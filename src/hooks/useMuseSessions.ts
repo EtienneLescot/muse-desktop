@@ -197,8 +197,9 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
  *   coalesced into one open entry, sub-agent blocks grouped by agent id,
  *   tool/system entries), persisted per session and restored on boot.
  * - Invokes `start_session` / `send_input` / `approve` / `cancel_session` /
- *   `kill_session` with the snake_case args the Rust commands declare, and
+ *   `kill_session` with camelCase args (Tauri `#[command]` default), and
  *   subscribes to `output` / `subagent_event` / `tool_request` / `status`.
+ *   (Event payloads stay snake_case: they are Rust-serde JSON, not args.)
  */
 export function useMuseSessions(): UseMuseSessions {
   const [sessions, setSessions] = useState<MuseSession[]>([]);
@@ -461,7 +462,7 @@ export function useMuseSessions(): UseMuseSessions {
         return;
       }
       const meta = await invoke<BackendSessionMeta>("start_session", {
-        workspace_path: ws,
+        workspacePath: ws,
       });
       const record: MuseSession = {
         session_id: meta.session_id,
@@ -497,7 +498,7 @@ export function useMuseSessions(): UseMuseSessions {
       );
       try {
         setError(null);
-        await invoke("send_input", { session_id: sessionId, text: trimmed });
+        await invoke("send_input", { sessionId, text: trimmed });
       } catch (e) {
         setError(`send_input failed: ${String(e)}`);
         setSessions((cur) =>
@@ -513,9 +514,9 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         setError(null);
         await invoke("approve", {
-          session_id: sessionId,
-          approval_id: approvalId,
-          choice_id: choiceId,
+          sessionId,
+          approvalId,
+          choiceId,
         });
         setApprovals((cur) =>
           cur.filter(
@@ -540,7 +541,7 @@ export function useMuseSessions(): UseMuseSessions {
   const cancelSession = useCallback(async (sessionId: string) => {
     try {
       setError(null);
-      await invoke("cancel_session", { session_id: sessionId });
+      await invoke("cancel_session", { sessionId });
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sessionId ? { ...s, running: false } : s)),
       );
@@ -557,7 +558,7 @@ export function useMuseSessions(): UseMuseSessions {
     async (sessionId: string) => {
       try {
         setError(null);
-        await invoke("kill_session", { session_id: sessionId });
+        await invoke("kill_session", { sessionId });
       } catch (e) {
         setError(`kill_session failed: ${String(e)}`);
         return;
