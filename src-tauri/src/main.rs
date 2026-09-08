@@ -26,7 +26,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
+use tauri::{AppHandle, Manager, RunEvent, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::mpsc;
@@ -41,13 +41,20 @@ pub struct SessionMeta {
     pub running: bool,
 }
 
-/// Events emitted to the frontend. `kind` selects the UI lane
-/// (`output` / `subagent_event` / `tool_request` / `status`).
+/// One buffered backend event with its sequence number (poll transport).
 #[derive(Debug, Serialize, Clone)]
-pub struct SessionEvent {
+pub struct DrainedEvent {
+    pub seq: u64,
     pub session_id: String,
     pub kind: String,
     pub payload: String,
+}
+
+/// Poll result: current head cursor plus events after `since`.
+#[derive(Debug, Serialize, Clone)]
+pub struct PollResult {
+    pub head: u64,
+    pub events: Vec<DrainedEvent>,
 }
 
 /// A pending approval: what `approval/decide` needs beyond the choice itself.
@@ -67,6 +74,12 @@ struct Host {
     client: std::sync::Arc<MspClient>,
 }
 
+/// Backend event buffer: the poll transport. `listen`-based push delivery
+/// proved undebuggable in one environment (subscriptions resolved yet never
+/// fired), so the UI polls this buffer instead — same broadcast semantics,
+/// over the already-proven `invoke` path.
+const EVENT_BUFFER_CAP: usize = 2000;
+
 struct AppState {
     host: Mutex<Option<Host>>,
     workspace: Mutex<Option<PathBuf>>,
@@ -79,6 +92,8 @@ struct AppState {
     /// Serializes host creation: check-spawn-insert must be atomic or two
     /// concurrent `start_session` calls spawn two hosts.
     host_mutex: tokio::sync::Mutex<()>,
+    event_seq: Mutex<u64>,
+    event_buffer: Mutex<std::collections::VecDeque<DrainedEvent>>,
 }
 
 fn truncate(s: &str, n: usize) -> String {
@@ -90,14 +105,27 @@ fn truncate(s: &str, n: usize) -> String {
 }
 
 fn emit(app: &AppHandle, event: &str, session_id: &str, kind: &str, payload: String) {
-    let _ = app.emit(
-        event,
-        SessionEvent {
-            session_id: session_id.to_string(),
-            kind: kind.to_string(),
-            payload,
-        },
-    );
+    // Poll transport: buffer the event with a sequence number. The UI drains
+    // via `poll_events`. (`event` is kept for log readability.)
+    // Temporary: wire_log retained for this diagnosis round.
+    wire_log(&format!(
+        "EMIT event={event} kind={kind} len={}",
+        payload.len()
+    ));
+    let state: State<AppState> = app.state();
+    let (Ok(mut seq), Ok(mut buf)) = (state.event_seq.lock(), state.event_buffer.lock()) else {
+        return;
+    };
+    *seq += 1;
+    buf.push_back(DrainedEvent {
+        seq: *seq,
+        session_id: session_id.to_string(),
+        kind: kind.to_string(),
+        payload,
+    });
+    while buf.len() > EVENT_BUFFER_CAP {
+        buf.pop_front();
+    }
 }
 
 fn mark_running(state: &State<AppState>, session_id: &str, running: bool) {
@@ -588,6 +616,26 @@ async fn start_session(
     Ok(meta)
 }
 
+/// Drain backend events after `since` (None = head cursor only, no replay).
+/// The UI polls this every ~300ms instead of `listen` push delivery.
+#[tauri::command]
+fn poll_events(state: State<'_, AppState>, since: Option<u64>) -> Result<PollResult, String> {
+    let head = state
+        .event_seq
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?;
+    let head = *head;
+    let since = since.unwrap_or(head);
+    let buf = state
+        .event_buffer
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?;
+    Ok(PollResult {
+        head,
+        events: buf.iter().filter(|e| e.seq > since).cloned().collect(),
+    })
+}
+
 #[tauri::command]
 async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>, String> {
     // No host yet (fresh boot before any workspace): nothing live to report;
@@ -797,6 +845,8 @@ fn main() {
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             host_mutex: tokio::sync::Mutex::new(()),
+            event_seq: Mutex::new(0),
+            event_buffer: Mutex::new(std::collections::VecDeque::new()),
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
@@ -806,6 +856,7 @@ fn main() {
             cancel_session,
             kill_session,
             set_workspace,
+            poll_events,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build muse-desktop app")

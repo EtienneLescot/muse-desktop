@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { isTauriRuntime } from "../lib/env";
 import {
   appendLog,
@@ -30,6 +29,19 @@ export interface MuseEvent {
   kind: string;
   payload: string;
 }
+
+/** One buffered backend event with its sequence number (poll transport). */
+interface DrainedEvent extends MuseEvent {
+  seq: number;
+}
+
+interface PollResult {
+  head: number;
+  events: DrainedEvent[];
+}
+
+/** Poll cadence: prompt enough for streaming text, cheap enough to be boring. */
+const POLL_MS = 300;
 
 export interface ApprovalChoice {
   choiceId: string;
@@ -62,6 +74,8 @@ interface UseMuseSessions {
   cancelSession: (sessionId: string) => Promise<void>;
   killSession: (sessionId: string) => Promise<void>;
   error: string | null;
+  /** TEMPORARY dev diagnosis: backend events received by this window. */
+  evtCount: number;
   /** True when the Tauri backend is unreachable (plain-browser preview). */
   backendMissing: boolean;
 }
@@ -71,8 +85,6 @@ interface BackendSessionMeta {
   workspace: string;
   running: boolean;
 }
-
-const EVENT_NAMES = ["output", "subagent_event", "tool_request", "status"] as const;
 
 /** Status kinds that mean the child is no longer producing output. */
 const STOPPED_KINDS = new Set([
@@ -208,16 +220,22 @@ export function useMuseSessions(): UseMuseSessions {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [workspace, setWorkspaceState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // TEMPORARY dev diagnosis: counts backend events received by this window.
+  const [evtCount, setEvtCount] = useState(0);
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
   const booted = useRef(false);
 
   // Boot: restore local persistence first (instant history), then merge
-  // the supervisor's live table, then subscribe to multiplexed events.
+  // the supervisor's live table, then poll the backend event buffer.
+  // (Polling, not `listen` push: push subscriptions resolved yet never fired
+  // in one environment, while `invoke` always worked — same broadcast
+  // semantics, boring transport.)
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
-    let unlistens: UnlistenFn[] = [];
+    let timer: ReturnType<typeof setInterval> | null = null;
     let cancelled = false;
+    let cursor = 0;
 
     const stored = loadSessions();
     const storedLogs: Record<string, LogEntry[]> = {};
@@ -275,19 +293,34 @@ export function useMuseSessions(): UseMuseSessions {
       } catch (e) {
         if (!cancelled) setError(`restore_sessions failed: ${String(e)}`);
       }
-      for (const name of EVENT_NAMES) {
-        try {
-          unlistens.push(await listen<MuseEvent>(name, (e) => handleEvent(e.payload)));
-        } catch (err) {
-          if (!cancelled) setError(`subscribe to ${name} failed: ${String(err)}`);
-        }
+      // Start polling from the current head: no replay of ancient history,
+      // live events only. Each response advances the cursor past what we fed.
+      try {
+        const head = await invoke<PollResult>("poll_events", {});
+        if (cancelled) return;
+        cursor = head.head;
+      } catch (err) {
+        if (!cancelled) setError(`event poll failed: ${String(err)}`);
+        return;
       }
+      const tick = async () => {
+        try {
+          const res = await invoke<PollResult>("poll_events", { since: cursor });
+          if (cancelled) return;
+          cursor = res.head;
+          for (const e of res.events) handleEvent(e);
+        } catch (err) {
+          if (!cancelled) setError(`event poll failed: ${String(err)}`);
+        }
+      };
+      timer = setInterval(() => void tick(), POLL_MS);
+      void tick();
     })();
 
     return () => {
       cancelled = true;
-      unlistens.forEach((u) => u());
-      unlistens = [];
+      if (timer !== null) clearInterval(timer);
+      timer = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -348,6 +381,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   function handleEvent(evt: MuseEvent): void {
     const { session_id: sid, kind, payload } = evt;
+    setEvtCount((c) => c + 1);
     if (!sid) return;
     if (kind === "output") {
       ensureSessionRow(sid, null);
@@ -600,5 +634,6 @@ export function useMuseSessions(): UseMuseSessions {
     cancelSession,
     killSession,
     error,
+    evtCount,
   };
 }
