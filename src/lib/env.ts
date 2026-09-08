@@ -5,3 +5,6 @@ export function isTauriRuntime(): boolean {
     "__TAURI_INTERNALS__" in window
   );
 }
+
+/** Frontend build marker: bump on every shipped frontend fix so stale webviews are identifiable. */
+export const BUILD_ID = "2026-09-08-workspace-fix";

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { BUILD_ID } from "./lib/env";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { WorkspacePicker } from "./components/WorkspacePicker";
 import { EmptySessionScreen } from "./components/EmptySessionScreen";
@@ -39,6 +40,7 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <h1>muse-desktop</h1>
+        <span className="muted build-id">{BUILD_ID}</span>
         <WorkspacePicker workspace={workspace} onPick={setWorkspace} />
         <SessionSidebar
           sessions={sessions}
