@@ -263,6 +263,7 @@ fn pump_stdout(
             match ev {
                 CommandEvent::Stdout(chunk) => {
                     for line in split_lines(&mut out_buf, &chunk) {
+                        wire_log(&line);
                         match serde_json::from_str::<Value>(&line) {
                             Ok(frame) => client.ingest(frame).await,
                             Err(_) => push_stderr(&stderr_tail, format!("unparsable frame: {line}")),
@@ -299,6 +300,23 @@ fn pump_stdout(
     });
 }
 
+/// Temporary wire tap (dev diagnosis): every raw host line, truncated.
+/// Remove before release; prompts may transit here, file stays local in /tmp.
+fn wire_log(line: &str) {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/muse-wire.log")
+    {
+        let mut l = line.to_string();
+        if l.len() > 2000 {
+            l.truncate(2000);
+        }
+        let _ = writeln!(f, "{l}");
+    }
+}
+
 fn push_stderr(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>, line: String) {
     if let Ok(mut tail) = stderr_tail.lock() {
         tail.push(line);
@@ -324,6 +342,13 @@ fn pump_notifications(
 
 fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p: &Value) {
     let sid = p.get("sessionId").and_then(Value::as_str).unwrap_or("");
+    wire_log(&format!(
+        "ROUTE method={method} sid={sid} keys={}",
+        match p.as_object() {
+            Some(o) => o.keys().cloned().collect::<Vec<_>>().join(","),
+            None => "<non-object>".to_string(),
+        }
+    ));
     match method {
         "item/started" => {
             if let (Some(item_id), Some(item)) = (
