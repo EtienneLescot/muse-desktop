@@ -442,6 +442,9 @@ export function useMuseSessions(): UseMuseSessions {
   const setWorkspace = useCallback((path: string) => {
     setWorkspaceState(path);
     saveWorkspace(path);
+    // Rust holds the pick as source of truth too (fire-and-forget: a stale
+    // start_session arg can then still resolve server-side).
+    void invoke<string>("set_workspace", { path }).catch(() => {});
   }, []);
 
   const setActive = useCallback((id: string | null) => setActiveId(id), []);
@@ -449,9 +452,16 @@ export function useMuseSessions(): UseMuseSessions {
   const startSession = useCallback(async () => {
     try {
       setError(null);
-      const ws = loadWorkspace() ?? undefined;
+      // Live React state first: localStorage writes are best-effort and may
+      // silently fail, which previously enabled the buttons while sending
+      // workspace_path=null ("no workspace selected" from the backend).
+      const ws = workspace ?? loadWorkspace() ?? undefined;
+      if (ws === undefined) {
+        setError("Pick a workspace folder first.");
+        return;
+      }
       const meta = await invoke<BackendSessionMeta>("start_session", {
-        workspace_path: ws ?? null,
+        workspace_path: ws,
       });
       const record: MuseSession = {
         session_id: meta.session_id,
@@ -466,7 +476,7 @@ export function useMuseSessions(): UseMuseSessions {
     } catch (e) {
       setError(`start_session failed: ${String(e)}`);
     }
-  }, []);
+  }, [workspace]);
 
   const sendInput = useCallback(
     async (sessionId: string, text: string) => {

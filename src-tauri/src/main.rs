@@ -6,8 +6,9 @@
 //!   sidecar child and multiplexes sessions by `sessionId` — not one process
 //!   per session (that would strand durability and force one sandbox posture
 //!   negotiation per session for no benefit).
-//! - Approval mode is selected on the wire: every `session/start` passes
-//!   `"onRequest"`, matching the plan's permission posture.
+//! - Approval mode is intentionally NOT selected on the wire: the host seals
+//!   a startup ceiling and rejects selections (`approval_mode_ceiling`), so
+//!   `session/start` omits it and inherits the sealed default.
 //! - No agentic logic lives here: spawn, frame relay, kill. The sidecar owns
 //!   orchestration (sub-agents included).
 //!
@@ -433,14 +434,36 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
     }
 }
 
+/// Persist the picked workspace on the Rust side immediately, so the backend
+/// holds it as source of truth even if a later `start_session` arg were lost.
+#[tauri::command]
+fn set_workspace(state: State<'_, AppState>, path: String) -> Result<String, String> {
+    let root = PathBuf::from(&path);
+    if !root.is_dir() {
+        return Err(format!("workspace is not a directory: {path}"));
+    }
+    let root = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve workspace {path}: {e}"))?;
+    if let Ok(mut w) = state.workspace.lock() {
+        *w = Some(root.clone());
+    }
+    Ok(root.display().to_string())
+}
+
 fn resolve_workspace(
     state: &State<AppState>,
     workspace_path: Option<String>,
 ) -> Result<PathBuf, String> {
+    let arg_present = workspace_path.is_some();
     let root = workspace_path
         .map(PathBuf::from)
         .or_else(|| state.workspace.lock().ok().and_then(|w| w.clone()))
-        .ok_or_else(|| "no workspace selected — pick a folder first".to_string())?;
+        .ok_or_else(|| {
+            format!(
+                "no workspace selected — pick a folder first (arg present: {arg_present})"
+            )
+        })?;
     if !root.is_dir() {
         return Err(format!("workspace is not a directory: {}", root.display()));
     }
@@ -462,13 +485,15 @@ async fn start_session(
 ) -> Result<SessionMeta, String> {
     let root = resolve_workspace(&state, workspace_path)?;
     let client = ensure_host(&app, &state, &root).await?;
+    // No `approvalMode` on the wire: the host seals a startup ceiling
+    // (observed: `promptUnmatched`) and rejects any selected mode as
+    // `approval_mode_ceiling` — omitted selects the sealed default.
     let res = client
         .request(
             "session/start",
             json!({
                 "commandId": new_command_id(),
                 "workspaceRoot": root.display().to_string(),
-                "approvalMode": "onRequest",
             }),
         )
         .await?;
@@ -710,6 +735,7 @@ fn main() {
             approve,
             cancel_session,
             kill_session,
+            set_workspace,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build muse-desktop app")
