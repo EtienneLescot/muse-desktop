@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+dist/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+
+# Sidecar binaries: ignore per-platform triple-suffixed binaries,
+# but keep the placeholder docs (see src-tauri/binaries/README.md).
+src-tauri/binaries/muse-*
+!src-tauri/binaries/.gitkeep
+!src-tauri/binaries/README.md
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
