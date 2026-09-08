@@ -73,6 +73,15 @@ pub fn encode_request(id: u64, method: &str, params: Value) -> String {
     serde_json::to_string(&frame).unwrap_or_default()
 }
 
+/// Encode one notification frame (no `id`; never answered).
+pub fn encode_notification(method: &str, params: Value) -> String {
+    let mut frame = json!({"jsonrpc": "2.0", "method": method});
+    if !params.is_null() {
+        frame["params"] = params;
+    }
+    serde_json::to_string(&frame).unwrap_or_default()
+}
+
 /// Split a byte chunk into complete lines; returns leftover partial line.
 pub fn split_lines(buf: &mut Vec<u8>, chunk: &[u8]) -> Vec<String> {
     buf.extend_from_slice(chunk);
@@ -157,6 +166,22 @@ impl MspClient {
         self.pending.lock().await.remove(key);
     }
 
+    async fn write_line(&self, mut line: String) -> Result<(), String> {
+        line.push('\n');
+        let mut guard = self.child.lock().await;
+        let child = guard
+            .as_mut()
+            .ok_or_else(|| "sidecar is gone (nowhere to write)".to_string())?;
+        child
+            .write(line.as_bytes())
+            .map_err(|e| format!("sidecar write failed: {e}"))
+    }
+
+    /// Send a notification (MCP-style `initialized` included): no id, no reply.
+    pub async fn notify(&self, method: &str, params: Value) -> Result<(), String> {
+        self.write_line(encode_notification(method, params)).await
+    }
+
     /// Send a request and wait for its response (120s cap: model turns ack fast;
     /// a missing response is a broken host, not a slow one).
     pub async fn request(&self, method: &str, params: Value) -> Result<Value, String> {
@@ -164,18 +189,12 @@ impl MspClient {
         let key = id.to_string();
         let (tx, rx) = oneshot::channel();
         self.pending.lock().await.insert(key.clone(), tx);
-        let mut line = encode_request(id, method, params);
-        line.push('\n');
+        if let Err(e) = self
+            .write_line(encode_request(id, method, params))
+            .await
         {
-            let mut guard = self.child.lock().await;
-            let child = guard.as_mut().ok_or_else(|| {
-                format!("sidecar is gone (request {method} has nowhere to go)")
-            })?;
-            if let Err(e) = child.write(line.as_bytes()) {
-                drop(guard);
-                self.remove_pending(&key).await;
-                return Err(format!("sidecar write failed: {e}"));
-            }
+            self.remove_pending(&key).await;
+            return Err(format!("sidecar write failed for {method}: {e}"));
         }
         match tokio::time::timeout(std::time::Duration::from_secs(120), rx).await {
             Ok(Ok(Ok(v))) => Ok(v),
@@ -213,6 +232,15 @@ mod tests {
         assert_eq!(a.len(), 36);
         assert_eq!(&a[14..15], "7", "version nibble must be 7: {a}");
         assert!(matches!(&a[19..20], "8" | "9" | "a" | "b"), "variant bits: {a}");
+    }
+
+    #[test]
+    fn notification_frame_shape() {
+        let f: Value = serde_json::from_str(&encode_notification("initialized", Value::Null)).unwrap();
+        assert_eq!(f["jsonrpc"], "2.0");
+        assert_eq!(f["method"], "initialized");
+        assert!(f.get("id").is_none());
+        assert!(f.get("params").is_none());
     }
 
     #[test]

@@ -12,8 +12,11 @@ the real binaries here as:
 
 Linux is an explicit V1 non-goal: no `*-unknown-linux-gnu` binary is bundled.
 
-The Rust supervisor (`src/main.rs`) invokes the sidecar without any PATH
-dependency via `app.shell().sidecar("binaries/muse")` with `cwd` locked to
-the user-selected workspace root. Until the real binaries land, `spawn`
-fails and the UI surfaces the "sidecar missing/incompatible" error path
+The Rust supervisor (`src/main.rs`, `resolve_sidecar`) invokes the sidecar
+without any PATH dependency, with `cwd` locked to the user-selected
+workspace root. Resolution order: `<app-exe-dir>/binaries/muse-<triple>`
+(bundled layout), then `<src-tauri>/binaries/muse-<triple>` (dev source
+tree). For local dev, drop the binary matching your host triple here (e.g.
+copy the installed backend); these files are gitignored. Until a binary
+lands, `spawn` fails and the UI surfaces the "sidecar missing" error path
 (step 6 of the plan).

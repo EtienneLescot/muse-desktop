@@ -149,13 +149,21 @@ async fn ensure_host(
     // A failed handshake must kill the just-spawned child: dropping the
     // handle never kills the process, so an early Err here would leak one
     // running `muse serve` per failed attempt.
-    if let Err(e) = client
-        .request(
-            "initialize",
-            json!({"clientInfo": {"name": "muse_desktop", "version": "0.1.0"}}),
-        )
-        .await
-    {
+    //
+    // The handshake is two steps (proven against the real binary): the
+    // `initialize` response alone leaves the host uninitialized — the
+    // `initialized` notification completes it, and every later call fails
+    // `Not initialized` without it.
+    let handshake = async {
+        client
+            .request(
+                "initialize",
+                json!({"clientInfo": {"name": "muse_desktop", "version": "0.1.0"}}),
+            )
+            .await?;
+        client.notify("initialized", Value::Null).await
+    };
+    if let Err(e) = handshake.await {
         client.shutdown().await;
         return Err(format!(
             "MSP handshake failed ({e}). Host stderr: {}",
@@ -181,18 +189,55 @@ fn tail_of(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>) -> String {
         .unwrap_or_default()
 }
 
+/// Absolute path of the `muse` sidecar binary.
+///
+/// The plugin resolves `sidecar(..)` against the app exe directory, which is
+/// only where the binary lands in a bundled app (`externalBin`). In dev the
+/// binary lives under `src-tauri/binaries/`, and the filename always carries
+/// the target triple (bundling convention) — so resolve it ourselves and hand
+/// the plugin an absolute path (its join is a no-op on absolute paths).
+fn resolve_sidecar() -> Result<PathBuf, String> {
+    let triple = env!("TAURI_ENV_TARGET_TRIPLE");
+    let mut file = format!("binaries/muse-{triple}");
+    if cfg!(windows) && !file.ends_with(".exe") {
+        file.push_str(".exe");
+    }
+    let mut tried = Vec::new();
+    // 1. Next to the app exe (bundled layout, and dev if staged there).
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join(&file);
+            tried.push(p.clone());
+            if p.is_file() {
+                return Ok(p);
+            }
+        }
+    }
+    // 2. Dev source tree (compile-time manifest dir is absolute in dev).
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(&file);
+    tried.push(p.clone());
+    if p.is_file() {
+        return Ok(p);
+    }
+    Err(format!(
+        "sidecar binary not found (tried {}); bundle binaries/muse-<triple> (see src-tauri/binaries/README.md)",
+        tried
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
 fn spawn_sidecar(
     app: &AppHandle,
     root: &PathBuf,
 ) -> Result<(tauri::async_runtime::Receiver<CommandEvent>, CommandChild), String> {
+    let bin = resolve_sidecar()?;
     let cmd = app
         .shell()
-        .sidecar("binaries/muse")
-        .map_err(|e| {
-            format!(
-                "sidecar binary not bundled (expected binaries/muse-<triple> next to the app): {e}"
-            )
-        })?
+        .sidecar(&bin)
+        .map_err(|e| format!("sidecar command failed for {}: {e}", bin.display()))?
         .args(["serve"])
         .current_dir(root);
     cmd.spawn().map_err(|e| {
