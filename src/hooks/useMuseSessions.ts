@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/env";
 import {
@@ -223,7 +223,6 @@ export function useMuseSessions(): UseMuseSessions {
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
-  const booted = useRef(false);
 
   // Boot: restore local persistence first (instant history), then merge
   // the supervisor's live table, then poll the backend event buffer.
@@ -231,8 +230,9 @@ export function useMuseSessions(): UseMuseSessions {
   // in one environment, while `invoke` always worked — same broadcast
   // semantics, boring transport.)
   useEffect(() => {
-    if (booted.current) return;
-    booted.current = true;
+    // No once-guard here: React StrictMode (dev) mounts, unmounts, and
+    // remounts — a "booted" ref would skip the second (real) setup forever
+    // after cleanup cancelled the first. Teardown below makes re-setup safe.
     let timer: ReturnType<typeof setInterval> | null = null;
     let cancelled = false;
     let cursor = 0;
