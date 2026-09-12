@@ -36,6 +36,7 @@ export interface LogEntry {
 const SESSIONS_KEY = "muse-desktop.sessions.v1";
 const WORKSPACE_KEY = "muse-desktop.workspace.v1";
 const ACTIVE_KEY = "muse-desktop.active.v1";
+const TOMBSTONES_KEY = "muse-desktop.tombstones.v1";
 const logKey = (sessionId: string) => `muse-desktop.log.v1.${sessionId}`;
 
 /** Cap per-session log length (mitigation for huge/corrupt histories). */
@@ -95,6 +96,24 @@ export function loadSessions(): StoredSession[] {
 
 export function saveSessions(sessions: StoredSession[]): void {
   write(SESSIONS_KEY, sessions);
+}
+
+/**
+ * Tombstones: ids the user deleted. The MSP host has no session/stop, so a
+ * killed session still exists server-side and would be resurrected by
+ * `restore_sessions` or a late in-flight event. Tombstones (persisted, capped)
+ * make deletion stick. Ids are UUIDv7: never reused, so no pruning by return.
+ */
+const MAX_TOMBSTONES = 500;
+
+export function loadTombstones(): string[] {
+  const raw = read<unknown>(TOMBSTONES_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((t): t is string => typeof t === "string" && t.length > 0);
+}
+
+export function saveTombstones(ids: string[]): void {
+  write(TOMBSTONES_KEY, ids.slice(-MAX_TOMBSTONES));
 }
 
 export function loadLog(sessionId: string): LogEntry[] {

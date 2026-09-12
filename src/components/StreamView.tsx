@@ -71,12 +71,20 @@ export function StreamView({ entries, sessionId }: Props) {
               </span>
               <span className="ts">{timeOf(e.ts)}</span>
             </summary>
-            <pre>{e.text}</pre>
+            <pre>
+              {e.text}
+              {e.open && <span className="caret" aria-hidden="true" />}
+            </pre>
           </details>
         ) : (
           <div key={e.id} className={`msg ${e.role}`}>
             <span className="role">{roleLabel(e)}</span>
-            <pre>{e.text}</pre>
+            <pre>
+              {e.text}
+              {e.open && e.role === "assistant" && (
+                <span className="caret" aria-hidden="true" />
+              )}
+            </pre>
             <span className="ts">{timeOf(e.ts)}</span>
           </div>
         ),

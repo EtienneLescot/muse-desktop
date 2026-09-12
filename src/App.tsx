@@ -6,6 +6,7 @@ import { EmptySessionScreen } from "./components/EmptySessionScreen";
 import { SessionSidebar } from "./components/SessionSidebar";
 import { StreamView } from "./components/StreamView";
 import { ApprovalPanel } from "./components/ApprovalPanel";
+import { InputPanel } from "./components/InputPanel";
 import { Composer } from "./components/Composer";
 import "./App.css";
 
@@ -16,16 +17,21 @@ export default function App() {
     activeLog,
     approvals,
     activeApprovals,
+    inputRequests,
+    activeInputRequests,
     workspace,
     setWorkspace,
     setActive,
     startSession,
     sendInput,
     approve,
+    answerInput,
+    cancelInput,
     cancelSession,
     killSession,
     error,
     backendMissing,
+    evtCount,
   } = useMuseSessions();
 
   const active = sessions.find((s) => s.session_id === activeId) ?? null;
@@ -33,8 +39,9 @@ export default function App() {
   const pendingCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const a of approvals) counts[a.session_id] = (counts[a.session_id] ?? 0) + 1;
+    for (const r of inputRequests) counts[r.session_id] = (counts[r.session_id] ?? 0) + 1;
     return counts;
-  }, [approvals]);
+  }, [approvals, inputRequests]);
 
   return (
     <div className="app">
@@ -75,8 +82,16 @@ export default function App() {
                 {active.workspace}
               </span>
               <span className="muted">{active.running ? "running" : "stopped"}</span>
+              <span className="muted" title="backend events received (temporary)">
+                ev:{evtCount}
+              </span>
             </header>
             <ApprovalPanel approvals={activeApprovals} onDecision={approve} />
+            <InputPanel
+              requests={activeInputRequests}
+              onAnswer={(sid, iid, answers) => void answerInput(sid, iid, answers)}
+              onSkip={(sid, iid) => void cancelInput(sid, iid)}
+            />
             <StreamView entries={activeLog} sessionId={active.session_id} />
             <Composer
               disabled={workspace === null || backendMissing}

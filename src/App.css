@@ -441,3 +441,22 @@ button:hover:not(:disabled) {
     scroll-behavior: auto;
   }
 }
+
+/* Typing caret on still-open stream blocks: liveness signal while deltas land. */
+.caret {
+  display: inline-block;
+  width: 0.55em;
+  margin-left: 1px;
+  color: inherit;
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+.caret::after {
+  content: "▍";
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/env";
 import {
@@ -7,16 +7,35 @@ import {
   loadActiveId,
   loadLog,
   loadSessions,
+  loadTombstones,
   loadWorkspace,
   newId,
   saveActiveId,
   saveLog,
   saveSessions,
+  saveTombstones,
   saveWorkspace,
   type LogEntry,
   type LogRole,
   type StoredSession,
 } from "../lib/persist";
+// Input-prompt helpers live in ../lib/input (dependency-free, unit-tested).
+// Only parseInputRequest + the locally used types are imported; the rest is
+// re-exported below for consumers (InputPanel).
+import {
+  parseInputRequest,
+  type InputAnswer,
+  type InputRequest,
+} from "../lib/input";
+export type {
+  InputAnswer,
+  InputOption,
+  InputPicks,
+  InputQuestion,
+  InputRequest,
+} from "../lib/input";
+export { buildAnswers, parseInputRequest } from "../lib/input";
+
 
 /** One session: persisted metadata + live running flag. */
 export interface MuseSession extends StoredSession {
@@ -40,8 +59,12 @@ interface PollResult {
   events: DrainedEvent[];
 }
 
-/** Poll cadence: prompt enough for streaming text, cheap enough to be boring. */
-const POLL_MS = 300;
+/**
+ * Poll cadence: fast while a turn streams (near-live text), slow at idle.
+ * The host emits line-frames as they arrive; 150ms keeps chunking invisible.
+ */
+const POLL_FAST_MS = 150;
+const POLL_SLOW_MS = 1000;
 
 export interface ApprovalChoice {
   choiceId: string;
@@ -49,6 +72,7 @@ export interface ApprovalChoice {
   decision: string;
   scope: string;
 }
+
 
 export interface ApprovalRequest {
   session_id: string;
@@ -71,6 +95,10 @@ interface UseMuseSessions {
   startSession: () => Promise<void>;
   sendInput: (sessionId: string, text: string) => Promise<void>;
   approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<void>;
+  answerInput: (sessionId: string, inputId: string, answers: InputAnswer[]) => Promise<void>;
+  cancelInput: (sessionId: string, inputId: string) => Promise<void>;
+  inputRequests: InputRequest[];
+  activeInputRequests: InputRequest[];
   cancelSession: (sessionId: string) => Promise<void>;
   killSession: (sessionId: string) => Promise<void>;
   error: string | null;
@@ -218,11 +246,21 @@ export function useMuseSessions(): UseMuseSessions {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [inputRequests, setInputRequests] = useState<InputRequest[]>([]);
   const [workspace, setWorkspaceState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
+  // Mirror of "any session running", read by the poll loop to pick cadence.
+  // Plain ref (not state): the loop lives outside render, StrictMode-safe.
+  const runningRef = useRef(false);
+  // Tombstoned ids (user-deleted): late events and backend restores must not
+  // resurrect them. Lazy init survives StrictMode remounts (ref persists).
+  const tombstoned = useRef<Set<string> | null>(null);
+  if (tombstoned.current === null) {
+    tombstoned.current = new Set(loadTombstones());
+  }
 
   // Boot: restore local persistence first (instant history), then merge
   // the supervisor's live table, then poll the backend event buffer.
@@ -233,7 +271,7 @@ export function useMuseSessions(): UseMuseSessions {
     // No once-guard here: React StrictMode (dev) mounts, unmounts, and
     // remounts — a "booted" ref would skip the second (real) setup forever
     // after cleanup cancelled the first. Teardown below makes re-setup safe.
-    let timer: ReturnType<typeof setInterval> | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
     let cursor = 0;
 
@@ -245,7 +283,9 @@ export function useMuseSessions(): UseMuseSessions {
     if (!cancelled) {
       // Mark restored sessions stopped: sidecar children do not survive
       // an app restart; the user relaunches by sending new input.
-      setSessions(stored.map((s) => ({ ...s, running: false })));
+      // Tombstoned ids never come back, even from a stale persisted list.
+      const live = stored.filter((s) => !tombstoned.current?.has(s.session_id));
+      setSessions(live.map((s) => ({ ...s, running: false })));
       setLogs(storedLogs);
       setWorkspaceState(storedWorkspace);
       setActiveId(
@@ -271,6 +311,9 @@ export function useMuseSessions(): UseMuseSessions {
         setSessions((cur) => {
           const next = [...cur];
           for (const meta of restored) {
+            // The host keeps killed sessions server-side (no session/stop);
+            // never merge a tombstoned id back in.
+            if (tombstoned.current?.has(meta.session_id)) continue;
             const i = next.findIndex((s) => s.session_id === meta.session_id);
             if (i >= 0) {
               next[i] = { ...next[i], workspace: meta.workspace, running: meta.running };
@@ -303,6 +346,8 @@ export function useMuseSessions(): UseMuseSessions {
         if (!cancelled) setError(`event poll failed: ${String(err)}`);
         return;
       }
+      // setTimeout chain (not setInterval): cadence adapts to whether a
+      // turn is streaming, and a slow tick never piles onto the next.
       const tick = async () => {
         try {
           const res = await invoke<PollResult>("poll_events", { since: cursor });
@@ -312,14 +357,19 @@ export function useMuseSessions(): UseMuseSessions {
         } catch (err) {
           if (!cancelled) setError(`event poll failed: ${String(err)}`);
         }
+        if (!cancelled) {
+          timer = setTimeout(
+            () => void tick(),
+            runningRef.current ? POLL_FAST_MS : POLL_SLOW_MS,
+          );
+        }
       };
-      timer = setInterval(() => void tick(), POLL_MS);
       void tick();
     })();
 
     return () => {
       cancelled = true;
-      if (timer !== null) clearInterval(timer);
+      if (timer !== null) clearTimeout(timer);
       timer = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -348,6 +398,7 @@ export function useMuseSessions(): UseMuseSessions {
   }
 
   function ensureSessionRow(sessionId: string, ws: string | null): void {
+    if (tombstoned.current?.has(sessionId)) return;
     setSessions((cur) => {
       if (cur.some((s) => s.session_id === sessionId)) return cur;
       return [
@@ -383,6 +434,9 @@ export function useMuseSessions(): UseMuseSessions {
     const { session_id: sid, kind, payload } = evt;
     setEvtCount((c) => c + 1);
     if (!sid) return;
+    // Deleted stays deleted: late in-flight events for a killed session are
+    // dropped instead of resurrecting its row.
+    if (tombstoned.current?.has(sid)) return;
     if (kind === "output") {
       ensureSessionRow(sid, null);
       const { itemId, text } = parseChunk(payload);
@@ -427,6 +481,51 @@ export function useMuseSessions(): UseMuseSessions {
         saveLog(sid, next);
         return { ...cur, [sid]: next };
       });
+      return;
+    }
+    if (kind === "input_request") {
+      ensureSessionRow(sid, null);
+      const req = parseInputRequest(sid, payload);
+      if (req === null) {
+        pushLog(sid, [
+          { id: newId(), ts: Date.now(), role: "system", text: "input requested (unparseable)" },
+        ]);
+        return;
+      }
+      setInputRequests((cur) => {
+        const i = cur.findIndex(
+          (r) => r.session_id === sid && r.input_id === req.input_id,
+        );
+        if (i >= 0) {
+          const next = [...cur];
+          next[i] = req;
+          return next;
+        }
+        return [...cur, req];
+      });
+      pushLog(sid, [
+        { id: newId(), ts: Date.now(), role: "tool", text: `Input requested: ${req.tool_name}` },
+      ]);
+      return;
+    }
+    if (kind === "input_settled") {
+      let inputId = "";
+      let outcome = "settled";
+      try {
+        const obj = JSON.parse(payload) as Record<string, unknown>;
+        if (typeof obj.inputId === "string") inputId = obj.inputId;
+        if (typeof obj.outcome === "string") outcome = obj.outcome;
+      } catch {
+        // keep defaults
+      }
+      if (inputId.length > 0) {
+        setInputRequests((cur) =>
+          cur.filter((r) => !(r.session_id === sid && r.input_id === inputId)),
+        );
+      }
+      pushLog(sid, [
+        { id: newId(), ts: Date.now(), role: "system", text: `Input ${outcome}` },
+      ]);
       return;
     }
     if (kind === "item_done") {
@@ -597,6 +696,9 @@ export function useMuseSessions(): UseMuseSessions {
         setError(`kill_session failed: ${String(e)}`);
         return;
       }
+      if (tombstoned.current === null) tombstoned.current = new Set();
+      tombstoned.current.add(sessionId);
+      saveTombstones([...tombstoned.current]);
       setSessions((cur) => cur.filter((s) => s.session_id !== sessionId));
       setLogs((cur) => {
         const next = { ...cur };
@@ -605,6 +707,7 @@ export function useMuseSessions(): UseMuseSessions {
       });
       dropLog(sessionId);
       setApprovals((cur) => cur.filter((a) => a.session_id !== sessionId));
+      setInputRequests((cur) => cur.filter((r) => r.session_id !== sessionId));
       setActiveId((cur) => {
         if (cur !== sessionId) return cur;
         const remaining = loadSessions().filter((s) => s.session_id !== sessionId);
@@ -616,6 +719,37 @@ export function useMuseSessions(): UseMuseSessions {
 
   const activeLog = (activeId !== null && logs[activeId]) || [];
   const activeApprovals = approvals.filter((a) => a.session_id === activeId);
+  const activeInputRequests = inputRequests.filter((r) => r.session_id === activeId);
+
+  const answerInput = useCallback(
+    async (sessionId: string, inputId: string, answers: InputAnswer[]) => {
+      try {
+        setError(null);
+        await invoke("answer_input", {
+          sessionId,
+          userInputId: inputId,
+          answers,
+        });
+        // Panel removal arrives via input_settled; on success the turn
+        // resumes. On error (-32057) the panel stays for a corrected answer.
+      } catch (e) {
+        setError(`answer_input failed: ${String(e)}`);
+      }
+    },
+    [],
+  );
+
+  const cancelInput = useCallback(async (sessionId: string, inputId: string) => {
+    try {
+      setError(null);
+      await invoke("cancel_input", { sessionId, userInputId: inputId });
+    } catch (e) {
+      setError(`cancel_input failed: ${String(e)}`);
+    }
+  }, []);
+
+  // Updated every render; the poll loop reads it for cadence.
+  runningRef.current = sessions.some((s) => s.running);
 
   return {
     sessions,
@@ -624,6 +758,8 @@ export function useMuseSessions(): UseMuseSessions {
     activeLog,
     approvals,
     activeApprovals,
+    inputRequests,
+    activeInputRequests,
     workspace,
     backendMissing,
     setWorkspace,
@@ -631,6 +767,8 @@ export function useMuseSessions(): UseMuseSessions {
     startSession,
     sendInput,
     approve,
+    answerInput,
+    cancelInput,
     cancelSession,
     killSession,
     error,

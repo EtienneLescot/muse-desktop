@@ -519,14 +519,24 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
             emit(app, "status", sid, method, String::new())
         }
         "userInput/requested" => {
-            // V1 gap: free-text input prompts have no inline answer UI; they
-            // surface as a system log line instead of hanging silently.
-            let prompt = p
-                .get("prompt")
-                .and_then(Value::as_str)
-                .or_else(|| p.get("message").and_then(Value::as_str))
-                .unwrap_or("input requested");
-            emit(app, "status", sid, "input_requested", prompt.to_string());
+            // The turn suspends until answered: surface as an answerable
+            // panel, never a bare log line (a log line leaves the chat
+            // hanging with no way to reply).
+            match build_input_request_payload(p) {
+                Some(payload) => emit(app, "input_request", sid, "input_request", payload.to_string()),
+                None => emit(app, "status", sid, "input_requested", "input requested (unparseable)".to_string()),
+            }
+        }
+        "userInput/settled" => {
+            let outcome = p.get("outcome").and_then(Value::as_str).unwrap_or("settled");
+            let input_id = p.get("userInputId").and_then(Value::as_str).unwrap_or("");
+            emit(
+                app,
+                "input_settled",
+                sid,
+                "input_settled",
+                json!({"inputId": input_id, "outcome": outcome}).to_string(),
+            );
         }
         _ => {}
     }
@@ -547,6 +557,65 @@ fn set_workspace(state: State<'_, AppState>, path: String) -> Result<String, Str
         *w = Some(root.clone());
     }
     Ok(root.display().to_string())
+}
+
+/// Build the frontend `input_request` payload from a `userInput/requested`
+/// notification. Pure (unit-tested): questions forwarded verbatim (capped),
+/// ids threaded through for the answer round-trip.
+fn build_input_request_payload(p: &Value) -> Option<Value> {
+    let input_id = p.get("userInputId")?.as_str()?;
+    let questions = p.get("questions")?.as_array()?;
+    let qs: Vec<Value> = questions
+        .iter()
+        .take(10)
+        .filter_map(|q| {
+            let id = q.get("id")?.as_str()?;
+            let mode = q
+                .get("selection")
+                .and_then(|s| s.get("mode"))
+                .and_then(Value::as_str)
+                .unwrap_or("single");
+            if mode != "single" && mode != "multiple" {
+                return None;
+            }
+            let options: Vec<Value> = q
+                .get("options")
+                .and_then(Value::as_array)
+                .map(|os| {
+                    os.iter()
+                        .take(20)
+                        .filter_map(|o| {
+                            o.get("label").and_then(Value::as_str).map(|label| {
+                                json!({
+                                    "label": label,
+                                    "description": o.get("description").and_then(Value::as_str).unwrap_or(""),
+                                })
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(json!({
+                "id": id,
+                "header": q.get("header").and_then(Value::as_str).unwrap_or(""),
+                "question": q.get("question").and_then(Value::as_str).unwrap_or(""),
+                "mode": mode,
+                "minSelections": q.get("selection").and_then(|s| s.get("minSelections")),
+                "maxSelections": q.get("selection").and_then(|s| s.get("maxSelections")),
+                "options": options,
+            }))
+        })
+        .collect();
+    if qs.is_empty() {
+        return None;
+    }
+    Some(json!({
+        "request_id": input_id,
+        "inputId": input_id,
+        "toolName": p.get("toolName").and_then(Value::as_str).unwrap_or("input"),
+        "questions": qs,
+        "itemId": p.get("itemId").and_then(Value::as_str).unwrap_or(""),
+    }))
 }
 
 fn resolve_workspace(
@@ -774,6 +843,94 @@ async fn approve(
     Ok(())
 }
 
+/// Answer a suspended input prompt. `answers` is a JSON array of
+/// `{questionId, selectedLabel?|selectedLabels?|freeText?}`; the host is the
+/// final validator (-32057 surfaces here as the command error, panel stays).
+#[tauri::command]
+async fn answer_input(
+    state: State<'_, AppState>,
+    session_id: String,
+    user_input_id: String,
+    answers: Value,
+) -> Result<(), String> {
+    let answers = answers.as_array().filter(|a| !a.is_empty()).ok_or_else(|| {
+        "answers must be a non-empty JSON array".to_string()
+    })?;
+    for a in answers.iter() {
+        let obj = a.as_object().ok_or("each answer must be an object")?;
+        obj.get("questionId")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .ok_or("each answer needs a questionId")?;
+        let has_label = obj.get("selectedLabel").and_then(Value::as_str).map(|s| !s.is_empty()).unwrap_or(false);
+        let has_labels = obj.get("selectedLabels").and_then(Value::as_array).map(|l| !l.is_empty()).unwrap_or(false);
+        let has_text = obj.get("freeText").and_then(Value::as_str).map(|s| !s.is_empty()).unwrap_or(false);
+        if [has_label, has_labels, has_text].iter().filter(|&&b| b).count() != 1 {
+            return Err("each answer needs exactly one of selectedLabel, selectedLabels, freeText".to_string());
+        }
+        if let Some(t) = obj.get("freeText").and_then(Value::as_str) {
+            if t.len() > 500 {
+                return Err("freeText is capped at 500 chars".to_string());
+            }
+        }
+    }
+    let client = {
+        state
+            .host
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .as_ref()
+            .map(|h| h.client.clone())
+    };
+    let Some(client) = client else {
+        return Err("no sidecar host — start a session first".to_string());
+    };
+    client
+        .request(
+            "userInput/answer",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": session_id,
+                "userInputId": user_input_id,
+                "answers": answers,
+            }),
+        )
+        .await?;
+    Ok(())
+}
+
+/// Decline an input prompt; the tool call resolves cancelled (model-visible).
+#[tauri::command]
+async fn cancel_input(
+    state: State<'_, AppState>,
+    session_id: String,
+    user_input_id: String,
+) -> Result<(), String> {
+    let client = {
+        state
+            .host
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .as_ref()
+            .map(|h| h.client.clone())
+    };
+    let Some(client) = client else {
+        return Err("no sidecar host — start a session first".to_string());
+    };
+    client
+        .request(
+            "userInput/cancel",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": session_id,
+                "userInputId": user_input_id,
+                "reason": "declined in UI",
+            }),
+        )
+        .await?;
+    Ok(())
+}
+
 #[tauri::command]
 async fn cancel_session(
     app: AppHandle,
@@ -834,6 +991,72 @@ async fn kill_session(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_prompt() -> Value {
+        json!({
+            "sessionId": "sess-1",
+            "itemId": "item-9",
+            "toolName": "ask",
+            "toolCallId": "tc-1",
+            "turnId": "t-1",
+            "userInputId": "ui-7",
+            "questions": [
+                {
+                    "id": "q1",
+                    "header": "Format",
+                    "question": "Which format?",
+                    "selection": {"mode": "single"},
+                    "options": [
+                        {"label": "Short", "description": "under 100 words"},
+                        {"label": "Long"}
+                    ]
+                },
+                {
+                    "id": "q2",
+                    "header": "Topics",
+                    "question": "Pick topics",
+                    "selection": {"mode": "multiple", "minSelections": 1, "maxSelections": 2},
+                    "options": [{"label": "A"}, {"label": "B"}]
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn input_payload_threads_ids_and_modes() {
+        let out = build_input_request_payload(&sample_prompt()).unwrap();
+        assert_eq!(out["inputId"], "ui-7");
+        assert_eq!(out["request_id"], "ui-7");
+        assert_eq!(out["questions"].as_array().unwrap().len(), 2);
+        assert_eq!(out["questions"][0]["mode"], "single");
+        assert_eq!(out["questions"][0]["options"][0]["label"], "Short");
+        assert_eq!(out["questions"][1]["mode"], "multiple");
+        assert_eq!(out["questions"][1]["maxSelections"], 2);
+    }
+
+    #[test]
+    fn input_payload_rejects_missing_id_or_empty_questions() {
+        let mut bad = sample_prompt();
+        bad.as_object_mut().unwrap().remove("userInputId");
+        assert!(build_input_request_payload(&bad).is_none());
+        let empty = json!({"userInputId": "x", "questions": []});
+        assert!(build_input_request_payload(&empty).is_none());
+    }
+
+    #[test]
+    fn input_payload_drops_bad_modes_but_keeps_good() {
+        let mut p = sample_prompt();
+        p["questions"][0]["selection"]["mode"] = json!("ranked");
+        let out = build_input_request_payload(&p).unwrap();
+        let qs = out["questions"].as_array().unwrap();
+        assert_eq!(qs.len(), 1);
+        assert_eq!(qs[0]["id"], "q2");
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -853,6 +1076,8 @@ fn main() {
             restore_sessions,
             send_input,
             approve,
+            answer_input,
+            cancel_input,
             cancel_session,
             kill_session,
             set_workspace,
