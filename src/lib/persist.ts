@@ -179,6 +179,53 @@ export function saveActiveId(id: string | null): void {
   }
 }
 
+/**
+ * US-15 allowlist: persistent approval rules (extends this module's scope).
+ * One rule memoizes a command pattern + scope with an allow/prompt/forbidden
+ * decision. Stored under a dedicated localStorage key so it survives restarts
+ * like sessions and logs; writes are best-effort like everything else here.
+ */
+export type AllowDecision = "allow" | "prompt" | "forbidden";
+
+export interface AllowRule {
+  id: string;
+  /** Command pattern: substring or `*` glob, matched case-insensitively. */
+  pattern: string;
+  /** Host scope the rule was memorized from (command scope or network/domain). */
+  scope: string;
+  decision: AllowDecision;
+  createdAt: number;
+}
+
+const ALLOWLIST_KEY = "muse-desktop.allowlist.v1";
+
+/** Cap stored rules so a runaway memorizer stays bounded (cf. 2000/500 caps). */
+export const MAX_ALLOWLIST_RULES = 200;
+
+function isValidAllowRule(r: unknown): r is AllowRule {
+  if (typeof r !== "object" || r === null) return false;
+  const o = r as Record<string, unknown>;
+  return (
+    typeof o.id === "string" &&
+    o.id.length > 0 &&
+    typeof o.pattern === "string" &&
+    o.pattern.length > 0 &&
+    typeof o.scope === "string" &&
+    (o.decision === "allow" || o.decision === "prompt" || o.decision === "forbidden") &&
+    typeof o.createdAt === "number"
+  );
+}
+
+export function loadAllowlist(): AllowRule[] {
+  const raw = read<unknown>(ALLOWLIST_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isValidAllowRule).slice(-MAX_ALLOWLIST_RULES);
+}
+
+export function saveAllowlist(rules: AllowRule[]): void {
+  write(ALLOWLIST_KEY, rules.slice(-MAX_ALLOWLIST_RULES));
+}
+
 export function newId(): string {
   try {
     return crypto.randomUUID();

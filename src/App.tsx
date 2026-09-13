@@ -27,6 +27,11 @@ export default function App() {
     startSession,
     sendInput,
     approve,
+    allowlist,
+    allowDecisionFor,
+    rememberApproval,
+    revokeAllowRule,
+    setAllowRuleDecision,
     answerInput,
     cancelInput,
     cancelSession,
@@ -110,7 +115,15 @@ export default function App() {
                 ev:{evtCount}
               </span>
             </header>
-            <ApprovalPanel approvals={activeApprovals} onDecision={approve} />
+            <ApprovalPanel
+              approvals={activeApprovals}
+              rules={allowlist}
+              onDecision={approve}
+              onRemember={(a, choiceId) => void rememberApproval(a, choiceId)}
+              decisionFor={allowDecisionFor}
+              onRevoke={revokeAllowRule}
+              onRuleDecision={setAllowRuleDecision}
+            />
             <InputPanel
               requests={activeInputRequests}
               onAnswer={(sid, iid, answers) => void answerInput(sid, iid, answers)}
