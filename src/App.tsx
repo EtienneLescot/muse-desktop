@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { BUILD_ID } from "./lib/env";
+import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
+import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { WorkspacePicker } from "./components/WorkspacePicker";
 import { EmptySessionScreen } from "./components/EmptySessionScreen";
@@ -43,6 +45,19 @@ export default function App() {
     return counts;
   }, [approvals, inputRequests]);
 
+  // US-33: sidecar startup failures surface explicitly (message + expected
+  // paths + retry/re-pick actions), never as a blank screen.
+  const sidecarKind = classifySidecarError(error);
+  const sidecarPanel = sidecarKind !== null && error !== null && (
+    <SidecarErrorPanel
+      kind={sidecarKind}
+      message={error}
+      triedPaths={extractTriedPaths(error)}
+      onRetry={() => void startSession()}
+      onPickWorkspace={setWorkspace}
+    />
+  );
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -67,11 +82,14 @@ export default function App() {
             live sessions; local history still works.
           </div>
         )}
-        {error && <div className="error-banner">{error}</div>}
+        {sidecarKind !== null
+          ? (active !== null && sidecarPanel)
+          : (error && <div className="error-banner">{error}</div>)}
         {active === null ? (
           <EmptySessionScreen
             hasWorkspace={workspace !== null}
             onNewSession={startSession}
+            sidecarError={sidecarPanel}
           />
         ) : (
           <div className="session-view">

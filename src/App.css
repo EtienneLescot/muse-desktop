@@ -417,6 +417,56 @@ button:hover:not(:disabled) {
   text-align: center;
 }
 
+.empty-session.wide {
+  max-width: 560px;
+  text-align: left;
+}
+
+.sidecar-error {
+  border: 1px solid var(--danger);
+  background: var(--danger-bg);
+  border-radius: 4px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidecar-error h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--danger);
+}
+
+.sidecar-error p {
+  margin: 0;
+}
+
+.sidecar-error-message {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.85rem;
+  word-break: break-word;
+}
+
+.sidecar-error ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.sidecar-error code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.85rem;
+  background: var(--code-bg);
+  padding: 0 4px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+.sidecar-error-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .muted {
   color: var(--muted);
 }
