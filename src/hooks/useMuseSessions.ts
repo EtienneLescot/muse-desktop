@@ -50,6 +50,12 @@ import {
   isSubagentItemKind,
   upsertReflexivePlaceholder,
 } from "../lib/phase";
+// Sub-agent payload parsing/formatting (US-6 controls): pure, unit-tested.
+import {
+  formatDrilldown,
+  formatSubagentResult,
+  parseSubagentPayload,
+} from "../lib/subagent";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -116,6 +122,15 @@ interface UseMuseSessions {
   activeInputRequests: InputRequest[];
   cancelSession: (sessionId: string) => Promise<void>;
   killSession: (sessionId: string) => Promise<void>;
+  /** US-6 controls: one hook method per `subagent/*` MSP method. */
+  subagentInterrupt: (sessionId: string, agentId: string) => Promise<void>;
+  subagentStop: (sessionId: string, agentId: string) => Promise<void>;
+  subagentResume: (sessionId: string, agentId: string) => Promise<void>;
+  subagentFollowup: (sessionId: string, agentId: string, task: string) => Promise<void>;
+  /** `subagent/readResult`: formatted result text, or null on error. */
+  subagentReadResult: (sessionId: string, agentId: string) => Promise<string | null>;
+  /** Drill-down via `session/read`; explicit error when unavailable. */
+  subagentDrilldown: (sessionId: string, childSessionId: string | undefined) => Promise<string | null>;
   error: string | null;
   /** TEMPORARY dev diagnosis: backend events received by this window. */
   evtCount: number;
@@ -134,32 +149,6 @@ interface BackendSessionMeta {
 function shortTitle(text: string): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   return oneLine.length > 42 ? `${oneLine.slice(0, 42)}…` : oneLine;
-}
-
-/** Best-effort parse of a subagent payload: JSON or tagged/plain text. */
-function parseSubagent(payload: string): { agentId: string; text: string } {
-  const trimmed = payload.trim();
-  if (trimmed.startsWith("{")) {
-    try {
-      const obj = JSON.parse(trimmed) as Record<string, unknown>;
-      const agentId =
-        (typeof obj.agent_id === "string" && obj.agent_id) ||
-        (typeof obj.id === "string" && obj.id) ||
-        (typeof obj.name === "string" && obj.name) ||
-        "agent";
-      const text =
-        (typeof obj.text === "string" && obj.text) ||
-        (typeof obj.chunk === "string" && obj.chunk) ||
-        (typeof obj.output === "string" && obj.output) ||
-        payload;
-      return { agentId, text };
-    } catch {
-      // fall through to plain text
-    }
-  }
-  const m = /^\/\*([^*]+)\*\/\s*([\s\S]*)$/.exec(trimmed) ?? /^([A-Za-z0-9_-]{1,32}):\s+([\s\S]+)$/.exec(trimmed);
-  if (m) return { agentId: m[1].trim() || "agent", text: m[2] };
-  return { agentId: "agent", text: payload };
 }
 
 /**
@@ -239,7 +228,8 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
  *   coalesced into one open entry, sub-agent blocks grouped by agent id,
  *   tool/system entries), persisted per session and restored on boot.
  * - Invokes `start_session` / `send_input` / `approve` / `cancel_session` /
- *   `kill_session` with camelCase args (Tauri `#[command]` default), and
+ *   `kill_session` / `subagent_*` with camelCase args (Tauri `#[command]`
+ *   default), and
  *   subscribes to `output` / `subagent_event` / `tool_request` / `status`.
  *   (Event payloads stay snake_case: they are Rust-serde JSON, not args.)
  */
@@ -530,17 +520,42 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "subagent_event") {
       ensureSessionRow(sid, null);
-      const { agentId, text } = parseSubagent(payload);
+      const parsed = parseSubagentPayload(payload);
       setLogs((cur) => {
         const log = cur[sid] ?? [];
-        const i = lastOpenIndex(log, "subagent", agentId);
+        const i = lastOpenIndex(log, "subagent", parsed.agentId);
         let next: LogEntry[];
         if (i >= 0) {
-          next = [...log.slice(0, i), { ...log[i], text: log[i].text + text }, ...log.slice(i + 1)];
+          // Keep drill-down identity learned earlier: a bare delta must not
+          // wipe the childSessionId announced at `item/started`.
+          const prev = log[i];
+          next = [
+            ...log.slice(0, i),
+            {
+              ...prev,
+              text: prev.text + parsed.text,
+              childSessionId: parsed.childSessionId ?? prev.childSessionId,
+              objective: parsed.objective ?? prev.objective,
+              subagentRole: parsed.role ?? prev.subagentRole,
+              depth: parsed.depth ?? prev.depth,
+            },
+            ...log.slice(i + 1),
+          ];
         } else {
           next = [
             ...log,
-            { id: newId(), ts: Date.now(), role: "subagent" as LogRole, text, agentId, open: true },
+            {
+              id: newId(),
+              ts: Date.now(),
+              role: "subagent" as LogRole,
+              text: parsed.text,
+              agentId: parsed.agentId,
+              open: true,
+              childSessionId: parsed.childSessionId,
+              objective: parsed.objective,
+              subagentRole: parsed.role,
+              depth: parsed.depth,
+            },
           ];
         }
         saveLog(sid, next);
@@ -858,6 +873,102 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, []);
 
+  // US-6 sub-agent controls: each method invokes exactly one `subagent/*`
+  // Tauri command (one MSP method), then kicks the poll loop so the effect
+  // paints from its first events instead of waiting for the next tick.
+  const subagentFireAndForget = useCallback(
+    async (command: string, sessionId: string, agentId: string, extra?: Record<string, string>) => {
+      try {
+        setError(null);
+        await invoke(command, { sessionId, agentId, ...extra });
+        pushLog(sessionId, [
+          { id: newId(), ts: Date.now(), role: "system", text: `Subagent ${agentId}: ${command} sent.` },
+        ]);
+        kickPoll();
+      } catch (e) {
+        setError(`${command} failed: ${String(e)}`);
+      }
+    },
+    [kickPoll],
+  );
+
+  const subagentInterrupt = useCallback(
+    (sessionId: string, agentId: string) =>
+      subagentFireAndForget("subagent_interrupt", sessionId, agentId),
+    [subagentFireAndForget],
+  );
+
+  const subagentStop = useCallback(
+    (sessionId: string, agentId: string) =>
+      subagentFireAndForget("subagent_stop", sessionId, agentId),
+    [subagentFireAndForget],
+  );
+
+  const subagentResume = useCallback(
+    (sessionId: string, agentId: string) =>
+      subagentFireAndForget("subagent_resume", sessionId, agentId),
+    [subagentFireAndForget],
+  );
+
+  const subagentFollowup = useCallback(
+    async (sessionId: string, agentId: string, task: string) => {
+      const trimmed = task.trim();
+      if (!trimmed) {
+        setError("subagent_followup failed: task must not be empty");
+        return;
+      }
+      await subagentFireAndForget("subagent_followup", sessionId, agentId, { task: trimmed });
+    },
+    [subagentFireAndForget],
+  );
+
+  const subagentReadResult = useCallback(
+    async (sessionId: string, agentId: string): Promise<string | null> => {
+      try {
+        setError(null);
+        const res = await invoke<unknown>("subagent_read_result", { sessionId, agentId });
+        const text = formatSubagentResult(res);
+        pushLog(sessionId, [
+          { id: newId(), ts: Date.now(), role: "system", text: `Subagent ${agentId} result:\n${text}` },
+        ]);
+        kickPoll();
+        return text;
+      } catch (e) {
+        setError(`subagent_read_result failed: ${String(e)}`);
+        return null;
+      }
+    },
+    [kickPoll],
+  );
+
+  const subagentDrilldown = useCallback(
+    async (sessionId: string, childSessionId: string | undefined): Promise<string | null> => {
+      if (!childSessionId) {
+        // Explicit error, never a silent empty view: without an id there is
+        // nothing `session/read` could open.
+        setError("subagent drill-down unavailable: this block carries no child session id");
+        return null;
+      }
+      try {
+        setError(null);
+        const res = await invoke<unknown>("subagent_drilldown", {
+          sessionId,
+          childSessionId,
+        });
+        const text = formatDrilldown(res);
+        pushLog(sessionId, [
+          { id: newId(), ts: Date.now(), role: "system", text: `Child session ${childSessionId}:\n${text}` },
+        ]);
+        kickPoll();
+        return text;
+      } catch (e) {
+        setError(`subagent drill-down failed: ${String(e)}`);
+        return null;
+      }
+    },
+    [kickPoll],
+  );
+
   // Updated every render; the poll loop reads it for cadence.
   runningRef.current = sessions.some((s) => s.running);
   // Latest event handler for the render-detached poll drain.
@@ -883,6 +994,12 @@ export function useMuseSessions(): UseMuseSessions {
     cancelInput,
     cancelSession,
     killSession,
+    subagentInterrupt,
+    subagentStop,
+    subagentResume,
+    subagentFollowup,
+    subagentReadResult,
+    subagentDrilldown,
     error,
     evtCount,
   };
