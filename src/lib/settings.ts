@@ -9,10 +9,12 @@
  *   `elevated` modes only take effect with their explicit permission toggle
  *   persisted alongside; without it the effective mode falls back to
  *   `workspace` (fail-closed).
- * - Providers (US-31): picker over a local sample registry. The backend
- *   model list is unsourced, so the UI must label this "configured
- *   providers", never a live list. Selection persists per project
- *   (project id = workspace path).
+ * - Providers (US-31): picker over the live host catalog (`model/list`,
+ *   snapshot at call time) with the local sample registry as fallback when
+ *   the backend is unreachable. The fallback must be labelled "configured
+ *   providers", never a live list. Provider selection persists per project
+ *   (project id = workspace path); model choice applies via
+ *   `session/setModel` on the active session.
  * - Scope routing: paths outside the workspace root are out-of-scope
  *   attempts and must go through the existing scope-guard prompt path
  *   (`checkScope` in ./scope.ts); `isOutsideWorkspace` is the pure
@@ -89,13 +91,80 @@ export const WEB_SEARCH_DEFAULT_NOTE =
   "Web search is off by default. Results are never fetched " +
   "in the background; enabling search is an explicit per-request choice.";
 
-/** One entry of the local sample provider registry (US-31). */
+/** One entry of the provider picker (US-31). */
 export interface ProviderEntry {
   id: string;
   label: string;
   model: string;
-  /** Every entry here is a local sample, never a live backend listing. */
-  sample: true;
+  /** True for local samples, false for live host catalog rows. */
+  sample: boolean;
+}
+
+/**
+ * One row of the live host catalog (`model/list` result `models[]`).
+ * Same defensive contract as the Rust `ModelEntry`: only `modelId` is
+ * required; everything else falls back. Unknown/invalid rows are dropped.
+ */
+export interface LiveModel {
+  modelId: string;
+  displayLabel: string;
+  providerId: string;
+  profileId: string | null;
+  isActive: boolean;
+  isDefault: boolean;
+}
+
+/** Validate one catalog row; null when it carries no usable model id. */
+export function parseLiveModel(raw: unknown): LiveModel | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const o = raw as Record<string, unknown>;
+  const id = ["modelId", "model_id", "id"]
+    .map((k) => o[k])
+    .find(
+      (v): v is string => typeof v === "string" && v.trim().length > 0,
+    );
+  if (id === undefined) return null;
+  const str = (keys: string[], fallback: string): string => {
+    for (const k of keys) {
+      const v = o[k];
+      if (typeof v === "string" && v.length > 0) return v;
+    }
+    return fallback;
+  };
+  const bool = (keys: string[]): boolean =>
+    keys.some((k) => o[k] === true);
+  const profile = ["profileId", "profile_id", "profile"]
+    .map((k) => o[k])
+    .find((v): v is string => typeof v === "string" && v.length > 0) ?? null;
+  return {
+    modelId: id,
+    displayLabel: str(["displayLabel", "display_label", "label"], id),
+    providerId: str(["providerId", "provider_id", "provider"], ""),
+    profileId: profile,
+    isActive: bool(["isActive", "is_active"]),
+    isDefault: bool(["isDefault", "is_default"]),
+  };
+}
+
+/** Validate a whole catalog payload; invalid rows are dropped. */
+export function parseModelList(raw: unknown): LiveModel[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LiveModel[] = [];
+  for (const row of raw) {
+    const m = parseLiveModel(row);
+    if (m !== null) out.push(m);
+  }
+  return out;
+}
+
+/** Project a live catalog onto picker entries (never samples). */
+export function liveProviderEntries(live: LiveModel[]): ProviderEntry[] {
+  return live.map((m) => ({
+    id: `live:${m.modelId}`,
+    label: m.displayLabel,
+    model: m.modelId,
+    sample: false,
+  }));
 }
 
 /**

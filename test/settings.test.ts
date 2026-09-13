@@ -24,6 +24,9 @@ import {
   isOutsideWorkspace,
   isRelaxedSandbox,
   isSandboxMode,
+  liveProviderEntries,
+  parseModelList,
+  parseLiveModel,
   parseProviderId,
   parseProviderMap,
   parseSandboxSettings,
@@ -190,5 +193,54 @@ describe("workspace containment", () => {
     assert.equal(isOutsideWorkspace("", "/ws/a.ts"), true);
     assert.equal(isOutsideWorkspace("/ws", ""), true);
     assert.equal(isOutsideWorkspace("/ws", "   "), true);
+  });
+});
+
+describe("live model catalog (US-31)", () => {
+  const liveRow = {
+    modelId: "muse-spark-1.3-contributor",
+    displayLabel: "muse-spark-1.3-contributor",
+    providerId: "meta",
+    profileId: "tbh",
+    isActive: false,
+    isDefault: true,
+    contextLimit: 1007997,
+  };
+
+  it("parses a full live row, keeps host flags", () => {
+    const m = parseLiveModel(liveRow);
+    assert.ok(m !== null);
+    assert.equal(m.modelId, "muse-spark-1.3-contributor");
+    assert.equal(m.providerId, "meta");
+    assert.equal(m.profileId, "tbh");
+    assert.equal(m.isActive, false);
+    assert.equal(m.isDefault, true);
+  });
+
+  it("drops rows without a usable id, defaults the rest", () => {
+    assert.equal(parseLiveModel(null), null);
+    assert.equal(parseLiveModel({}), null);
+    assert.equal(parseLiveModel({ modelId: "" }), null);
+    const sparse = parseLiveModel({ id: "legacy-1" });
+    assert.ok(sparse !== null);
+    assert.equal(sparse.displayLabel, "legacy-1");
+    assert.equal(sparse.providerId, "");
+    assert.equal(sparse.profileId, null);
+    assert.equal(sparse.isActive, false);
+  });
+
+  it("parseModelList keeps valid rows, drops the rest", () => {
+    assert.deepEqual(parseModelList("nope"), []);
+    assert.deepEqual(parseModelList(null), []);
+    const out = parseModelList([liveRow, {}, { modelId: "m-2" }]);
+    assert.equal(out.length, 2);
+    assert.equal(out[1].modelId, "m-2");
+  });
+
+  it("live entries are never samples", () => {
+    const entries = liveProviderEntries(parseModelList([liveRow]));
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].sample, false);
+    assert.equal(entries[0].model, "muse-spark-1.3-contributor");
   });
 });

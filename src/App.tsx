@@ -63,6 +63,10 @@ export default function App() {
     setSandbox,
     providerId,
     setProviderId,
+    liveModels,
+    modelsError,
+    refreshModels,
+    setSessionModel,
     checkPathScope,
     setActive,
     startSession,
@@ -331,6 +335,13 @@ export default function App() {
               onSandboxChange={setSandbox}
               providerId={providerId}
               onProviderChange={setProviderId}
+              liveModels={liveModels}
+              modelsError={modelsError}
+              activeSessionId={activeId}
+              onRefreshModels={() => void refreshModels(activeId ?? undefined)}
+              onSelectModel={(modelId) => {
+                if (activeId !== null) void setSessionModel(activeId, modelId);
+              }}
               checkPathScope={checkPathScope}
               onClose={() => setSettingsOpen(false)}
             />

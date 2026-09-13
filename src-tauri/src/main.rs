@@ -67,6 +67,74 @@ pub struct ScopeCheck {
     pub reason: String,
 }
 
+/// One row of the host model catalog (`model/list` result `models[]`,
+/// US-31). Field names are camelCase on the wire; the struct renames them
+/// for the TS side, which uses the same names. Only `modelId` is required —
+/// every other field is defensive (a newer host may add keys, an older one
+/// may omit them).
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct ModelEntry {
+    pub model_id: String,
+    pub display_label: String,
+    pub provider_id: String,
+    pub profile_id: Option<String>,
+    pub is_active: bool,
+    pub is_default: bool,
+    pub context_limit: Option<u64>,
+    pub output_limit: Option<u64>,
+}
+
+/// Parse one catalog row defensively: `modelId` (or legacy `id`) is
+/// required, everything else falls back to a neutral default. Additive
+/// schema evolution must never drop a row the host sent.
+fn parse_model_entry(v: &Value) -> Option<ModelEntry> {
+    let model_id = v
+        .get("modelId")
+        .or_else(|| v.get("model_id"))
+        .or_else(|| v.get("id"))
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())?;
+    let str_or = |keys: &[&str], fallback: &str| {
+        keys.iter()
+            .filter_map(|k| v.get(*k))
+            .filter_map(Value::as_str)
+            .find(|s| !s.is_empty())
+            .unwrap_or(fallback)
+            .to_string()
+    };
+    let opt_str = |keys: &[&str]| {
+        keys.iter()
+            .filter_map(|k| v.get(*k))
+            .filter_map(Value::as_str)
+            .find(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    let opt_u64 = |keys: &[&str]| {
+        keys.iter()
+            .filter_map(|k| v.get(*k))
+            .filter_map(Value::as_u64)
+            .next()
+    };
+    Some(ModelEntry {
+        model_id: model_id.to_string(),
+        display_label: str_or(&["displayLabel", "display_label", "label"], model_id),
+        provider_id: str_or(&["providerId", "provider_id", "provider"], ""),
+        profile_id: opt_str(&["profileId", "profile_id", "profile"]),
+        is_active: v
+            .get("isActive")
+            .or_else(|| v.get("is_active"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        is_default: v
+            .get("isDefault")
+            .or_else(|| v.get("is_default"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        context_limit: opt_u64(&["contextLimit", "context_limit"]),
+        output_limit: opt_u64(&["outputLimit", "output_limit"]),
+    })
+}
+
 /// A pending approval: what `approval/decide` needs beyond the choice itself.
 /// `requirement_id` is the opaque race-guard token from `approval/requested`,
 /// echoed back verbatim (stale values are rejected by the host, surfaced as
@@ -999,6 +1067,90 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
     Ok(out)
 }
 
+/// US-31: live host model catalog (`model/list`). A query, not a command —
+/// no `commandId` param (the JSON-RPC frame id is minted by `request`).
+/// No host yet (fresh boot): empty list, the UI falls back to its sample
+/// registry. `session_id` is optional; when present the row matching that
+/// session's effective model is flagged `isActive` by the host.
+#[tauri::command]
+async fn list_models(
+    state: State<'_, AppState>,
+    session_id: Option<String>,
+) -> Result<Vec<ModelEntry>, String> {
+    let client = {
+        state
+            .host
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .as_ref()
+            .map(|h| h.client.clone())
+    };
+    let Some(client) = client else {
+        return Ok(Vec::new());
+    };
+    let mut params = json!({});
+    if let Some(sid) = session_id {
+        if !sid.trim().is_empty() {
+            params["sessionId"] = json!(sid);
+        }
+    }
+    let res = client.request("model/list", params).await?;
+    let mut out = Vec::new();
+    if let Some(models) = res.get("models").and_then(Value::as_array) {
+        for m in models {
+            if let Some(entry) = parse_model_entry(m) {
+                out.push(entry);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// US-31: model-picker gesture (`session/setModel`). Durable on the host,
+/// applies to subsequent model calls of that session. `model_id` is the
+/// catalog id (required by schema); provider/profile ride along when known.
+#[tauri::command]
+async fn set_model(
+    state: State<'_, AppState>,
+    session_id: String,
+    model_id: String,
+    provider_id: Option<String>,
+    profile_id: Option<String>,
+) -> Result<(), String> {
+    if model_id.trim().is_empty() {
+        return Err("empty model id".to_string());
+    }
+    let client = {
+        state
+            .host
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .as_ref()
+            .map(|h| h.client.clone())
+    };
+    let Some(client) = client else {
+        return Err("no sidecar host — start a session first".to_string());
+    };
+    let mut model = json!({ "modelId": model_id });
+    if let Some(p) = provider_id.filter(|s| !s.trim().is_empty()) {
+        model["providerId"] = json!(p);
+    }
+    if let Some(p) = profile_id.filter(|s| !s.trim().is_empty()) {
+        model["profileId"] = json!(p);
+    }
+    client
+        .request(
+            "session/setModel",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": session_id,
+                "model": model,
+            }),
+        )
+        .await?;
+    Ok(())
+}
+
 #[tauri::command]
 async fn send_input(
     state: State<'_, AppState>,
@@ -1597,6 +1749,45 @@ mod tests {
     }
 
     #[test]
+    fn model_entry_parses_full_live_row() {
+        let row = json!({
+            "modelId": "muse-spark-1.3-contributor",
+            "displayLabel": "muse-spark-1.3-contributor",
+            "providerId": "meta",
+            "profileId": "tbh",
+            "isActive": false,
+            "isDefault": true,
+            "contextLimit": 1007997,
+            "outputLimit": 128000,
+            "cost": {"input": "0.10"},
+        });
+        let e = parse_model_entry(&row).unwrap();
+        assert_eq!(e.model_id, "muse-spark-1.3-contributor");
+        assert_eq!(e.display_label, "muse-spark-1.3-contributor");
+        assert_eq!(e.provider_id, "meta");
+        assert_eq!(e.profile_id.as_deref(), Some("tbh"));
+        assert!(!e.is_active);
+        assert!(e.is_default);
+        assert_eq!(e.context_limit, Some(1007997));
+        assert_eq!(e.output_limit, Some(128000));
+    }
+
+    #[test]
+    fn model_entry_requires_an_id_but_tolerates_sparse_rows() {
+        assert!(parse_model_entry(&json!({})).is_none());
+        assert!(parse_model_entry(&json!({"modelId": ""})).is_none());
+        assert!(parse_model_entry(&json!({"modelId": "  "})).is_none());
+        // Sparse row: label falls back to the id, flags default off.
+        let e = parse_model_entry(&json!({"id": "legacy-1"})).unwrap();
+        assert_eq!(e.model_id, "legacy-1");
+        assert_eq!(e.display_label, "legacy-1");
+        assert_eq!(e.provider_id, "");
+        assert_eq!(e.profile_id, None);
+        assert!(!e.is_active && !e.is_default);
+        assert_eq!(e.context_limit, None);
+    }
+
+    #[test]
     fn subagent_payloads_reject_blank_ids() {
         assert!(subagent_control_payload(SUBAGENT_STOP_METHOD, "", "item-9").is_err());
         assert!(subagent_control_payload(SUBAGENT_STOP_METHOD, "sess-1", "  ").is_err());
@@ -1655,6 +1846,8 @@ fn main() {
             kill_session,
             set_workspace,
             check_scope,
+            list_models,
+            set_model,
             poll_events,
             subagent_interrupt,
             subagent_stop,

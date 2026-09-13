@@ -7,9 +7,12 @@
  * - Sandbox mode select (workspace-confined default); network/elevated
  *   need their explicit permission toggle persisted alongside.
  * - Hidden web-search default note.
- * - Provider/model picker over the local sample registry, labelled
- *   "configured providers" (the backend model list is unsourced, so this
- *   is never presented as a live list). Selection persists per project.
+ * - Model picker over the live host catalog when reachable (US-31):
+ *   `model/list` snapshot with host-flagged active/default rows; picking
+ *   one calls `session/setModel` on the active session. Unreachable
+ *   backend falls back to the local sample registry, labelled "configured
+ *   providers" (never a live list). Provider selection persists per
+ *   project either way.
  */
 import { useState } from "react";
 import type { ScopeVerdict } from "../lib/scope";
@@ -19,6 +22,7 @@ import {
   canSelectMode,
   effectiveSandboxMode,
   isOutsideWorkspace,
+  type LiveModel,
   type SandboxMode,
   type SandboxSettings,
 } from "../lib/settings";
@@ -31,6 +35,16 @@ interface Props {
   /** Provider id selected for the current project. */
   providerId: string;
   onProviderChange: (id: string) => void;
+  /** Live host catalog (`model/list` snapshot); null when unloaded. */
+  liveModels: LiveModel[] | null;
+  /** Last catalog load failure; the picker falls back silently otherwise. */
+  modelsError: string | null;
+  /** Active session id; null disables the live pick (needs a target). */
+  activeSessionId: string | null;
+  /** Reload the catalog (host-flagged active row follows the session). */
+  onRefreshModels: () => void;
+  /** Model-picker gesture on the active session (`session/setModel`). */
+  onSelectModel: (modelId: string) => void;
   /**
    * Existing scope-guard prompt path: out-of-scope attempts go here.
    * Surfaces the backend verdict (and the error-banner prompt) for the path.
@@ -45,6 +59,11 @@ export function SettingsPanel({
   onSandboxChange,
   providerId,
   onProviderChange,
+  liveModels,
+  modelsError,
+  activeSessionId,
+  onRefreshModels,
+  onSelectModel,
   checkPathScope,
   onClose,
 }: Props) {
@@ -180,28 +199,72 @@ export function SettingsPanel({
       </div>
 
       <div className="settings-group">
-        <h3>Configured providers</h3>
-        <p className="settings-note">
-          Sample registry in the app — not a live backend list.
-        </p>
-        <label className="settings-label" htmlFor="settings-provider">
-          Provider / model (saved per project)
-        </label>
-        <select
-          id="settings-provider"
-          value={providerId}
-          onChange={(e) => onProviderChange(e.target.value)}
-          aria-label="Provider and model"
-        >
-          {CONFIGURED_PROVIDERS.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label} — {p.model}
-            </option>
-          ))}
-        </select>
-        <p className="settings-note">
-          Project: {workspace ?? "none selected yet"}
-        </p>
+        <h3>{liveModels === null ? "Configured providers" : "Live models"}</h3>
+        {liveModels === null ? (
+          <>
+            <p className="settings-note">
+              Sample registry in the app — not a live backend list.
+              {modelsError !== null && ` (${modelsError})`}
+            </p>
+            <label className="settings-label" htmlFor="settings-provider">
+              Provider / model (saved per project)
+            </label>
+            <select
+              id="settings-provider"
+              value={providerId}
+              onChange={(e) => onProviderChange(e.target.value)}
+              aria-label="Provider and model"
+            >
+              {CONFIGURED_PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} — {p.model}
+                </option>
+              ))}
+            </select>
+            <p className="settings-note">
+              Project: {workspace ?? "none selected yet"}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="settings-note">
+              Live host catalog snapshot ({liveModels.length} model
+              {liveModels.length === 1 ? "" : "s"}).
+              <button
+                type="button"
+                className="settings-link"
+                onClick={onRefreshModels}
+              >
+                Refresh
+              </button>
+            </p>
+            <label className="settings-label" htmlFor="settings-model">
+              Model (applies to the active session)
+            </label>
+            <select
+              id="settings-model"
+              value={liveModels.find((m) => m.isActive)?.modelId ?? ""}
+              onChange={(e) => {
+                if (e.target.value.length > 0) onSelectModel(e.target.value);
+              }}
+              disabled={activeSessionId === null}
+              aria-label="Live model for the active session"
+            >
+              {liveModels.map((m) => (
+                <option key={m.modelId} value={m.modelId}>
+                  {m.displayLabel}
+                  {m.isDefault ? " (default)" : ""}
+                  {m.isActive ? " (active)" : ""}
+                </option>
+              ))}
+            </select>
+            {activeSessionId === null && (
+              <p className="settings-note">
+                Start or select a session to change its model.
+              </p>
+            )}
+          </>
+        )}
       </div>
     </section>
   );

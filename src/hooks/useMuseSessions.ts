@@ -186,10 +186,12 @@ import {
 import {
   PROVIDER_MAP_KEY,
   SETTINGS_KEY,
+  parseModelList,
   parseProviderId,
   parseProviderMap,
   parseSandboxSettings,
   providerForProject,
+  type LiveModel,
   type SandboxSettings,
 } from "../lib/settings";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
@@ -423,6 +425,14 @@ interface UseMuseSessions {
   providerId: string;
   /** w-settings: persist the provider selection for the current project. */
   setProviderId: (id: string) => void;
+  /** US-31: live host catalog (`model/list` snapshot), null when unloaded. */
+  liveModels: LiveModel[] | null;
+  /** US-31: last catalog load failure (panel shows it, picker falls back). */
+  modelsError: string | null;
+  /** US-31: (re)load the catalog, optionally flagging one session active. */
+  refreshModels: (sessionId?: string) => Promise<void>;
+  /** US-31: model-picker gesture on one session, then reload the catalog. */
+  setSessionModel: (sessionId: string, modelId: string) => Promise<void>;
   /** w-settings: route a path through the scope-guard prompt path. */
   checkPathScope: (path: string) => Promise<ScopeVerdict>;
   startSession: () => Promise<void>;
@@ -945,6 +955,10 @@ export function useMuseSessions(): UseMuseSessions {
         if (!cancelled) setError(`event poll failed: ${String(err)}`);
         return;
       }
+      // US-31: the backend answered, so the host is up — snapshot the live
+      // model catalog once (no per-session active flags yet; setSessionModel
+      // reloads with the session after each pick). refreshModels is stable.
+      if (!cancelled) await refreshModels();
       // setTimeout chain (not setInterval): cadence adapts to whether a
       // turn is streaming, and a slow tick never piles onto the next. The
       // drain itself goes through the shared chain so a post-send kick can
@@ -1450,6 +1464,50 @@ export function useMuseSessions(): UseMuseSessions {
       return { ...cur, [ws]: checked };
     });
   }, [workspace]);
+
+  // US-31: live host catalog. Null until the first successful load (the
+  // panel falls back to the sample registry); failures record modelsError
+  // instead of clobbering the banner — a picker must degrade, not shout.
+  const [liveModels, setLiveModels] = useState<LiveModel[] | null>(null);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const refreshModels = useCallback(async (sessionId?: string) => {
+    try {
+      const raw = await invoke("list_models", {
+        sessionId: sessionId ?? null,
+      });
+      setLiveModels(parseModelList(raw));
+      setModelsError(null);
+    } catch (e) {
+      setLiveModels(null);
+      setModelsError(
+        `model catalog unavailable: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }, []);
+
+  // US-31: model-picker gesture (`session/setModel`) on one session, then
+  // reload so the host-flagged `isActive` row follows the choice.
+  const setSessionModel = useCallback(
+    async (sessionId: string, modelId: string) => {
+      const target = liveModels?.find((m) => m.modelId === modelId) ?? null;
+      try {
+        await invoke("set_model", {
+          sessionId,
+          modelId,
+          providerId: target?.providerId ?? null,
+          profileId: target?.profileId ?? null,
+        });
+        setModelsError(null);
+      } catch (e) {
+        setError(
+          `set model failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        return;
+      }
+      await refreshModels(sessionId);
+    },
+    [liveModels, refreshModels],
+  );
 
   // w-settings: out-of-scope attempts (path outside cwd) route to the
   // existing scope-guard prompt path — the backend `check_scope` verdict,
@@ -2422,6 +2480,10 @@ export function useMuseSessions(): UseMuseSessions {
     setSandbox,
     providerId,
     setProviderId,
+    liveModels,
+    modelsError,
+    refreshModels,
+    setSessionModel,
     checkPathScope,
     startSession,
     sendInput,
