@@ -337,7 +337,7 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
           placeholder={
             disabled
               ? "Pick a workspace and start a session first."
-              : "Type a prompt… (Enter to send, @ for files, /compact to summarize)"
+              : "Type a prompt… (Enter to send, @ for files, /compact to summarize, /fanout n \"task\" for parallel agents)"
           }
           aria-label="Prompt input"
           aria-expanded={dropdownOpen}

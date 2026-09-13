@@ -1,0 +1,99 @@
+/**
+ * US-8 worktree helper: pure per-agent git worktree planning, zero imports.
+ *
+ * Setup is MANUAL: the UI shows a shell snippet the user runs themselves
+ * (the desktop app never executes git). The pre-flight HEAD-hash compare
+ * is report-only — a moved HEAD never blocks, it just warns.
+ */
+
+/** Root under which per-agent worktrees are created. */
+export const WORKTREE_ROOT = ".muse/worktrees";
+
+/** Default base ref for new worktree branches. */
+export const WORKTREE_BASE = "HEAD";
+
+/** Manual-setup plan for one agent's worktree. */
+export interface WorktreePlan {
+  agent: string;
+  path: string;
+  branch: string;
+  base: string;
+}
+
+/**
+ * Build one plan per agent id: path `.muse/worktrees/<agent>`, branch
+ * `task<N>-branch` (1-based position), base HEAD by default. Pure and
+ * total: empty/blank ids are skipped, order is preserved, never throws.
+ */
+export function planWorktrees(
+  agentIds: string[],
+  base: string = WORKTREE_BASE,
+): WorktreePlan[] {
+  const plans: WorktreePlan[] = [];
+  let n = 0;
+  for (const raw of agentIds) {
+    const agent = raw.trim();
+    if (agent.length === 0) continue;
+    if (plans.some((p) => p.agent === agent)) continue;
+    n += 1;
+    plans.push({
+      agent,
+      path: `${WORKTREE_ROOT}/${agent}`,
+      branch: `task${n}-branch`,
+      base,
+    });
+  }
+  return plans;
+}
+
+/**
+ * Render the manual-setup shell snippet for a plan list: one
+ * `git worktree add` per agent. Empty plan list yields an empty string.
+ */
+export function worktreeShellSnippet(plans: WorktreePlan[]): string {
+  return plans
+    .map((p) => `git worktree add ${p.path} -b ${p.branch} ${p.base}`)
+    .join("\n");
+}
+
+/** Outcome of the pre-flight HEAD-hash compare (report-only). */
+export interface HeadCompare {
+  match: boolean;
+  report: string;
+}
+
+function shortHash(hash: string): string {
+  return hash.length > 12 ? hash.slice(0, 12) : hash;
+}
+
+/**
+ * Compare the baseline HEAD hash (recorded when the plan was made) with
+ * the current HEAD hash. Report-only: a mismatch warns that worktree
+ * branches may need a rebase, it never invalidates the plan. Missing
+ * input yields a non-match with an explicit "nothing checked" report.
+ */
+export function compareHeadHashes(
+  baseline: string,
+  current: string,
+): HeadCompare {
+  const b = baseline.trim();
+  const c = current.trim();
+  if (b.length === 0 || c.length === 0) {
+    return {
+      match: false,
+      report: "HEAD compare needs both hashes — nothing checked.",
+    };
+  }
+  if (b === c) {
+    return {
+      match: true,
+      report: `HEAD matches baseline (${shortHash(b)}) — worktree plan still applies.`,
+    };
+  }
+  return {
+    match: false,
+    report:
+      `HEAD moved: ${shortHash(b)} → ${shortHash(c)} — rebase worktree ` +
+      "branches before use (report-only, plan unchanged).",
+  };
+}

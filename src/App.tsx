@@ -13,6 +13,7 @@ import { ApprovalPanel } from "./components/ApprovalPanel";
 import { InputPanel } from "./components/InputPanel";
 import { Composer } from "./components/Composer";
 import { CompactBar } from "./components/CompactBar";
+import { OrchestrationPanel } from "./components/OrchestrationPanel";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -107,6 +108,18 @@ export default function App() {
     const parts = workspace.split("/").filter((p) => p.length > 0);
     return parts[parts.length - 1] ?? workspace;
   }, [workspace]);
+
+  // US-7/US-8: agent ids seen as `subagent` entries in the active thread
+  // drive the worktree plan panel (null panel until the first child).
+  const orchestrationAgents = useMemo(() => {
+    const seen: string[] = [];
+    for (const e of activeLog) {
+      if (e.role === "subagent" && typeof e.agentId === "string" && !seen.includes(e.agentId)) {
+        seen.push(e.agentId);
+      }
+    }
+    return seen;
+  }, [activeLog]);
 
   // US-5: global ctrl-tab / ctrl-shift-tab cycles active threads in sidebar
   // order, wherever focus sits (sidebar list, stream, composer).
@@ -291,6 +304,7 @@ export default function App() {
               onCompact={() => compactSession(active.session_id)}
               onNewFromSummary={() => void newFromSummary(active.session_id)}
             />
+            <OrchestrationPanel agents={orchestrationAgents} />
             <Composer
               disabled={workspace === null || backendMissing}
               running={active.running}
