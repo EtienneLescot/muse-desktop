@@ -16,6 +16,11 @@ export interface StoredSession {
   workspace: string;
   title: string;
   createdAt: number;
+  /**
+   * US-5: archived threads leave the main sidebar list for the collapsible
+   * archived section. Persisted like the rest; absent = active (V1 data).
+   */
+  archived?: boolean;
 }
 
 export type LogRole = "user" | "assistant" | "subagent" | "system" | "tool";
@@ -75,7 +80,8 @@ function isValidSession(s: unknown): s is StoredSession {
     r.session_id.length > 0 &&
     typeof r.workspace === "string" &&
     typeof r.title === "string" &&
-    typeof r.createdAt === "number"
+    typeof r.createdAt === "number" &&
+    (r.archived === undefined || typeof r.archived === "boolean")
   );
 }
 

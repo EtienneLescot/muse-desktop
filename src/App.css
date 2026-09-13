@@ -321,6 +321,48 @@ body.dark .session-item.active {
   border-radius: var(--radius-sm);
 }
 
+/* ---- US-5 threads sidebar ---- */
+
+.threads-hint {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+}
+
+.threads-live {
+  color: var(--ok);
+  border: 1px solid var(--ok);
+  border-radius: 8px;
+  padding: 0 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.session-item.archived {
+  opacity: 0.85;
+}
+
+.archived-section {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+.archived-toggle {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.session-select:focus-visible,
+.archived-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .dot {
   width: 6px;
   height: 6px;
