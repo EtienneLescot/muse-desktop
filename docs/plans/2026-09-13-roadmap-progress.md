@@ -33,8 +33,11 @@ binaire embarqué (`checkServedFingerprint`).
    Note : le binaire annonce le fingerprint `sha256:03312c21…` alors que le
    SDK épingle `sha256:cfd31ee7…` (schéma avancé côté host — warning, pas
    erreur ; à surveiller).
-2. US-4 : compaction via `session/compact` serveur (remplace/complète
-   l'extractif local) ; seuil réel via `session/contextUsage`.
+2. ~~US-4 serveur~~ **fait** (`5539be3`) : commande `compact_session`
+   (`session/compact`, statuts `accepted`/`noop`, rejets `missing_run` /
+   `run_active` mappés — tous prouvés live), routage
+   `session/contextUsage` → barre d'occupation + bouton « Compact server »
+   suggéré dès `warning` (jamais auto). Récap local inchangé.
 3. US-28 : channels temps réel (transport à spécifier) ou déclasser en
    Won't documenté.
 4. Capacités serveur non exploitées : `turn/steer`, `session/fork`,
