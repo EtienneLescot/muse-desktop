@@ -1018,6 +1018,153 @@ body.dark .composer textarea::placeholder {
   padding: 6px 8px;
 }
 
+/* ---- US-20 memory + anti-drift ---- */
+
+.mention-chip-mem {
+  border-style: dashed;
+}
+
+.mention-chip-stale {
+  border-color: var(--danger);
+}
+
+.memory-panel {
+  border-top: 1px solid var(--line);
+  padding: 6px 12px;
+}
+
+.memory-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 0;
+}
+
+.memory-count {
+  min-width: 20px;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 11px;
+  padding: 0 6px;
+}
+
+.memory-scan-dot {
+  color: var(--blue);
+  border: 1px solid var(--blue);
+  border-radius: 999px;
+  font-size: 10px;
+  padding: 0 6px;
+}
+
+.memory-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 4px;
+}
+
+.memory-nudge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--blue);
+  background: var(--pale);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.memory-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.memory-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.memory-item-stale {
+  border-color: var(--danger);
+}
+
+.memory-chip-link {
+  border: none;
+  background: none;
+  color: var(--blue);
+  cursor: pointer;
+  font-family: var(--font-code);
+  font-size: 11px;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.memory-item-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-item-source {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.memory-age {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.memory-age-stale {
+  color: var(--danger);
+}
+
+.memory-remove {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.memory-remove:hover {
+  color: var(--danger);
+}
+
+.memory-add {
+  display: flex;
+  gap: 6px;
+}
+
+.memory-add input {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ---- Empty session / errors ---- */
 
 .empty-session {

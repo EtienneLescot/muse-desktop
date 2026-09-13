@@ -26,6 +26,7 @@ import { ImportPanel } from "./components/ImportPanel";
 import type { ShareBundle } from "./lib/sharing";
 import { IndexPanel } from "./components/IndexPanel";
 import { BrowserPanel } from "./components/BrowserPanel";
+import { MemoryPanel } from "./components/MemoryPanel";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -132,10 +133,18 @@ export default function App() {
     removeBrowserAnnotation,
     browserPermissions,
     setBrowserAppPermission,
+    memories,
+    scanNudge,
+    addMemoryEntry,
+    removeMemoryEntry,
+    ackScanNudge,
     error,
     backendMissing,
     evtCount,
   } = useMuseSessions();
+
+  // US-20: one `@mem/…` token the panel asked the composer to insert.
+  const [memoryInsert, setMemoryInsert] = useState<string | null>(null);
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -486,6 +495,15 @@ export default function App() {
               onRemoveAnnotation={removeBrowserAnnotation}
               onSetPermission={setBrowserAppPermission}
             />
+            <MemoryPanel
+              memories={memories}
+              now={Date.now()}
+              scanNudge={scanNudge}
+              onAdd={(text, source) => addMemoryEntry(text, source)}
+              onRemove={removeMemoryEntry}
+              onAckScan={ackScanNudge}
+              onMention={(query) => setMemoryInsert(query)}
+            />
             <Composer
               disabled={workspace === null || backendMissing}
               running={active.running}
@@ -494,6 +512,9 @@ export default function App() {
               onCancel={() => void cancelSession(active.session_id)}
               prefill={prefill}
               onPrefillConsumed={clearPrefill}
+              memories={memories}
+              memoryInsert={memoryInsert}
+              onMemoryInsertConsumed={() => setMemoryInsert(null)}
             />
             </div>
             <ArtifactsPane

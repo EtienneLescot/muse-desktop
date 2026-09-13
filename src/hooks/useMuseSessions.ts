@@ -67,6 +67,7 @@ export type {
   BrowserAnnotation,
   BrowserAppPermission,
 } from "../lib/browserAnnotate";
+export type { MemoryEntry } from "../lib/memory";
 export type {
   InputAnswer,
   InputOption,
@@ -269,6 +270,19 @@ import {
   type LineHit,
 } from "../lib/indexer";
 export type { LineHit } from "../lib/indexer";
+// US-20 memory + anti-drift: dated/sourced entries, stale warnings, SCAN
+// nudge (pure, unit-tested); storage extends the muse-desktop.* keys.
+import {
+  addMemory,
+  buildScanNudge,
+  loadLastScan,
+  loadMemories,
+  removeMemory,
+  saveLastScan,
+  saveMemories,
+  shouldScanNudge,
+  type MemoryEntry,
+} from "../lib/memory";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -511,6 +525,14 @@ interface UseMuseSessions {
   browserPermissions: BrowserAppPermission[];
   /** US-19: toggle one app's computer-use permission. */
   setBrowserAppPermission: (app: string, allowed: boolean) => void;
+  /** US-20: dated/sourced memory entries (persisted, global to the app). */
+  memories: MemoryEntry[];
+  /** US-20: SCAN review nudge text when due, else null. */
+  scanNudge: string | null;
+  addMemoryEntry: (text: string, source: string) => void;
+  removeMemoryEntry: (id: string) => void;
+  /** US-20: stamp the SCAN review as done (dismisses the nudge). */
+  ackScanNudge: () => void;
   /** US-6 controls: one hook method per `subagent/*` MSP method. */
   subagentInterrupt: (sessionId: string, agentId: string) => Promise<void>;
   subagentStop: (sessionId: string, agentId: string) => Promise<void>;
@@ -753,6 +775,10 @@ export function useMuseSessions(): UseMuseSessions {
   if (autoBundleIds.current === null) {
     autoBundleIds.current = loadAutoMap();
   }
+  // US-20: memory entries + last SCAN review stamp, restored once and
+  // written through on every change (localStorage, best-effort).
+  const [memories, setMemories] = useState<MemoryEntry[]>(() => loadMemories());
+  const [lastScan, setLastScan] = useState<number | null>(() => loadLastScan());
   // Latest logs for the render-detached compaction paths (`/compact` inside
   // sendInput, auto-compact effect): refs stay fresh where useCallback deps
   // would go stale.
@@ -1041,6 +1067,14 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveBrowserPermissions(browserPermissions);
   }, [browserPermissions]);
+
+  useEffect(() => {
+    saveMemories(memories);
+  }, [memories]);
+
+  useEffect(() => {
+    if (lastScan !== null) saveLastScan(lastScan);
+  }, [lastScan]);
 
   useEffect(() => {
     // null means "not loaded yet" (there is no clear-workspace action),
@@ -2191,6 +2225,24 @@ export function useMuseSessions(): UseMuseSessions {
   const dismissImport = useCallback((id: string) => {
     setImportedSessions((cur) => dismissImportedSession(cur, id));
   }, []);
+  // US-20: memory CRUD (blank text is a no-op in addMemory) + SCAN ack.
+  // The nudge is derived (not state): due = interval elapsed + non-empty.
+  const addMemoryEntry = useCallback((text: string, source: string) => {
+    setMemories((cur) => addMemory(cur, text, source, Date.now()));
+  }, []);
+
+  const removeMemoryEntry = useCallback((id: string) => {
+    setMemories((cur) => removeMemory(cur, id));
+  }, []);
+
+  const ackScanNudge = useCallback(() => {
+    setLastScan(Date.now());
+  }, []);
+
+  const scanNudge =
+    shouldScanNudge(memories.length, lastScan, Date.now())
+      ? buildScanNudge(memories, Date.now())
+      : null;
 
   const activeLog = (activeId !== null && logs[activeId]) || [];
   const activeApprovals = approvals.filter((a) => a.session_id === activeId);
@@ -2420,6 +2472,11 @@ export function useMuseSessions(): UseMuseSessions {
     importNotes,
     importConfigText,
     dismissImport,
+    memories,
+    scanNudge,
+    addMemoryEntry,
+    removeMemoryEntry,
+    ackScanNudge,
     subagentInterrupt,
     subagentStop,
     subagentResume,
