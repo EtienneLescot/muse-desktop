@@ -203,6 +203,32 @@ import {
   type Skill,
   type SkillSuggestion,
 } from "../lib/skills";
+// w-collab (US-27/US-28): share bundles + modes + channel stub (pure,
+// unit-tested). `shareThread` is aliased: the hook exposes `shareSession`.
+import {
+  emptyShareState,
+  listSessionBundles,
+  loadShareState,
+  revokeBundle,
+  saveShareState,
+  setShareMode as setShareModePure,
+  shareThread as createShareBundle,
+  shouldAutoShare,
+  type BundleFormat,
+  type ShareBundle,
+  type ShareMode,
+  type ShareState,
+} from "../lib/sharing";
+// w-collab (US-34): CLI/IDE config import (pure, unit-tested). Import-only:
+// merges never overwrite live sessions or existing imported rows.
+import {
+  dismissImportedSession,
+  loadImportedSessions,
+  mergeImportedSessions,
+  parseImportPayload,
+  saveImportedSessions,
+  type ResumableSession,
+} from "../lib/importConfig";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -342,6 +368,21 @@ interface UseMuseSessions {
   approveReview: (id: string) => Promise<void>;
   /** US-9: discard a pending review entry. */
   discardReview: (id: string) => void;
+  /** w-collab US-27: share mode + bundles for one session (newest first). */
+  shareMode: ShareMode;
+  setShareMode: (mode: ShareMode) => void;
+  sessionBundles: (sessionId: string) => ShareBundle[];
+  /** Snapshot the thread log into a bundle (null when disabled/empty). */
+  shareSession: (sessionId: string, format: BundleFormat) => ShareBundle | null;
+  /** Un-share: revoke the bundle locally (its link then 404s). */
+  unshareBundle: (bundleId: string) => void;
+  /** w-collab US-28: channel stub flag (off) — never connected. */
+  channelsExperimental: boolean;
+  /** w-collab US-34: resumable sessions surfaced by config imports. */
+  importedSessions: ResumableSession[];
+  importNotes: string[];
+  importConfigText: (source: string, content: string) => void;
+  dismissImport: (id: string) => void;
   /** US-6 controls: one hook method per `subagent/*` MSP method. */
   subagentInterrupt: (sessionId: string, agentId: string) => Promise<void>;
   subagentStop: (sessionId: string, agentId: string) => Promise<void>;
@@ -532,6 +573,50 @@ export function useMuseSessions(): UseMuseSessions {
   const [prefill, setPrefill] = useState<string | null>(null);
   // US-12 + US-21: versioned artifacts per thread (mirror of localStorage).
   const [artifacts, setArtifacts] = useState<Record<string, Artifact[]>>({});
+  // w-collab US-27: share mode + bundles (persisted under
+  // muse-desktop.sharing.v1 via the save effect below).
+  const [shareState, setShareState] = useState<ShareState>(() => {
+    try {
+      return loadShareState();
+    } catch {
+      return emptyShareState();
+    }
+  });
+  // w-collab US-28: channel stub stays behind its flag (off, never live).
+  const [channelsExperimental] = useState(false);
+  // w-collab US-34: resumable sessions from CLI/IDE config imports
+  // (persisted under muse-desktop.import.v1; live sessions never touched).
+  const [importedSessions, setImportedSessions] = useState<ResumableSession[]>(() => {
+    try {
+      return loadImportedSessions();
+    } catch {
+      return [];
+    }
+  });
+  const [importNotes, setImportNotes] = useState<string[]>([]);
+  // w-collab: auto-share keeps one live auto bundle per session; the map
+  // (sessionId -> bundleId) is persisted alongside so a restart revokes the
+  // stale auto snapshot instead of stacking new ones.
+  const AUTO_MAP_KEY = "muse-desktop.sharing.auto.v1";
+  const loadAutoMap = (): Record<string, string> => {
+    try {
+      const raw = localStorage.getItem(AUTO_MAP_KEY);
+      if (raw === null) return {};
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed !== "object" || parsed === null) return {};
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof v === "string" && v.length > 0) out[k] = v;
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  };
+  const autoBundleIds = useRef<Record<string, string> | null>(null);
+  if (autoBundleIds.current === null) {
+    autoBundleIds.current = loadAutoMap();
+  }
   // Latest logs for the render-detached compaction paths (`/compact` inside
   // sendInput, auto-compact effect): refs stay fresh where useCallback deps
   // would go stale.
@@ -803,6 +888,15 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveSkills(skills);
   }, [skills]);
+  // w-collab: write-through for share state + imported sessions. Keys stay
+  // inside the muse-desktop.* namespace like the rest of persist.ts.
+  useEffect(() => {
+    saveShareState(shareState);
+  }, [shareState]);
+
+  useEffect(() => {
+    saveImportedSessions(importedSessions);
+  }, [importedSessions]);
 
   useEffect(() => {
     // null means "not loaded yet" (there is no clear-workspace action),
@@ -1085,6 +1179,9 @@ export function useMuseSessions(): UseMuseSessions {
         // unparseable payload: close all, as before
       }
       closeOpenBlocks(sid, itemId);
+      // w-collab US-27: a turn end (item_done without item id) refreshes
+      // the auto snapshot; per-item completions never do (no spam).
+      if (itemId === undefined) refreshAutoShare(sid);
       return;
     }
     if (kind === "tool_request") {
@@ -1145,6 +1242,10 @@ export function useMuseSessions(): UseMuseSessions {
     // Closing a (re)start would kill the just-painted placeholder; only
     // settle blocks for other statuses (turn end, approvals, …).
     if (!isRunningKind(kind)) closeOpenBlocks(sid);
+    // w-collab US-27: a stopped status also ends the turn — refresh the
+    // auto snapshot (no-op unless the share mode is auto). Idempotent
+    // with the item_done trigger above: one live auto bundle per session.
+    if (isStoppedKind(kind)) refreshAutoShare(sid);
   }
 
   const setWorkspace = useCallback((path: string) => {
@@ -1745,6 +1846,94 @@ export function useMuseSessions(): UseMuseSessions {
     const res = discardReview(reviewQueueRef.current, id);
     if (res !== null) setReviewQueue(res.queue);
   }, []);
+  // w-collab US-27: explicit share / un-share + mode toggle. Manual mode
+  // shares only here; auto additionally refreshes on turn end (see
+  // refreshAutoShare); disabled refuses (createShareBundle returns null).
+  const setShareMode = useCallback((mode: ShareMode) => {
+    setShareState((cur) => setShareModePure(cur, mode));
+  }, []);
+
+  const sessionBundles = useCallback(
+    (sessionId: string): ShareBundle[] => listSessionBundles(shareState, sessionId),
+    [shareState],
+  );
+
+  const shareSession = useCallback(
+    (sessionId: string, format: BundleFormat): ShareBundle | null => {
+      const log = logsRef.current[sessionId] ?? loadLog(sessionId);
+      const title =
+        sessions.find((s) => s.session_id === sessionId)?.title ?? sessionId;
+      const created = createShareBundle(shareState, sessionId, title, log, format);
+      if (created === null) {
+        if (shareState.mode === "disabled") {
+          setError("sharing is disabled (share mode off).");
+        }
+        return null;
+      }
+      setShareState(created.state);
+      return created.bundle;
+    },
+    [shareState, sessions],
+  );
+
+  const unshareBundle = useCallback((bundleId: string) => {
+    setShareState((cur) => revokeBundle(cur, bundleId));
+    // A revoked auto snapshot stops being "the live one": the next turn
+    // end mints a fresh auto bundle instead of revoking an already-dead id.
+    for (const [sid, bid] of Object.entries(autoBundleIds.current ?? {})) {
+      if (bid === bundleId) delete (autoBundleIds.current as Record<string, string>)[sid];
+    }
+  }, []);
+
+  /**
+   * w-collab US-27 auto mode: on turn end, refresh this session's single
+   * live auto snapshot (revoke the previous, mint a new one). Outcome is
+   * one live auto bundle per session; manual bundles are never touched.
+   * No-op unless the mode is auto.
+   */
+  function refreshAutoShare(sessionId: string): void {
+    if (!shouldAutoShare(shareState)) return;
+    const log = logsRef.current[sessionId] ?? [];
+    if (log.length === 0) return;
+    const title =
+      sessions.find((s) => s.session_id === sessionId)?.title ?? sessionId;
+    let next = shareState;
+    const prevId = autoBundleIds.current?.[sessionId];
+    if (prevId && next.bundles[prevId] && !next.bundles[prevId].revoked) {
+      next = revokeBundle(next, prevId);
+    }
+    const created = createShareBundle(next, sessionId, title, log, "markdown");
+    if (created === null) return;
+    if (autoBundleIds.current === null) autoBundleIds.current = {};
+    autoBundleIds.current[sessionId] = created.bundle.bundleId;
+    try {
+      localStorage.setItem(AUTO_MAP_KEY, JSON.stringify(autoBundleIds.current));
+    } catch {
+      // best-effort like persist.ts
+    }
+    setShareState(created.state);
+  }
+
+  // w-collab US-34: import a config file's text (pasted or picked). The
+  // merge is import-only: live sessions and existing rows always win.
+  const importConfigText = useCallback(
+    (source: string, content: string) => {
+      const sum = parseImportPayload(source, content);
+      setImportedSessions((cur) =>
+        mergeImportedSessions(
+          cur,
+          sum.sessions,
+          sessions.map((s) => s.session_id),
+        ),
+      );
+      setImportNotes((cur) => [...cur, ...sum.notes].slice(-10));
+    },
+    [sessions],
+  );
+
+  const dismissImport = useCallback((id: string) => {
+    setImportedSessions((cur) => dismissImportedSession(cur, id));
+  }, []);
 
   const activeLog = (activeId !== null && logs[activeId]) || [];
   const activeApprovals = approvals.filter((a) => a.session_id === activeId);
@@ -1936,6 +2125,16 @@ export function useMuseSessions(): UseMuseSessions {
     runScheduleNow,
     approveReview: approveReviewCb,
     discardReview: discardReviewCb,
+    shareMode: shareState.mode,
+    setShareMode,
+    sessionBundles,
+    shareSession,
+    unshareBundle,
+    channelsExperimental,
+    importedSessions,
+    importNotes,
+    importConfigText,
+    dismissImport,
     subagentInterrupt,
     subagentStop,
     subagentResume,

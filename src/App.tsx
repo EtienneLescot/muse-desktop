@@ -20,6 +20,10 @@ import { ReviewQueuePanel } from "./components/ReviewQueuePanel";
 import { ArtifactsPane } from "./components/ArtifactsPane";
 import { ConnectorPanel } from "./components/ConnectorPanel";
 import { SkillPanel } from "./components/SkillPanel";
+import { SharePanel } from "./components/SharePanel";
+import { ChannelPanel } from "./components/ChannelPanel";
+import { ImportPanel } from "./components/ImportPanel";
+import type { ShareBundle } from "./lib/sharing";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -85,6 +89,16 @@ export default function App() {
     runScheduleNow,
     approveReview,
     discardReview,
+    shareMode,
+    setShareMode,
+    sessionBundles,
+    shareSession,
+    unshareBundle,
+    channelsExperimental,
+    importedSessions,
+    importNotes,
+    importConfigText,
+    dismissImport,
     subagentInterrupt,
     subagentStop,
     subagentResume,
@@ -304,6 +318,12 @@ export default function App() {
               }
             />
           </details>
+          <ImportPanel
+            imported={importedSessions}
+            notes={importNotes}
+            onImportText={(source, content) => importConfigText(source, content)}
+            onDismiss={dismissImport}
+          />
         </div>
         <button
           type="button"
@@ -402,6 +422,36 @@ export default function App() {
               onNewFromSummary={() => void newFromSummary(active.session_id)}
             />
             <OrchestrationPanel agents={orchestrationAgents} />
+            <SharePanel
+              sessionId={active.session_id}
+              mode={shareMode}
+              bundles={sessionBundles(active.session_id)}
+              onModeChange={setShareMode}
+              onShare={(format) => void shareSession(active.session_id, format)}
+              onUnshare={unshareBundle}
+              onCopy={(b: ShareBundle) => {
+                try {
+                  void navigator.clipboard?.writeText(b.bundleId);
+                } catch {
+                  // clipboard unavailable: the id stays visible for manual copy
+                }
+              }}
+              onDownload={(b: ShareBundle) => {
+                const ext = b.format === "json" ? "json" : "md";
+                const blob = new Blob([b.body], {
+                  type: b.format === "json" ? "application/json" : "text/markdown",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${b.bundleId}.${ext}`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+              }}
+            />
+            <ChannelPanel experimental={channelsExperimental} />
             <Composer
               disabled={workspace === null || backendMissing}
               running={active.running}
