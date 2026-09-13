@@ -18,6 +18,9 @@ interface Props {
   workspace: string | null;
   onSend: (text: string) => void;
   onCancel: () => void;
+  /** US-4: summary text to load into the box after « New From Summary ». */
+  prefill?: string | null;
+  onPrefillConsumed?: () => void;
 }
 
 interface RecentMention {
@@ -76,7 +79,7 @@ function isMissingCommand(err: unknown): boolean {
  * the workspace asks the backend `check_scope` permission when that command
  * exists (US-22), otherwise the send is blocked with an explicit message.
  */
-export function Composer({ disabled, running, workspace, onSend, onCancel }: Props) {
+export function Composer({ disabled, running, workspace, onSend, onCancel, prefill, onPrefillConsumed }: Props) {
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [selIndex, setSelIndex] = useState(0);
@@ -92,6 +95,22 @@ export function Composer({ disabled, running, workspace, onSend, onCancel }: Pro
     setRecents(workspace !== null ? loadRecents(workspace) : []);
     setBlocked(null);
   }, [workspace]);
+
+  // US-4: a fresh thread from a summary arrives with its text pre-filled.
+  // Loaded once per prefill value, then released back to the hook.
+  useEffect(() => {
+    if (prefill === null || prefill === undefined) return;
+    setText(prefill);
+    setCaret(prefill.length);
+    setBlocked(null);
+    onPrefillConsumed?.();
+    const el = areaRef.current;
+    if (el !== null) {
+      el.focus();
+      el.setSelectionRange(prefill.length, prefill.length);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill]);
 
   const mentions: ResolvedMention[] = useMemo(
     () => (workspace !== null ? resolveMentions(workspace, text) : []),
@@ -318,7 +337,7 @@ export function Composer({ disabled, running, workspace, onSend, onCancel }: Pro
           placeholder={
             disabled
               ? "Pick a workspace and start a session first."
-              : "Type a prompt… (Enter to send, @ for files)"
+              : "Type a prompt… (Enter to send, @ for files, /compact to summarize)"
           }
           aria-label="Prompt input"
           aria-expanded={dropdownOpen}
