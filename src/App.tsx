@@ -7,6 +7,7 @@ import { useMuseSessions } from "./hooks/useMuseSessions";
 import { WorkspacePicker } from "./components/WorkspacePicker";
 import { EmptySessionScreen } from "./components/EmptySessionScreen";
 import { SessionSidebar } from "./components/SessionSidebar";
+import { ProjectsPanel } from "./components/ProjectsPanel";
 import { StreamView } from "./components/StreamView";
 import { ApprovalPanel } from "./components/ApprovalPanel";
 import { InputPanel } from "./components/InputPanel";
@@ -53,6 +54,17 @@ export default function App() {
     killSession,
     archiveSession,
     restoreSession,
+    projects,
+    threadProjects,
+    projectError,
+    createProject,
+    deleteProject,
+    updateProject,
+    attachThread,
+    globalSettings,
+    setGlobalSettings,
+    setProjectOverride,
+    settingsFor,
     subagentInterrupt,
     subagentStop,
     subagentResume,
@@ -163,6 +175,20 @@ export default function App() {
             onPick={setWorkspace}
             pickButtonRef={pickButtonRef}
           />
+          <ProjectsPanel
+            projects={projects}
+            threadProjects={threadProjects}
+            projectError={projectError}
+            activeSessionId={activeId}
+            globalSettings={globalSettings}
+            onCreate={(name, instructions) => createProject(name, instructions)}
+            onDelete={deleteProject}
+            onUpdate={updateProject}
+            onAttach={attachThread}
+            onSetGlobal={setGlobalSettings}
+            onSetOverride={setProjectOverride}
+            settingsFor={settingsFor}
+          />
           <SessionSidebar
             sessions={sessions}
             activeId={activeId}
@@ -175,6 +201,8 @@ export default function App() {
             onArchive={archiveSession}
             onRestore={restoreSession}
             canStart={workspace !== null}
+            projects={projects}
+            threadProjects={threadProjects}
           />
         </div>
         <button

@@ -5,14 +5,20 @@ import {
   appendLog,
   dropLog,
   loadActiveId,
+  loadGlobalSettings,
   loadLog,
+  loadProjects,
   loadSessions,
+  loadThreadProjects,
   loadTombstones,
   loadWorkspace,
   newId,
   saveActiveId,
+  saveGlobalSettings,
   saveLog,
+  saveProjects,
   saveSessions,
+  saveThreadProjects,
   saveTombstones,
   saveWorkspace,
   type LogEntry,
@@ -86,6 +92,32 @@ import {
 } from "../lib/compact";
 // US-5 thread archiving flag helper (pure, unit-tested).
 import { withArchivedFlag } from "../lib/threads";
+// US-3 + US-30 Projects: create/attach/instruction-prepend/settings
+// override live in ../lib/projects (dependency-free, unit-tested).
+import {
+  attachThread as attachThreadRow,
+  buildProjectInput,
+  createProject as createProjectRow,
+  DEFAULT_PROJECT_SETTINGS,
+  deleteProject as deleteProjectRow,
+  resolveProjectSettings,
+  setProjectOverride as setProjectOverrideRow,
+  updateProject as updateProjectRow,
+  type Project,
+  type ProjectSettings,
+  type ThreadProjectMap,
+} from "../lib/projects";
+export type {
+  Project,
+  ProjectSettings,
+  ProjectSettingsOverride,
+  ThreadProjectMap,
+} from "../lib/projects";
+export {
+  DEFAULT_PROJECT_SETTINGS,
+  diffProjectSettings,
+  resolveProjectSettings,
+} from "../lib/projects";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -172,6 +204,29 @@ interface UseMuseSessions {
   archiveSession: (sessionId: string) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
   restoreSession: (sessionId: string) => void;
+  /** US-3: project list (creation refused past 5, see projectError). */
+  projects: Project[];
+  threadProjects: ThreadProjectMap;
+  /** Last project refusal (quota / blank name); null when clean. */
+  projectError: string | null;
+  createProject: (name: string, instructions?: string) => void;
+  /** Delete a project; its threads become ungrouped (no orphans). */
+  deleteProject: (id: string) => void;
+  updateProject: (id: string, patch: { name?: string; instructions?: string }) => void;
+  /** Attach a thread to a project (null detaches). */
+  attachThread: (sessionId: string, projectId: string | null) => void;
+  /** Project a thread is attached to (null = ungrouped/unknown). */
+  projectForSession: (sessionId: string) => Project | null;
+  /** US-30: global defaults + per-project overrides (inherit + diff). */
+  globalSettings: ProjectSettings;
+  setGlobalSettings: (patch: Partial<ProjectSettings>) => void;
+  setProjectOverride: (
+    projectId: string,
+    key: keyof ProjectSettings,
+    value: ProjectSettings[keyof ProjectSettings] | undefined,
+  ) => void;
+  /** Effective settings for a project (null = global as-is). */
+  settingsFor: (projectId: string | null) => ProjectSettings;
   /** US-6 controls: one hook method per `subagent/*` MSP method. */
   subagentInterrupt: (sessionId: string, agentId: string) => Promise<void>;
   subagentStop: (sessionId: string, agentId: string) => Promise<void>;
@@ -303,6 +358,22 @@ export function useMuseSessions(): UseMuseSessions {
   // would go stale.
   const logsRef = useRef<Record<string, LogEntry[]>>({});
   logsRef.current = logs;
+  // US-3 + US-30 Projects: restored once (survive restarts via
+  // localStorage), written through on every change like sessions.
+  const [projects, setProjects] = useState<Project[]>(() => loadProjects());
+  const [threadProjects, setThreadProjects] = useState<ThreadProjectMap>(
+    () => loadThreadProjects(),
+  );
+  const [globalSettings, setGlobalSettingsState] = useState<ProjectSettings>(
+    () => loadGlobalSettings(DEFAULT_PROJECT_SETTINGS),
+  );
+  const [projectError, setProjectError] = useState<string | null>(null);
+  // Fresh copies for the render-detached send path (same pattern as
+  // logsRef): sendInput reads these so instructions never go stale.
+  const projectsRef = useRef<Project[]>([]);
+  projectsRef.current = projects;
+  const threadProjectsRef = useRef<ThreadProjectMap>({});
+  threadProjectsRef.current = threadProjects;
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
@@ -480,6 +551,19 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveAllowlist(allowlist);
   }, [allowlist]);
+
+  // US-3 + US-30 write-through persistence (best-effort, cf. persist.ts).
+  useEffect(() => {
+    saveProjects(projects);
+  }, [projects]);
+
+  useEffect(() => {
+    saveThreadProjects(threadProjects);
+  }, [threadProjects]);
+
+  useEffect(() => {
+    saveGlobalSettings(globalSettings);
+  }, [globalSettings]);
 
   useEffect(() => {
     // null means "not loaded yet" (there is no clear-workspace action),
@@ -848,6 +932,14 @@ export function useMuseSessions(): UseMuseSessions {
         doCompact(sessionId);
         return;
       }
+      // US-3: the thread's project instructions ride along with the sent
+      // input (the stored log keeps the raw user text).
+      const attachedId = threadProjectsRef.current[sessionId] ?? null;
+      const project =
+        attachedId !== null
+          ? (projectsRef.current.find((p) => p.id === attachedId) ?? null)
+          : null;
+      const outgoing = buildProjectInput(trimmed, project);
       closeOpenBlocks(sessionId);
       pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "user", text: trimmed }]);
       // US-10: reflexive indicator synchronously (<200ms), before the first
@@ -867,7 +959,7 @@ export function useMuseSessions(): UseMuseSessions {
       );
       try {
         setError(null);
-        await invoke("send_input", { sessionId, text: trimmed });
+        await invoke("send_input", { sessionId, text: outgoing });
         // Drain immediately: the next slow tick could be ~1s away, which
         // would delay the first tokens and dump them as one catch-up burst.
         kickPoll();
@@ -1028,6 +1120,13 @@ export function useMuseSessions(): UseMuseSessions {
         delete next[sessionId];
         return next;
       });
+      // US-3: a killed thread leaves its project attachment behind.
+      setThreadProjects((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       setActiveId((cur) => {
         if (cur !== sessionId) return cur;
         const remaining = loadSessions().filter(
@@ -1058,6 +1157,70 @@ export function useMuseSessions(): UseMuseSessions {
   const restoreSession = useCallback((sessionId: string) => {
     setSessions((cur) => withArchivedFlag(cur, sessionId, false));
   }, []);
+
+  // US-3 + US-30 project actions. Creation past MAX_PROJECTS is refused
+  // client-side with the explicit quota message in projectError.
+  const createProject = useCallback(
+    (name: string, instructions?: string) => {
+      const res = createProjectRow(projects, { name, instructions });
+      setProjectError(res.error);
+      if (res.project !== null) setProjects(res.projects);
+    },
+    [projects],
+  );
+
+  const deleteProject = useCallback(
+    (id: string) => {
+      const res = deleteProjectRow(projects, threadProjects, id);
+      setProjects(res.projects);
+      setThreadProjects(res.attached);
+    },
+    [projects, threadProjects],
+  );
+
+  const updateProject = useCallback((id: string, patch: { name?: string; instructions?: string }) => {
+    setProjects((cur) => updateProjectRow(cur, id, patch));
+  }, []);
+
+  const attachThread = useCallback(
+    (sessionId: string, projectId: string | null) => {
+      setThreadProjects((cur) => attachThreadRow(cur, projects, sessionId, projectId));
+    },
+    [projects],
+  );
+
+  const projectForSession = useCallback(
+    (sessionId: string): Project | null => {
+      const pid = threadProjects[sessionId] ?? null;
+      if (pid === null) return null;
+      return projects.find((p) => p.id === pid) ?? null;
+    },
+    [projects, threadProjects],
+  );
+
+  const setGlobalSettings = useCallback((patch: Partial<ProjectSettings>) => {
+    setGlobalSettingsState((cur) => ({ ...cur, ...patch }));
+  }, []);
+
+  const setProjectOverride = useCallback(
+    (
+      projectId: string,
+      key: keyof ProjectSettings,
+      value: ProjectSettings[keyof ProjectSettings] | undefined,
+    ) => {
+      setProjects((cur) => setProjectOverrideRow(cur, projectId, key, value));
+    },
+    [],
+  );
+
+  const settingsFor = useCallback(
+    (projectId: string | null): ProjectSettings => {
+      const found =
+        projectId !== null ? projects.find((p) => p.id === projectId) : undefined;
+      return resolveProjectSettings(globalSettings, found?.settings);
+    },
+    [projects, globalSettings],
+  );
 
   const activeLog = (activeId !== null && logs[activeId]) || [];
   const activeApprovals = approvals.filter((a) => a.session_id === activeId);
@@ -1222,6 +1385,18 @@ export function useMuseSessions(): UseMuseSessions {
     killSession,
     archiveSession,
     restoreSession,
+    projects,
+    threadProjects,
+    projectError,
+    createProject,
+    deleteProject,
+    updateProject,
+    attachThread,
+    projectForSession,
+    globalSettings,
+    setGlobalSettings,
+    setProjectOverride,
+    settingsFor,
     subagentInterrupt,
     subagentStop,
     subagentResume,
