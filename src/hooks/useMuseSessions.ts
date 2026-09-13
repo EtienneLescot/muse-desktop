@@ -58,6 +58,18 @@ import {
 } from "../lib/subagent";
 // US-5 thread archiving flag helper (pure, unit-tested).
 import { withArchivedFlag } from "../lib/threads";
+// US-4 compaction: local extractive summaries (no model call), entry-count
+// thresholds (the muse token threshold is unsourced — see compact.ts).
+import {
+  buildSummary,
+  COMPACT_AUTO_ENTRIES,
+  dropSummary,
+  formatSummaryText,
+  isCompactCommand,
+  loadSummary,
+  saveSummary,
+  type ThreadSummary,
+} from "../lib/compact";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -128,6 +140,15 @@ interface UseMuseSessions {
   archiveSession: (sessionId: string) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
   restoreSession: (sessionId: string) => void;
+  /** US-4: summaries by source session id (a stored summary = compacted). */
+  summaries: Record<string, ThreadSummary>;
+  /** US-4: build the local summary now (`/compact` manual path / button). */
+  compactSession: (sessionId: string) => void;
+  /** US-4: open a fresh thread pre-filled with the source summary. */
+  newFromSummary: (sourceId: string) => Promise<void>;
+  /** US-4: prefill text for the composer after `newFromSummary`. */
+  prefill: string | null;
+  clearPrefill: () => void;
   /** US-6 controls: one hook method per `subagent/*` MSP method. */
   subagentInterrupt: (sessionId: string, agentId: string) => Promise<void>;
   subagentStop: (sessionId: string, agentId: string) => Promise<void>;
@@ -247,6 +268,15 @@ export function useMuseSessions(): UseMuseSessions {
   const [inputRequests, setInputRequests] = useState<InputRequest[]>([]);
   const [workspace, setWorkspaceState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // US-4: local thread summaries (mirror of localStorage) + composer prefill
+  // after `newFromSummary`.
+  const [summaries, setSummaries] = useState<Record<string, ThreadSummary>>({});
+  const [prefill, setPrefill] = useState<string | null>(null);
+  // Latest logs for the render-detached compaction paths (`/compact` inside
+  // sendInput, auto-compact effect): refs stay fresh where useCallback deps
+  // would go stale.
+  const logsRef = useRef<Record<string, LogEntry[]>>({});
+  logsRef.current = logs;
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
@@ -318,6 +348,13 @@ export function useMuseSessions(): UseMuseSessions {
       const live = stored.filter((s) => !tombstoned.current?.has(s.session_id));
       setSessions(live.map((s) => ({ ...s, running: false })));
       setLogs(storedLogs);
+      // US-4: restore stored summaries (a stored summary = compacted thread).
+      const storedSummaries: Record<string, ThreadSummary> = {};
+      for (const s of stored) {
+        const sum = loadSummary(s.session_id);
+        if (sum !== null) storedSummaries[s.session_id] = sum;
+      }
+      setSummaries(storedSummaries);
       setWorkspaceState(storedWorkspace);
       setActiveId(
         storedActive &&
@@ -426,6 +463,42 @@ export function useMuseSessions(): UseMuseSessions {
     setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), ...entries] }));
     appendLog(sessionId, entries);
   }
+
+  /**
+   * US-4: build the local extractive summary of a thread now and record it
+   * (disk + state) with a system note in the log. Stable across renders:
+   * it only touches refs, setState and imports, so `sendInput` and the
+   * auto-compact effect can safely depend on it.
+   */
+  const doCompact = useCallback((sessionId: string): void => {
+    const log = logsRef.current[sessionId] ?? loadLog(sessionId);
+    const summary = buildSummary(sessionId, log);
+    saveSummary(summary);
+    setSummaries((cur) => ({ ...cur, [sessionId]: summary }));
+    const note: LogEntry = {
+      id: newId(),
+      ts: Date.now(),
+      role: "system",
+      text:
+        `Thread compacté — résumé local prêt (${summary.entryCount} entrées : ` +
+        `${summary.decisions.length} décision(s), ${summary.context.length} contexte, ` +
+        `${summary.todos.length} à-faire). Ouvrez un thread neuf via « New From Summary ».`,
+    };
+    setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
+    appendLog(sessionId, [note]);
+  }, []);
+
+  // US-4 auto-compaction: once a thread log reaches the persisted-log cap
+  // (COMPACT_AUTO_ENTRIES == persist MAX_LOG_ENTRIES), build the local
+  // summary once. The disk write inside doCompact is synchronous, so the
+  // loadSummary guard stops the loop on the re-render the note triggers.
+  useEffect(() => {
+    for (const [sid, log] of Object.entries(logs)) {
+      if (log.length >= COMPACT_AUTO_ENTRIES && loadSummary(sid) === null) {
+        doCompact(sid);
+      }
+    }
+  }, [logs, doCompact]);
 
   function ensureSessionRow(sessionId: string, ws: string | null): void {
     if (tombstoned.current?.has(sessionId)) return;
@@ -698,7 +771,9 @@ export function useMuseSessions(): UseMuseSessions {
 
   const setActive = useCallback((id: string | null) => setActiveId(id), []);
 
-  const startSession = useCallback(async () => {
+  // Shared session creation (US-4 `newFromSummary` reuses it so the fresh
+  // thread goes through the exact same backend + state path as `+ New`).
+  const startSessionRow = useCallback(async (): Promise<string | null> => {
     try {
       setError(null);
       // Live React state first: localStorage writes are best-effort and may
@@ -707,7 +782,7 @@ export function useMuseSessions(): UseMuseSessions {
       const ws = workspace ?? loadWorkspace() ?? undefined;
       if (ws === undefined) {
         setError("Pick a workspace folder first.");
-        return;
+        return null;
       }
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
@@ -722,15 +797,27 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) => [...cur, record]);
       setLogs((cur) => (cur[meta.session_id] ? cur : { ...cur, [meta.session_id]: [] }));
       setActiveId(meta.session_id);
+      return meta.session_id;
     } catch (e) {
       setError(`start_session failed: ${String(e)}`);
+      return null;
     }
   }, [workspace]);
+
+  const startSession = useCallback(async () => {
+    await startSessionRow();
+  }, [startSessionRow]);
 
   const sendInput = useCallback(
     async (sessionId: string, text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
+      // US-4: `/compact` is intercepted at send time and never reaches the
+      // model — it builds the local extractive summary of this thread.
+      if (isCompactCommand(trimmed)) {
+        doCompact(sessionId);
+        return;
+      }
       closeOpenBlocks(sessionId);
       pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "user", text: trimmed }]);
       // US-10: reflexive indicator synchronously (<200ms), before the first
@@ -763,8 +850,38 @@ export function useMuseSessions(): UseMuseSessions {
         );
       }
     },
-    [kickPoll],
+    [kickPoll, doCompact],
   );
+
+  /**
+   * US-4: open a fresh thread pre-filled with the source thread's summary.
+   * The summary must exist (manual `/compact`, Compacter button, or auto at
+   * the entry cap). The composer receives the formatted text as prefill —
+   * nothing is sent to the model until the user presses Send.
+   */
+  const newFromSummary = useCallback(
+    async (sourceId: string) => {
+      const summary =
+        summaries[sourceId] ?? loadSummary(sourceId);
+      if (!summary) {
+        setError(
+          `no summary for thread ${sourceId.slice(0, 8)}: compact it first (/compact).`,
+        );
+        return;
+      }
+      const id = await startSessionRow();
+      if (id === null) return;
+      setSessions((cur) =>
+        cur.map((s) =>
+          s.session_id === id ? { ...s, title: `Suite ${sourceId.slice(0, 8)}` } : s,
+        ),
+      );
+      setPrefill(formatSummaryText(summary));
+    },
+    [startSessionRow, summaries],
+  );
+
+  const clearPrefill = useCallback(() => setPrefill(null), []);
 
   const approve = useCallback(
     async (sessionId: string, approvalId: string, choiceId: string) => {
@@ -836,6 +953,14 @@ export function useMuseSessions(): UseMuseSessions {
       dropLog(sessionId);
       setApprovals((cur) => cur.filter((a) => a.session_id !== sessionId));
       setInputRequests((cur) => cur.filter((r) => r.session_id !== sessionId));
+      // US-4: a killed thread takes its summary with it.
+      dropSummary(sessionId);
+      setSummaries((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       setActiveId((cur) => {
         if (cur !== sessionId) return cur;
         const remaining = loadSessions().filter(
@@ -1031,6 +1156,11 @@ export function useMuseSessions(): UseMuseSessions {
     subagentFollowup,
     subagentReadResult,
     subagentDrilldown,
+    summaries,
+    compactSession: doCompact,
+    newFromSummary,
+    prefill,
+    clearPrefill,
     error,
     evtCount,
   };

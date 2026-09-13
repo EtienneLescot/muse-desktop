@@ -12,6 +12,8 @@ interface Props {
   sessions: MuseSession[];
   activeId: string | null;
   pendingCounts: Record<string, number>;
+  /** US-4: ids of threads holding a stored summary (compacted). */
+  compactedIds?: string[];
   onSelect: (id: string) => void;
   onNew: () => void;
   onCancel: (id: string) => void;
@@ -45,6 +47,7 @@ export function SessionSidebar({
   sessions,
   activeId,
   pendingCounts,
+  compactedIds,
   onSelect,
   onNew,
   onCancel,
@@ -124,6 +127,11 @@ export function SessionSidebar({
                 {s.running && (
                   <span className="threads-live" title="Agent running">
                     live
+                  </span>
+                )}
+                {compactedIds?.includes(s.session_id) && (
+                  <span className="compact-flag" title="Thread compacté — résumé disponible">
+                    compacté
                   </span>
                 )}
                 {pending > 0 && (
