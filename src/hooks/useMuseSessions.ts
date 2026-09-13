@@ -86,6 +86,18 @@ import {
 } from "../lib/compact";
 // US-5 thread archiving flag helper (pure, unit-tested).
 import { withArchivedFlag } from "../lib/threads";
+// w-settings (US-16 sandbox + US-31 providers): pure settings helpers
+// (dependency-free, unit-tested); scope-guard client for the path probe.
+import {
+  PROVIDER_MAP_KEY,
+  SETTINGS_KEY,
+  parseProviderId,
+  parseProviderMap,
+  parseSandboxSettings,
+  providerForProject,
+  type SandboxSettings,
+} from "../lib/settings";
+import { checkScope, type ScopeVerdict } from "../lib/scope";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -143,6 +155,15 @@ interface UseMuseSessions {
   workspace: string | null;
   setWorkspace: (path: string) => void;
   setActive: (id: string | null) => void;
+  /** w-settings: sandbox settings (persisted) + whole-object setter. */
+  sandbox: SandboxSettings;
+  setSandbox: (next: SandboxSettings) => void;
+  /** w-settings: provider id selected for the current project. */
+  providerId: string;
+  /** w-settings: persist the provider selection for the current project. */
+  setProviderId: (id: string) => void;
+  /** w-settings: route a path through the scope-guard prompt path. */
+  checkPathScope: (path: string) => Promise<ScopeVerdict>;
   startSession: () => Promise<void>;
   sendInput: (sessionId: string, text: string) => Promise<void>;
   approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<void>;
@@ -293,6 +314,24 @@ export function useMuseSessions(): UseMuseSessions {
   const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
   const [inputRequests, setInputRequests] = useState<InputRequest[]>([]);
   const [workspace, setWorkspaceState] = useState<string | null>(null);
+  // w-settings: sandbox settings + per-project provider map, restored once
+  // (survive restarts via localStorage), written through on every change.
+  const [sandbox, setSandboxState] = useState<SandboxSettings>(() => {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      return parseSandboxSettings(raw === null ? null : JSON.parse(raw));
+    } catch {
+      return parseSandboxSettings(null);
+    }
+  });
+  const [providerMap, setProviderMap] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem(PROVIDER_MAP_KEY);
+      return parseProviderMap(raw === null ? null : JSON.parse(raw));
+    } catch {
+      return {};
+    }
+  });
   const [error, setError] = useState<string | null>(null);
   // US-4: local thread summaries (mirror of localStorage) + composer prefill
   // after `newFromSummary`.
@@ -480,6 +519,23 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveAllowlist(allowlist);
   }, [allowlist]);
+
+  // w-settings write-through persistence (best-effort, like the rest here).
+  useEffect(() => {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(sandbox));
+    } catch {
+      // best-effort
+    }
+  }, [sandbox]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROVIDER_MAP_KEY, JSON.stringify(providerMap));
+    } catch {
+      // best-effort
+    }
+  }, [providerMap]);
 
   useEffect(() => {
     // null means "not loaded yet" (there is no clear-workspace action),
@@ -799,6 +855,34 @@ export function useMuseSessions(): UseMuseSessions {
     void invoke<string>("set_workspace", { path }).catch(() => {});
   }, []);
 
+  // w-settings: whole-object sandbox setter (the panel builds the next
+  // object, including the explicit network/elevated permission toggles).
+  const setSandbox = useCallback((next: SandboxSettings) => {
+    setSandboxState(parseSandboxSettings(next));
+  }, []);
+
+  // w-settings: provider selection is per project (project id = workspace).
+  const setProviderId = useCallback((id: string) => {
+    setProviderMap((cur) => {
+      const ws = workspace ?? loadWorkspace() ?? "";
+      if (ws.length === 0) return cur;
+      const checked = parseProviderId(id);
+      if (cur[ws] === checked) return cur;
+      return { ...cur, [ws]: checked };
+    });
+  }, [workspace]);
+
+  // w-settings: out-of-scope attempts (path outside cwd) route to the
+  // existing scope-guard prompt path — the backend `check_scope` verdict,
+  // with an error-banner prompt when access is denied.
+  const checkPathScope = useCallback(async (path: string): Promise<ScopeVerdict> => {
+    const verdict = await checkScope(path);
+    if (!verdict.in_scope) {
+      setError(`Scope guard: ${verdict.reason} — approval required before opening.`);
+    }
+    return verdict;
+  }, []);
+
   const setActive = useCallback((id: string | null) => setActiveId(id), []);
 
   // Shared session creation (US-4 `newFromSummary` reuses it so the fresh
@@ -1062,6 +1146,8 @@ export function useMuseSessions(): UseMuseSessions {
   const activeLog = (activeId !== null && logs[activeId]) || [];
   const activeApprovals = approvals.filter((a) => a.session_id === activeId);
   const activeInputRequests = inputRequests.filter((r) => r.session_id === activeId);
+  // w-settings: provider id selected for the current project (workspace).
+  const providerId = providerForProject(providerMap, workspace);
 
   const answerInput = useCallback(
     async (sessionId: string, inputId: string, answers: InputAnswer[]) => {
@@ -1208,6 +1294,11 @@ export function useMuseSessions(): UseMuseSessions {
     backendMissing,
     setWorkspace,
     setActive,
+    sandbox,
+    setSandbox,
+    providerId,
+    setProviderId,
+    checkPathScope,
     startSession,
     sendInput,
     approve,
