@@ -1,9 +1,11 @@
+import { useEffect, useRef } from "react";
 import type {
   AllowDecision,
   AllowRule,
   ApprovalRequest,
   ResolvedApproval,
 } from "../hooks/useMuseSessions";
+import { choiceIndexForKey, trapTabIndex } from "../lib/a11y";
 
 interface Props {
   approvals: ApprovalRequest[];
@@ -49,15 +51,76 @@ export function ApprovalPanel({
   onRevoke,
   onRuleDecision,
 }: Props) {
+  // US-32: focus the first decision button when a new approval arrives,
+  // and trap Tab inside the panel while a decision is pending.
+  const sectionRef = useRef<HTMLElement>(null);
+  const prevApprovalKey = useRef<string | null>(null);
+  const firstKey =
+    approvals.length > 0 ? `${approvals[0].session_id}:${approvals[0].request_id}` : null;
+  useEffect(() => {
+    if (firstKey !== null && firstKey !== prevApprovalKey.current) {
+      prevApprovalKey.current = firstKey;
+      const el = sectionRef.current?.querySelector<HTMLButtonElement>(
+        ".approval-actions button:not(:disabled)",
+      );
+      el?.focus();
+    } else if (firstKey === null) {
+      prevApprovalKey.current = null;
+    }
+  }, [firstKey]);
+
+  function focusables(): HTMLButtonElement[] {
+    const root = sectionRef.current;
+    if (!root) return [];
+    return [...root.querySelectorAll<HTMLButtonElement>(".approval-actions button:not(:disabled)")];
+  }
+
+  function onSectionKeyDown(e: React.KeyboardEvent): void {
+    const target = e.target as HTMLElement | null;
+    if (target === null || target.tagName !== "BUTTON") return;
+    // Focus trap: while a decision is pending, Tab cycles inside the panel.
+    if (e.key === "Tab" && approvals.length > 0) {
+      const items = focusables();
+      const idx = items.indexOf(target as HTMLButtonElement);
+      if (idx === -1) return;
+      e.preventDefault();
+      const next = trapTabIndex(idx, items.length, e.shiftKey);
+      if (next !== null) items[next].focus();
+      return;
+    }
+    // Arrow/enter choice navigation between the buttons of one request.
+    const group = target.closest(".approval-actions");
+    if (!group) return;
+    const items = [...group.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+    const idx = items.indexOf(target as HTMLButtonElement);
+    if (idx === -1) return;
+    const next = choiceIndexForKey(e.key, idx, items.length);
+    if (next !== null) {
+      e.preventDefault();
+      items[next].focus();
+    }
+  }
+
   if (approvals.length === 0 && rules.length === 0) return null;
   return (
-    <section className="approvals" aria-label="Pending approvals">
+    <section
+      className="approvals"
+      role="region"
+      aria-label="Pending approvals"
+      ref={sectionRef}
+      onKeyDown={onSectionKeyDown}
+    >
       {approvals.map((a) => {
         const resolved = decisionFor(a);
         const allowChoice = a.choices.find((c) => !c.decision.startsWith("denied"));
         const scopes = [...new Set(a.choices.map((c) => c.scope).filter((s) => s !== ""))];
         return (
-          <div key={`${a.session_id}:${a.request_id}`} className="approval">
+          <div
+            key={`${a.session_id}:${a.request_id}`}
+            className="approval"
+            role="group"
+            aria-label={`Approval needed${a.toolName !== "tool" ? ` for ${a.toolName}` : ""}`}
+          >
             <div className="approval-text">
               <strong>
                 Approval needed{a.toolName !== "tool" ? `: ${a.toolName}` : ""}
@@ -81,13 +144,18 @@ export function ApprovalPanel({
                 </div>
               )}
             </div>
-            <div className="approval-actions">
+            <div
+              className="approval-actions"
+              role="group"
+              aria-label="Approval choices — arrow keys move, Enter chooses"
+            >
               {a.choices.length > 0 ? (
                 a.choices.map((c) => (
                   <button
                     key={c.choiceId}
                     className={c.decision.startsWith("denied") ? "deny" : "approve"}
-                    title={c.scope}
+                    title={`${c.scope} (←/→ to move, Enter to choose)`.trim()}
+                    aria-label={`${c.label}${c.scope !== "" ? `, scope ${c.scope}` : ""}`}
                     onClick={() => onDecision(a.session_id, a.request_id, c.choiceId)}
                   >
                     {c.label}
