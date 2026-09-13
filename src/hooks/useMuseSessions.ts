@@ -39,6 +39,17 @@ export { buildAnswers, parseInputRequest } from "../lib/input";
 // share it so two drains never overlap with the same cursor (overlap would
 // deliver the same buffered events twice and duplicate streamed text).
 import { createPollChain, enqueuePoll } from "../lib/poll";
+// US-10 reflexive phase: kind→phase mapping + placeholder entries, so the
+// stream shows "réflexion…" synchronously on send and on `item/started`
+// even before the first delta lands.
+import {
+  dropEmptyPlaceholders,
+  isItemStartKind,
+  isRunningKind,
+  isStoppedKind,
+  isSubagentItemKind,
+  upsertReflexivePlaceholder,
+} from "../lib/phase";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -118,20 +129,7 @@ interface BackendSessionMeta {
   running: boolean;
 }
 
-/** Status kinds that mean the child is no longer producing output. */
-const STOPPED_KINDS = new Set([
-  "cancelled",
-  "completed",
-  "stopped",
-  "exited",
-  "host_exited",
-  "error",
-  "turn_end",
-  "idle",
-]);
-
-/** Status kinds that mean the child is (still) running. */
-const RUNNING_KINDS = new Set(["started", "running", "created", "turn_start"]);
+/** Status-kind mapping lives in ../lib/phase (unit-tested, US-10). */
 
 function shortTitle(text: string): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
@@ -465,6 +463,38 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }
 
+  /**
+   * US-10: paint the reflexive phase immediately (synchronously on send,
+   * on turn/item start) as an empty open entry. The first delta coalesces
+   * into it, so the stream is never blank pre-first-token. No-op when a
+   * live entry already exists.
+   */
+  function ensurePlaceholder(sessionId: string, itemId?: string, agentId?: string): void {
+    const stamp = { id: newId(), ts: Date.now() };
+    setLogs((cur) => {
+      const next = upsertReflexivePlaceholder(cur[sessionId] ?? [], {
+        itemId,
+        agentId,
+        stamp,
+      });
+      if (next === (cur[sessionId] ?? [])) return cur;
+      saveLog(sessionId, next);
+      return { ...cur, [sessionId]: next };
+    });
+  }
+
+  /** US-10: remove a still-empty placeholder (send failed, no delta came). */
+  function dropPlaceholder(sessionId: string): void {
+    setLogs((cur) => {
+      const log = cur[sessionId];
+      if (!log) return cur;
+      const next = dropEmptyPlaceholders(log);
+      if (next === log) return cur;
+      saveLog(sessionId, next);
+      return { ...cur, [sessionId]: next };
+    });
+  }
+
   function handleEvent(evt: MuseEvent): void {
     const { session_id: sid, kind, payload } = evt;
     setEvtCount((c) => c + 1);
@@ -590,14 +620,40 @@ export function useMuseSessions(): UseMuseSessions {
       closeOpenBlocks(sid);
       return;
     }
-    // status (and any future kinds): record + reflect liveness.
-    ensureSessionRow(sid, null);
-    const lower = kind.toLowerCase();
-    if (RUNNING_KINDS.has(lower)) {
+    // US-10: `item/started` paints before the first delta. Ensure a visible
+    // open block even when no chunk has landed yet (no system-line noise,
+    // and other open items keep streaming).
+    if (isItemStartKind(kind)) {
+      ensureSessionRow(sid, null);
+      let itemId: string | undefined;
+      let agentId: string | undefined;
+      try {
+        const obj = JSON.parse(payload) as Record<string, unknown>;
+        const rawId = obj.itemId ?? obj.id;
+        if (typeof rawId === "string" && rawId.length > 0) itemId = rawId;
+        const rawKind = obj.itemKind ?? obj.kind;
+        if (typeof rawKind === "string" && isSubagentItemKind(rawKind)) {
+          agentId = itemId ?? "agent";
+        }
+      } catch {
+        // unparseable payload: still show the reflexive phase
+      }
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
       );
-    } else if (STOPPED_KINDS.has(lower)) {
+      ensurePlaceholder(sid, itemId, agentId);
+      return;
+    }
+    // status (and any future kinds): record + reflect liveness.
+    ensureSessionRow(sid, null);
+    if (isRunningKind(kind)) {
+      setSessions((cur) =>
+        cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
+      );
+      // A (re)start must never blank the stream: keep/paint the reflexive
+      // placeholder instead of closing it (US-10).
+      ensurePlaceholder(sid);
+    } else if (isStoppedKind(kind)) {
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: false } : s)),
       );
@@ -605,7 +661,9 @@ export function useMuseSessions(): UseMuseSessions {
     if (payload) {
       pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text: `[${kind}] ${payload}` }]);
     }
-    closeOpenBlocks(sid);
+    // Closing a (re)start would kill the just-painted placeholder; only
+    // settle blocks for other statuses (turn end, approvals, …).
+    if (!isRunningKind(kind)) closeOpenBlocks(sid);
   }
 
   const setWorkspace = useCallback((path: string) => {
@@ -653,6 +711,10 @@ export function useMuseSessions(): UseMuseSessions {
       if (!trimmed) return;
       closeOpenBlocks(sessionId);
       pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "user", text: trimmed }]);
+      // US-10: reflexive indicator synchronously (<200ms), before the first
+      // delta or even `item/started` can arrive. The first chunk coalesces
+      // into this entry, so no catch-up burst ever paints.
+      ensurePlaceholder(sessionId);
       setSessions((cur) =>
         cur.map((s) =>
           s.session_id === sessionId
@@ -672,6 +734,8 @@ export function useMuseSessions(): UseMuseSessions {
         kickPoll();
       } catch (e) {
         setError(`send_input failed: ${String(e)}`);
+        // The turn never started: withdraw the reflexive placeholder.
+        dropPlaceholder(sessionId);
         setSessions((cur) =>
           cur.map((s) => (s.session_id === sessionId ? { ...s, running: false } : s)),
         );
@@ -703,6 +767,8 @@ export function useMuseSessions(): UseMuseSessions {
           },
         ]);
         // The turn resumes after a decision: drain now, don't wait a tick.
+        // US-10: reflexive placeholder synchronously, same as after send.
+        ensurePlaceholder(sessionId);
         kickPoll();
       } catch (e) {
         setError(`approve failed: ${String(e)}`);
@@ -773,6 +839,8 @@ export function useMuseSessions(): UseMuseSessions {
         // Panel removal arrives via input_settled; on success the turn
         // resumes. On error (-32057) the panel stays for a corrected answer.
         // Drain now so the resumed turn paints from its first tokens.
+        // US-10: reflexive placeholder synchronously, same as after send.
+        ensurePlaceholder(sessionId);
         kickPoll();
       } catch (e) {
         setError(`answer_input failed: ${String(e)}`);

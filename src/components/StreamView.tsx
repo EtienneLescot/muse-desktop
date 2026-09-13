@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { LogEntry } from "../lib/persist";
+import { REFLEXIVE_LABEL } from "../lib/phase";
 
 interface Props {
   entries: LogEntry[];
@@ -61,18 +62,28 @@ export function StreamView({ entries, sessionId }: Props) {
           restored on restart.
         </p>
       )}
-      {entries.map((e) =>
-        e.role === "subagent" ? (
+      {entries.map((e) => {
+        // US-10 reflexive phase: an open entry with no text yet (send just
+        // happened, or `item/started` arrived before the first delta) shows
+        // a plain muted label. The label is rendered, never stored: the
+        // first delta coalesces into the empty text.
+        const reflexive = e.open === true && e.text === "";
+        const firstLine = e.text.split("\n")[0]?.slice(0, 90);
+        return e.role === "subagent" ? (
           <details key={e.id} className="msg subagent">
             <summary>
               <span className="role">{roleLabel(e)}</span>
               <span className="msg-summary">
-                {e.text.split("\n")[0]?.slice(0, 90) || "(activity)"}
+                {firstLine || (e.open ? REFLEXIVE_LABEL : "(activity)")}
               </span>
               <span className="ts">{timeOf(e.ts)}</span>
             </summary>
             <pre>
-              {e.text}
+              {reflexive ? (
+                <span className="muted">{REFLEXIVE_LABEL}</span>
+              ) : (
+                e.text
+              )}
               {e.open && <span className="caret" aria-hidden="true" />}
             </pre>
           </details>
@@ -80,15 +91,19 @@ export function StreamView({ entries, sessionId }: Props) {
           <div key={e.id} className={`msg ${e.role}`}>
             <span className="role">{roleLabel(e)}</span>
             <pre>
-              {e.text}
+              {reflexive ? (
+                <span className="muted">{REFLEXIVE_LABEL}</span>
+              ) : (
+                e.text
+              )}
               {e.open && e.role === "assistant" && (
                 <span className="caret" aria-hidden="true" />
               )}
             </pre>
             <span className="ts">{timeOf(e.ts)}</span>
           </div>
-        ),
-      )}
+        );
+      })}
       <div ref={bottomRef} />
     </div>
   );
