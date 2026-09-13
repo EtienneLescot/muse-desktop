@@ -14,6 +14,8 @@ import { InputPanel } from "./components/InputPanel";
 import { Composer } from "./components/Composer";
 import { CompactBar } from "./components/CompactBar";
 import { OrchestrationPanel } from "./components/OrchestrationPanel";
+import { SchedulesPanel } from "./components/SchedulesPanel";
+import { ReviewQueuePanel } from "./components/ReviewQueuePanel";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -66,6 +68,14 @@ export default function App() {
     setGlobalSettings,
     setProjectOverride,
     settingsFor,
+    schedules,
+    reviewQueue,
+    createSchedule,
+    setScheduleEnabled,
+    deleteSchedule,
+    runScheduleNow,
+    approveReview,
+    discardReview,
     subagentInterrupt,
     subagentStop,
     subagentResume,
@@ -217,6 +227,17 @@ export default function App() {
             projects={projects}
             threadProjects={threadProjects}
           />
+          <SchedulesPanel
+            schedules={schedules}
+            sessions={sessions}
+            activeId={activeId}
+            onCreate={(input) => {
+              createSchedule(input);
+            }}
+            onToggle={(id, enabled) => setScheduleEnabled(id, enabled)}
+            onDelete={(id) => deleteSchedule(id)}
+            onRunNow={(id) => runScheduleNow(id)}
+          />
         </div>
         <button
           type="button"
@@ -280,6 +301,15 @@ export default function App() {
               requests={activeInputRequests}
               onAnswer={(sid, iid, answers) => void answerInput(sid, iid, answers)}
               onSkip={(sid, iid) => void cancelInput(sid, iid)}
+            />
+            <ReviewQueuePanel
+              items={reviewQueue}
+              sessionTitle={(sid) =>
+                sessions.find((s) => s.session_id === sid)?.title ??
+                sid.slice(0, 8)
+              }
+              onApprove={(id) => void approveReview(id)}
+              onDiscard={(id) => discardReview(id)}
             />
             <StreamView
               entries={activeLog}
