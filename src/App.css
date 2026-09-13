@@ -1224,7 +1224,6 @@ body.dark .composer textarea::placeholder {
   }
 }
 
-<<<<<<< HEAD
 /* ---- US-3 + US-30 Projects panel + sidebar grouping ---- */
 
 .projects-panel {
@@ -1710,6 +1709,59 @@ body.dark .composer textarea::placeholder {
   gap: 6px;
 }
 
+/* w-integrations: connectors directory + skills (existing CSS vars only). */
+.integrations {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+}
+
+.integrations > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.integration-panel {
+  margin-top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.integration-panel + .integration-panel {
+  margin-top: 8px;
+}
+
+.integration-panel h3 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+}
+
+.integration-panel h4 {
+  margin: 8px 0 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.integration-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.integration-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .review-item {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -1762,6 +1814,28 @@ body.dark .composer textarea::placeholder {
   font-weight: 700;
   color: var(--blue);
   border: 1px solid var(--blue);
+  border-radius: 4px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.integration-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.integration-main small {
+  color: var(--muted);
+}
+
+.integration-flag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--green);
+  border: 1px solid var(--green);
   border-radius: 4px;
   padding: 0 6px;
   white-space: nowrap;
@@ -1892,4 +1966,35 @@ body.dark .composer textarea::placeholder {
   color: var(--muted);
   margin: 0;
   word-break: break-word;
+}
+
+.integration-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.integration-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.integration-form input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}
+
+.integration-notice {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 6px 8px;
 }

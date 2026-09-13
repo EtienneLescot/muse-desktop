@@ -18,6 +18,8 @@ import { OrchestrationPanel } from "./components/OrchestrationPanel";
 import { SchedulesPanel } from "./components/SchedulesPanel";
 import { ReviewQueuePanel } from "./components/ReviewQueuePanel";
 import { ArtifactsPane } from "./components/ArtifactsPane";
+import { ConnectorPanel } from "./components/ConnectorPanel";
+import { SkillPanel } from "./components/SkillPanel";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -89,6 +91,17 @@ export default function App() {
     subagentFollowup,
     subagentReadResult,
     subagentDrilldown,
+    connectors,
+    connectorTools,
+    remoteNotice,
+    installConnectorById,
+    uninstallConnectorById,
+    setConnectorEnabledById,
+    addRemoteConnector,
+    skills,
+    setSkillEnabledByName,
+    traceSkillSuggestions,
+    invokeSkill,
     summaries,
     compactSession,
     newFromSummary,
@@ -269,6 +282,28 @@ export default function App() {
             onDelete={(id) => deleteSchedule(id)}
             onRunNow={(id) => runScheduleNow(id)}
           />
+          <details className="integrations">
+            <summary>Intégrations</summary>
+            <ConnectorPanel
+              installed={connectors}
+              toolNames={connectorTools.map((t) => t.name)}
+              remoteNotice={remoteNotice}
+              onInstall={(dirId) => installConnectorById(dirId)}
+              onUninstall={(id) => uninstallConnectorById(id)}
+              onToggle={(id, enabled) => setConnectorEnabledById(id, enabled)}
+              onAddRemote={(name, url) => addRemoteConnector(name, url)}
+            />
+            <SkillPanel
+              skills={skills}
+              onToggle={(name, enabled) => setSkillEnabledByName(name, enabled)}
+              onInvoke={(name) => {
+                if (activeId !== null) invokeSkill(activeId, name, "");
+              }}
+              onTraceSuggest={(text) =>
+                activeId !== null ? traceSkillSuggestions(activeId, text) : []
+              }
+            />
+          </details>
         </div>
         <button
           type="button"

@@ -1,0 +1,363 @@
+/**
+ * Connectors / MCP registry (US-24 + US-26).
+ *
+ * Zero imports: safe to unit-test on the built-in node:test runner.
+ *
+ * - US-24: a curated in-app directory of LOCAL connectors installs in
+ *   1 click (no manual JSON). Installed connectors hot-list their tools
+ *   without restart: `listConnectorTools` re-reads the registry on every
+ *   call, so there is no cache to invalidate; `diffTools` mirrors the
+ *   `notifications/tools/list_changed` semantics for the UI.
+ * - US-26: REMOTE registry entries exist for bookkeeping only (no real
+ *   transport here). A single-remote guard plus an explicit
+ *   public-internet/allowlist message applies; private/VPN-style hosts are
+ *   refused with a documented failure message.
+ *
+ * Persistence lives under `muse-desktop.connectors.v1` (localStorage,
+ * best-effort). Under node:test there is no localStorage, so load/save
+ * degrade gracefully to memory defaults.
+ */
+
+/** Local (in-process/sidecar) vs remote (HTTP/SSE, bookkeeping only). */
+export type ConnectorKind = "local" | "remote";
+
+/** Lifecycle state of a registry entry. */
+export type ConnectorStatus = "installed" | "disabled" | "error";
+
+/** One tool exposed by a connector. */
+export interface ConnectorTool {
+  name: string;
+  description: string;
+}
+
+/** One curated directory entry: installable in 1 click, no JSON. */
+export interface CuratedConnector {
+  id: string;
+  name: string;
+  description: string;
+  tools: ConnectorTool[];
+}
+
+/** One installed registry entry (persisted). */
+export interface ConnectorEntry {
+  id: string;
+  name: string;
+  description: string;
+  kind: ConnectorKind;
+  tools: ConnectorTool[];
+  status: ConnectorStatus;
+  /** Remote-only: the configured endpoint URL. */
+  url?: string;
+  /** Remote-only: human-readable guard failure, if the entry is blocked. */
+  guardMessage?: string;
+  addedAt: number;
+}
+
+/** Storage key (all writes confined to `muse-desktop.*`). */
+export const CONNECTORS_KEY = "muse-desktop.connectors.v1";
+
+/**
+ * Curated in-app directory (reviewed entries; installing one never asks
+ * for raw JSON).
+ */
+export const CURATED_CONNECTORS: CuratedConnector[] = [
+  {
+    id: "local-filesystem",
+    name: "Filesystem",
+    description: "Scoped read/write to workspace files.",
+    tools: [
+      { name: "fs.read", description: "Read a workspace file." },
+      { name: "fs.write", description: "Write a workspace file." },
+      { name: "fs.list", description: "List a workspace directory." },
+    ],
+  },
+  {
+    id: "local-fetch",
+    name: "Fetch",
+    description: "Fetch public URLs into the context.",
+    tools: [
+      { name: "fetch.url", description: "GET a public URL as text." },
+    ],
+  },
+  {
+    id: "local-sqlite",
+    name: "SQLite",
+    description: "Query a local SQLite database file.",
+    tools: [
+      { name: "sqlite.query", description: "Run a read-only SQL query." },
+      { name: "sqlite.schema", description: "Describe tables and columns." },
+    ],
+  },
+  {
+    id: "local-git",
+    name: "Git",
+    description: "Inspect local git state (read-only).",
+    tools: [
+      { name: "git.status", description: "Working-tree status." },
+      { name: "git.log", description: "Recent commits." },
+      { name: "git.diff", description: "Uncommitted diff." },
+    ],
+  },
+  {
+    id: "local-github",
+    name: "GitHub",
+    description: "Read issues and pull requests via the local CLI auth.",
+    tools: [
+      { name: "github.issue_read", description: "Read an issue." },
+      { name: "github.pr_read", description: "Read a pull request." },
+      { name: "github.pr_diff", description: "Diff of a pull request." },
+    ],
+  },
+];
+
+/** Free-like plan: at most one remote connector at a time. */
+export const REMOTE_LIMIT = 1;
+
+/**
+ * Documented VPN/private-network failure message (US-26 AC): remote MCP
+ * requires a public-internet endpoint plus allowlisted IPs; VPN or
+ * firewall-private hosts are unreachable from the connector runtime.
+ */
+export const VPN_FAILURE_MESSAGE =
+  "Remote connector unreachable: the host looks like a private/VPN address. " +
+  "Remote MCP requires a public-internet HTTPS endpoint with allowlisted IPs; " +
+  "VPN or firewall-private hosts (localhost, 10/8, 172.16/12, 192.168/16, " +
+  "*.local/*.internal) cannot be reached. Expose the server publicly or run " +
+  "it locally as a local connector instead.";
+
+/** Explicit single-remote guard message (US-26 AC). */
+export const REMOTE_LIMIT_MESSAGE =
+  `Only ${REMOTE_LIMIT} remote connector is allowed on this plan: ` +
+  "remove the existing remote connector before adding another. Remote MCP " +
+  "also requires a public-internet HTTPS endpoint with allowlisted IPs.";
+
+/** Find a curated entry by id, or null. */
+export function findCurated(id: string): CuratedConnector | null {
+  for (const c of CURATED_CONNECTORS) {
+    if (c.id === id) return c;
+  }
+  return null;
+}
+
+/** Find an installed entry by id, or null. */
+export function findConnector(
+  registry: ConnectorEntry[],
+  id: string,
+): ConnectorEntry | null {
+  for (const e of registry) {
+    if (e.id === id) return e;
+  }
+  return null;
+}
+
+/**
+ * 1-click install of a LOCAL connector from the curated directory.
+ * Idempotent: reinstalling returns the existing entry (`already: true`).
+ * Returns null when `dirId` is not a curated entry (unknown ids never
+ * install; remote endpoints go through `requestRemoteConnector`).
+ */
+export function installConnector(
+  registry: ConnectorEntry[],
+  dirId: string,
+  now: number = Date.now(),
+): { registry: ConnectorEntry[]; entry: ConnectorEntry; already: boolean } | null {
+  const curated = findCurated(dirId);
+  if (curated === null) return null;
+  const existing = findConnector(registry, dirId);
+  if (existing !== null) return { registry, entry: existing, already: true };
+  const entry: ConnectorEntry = {
+    id: curated.id,
+    name: curated.name,
+    description: curated.description,
+    kind: "local",
+    tools: curated.tools.map((t) => ({ ...t })),
+    status: "installed",
+    addedAt: now,
+  };
+  return { registry: [...registry, entry], entry, already: false };
+}
+
+/** Remove an entry by id. Missing ids are a no-op (`removed: false`). */
+export function uninstallConnector(
+  registry: ConnectorEntry[],
+  id: string,
+): { registry: ConnectorEntry[]; removed: boolean } {
+  const next = registry.filter((e) => e.id !== id);
+  return { registry: next, removed: next.length !== registry.length };
+}
+
+/**
+ * Enable/disable an entry. Missing ids leave the registry unchanged
+ * (`changed: false`).
+ */
+export function setConnectorEnabled(
+  registry: ConnectorEntry[],
+  id: string,
+  enabled: boolean,
+): { registry: ConnectorEntry[]; changed: boolean } {
+  let changed = false;
+  const next = registry.map((e) => {
+    if (e.id !== id) return e;
+    const status: ConnectorStatus = enabled ? "installed" : "disabled";
+    if (e.status === status) return e;
+    changed = true;
+    return { ...e, status };
+  });
+  return { registry: next, changed };
+}
+
+/**
+ * Hot-list tools without restart: re-reads the registry on every call
+ * (no cache), skipping disabled entries. Callers diff successive results
+ * with `diffTools` for `list_changed`-style updates.
+ */
+export function listConnectorTools(registry: ConnectorEntry[]): ConnectorTool[] {
+  const out: ConnectorTool[] = [];
+  for (const e of registry) {
+    if (e.status !== "installed") continue;
+    for (const t of e.tools) out.push({ ...t });
+  }
+  return out;
+}
+
+/** Tool names present in `after` but not `before` (and vice versa). */
+export function diffTools(
+  before: ConnectorTool[],
+  after: ConnectorTool[],
+): { added: string[]; removed: string[] } {
+  const hasBefore = new Set(before.map((t) => t.name));
+  const hasAfter = new Set(after.map((t) => t.name));
+  return {
+    added: after.map((t) => t.name).filter((n) => !hasBefore.has(n)),
+    removed: before.map((t) => t.name).filter((n) => !hasAfter.has(n)),
+  };
+}
+
+/** True when `url` is an https URL on a plausibly public host. */
+export function isPublicHttpUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!/^https:\/\//i.test(trimmed)) return false;
+  let host = "";
+  try {
+    host = new URL(trimmed).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (host.length === 0) return false;
+  if (host === "localhost") return false;
+  if (host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".lan")) {
+    return false;
+  }
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    if (host.startsWith("10.")) return false;
+    if (host.startsWith("192.168.")) return false;
+    const second = Number(host.split(".")[1]);
+    if (host.startsWith("172.") && second >= 16 && second <= 31) return false;
+    if (host.startsWith("127.")) return false;
+  }
+  return true;
+}
+
+export type RemoteGuardCode = "remote-limit" | "private-network";
+
+/** Outcome of requesting a remote (US-26) connector entry. */
+export type RemoteRequestResult =
+  | { ok: true; registry: ConnectorEntry[]; entry: ConnectorEntry }
+  | { ok: false; registry: ConnectorEntry[]; code: RemoteGuardCode; message: string };
+
+/**
+ * Request a REMOTE connector entry (bookkeeping only — no real transport
+ * in this client). Guards, in order:
+ * 1. single-remote limit (any existing remote entry blocks a new one);
+ * 2. public-internet/allowlist check on the URL (private/VPN hosts are
+ *    refused with the documented VPN failure message).
+ */
+export function requestRemoteConnector(
+  registry: ConnectorEntry[],
+  spec: { id: string; name: string; url: string },
+  now: number = Date.now(),
+): RemoteRequestResult {
+  const existingRemote = registry.find((e) => e.kind === "remote") ?? null;
+  if (existingRemote !== null) {
+    return { ok: false, registry, code: "remote-limit", message: REMOTE_LIMIT_MESSAGE };
+  }
+  if (!isPublicHttpUrl(spec.url)) {
+    return { ok: false, registry, code: "private-network", message: VPN_FAILURE_MESSAGE };
+  }
+  const entry: ConnectorEntry = {
+    id: spec.id,
+    name: spec.name,
+    description: `Remote MCP endpoint ${spec.url} (single-remote plan).`,
+    kind: "remote",
+    tools: [],
+    status: "error",
+    url: spec.url,
+    guardMessage:
+      "Registered, no transport yet: tools will list once the remote " +
+      "endpoint is reachable over the public internet with allowlisted IPs.",
+    addedAt: now,
+  };
+  return { ok: true, registry: [...registry, entry], entry };
+}
+
+function storage(): Storage | null {
+  try {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const ls = g["localStorage"];
+    if (typeof ls !== "object" || ls === null) return null;
+    const get = (ls as Record<string, unknown>)["getItem"];
+    const set = (ls as Record<string, unknown>)["setItem"];
+    if (typeof get !== "function" || typeof set !== "function") return null;
+    return ls as unknown as Storage;
+  } catch {
+    return null;
+  }
+}
+
+function isValidEntry(e: unknown): e is ConnectorEntry {
+  if (typeof e !== "object" || e === null) return false;
+  const r = e as Record<string, unknown>;
+  return (
+    typeof r["id"] === "string" &&
+    (r["id"] as string).length > 0 &&
+    typeof r["name"] === "string" &&
+    (r["kind"] === "local" || r["kind"] === "remote") &&
+    Array.isArray(r["tools"])
+  );
+}
+
+/** Load the persisted registry; corrupt/missing data yields []. */
+export function loadConnectors(): ConnectorEntry[] {
+  try {
+    const ls = storage();
+    if (ls === null) return [];
+    const raw = ls.getItem(CONNECTORS_KEY);
+    if (raw === null) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isValidEntry).map((e) => ({
+      ...e,
+      tools: e.tools.filter(
+        (t): t is ConnectorTool =>
+          typeof t === "object" &&
+          t !== null &&
+          typeof (t as ConnectorTool).name === "string",
+      ),
+      status:
+        e.status === "installed" || e.status === "disabled" || e.status === "error"
+          ? e.status
+          : "installed",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Persist the registry (best-effort: quota/private mode never throws). */
+export function saveConnectors(registry: ConnectorEntry[]): void {
+  try {
+    storage()?.setItem(CONNECTORS_KEY, JSON.stringify(registry));
+  } catch {
+    // best-effort persistence only
+  }
+}

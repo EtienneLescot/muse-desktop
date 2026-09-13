@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/env";
 import {
@@ -174,6 +174,35 @@ import {
   type SandboxSettings,
 } from "../lib/settings";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
+// w-integrations (US-24/US-26): curated connector directory + remote guard
+// (pure, unit-tested). Hot-listing re-reads the registry, no restart.
+import {
+  installConnector,
+  listConnectorTools,
+  loadConnectors,
+  requestRemoteConnector,
+  saveConnectors,
+  setConnectorEnabled,
+  uninstallConnector,
+  type ConnectorEntry,
+  type ConnectorTool,
+} from "../lib/connectors";
+// w-integrations (US-25): slash-invokable + auto-suggested skills with
+// progressive disclosure (pure, unit-tested).
+import {
+  buildSkillInvocation,
+  formatSkillInvokeTrace,
+  formatSkillTrace,
+  loadSkills,
+  mergeBuiltinSkills,
+  parseSkillCommand,
+  resolveSkill,
+  saveSkills,
+  setSkillEnabled,
+  suggestSkills,
+  type Skill,
+  type SkillSuggestion,
+} from "../lib/skills";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -322,6 +351,34 @@ interface UseMuseSessions {
   subagentReadResult: (sessionId: string, agentId: string) => Promise<string | null>;
   /** Drill-down via `session/read`; explicit error when unavailable. */
   subagentDrilldown: (sessionId: string, childSessionId: string | undefined) => Promise<string | null>;
+  /** w-integrations US-24/US-26: installed connector entries. */
+  connectors: ConnectorEntry[];
+  /** w-integrations US-24: hot-listed tools (re-read, no restart). */
+  connectorTools: ConnectorTool[];
+  /** w-integrations US-26: last remote-guard refusal message, if any. */
+  remoteNotice: string | null;
+  /** w-integrations US-24: 1-click install from the curated directory. */
+  installConnectorById: (dirId: string) => void;
+  /** w-integrations US-24: remove an installed connector. */
+  uninstallConnectorById: (id: string) => void;
+  /** w-integrations US-24: enable/disable an installed connector. */
+  setConnectorEnabledById: (id: string, enabled: boolean) => void;
+  /**
+   * w-integrations US-26: request a remote entry. False when the
+   * single-remote or public-internet guard refused (see remoteNotice).
+   */
+  addRemoteConnector: (name: string, url: string) => boolean;
+  /** w-integrations US-25: skills (builtins merged over stored). */
+  skills: Skill[];
+  /** w-integrations US-25: enable/disable a skill by slash name. */
+  setSkillEnabledByName: (name: string, enabled: boolean) => void;
+  /**
+   * w-integrations US-25: suggest skills for a draft AND trace every
+   * suggestion into the session log (auditable auto-suggest).
+   */
+  traceSkillSuggestions: (sessionId: string, text: string) => SkillSuggestion[];
+  /** w-integrations US-25: invoke `/name args` (traced, then sent). */
+  invokeSkill: (sessionId: string, name: string, args: string) => void;
   error: string | null;
   /** TEMPORARY dev diagnosis: backend events received by this window. */
   evtCount: number;
@@ -436,6 +493,18 @@ export function useMuseSessions(): UseMuseSessions {
   // written through on every change (effect below).
   const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
+  // w-integrations US-24/US-26: connector registry (survives restarts via
+  // localStorage), written through on every change.
+  const [connectors, setConnectors] = useState<ConnectorEntry[]>(() => loadConnectors());
+  const [remoteNotice, setRemoteNotice] = useState<string | null>(null);
+  // w-integrations US-25: skills, builtins merged over stored overrides.
+  const [skills, setSkills] = useState<Skill[]>(() => mergeBuiltinSkills(loadSkills()));
+  // Latest skills for the render-detached `/skill` path inside sendInput.
+  const skillsRef = useRef<Skill[]>(skills);
+  skillsRef.current = skills;
+  // Latest connectors for the render-detached remote-guard path.
+  const connectorsRef = useRef<ConnectorEntry[]>(connectors);
+  connectorsRef.current = connectors;
   const [inputRequests, setInputRequests] = useState<InputRequest[]>([]);
   const [workspace, setWorkspaceState] = useState<string | null>(null);
   // w-settings: sandbox settings + per-project provider map, restored once
@@ -726,6 +795,14 @@ export function useMuseSessions(): UseMuseSessions {
       // best-effort
     }
   }, [providerMap]);
+  // w-integrations write-through persistence.
+  useEffect(() => {
+    saveConnectors(connectors);
+  }, [connectors]);
+
+  useEffect(() => {
+    saveSkills(skills);
+  }, [skills]);
 
   useEffect(() => {
     // null means "not loaded yet" (there is no clear-workspace action),
@@ -1145,6 +1222,61 @@ export function useMuseSessions(): UseMuseSessions {
     await startSessionRow();
   }, [startSessionRow]);
 
+  // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
+  // Hot-listed tools: re-read from the registry on every render, so a
+  // fresh install lists without restart (no cache to invalidate).
+  const connectorTools = useMemo(() => listConnectorTools(connectors), [connectors]);
+
+  const installConnectorById = useCallback((dirId: string): void => {
+    const r = installConnector(connectorsRef.current, dirId);
+    if (r === null) {
+      setError(`unknown connector "${dirId}": install from the curated directory.`);
+      return;
+    }
+    setConnectors(r.registry);
+  }, []);
+
+  const uninstallConnectorById = useCallback((id: string): void => {
+    setConnectors((cur) => uninstallConnector(cur, id).registry);
+  }, []);
+
+  const setConnectorEnabledById = useCallback((id: string, enabled: boolean): void => {
+    setConnectors((cur) => setConnectorEnabled(cur, id, enabled).registry);
+  }, []);
+
+  const addRemoteConnector = useCallback((name: string, url: string): boolean => {
+    const id = `remote-${name.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
+    const r = requestRemoteConnector(connectorsRef.current, { id, name, url });
+    if (!r.ok) {
+      setRemoteNotice(r.message);
+      return false;
+    }
+    setRemoteNotice(null);
+    setConnectors(r.registry);
+    return true;
+  }, []);
+
+  const setSkillEnabledByName = useCallback((name: string, enabled: boolean): void => {
+    setSkills((cur) => setSkillEnabled(cur, name, enabled).skills);
+  }, []);
+
+  const traceSkillSuggestions = useCallback(
+    (sessionId: string, text: string): SkillSuggestion[] => {
+      const out = suggestSkills(skillsRef.current, text);
+      if (out.length > 0) {
+        const entries: LogEntry[] = out.map((s) => ({
+          id: newId(),
+          ts: Date.now(),
+          role: "system",
+          text: formatSkillTrace(s),
+        }));
+        pushLog(sessionId, entries);
+      }
+      return out;
+    },
+    [],
+  );
+
   const sendInput = useCallback(
     async (sessionId: string, text: string) => {
       const trimmed = text.trim();
@@ -1155,11 +1287,38 @@ export function useMuseSessions(): UseMuseSessions {
         doCompact(sessionId);
         return;
       }
+      // w-integrations US-25: `/skill-name args` expands to the skill
+      // instructions (traced in the log) and sends as the turn.
+      let outgoing = trimmed;
+      const skillCmd = parseSkillCommand(trimmed);
+      if (skillCmd !== null) {
+        const skill = resolveSkill(skillsRef.current, skillCmd.name);
+        if (skill === null) {
+          pushLog(sessionId, [
+            {
+              id: newId(),
+              ts: Date.now(),
+              role: "system",
+              text: `unknown skill /${skillCmd.name}: install or enable it first.`,
+            },
+          ]);
+          setError(`unknown skill /${skillCmd.name}`);
+          return;
+        }
+        pushLog(sessionId, [
+          {
+            id: newId(),
+            ts: Date.now(),
+            role: "system",
+            text: formatSkillInvokeTrace(skill.name, skillCmd.args),
+          },
+        ]);
+        outgoing = buildSkillInvocation(skill, skillCmd.args);
+      }
       // US-7: `/fanout <n> "<task>"` never reaches the model as typed —
       // it becomes one parent-turn prompt instructing N parallel
       // subagents. A FIFO note is logged when n exceeds the lanes.
-      let outgoing = trimmed;
-      const fanout = parseFanoutCommand(trimmed);
+      const fanout = parseFanoutCommand(outgoing);
       if (fanout !== null) {
         outgoing = buildFanoutPrompt(fanout);
         const note = fanoutQueueNote(fanout.count);
@@ -1208,6 +1367,31 @@ export function useMuseSessions(): UseMuseSessions {
       }
     },
     [kickPoll, doCompact],
+  );
+
+  /**
+   * w-integrations US-25: invoke `/name args` from a button (the composer
+   * slash path is intercepted inside sendInput). Traces to the log, then
+   * sends the expanded instructions as the turn.
+   */
+  const invokeSkill = useCallback(
+    (sessionId: string, name: string, args: string): void => {
+      const skill = resolveSkill(skillsRef.current, name);
+      if (skill === null) {
+        setError(`unknown skill /${name}`);
+        return;
+      }
+      pushLog(sessionId, [
+        {
+          id: newId(),
+          ts: Date.now(),
+          role: "system",
+          text: formatSkillInvokeTrace(skill.name, args),
+        },
+      ]);
+      void sendInput(sessionId, buildSkillInvocation(skill, args));
+    },
+    [sendInput],
   );
 
   /**
@@ -1758,6 +1942,17 @@ export function useMuseSessions(): UseMuseSessions {
     subagentFollowup,
     subagentReadResult,
     subagentDrilldown,
+    connectors,
+    connectorTools,
+    remoteNotice,
+    installConnectorById,
+    uninstallConnectorById,
+    setConnectorEnabledById,
+    addRemoteConnector,
+    skills,
+    setSkillEnabledByName,
+    traceSkillSuggestions,
+    invokeSkill,
     summaries,
     compactSession: doCompact,
     newFromSummary,
