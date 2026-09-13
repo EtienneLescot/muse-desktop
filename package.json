@@ -12,6 +12,7 @@
     "dev:clean": "sh scripts/dev-clean.sh"
   },
   "dependencies": {
+    "@muse-code/sdk": "0.1.1",
     "@tauri-apps/api": "^2.1.0",
     "@tauri-apps/plugin-dialog": "^2.1.0",
     "@tauri-apps/plugin-shell": "^2.1.0",

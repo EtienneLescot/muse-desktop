@@ -250,6 +250,27 @@ Prouvé par le code lu : sous-agents = orchestration sidecar, **aucun spawn IPC 
 
 1. Lifecycle 1-host-partagé/workspace (perte contexte au switch — `ensure_host` tue l'ancien ; portée sandbox = cwd au spawn). 2. `listen` vs polling (env inconnu, sans mesure). 3. Pas de spawn MSP dans le code lu → fan-out uniquement model-tool **[TROU si le schéma expose un spawn : à re-prouver]**. 4. Drift mémoire + conflits inter-worktrees. 5. Lock-in/IP/licensing, tokens/policy/audit ; benchmarks non stabilisés (voir partie 1 §5). 6. Branding sans asset relu ici. 7. `wire_log` avec prompts en clair + `/dev/urandom` best-effort (collisions = clés d'idempotence dupliquées).
 
-## 9. Points non couverts (preuves manquantes — ne pas spécifier sans elles)
+## 9. Audit SDK officiel (2026-09-13, `meta-models/muse-code-sdk`, schéma `msp.schema.json`)
+
+Schéma officiel : 31 méthodes, 23 notifications, registre d'erreurs. Constat :
+aucun écart dans ce que notre client envoie (`initialize`, `session/start`,
+`session/list`, `turn/start`, `turn/interrupt`, `approval/decide`,
+`userInput/answer`, `userInput/cancel` — params conformes, `commandId` UUIDv7
+requis, `workspaceRoot` valide, `approvalMode` omis = défaut serveur).
+Codes `-32053 approvalRequirementStale` / `-32057 userInputAnswerInvalid`
+confirmés. **Pas de méthode spawn** → fan-out via tour parent acté.
+`subagent/*` = exactement 8 méthodes control-only → acté. **Pas de
+`workflow/*`** → scheduling client-side acté. Le seuil tokens a une source
+réelle : notifications `session/contextUsage` + `session/tokenUsage`.
+Capacités serveur non exploitées (pistes) : `session/compact`,
+`model/list` + `session/setModel`, `turn/steer`, `session/fork`,
+`turn/cancel`/`unqueue`, `view/page`, `approval/listPending`,
+`userInput/clarify`. Garde-fou : `src/lib/msp.ts` + `test/msp-conformance.test.ts`
+valident nos méthodes/notifications contre `@muse-code/sdk@0.1.1` à la
+compilation (`import type` uniquement, zéro byte runtime). Reste ouvert :
+`EXPECTED_SCHEMA_FINGERPRINT` du binaire embarqué (à vérifier via
+`checkServedFingerprint`).
+
+## 10. Points non couverts (preuves manquantes — ne pas spécifier sans elles)
 
 `App.tsx`/composants (`ApprovalPanel`, `InputPanel`, `Composer` cités partie 1, non relus ici) ; `tauri.conf` (`externalBin`) ; `src-tauri/binaries/README.md` + binaires présents ; `muse serve --help` + schéma TS depuis le binaire ; codes `-32053/-32057` côté host (repris du code : commentaires + chemins d'erreur) ; N absolu d'agents ; spawn MSP ; `workflow/*` ; benchmarks/coûts ; formats d'index ; docs officielles ; framing au-delà de `split_lines` ; UX approval granulaire ; MCP/streaming/indexation Claude ; LICENSE ; transport OpenCode ; slash/CRDT/120 fps Zed.
