@@ -1,6 +1,6 @@
-# Roadmap — état d'avancement (2026-09-13, `main` @ `647eebd`)
+# Roadmap — état d'avancement (2026-09-13, `main` @ `4d1f92c`)
 
-Arbre propre, poussé sur `origin/main`. Gates : `tsc` propre, 335/335 tests
+Arbre propre, poussé sur `origin/main`. Gates : `tsc` propre, 343/343 tests
 node, 23/23 tests Rust, `vite build` vert (node Linux
 `~/.nvm/versions/node/v22.16.0`, le `node` du PATH étant un shim Windows cassé).
 
@@ -46,6 +46,18 @@ binaire embarqué (`checkServedFingerprint`).
    (jamais exercés dans cette session ; pas d'automatisation sous WSLg).
 6. Ménage : branches `impl/w-*`, `impl/us-32-a11y`, `impl/v2-batch2`
    encore sur origin ; worktrees déjà supprimés.
+
+## Sidebar UX — threads first, maquette `design/prototype` (`be54165` → `4d1f92c`)
+
+- Threads d'abord, sections secondaires en labels statiques (pas de
+  `<details>` — la maquette n'a aucun dépliant) : Projets, Automatisations,
+  Intégrations, Bibliothèque, Archivés.
+- Labels au token maquette (`.section-label` : 11px, capitales espacées,
+  muted, `margin: 28px 12px 9px`) ; bouton `+` discret comme le `[+]`
+  Projets de la maquette.
+- Workspace par thread (façon Codex) : picker de dossier à la création,
+  défaut réglable dans Settings ; plus de verrou global « Choose workspace
+  folder ».
 
 ## Risques connus
 
