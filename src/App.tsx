@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
 import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
+import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { WorkspacePicker } from "./components/WorkspacePicker";
@@ -45,6 +46,8 @@ export default function App() {
     cancelInput,
     cancelSession,
     killSession,
+    archiveSession,
+    restoreSession,
     subagentInterrupt,
     subagentStop,
     subagentResume,
@@ -87,6 +90,24 @@ export default function App() {
     const parts = workspace.split("/").filter((p) => p.length > 0);
     return parts[parts.length - 1] ?? workspace;
   }, [workspace]);
+
+  // US-5: global ctrl-tab / ctrl-shift-tab cycles active threads in sidebar
+  // order, wherever focus sits (sidebar list, stream, composer).
+  const activeThreadIds = useMemo(
+    () => selectActiveThreads(sessions).map((s) => s.session_id),
+    [sessions],
+  );
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab" && e.ctrlKey) {
+        e.preventDefault();
+        const next = cycleThreadId(activeThreadIds, activeId, e.shiftKey ? -1 : 1);
+        if (next !== null) setActive(next);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeThreadIds, activeId, setActive]);
 
   // US-33: sidecar startup failures surface explicitly (message + expected
   // paths + retry/re-pick actions), never as a blank screen.
@@ -146,6 +167,8 @@ export default function App() {
             onNew={startSession}
             onCancel={cancelSession}
             onKill={killSession}
+            onArchive={archiveSession}
+            onRestore={restoreSession}
             canStart={workspace !== null}
           />
         </div>
