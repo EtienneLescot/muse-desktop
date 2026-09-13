@@ -22,6 +22,8 @@ import {
   type MemoryEntry,
   type MemoryMentionToken,
 } from "../lib/memory";
+// US-32: composer shortcuts documented in the UI via title attributes.
+import { COMPOSER_SHORTCUT_TITLES } from "../lib/a11y";
 
 interface Props {
   disabled: boolean;
@@ -359,7 +361,7 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
   }
 
   return (
-    <div className="composer-wrap">
+    <div className="composer-wrap" id="composer">
       <div className="composer">
         <div className="composer-main">
         {mentions.length > 0 && (
@@ -496,6 +498,7 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
           aria-label="Prompt input"
           aria-expanded={dropdownOpen || memDropdownOpen}
           aria-autocomplete="list"
+          title={COMPOSER_SHORTCUT_TITLES.textarea}
         />
         {blocked !== null && (
           <div className="mention-error" role="alert">
@@ -505,14 +508,14 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
       </div>
       <div className="composer-actions">
         {running && (
-          <button onClick={onCancel} title="Stop the running sidecar">
+          <button onClick={onCancel} title={COMPOSER_SHORTCUT_TITLES.stop}>
             Stop
           </button>
         )}
         <button
           className="send"
           aria-label="Send prompt"
-          title="Send (Enter)"
+          title={COMPOSER_SHORTCUT_TITLES.send}
           onClick={() => void send()}
           disabled={disabled || text.trim().length === 0 || checking}
         >
@@ -520,7 +523,12 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
         </button>
       </div>
       </div>
-      <p className="composer-hint">Enter to send · Shift+Enter for a new line</p>
+      <p
+        className="composer-hint"
+        title="Enter sends, Shift+Enter inserts a newline, Escape dismisses completions"
+      >
+        Enter to send · Shift+Enter for a new line · Esc dismisses completions
+      </p>
     </div>
   );
 }

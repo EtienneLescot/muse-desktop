@@ -178,7 +178,7 @@ export function SessionSidebar({
   }
 
   return (
-    <div className="session-list">
+    <div className="session-list" role="navigation" aria-label="Threads">
       <div className="session-list-header">
         <span>
           Threads ({active.length}

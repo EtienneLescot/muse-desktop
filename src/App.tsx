@@ -24,6 +24,12 @@ import { SharePanel } from "./components/SharePanel";
 import { ChannelPanel } from "./components/ChannelPanel";
 import { ImportPanel } from "./components/ImportPanel";
 import type { ShareBundle } from "./lib/sharing";
+// US-32: polite live-region announcements for stream/approval/input changes.
+import {
+  approvalAnnouncement,
+  inputAnnouncement,
+  streamStatusMessage,
+} from "./lib/a11y";
 import { IndexPanel } from "./components/IndexPanel";
 import { BrowserPanel } from "./components/BrowserPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
@@ -186,6 +192,42 @@ export default function App() {
     return seen;
   }, [activeLog]);
 
+  // US-32: one polite live region announces stream running/stopped
+  // transitions plus approval/input arrivals (not every render).
+  const [liveMessage, setLiveMessage] = useState("");
+  const prevLive = useRef<{ running: boolean | null; approvals: number; inputs: number }>({
+    running: null,
+    approvals: 0,
+    inputs: 0,
+  });
+  const liveRunning = active?.running ?? false;
+  useEffect(() => {
+    const prev = prevLive.current;
+    let msg = "";
+    if (
+      prev.running !== null &&
+      prev.running !== liveRunning &&
+      activeApprovals.length === prev.approvals &&
+      activeInputRequests.length === prev.inputs
+    ) {
+      msg = streamStatusMessage(liveRunning);
+    } else if (activeApprovals.length > prev.approvals) {
+      const last = activeApprovals[activeApprovals.length - 1];
+      msg = approvalAnnouncement(activeApprovals.length - prev.approvals, last?.toolName);
+    } else if (activeInputRequests.length > prev.inputs) {
+      const last = activeInputRequests[activeInputRequests.length - 1];
+      msg = inputAnnouncement(activeInputRequests.length - prev.inputs, last?.tool_name);
+    } else if (prev.running !== null && prev.running !== liveRunning) {
+      msg = streamStatusMessage(liveRunning);
+    }
+    prevLive.current = {
+      running: liveRunning,
+      approvals: activeApprovals.length,
+      inputs: activeInputRequests.length,
+    };
+    if (msg !== "") setLiveMessage(msg);
+  }, [liveRunning, activeApprovals, activeInputRequests]);
+
   // US-5: global ctrl-tab / ctrl-shift-tab cycles active threads in sidebar
   // order, wherever focus sits (sidebar list, stream, composer).
   const activeThreadIds = useMemo(
@@ -219,7 +261,13 @@ export default function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <a className="skip-link" href="#composer">
+        Skip to composer
+      </a>
+      <div className="sr-only" aria-live="polite" role="status">
+        {liveMessage}
+      </div>
+      <aside className="sidebar" aria-label="Sidebar">
         <div className="brand">
           <span className="muse-logo">
             <img src="muse-logo.png" alt="Muse logo" />
@@ -381,7 +429,7 @@ export default function App() {
           </span>
         </button>
       </aside>
-      <main className="conversation">
+      <main className="conversation" aria-label="Conversation">
         {backendMissing && (
           <div className="error-banner">
             Preview mode: no Tauri backend here. Run inside the desktop app for

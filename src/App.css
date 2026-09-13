@@ -359,8 +359,57 @@ body.dark .session-item.active {
 
 .session-select:focus-visible,
 .archived-toggle:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--blue);
   outline-offset: 1px;
+}
+
+/* ---- US-32 keyboard + screen-reader accessibility (additive) ---- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  z-index: 100;
+  background: var(--bg);
+  color: var(--text);
+  border: 2px solid var(--blue);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  text-decoration: none;
+  transition: top 0.15s;
+}
+
+.skip-link:focus-visible {
+  top: 8px;
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Visible focus on decision controls, reusing the existing blue token. */
+.approval-actions button:focus-visible,
+.allowlist-row button:focus-visible,
+.session-sidebar button:focus-visible,
+.composer-actions button:focus-visible,
+.mention-chip-remove:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.approvals:focus-within {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
 }
 
 .dot {
@@ -1441,6 +1490,8 @@ body.dark .composer textarea::placeholder {
   }
 }
 
+/* US-32: honor prefers-reduced-motion — kills the typing caret blink,
+ * smooth scrolling, and all other non-essential animation/transitions. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
