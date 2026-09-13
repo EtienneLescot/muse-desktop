@@ -247,7 +247,7 @@ small {
 }
 
 .session-list-header > span {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 11px;
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -348,24 +348,7 @@ small {
   opacity: 0.85;
 }
 
-.archived-section {
-  margin-top: 8px;
-  border-top: 1px solid var(--line);
-  padding-top: 6px;
-}
-
-.archived-toggle {
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 2px 0;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.session-select:focus-visible,
-.archived-toggle:focus-visible {
+.session-select:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 1px;
 }
@@ -2007,44 +1990,26 @@ body.dark .composer textarea::placeholder {
   gap: 6px;
 }
 
-/* w-integrations: connectors directory + skills (existing CSS vars only). */
-.integrations {
-  margin-top: 16px;
-  padding: 0 4px;
-}
+/* w-integrations: connectors directory + skills render under the
+ * Intégrations section-label (existing CSS vars only). */
 
-.integrations > summary {
-  cursor: pointer;
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
+/* Prototype section-label (design/prototype/style.css): static tracked
+ * capitals, muted — whitespace separates sections, no rules, no
+ * disclosure widgets. First label (threads) drops the top margin. */
+.section-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   color: var(--muted);
-}
-
-.integrations > summary:hover {
-  color: var(--text);
-}
-
-/* Sidebar sections (Codex-like): one threads list up front, everything
- * else collapsed behind a quiet label. Prototype section-label treatment:
- * 11px tracked capitals, muted — whitespace separates, no rules. */
-.side-section {
-  margin-top: 16px;
-  padding: 0 4px;
-}
-
-.side-section > summary {
-  cursor: pointer;
-  font-weight: 700;
   font-size: 11px;
+  font-weight: 600;
   letter-spacing: 1px;
+  margin: 28px 12px 9px;
   text-transform: uppercase;
-  color: var(--muted);
 }
 
-.side-section > summary:hover {
-  color: var(--text);
+.threads-label {
+  margin-top: 0;
 }
 
 /* ---- Sidebar footer: profile + settings gear ---- */

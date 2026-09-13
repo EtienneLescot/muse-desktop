@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { MuseSession } from "../hooks/useMuseSessions";
 import {
   countRunning,
@@ -62,7 +62,6 @@ export function SessionSidebar({
   projects,
   threadProjects,
 }: Props) {
-  const [archivedOpen, setArchivedOpen] = useState(false);
   const active = useMemo(() => selectActiveThreads(sessions), [sessions]);
   const archived = useMemo(() => selectArchivedThreads(sessions), [sessions]);
   const runningCount = useMemo(() => countRunning(sessions), [sessions]);
@@ -180,7 +179,7 @@ export function SessionSidebar({
   return (
     <div className="session-list" role="navigation" aria-label="Threads">
       <div
-        className="session-list-header"
+        className="section-label threads-label"
         title="↑↓ or Ctrl+Tab / Ctrl+Shift+Tab to switch threads"
       >
         <span>
@@ -190,8 +189,15 @@ export function SessionSidebar({
           </span>
           )
         </span>
-        <button onClick={onNew} disabled={!canStart} title="New session">
-          + New
+        <button
+          type="button"
+          className="icon"
+          onClick={onNew}
+          disabled={!canStart}
+          title="New session"
+          aria-label="New thread"
+        >
+          +
         </button>
       </div>
       {active.length === 0 && (
@@ -240,16 +246,8 @@ export function SessionSidebar({
       )}
       {archived.length > 0 && (
         <div className="archived-section">
-          <button
-            className="archived-toggle"
-            onClick={() => setArchivedOpen((v) => !v)}
-            aria-expanded={archivedOpen}
-            title={archivedOpen ? "Collapse archived threads" : "Expand archived threads"}
-          >
-            {archivedOpen ? "▾" : "▸"} Archived ({archived.length})
-          </button>
-          {archivedOpen && (
-            <ul className="session-items" aria-label="Archived threads">
+          <div className="section-label">Archivés ({archived.length})</div>
+          <ul className="session-items" aria-label="Archived threads">
               {archived.map((s) => (
                 <li key={s.session_id} className="session-item archived">
                   <button
@@ -285,8 +283,7 @@ export function SessionSidebar({
                   </div>
                 </li>
               ))}
-            </ul>
-          )}
+          </ul>
         </div>
       )}
     </div>

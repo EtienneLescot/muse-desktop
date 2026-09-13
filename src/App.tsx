@@ -320,8 +320,8 @@ export default function App() {
             projects={projects}
             threadProjects={threadProjects}
           />
-          <details className="side-section">
-            <summary>Projets</summary>
+          <div className="section-label">Projets</div>
+          <div className="side-section">
             <ProjectsPanel
               projects={projects}
               threadProjects={threadProjects}
@@ -337,9 +337,9 @@ export default function App() {
               settingsFor={settingsFor}
               hideGlobalSettings
             />
-          </details>
-          <details className="side-section">
-            <summary>Automatisations</summary>
+          </div>
+          <div className="section-label">Automatisations</div>
+          <div className="side-section">
             <SchedulesPanel
               schedules={schedules}
               sessions={sessions}
@@ -351,9 +351,9 @@ export default function App() {
               onDelete={(id) => deleteSchedule(id)}
               onRunNow={(id) => runScheduleNow(id)}
             />
-          </details>
-          <details className="side-section integrations">
-            <summary>Intégrations</summary>
+          </div>
+          <div className="section-label">Intégrations</div>
+          <div className="side-section">
             <ConnectorPanel
               installed={connectors}
               toolNames={connectorTools.map((t) => t.name)}
@@ -373,9 +373,9 @@ export default function App() {
                 activeId !== null ? traceSkillSuggestions(activeId, text) : []
               }
             />
-          </details>
-          <details className="side-section">
-            <summary>Bibliothèque</summary>
+          </div>
+          <div className="section-label">Bibliothèque</div>
+          <div className="side-section">
             <IndexPanel
             enabled={index.enabled}
             paused={index.paused}
@@ -401,7 +401,7 @@ export default function App() {
               onImportText={(source, content) => importConfigText(source, content)}
               onDismiss={dismissImport}
             />
-          </details>
+          </div>
           {settingsOpen && (
             <SettingsPanel
               workspace={workspace}
