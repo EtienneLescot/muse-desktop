@@ -27,6 +27,22 @@ import {
   type InputAnswer,
   type InputRequest,
 } from "../lib/input";
+// US-15 persistent approval allowlist: matching + most-restrictive-wins
+// resolution live in ../lib/allowlist (dependency-free, unit-tested);
+// storage + rule types extend ../lib/persist.
+import {
+  addAllowRule,
+  defaultPatternFor,
+  loadAllowlist,
+  removeAllowRule,
+  resolveApproval,
+  saveAllowlist,
+  setAllowRuleDecision,
+  type AllowDecision,
+  type AllowRule,
+  type ResolvedApproval,
+} from "../lib/allowlist";
+export type { AllowDecision, AllowRule, ResolvedApproval } from "../lib/allowlist";
 export type {
   InputAnswer,
   InputOption,
@@ -130,6 +146,13 @@ interface UseMuseSessions {
   startSession: () => Promise<void>;
   sendInput: (sessionId: string, text: string) => Promise<void>;
   approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<void>;
+  /** US-15: persisted allowlist rules + effective decision per request. */
+  allowlist: AllowRule[];
+  allowDecisionFor: (approval: ApprovalRequest) => ResolvedApproval;
+  /** Approve, then memorize an allow rule (command pattern + choice scope). */
+  rememberApproval: (approval: ApprovalRequest, choiceId: string) => Promise<void>;
+  revokeAllowRule: (id: string) => void;
+  setAllowRuleDecision: (id: string, decision: AllowDecision) => void;
   answerInput: (sessionId: string, inputId: string, answers: InputAnswer[]) => Promise<void>;
   cancelInput: (sessionId: string, inputId: string) => Promise<void>;
   inputRequests: InputRequest[];
@@ -265,6 +288,9 @@ export function useMuseSessions(): UseMuseSessions {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  // US-15 allowlist: restored once (survives restarts via localStorage),
+  // written through on every change.
+  const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
   const [inputRequests, setInputRequests] = useState<InputRequest[]>([]);
   const [workspace, setWorkspaceState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -450,6 +476,10 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveActiveId(activeId);
   }, [activeId]);
+
+  useEffect(() => {
+    saveAllowlist(allowlist);
+  }, [allowlist]);
 
   useEffect(() => {
     // null means "not loaded yet" (there is no clear-workspace action),
@@ -916,6 +946,43 @@ export function useMuseSessions(): UseMuseSessions {
     [kickPoll],
   );
 
+  // US-15: effective allowlist decision for one pending approval request
+  // (badge in the panel; most-restrictive-wins, network default-deny).
+  const allowDecisionFor = useCallback(
+    (approval: ApprovalRequest): ResolvedApproval =>
+      resolveApproval(allowlist, {
+        toolName: approval.toolName,
+        summary: approval.summary,
+        scopes: approval.choices.map((c) => c.scope),
+      }),
+    [allowlist],
+  );
+
+  // US-15 "toujours autoriser": send the decision, then memorize an allow
+  // rule (command pattern + the chosen scope) for future requests.
+  const rememberApproval = useCallback(
+    async (approval: ApprovalRequest, choiceId: string) => {
+      await approve(approval.session_id, approval.request_id, choiceId);
+      const choice = approval.choices.find((c) => c.choiceId === choiceId);
+      setAllowlist((cur) =>
+        addAllowRule(cur, {
+          pattern: defaultPatternFor(approval.toolName, approval.summary),
+          scope: choice?.scope ?? "",
+          decision: "allow",
+        }),
+      );
+    },
+    [approve],
+  );
+
+  const revokeAllowRule = useCallback((id: string) => {
+    setAllowlist((cur) => removeAllowRule(cur, id));
+  }, []);
+
+  const setAllowRuleDecisionCb = useCallback((id: string, decision: AllowDecision) => {
+    setAllowlist((cur) => setAllowRuleDecision(cur, id, decision));
+  }, []);
+
   const cancelSession = useCallback(async (sessionId: string) => {
     try {
       setError(null);
@@ -1144,6 +1211,11 @@ export function useMuseSessions(): UseMuseSessions {
     startSession,
     sendInput,
     approve,
+    allowlist,
+    allowDecisionFor,
+    rememberApproval,
+    revokeAllowRule,
+    setAllowRuleDecision: setAllowRuleDecisionCb,
     answerInput,
     cancelInput,
     cancelSession,
