@@ -411,6 +411,121 @@ button:hover:not(:disabled) {
   justify-content: flex-end;
 }
 
+.composer-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* ---- @-mention chips (US-18) ---- */
+
+.mention-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mention-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 1px 4px 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+}
+
+.mention-chip-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention-chip-out {
+  border-color: var(--danger);
+}
+
+.mention-chip-flag {
+  color: var(--danger);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.mention-chip-remove {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.mention-chip-remove:hover {
+  color: var(--danger);
+}
+
+/* ---- @-mention completion ---- */
+
+.mention-list {
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.mention-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+}
+
+.mention-item-active {
+  background: var(--panel);
+}
+
+.mention-item-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention-item-scope {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.mention-item-scope-out {
+  color: var(--danger);
+}
+
+.mention-error {
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  background: var(--danger-bg);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
 .empty-session {
   max-width: 420px;
   margin: 15vh auto;

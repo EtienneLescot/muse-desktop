@@ -114,6 +114,7 @@ export default function App() {
             <Composer
               disabled={workspace === null || backendMissing}
               running={active.running}
+              workspace={workspace}
               onSend={(text) => void sendInput(active.session_id, text)}
               onCancel={() => void cancelSession(active.session_id)}
             />
