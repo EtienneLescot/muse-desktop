@@ -27,8 +27,12 @@ binaire embarqué (`checkServedFingerprint`).
 
 ## Reste à faire (ordre suggéré)
 
-1. US-31 : brancher `model/list` (+ `session/setModel`) réel(s) — Rust +
-   UI, preuve sur binaire.
+1. ~~US-31~~ **fait** (`8f98fa1`) : `model/list` + `session/setModel`
+   réels, prouvés sur le binaire (`accepted`, `isActive` bascule ; id
+   invalide → `-32030 invalid_model`). Picker live avec fallback sample.
+   Note : le binaire annonce le fingerprint `sha256:03312c21…` alors que le
+   SDK épingle `sha256:cfd31ee7…` (schéma avancé côté host — warning, pas
+   erreur ; à surveiller).
 2. US-4 : compaction via `session/compact` serveur (remplace/complète
    l'extractif local) ; seuil réel via `session/contextUsage`.
 3. US-28 : channels temps réel (transport à spécifier) ou déclasser en
