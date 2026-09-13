@@ -224,12 +224,38 @@ fn tail_of(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>) -> String {
 /// binary lives under `src-tauri/binaries/`, and the filename always carries
 /// the target triple (bundling convention) — so resolve it ourselves and hand
 /// the plugin an absolute path (its join is a no-op on absolute paths).
-fn resolve_sidecar() -> Result<PathBuf, String> {
-    let triple = env!("TAURI_ENV_TARGET_TRIPLE");
+/// File name of the sidecar binary for this build (bundling convention:
+/// always suffixed by the target triple, plus `.exe` on Windows).
+fn sidecar_file_name() -> String {
+    sidecar_file_name_for(env!("TAURI_ENV_TARGET_TRIPLE"), cfg!(windows))
+}
+
+fn sidecar_file_name_for(triple: &str, windows: bool) -> String {
     let mut file = format!("binaries/muse-{triple}");
-    if cfg!(windows) && !file.ends_with(".exe") {
+    if windows && !file.ends_with(".exe") {
         file.push_str(".exe");
     }
+    file
+}
+
+/// Human-readable "binary missing" error (US-33): names the expected
+/// triple-suffixed file, labels both searched locations (exe-dir bundled
+/// layout, then src-tauri/binaries dev tree), and lists the exact paths
+/// probed so the UI can show them instead of a blank screen.
+/// Pure (unit-tested).
+fn sidecar_missing_message(file: &str, tried: &[PathBuf]) -> String {
+    let tried_list = tried
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "sidecar binary not found: expected `{file}` (file name carries the target triple). Tried (1) bundled layout next to the app executable, then (2) dev tree src-tauri/binaries (tried {tried_list}). Place the binary matching your target triple at one of those locations (see src-tauri/binaries/README.md)."
+    )
+}
+
+fn resolve_sidecar() -> Result<PathBuf, String> {
+    let file = sidecar_file_name();
     let mut tried = Vec::new();
     // 1. Next to the app exe (bundled layout, and dev if staged there).
     if let Ok(exe) = std::env::current_exe() {
@@ -247,14 +273,7 @@ fn resolve_sidecar() -> Result<PathBuf, String> {
     if p.is_file() {
         return Ok(p);
     }
-    Err(format!(
-        "sidecar binary not found (tried {}); bundle binaries/muse-<triple> (see src-tauri/binaries/README.md)",
-        tried
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
-    ))
+    Err(sidecar_missing_message(&file, &tried))
 }
 
 fn spawn_sidecar(
@@ -1044,6 +1063,41 @@ mod tests {
         assert!(build_input_request_payload(&bad).is_none());
         let empty = json!({"userInputId": "x", "questions": []});
         assert!(build_input_request_payload(&empty).is_none());
+    }
+
+    #[test]
+    fn sidecar_file_name_carries_triple_suffix() {
+        assert_eq!(
+            sidecar_file_name_for("x86_64-unknown-linux-gnu", false),
+            "binaries/muse-x86_64-unknown-linux-gnu"
+        );
+        assert_eq!(
+            sidecar_file_name_for("aarch64-apple-darwin", false),
+            "binaries/muse-aarch64-apple-darwin"
+        );
+    }
+
+    #[test]
+    fn sidecar_file_name_adds_exe_on_windows() {
+        assert_eq!(
+            sidecar_file_name_for("x86_64-pc-windows-msvc", true),
+            "binaries/muse-x86_64-pc-windows-msvc.exe"
+        );
+    }
+
+    #[test]
+    fn sidecar_missing_message_names_file_and_both_locations() {
+        let tried = vec![
+            PathBuf::from("/app/binaries/muse-x86_64-unknown-linux-gnu"),
+            PathBuf::from("/src/src-tauri/binaries/muse-x86_64-unknown-linux-gnu"),
+        ];
+        let msg = sidecar_missing_message("binaries/muse-x86_64-unknown-linux-gnu", &tried);
+        assert!(msg.contains("binaries/muse-x86_64-unknown-linux-gnu"), "{msg}");
+        assert!(msg.contains("target triple"), "{msg}");
+        assert!(msg.contains("/app/binaries/muse-x86_64-unknown-linux-gnu"), "{msg}");
+        assert!(msg.contains("/src/src-tauri/binaries/muse-x86_64-unknown-linux-gnu"), "{msg}");
+        assert!(msg.contains("src-tauri/binaries"), "{msg}");
+        assert!(msg.contains("src-tauri/binaries/README.md"), "{msg}");
     }
 
     #[test]
