@@ -84,6 +84,13 @@ import {
   saveSummary,
   type ThreadSummary,
 } from "../lib/compact";
+// US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
+// endpoint exists); children surface as `subagent` entries as usual.
+import {
+  buildFanoutPrompt,
+  fanoutQueueNote,
+  parseFanoutCommand,
+} from "../lib/fanout";
 // US-5 thread archiving flag helper (pure, unit-tested).
 import { withArchivedFlag } from "../lib/threads";
 
@@ -848,8 +855,20 @@ export function useMuseSessions(): UseMuseSessions {
         doCompact(sessionId);
         return;
       }
+      // US-7: `/fanout <n> "<task>"` never reaches the model as typed —
+      // it becomes one parent-turn prompt instructing N parallel
+      // subagents. A FIFO note is logged when n exceeds the lanes.
+      let outgoing = trimmed;
+      const fanout = parseFanoutCommand(trimmed);
+      if (fanout !== null) {
+        outgoing = buildFanoutPrompt(fanout);
+        const note = fanoutQueueNote(fanout.count);
+        if (note !== null) {
+          pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: note }]);
+        }
+      }
       closeOpenBlocks(sessionId);
-      pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "user", text: trimmed }]);
+      pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "user", text: outgoing }]);
       // US-10: reflexive indicator synchronously (<200ms), before the first
       // delta or even `item/started` can arrive. The first chunk coalesces
       // into this entry, so no catch-up burst ever paints.
@@ -859,7 +878,7 @@ export function useMuseSessions(): UseMuseSessions {
           s.session_id === sessionId
             ? {
                 ...s,
-                title: s.title.startsWith("Session ") ? shortTitle(trimmed) : s.title,
+                title: s.title.startsWith("Session ") ? shortTitle(fanout !== null ? fanout.task : trimmed) : s.title,
                 running: true,
               }
             : s,
@@ -867,7 +886,7 @@ export function useMuseSessions(): UseMuseSessions {
       );
       try {
         setError(null);
-        await invoke("send_input", { sessionId, text: trimmed });
+        await invoke("send_input", { sessionId, text: outgoing });
         // Drain immediately: the next slow tick could be ~1s away, which
         // would delay the first tokens and dump them as one catch-up burst.
         kickPoll();

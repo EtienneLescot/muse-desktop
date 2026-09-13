@@ -1223,3 +1223,58 @@ body.dark .composer textarea::placeholder {
     padding: 8px 20px;
   }
 }
+
+/* US-7/US-8 orchestration panel: worktree plan + setup snippet. */
+.orchestration {
+  margin: 0 28px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.orchestration-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.orchestration-list {
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.orchestration-list li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.orchestration-list code {
+  background: var(--code-bg);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+.orchestration-snippet {
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.orchestration-compare {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.orchestration-compare input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
