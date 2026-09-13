@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { BUILD_ID } from "./lib/env";
 import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
+import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { WorkspacePicker } from "./components/WorkspacePicker";
@@ -31,6 +32,8 @@ export default function App() {
     cancelInput,
     cancelSession,
     killSession,
+    archiveSession,
+    restoreSession,
     subagentInterrupt,
     subagentStop,
     subagentResume,
@@ -50,6 +53,24 @@ export default function App() {
     for (const r of inputRequests) counts[r.session_id] = (counts[r.session_id] ?? 0) + 1;
     return counts;
   }, [approvals, inputRequests]);
+
+  // US-5: global ctrl-tab / ctrl-shift-tab cycles active threads in sidebar
+  // order, wherever focus sits (sidebar list, stream, composer).
+  const activeThreadIds = useMemo(
+    () => selectActiveThreads(sessions).map((s) => s.session_id),
+    [sessions],
+  );
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab" && e.ctrlKey) {
+        e.preventDefault();
+        const next = cycleThreadId(activeThreadIds, activeId, e.shiftKey ? -1 : 1);
+        if (next !== null) setActive(next);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeThreadIds, activeId, setActive]);
 
   // US-33: sidecar startup failures surface explicitly (message + expected
   // paths + retry/re-pick actions), never as a blank screen.
@@ -78,6 +99,8 @@ export default function App() {
           onNew={startSession}
           onCancel={cancelSession}
           onKill={killSession}
+          onArchive={archiveSession}
+          onRestore={restoreSession}
           canStart={workspace !== null}
         />
       </aside>

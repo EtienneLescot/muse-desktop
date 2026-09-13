@@ -56,6 +56,8 @@ import {
   formatSubagentResult,
   parseSubagentPayload,
 } from "../lib/subagent";
+// US-5 thread archiving flag helper (pure, unit-tested).
+import { withArchivedFlag } from "../lib/threads";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -122,6 +124,10 @@ interface UseMuseSessions {
   activeInputRequests: InputRequest[];
   cancelSession: (sessionId: string) => Promise<void>;
   killSession: (sessionId: string) => Promise<void>;
+  /** US-5: move a thread to the archived list (persisted flag). */
+  archiveSession: (sessionId: string) => void;
+  /** US-5: move a thread back to the active list (persisted flag). */
+  restoreSession: (sessionId: string) => void;
   /** US-6 controls: one hook method per `subagent/*` MSP method. */
   subagentInterrupt: (sessionId: string, agentId: string) => Promise<void>;
   subagentStop: (sessionId: string, agentId: string) => Promise<void>;
@@ -314,9 +320,10 @@ export function useMuseSessions(): UseMuseSessions {
       setLogs(storedLogs);
       setWorkspaceState(storedWorkspace);
       setActiveId(
-        storedActive && stored.some((s) => s.session_id === storedActive)
+        storedActive &&
+          stored.some((s) => s.session_id === storedActive && s.archived !== true)
           ? storedActive
-          : (stored[0]?.session_id ?? null),
+          : (stored.find((s) => s.archived !== true)?.session_id ?? null),
       );
     }
 
@@ -831,12 +838,34 @@ export function useMuseSessions(): UseMuseSessions {
       setInputRequests((cur) => cur.filter((r) => r.session_id !== sessionId));
       setActiveId((cur) => {
         if (cur !== sessionId) return cur;
-        const remaining = loadSessions().filter((s) => s.session_id !== sessionId);
+        const remaining = loadSessions().filter(
+          (s) => s.session_id !== sessionId && s.archived !== true,
+        );
         return remaining[0]?.session_id ?? null;
       });
     },
     [],
   );
+
+  // US-5: archive/restore flip the persisted `archived` flag (the
+  // sessions write-through effect persists it); archiving the active
+  // thread moves selection to the first remaining active thread.
+  const archiveSession = useCallback(
+    (sessionId: string) => {
+      setSessions((cur) => withArchivedFlag(cur, sessionId, true));
+      if (activeId === sessionId) {
+        const fallback =
+          sessions.find((s) => s.session_id !== sessionId && s.archived !== true)
+            ?.session_id ?? null;
+        setActiveId(fallback);
+      }
+    },
+    [sessions, activeId],
+  );
+
+  const restoreSession = useCallback((sessionId: string) => {
+    setSessions((cur) => withArchivedFlag(cur, sessionId, false));
+  }, []);
 
   const activeLog = (activeId !== null && logs[activeId]) || [];
   const activeApprovals = approvals.filter((a) => a.session_id === activeId);
@@ -994,6 +1023,8 @@ export function useMuseSessions(): UseMuseSessions {
     cancelInput,
     cancelSession,
     killSession,
+    archiveSession,
+    restoreSession,
     subagentInterrupt,
     subagentStop,
     subagentResume,
