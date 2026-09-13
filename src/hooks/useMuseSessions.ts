@@ -35,6 +35,10 @@ export type {
   InputRequest,
 } from "../lib/input";
 export { buildAnswers, parseInputRequest } from "../lib/input";
+// Serialized poll chain: the periodic tick and the immediate post-send kick
+// share it so two drains never overlap with the same cursor (overlap would
+// deliver the same buffered events twice and duplicate streamed text).
+import { createPollChain, enqueuePoll } from "../lib/poll";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -255,12 +259,45 @@ export function useMuseSessions(): UseMuseSessions {
   // Mirror of "any session running", read by the poll loop to pick cadence.
   // Plain ref (not state): the loop lives outside render, StrictMode-safe.
   const runningRef = useRef(false);
+  // Shared poll cursor: the periodic tick and the post-send kick both drain
+  // from here, so a kick never replays what the tick already fed.
+  const cursorRef = useRef(0);
+  // One serialized drain chain (tick + kicks); created once per mount.
+  const pollChainRef = useRef(createPollChain());
+  // Latest handleEvent, read by the render-detached poll drain.
+  const handleEventRef = useRef<(evt: DrainedEvent) => void>(() => {});
+  // False after unmount: a late kick must not setState on a dead component.
+  const aliveRef = useRef(true);
   // Tombstoned ids (user-deleted): late events and backend restores must not
   // resurrect them. Lazy init survives StrictMode remounts (ref persists).
   const tombstoned = useRef<Set<string> | null>(null);
   if (tombstoned.current === null) {
     tombstoned.current = new Set(loadTombstones());
   }
+
+  // One drain of the backend event buffer, shared by the periodic tick and
+  // the immediate post-send kick. Stable across renders: it only touches refs
+  // plus setState, so send/answer/approve callbacks can safely depend on it.
+  const pollOnce = useCallback(async (): Promise<void> => {
+    if (!aliveRef.current) return;
+    try {
+      const res = await invoke<PollResult>("poll_events", { since: cursorRef.current });
+      if (!aliveRef.current) return;
+      cursorRef.current = res.head;
+      const apply = handleEventRef.current;
+      for (const e of res.events) apply(e);
+    } catch (err) {
+      if (aliveRef.current) setError(`event poll failed: ${String(err)}`);
+    }
+  }, []);
+
+  // Immediate drain right after the backend acknowledges new work: without
+  // this the next tick can be a full slow interval away, so the first paint
+  // arrives late with a whole backlog at once (catch-up burst) instead of
+  // streaming from the first tokens.
+  const kickPoll = useCallback((): void => {
+    enqueuePoll(pollChainRef.current, () => pollOnce());
+  }, [pollOnce]);
 
   // Boot: restore local persistence first (instant history), then merge
   // the supervisor's live table, then poll the backend event buffer.
@@ -273,7 +310,7 @@ export function useMuseSessions(): UseMuseSessions {
     // after cleanup cancelled the first. Teardown below makes re-setup safe.
     let timer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
-    let cursor = 0;
+    aliveRef.current = true;
 
     const stored = loadSessions();
     const storedLogs: Record<string, LogEntry[]> = {};
@@ -341,39 +378,37 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         const head = await invoke<PollResult>("poll_events", {});
         if (cancelled) return;
-        cursor = head.head;
+        cursorRef.current = head.head;
       } catch (err) {
         if (!cancelled) setError(`event poll failed: ${String(err)}`);
         return;
       }
       // setTimeout chain (not setInterval): cadence adapts to whether a
-      // turn is streaming, and a slow tick never piles onto the next.
-      const tick = async () => {
-        try {
-          const res = await invoke<PollResult>("poll_events", { since: cursor });
-          if (cancelled) return;
-          cursor = res.head;
-          for (const e of res.events) handleEvent(e);
-        } catch (err) {
-          if (!cancelled) setError(`event poll failed: ${String(err)}`);
-        }
-        if (!cancelled) {
-          timer = setTimeout(
-            () => void tick(),
-            runningRef.current ? POLL_FAST_MS : POLL_SLOW_MS,
-          );
-        }
+      // turn is streaming, and a slow tick never piles onto the next. The
+      // drain itself goes through the shared chain so a post-send kick can
+      // never overlap this tick with the same cursor.
+      const tick = () => {
+        enqueuePoll(pollChainRef.current, () => pollOnce());
+        void pollChainRef.current.current.then(() => {
+          if (!cancelled) {
+            timer = setTimeout(
+              tick,
+              runningRef.current ? POLL_FAST_MS : POLL_SLOW_MS,
+            );
+          }
+        });
       };
-      void tick();
+      tick();
     })();
 
     return () => {
       cancelled = true;
+      aliveRef.current = false;
       if (timer !== null) clearTimeout(timer);
       timer = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pollOnce]);
 
   // Write-through persistence.
   useEffect(() => {
@@ -632,6 +667,9 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         setError(null);
         await invoke("send_input", { sessionId, text: trimmed });
+        // Drain immediately: the next slow tick could be ~1s away, which
+        // would delay the first tokens and dump them as one catch-up burst.
+        kickPoll();
       } catch (e) {
         setError(`send_input failed: ${String(e)}`);
         setSessions((cur) =>
@@ -639,7 +677,7 @@ export function useMuseSessions(): UseMuseSessions {
         );
       }
     },
-    [],
+    [kickPoll],
   );
 
   const approve = useCallback(
@@ -664,11 +702,13 @@ export function useMuseSessions(): UseMuseSessions {
             text: `Decision sent: ${choiceId} (${approvalId})`,
           },
         ]);
+        // The turn resumes after a decision: drain now, don't wait a tick.
+        kickPoll();
       } catch (e) {
         setError(`approve failed: ${String(e)}`);
       }
     },
-    [],
+    [kickPoll],
   );
 
   const cancelSession = useCallback(async (sessionId: string) => {
@@ -732,11 +772,13 @@ export function useMuseSessions(): UseMuseSessions {
         });
         // Panel removal arrives via input_settled; on success the turn
         // resumes. On error (-32057) the panel stays for a corrected answer.
+        // Drain now so the resumed turn paints from its first tokens.
+        kickPoll();
       } catch (e) {
         setError(`answer_input failed: ${String(e)}`);
       }
     },
-    [],
+    [kickPoll],
   );
 
   const cancelInput = useCallback(async (sessionId: string, inputId: string) => {
@@ -750,6 +792,8 @@ export function useMuseSessions(): UseMuseSessions {
 
   // Updated every render; the poll loop reads it for cadence.
   runningRef.current = sessions.some((s) => s.running);
+  // Latest event handler for the render-detached poll drain.
+  handleEventRef.current = handleEvent;
 
   return {
     sessions,
