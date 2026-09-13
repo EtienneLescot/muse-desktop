@@ -331,6 +331,50 @@ button:hover:not(:disabled) {
   border-top: 1px solid var(--border);
 }
 
+.subagent-child {
+  padding: 2px 8px 2px 24px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.subagent-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px 6px 24px;
+}
+
+.subagent-controls button {
+  font-size: 0.8rem;
+}
+
+.subagent-followup {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px 6px 24px;
+}
+
+.subagent-followup input {
+  flex: 1;
+  font: inherit;
+  font-size: 0.85rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+.subagent-result {
+  margin: 0;
+  padding: 4px 8px 6px 24px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
 /* ---- Approvals ---- */
 
 .approvals {

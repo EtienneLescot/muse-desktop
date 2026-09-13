@@ -31,6 +31,12 @@ export interface LogEntry {
   itemId?: string;
   /** True while further stream chunks may still be appended. */
   open?: boolean;
+  /** Drill-down into the child's own transcript (`session/read`). */
+  childSessionId?: string;
+  /** Sub-agent header facts from `item/started` (objective/role/depth). */
+  objective?: string;
+  subagentRole?: string;
+  depth?: number;
 }
 
 const SESSIONS_KEY = "muse-desktop.sessions.v1";

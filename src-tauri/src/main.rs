@@ -14,7 +14,9 @@
 //!
 //! IPC surface (frontend calls via `invoke`, receives via `listen`):
 //!   commands: start_session, restore_sessions, send_input, approve,
-//!             cancel_session, kill_session
+//!             cancel_session, kill_session,
+//!             subagent_interrupt, subagent_stop, subagent_resume,
+//!             subagent_followup, subagent_read_result, subagent_drilldown
 //!   events:   output, subagent_event, tool_request, status
 //! Payloads always carry `session_id` so the hook demultiplexes sessions.
 
@@ -74,6 +76,51 @@ struct Host {
     client: std::sync::Arc<MspClient>,
 }
 
+/// Sub-agent identity captured from `item/started` for kind `subagent`.
+/// Feeds the UI drill-down (childSessionId) and the control commands
+/// (agent id = item id). Pure data, no sidecar calls.
+#[derive(Debug, Clone, Default)]
+struct SubagentMeta {
+    child_session_id: Option<String>,
+    objective: Option<String>,
+    role: Option<String>,
+    depth: Option<u64>,
+}
+
+/// Pull sub-agent identity out of an `item/started` item object.
+/// MSP params are camelCase (`childSessionId`); accept snake_case too —
+/// the schema evolves additively and the UI must not lose drill-down
+/// over a key rename. Returns None when the item carries no identity.
+fn extract_subagent_meta(item: &Value) -> Option<SubagentMeta> {
+    let child = item
+        .get("childSessionId")
+        .or_else(|| item.get("child_session_id"))
+        .or_else(|| item.get("childSession"))
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let objective = item
+        .get("objective")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let role = item
+        .get("role")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let depth = item.get("depth").and_then(Value::as_u64);
+    if child.is_none() && objective.is_none() && role.is_none() && depth.is_none() {
+        return None;
+    }
+    Some(SubagentMeta {
+        child_session_id: child,
+        objective,
+        role,
+        depth,
+    })
+}
+
 /// Backend event buffer: the poll transport. `listen`-based push delivery
 /// proved undebuggable in one environment (subscriptions resolved yet never
 /// fired), so the UI polls this buffer instead — same broadcast semantics,
@@ -89,6 +136,9 @@ struct AppState {
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
     /// its own. Scoped by session: bare item ids may repeat across sessions.
     item_kinds: Mutex<HashMap<(String, String), String>>,
+    /// (session_id, item_id) -> sub-agent identity from `item/started`.
+    /// Scoped by session like `item_kinds`; purged with it on kill.
+    subagent_meta: Mutex<HashMap<(String, String), SubagentMeta>>,
     /// Serializes host creation: check-spawn-insert must be atomic or two
     /// concurrent `start_session` calls spawn two hosts.
     host_mutex: tokio::sync::Mutex<()>,
@@ -389,7 +439,42 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                     .unwrap_or("agentMessage")
                     .to_string();
                 if let Ok(mut kinds) = state.item_kinds.lock() {
-                    kinds.insert((sid.to_string(), item_id.to_string()), kind);
+                    kinds.insert((sid.to_string(), item_id.to_string()), kind.clone());
+                }
+                // Sub-agent lanes need identity up front (objective/role for
+                // the header, childSessionId for drill-down): announce the
+                // block now so the UI owns the entry before deltas land.
+                if matches!(kind.as_str(), "subagent" | "workflow" | "reminderChild") {
+                    let meta = extract_subagent_meta(item);
+                    if let Ok(mut metas) = state.subagent_meta.lock() {
+                        if let Some(m) = meta.clone() {
+                            metas.insert((sid.to_string(), item_id.to_string()), m);
+                        }
+                    }
+                    let mut announce = serde_json::Map::new();
+                    announce.insert("agent_id".to_string(), json!(item_id));
+                    announce.insert("text".to_string(), json!(""));
+                    if let Some(m) = meta {
+                        if let Some(c) = m.child_session_id {
+                            announce.insert("childSessionId".to_string(), json!(c));
+                        }
+                        if let Some(o) = m.objective {
+                            announce.insert("objective".to_string(), json!(o));
+                        }
+                        if let Some(r) = m.role {
+                            announce.insert("role".to_string(), json!(r));
+                        }
+                        if let Some(d) = m.depth {
+                            announce.insert("depth".to_string(), json!(d));
+                        }
+                    }
+                    emit(
+                        app,
+                        "subagent_event",
+                        sid,
+                        "subagent_event",
+                        Value::Object(announce).to_string(),
+                    );
                 }
             }
         }
@@ -414,8 +499,39 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
             let item_ref = json!({"itemId": item_id, "text": delta}).to_string();
             match kind.as_str() {
                 "subagent" | "workflow" | "reminderChild" => {
-                    let payload = json!({"agent_id": item_id, "text": delta}).to_string();
-                    emit(app, "subagent_event", sid, "subagent_event", payload);
+                    // Re-attach identity learned at `item/started` so entries
+                    // created from a bare delta still carry drill-down data.
+                    let meta = state
+                        .subagent_meta
+                        .lock()
+                        .map(|m| {
+                            m.get(&(sid.to_string(), item_id.to_string())).cloned()
+                        })
+                        .unwrap_or(None);
+                    let mut obj = serde_json::Map::new();
+                    obj.insert("agent_id".to_string(), json!(item_id));
+                    obj.insert("text".to_string(), json!(delta));
+                    if let Some(m) = meta {
+                        if let Some(c) = m.child_session_id {
+                            obj.insert("childSessionId".to_string(), json!(c));
+                        }
+                        if let Some(o) = m.objective {
+                            obj.insert("objective".to_string(), json!(o));
+                        }
+                        if let Some(r) = m.role {
+                            obj.insert("role".to_string(), json!(r));
+                        }
+                        if let Some(d) = m.depth {
+                            obj.insert("depth".to_string(), json!(d));
+                        }
+                    }
+                    emit(
+                        app,
+                        "subagent_event",
+                        sid,
+                        "subagent_event",
+                        Value::Object(obj).to_string(),
+                    );
                 }
                 _ => emit(app, "output", sid, "output", item_ref),
             }
@@ -931,6 +1047,159 @@ async fn cancel_input(
     Ok(())
 }
 
+/// MSP method names for the control-only `subagent/*` family (schema 1.2.1:
+/// close/followupTask/interrupt/readResult/reopen/resume/sendMessage/stop —
+/// no spawn/start). Each UI control below calls exactly one of these.
+const SUBAGENT_INTERRUPT_METHOD: &str = "subagent/interrupt";
+const SUBAGENT_STOP_METHOD: &str = "subagent/stop";
+const SUBAGENT_RESUME_METHOD: &str = "subagent/resume";
+const SUBAGENT_FOLLOWUP_METHOD: &str = "subagent/followupTask";
+const SUBAGENT_READ_RESULT_METHOD: &str = "subagent/readResult";
+/// Drill-down target: the child's own session transcript, when the host
+/// exposes it.
+const SESSION_READ_METHOD: &str = "session/read";
+
+fn require_non_empty(value: &str, what: &str) -> Result<String, String> {
+    let v = value.trim().to_string();
+    if v.is_empty() {
+        return Err(format!("{what} must not be empty"));
+    }
+    Ok(v)
+}
+
+/// Base params shared by every `subagent/*` control call, following the
+/// existing commands' shape (`commandId` UUIDv7 + `sessionId`).
+/// Pure (unit-tested): validation only, no sidecar I/O.
+fn subagent_control_payload(
+    method: &str,
+    session_id: &str,
+    agent_id: &str,
+) -> Result<(String, Value), String> {
+    let session_id = require_non_empty(session_id, "sessionId")?;
+    let agent_id = require_non_empty(agent_id, "agentId")?;
+    Ok((
+        method.to_string(),
+        json!({
+            "commandId": new_command_id(),
+            "sessionId": session_id,
+            "agentId": agent_id,
+        }),
+    ))
+}
+
+/// Params for `subagent/followupTask`: base ids plus the follow-up text.
+/// Pure (unit-tested).
+fn subagent_followup_payload(
+    session_id: &str,
+    agent_id: &str,
+    task: &str,
+) -> Result<(String, Value), String> {
+    let (method, mut params) =
+        subagent_control_payload(SUBAGENT_FOLLOWUP_METHOD, session_id, agent_id)?;
+    let task = require_non_empty(task, "task")?;
+    params
+        .as_object_mut()
+        .ok_or("followup payload is not an object")?
+        .insert("task".to_string(), json!(task));
+    Ok((method, params))
+}
+
+fn subagent_client(state: &State<'_, AppState>) -> Result<std::sync::Arc<MspClient>, String> {
+    state
+        .host
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .as_ref()
+        .map(|h| h.client.clone())
+        .ok_or_else(|| "no sidecar host — start a session first".to_string())
+}
+
+async fn subagent_control(
+    state: &State<'_, AppState>,
+    method: &str,
+    session_id: &str,
+    agent_id: &str,
+) -> Result<(), String> {
+    let (method, params) = subagent_control_payload(method, session_id, agent_id)?;
+    subagent_client(state)?.request(&method, params).await?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn subagent_interrupt(
+    state: State<'_, AppState>,
+    session_id: String,
+    agent_id: String,
+) -> Result<(), String> {
+    subagent_control(&state, SUBAGENT_INTERRUPT_METHOD, &session_id, &agent_id).await
+}
+
+#[tauri::command]
+async fn subagent_stop(
+    state: State<'_, AppState>,
+    session_id: String,
+    agent_id: String,
+) -> Result<(), String> {
+    subagent_control(&state, SUBAGENT_STOP_METHOD, &session_id, &agent_id).await
+}
+
+#[tauri::command]
+async fn subagent_resume(
+    state: State<'_, AppState>,
+    session_id: String,
+    agent_id: String,
+) -> Result<(), String> {
+    subagent_control(&state, SUBAGENT_RESUME_METHOD, &session_id, &agent_id).await
+}
+
+#[tauri::command]
+async fn subagent_followup(
+    state: State<'_, AppState>,
+    session_id: String,
+    agent_id: String,
+    task: String,
+) -> Result<(), String> {
+    let (method, params) = subagent_followup_payload(&session_id, &agent_id, &task)?;
+    subagent_client(&state)?.request(&method, params).await?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn subagent_read_result(
+    state: State<'_, AppState>,
+    session_id: String,
+    agent_id: String,
+) -> Result<Value, String> {
+    let (method, params) =
+        subagent_control_payload(SUBAGENT_READ_RESULT_METHOD, &session_id, &agent_id)?;
+    Ok(subagent_client(&state)?.request(&method, params).await?)
+}
+
+/// Open a sub-agent's child session transcript via `session/read` when the
+/// host exposes it; otherwise fail with an explicit error (never an empty
+/// view the user could mistake for "no output yet").
+#[tauri::command]
+async fn subagent_drilldown(
+    state: State<'_, AppState>,
+    session_id: String,
+    child_session_id: String,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let child = require_non_empty(&child_session_id, "childSessionId")?;
+    let params = json!({
+        "commandId": new_command_id(),
+        "sessionId": child,
+    });
+    subagent_client(&state)?
+        .request(SESSION_READ_METHOD, params)
+        .await
+        .map_err(|e| {
+            format!(
+                "session/read unavailable for child session {child} of {session_id}: {e}"
+            )
+        })
+}
+
 #[tauri::command]
 async fn cancel_session(
     app: AppHandle,
@@ -987,6 +1256,11 @@ async fn kill_session(
     // entries that could misroute a later session reusing an item id.
     if let Ok(mut kinds) = state.item_kinds.lock() {
         kinds.retain(|(sid, _), _| *sid != session_id);
+    }
+    // Same for the sub-agent identity table (stale childSessionId entries
+    // would attach the wrong drill-down to a reused item id).
+    if let Ok(mut metas) = state.subagent_meta.lock() {
+        metas.retain(|(sid, _), _| *sid != session_id);
     }
     Ok(())
 }
@@ -1055,6 +1329,66 @@ mod tests {
         assert_eq!(qs.len(), 1);
         assert_eq!(qs[0]["id"], "q2");
     }
+
+    #[test]
+    fn subagent_controls_hit_their_own_msp_method() {
+        // US-6 AC: each UI control calls its matching MSP method, with the
+        // shared commandId/sessionId shape.
+        let cases = [
+            (SUBAGENT_INTERRUPT_METHOD, "subagent/interrupt"),
+            (SUBAGENT_STOP_METHOD, "subagent/stop"),
+            (SUBAGENT_RESUME_METHOD, "subagent/resume"),
+            (SUBAGENT_READ_RESULT_METHOD, "subagent/readResult"),
+        ];
+        for (method, expected) in cases {
+            let (m, params) = subagent_control_payload(method, "sess-1", "item-9").unwrap();
+            assert_eq!(m, expected);
+            assert_eq!(params["sessionId"], "sess-1");
+            assert_eq!(params["agentId"], "item-9");
+            assert!(params["commandId"].as_str().is_some_and(|s| !s.is_empty()));
+        }
+    }
+
+    #[test]
+    fn subagent_followup_carries_the_task_text() {
+        let (m, params) = subagent_followup_payload("sess-1", "item-9", "dig deeper").unwrap();
+        assert_eq!(m, "subagent/followupTask");
+        assert_eq!(params["task"], "dig deeper");
+        assert_eq!(params["sessionId"], "sess-1");
+        assert_eq!(params["agentId"], "item-9");
+    }
+
+    #[test]
+    fn subagent_payloads_reject_blank_ids() {
+        assert!(subagent_control_payload(SUBAGENT_STOP_METHOD, "", "item-9").is_err());
+        assert!(subagent_control_payload(SUBAGENT_STOP_METHOD, "sess-1", "  ").is_err());
+        assert!(subagent_followup_payload("sess-1", "item-9", "").is_err());
+        assert!(subagent_followup_payload("sess-1", "", "task").is_err());
+    }
+
+    #[test]
+    fn subagent_meta_extraction_keeps_drilldown_identity() {
+        let item = json!({
+            "kind": "subagent",
+            "objective": "explore the repo",
+            "role": "explorer",
+            "depth": 1,
+            "childSessionId": "child-42",
+        });
+        let meta = extract_subagent_meta(&item).unwrap();
+        assert_eq!(meta.child_session_id.as_deref(), Some("child-42"));
+        assert_eq!(meta.objective.as_deref(), Some("explore the repo"));
+        assert_eq!(meta.role.as_deref(), Some("explorer"));
+        assert_eq!(meta.depth, Some(1));
+        // snake_case fallback: drill-down must survive a key rename.
+        let snake = json!({"kind": "subagent", "child_session_id": "child-7"});
+        assert_eq!(
+            extract_subagent_meta(&snake).unwrap().child_session_id.as_deref(),
+            Some("child-7")
+        );
+        // Items without identity contribute nothing (no empty announce).
+        assert!(extract_subagent_meta(&json!({"kind": "subagent"})).is_none());
+    }
 }
 
 fn main() {
@@ -1067,6 +1401,7 @@ fn main() {
             sessions: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
+            subagent_meta: Mutex::new(HashMap::new()),
             host_mutex: tokio::sync::Mutex::new(()),
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
@@ -1082,6 +1417,12 @@ fn main() {
             kill_session,
             set_workspace,
             poll_events,
+            subagent_interrupt,
+            subagent_stop,
+            subagent_resume,
+            subagent_followup,
+            subagent_read_result,
+            subagent_drilldown,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build muse-desktop app")

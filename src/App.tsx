@@ -29,6 +29,12 @@ export default function App() {
     cancelInput,
     cancelSession,
     killSession,
+    subagentInterrupt,
+    subagentStop,
+    subagentResume,
+    subagentFollowup,
+    subagentReadResult,
+    subagentDrilldown,
     error,
     backendMissing,
     evtCount,
@@ -92,7 +98,23 @@ export default function App() {
               onAnswer={(sid, iid, answers) => void answerInput(sid, iid, answers)}
               onSkip={(sid, iid) => void cancelInput(sid, iid)}
             />
-            <StreamView entries={activeLog} sessionId={active.session_id} />
+            <StreamView
+              entries={activeLog}
+              sessionId={active.session_id}
+              controls={{
+                onInterrupt: (agentId) =>
+                  void subagentInterrupt(active.session_id, agentId),
+                onStop: (agentId) => void subagentStop(active.session_id, agentId),
+                onResume: (agentId) =>
+                  void subagentResume(active.session_id, agentId),
+                onFollowup: (agentId, task) =>
+                  void subagentFollowup(active.session_id, agentId, task),
+                onReadResult: (agentId) =>
+                  subagentReadResult(active.session_id, agentId),
+                onDrilldown: (entry) =>
+                  subagentDrilldown(active.session_id, entry.childSessionId),
+              }}
+            />
             <Composer
               disabled={workspace === null || backendMissing}
               running={active.running}
