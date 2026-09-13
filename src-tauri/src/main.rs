@@ -1181,6 +1181,74 @@ mod tests {
         assert!(build_input_request_payload(&empty).is_none());
     }
 
+    fn scope_root() -> PathBuf {
+        PathBuf::from("/tmp/muse-ws")
+    }
+
+    #[test]
+    fn scope_root_itself_is_in_scope() {
+        let v = check_scope_pure(&scope_root(), &scope_root());
+        assert!(v.in_scope, "{}", v.reason);
+    }
+
+    #[test]
+    fn scope_nested_path_is_in_scope() {
+        let v = check_scope_pure(&scope_root(), &PathBuf::from("/tmp/muse-ws/src/a.ts"));
+        assert!(v.in_scope, "{}", v.reason);
+    }
+
+    #[test]
+    fn scope_outside_path_is_denied_with_reason() {
+        let v = check_scope_pure(&scope_root(), &PathBuf::from("/etc/passwd"));
+        assert!(!v.in_scope, "{}", v.reason);
+        assert!(v.reason.contains("outside"), "{}", v.reason);
+        assert!(v.reason.contains("/etc/passwd"), "{}", v.reason);
+    }
+
+    #[test]
+    fn scope_dotdot_escape_is_denied() {
+        // `..` must not slip through `starts_with`: the pure check
+        // normalizes lexically even when given a non-canonical path.
+        let v = check_scope_pure(&scope_root(), &PathBuf::from("/tmp/muse-ws/sub/../../evil"));
+        assert!(!v.in_scope, "{}", v.reason);
+    }
+
+    #[test]
+    fn scope_sibling_prefix_is_not_inside() {
+        // Component-wise comparison: `/tmp/muse-ws-evil` shares a string
+        // prefix but is a different directory.
+        let v = check_scope_pure(&scope_root(), &PathBuf::from("/tmp/muse-ws-evil/x"));
+        assert!(!v.in_scope, "{}", v.reason);
+    }
+
+    #[test]
+    fn scope_dot_segments_are_neutralized() {
+        let v = check_scope_pure(&scope_root(), &PathBuf::from("/tmp/muse-ws/./sub"));
+        assert!(v.in_scope, "{}", v.reason);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn scope_symlink_escape_is_denied_after_canonicalize() {
+        // End-to-end pattern of the command: canonicalize (resolves the
+        // symlink) then the pure verdict. `link` lives inside the root but
+        // points outside, so the verdict must be out-of-scope.
+        let base = std::env::temp_dir().join(format!("muse-scope-test-{}", std::process::id()));
+        let root = base.join("ws");
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::os::unix::fs::symlink("/tmp", root.join("sub").join("link")).unwrap();
+        let canonical_root = root.canonicalize().unwrap();
+        let canonical_cand = root.join("sub").join("link").join("x").canonicalize();
+        // `/tmp/x` may not exist; canonicalize the link itself instead.
+        let canonical_cand = match canonical_cand {
+            Ok(p) => p,
+            Err(_) => root.join("sub").join("link").canonicalize().unwrap(),
+        };
+        let v = check_scope_pure(&canonical_root, &canonical_cand);
+        assert!(!v.in_scope, "{}", v.reason);
+        std::fs::remove_dir_all(&base).ok();
+    }
+
     #[test]
     fn sidecar_file_name_carries_triple_suffix() {
         assert_eq!(
