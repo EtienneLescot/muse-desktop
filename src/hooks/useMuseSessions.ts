@@ -43,6 +43,24 @@ import {
   type ResolvedApproval,
 } from "../lib/allowlist";
 export type { AllowDecision, AllowRule, ResolvedApproval } from "../lib/allowlist";
+// US-19 in-app browser + computer-use (scoped): pure helpers, unit-tested;
+// storage keys extend the muse-desktop.* localStorage namespace.
+import {
+  addBrowserAnnotation,
+  createBrowserAnnotation,
+  loadBrowserAnnotations,
+  loadBrowserPermissions,
+  removeBrowserAnnotation,
+  saveBrowserAnnotations,
+  saveBrowserPermissions,
+  setBrowserAppPermission,
+  type BrowserAnnotation,
+  type BrowserAppPermission,
+} from "../lib/browserAnnotate";
+export type {
+  BrowserAnnotation,
+  BrowserAppPermission,
+} from "../lib/browserAnnotate";
 export type {
   InputAnswer,
   InputOption,
@@ -172,6 +190,16 @@ interface UseMuseSessions {
   archiveSession: (sessionId: string) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
   restoreSession: (sessionId: string) => void;
+  /** US-19: anchored page comments (URL + selection, persisted). */
+  browserAnnotations: BrowserAnnotation[];
+  /** US-19: anchor a comment to a URL + selection (no-op when invalid). */
+  addBrowserAnnotation: (url: string, selection: string, comment: string) => void;
+  /** US-19: remove an anchored comment by id. */
+  removeBrowserAnnotation: (id: string) => void;
+  /** US-19: computer-use per-app permissions (default denied). */
+  browserPermissions: BrowserAppPermission[];
+  /** US-19: toggle one app's computer-use permission. */
+  setBrowserAppPermission: (app: string, allowed: boolean) => void;
   /** US-6 controls: one hook method per `subagent/*` MSP method. */
   subagentInterrupt: (sessionId: string, agentId: string) => Promise<void>;
   subagentStop: (sessionId: string, agentId: string) => Promise<void>;
@@ -292,6 +320,14 @@ export function useMuseSessions(): UseMuseSessions {
   // written through on every change.
   const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
   const [inputRequests, setInputRequests] = useState<InputRequest[]>([]);
+  // US-19 browser: anchored comments + per-app computer-use permissions,
+  // restored once (survive restarts via localStorage), written through below.
+  const [browserAnnotations, setBrowserAnnotations] = useState<BrowserAnnotation[]>(() =>
+    loadBrowserAnnotations(),
+  );
+  const [browserPermissions, setBrowserPermissions] = useState<BrowserAppPermission[]>(() =>
+    loadBrowserPermissions(),
+  );
   const [workspace, setWorkspaceState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // US-4: local thread summaries (mirror of localStorage) + composer prefill
@@ -480,6 +516,15 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveAllowlist(allowlist);
   }, [allowlist]);
+
+  // US-19 write-through persistence (muse-desktop.browser.* keys).
+  useEffect(() => {
+    saveBrowserAnnotations(browserAnnotations);
+  }, [browserAnnotations]);
+
+  useEffect(() => {
+    saveBrowserPermissions(browserPermissions);
+  }, [browserPermissions]);
 
   useEffect(() => {
     // null means "not loaded yet" (there is no clear-workspace action),
@@ -979,6 +1024,25 @@ export function useMuseSessions(): UseMuseSessions {
     setAllowlist((cur) => removeAllowRule(cur, id));
   }, []);
 
+  // US-19 browser: anchor a comment (invalid URL / empty comment = no-op),
+  // remove one by id, toggle one app's computer-use permission.
+  const addBrowserAnnotationCb = useCallback(
+    (url: string, selection: string, comment: string) => {
+      setBrowserAnnotations((cur) =>
+        addBrowserAnnotation(cur, createBrowserAnnotation(url, selection, comment)),
+      );
+    },
+    [],
+  );
+
+  const removeBrowserAnnotationCb = useCallback((id: string) => {
+    setBrowserAnnotations((cur) => removeBrowserAnnotation(cur, id));
+  }, []);
+
+  const setBrowserAppPermissionCb = useCallback((app: string, allowed: boolean) => {
+    setBrowserPermissions((cur) => setBrowserAppPermission(cur, app, allowed));
+  }, []);
+
   const setAllowRuleDecisionCb = useCallback((id: string, decision: AllowDecision) => {
     setAllowlist((cur) => setAllowRuleDecision(cur, id, decision));
   }, []);
@@ -1216,6 +1280,11 @@ export function useMuseSessions(): UseMuseSessions {
     rememberApproval,
     revokeAllowRule,
     setAllowRuleDecision: setAllowRuleDecisionCb,
+    browserAnnotations,
+    addBrowserAnnotation: addBrowserAnnotationCb,
+    removeBrowserAnnotation: removeBrowserAnnotationCb,
+    browserPermissions,
+    setBrowserAppPermission: setBrowserAppPermissionCb,
     answerInput,
     cancelInput,
     cancelSession,

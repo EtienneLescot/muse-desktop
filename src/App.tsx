@@ -12,6 +12,7 @@ import { ApprovalPanel } from "./components/ApprovalPanel";
 import { InputPanel } from "./components/InputPanel";
 import { Composer } from "./components/Composer";
 import { CompactBar } from "./components/CompactBar";
+import { BrowserPanel } from "./components/BrowserPanel";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -64,6 +65,11 @@ export default function App() {
     newFromSummary,
     prefill,
     clearPrefill,
+    browserAnnotations,
+    addBrowserAnnotation,
+    removeBrowserAnnotation,
+    browserPermissions,
+    setBrowserAppPermission,
     error,
     backendMissing,
     evtCount,
@@ -262,6 +268,13 @@ export default function App() {
               summary={summaries[active.session_id] ?? null}
               onCompact={() => compactSession(active.session_id)}
               onNewFromSummary={() => void newFromSummary(active.session_id)}
+            />
+            <BrowserPanel
+              annotations={browserAnnotations}
+              permissions={browserPermissions}
+              onAddAnnotation={addBrowserAnnotation}
+              onRemoveAnnotation={removeBrowserAnnotation}
+              onSetPermission={setBrowserAppPermission}
             />
             <Composer
               disabled={workspace === null || backendMissing}
