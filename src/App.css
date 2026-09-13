@@ -2135,6 +2135,107 @@ body.dark .composer textarea::placeholder {
   gap: var(--space-1);
 }
 
+/* ---- US-19 in-app browser + computer-use (scoped) ---- */
+.browser-panel {
+  border-top: 1px solid var(--line);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+}
+
+.browser-title {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.browser-url-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.browser-url {
+  flex: 1;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.browser-frame {
+  width: 100%;
+  height: 320px;
+  margin-top: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.browser-annotate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+.browser-annotate input {
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.browser-notes {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.browser-note {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  background: var(--bg);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.browser-note blockquote {
+  margin: 0;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--blue);
+  color: var(--muted);
+}
+
+.browser-note-remove {
+  margin-left: auto;
+  color: var(--danger);
+}
+
+.browser-perms {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-2);
+}
+
+.browser-perms-title {
+  margin-bottom: var(--space-2);
+}
+
+.browser-perms-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
 .collab-row {
   display: flex;
   align-items: center;
@@ -2172,4 +2273,30 @@ body.dark .composer textarea::placeholder {
   border-radius: var(--radius-sm);
   padding: var(--space-2);
   resize: vertical;
+}
+
+.browser-perm-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.browser-perm-row code {
+  font-family: var(--font-code);
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.browser-perms-custom {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.browser-perms-custom input {
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
 }

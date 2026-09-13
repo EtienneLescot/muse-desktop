@@ -25,6 +25,7 @@ import { ChannelPanel } from "./components/ChannelPanel";
 import { ImportPanel } from "./components/ImportPanel";
 import type { ShareBundle } from "./lib/sharing";
 import { IndexPanel } from "./components/IndexPanel";
+import { BrowserPanel } from "./components/BrowserPanel";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -126,6 +127,11 @@ export default function App() {
     restoreArtifact,
     commentArtifact,
     index,
+    browserAnnotations,
+    addBrowserAnnotation,
+    removeBrowserAnnotation,
+    browserPermissions,
+    setBrowserAppPermission,
     error,
     backendMissing,
     evtCount,
@@ -473,6 +479,13 @@ export default function App() {
               }}
             />
             <ChannelPanel experimental={channelsExperimental} />
+            <BrowserPanel
+              annotations={browserAnnotations}
+              permissions={browserPermissions}
+              onAddAnnotation={addBrowserAnnotation}
+              onRemoveAnnotation={removeBrowserAnnotation}
+              onSetPermission={setBrowserAppPermission}
+            />
             <Composer
               disabled={workspace === null || backendMissing}
               running={active.running}
