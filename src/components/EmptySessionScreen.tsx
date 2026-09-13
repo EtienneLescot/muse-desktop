@@ -14,13 +14,16 @@ export function EmptySessionScreen({ hasWorkspace, onNewSession, sidecarError }:
   }
   return (
     <div className="empty-session">
+      <span className="muse-logo">
+        <img src="muse-logo.png" alt="Muse logo" />
+      </span>
       <h2>No session yet</h2>
       <p>
         {hasWorkspace
           ? "Start your first Muse session in the selected workspace."
           : "Pick a workspace folder first, then start a session."}
       </p>
-      <button onClick={onNewSession} disabled={!hasWorkspace}>
+      <button className="primary" onClick={onNewSession} disabled={!hasWorkspace}>
         New session
       </button>
     </div>

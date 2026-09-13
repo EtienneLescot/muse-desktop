@@ -253,8 +253,9 @@ export function Composer({ disabled, running, workspace, onSend, onCancel }: Pro
   }
 
   return (
-    <div className="composer">
-      <div className="composer-main">
+    <div className="composer-wrap">
+      <div className="composer">
+        <div className="composer-main">
         {mentions.length > 0 && (
           <ul className="mention-chips" aria-label="Resolved mentions">
             {mentions.map((m, i) => (
@@ -335,10 +336,18 @@ export function Composer({ disabled, running, workspace, onSend, onCancel }: Pro
             Stop
           </button>
         )}
-        <button onClick={() => void send()} disabled={disabled || text.trim().length === 0 || checking}>
-          {checking ? "Checking…" : "Send"}
+        <button
+          className="send"
+          aria-label="Send prompt"
+          title="Send (Enter)"
+          onClick={() => void send()}
+          disabled={disabled || text.trim().length === 0 || checking}
+        >
+          {checking ? "…" : "↑"}
         </button>
       </div>
+      </div>
+      <p className="composer-hint">Enter to send · Shift+Enter for a new line</p>
     </div>
   );
 }
