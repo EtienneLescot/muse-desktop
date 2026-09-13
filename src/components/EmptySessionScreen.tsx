@@ -1,14 +1,21 @@
 import type { ReactNode } from "react";
+import { WorkspacePicker } from "./WorkspacePicker";
 
 interface Props {
-  hasWorkspace: boolean;
+  /** Default folder for the new thread; null until the user picks one. */
+  workspace: string | null;
+  onPickWorkspace: (path: string) => void;
   onNewSession: () => void;
   /** US-33: explicit sidecar failure rendered instead of the blank screen. */
   sidecarError?: ReactNode | null;
 }
 
-/** Empty session screen shown when no session is active. */
-export function EmptySessionScreen({ hasWorkspace, onNewSession, sidecarError }: Props) {
+/**
+ * Empty session screen shown when no session is active. Codex-like: the
+ * folder is chosen here, per thread, at creation time — there is no
+ * global folder lock in the sidebar.
+ */
+export function EmptySessionScreen({ workspace, onPickWorkspace, onNewSession, sidecarError }: Props) {
   if (sidecarError) {
     return <div className="empty-session wide">{sidecarError}</div>;
   }
@@ -19,11 +26,12 @@ export function EmptySessionScreen({ hasWorkspace, onNewSession, sidecarError }:
       </span>
       <h2>No session yet</h2>
       <p>
-        {hasWorkspace
-          ? "Start your first Muse session in the selected workspace."
-          : "Pick a workspace folder first, then start a session."}
+        {workspace !== null
+          ? "Start your first Muse session in this folder."
+          : "Pick a folder for this thread, then start a session."}
       </p>
-      <button className="primary" onClick={onNewSession} disabled={!hasWorkspace}>
+      <WorkspacePicker workspace={workspace} onPick={onPickWorkspace} />
+      <button className="primary" onClick={onNewSession} disabled={workspace === null}>
         New session
       </button>
     </div>

@@ -4,7 +4,6 @@ import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
 import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { useMuseSessions } from "./hooks/useMuseSessions";
-import { WorkspacePicker } from "./components/WorkspacePicker";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { EmptySessionScreen } from "./components/EmptySessionScreen";
 import { SessionSidebar } from "./components/SessionSidebar";
@@ -160,7 +159,6 @@ export default function App() {
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const pickButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     document.body.classList.toggle("dark", theme === "dark");
@@ -302,23 +300,23 @@ export default function App() {
           </button>
         </div>
         <div className="sidebar-scroll">
-          <WorkspacePicker
-            workspace={workspace}
-            onPick={setWorkspace}
-            pickButtonRef={pickButtonRef}
-          />
           <SessionSidebar
             sessions={sessions}
             activeId={activeId}
             pendingCounts={pendingCounts}
             compactedIds={Object.keys(summaries)}
             onSelect={setActive}
-            onNew={startSession}
+            onNew={() => {
+              // No default folder yet: show the empty screen, where the
+              // folder is picked per thread at creation time.
+              if (workspace === null) setActive(null);
+              else void startSession();
+            }}
             onCancel={cancelSession}
             onKill={killSession}
             onArchive={archiveSession}
             onRestore={restoreSession}
-            canStart={workspace !== null}
+            canStart
             projects={projects}
             threadProjects={threadProjects}
           />
@@ -407,6 +405,7 @@ export default function App() {
           {settingsOpen && (
             <SettingsPanel
               workspace={workspace}
+              onPickWorkspace={setWorkspace}
               sandbox={sandbox}
               onSandboxChange={setSandbox}
               providerId={providerId}
@@ -427,13 +426,13 @@ export default function App() {
           <button
             type="button"
             className="account"
-            title={workspace ?? "No workspace selected — choose a folder"}
+            title={workspace ?? "No workspace selected"}
             aria-label={
               workspace === null
-                ? "Profile: no workspace selected, activate to choose a folder"
-                : `Profile: workspace ${workspace}, activate to change folder`
+                ? "Profile: no default folder, activate to open settings"
+                : `Profile: default folder ${workspace}, activate to open settings`
             }
-            onClick={() => pickButtonRef.current?.click()}
+            onClick={() => setSettingsOpen(true)}
           >
             <span className="avatar" aria-hidden="true">
               {(workspaceName?.slice(0, 1).toUpperCase() ?? "M")}
@@ -470,7 +469,8 @@ export default function App() {
           : (error && <div className="error-banner">{error}</div>)}
         {active === null ? (
           <EmptySessionScreen
-            hasWorkspace={workspace !== null}
+            workspace={workspace}
+            onPickWorkspace={setWorkspace}
             onNewSession={startSession}
             sidecarError={sidecarPanel}
           />

@@ -418,7 +418,9 @@ interface UseMuseSessions {
   activeLog: LogEntry[];
   approvals: ApprovalRequest[];
   activeApprovals: ApprovalRequest[];
+  /** Default folder for new threads (persisted); each thread keeps its own. */
   workspace: string | null;
+  /** Change the default folder for new threads (not a global lock). */
   setWorkspace: (path: string) => void;
   setActive: (id: string | null) => void;
   /** w-settings: sandbox settings (persisted) + whole-object setter. */

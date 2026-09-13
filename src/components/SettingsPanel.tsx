@@ -15,6 +15,7 @@
  *   project either way.
  */
 import { useState } from "react";
+import { WorkspacePicker } from "./WorkspacePicker";
 import type { ScopeVerdict } from "../lib/scope";
 import {
   CONFIGURED_PROVIDERS,
@@ -30,6 +31,8 @@ import {
 interface Props {
   /** Absolute workspace root; null while none is picked. */
   workspace: string | null;
+  /** Change the default folder for new threads. */
+  onPickWorkspace: (path: string) => void;
   sandbox: SandboxSettings;
   onSandboxChange: (next: SandboxSettings) => void;
   /** Provider id selected for the current project. */
@@ -55,6 +58,7 @@ interface Props {
 
 export function SettingsPanel({
   workspace,
+  onPickWorkspace,
   sandbox,
   onSandboxChange,
   providerId,
@@ -110,10 +114,15 @@ export function SettingsPanel({
       </header>
 
       <div className="settings-group">
-        <h3>Workspace</h3>
-        <p className="settings-root" title={workspace ?? ""}>
-          {workspace ?? "No workspace selected"}
+        <h3>Default folder for new threads</h3>
+        <p className="settings-note">
+          Each thread keeps its own folder (shown in its topbar); this only
+          pre-fills creation.
         </p>
+        <WorkspacePicker workspace={workspace} onPick={onPickWorkspace} />
+      </div>
+      <div className="settings-group">
+        <h3>Scope probe</h3>
         <label className="settings-label" htmlFor="settings-path-probe">
           Check a path against the workspace
         </label>
