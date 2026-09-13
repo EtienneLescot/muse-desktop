@@ -1180,6 +1180,101 @@ body.dark .composer textarea::placeholder {
   }
 }
 
+/* ---- US-23 local index panel (sidebar) ---- */
+
+.index-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.index-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.index-note,
+.index-status {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.index-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.index-actions button {
+  font-size: 0.8rem;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+
+.index-actions .index-delete {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.index-search {
+  font: inherit;
+  font-size: 0.85rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  width: 100%;
+}
+
+.index-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.index-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  padding: 4px 8px;
+  min-width: 0;
+}
+
+.index-hit-path {
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+  color: var(--blue);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.index-hit-text {
+  font-family: var(--font-code);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Typing caret on still-open stream blocks: liveness signal while deltas land. */
 .caret {
   display: inline-block;

@@ -12,6 +12,7 @@ import { ApprovalPanel } from "./components/ApprovalPanel";
 import { InputPanel } from "./components/InputPanel";
 import { Composer } from "./components/Composer";
 import { CompactBar } from "./components/CompactBar";
+import { IndexPanel } from "./components/IndexPanel";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -64,6 +65,7 @@ export default function App() {
     newFromSummary,
     prefill,
     clearPrefill,
+    index,
     error,
     backendMissing,
     evtCount,
@@ -175,6 +177,25 @@ export default function App() {
             onArchive={archiveSession}
             onRestore={restoreSession}
             canStart={workspace !== null}
+          />
+          <IndexPanel
+            enabled={index.enabled}
+            paused={index.paused}
+            fileCount={index.fileCount}
+            lineCount={index.lineCount}
+            builtAt={index.builtAt}
+            lastSummary={index.lastSummary}
+            hasSource={index.hasSource}
+            query={index.query}
+            results={index.results}
+            onToggle={index.setIndexEnabled}
+            onPause={() => index.setIndexPaused(true)}
+            onResume={() => index.setIndexPaused(false)}
+            onFilesPicked={(files) => void index.indexPickedFiles(files)}
+            onRescan={() => void index.rescanIndexFiles()}
+            onRebuild={() => void index.rebuildIndex()}
+            onDelete={index.deleteIndex}
+            onQueryChange={index.setIndexQuery}
           />
         </div>
         <button
