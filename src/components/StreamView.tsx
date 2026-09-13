@@ -1,10 +1,24 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LogEntry } from "../lib/persist";
 import { REFLEXIVE_LABEL } from "../lib/phase";
+import { subagentSummary } from "../lib/subagent";
+
+/** US-6 controls for one sub-agent block. Read-result and drill-down resolve
+ *  to display text (also logged as system lines by the hook); the rest are
+ *  fire-and-forget with errors surfaced in the hook error banner. */
+export interface SubagentControls {
+  onInterrupt: (agentId: string) => void;
+  onStop: (agentId: string) => void;
+  onResume: (agentId: string) => void;
+  onFollowup: (agentId: string, task: string) => void;
+  onReadResult: (agentId: string) => Promise<string | null>;
+  onDrilldown: (entry: LogEntry) => Promise<string | null>;
+}
 
 interface Props {
   entries: LogEntry[];
   sessionId: string | null;
+  controls?: SubagentControls;
 }
 
 function timeOf(ts: number): string {
@@ -30,14 +44,23 @@ function roleLabel(e: LogEntry): string {
   }
 }
 
+function agentOf(e: LogEntry): string {
+  return e.agentId ?? e.itemId ?? "agent";
+}
+
 /**
  * Conversation stream for one session. Consecutive assistant chunks are
  * coalesced by the hook into a single entry; sub-agent entries render as
- * collapsible blocks grouped by agent id.
+ * collapsible blocks grouped by agent id, each with its US-6 controls
+ * (interrupt/stop/resume/follow-up/read-result/drill-down).
  */
-export function StreamView({ entries, sessionId }: Props) {
+export function StreamView({ entries, sessionId, controls }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
+  const [followupFor, setFollowupFor] = useState<string | null>(null);
+  const [followupText, setFollowupText] = useState("");
+  const [shown, setShown] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     stickRef.current = true;
@@ -50,6 +73,29 @@ export function StreamView({ entries, sessionId }: Props) {
   function onScroll(e: React.UIEvent<HTMLDivElement>): void {
     const el = e.currentTarget;
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }
+
+  async function runResult(entry: LogEntry, kind: "result" | "drilldown"): Promise<void> {
+    if (!controls || busy === entry.id) return;
+    setBusy(entry.id);
+    try {
+      const text =
+        kind === "result"
+          ? await controls.onReadResult(agentOf(entry))
+          : await controls.onDrilldown(entry);
+      if (text !== null) setShown((cur) => ({ ...cur, [entry.id]: text }));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function sendFollowup(entry: LogEntry): void {
+    if (!controls) return;
+    const task = followupText.trim();
+    if (!task) return;
+    controls.onFollowup(agentOf(entry), task);
+    setFollowupFor(null);
+    setFollowupText("");
   }
 
   if (sessionId === null) return null;
@@ -68,13 +114,19 @@ export function StreamView({ entries, sessionId }: Props) {
         // a plain muted label. The label is rendered, never stored: the
         // first delta coalesces into the empty text.
         const reflexive = e.open === true && e.text === "";
-        const firstLine = e.text.split("\n")[0]?.slice(0, 90);
         return e.role === "subagent" ? (
           <details key={e.id} className="msg subagent">
             <summary>
               <span className="role">{roleLabel(e)}</span>
               <span className="msg-summary">
-                {firstLine || (e.open ? REFLEXIVE_LABEL : "(activity)")}
+                {reflexive
+                  ? REFLEXIVE_LABEL
+                  : subagentSummary({
+                      objective: e.objective,
+                      subagentRole: e.subagentRole,
+                      depth: e.depth,
+                      text: e.text,
+                    })}
               </span>
               <span className="ts">{timeOf(e.ts)}</span>
             </summary>
@@ -86,6 +138,88 @@ export function StreamView({ entries, sessionId }: Props) {
               )}
               {e.open && <span className="caret" aria-hidden="true" />}
             </pre>
+            {e.childSessionId && (
+              <div className="muted subagent-child">child: {e.childSessionId}</div>
+            )}
+            {controls && (
+              <div className="subagent-controls">
+                <button
+                  type="button"
+                  disabled={busy === e.id}
+                  onClick={() => controls.onInterrupt(agentOf(e))}
+                  title="subagent/interrupt"
+                >
+                  Interrupt
+                </button>
+                <button
+                  type="button"
+                  disabled={busy === e.id}
+                  onClick={() => controls.onStop(agentOf(e))}
+                  title="subagent/stop"
+                >
+                  Stop
+                </button>
+                <button
+                  type="button"
+                  disabled={busy === e.id}
+                  onClick={() => controls.onResume(agentOf(e))}
+                  title="subagent/resume"
+                >
+                  Resume
+                </button>
+                <button
+                  type="button"
+                  disabled={busy === e.id}
+                  onClick={() => {
+                    setFollowupFor(followupFor === e.id ? null : e.id);
+                    setFollowupText("");
+                  }}
+                  title="subagent/followupTask"
+                >
+                  Follow-up
+                </button>
+                <button
+                  type="button"
+                  disabled={busy === e.id}
+                  onClick={() => void runResult(e, "result")}
+                  title="subagent/readResult"
+                >
+                  Read result
+                </button>
+                {e.childSessionId && (
+                  <button
+                    type="button"
+                    disabled={busy === e.id}
+                    onClick={() => void runResult(e, "drilldown")}
+                    title="session/read"
+                  >
+                    Child session
+                  </button>
+                )}
+              </div>
+            )}
+            {followupFor === e.id && controls && (
+              <div className="subagent-followup">
+                <input
+                  type="text"
+                  value={followupText}
+                  placeholder="Follow-up task for this subagent…"
+                  onChange={(ev) => setFollowupText(ev.target.value)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter") sendFollowup(e);
+                    if (ev.key === "Escape") {
+                      setFollowupFor(null);
+                      setFollowupText("");
+                    }
+                  }}
+                  aria-label="Follow-up task"
+                />
+                <button type="button" onClick={() => sendFollowup(e)}>
+                  Send
+                </button>
+              </div>
+            )}
+            {shown[e.id] && <pre className="subagent-result">{shown[e.id]}</pre>}
           </details>
         ) : (
           <div key={e.id} className={`msg ${e.role}`}>
