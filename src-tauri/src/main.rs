@@ -759,6 +759,20 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 json!({"inputId": input_id, "outcome": outcome}).to_string(),
             );
         }
+        // US-4 (server half): provider-reported context occupancy
+        // (SS4.6.6 triple). The host only emits on change; forward
+        // defensively — unknown pressure levels pass through untouched (the
+        // enum is open) so a newer host never breaks the UI.
+        "session/contextUsage" => {
+            if !sid.is_empty() {
+                let usage = json!({
+                    "pressure": p.get("pressure").and_then(Value::as_str).unwrap_or("unknown"),
+                    "usedTokens": p.get("usedTokens").and_then(Value::as_u64),
+                    "windowTokens": p.get("windowTokens").and_then(Value::as_u64),
+                });
+                emit(app, "context_usage", sid, "context_usage", usage.to_string());
+            }
+        }
         _ => {}
     }
 }
@@ -1104,6 +1118,55 @@ async fn list_models(
         }
     }
     Ok(out)
+}
+
+/// US-4 (server half): real context compaction (`session/compact`). The ack
+/// is admission-only (`accepted`); the work runs async on the host and its
+/// terminal outcome arrives as a view event. `noop` (e.g.
+/// `no_compactable_history`) is a success, not an error. Wire rejections
+/// become friendly errors: `missing_run` (nothing to compact yet),
+/// `run_active` (a turn is streaming — wait for it to finish).
+#[tauri::command]
+async fn compact_session(state: State<'_, AppState>, session_id: String) -> Result<String, String> {
+    let client = {
+        state
+            .host
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .as_ref()
+            .map(|h| h.client.clone())
+    };
+    let Some(client) = client else {
+        return Err("no sidecar host — start a session first".to_string());
+    };
+    let res = client
+        .request(
+            "session/compact",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": session_id,
+            }),
+        )
+        .await
+        .map_err(|e| describe_compact_failure(&e))?;
+    Ok(res
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("accepted")
+        .to_string())
+}
+
+/// Map a `session/compact` wire failure to a user-facing sentence. Proven
+/// against the live host: fresh session → `missing_run`, streaming turn →
+/// `run_active`, empty history → `noop` (success, handled by the caller).
+fn describe_compact_failure(wire_error: &str) -> String {
+    if wire_error.contains("missing_run") {
+        return "nothing to compact yet — send a turn first".to_string();
+    }
+    if wire_error.contains("run_active") {
+        return "a turn is still streaming — compact once it finishes".to_string();
+    }
+    wire_error.to_string()
 }
 
 /// US-31: model-picker gesture (`session/setModel`). Durable on the host,
@@ -1788,6 +1851,23 @@ mod tests {
     }
 
     #[test]
+    fn compact_failures_map_to_user_sentences() {
+        assert_eq!(
+            describe_compact_failure("session/compact command c: missing_run"),
+            "nothing to compact yet — send a turn first"
+        );
+        assert_eq!(
+            describe_compact_failure("session/compact command c: run_active"),
+            "a turn is still streaming — compact once it finishes"
+        );
+        // Unknown wire text passes through untouched for the banner.
+        assert_eq!(
+            describe_compact_failure("boom -32030"),
+            "boom -32030"
+        );
+    }
+
+    #[test]
     fn subagent_payloads_reject_blank_ids() {
         assert!(subagent_control_payload(SUBAGENT_STOP_METHOD, "", "item-9").is_err());
         assert!(subagent_control_payload(SUBAGENT_STOP_METHOD, "sess-1", "  ").is_err());
@@ -1848,6 +1928,7 @@ fn main() {
             check_scope,
             list_models,
             set_model,
+            compact_session,
             poll_events,
             subagent_interrupt,
             subagent_stop,

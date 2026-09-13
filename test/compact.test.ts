@@ -13,11 +13,14 @@ import {
   buildSummary,
   dropSummary,
   formatSummaryText,
+  formatUsage,
   isCompactCommand,
   loadSummary,
   needsAutoCompaction,
   needsCompaction,
+  parseContextUsage,
   saveSummary,
+  suggestsServerCompaction,
 } from "../src/lib/compact.ts";
 import type { LogEntry } from "../src/lib/persist.ts";
 
@@ -141,5 +144,62 @@ describe("summary persistence", () => {
     assert.deepEqual(loadSummary("abc"), s);
     dropSummary("abc");
     assert.equal(loadSummary("abc"), null);
+  });
+});
+
+describe("server context usage (US-4 server half)", () => {
+  it("parses a full triple, keeps host pressure verbatim", () => {
+    const u = parseContextUsage({
+      pressure: "warning",
+      usedTokens: 1200000,
+      windowTokens: 2000000,
+    });
+    assert.ok(u !== null);
+    assert.equal(u.pressure, "warning");
+    assert.equal(u.usedTokens, 1200000);
+    assert.equal(u.windowTokens, 2000000);
+  });
+
+  it("defaults unknown pressure, drops non-objects", () => {
+    assert.equal(parseContextUsage(null), null);
+    assert.equal(parseContextUsage("x"), null);
+    const u = parseContextUsage({});
+    assert.ok(u !== null);
+    assert.equal(u.pressure, "unknown");
+    assert.equal(u.usedTokens, null);
+    const bad = parseContextUsage({ pressure: "warning", usedTokens: "lots" });
+    assert.ok(bad !== null);
+    assert.equal(bad.usedTokens, null);
+  });
+
+  it("suggests from warning up, never on unknown", () => {
+    assert.equal(suggestsServerCompaction(null), false);
+    assert.equal(
+      suggestsServerCompaction({ pressure: "unknown", usedTokens: null, windowTokens: null }),
+      false,
+    );
+    assert.equal(
+      suggestsServerCompaction({ pressure: "normal", usedTokens: 1, windowTokens: 2 }),
+      false,
+    );
+    assert.equal(
+      suggestsServerCompaction({ pressure: "warning", usedTokens: 1, windowTokens: 2 }),
+      true,
+    );
+    assert.equal(
+      suggestsServerCompaction({ pressure: "blocked", usedTokens: 1, windowTokens: 2 }),
+      true,
+    );
+  });
+
+  it("formats occupancy compactly", () => {
+    assert.equal(
+      formatUsage({ pressure: "warning", usedTokens: 1200000, windowTokens: 2000000 }),
+      "1.2M / 2.0M tokens · warning",
+    );
+    assert.equal(
+      formatUsage({ pressure: "normal", usedTokens: null, windowTokens: null }),
+      "? / ? tokens · normal",
+    );
   });
 });

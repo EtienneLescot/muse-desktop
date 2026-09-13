@@ -97,8 +97,9 @@ import {
   formatSubagentResult,
   parseSubagentPayload,
 } from "../lib/subagent";
-// US-4 compaction: local extractive summaries (no model call), entry-count
-// thresholds (the muse token threshold is unsourced — see compact.ts).
+// US-4 compaction: local extractive summaries + server context gesture.
+// Entry counts drive the recap UI; the host `session/contextUsage` triple
+// drives the occupancy display + server-gesture suggestion (see compact.ts).
 import {
   buildSummary,
   COMPACT_AUTO_ENTRIES,
@@ -106,7 +107,9 @@ import {
   formatSummaryText,
   isCompactCommand,
   loadSummary,
+  parseContextUsage,
   saveSummary,
+  type ContextUsage,
   type ThreadSummary,
 } from "../lib/compact";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
@@ -460,6 +463,10 @@ interface UseMuseSessions {
   /** US-4: prefill text for the composer after `newFromSummary`. */
   prefill: string | null;
   clearPrefill: () => void;
+  /** US-4: host occupancy per session (`session/contextUsage` triple). */
+  usageBySession: Record<string, ContextUsage>;
+  /** US-4: server context gesture (`session/compact`), user-clicked only. */
+  serverCompact: (sessionId: string) => Promise<void>;
   /** US-12 + US-21: versioned artifacts per thread (extracted blocks). */
   artifacts: Record<string, Artifact[]>;
   /** US-21: 1-click restore — copy the version text via US-4 prefill. */
@@ -1139,6 +1146,39 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, [logs, doCompact]);
 
+  // US-4 server half: host occupancy per session (latest triple wins; the
+  // host only emits on change). Never persisted — it is live host state.
+  const [usageBySession, setUsageBySession] = useState<
+    Record<string, ContextUsage>
+  >({});
+
+  // US-4 server half: the real context gesture (`session/compact`).
+  // User-clicked only — async host work is never fired automatically.
+  // The ack is admission-only; `noop` is a success. Rejections carry the
+  // friendly sentence mapped in Rust (`missing_run`, `run_active`).
+  const serverCompact = useCallback(async (sessionId: string) => {
+    let status: string;
+    try {
+      status = await invoke<string>("compact_session", { sessionId });
+    } catch (e) {
+      setError(
+        `server compact failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return;
+    }
+    const note: LogEntry = {
+      id: newId(),
+      ts: Date.now(),
+      role: "system",
+      text:
+        status === "noop"
+          ? "Compactage serveur : rien à compacter (noop)."
+          : "Compactage serveur accepté — le host travaille en arrière-plan.",
+    };
+    setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
+    appendLog(sessionId, [note]);
+  }, []);
+
   // US-12 + US-21: extract assistant fenced blocks into versioned artifacts.
   // Only closed assistant entries not yet anchoring a version are merged:
   // a streaming entry keeps its id while its text grows, so extracting it
@@ -1388,6 +1428,28 @@ export function useMuseSessions(): UseMuseSessions {
         { id: newId(), ts: Date.now(), role: "tool", text: `Approval requested: ${req.summary}` },
       ]);
       closeOpenBlocks(sid);
+      return;
+    }
+    // US-4 server half: host occupancy triple. Latest wins, no log noise,
+    // no persistence — the CompactBar reads it live. Malformed payloads
+    // are dropped (the host only emits on change anyway).
+    if (kind === "context_usage") {
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(payload);
+      } catch {
+        return;
+      }
+      const usage = parseContextUsage(parsed);
+      if (usage === null) return;
+      setUsageBySession((cur) =>
+        cur[sid] !== undefined &&
+        cur[sid].pressure === usage.pressure &&
+        cur[sid].usedTokens === usage.usedTokens &&
+        cur[sid].windowTokens === usage.windowTokens
+          ? cur
+          : { ...cur, [sid]: usage },
+      );
       return;
     }
     // US-10: `item/started` paints before the first delta. Ensure a visible
@@ -2558,6 +2620,8 @@ export function useMuseSessions(): UseMuseSessions {
     invokeSkill,
     summaries,
     compactSession: doCompact,
+    usageBySession,
+    serverCompact,
     newFromSummary,
     prefill,
     clearPrefill,

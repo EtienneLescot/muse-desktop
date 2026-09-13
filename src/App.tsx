@@ -131,6 +131,8 @@ export default function App() {
     invokeSkill,
     summaries,
     compactSession,
+    usageBySession,
+    serverCompact,
     newFromSummary,
     prefill,
     clearPrefill,
@@ -515,6 +517,8 @@ export default function App() {
               summary={summaries[active.session_id] ?? null}
               onCompact={() => compactSession(active.session_id)}
               onNewFromSummary={() => void newFromSummary(active.session_id)}
+              usage={usageBySession[active.session_id] ?? null}
+              onServerCompact={() => void serverCompact(active.session_id)}
             />
             <OrchestrationPanel agents={orchestrationAgents} />
             <SharePanel

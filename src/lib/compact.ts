@@ -1,11 +1,16 @@
 /**
- * US-4 thread compaction: local extractive summaries, no model call.
+ * US-4 thread compaction, two halves:
  *
- * The muse token threshold is unsourced ([TROU] spec §3.1 US-4), so
- * compaction is driven by persisted-log entry counts instead:
- * - COMPACT_WARN_ENTRIES (1500): the UI suggests compacting.
- * - COMPACT_AUTO_ENTRIES (2000): the persisted-log cap (persist.ts
- *   MAX_LOG_ENTRIES) — the hook auto-builds a summary at this point.
+ * - Local extractive summaries, no model call. Entry counts drive the
+ *   recap UI (the token threshold now has a real source — see below):
+ *   COMPACT_WARN_ENTRIES (1500) suggests, COMPACT_AUTO_ENTRIES (2000,
+ *   the persist.ts cap) auto-builds a summary.
+ * - Server context compaction (`session/compact`, admission-only `accepted`
+ *   / `noop`): frees the host context window for real. The host reports
+ *   occupancy via `session/contextUsage` (windowTokens/usedTokens/pressure
+ *   triple, emitted on change) — the UI surfaces it and suggests the
+ *   server gesture from `warning` pressure up. The server gesture never
+ *   runs automatically: it is async host work, the user clicks.
  *
  * `/compact` typed in the composer is intercepted at send time (hook
  * `sendInput`) and never forwarded to the model. The summary is stored
@@ -32,6 +37,59 @@ export const MAX_SUMMARY_LINE = 200;
 
 /** Max chars for the first-user / last-assistant excerpts. */
 export const MAX_SUMMARY_EXCERPT = 500;
+
+/**
+ * Provider-reported context occupancy for one session
+ * (`session/contextUsage` triple). `pressure` is the host-computed level
+ * (`normal`/`warning`/`blocked`, open enum — unknown levels pass through);
+ * token counts are null when the host omits them.
+ */
+export interface ContextUsage {
+  pressure: string;
+  usedTokens: number | null;
+  windowTokens: number | null;
+}
+
+/** Parse a `context_usage` poll payload; null when it is not an object. */
+export function parseContextUsage(raw: unknown): ContextUsage | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const o = raw as Record<string, unknown>;
+  const pressure =
+    typeof o["pressure"] === "string" && o["pressure"].length > 0
+      ? o["pressure"]
+      : "unknown";
+  const num = (k: string): number | null =>
+    typeof o[k] === "number" && Number.isFinite(o[k])
+      ? (o[k] as number)
+      : null;
+  return {
+    pressure,
+    usedTokens: num("usedTokens"),
+    windowTokens: num("windowTokens"),
+  };
+}
+
+/**
+ * True when the host pressure warrants suggesting the server gesture
+ * (`warning` and up; `unknown` never suggests — no data, no nag).
+ */
+export function suggestsServerCompaction(usage: ContextUsage | null): boolean {
+  if (usage === null) return false;
+  return usage.pressure === "warning" || usage.pressure === "blocked";
+}
+
+/** Human occupancy line for the bar (`1.2M / 2.0M tokens · warning`). */
+export function formatUsage(usage: ContextUsage): string {
+  const fmt = (n: number | null): string =>
+    n === null
+      ? "?"
+      : n >= 1_000_000
+        ? `${(n / 1_000_000).toFixed(1)}M`
+        : n >= 1_000
+          ? `${(n / 1_000).toFixed(0)}k`
+          : `${n}`;
+  return `${fmt(usage.usedTokens)} / ${fmt(usage.windowTokens)} tokens · ${usage.pressure}`;
+}
 
 export interface ThreadSummary {
   sourceSessionId: string;
