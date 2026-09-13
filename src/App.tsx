@@ -307,47 +307,6 @@ export default function App() {
             onPick={setWorkspace}
             pickButtonRef={pickButtonRef}
           />
-          <ProjectsPanel
-            projects={projects}
-            threadProjects={threadProjects}
-            projectError={projectError}
-            activeSessionId={activeId}
-            globalSettings={globalSettings}
-            onCreate={(name, instructions) => createProject(name, instructions)}
-            onDelete={deleteProject}
-            onUpdate={updateProject}
-            onAttach={attachThread}
-            onSetGlobal={setGlobalSettings}
-            onSetOverride={setProjectOverride}
-            settingsFor={settingsFor}
-          />
-          <button
-            type="button"
-            className="settings-toggle"
-            aria-expanded={settingsOpen}
-            aria-label={settingsOpen ? "Close settings" : "Open settings"}
-            onClick={() => setSettingsOpen((v) => !v)}
-          >
-            {settingsOpen ? "Close settings" : "Settings"}
-          </button>
-          {settingsOpen && (
-            <SettingsPanel
-              workspace={workspace}
-              sandbox={sandbox}
-              onSandboxChange={setSandbox}
-              providerId={providerId}
-              onProviderChange={setProviderId}
-              liveModels={liveModels}
-              modelsError={modelsError}
-              activeSessionId={activeId}
-              onRefreshModels={() => void refreshModels(activeId ?? undefined)}
-              onSelectModel={(modelId) => {
-                if (activeId !== null) void setSessionModel(activeId, modelId);
-              }}
-              checkPathScope={checkPathScope}
-              onClose={() => setSettingsOpen(false)}
-            />
-          )}
           <SessionSidebar
             sessions={sessions}
             activeId={activeId}
@@ -363,18 +322,39 @@ export default function App() {
             projects={projects}
             threadProjects={threadProjects}
           />
-          <SchedulesPanel
-            schedules={schedules}
-            sessions={sessions}
-            activeId={activeId}
-            onCreate={(input) => {
-              createSchedule(input);
-            }}
-            onToggle={(id, enabled) => setScheduleEnabled(id, enabled)}
-            onDelete={(id) => deleteSchedule(id)}
-            onRunNow={(id) => runScheduleNow(id)}
-          />
-          <details className="integrations">
+          <details className="side-section">
+            <summary>Projets</summary>
+            <ProjectsPanel
+              projects={projects}
+              threadProjects={threadProjects}
+              projectError={projectError}
+              activeSessionId={activeId}
+              globalSettings={globalSettings}
+              onCreate={(name, instructions) => createProject(name, instructions)}
+              onDelete={deleteProject}
+              onUpdate={updateProject}
+              onAttach={attachThread}
+              onSetGlobal={setGlobalSettings}
+              onSetOverride={setProjectOverride}
+              settingsFor={settingsFor}
+              hideGlobalSettings
+            />
+          </details>
+          <details className="side-section">
+            <summary>Automatisations</summary>
+            <SchedulesPanel
+              schedules={schedules}
+              sessions={sessions}
+              activeId={activeId}
+              onCreate={(input) => {
+                createSchedule(input);
+              }}
+              onToggle={(id, enabled) => setScheduleEnabled(id, enabled)}
+              onDelete={(id) => deleteSchedule(id)}
+              onRunNow={(id) => runScheduleNow(id)}
+            />
+          </details>
+          <details className="side-section integrations">
             <summary>Intégrations</summary>
             <ConnectorPanel
               installed={connectors}
@@ -396,13 +376,9 @@ export default function App() {
               }
             />
           </details>
-          <ImportPanel
-            imported={importedSessions}
-            notes={importNotes}
-            onImportText={(source, content) => importConfigText(source, content)}
-            onDismiss={dismissImport}
-          />
-          <IndexPanel
+          <details className="side-section">
+            <summary>Bibliothèque</summary>
+            <IndexPanel
             enabled={index.enabled}
             paused={index.paused}
             fileCount={index.fileCount}
@@ -421,26 +397,66 @@ export default function App() {
             onDelete={index.deleteIndex}
             onQueryChange={index.setIndexQuery}
           />
+            <ImportPanel
+              imported={importedSessions}
+              notes={importNotes}
+              onImportText={(source, content) => importConfigText(source, content)}
+              onDismiss={dismissImport}
+            />
+          </details>
+          {settingsOpen && (
+            <SettingsPanel
+              workspace={workspace}
+              sandbox={sandbox}
+              onSandboxChange={setSandbox}
+              providerId={providerId}
+              onProviderChange={setProviderId}
+              liveModels={liveModels}
+              modelsError={modelsError}
+              activeSessionId={activeId}
+              onRefreshModels={() => void refreshModels(activeId ?? undefined)}
+              onSelectModel={(modelId) => {
+                if (activeId !== null) void setSessionModel(activeId, modelId);
+              }}
+              checkPathScope={checkPathScope}
+              onClose={() => setSettingsOpen(false)}
+            />
+          )}
         </div>
-        <button
-          type="button"
-          className="account"
-          title={workspace ?? "No workspace selected — choose a folder"}
-          aria-label={
-            workspace === null
-              ? "Profile: no workspace selected, activate to choose a folder"
-              : `Profile: workspace ${workspace}, activate to change folder`
-          }
-          onClick={() => pickButtonRef.current?.click()}
-        >
-          <span className="avatar" aria-hidden="true">
-            {(workspaceName?.slice(0, 1).toUpperCase() ?? "M")}
-          </span>
-          <span className="account-text">
-            <span className="account-name">{workspaceName ?? "No workspace"}</span>
-            <small>Local profile</small>
-          </span>
-        </button>
+        <div className="sidebar-footer">
+          <button
+            type="button"
+            className="account"
+            title={workspace ?? "No workspace selected — choose a folder"}
+            aria-label={
+              workspace === null
+                ? "Profile: no workspace selected, activate to choose a folder"
+                : `Profile: workspace ${workspace}, activate to change folder`
+            }
+            onClick={() => pickButtonRef.current?.click()}
+          >
+            <span className="avatar" aria-hidden="true">
+              {(workspaceName?.slice(0, 1).toUpperCase() ?? "M")}
+            </span>
+            <span className="account-text">
+              <span className="account-name">{workspaceName ?? "No workspace"}</span>
+              <small>Local profile</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            className="gear"
+            aria-expanded={settingsOpen}
+            aria-label={settingsOpen ? "Close settings" : "Open settings"}
+            title="Settings"
+            onClick={() => setSettingsOpen((v) => !v)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+            </svg>
+          </button>
+        </div>
       </aside>
       <main className="conversation" aria-label="Conversation">
         {backendMissing && (

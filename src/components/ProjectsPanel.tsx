@@ -25,6 +25,12 @@ interface ProjectsPanelProps {
     value: ProjectSettings[keyof ProjectSettings] | undefined,
   ) => void;
   settingsFor: (projectId: string | null) => ProjectSettings;
+  /**
+   * Hide the global-defaults editor: global settings live in the Settings
+   * panel (sidebar footer). Per-project overrides stay — they are
+   * project-scoped, not global.
+   */
+  hideGlobalSettings?: boolean;
 }
 
 const SETTING_KEYS: (keyof ProjectSettings)[] = [
@@ -57,6 +63,7 @@ export function ProjectsPanel({
   onSetGlobal,
   onSetOverride,
   settingsFor,
+  hideGlobalSettings = false,
 }: ProjectsPanelProps) {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -133,6 +140,7 @@ export function ProjectsPanel({
           />
         ))}
       </ul>
+      {!hideGlobalSettings && (
       <details className="project-global">
         <summary>Global settings (project defaults)</summary>
         <div className="project-settings">
@@ -186,6 +194,7 @@ export function ProjectsPanel({
           </label>
         </div>
       </details>
+      )}
     </div>
   );
 }

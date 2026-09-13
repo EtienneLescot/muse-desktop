@@ -2016,6 +2016,70 @@ body.dark .composer textarea::placeholder {
   color: var(--muted);
 }
 
+/* Sidebar sections (Codex-like): one threads list up front, everything
+ * else collapsed behind a quiet label. Same tokens as .integrations. */
+.side-section {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+}
+
+.side-section > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* ---- Sidebar footer: profile + settings gear ---- */
+
+.sidebar-footer {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--line);
+  background: var(--side);
+}
+
+.sidebar-footer .account {
+  flex: 1;
+  min-width: 0;
+  border-top: none;
+  border-radius: 0;
+}
+
+.gear {
+  flex: none;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--side);
+  border: none;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.gear:hover {
+  background: var(--pale);
+  color: var(--text);
+}
+
+.gear[aria-expanded="true"] {
+  color: var(--blue);
+}
+
+.gear svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .integration-panel {
   margin-top: 8px;
   background: var(--surface);
