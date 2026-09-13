@@ -10,6 +10,18 @@ import {
   type MentionToken,
   type ResolvedMention,
 } from "../lib/mentions";
+// US-20 memory @-mention chips: `@mem/<id>` tokens expand to quoted,
+// source+age flagged context (stale flagged, never silent).
+import {
+  ageLabel,
+  expandMemoryMentions,
+  findMemoryByPrefix,
+  isStale,
+  memoryChipLabel,
+  parseMemoryMentions,
+  type MemoryEntry,
+  type MemoryMentionToken,
+} from "../lib/memory";
 
 interface Props {
   disabled: boolean;
@@ -21,6 +33,11 @@ interface Props {
   /** US-4: summary text to load into the box after « New From Summary ». */
   prefill?: string | null;
   onPrefillConsumed?: () => void;
+  /** US-20: memory entries offered as `@mem/<id>` context chips. */
+  memories?: MemoryEntry[];
+  /** US-20: one `@mem/…` query to insert (from the memory panel). */
+  memoryInsert?: string | null;
+  onMemoryInsertConsumed?: () => void;
 }
 
 interface RecentMention {
@@ -79,7 +96,7 @@ function isMissingCommand(err: unknown): boolean {
  * the workspace asks the backend `check_scope` permission when that command
  * exists (US-22), otherwise the send is blocked with an explicit message.
  */
-export function Composer({ disabled, running, workspace, onSend, onCancel, prefill, onPrefillConsumed }: Props) {
+export function Composer({ disabled, running, workspace, onSend, onCancel, prefill, onPrefillConsumed, memories, memoryInsert, onMemoryInsertConsumed }: Props) {
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [selIndex, setSelIndex] = useState(0);
@@ -117,6 +134,47 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
     [workspace, text],
   );
 
+  // US-20: `@mem/<id>` tokens in the text, resolved against the entries.
+  const memTokens: (MemoryMentionToken & { entry: MemoryEntry | null })[] = useMemo(
+    () =>
+      parseMemoryMentions(text).map((t) => ({
+        ...t,
+        entry: memories !== undefined ? findMemoryByPrefix(memories, t.idPrefix) : null,
+      })),
+    [text, memories],
+  );
+
+  // US-20: insert one `@mem/…` token from the panel or the completion.
+  useEffect(() => {
+    if (memoryInsert === null || memoryInsert === undefined) return;
+    const sep = text === "" || text.endsWith(" ") || text.endsWith("\n") ? "" : " ";
+    const insert = `${sep}@${memoryInsert} `;
+    const next = text + insert;
+    setText(next);
+    setCaret(next.length);
+    setBlocked(null);
+    onMemoryInsertConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memoryInsert]);
+
+  function applyMemoryCandidate(m: MemoryEntry): void {
+    if (active === null) return;
+    const insert = `@mem/${m.id.slice(0, 8)} `;
+    const next = text.slice(0, active.start) + insert + text.slice(active.end);
+    const nextCaret = active.start + insert.length;
+    setText(next);
+    setCaret(nextCaret);
+    setBlocked(null);
+  }
+
+  function removeMemToken(t: MemoryMentionToken): void {
+    const after = text.slice(t.end, t.end + 1) === " " ? t.end + 1 : t.end;
+    const next = text.slice(0, t.start) + text.slice(after);
+    setText(next);
+    setCaret(t.start);
+    setBlocked(null);
+  }
+
   const active: MentionToken | null = useMemo(
     () => findMentionAt(text, caret),
     [text, caret],
@@ -141,6 +199,22 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
     return out.slice(0, 8);
   }, [workspace, active, recents]);
 
+  // US-20: memory completion while typing `@mem…` (mouse-pick; the panel
+  // `@mem` button inserts directly, so keyboard send is untouched).
+  const memCandidates: MemoryEntry[] = useMemo(() => {
+    if (memories === undefined || active === null) return [];
+    if (!(active.query === "mem/" || active.query.startsWith("mem/"))) return [];
+    const rest = active.query.slice(4).toLowerCase();
+    return memories
+      .filter(
+        (m) =>
+          rest === "" ||
+          m.id.toLowerCase().startsWith(rest) ||
+          memoryChipLabel(m).toLowerCase().includes(rest),
+      )
+      .slice(0, 5);
+  }, [memories, active]);
+
   useEffect(() => {
     setSelIndex(0);
     setDismissedKey(null);
@@ -150,6 +224,8 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
   const activeKey = active !== null ? `${active.start}-${active.end}-${active.query}` : null;
   const dropdownOpen =
     active !== null && candidates.length > 0 && !disabled && dismissedKey !== activeKey;
+  const memDropdownOpen =
+    memCandidates.length > 0 && !disabled && dismissedKey !== activeKey;
 
   function syncCaret(el: HTMLTextAreaElement): void {
     setCaret(el.selectionStart ?? el.value.length);
@@ -182,9 +258,18 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
 
   async function send(): Promise<void> {
     if (text.trim().length === 0 || disabled || checking) return;
+    // US-20: expand `@mem/` tokens first (works even without a workspace:
+    // memories are global). Unknown ids block explicitly, never silently.
+    const memExpanded = expandMemoryMentions(text, memories ?? [], Date.now());
+    if (memExpanded.missing.length > 0) {
+      setBlocked(
+        `Unknown memory reference(s) (${memExpanded.missing.map((p) => `@mem/${p}`).join(", ")}): remove or re-pick them from the memory panel.`,
+      );
+      return;
+    }
     if (workspace === null || mentions.length === 0) {
       setBlocked(null);
-      onSend(text);
+      onSend(memExpanded.text);
       setText("");
       setCaret(0);
       return;
@@ -217,7 +302,9 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
         setChecking(false);
       }
     }
-    const { text: enriched } = buildEnrichedText(workspace, text);
+    // US-20: file mentions enrich first, then memory blocks are expanded
+    // on the enriched text (stale entries flagged, never silent).
+    const { text: enriched } = buildEnrichedText(workspace, memExpanded.text);
     const fresh: RecentMention[] = [];
     for (const m of mentions) {
       if (!m.inScope) continue;
@@ -297,6 +384,45 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
             ))}
           </ul>
         )}
+        {memTokens.length > 0 && (
+          <ul className="mention-chips" aria-label="Memory context">
+            {memTokens.map((t, i) => {
+              const stale = t.entry !== null && isStale(t.entry, Date.now());
+              return (
+                <li
+                  key={`${t.start}-${t.end}-${i}`}
+                  className={
+                    t.entry === null
+                      ? "mention-chip mention-chip-out"
+                      : stale
+                        ? "mention-chip mention-chip-mem mention-chip-stale"
+                        : "mention-chip mention-chip-mem"
+                  }
+                  title={
+                    t.entry === null
+                      ? `Unknown memory @mem/${t.idPrefix}`
+                      : `${t.entry.text} — ${t.entry.source}`
+                  }
+                >
+                  <span className="mention-chip-path">
+                    {t.entry === null ? `@mem/${t.idPrefix}?` : memoryChipLabel(t.entry)}
+                  </span>
+                  {t.entry !== null && (
+                    <span className="mention-chip-flag">{ageLabel(t.entry, Date.now())}</span>
+                  )}
+                  <button
+                    type="button"
+                    className="mention-chip-remove"
+                    aria-label={`Remove memory mention ${t.idPrefix}`}
+                    onClick={() => removeMemToken(t)}
+                  >
+                    ×
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         {dropdownOpen && (
           <ul className="mention-list" role="listbox" aria-label="Mention completions">
             {candidates.map((c, i) => (
@@ -321,6 +447,34 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
             ))}
           </ul>
         )}
+        {memDropdownOpen && (
+          <ul className="mention-list" role="listbox" aria-label="Memory completions">
+            {memCandidates.map((m) => (
+              <li
+                key={m.id}
+                role="option"
+                aria-selected={false}
+                className="mention-item"
+                onMouseDown={(e) => {
+                  // Select before the textarea loses focus/caret.
+                  e.preventDefault();
+                  applyMemoryCandidate(m);
+                }}
+              >
+                <span className="mention-item-path">{memoryChipLabel(m)}</span>
+                <span
+                  className={
+                    isStale(m, Date.now())
+                      ? "mention-item-scope mention-item-scope-out"
+                      : "mention-item-scope"
+                  }
+                >
+                  mémoire · {m.source} · {ageLabel(m, Date.now())}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         <textarea
           ref={areaRef}
           value={text}
@@ -340,7 +494,7 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
               : "Type a prompt… (Enter to send, @ for files, /compact to summarize)"
           }
           aria-label="Prompt input"
-          aria-expanded={dropdownOpen}
+          aria-expanded={dropdownOpen || memDropdownOpen}
           aria-autocomplete="list"
         />
         {blocked !== null && (

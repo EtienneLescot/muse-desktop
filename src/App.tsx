@@ -12,6 +12,7 @@ import { ApprovalPanel } from "./components/ApprovalPanel";
 import { InputPanel } from "./components/InputPanel";
 import { Composer } from "./components/Composer";
 import { CompactBar } from "./components/CompactBar";
+import { MemoryPanel } from "./components/MemoryPanel";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -64,10 +65,18 @@ export default function App() {
     newFromSummary,
     prefill,
     clearPrefill,
+    memories,
+    scanNudge,
+    addMemoryEntry,
+    removeMemoryEntry,
+    ackScanNudge,
     error,
     backendMissing,
     evtCount,
   } = useMuseSessions();
+
+  // US-20: one `@mem/…` token the panel asked the composer to insert.
+  const [memoryInsert, setMemoryInsert] = useState<string | null>(null);
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const pickButtonRef = useRef<HTMLButtonElement>(null);
@@ -263,6 +272,15 @@ export default function App() {
               onCompact={() => compactSession(active.session_id)}
               onNewFromSummary={() => void newFromSummary(active.session_id)}
             />
+            <MemoryPanel
+              memories={memories}
+              now={Date.now()}
+              scanNudge={scanNudge}
+              onAdd={(text, source) => addMemoryEntry(text, source)}
+              onRemove={removeMemoryEntry}
+              onAckScan={ackScanNudge}
+              onMention={(query) => setMemoryInsert(query)}
+            />
             <Composer
               disabled={workspace === null || backendMissing}
               running={active.running}
@@ -271,6 +289,9 @@ export default function App() {
               onCancel={() => void cancelSession(active.session_id)}
               prefill={prefill}
               onPrefillConsumed={clearPrefill}
+              memories={memories}
+              memoryInsert={memoryInsert}
+              onMemoryInsertConsumed={() => setMemoryInsert(null)}
             />
           </div>
         )}

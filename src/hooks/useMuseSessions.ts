@@ -43,6 +43,7 @@ import {
   type ResolvedApproval,
 } from "../lib/allowlist";
 export type { AllowDecision, AllowRule, ResolvedApproval } from "../lib/allowlist";
+export type { MemoryEntry } from "../lib/memory";
 export type {
   InputAnswer,
   InputOption,
@@ -86,6 +87,19 @@ import {
 } from "../lib/compact";
 // US-5 thread archiving flag helper (pure, unit-tested).
 import { withArchivedFlag } from "../lib/threads";
+// US-20 memory + anti-drift: dated/sourced entries, stale warnings, SCAN
+// nudge (pure, unit-tested); storage extends the muse-desktop.* keys.
+import {
+  addMemory,
+  buildScanNudge,
+  loadLastScan,
+  loadMemories,
+  removeMemory,
+  saveLastScan,
+  saveMemories,
+  shouldScanNudge,
+  type MemoryEntry,
+} from "../lib/memory";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -172,6 +186,14 @@ interface UseMuseSessions {
   archiveSession: (sessionId: string) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
   restoreSession: (sessionId: string) => void;
+  /** US-20: dated/sourced memory entries (persisted, global to the app). */
+  memories: MemoryEntry[];
+  /** US-20: SCAN review nudge text when due, else null. */
+  scanNudge: string | null;
+  addMemoryEntry: (text: string, source: string) => void;
+  removeMemoryEntry: (id: string) => void;
+  /** US-20: stamp the SCAN review as done (dismisses the nudge). */
+  ackScanNudge: () => void;
   /** US-6 controls: one hook method per `subagent/*` MSP method. */
   subagentInterrupt: (sessionId: string, agentId: string) => Promise<void>;
   subagentStop: (sessionId: string, agentId: string) => Promise<void>;
@@ -298,6 +320,10 @@ export function useMuseSessions(): UseMuseSessions {
   // after `newFromSummary`.
   const [summaries, setSummaries] = useState<Record<string, ThreadSummary>>({});
   const [prefill, setPrefill] = useState<string | null>(null);
+  // US-20: memory entries + last SCAN review stamp, restored once and
+  // written through on every change (localStorage, best-effort).
+  const [memories, setMemories] = useState<MemoryEntry[]>(() => loadMemories());
+  const [lastScan, setLastScan] = useState<number | null>(() => loadLastScan());
   // Latest logs for the render-detached compaction paths (`/compact` inside
   // sendInput, auto-compact effect): refs stay fresh where useCallback deps
   // would go stale.
@@ -480,6 +506,14 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveAllowlist(allowlist);
   }, [allowlist]);
+
+  useEffect(() => {
+    saveMemories(memories);
+  }, [memories]);
+
+  useEffect(() => {
+    if (lastScan !== null) saveLastScan(lastScan);
+  }, [lastScan]);
 
   useEffect(() => {
     // null means "not loaded yet" (there is no clear-workspace action),
@@ -1059,6 +1093,25 @@ export function useMuseSessions(): UseMuseSessions {
     setSessions((cur) => withArchivedFlag(cur, sessionId, false));
   }, []);
 
+  // US-20: memory CRUD (blank text is a no-op in addMemory) + SCAN ack.
+  // The nudge is derived (not state): due = interval elapsed + non-empty.
+  const addMemoryEntry = useCallback((text: string, source: string) => {
+    setMemories((cur) => addMemory(cur, text, source, Date.now()));
+  }, []);
+
+  const removeMemoryEntry = useCallback((id: string) => {
+    setMemories((cur) => removeMemory(cur, id));
+  }, []);
+
+  const ackScanNudge = useCallback(() => {
+    setLastScan(Date.now());
+  }, []);
+
+  const scanNudge =
+    shouldScanNudge(memories.length, lastScan, Date.now())
+      ? buildScanNudge(memories, Date.now())
+      : null;
+
   const activeLog = (activeId !== null && logs[activeId]) || [];
   const activeApprovals = approvals.filter((a) => a.session_id === activeId);
   const activeInputRequests = inputRequests.filter((r) => r.session_id === activeId);
@@ -1222,6 +1275,11 @@ export function useMuseSessions(): UseMuseSessions {
     killSession,
     archiveSession,
     restoreSession,
+    memories,
+    scanNudge,
+    addMemoryEntry,
+    removeMemoryEntry,
+    ackScanNudge,
     subagentInterrupt,
     subagentStop,
     subagentResume,
