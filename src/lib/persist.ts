@@ -11,6 +11,12 @@
  * All writes are confined to these keys; nothing is written outside them.
  */
 
+import type {
+  Project,
+  ProjectSettings,
+  ThreadProjectMap,
+} from "./projects.ts";
+
 export interface StoredSession {
   session_id: string;
   workspace: string;
@@ -238,4 +244,73 @@ export function newId(): string {
   } catch {
     return `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
   }
+}
+
+/**
+ * US-3 + US-30 Projects: stored project list, thread→project map, and
+ * global agent settings (per-project overrides live on the Project row in
+ * ../lib/projects, inheriting these globals). Dedicated localStorage keys,
+ * best-effort writes like everything else here.
+ */
+const PROJECTS_KEY = "muse-desktop.projects.v1";
+const THREAD_PROJECTS_KEY = "muse-desktop.thread-projects.v1";
+const GLOBAL_SETTINGS_KEY = "muse-desktop.settings.v1";
+
+function isValidProjectRow(p: unknown): p is Project {
+  if (typeof p !== "object" || p === null) return false;
+  const r = p as Record<string, unknown>;
+  return (
+    typeof r.id === "string" &&
+    r.id.length > 0 &&
+    typeof r.name === "string" &&
+    typeof r.instructions === "string" &&
+    typeof r.createdAt === "number"
+  );
+}
+
+export function loadProjects(): Project[] {
+  const raw = read<unknown>(PROJECTS_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isValidProjectRow);
+}
+
+export function saveProjects(projects: Project[]): void {
+  write(PROJECTS_KEY, projects);
+}
+
+export function loadThreadProjects(): ThreadProjectMap {
+  const raw = read<unknown>(THREAD_PROJECTS_KEY, {});
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+  const out: ThreadProjectMap = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" && v.length > 0) out[k] = v;
+  }
+  return out;
+}
+
+export function saveThreadProjects(map: ThreadProjectMap): void {
+  write(THREAD_PROJECTS_KEY, map);
+}
+
+function isValidGlobalSettings(s: unknown): s is ProjectSettings {
+  if (typeof s !== "object" || s === null) return false;
+  const r = s as Record<string, unknown>;
+  return (
+    typeof r.model === "string" &&
+    (r.sandbox === "read-only" || r.sandbox === "workspace" || r.sandbox === "full") &&
+    (r.networkDefault === "allow" || r.networkDefault === "prompt" || r.networkDefault === "deny") &&
+    typeof r.autoCompact === "boolean"
+  );
+}
+
+export function loadGlobalSettings(
+  fallback: ProjectSettings,
+): ProjectSettings {
+  const raw = read<unknown>(GLOBAL_SETTINGS_KEY, null);
+  if (!isValidGlobalSettings(raw)) return fallback;
+  return raw;
+}
+
+export function saveGlobalSettings(settings: ProjectSettings): void {
+  write(GLOBAL_SETTINGS_KEY, settings);
 }

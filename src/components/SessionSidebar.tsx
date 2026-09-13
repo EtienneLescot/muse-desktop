@@ -7,6 +7,7 @@ import {
   selectArchivedThreads,
   type CycleDir,
 } from "../lib/threads";
+import type { Project, ThreadProjectMap } from "../lib/projects";
 
 interface Props {
   sessions: MuseSession[];
@@ -21,6 +22,9 @@ interface Props {
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
   canStart: boolean;
+  /** US-3: project grouping (absent/empty = flat list, as before). */
+  projects?: Project[];
+  threadProjects?: ThreadProjectMap;
 }
 
 function shortId(id: string): string {
@@ -55,12 +59,35 @@ export function SessionSidebar({
   onArchive,
   onRestore,
   canStart,
+  projects,
+  threadProjects,
 }: Props) {
   const [archivedOpen, setArchivedOpen] = useState(false);
   const active = useMemo(() => selectActiveThreads(sessions), [sessions]);
   const archived = useMemo(() => selectArchivedThreads(sessions), [sessions]);
   const runningCount = useMemo(() => countRunning(sessions), [sessions]);
   const activeIds = useMemo(() => active.map((s) => s.session_id), [active]);
+  // US-3: group active threads under their project heading; threads with
+  // no (or a dangling) attachment stay under Ungrouped. Null = flat list.
+  const groups = useMemo(() => {
+    if (projects === undefined || threadProjects === undefined || projects.length === 0) {
+      return null;
+    }
+    const per = projects
+      .map((p) => ({
+        project: p,
+        items: active.filter((s) => threadProjects[s.session_id] === p.id),
+      }))
+      .filter((g) => g.items.length > 0);
+    const groupedIds = new Set(per.flatMap((g) => g.items.map((s) => s.session_id)));
+    return { per, ungrouped: active.filter((s) => !groupedIds.has(s.session_id)) };
+  }, [projects, threadProjects, active]);
+  const projectNameOf = (sessionId: string): string | null => {
+    if (projects === undefined || threadProjects === undefined) return null;
+    const pid = threadProjects[sessionId] ?? null;
+    if (pid === null) return null;
+    return projects.find((p) => p.id === pid)?.name ?? null;
+  };
 
   function moveSelection(dir: CycleDir): void {
     const next = cycleThreadId(activeIds, activeId, dir);
@@ -75,6 +102,79 @@ export function SessionSidebar({
       e.preventDefault();
       moveSelection(-1);
     }
+  }
+
+  // One active-thread row (shared by the flat list and project groups).
+  function renderThread(s: MuseSession) {
+    const pending = pendingCounts[s.session_id] ?? 0;
+    const isActive = s.session_id === activeId;
+    const projectName = projectNameOf(s.session_id);
+    return (
+      <li
+        key={s.session_id}
+        role="option"
+        aria-selected={isActive}
+        className={isActive ? "session-item active" : "session-item"}
+      >
+        <button
+          className="session-select"
+          onClick={() => onSelect(s.session_id)}
+          title={s.session_id}
+        >
+          <span
+            className="dot"
+            data-running={s.running}
+            title={s.running ? "running" : "stopped"}
+          />
+          <span className="session-title">{s.title || shortId(s.session_id)}</span>
+          {projectName !== null && (
+            <span className="project-badge" title={`Project: ${projectName}`}>
+              {projectName}
+            </span>
+          )}
+          {s.running && (
+            <span className="threads-live" title="Agent running">
+              live
+            </span>
+          )}
+          {compactedIds?.includes(s.session_id) && (
+            <span className="compact-flag" title="Thread compacté — résumé disponible">
+              compacté
+            </span>
+          )}
+          {pending > 0 && (
+            <span className="badge" title={`${pending} pending approval(s)`}>
+              {pending}
+            </span>
+          )}
+        </button>
+        <div className="session-meta">
+          <span className="muted">{timeOf(s.createdAt)}</span>
+          <span className="session-actions">
+            {s.running && (
+              <button
+                onClick={() => onCancel(s.session_id)}
+                title="Stop sidecar (cancel session)"
+              >
+                Stop
+              </button>
+            )}
+            <button
+              onClick={() => onArchive(s.session_id)}
+              title="Archive thread (kept in local history)"
+            >
+              Archive
+            </button>
+            <button
+              onClick={() => onKill(s.session_id)}
+              title="Kill session and delete its local history"
+            >
+              Del
+            </button>
+          </span>
+        </div>
+      </li>
+    );
   }
 
   return (
@@ -97,78 +197,47 @@ export function SessionSidebar({
       {active.length === 0 && (
         <p className="muted">No active threads. Start one to begin.</p>
       )}
-      <ul
-        className="session-items"
-        role="listbox"
-        aria-label="Active threads"
-        onKeyDown={onListKeyDown}
-      >
-        {active.map((s) => {
-          const pending = pendingCounts[s.session_id] ?? 0;
-          const isActive = s.session_id === activeId;
-          return (
-            <li
-              key={s.session_id}
-              role="option"
-              aria-selected={isActive}
-              className={isActive ? "session-item active" : "session-item"}
-            >
-              <button
-                className="session-select"
-                onClick={() => onSelect(s.session_id)}
-                title={s.session_id}
-              >
-                <span
-                  className="dot"
-                  data-running={s.running}
-                  title={s.running ? "running" : "stopped"}
-                />
-                <span className="session-title">{s.title || shortId(s.session_id)}</span>
-                {s.running && (
-                  <span className="threads-live" title="Agent running">
-                    live
-                  </span>
-                )}
-                {compactedIds?.includes(s.session_id) && (
-                  <span className="compact-flag" title="Thread compacté — résumé disponible">
-                    compacté
-                  </span>
-                )}
-                {pending > 0 && (
-                  <span className="badge" title={`${pending} pending approval(s)`}>
-                    {pending}
-                  </span>
-                )}
-              </button>
-              <div className="session-meta">
-                <span className="muted">{timeOf(s.createdAt)}</span>
-                <span className="session-actions">
-                  {s.running && (
-                    <button
-                      onClick={() => onCancel(s.session_id)}
-                      title="Stop sidecar (cancel session)"
-                    >
-                      Stop
-                    </button>
-                  )}
-                  <button
-                    onClick={() => onArchive(s.session_id)}
-                    title="Archive thread (kept in local history)"
-                  >
-                    Archive
-                  </button>
-                  <button
-                    onClick={() => onKill(s.session_id)}
-                    title="Kill session and delete its local history"
-                  >
-                    Del
-                  </button>
-                </span>
+      {groups === null ? (
+        <ul
+          className="session-items"
+          role="listbox"
+          aria-label="Active threads"
+          onKeyDown={onListKeyDown}
+        >
+          {active.map(renderThread)}
+        </ul>
+      ) : (
+        <div onKeyDown={onListKeyDown}>
+          {groups.per.map((g) => (
+            <div key={g.project.id} className="project-group">
+              <div className="project-group-header">
+                {g.project.name} ({g.items.length})
               </div>
-            </li>
-          );
-        })}
-      </ul>
+              <ul
+                className="session-items"
+                role="listbox"
+                aria-label={`Threads in ${g.project.name}`}
+              >
+                {g.items.map(renderThread)}
+              </ul>
+            </div>
+          ))}
+          {groups.ungrouped.length > 0 && (
+            <div className="project-group">
+              <div className="project-group-header muted">
+                Ungrouped ({groups.ungrouped.length})
+              </div>
+              <ul
+                className="session-items"
+                role="listbox"
+                aria-label="Ungrouped threads"
+              >
+                {groups.ungrouped.map(renderThread)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
       {archived.length > 0 && (
         <div className="archived-section">
           <button
