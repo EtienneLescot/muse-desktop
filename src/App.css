@@ -1224,6 +1224,7 @@ body.dark .composer textarea::placeholder {
   }
 }
 
+<<<<<<< HEAD
 /* ---- US-3 + US-30 Projects panel + sidebar grouping ---- */
 
 .projects-panel {
@@ -1496,6 +1497,60 @@ body.dark .composer textarea::placeholder {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
+}
+
+/* ---- w-settings panel ---- */
+
+.settings-toggle {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.settings-toggle:hover {
+  border-color: var(--blue);
+}
+
+.settings-panel {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-head h2 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-group h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0;
 }
 
 .artifacts-body .muted {
@@ -1783,4 +1838,58 @@ body.dark .composer textarea::placeholder {
   .artifacts-pane {
     width: 240px;
   }
+}
+.settings-root {
+  font-size: 0.82rem;
+  word-break: break-all;
+  margin: 0;
+}
+
+.settings-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.settings-row {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 5px 8px;
+  font-size: 0.82rem;
+}
+
+.settings-row button,
+.settings-panel select {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 5px 8px;
+  font-size: 0.82rem;
+}
+
+.settings-panel select {
+  width: 100%;
+}
+
+.settings-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 0.82rem;
+}
+
+.settings-note {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0;
+  word-break: break-word;
 }

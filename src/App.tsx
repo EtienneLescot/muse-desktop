@@ -5,6 +5,7 @@ import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { WorkspacePicker } from "./components/WorkspacePicker";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { EmptySessionScreen } from "./components/EmptySessionScreen";
 import { SessionSidebar } from "./components/SessionSidebar";
 import { ProjectsPanel } from "./components/ProjectsPanel";
@@ -43,6 +44,11 @@ export default function App() {
     activeInputRequests,
     workspace,
     setWorkspace,
+    sandbox,
+    setSandbox,
+    providerId,
+    setProviderId,
+    checkPathScope,
     setActive,
     startSession,
     sendInput,
@@ -97,6 +103,7 @@ export default function App() {
   } = useMuseSessions();
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const pickButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -216,6 +223,26 @@ export default function App() {
             onSetOverride={setProjectOverride}
             settingsFor={settingsFor}
           />
+          <button
+            type="button"
+            className="settings-toggle"
+            aria-expanded={settingsOpen}
+            aria-label={settingsOpen ? "Close settings" : "Open settings"}
+            onClick={() => setSettingsOpen((v) => !v)}
+          >
+            {settingsOpen ? "Close settings" : "Settings"}
+          </button>
+          {settingsOpen && (
+            <SettingsPanel
+              workspace={workspace}
+              sandbox={sandbox}
+              onSandboxChange={setSandbox}
+              providerId={providerId}
+              onProviderChange={setProviderId}
+              checkPathScope={checkPathScope}
+              onClose={() => setSettingsOpen(false)}
+            />
+          )}
           <SessionSidebar
             sessions={sessions}
             activeId={activeId}
