@@ -229,11 +229,109 @@ import {
   saveImportedSessions,
   type ResumableSession,
 } from "../lib/importConfig";
+// US-23 opt-in local index: line parsers + mtime rescan + search live in
+// ../lib/indexer (dependency-free, unit-tested); the hook only owns state,
+// folder-pick reading, and localStorage write-through.
+import {
+  buildIndex,
+  dropIndexData,
+  indexStats,
+  loadIndexData,
+  loadIndexEnabled,
+  MAX_INDEX_FILES,
+  normalizePath,
+  parseGitignore,
+  rescanIndex,
+  saveIndexData,
+  saveIndexEnabled,
+  searchIndex,
+  shouldIndexPath,
+  type FileSnapshot,
+  type IndexStore,
+  type LineHit,
+} from "../lib/indexer";
+export type { LineHit } from "../lib/indexer";
 
 
 /** One session: persisted metadata + live running flag. */
 export interface MuseSession extends StoredSession {
   running: boolean;
+}
+
+/** US-23 local index surface (opt-in, default off). */
+export interface IndexApi {
+  enabled: boolean;
+  paused: boolean;
+  fileCount: number;
+  lineCount: number;
+  builtAt: number | null;
+  lastSummary: string | null;
+  /** True once a folder was picked, so Rescan/Rebuild have a source. */
+  hasSource: boolean;
+  query: string;
+  results: LineHit[];
+  setIndexEnabled: (on: boolean) => void;
+  setIndexPaused: (paused: boolean) => void;
+  indexPickedFiles: (files: FileList | File[]) => Promise<void>;
+  rescanIndexFiles: () => Promise<void>;
+  rebuildIndex: () => Promise<void>;
+  deleteIndex: () => void;
+  setIndexQuery: (q: string) => void;
+}
+
+type FileWithRelPath = File & { webkitRelativePath?: string };
+
+/**
+ * Directory-input path → workspace-relative path. The input prefixes every
+ * file with the picked top folder (`root/src/a.ts`); that root is dropped.
+ */
+function indexRelPath(f: File): string {
+  const w = f as FileWithRelPath;
+  const raw =
+    w.webkitRelativePath !== undefined && w.webkitRelativePath.length > 0
+      ? w.webkitRelativePath
+      : f.name;
+  const norm = normalizePath(raw);
+  const slash = norm.indexOf("/");
+  return slash >= 0 ? norm.slice(slash + 1) : norm;
+}
+
+/**
+ * Read one folder pick into snapshots: the root .gitignore is read first
+ * so eligibility uses it, then only eligible files are read (capped), so a
+ * huge folder pick stays bounded.
+ */
+async function readIndexSnapshots(
+  files: File[],
+): Promise<{ snapshots: FileSnapshot[]; patterns: string[] }> {
+  let gitText = "";
+  for (const f of files) {
+    if (indexRelPath(f) === ".gitignore") {
+      try {
+        gitText = await f.text();
+      } catch {
+        gitText = "";
+      }
+      break;
+    }
+  }
+  const patterns = parseGitignore(gitText);
+  const eligible = files
+    .filter((f) => shouldIndexPath(indexRelPath(f), patterns))
+    .slice(0, MAX_INDEX_FILES);
+  const snapshots: FileSnapshot[] = [];
+  for (const f of eligible) {
+    try {
+      snapshots.push({
+        path: indexRelPath(f),
+        mtimeMs: f.lastModified,
+        content: await f.text(),
+      });
+    } catch {
+      // Skip unreadable files; the rest still index.
+    }
+  }
+  return { snapshots, patterns };
 }
 
 /** Raw event relayed by the Rust supervisor (always tagged by session_id). */
@@ -326,6 +424,8 @@ interface UseMuseSessions {
   restoreArtifact: (sessionId: string, artifactId: string, v: number) => void;
   /** US-21: anchored per-version comment (persisted). */
   commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string) => void;
+  /** US-23 opt-in local index (panel state + folder-pick indexing). */
+  index: IndexApi;
   /** US-5: move a thread to the archived list (persisted flag). */
   archiveSession: (sessionId: string) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
@@ -1555,6 +1655,100 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
+  // US-23 local index: opt-in (default off, persisted), paused flag, and
+  // the stored line index. Picked File handles stay in memory only — the
+  // on-demand Rescan re-reads them (mtime-based, no watcher).
+  const [indexEnabled, setIndexEnabledState] = useState<boolean>(() =>
+    loadIndexEnabled(),
+  );
+  const [indexPaused, setIndexPausedState] = useState(false);
+  const [indexStore, setIndexStore] = useState<IndexStore>(() =>
+    loadIndexData(),
+  );
+  const [indexQuery, setIndexQueryState] = useState("");
+  const [indexSummary, setIndexSummary] = useState<string | null>(null);
+  const indexFilesRef = useRef<File[]>([]);
+
+  const setIndexEnabled = useCallback((on: boolean) => {
+    setIndexEnabledState(on);
+    saveIndexEnabled(on);
+    if (!on) setIndexQueryState("");
+  }, []);
+
+  const setIndexPaused = useCallback((paused: boolean) => {
+    setIndexPausedState(paused);
+  }, []);
+
+  const indexPickedFiles = useCallback(
+    async (files: FileList | File[]): Promise<void> => {
+      const list = Array.from(files);
+      if (list.length === 0) return;
+      try {
+        setError(null);
+        const { snapshots, patterns } = await readIndexSnapshots(list);
+        indexFilesRef.current = list;
+        const store = buildIndex(snapshots, patterns);
+        setIndexStore(store);
+        saveIndexData(store);
+        const s = indexStats(store);
+        setIndexSummary(
+          `Built ${s.files} file(s), ${s.lines} line(s) from ${list.length} picked.`,
+        );
+      } catch (e) {
+        setError(`index build failed: ${String(e)}`);
+      }
+    },
+    [],
+  );
+
+  const rescanIndexFiles = useCallback(async (): Promise<void> => {
+    if (indexPaused) {
+      setIndexSummary("Paused — resume to rescan.");
+      return;
+    }
+    const list = indexFilesRef.current;
+    if (list.length === 0) return;
+    try {
+      setError(null);
+      const { snapshots, patterns } = await readIndexSnapshots(list);
+      const { store, summary } = rescanIndex(indexStore, snapshots, patterns);
+      setIndexStore(store);
+      saveIndexData(store);
+      setIndexSummary(
+        `Rescan: ${summary.added} added, ${summary.updated} updated, ` +
+          `${summary.removed} removed, ${summary.unchanged} unchanged.`,
+      );
+    } catch (e) {
+      setError(`index rescan failed: ${String(e)}`);
+    }
+  }, [indexPaused, indexStore]);
+
+  const rebuildIndex = useCallback(async (): Promise<void> => {
+    const list = indexFilesRef.current;
+    if (list.length === 0) return;
+    try {
+      setError(null);
+      const { snapshots, patterns } = await readIndexSnapshots(list);
+      const store = buildIndex(snapshots, patterns);
+      setIndexStore(store);
+      saveIndexData(store);
+      const s = indexStats(store);
+      setIndexSummary(`Rebuilt ${s.files} file(s), ${s.lines} line(s).`);
+    } catch (e) {
+      setError(`index rebuild failed: ${String(e)}`);
+    }
+  }, []);
+
+  const deleteIndex = useCallback(() => {
+    setIndexStore({ files: {}, builtAt: null });
+    dropIndexData();
+    indexFilesRef.current = [];
+    setIndexQueryState("");
+    setIndexSummary(null);
+  }, []);
+
+  const setIndexQuery = useCallback((q: string) => setIndexQueryState(q), []);
+
   const approve = useCallback(
     async (sessionId: string, approvalId: string, choiceId: string) => {
       try {
@@ -2068,6 +2262,29 @@ export function useMuseSessions(): UseMuseSessions {
     [kickPoll],
   );
 
+  // US-23 search over the stored index (empty unless opted in). Search
+  // keeps working while paused — pause only suspends indexing updates.
+  const indexResults = searchIndex(indexStore, indexEnabled ? indexQuery : "");
+  const indexStatsNow = indexStats(indexStore);
+  const index: IndexApi = {
+    enabled: indexEnabled,
+    paused: indexPaused,
+    fileCount: indexStatsNow.files,
+    lineCount: indexStatsNow.lines,
+    builtAt: indexStore.builtAt,
+    lastSummary: indexSummary,
+    hasSource: indexFilesRef.current.length > 0,
+    query: indexQuery,
+    results: indexResults,
+    setIndexEnabled,
+    setIndexPaused,
+    indexPickedFiles,
+    rescanIndexFiles,
+    rebuildIndex,
+    deleteIndex,
+    setIndexQuery,
+  };
+
   // Updated every render; the poll loop reads it for cadence.
   runningRef.current = sessions.some((s) => s.running);
   // Latest event handler for the render-detached poll drain.
@@ -2160,6 +2377,7 @@ export function useMuseSessions(): UseMuseSessions {
     artifacts,
     restoreArtifact,
     commentArtifact,
+    index,
     error,
     evtCount,
   };

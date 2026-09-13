@@ -24,6 +24,7 @@ import { SharePanel } from "./components/SharePanel";
 import { ChannelPanel } from "./components/ChannelPanel";
 import { ImportPanel } from "./components/ImportPanel";
 import type { ShareBundle } from "./lib/sharing";
+import { IndexPanel } from "./components/IndexPanel";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -124,6 +125,7 @@ export default function App() {
     artifacts,
     restoreArtifact,
     commentArtifact,
+    index,
     error,
     backendMissing,
     evtCount,
@@ -323,6 +325,25 @@ export default function App() {
             notes={importNotes}
             onImportText={(source, content) => importConfigText(source, content)}
             onDismiss={dismissImport}
+          />
+          <IndexPanel
+            enabled={index.enabled}
+            paused={index.paused}
+            fileCount={index.fileCount}
+            lineCount={index.lineCount}
+            builtAt={index.builtAt}
+            lastSummary={index.lastSummary}
+            hasSource={index.hasSource}
+            query={index.query}
+            results={index.results}
+            onToggle={index.setIndexEnabled}
+            onPause={() => index.setIndexPaused(true)}
+            onResume={() => index.setIndexPaused(false)}
+            onFilesPicked={(files) => void index.indexPickedFiles(files)}
+            onRescan={() => void index.rescanIndexFiles()}
+            onRebuild={() => void index.rebuildIndex()}
+            onDelete={index.deleteIndex}
+            onQueryChange={index.setIndexQuery}
           />
         </div>
         <button
