@@ -86,6 +86,31 @@ import {
 } from "../lib/compact";
 // US-5 thread archiving flag helper (pure, unit-tested).
 import { withArchivedFlag } from "../lib/threads";
+// US-9 automations/scheduled + review queue: pure schedule logic (cron,
+// due → review enqueue, approve/discard, target resolution). No workflow/*
+// MSP endpoint exists, so scheduling is a client-side timer (see the
+// automation effect below) + persisted state — due entries never auto-send.
+import {
+  approveReview,
+  buildSchedule,
+  discardReview,
+  enqueueDue,
+  enqueueRunNow,
+  loadReviewQueue,
+  loadSchedules,
+  MAX_SCHEDULES,
+  pendingReviews,
+  resolveReviewTarget,
+  saveReviewQueue,
+  saveSchedules,
+  setScheduleEnabled,
+  deleteSchedule as removeSchedule,
+  validateScheduleInput,
+  type ReviewItem,
+  type Schedule,
+  type ScheduleInput,
+} from "../lib/schedules";
+export type { ReviewItem, Schedule, ScheduleInput, ThreadReuse } from "../lib/schedules";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -172,6 +197,21 @@ interface UseMuseSessions {
   archiveSession: (sessionId: string) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
   restoreSession: (sessionId: string) => void;
+  /** US-9: automation schedules (all) + pending review entries. */
+  schedules: Schedule[];
+  reviewQueue: ReviewItem[];
+  /** US-9: validate + append a schedule; returns the id, null on error. */
+  createSchedule: (input: ScheduleInput) => string | null;
+  /** US-9: enable/disable one schedule. */
+  setScheduleEnabled: (id: string, enabled: boolean) => void;
+  /** US-9: delete one schedule. */
+  deleteSchedule: (id: string) => void;
+  /** US-9: enqueue a review entry for one schedule immediately. */
+  runScheduleNow: (id: string) => void;
+  /** US-9: approve a review entry → sent as normal turn input. */
+  approveReview: (id: string) => Promise<void>;
+  /** US-9: discard a pending review entry. */
+  discardReview: (id: string) => void;
   /** US-6 controls: one hook method per `subagent/*` MSP method. */
   subagentInterrupt: (sessionId: string, agentId: string) => Promise<void>;
   subagentStop: (sessionId: string, agentId: string) => Promise<void>;
@@ -291,6 +331,10 @@ export function useMuseSessions(): UseMuseSessions {
   // US-15 allowlist: restored once (survives restarts via localStorage),
   // written through on every change.
   const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
+  // US-9 automations: restored once (survive restarts via localStorage),
+  // written through on every change (effect below).
+  const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
+  const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
   const [inputRequests, setInputRequests] = useState<InputRequest[]>([]);
   const [workspace, setWorkspaceState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -480,6 +524,35 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveAllowlist(allowlist);
   }, [allowlist]);
+
+  // US-9 write-through persistence (best-effort localStorage, like the rest).
+  useEffect(() => {
+    saveSchedules(schedules);
+  }, [schedules]);
+
+  useEffect(() => {
+    saveReviewQueue(reviewQueue);
+  }, [reviewQueue]);
+
+  // US-9 client-side scheduler: no workflow/* MSP endpoint exists, so a
+  // UI-side interval enqueues review entries for due schedules (never
+  // auto-sends — approval sends as normal turn input). Refs stay fresh
+  // where interval-closure deps would go stale.
+  const schedulesRef = useRef(schedules);
+  schedulesRef.current = schedules;
+  const reviewQueueRef = useRef(reviewQueue);
+  reviewQueueRef.current = reviewQueue;
+  useEffect(() => {
+    const check = () => {
+      const res = enqueueDue(schedulesRef.current, reviewQueueRef.current, Date.now());
+      if (res.added.length === 0) return;
+      setSchedules(res.schedules);
+      setReviewQueue(res.queue);
+    };
+    check();
+    const timer = setInterval(check, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     // null means "not loaded yet" (there is no clear-workspace action),
@@ -1059,6 +1132,74 @@ export function useMuseSessions(): UseMuseSessions {
     setSessions((cur) => withArchivedFlag(cur, sessionId, false));
   }, []);
 
+  // US-9 automation actions (create/toggle/delete/run-now/approve/discard).
+  const createScheduleCb = useCallback((input: ScheduleInput): string | null => {
+    const err = validateScheduleInput(input);
+    if (err !== null) {
+      setError(err);
+      return null;
+    }
+    if (schedulesRef.current.length >= MAX_SCHEDULES) {
+      setError(`too many schedules (cap ${MAX_SCHEDULES})`);
+      return null;
+    }
+    const s = buildSchedule(input, Date.now());
+    setSchedules((cur) => [...cur, s]);
+    return s.id;
+  }, []);
+
+  const setScheduleEnabledCb = useCallback((id: string, enabled: boolean) => {
+    setSchedules((cur) => setScheduleEnabled(cur, id, enabled));
+  }, []);
+
+  const deleteScheduleCb = useCallback((id: string) => {
+    setSchedules((cur) => removeSchedule(cur, id));
+  }, []);
+
+  const runScheduleNow = useCallback((id: string) => {
+    const res = enqueueRunNow(schedulesRef.current, reviewQueueRef.current, id, Date.now());
+    if (res === null) {
+      setError(`run-now failed: unknown schedule ${id.slice(0, 8)}`);
+      return;
+    }
+    setSchedules(res.schedules);
+    setReviewQueue(res.queue);
+  }, []);
+
+  const approveReviewCb = useCallback(
+    async (id: string): Promise<void> => {
+      const item = pendingReviews(reviewQueueRef.current).find((r) => r.id === id);
+      if (!item) {
+        setError(`approve failed: review entry ${id.slice(0, 8)} is not pending`);
+        return;
+      }
+      const knownIds = sessions.map((s) => s.session_id);
+      const target = resolveReviewTarget(item.threadReuse, activeId, knownIds);
+      if (target === null) {
+        setError("approve failed: the recorded target thread is gone (discard or re-target)");
+        return;
+      }
+      // Settle first: the entry leaves the pending queue even if the send
+      // below fails (the error banner then explains; the instructions stay
+      // readable in the settled entry).
+      const settled = approveReview(reviewQueueRef.current, id);
+      if (settled !== null) setReviewQueue(settled.queue);
+      if (target === "new") {
+        const fresh = await startSessionRow();
+        if (fresh === null) return;
+        await sendInput(fresh, item.instructions);
+      } else {
+        await sendInput(target, item.instructions);
+      }
+    },
+    [activeId, sessions, sendInput, startSessionRow],
+  );
+
+  const discardReviewCb = useCallback((id: string) => {
+    const res = discardReview(reviewQueueRef.current, id);
+    if (res !== null) setReviewQueue(res.queue);
+  }, []);
+
   const activeLog = (activeId !== null && logs[activeId]) || [];
   const activeApprovals = approvals.filter((a) => a.session_id === activeId);
   const activeInputRequests = inputRequests.filter((r) => r.session_id === activeId);
@@ -1222,6 +1363,14 @@ export function useMuseSessions(): UseMuseSessions {
     killSession,
     archiveSession,
     restoreSession,
+    schedules,
+    reviewQueue: pendingReviews(reviewQueue),
+    createSchedule: createScheduleCb,
+    setScheduleEnabled: setScheduleEnabledCb,
+    deleteSchedule: deleteScheduleCb,
+    runScheduleNow,
+    approveReview: approveReviewCb,
+    discardReview: discardReviewCb,
     subagentInterrupt,
     subagentStop,
     subagentResume,
