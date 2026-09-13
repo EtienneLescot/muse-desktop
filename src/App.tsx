@@ -12,6 +12,7 @@ import { ApprovalPanel } from "./components/ApprovalPanel";
 import { InputPanel } from "./components/InputPanel";
 import { Composer } from "./components/Composer";
 import { CompactBar } from "./components/CompactBar";
+import { ArtifactsPane } from "./components/ArtifactsPane";
 import "./App.css";
 
 function initialTheme(): Theme {
@@ -64,6 +65,9 @@ export default function App() {
     newFromSummary,
     prefill,
     clearPrefill,
+    artifacts,
+    restoreArtifact,
+    commentArtifact,
     error,
     backendMissing,
     evtCount,
@@ -215,6 +219,7 @@ export default function App() {
           />
         ) : (
           <div className="session-view">
+            <div className="session-center">
             <header className="topbar">
               <span className="dot" data-running={active.running} />
               <h2>{active.title || active.session_id.slice(0, 8)}</h2>
@@ -271,6 +276,14 @@ export default function App() {
               onCancel={() => void cancelSession(active.session_id)}
               prefill={prefill}
               onPrefillConsumed={clearPrefill}
+            />
+            </div>
+            <ArtifactsPane
+              sessionId={active.session_id}
+              log={activeLog}
+              artifacts={artifacts[active.session_id] ?? []}
+              onRestore={restoreArtifact}
+              onComment={commentArtifact}
             />
           </div>
         )}

@@ -86,6 +86,18 @@ import {
 } from "../lib/compact";
 // US-5 thread archiving flag helper (pure, unit-tested).
 import { withArchivedFlag } from "../lib/threads";
+// US-12 + US-21 versioned artifacts + thread recap: extraction, versioning
+// and per-thread persistence live in ../lib/artifacts (dependency-free,
+// unit-tested); restore reuses the US-4 composer prefill below.
+import {
+  dropArtifacts,
+  findVersionText,
+  loadArtifacts,
+  mergeAssistantBlocks,
+  saveArtifacts,
+  setVersionComment,
+  type Artifact,
+} from "../lib/artifacts";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -168,6 +180,12 @@ interface UseMuseSessions {
   /** US-4: prefill text for the composer after `newFromSummary`. */
   prefill: string | null;
   clearPrefill: () => void;
+  /** US-12 + US-21: versioned artifacts per thread (extracted blocks). */
+  artifacts: Record<string, Artifact[]>;
+  /** US-21: 1-click restore — copy the version text via US-4 prefill. */
+  restoreArtifact: (sessionId: string, artifactId: string, v: number) => void;
+  /** US-21: anchored per-version comment (persisted). */
+  commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string) => void;
   /** US-5: move a thread to the archived list (persisted flag). */
   archiveSession: (sessionId: string) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
@@ -298,6 +316,8 @@ export function useMuseSessions(): UseMuseSessions {
   // after `newFromSummary`.
   const [summaries, setSummaries] = useState<Record<string, ThreadSummary>>({});
   const [prefill, setPrefill] = useState<string | null>(null);
+  // US-12 + US-21: versioned artifacts per thread (mirror of localStorage).
+  const [artifacts, setArtifacts] = useState<Record<string, Artifact[]>>({});
   // Latest logs for the render-detached compaction paths (`/compact` inside
   // sendInput, auto-compact effect): refs stay fresh where useCallback deps
   // would go stale.
@@ -381,6 +401,13 @@ export function useMuseSessions(): UseMuseSessions {
         if (sum !== null) storedSummaries[s.session_id] = sum;
       }
       setSummaries(storedSummaries);
+      // US-12 + US-21: restore stored artifacts per thread.
+      const storedArtifacts: Record<string, Artifact[]> = {};
+      for (const s of stored) {
+        const arts = loadArtifacts(s.session_id);
+        if (arts.length > 0) storedArtifacts[s.session_id] = arts;
+      }
+      setArtifacts(storedArtifacts);
       setWorkspaceState(storedWorkspace);
       setActiveId(
         storedActive &&
@@ -529,6 +556,39 @@ export function useMuseSessions(): UseMuseSessions {
       }
     }
   }, [logs, doCompact]);
+
+  // US-12 + US-21: extract assistant fenced blocks into versioned artifacts.
+  // Only closed assistant entries not yet anchoring a version are merged:
+  // a streaming entry keeps its id while its text grows, so extracting it
+  // early would freeze a partial v1. The effect is idempotent and never
+  // loops (it writes artifacts, not logs).
+  useEffect(() => {
+    let changed = false;
+    const next: Record<string, Artifact[]> = { ...artifacts };
+    for (const [sid, log] of Object.entries(logs)) {
+      const cur = next[sid] ?? [];
+      const anchored = new Set<string>();
+      for (const a of cur) {
+        for (const ver of a.versions) anchored.add(ver.sourceEntryId);
+      }
+      const fresh = log.filter(
+        (e) => e.role === "assistant" && e.open !== true && !anchored.has(e.id),
+      );
+      if (fresh.length === 0) continue;
+      const merged = mergeAssistantBlocks(
+        cur,
+        sid,
+        fresh.map((e) => ({ entryId: e.id, text: e.text, ts: e.ts })),
+      );
+      if (JSON.stringify(merged) !== JSON.stringify(cur)) {
+        next[sid] = merged;
+        saveArtifacts(sid, merged);
+        changed = true;
+      }
+    }
+    if (changed) setArtifacts(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logs]);
 
   function ensureSessionRow(sessionId: string, ws: string | null): void {
     if (tombstoned.current?.has(sessionId)) return;
@@ -913,6 +973,36 @@ export function useMuseSessions(): UseMuseSessions {
 
   const clearPrefill = useCallback(() => setPrefill(null), []);
 
+  /**
+   * US-21: 1-click restore — the version text goes through the US-4
+   * composer prefill, so nothing is sent until the user presses Send.
+   */
+  const restoreArtifact = useCallback(
+    (sessionId: string, artifactId: string, v: number) => {
+      const text = findVersionText(artifacts[sessionId] ?? [], artifactId, v);
+      if (text === null) {
+        setError(`restore failed: version v${v} not found in this thread.`);
+        return;
+      }
+      setPrefill(text);
+    },
+    [artifacts],
+  );
+
+  /** US-21: anchored per-version comment (state + disk). */
+  const commentArtifact = useCallback(
+    (sessionId: string, artifactId: string, v: number, comment: string) => {
+      setArtifacts((cur) => {
+        const list = cur[sessionId] ?? [];
+        const next = setVersionComment(list, artifactId, v, comment);
+        if (JSON.stringify(next) === JSON.stringify(list)) return cur;
+        saveArtifacts(sessionId, next);
+        return { ...cur, [sessionId]: next };
+      });
+    },
+    [],
+  );
+
   const approve = useCallback(
     async (sessionId: string, approvalId: string, choiceId: string) => {
       try {
@@ -1021,7 +1111,15 @@ export function useMuseSessions(): UseMuseSessions {
       setApprovals((cur) => cur.filter((a) => a.session_id !== sessionId));
       setInputRequests((cur) => cur.filter((r) => r.session_id !== sessionId));
       // US-4: a killed thread takes its summary with it.
+      // US-12 + US-21: and its artifacts.
       dropSummary(sessionId);
+      dropArtifacts(sessionId);
+      setArtifacts((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       setSummaries((cur) => {
         if (!(sessionId in cur)) return cur;
         const next = { ...cur };
@@ -1233,6 +1331,9 @@ export function useMuseSessions(): UseMuseSessions {
     newFromSummary,
     prefill,
     clearPrefill,
+    artifacts,
+    restoreArtifact,
+    commentArtifact,
     error,
     evtCount,
   };
