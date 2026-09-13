@@ -250,9 +250,6 @@ small {
 
 .session-list-header button {
   font-size: 12px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  border-radius: 10px;
   padding: 7px 10px;
 }
 
@@ -262,23 +259,19 @@ small {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
+/* Prototype rows: no card borders — a plain 13px row, active marked by
+ * surface background + a soft shadow, both themes alike. */
 .session-item {
-  border: 1px solid transparent;
   border-radius: 10px;
   padding: 8px 10px;
 }
 
 .session-item.active {
   background: var(--bg);
-  border-color: var(--line);
   box-shadow: 0 2px 6px #00000008;
-}
-
-body.dark .session-item.active {
-  border-color: var(--blue);
 }
 
 .session-select {
@@ -296,29 +289,40 @@ body.dark .session-item.active {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-code);
-  font-size: 0.9rem;
+  font-size: 13px;
 }
 
+/* Second line (date + row actions) only on hover/focus: quiet list,
+ * full control on demand. focus-within keeps keyboard users covered. */
 .session-meta {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 0.8rem;
+  opacity: 0;
+}
+
+.session-item:hover .session-meta,
+.session-item:focus-within .session-meta {
+  opacity: 1;
+}
+
+.session-meta .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-actions {
   display: flex;
   gap: 4px;
+  flex: none;
 }
 
 .session-actions button {
   padding: 4px 8px;
   font-size: 0.8rem;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  border-radius: var(--radius-sm);
 }
 
 /* ---- US-5 threads sidebar ---- */
@@ -329,10 +333,7 @@ body.dark .session-item.active {
 }
 
 .threads-live {
-  color: var(--ok);
-  border: 1px solid var(--ok);
-  border-radius: 8px;
-  padding: 0 6px;
+  color: var(--green);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -343,7 +344,7 @@ body.dark .session-item.active {
 
 .archived-section {
   margin-top: 8px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--line);
   padding-top: 6px;
 }
 
@@ -792,15 +793,15 @@ body.dark .approval-actions .deny {
   display: inline-block;
   font-size: 0.78rem;
   font-weight: 600;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0 6px;
   white-space: nowrap;
 }
 
 .rule-allow {
-  color: var(--ok);
-  border-color: var(--ok);
+  color: var(--green);
+  border-color: var(--green);
 }
 
 .rule-prompt {
@@ -820,14 +821,14 @@ body.dark .approval-actions .deny {
 }
 
 .approval-actions .remember {
-  border-color: var(--ok);
-  color: var(--ok);
+  border-color: var(--green);
+  color: var(--green);
   font-weight: 600;
   white-space: nowrap;
 }
 
 .allowlist {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--line);
   padding-top: 6px;
 }
 
@@ -856,7 +857,7 @@ body.dark .approval-actions .deny {
   font-family: ui-monospace, Consolas, monospace;
   font-size: 0.85rem;
   background: var(--code-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0 6px;
 }
@@ -1297,7 +1298,7 @@ body.dark .composer textarea::placeholder {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--line);
   background: var(--panel);
   font-size: 0.85rem;
 }
@@ -1313,10 +1314,7 @@ body.dark .composer textarea::placeholder {
 .compact-flag {
   font-size: 0.75rem;
   font-weight: 700;
-  color: var(--ok);
-  border: 1px solid var(--ok);
-  border-radius: 4px;
-  padding: 0 6px;
+  color: var(--green);
   white-space: nowrap;
 }
 
@@ -1696,6 +1694,7 @@ body.dark .composer textarea::placeholder {
   font-weight: 600;
   font-size: 12px;
   padding: 0 4px;
+  color: var(--muted);
 }
 
 .project-group .session-items {

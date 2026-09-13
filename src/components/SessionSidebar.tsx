@@ -179,7 +179,10 @@ export function SessionSidebar({
 
   return (
     <div className="session-list" role="navigation" aria-label="Threads">
-      <div className="session-list-header">
+      <div
+        className="session-list-header"
+        title="↑↓ or Ctrl+Tab / Ctrl+Shift+Tab to switch threads"
+      >
         <span>
           Threads ({active.length}
           <span aria-live="polite" title={`${runningCount} running`}>
@@ -191,9 +194,6 @@ export function SessionSidebar({
           + New
         </button>
       </div>
-      <p className="muted threads-hint" title="Keyboard thread switch">
-        ↑↓ or Ctrl+Tab / Ctrl+Shift+Tab to switch
-      </p>
       {active.length === 0 && (
         <p className="muted">No active threads. Start one to begin.</p>
       )}
