@@ -57,6 +57,14 @@ pub struct PollResult {
     pub events: Vec<DrainedEvent>,
 }
 
+/// Workspace scope verdict: whether `path` is confined to the workspace root.
+/// Wire shape is `{in_scope, reason}` (snake_case, like the other commands).
+#[derive(Debug, Serialize, Clone)]
+pub struct ScopeCheck {
+    pub in_scope: bool,
+    pub reason: String,
+}
+
 /// A pending approval: what `approval/decide` needs beyond the choice itself.
 /// `requirement_id` is the opaque race-guard token from `approval/requested`,
 /// echoed back verbatim (stale values are rejected by the host, surfaced as
@@ -408,8 +416,18 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                     .unwrap_or("agentMessage")
                     .to_string();
                 if let Ok(mut kinds) = state.item_kinds.lock() {
-                    kinds.insert((sid.to_string(), item_id.to_string()), kind);
+                    kinds.insert((sid.to_string(), item_id.to_string()), kind.clone());
                 }
+                // US-10: surface the item start so the UI paints the
+                // reflexive phase before the first delta lands (even when
+                // no delta ever follows for this item).
+                emit(
+                    app,
+                    "status",
+                    sid,
+                    "item_started",
+                    json!({"itemId": item_id, "itemKind": kind}).to_string(),
+                );
             }
         }
         "item/delta" => {
@@ -635,6 +653,104 @@ fn build_input_request_payload(p: &Value) -> Option<Value> {
         "questions": qs,
         "itemId": p.get("itemId").and_then(Value::as_str).unwrap_or(""),
     }))
+}
+
+/// Lexically normalize a path: resolve `.`/`..` and duplicate separators
+/// without touching the filesystem. This neutralizes `..` escapes even when
+/// the caller passes a non-canonical path; symlinks are neutralized by the
+/// `canonicalize()` call in `check_scope` before this comparison runs.
+fn normalize_lexical(p: &std::path::Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for comp in p.components() {
+        match comp {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            c => out.push(c.as_os_str()),
+        }
+    }
+    if out.as_os_str().is_empty() {
+        out.push(".");
+    }
+    out
+}
+
+/// Pure workspace-confinement verdict over (already-resolved) paths.
+///
+/// Both inputs should be canonical (`canonicalize()` resolves symlinks and
+/// `..`); they are normalized lexically first anyway so a stray `..` can
+/// never slip through `starts_with`. Component-wise comparison means a
+/// sibling like `/ws-evil` is NOT "inside" `/ws`.
+fn check_scope_pure(canonical_root: &std::path::Path, canonical_candidate: &std::path::Path) -> ScopeCheck {
+    let root = normalize_lexical(canonical_root);
+    let cand = normalize_lexical(canonical_candidate);
+    if cand == root {
+        return ScopeCheck {
+            in_scope: true,
+            reason: format!("path is the workspace root: {}", root.display()),
+        };
+    }
+    if cand.starts_with(&root) {
+        return ScopeCheck {
+            in_scope: true,
+            reason: format!(
+                "path is inside the workspace: {} (root {})",
+                cand.display(),
+                root.display()
+            ),
+        };
+    }
+    ScopeCheck {
+        in_scope: false,
+        reason: format!(
+            "path is outside the workspace root {}: {}",
+            root.display(),
+            cand.display()
+        ),
+    }
+}
+
+/// Scope guard (US-22): is `path` confined to the current workspace?
+/// Outside the workspace → `in_scope: false` with an explicit reason
+/// (the US-18 `@`-mention flow maps that to ask/deny). Missing or
+/// unresolvable workspace, and empty paths, are hard errors.
+#[tauri::command]
+fn check_scope(state: State<'_, AppState>, path: String) -> Result<ScopeCheck, String> {
+    if path.trim().is_empty() {
+        return Err("empty path".to_string());
+    }
+    let root = state
+        .workspace
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .clone()
+        .ok_or_else(|| "no workspace selected — pick a folder first".to_string())?;
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve workspace {}: {e}", root.display()))?;
+    // Relative candidates resolve against the workspace; absolute ones stand
+    // alone. Existing paths are canonicalized (resolves symlinks); missing
+    // paths (e.g. a file about to be created) fall back to a lexical check,
+    // flagged as such since symlinks on them cannot be resolved.
+    let abs = {
+        let raw = PathBuf::from(&path);
+        if raw.is_absolute() {
+            raw
+        } else {
+            canonical_root.join(raw)
+        }
+    };
+    let (canonical_candidate, lexical_only) = match abs.canonicalize() {
+        Ok(p) => (p, false),
+        Err(_) => (normalize_lexical(&abs), true),
+    };
+    let mut verdict = check_scope_pure(&canonical_root, &canonical_candidate);
+    if lexical_only {
+        verdict.reason.push_str(" (path does not exist: lexical check only, symlinks unresolved)");
+    }
+    Ok(verdict)
 }
 
 fn resolve_workspace(
@@ -1109,6 +1225,74 @@ mod tests {
         assert_eq!(qs.len(), 1);
         assert_eq!(qs[0]["id"], "q2");
     }
+
+    fn scope_root() -> PathBuf {
+        PathBuf::from("/tmp/muse-ws")
+    }
+
+    #[test]
+    fn scope_root_itself_is_in_scope() {
+        let v = check_scope_pure(&scope_root(), &scope_root());
+        assert!(v.in_scope, "{}", v.reason);
+    }
+
+    #[test]
+    fn scope_nested_path_is_in_scope() {
+        let v = check_scope_pure(&scope_root(), &PathBuf::from("/tmp/muse-ws/src/a.ts"));
+        assert!(v.in_scope, "{}", v.reason);
+    }
+
+    #[test]
+    fn scope_outside_path_is_denied_with_reason() {
+        let v = check_scope_pure(&scope_root(), &PathBuf::from("/etc/passwd"));
+        assert!(!v.in_scope, "{}", v.reason);
+        assert!(v.reason.contains("outside"), "{}", v.reason);
+        assert!(v.reason.contains("/etc/passwd"), "{}", v.reason);
+    }
+
+    #[test]
+    fn scope_dotdot_escape_is_denied() {
+        // `..` must not slip through `starts_with`: the pure check
+        // normalizes lexically even when given a non-canonical path.
+        let v = check_scope_pure(&scope_root(), &PathBuf::from("/tmp/muse-ws/sub/../../evil"));
+        assert!(!v.in_scope, "{}", v.reason);
+    }
+
+    #[test]
+    fn scope_sibling_prefix_is_not_inside() {
+        // Component-wise comparison: `/tmp/muse-ws-evil` shares a string
+        // prefix but is a different directory.
+        let v = check_scope_pure(&scope_root(), &PathBuf::from("/tmp/muse-ws-evil/x"));
+        assert!(!v.in_scope, "{}", v.reason);
+    }
+
+    #[test]
+    fn scope_dot_segments_are_neutralized() {
+        let v = check_scope_pure(&scope_root(), &PathBuf::from("/tmp/muse-ws/./sub"));
+        assert!(v.in_scope, "{}", v.reason);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn scope_symlink_escape_is_denied_after_canonicalize() {
+        // End-to-end pattern of the command: canonicalize (resolves the
+        // symlink) then the pure verdict. `link` lives inside the root but
+        // points outside, so the verdict must be out-of-scope.
+        let base = std::env::temp_dir().join(format!("muse-scope-test-{}", std::process::id()));
+        let root = base.join("ws");
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::os::unix::fs::symlink("/tmp", root.join("sub").join("link")).unwrap();
+        let canonical_root = root.canonicalize().unwrap();
+        let canonical_cand = root.join("sub").join("link").join("x").canonicalize();
+        // `/tmp/x` may not exist; canonicalize the link itself instead.
+        let canonical_cand = match canonical_cand {
+            Ok(p) => p,
+            Err(_) => root.join("sub").join("link").canonicalize().unwrap(),
+        };
+        let v = check_scope_pure(&canonical_root, &canonical_cand);
+        assert!(!v.in_scope, "{}", v.reason);
+        std::fs::remove_dir_all(&base).ok();
+    }
 }
 
 fn main() {
@@ -1135,6 +1319,7 @@ fn main() {
             cancel_session,
             kill_session,
             set_workspace,
+            check_scope,
             poll_events,
         ])
         .build(tauri::generate_context!())
