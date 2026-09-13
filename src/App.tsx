@@ -10,6 +10,7 @@ import { StreamView } from "./components/StreamView";
 import { ApprovalPanel } from "./components/ApprovalPanel";
 import { InputPanel } from "./components/InputPanel";
 import { Composer } from "./components/Composer";
+import { CompactBar } from "./components/CompactBar";
 import "./App.css";
 
 export default function App() {
@@ -37,6 +38,11 @@ export default function App() {
     subagentFollowup,
     subagentReadResult,
     subagentDrilldown,
+    summaries,
+    compactSession,
+    newFromSummary,
+    prefill,
+    clearPrefill,
     error,
     backendMissing,
     evtCount,
@@ -74,6 +80,7 @@ export default function App() {
           sessions={sessions}
           activeId={activeId}
           pendingCounts={pendingCounts}
+          compactedIds={Object.keys(summaries)}
           onSelect={setActive}
           onNew={startSession}
           onCancel={cancelSession}
@@ -133,12 +140,20 @@ export default function App() {
                   subagentDrilldown(active.session_id, entry.childSessionId),
               }}
             />
+            <CompactBar
+              entryCount={activeLog.length}
+              summary={summaries[active.session_id] ?? null}
+              onCompact={() => compactSession(active.session_id)}
+              onNewFromSummary={() => void newFromSummary(active.session_id)}
+            />
             <Composer
               disabled={workspace === null || backendMissing}
               running={active.running}
               workspace={workspace}
               onSend={(text) => void sendInput(active.session_id, text)}
               onCancel={() => void cancelSession(active.session_id)}
+              prefill={prefill}
+              onPrefillConsumed={clearPrefill}
             />
           </div>
         )}

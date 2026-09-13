@@ -630,6 +630,40 @@ button:hover:not(:disabled) {
   color: var(--muted);
 }
 
+/* US-4 compaction strip: flat panel row between stream and composer. */
+.compact-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 0.85rem;
+}
+
+.compact-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.compact-flag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ok);
+  border: 1px solid var(--ok);
+  border-radius: 4px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.compact-primary {
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
 .error,
 .error-banner {
   color: var(--danger);
