@@ -27,7 +27,7 @@ export function SkillPanel({ skills, onToggle, onInvoke, onTraceSuggest }: Props
 
   return (
     <section className="integration-panel" aria-label="Skills">
-      <h3>Skills</h3>
+      <h3>Compétences</h3>
       <ul className="integration-list">
         {skills.map((s) => {
           const view = getSkillDetail(s, false);

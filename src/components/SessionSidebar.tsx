@@ -10,6 +10,7 @@ import {
 import type { Project, ThreadProjectMap } from "../lib/projects";
 
 interface Props {
+  showArchived?: boolean;
   sessions: MuseSession[];
   activeId: string | null;
   pendingCounts: Record<string, number>;
@@ -49,6 +50,7 @@ function timeOf(ts: number): string {
  */
 export function SessionSidebar({
   sessions,
+  showArchived = false,
   activeId,
   pendingCounts,
   compactedIds,
@@ -69,7 +71,11 @@ export function SessionSidebar({
   // US-3: group active threads under their project heading; threads with
   // no (or a dangling) attachment stay under Ungrouped. Null = flat list.
   const groups = useMemo(() => {
-    if (projects === undefined || threadProjects === undefined || projects.length === 0) {
+    if (
+      projects === undefined ||
+      threadProjects === undefined ||
+      projects.length === 0
+    ) {
       return null;
     }
     const per = projects
@@ -78,8 +84,13 @@ export function SessionSidebar({
         items: active.filter((s) => threadProjects[s.session_id] === p.id),
       }))
       .filter((g) => g.items.length > 0);
-    const groupedIds = new Set(per.flatMap((g) => g.items.map((s) => s.session_id)));
-    return { per, ungrouped: active.filter((s) => !groupedIds.has(s.session_id)) };
+    const groupedIds = new Set(
+      per.flatMap((g) => g.items.map((s) => s.session_id)),
+    );
+    return {
+      per,
+      ungrouped: active.filter((s) => !groupedIds.has(s.session_id)),
+    };
   }, [projects, threadProjects, active]);
   const projectNameOf = (sessionId: string): string | null => {
     if (projects === undefined || threadProjects === undefined) return null;
@@ -125,7 +136,9 @@ export function SessionSidebar({
             data-running={s.running}
             title={s.running ? "running" : "stopped"}
           />
-          <span className="session-title">{s.title || shortId(s.session_id)}</span>
+          <span className="session-title">
+            {s.title || shortId(s.session_id)}
+          </span>
           {projectName !== null && (
             <span className="project-badge" title={`Project: ${projectName}`}>
               {projectName}
@@ -137,7 +150,10 @@ export function SessionSidebar({
             </span>
           )}
           {compactedIds?.includes(s.session_id) && (
-            <span className="compact-flag" title="Thread compacté — résumé disponible">
+            <span
+              className="compact-flag"
+              title="Thread compacté — résumé disponible"
+            >
               compacté
             </span>
           )}
@@ -183,7 +199,7 @@ export function SessionSidebar({
         title="↑↓ or Ctrl+Tab / Ctrl+Shift+Tab to switch threads"
       >
         <span>
-          Threads ({active.length}
+          Tâches ({active.length}
           <span aria-live="polite" title={`${runningCount} running`}>
             {runningCount > 0 ? `, ${runningCount} live` : ""}
           </span>
@@ -194,14 +210,14 @@ export function SessionSidebar({
           className="icon"
           onClick={onNew}
           disabled={!canStart}
-          title="New session"
-          aria-label="New thread"
+          title="Nouvelle tâche"
+          aria-label="Nouvelle tâche"
         >
           +
         </button>
       </div>
       {active.length === 0 && (
-        <p className="muted">No active threads. Start one to begin.</p>
+        <p className="muted">Vos tâches apparaîtront ici.</p>
       )}
       {groups === null ? (
         <ul
@@ -231,7 +247,7 @@ export function SessionSidebar({
           {groups.ungrouped.length > 0 && (
             <div className="project-group">
               <div className="project-group-header muted">
-                Ungrouped ({groups.ungrouped.length})
+                Sans projet ({groups.ungrouped.length})
               </div>
               <ul
                 className="session-items"
@@ -244,45 +260,45 @@ export function SessionSidebar({
           )}
         </div>
       )}
-      {archived.length > 0 && (
+      {showArchived && archived.length > 0 && (
         <div className="archived-section">
           <div className="section-label">Archivés ({archived.length})</div>
           <ul className="session-items" aria-label="Archived threads">
-              {archived.map((s) => (
-                <li key={s.session_id} className="session-item archived">
-                  <button
-                    className="session-select"
-                    onClick={() => onSelect(s.session_id)}
-                    title={s.session_id}
-                  >
-                    <span
-                      className="dot"
-                      data-running={s.running}
-                      title={s.running ? "running" : "stopped"}
-                    />
-                    <span className="session-title">
-                      {s.title || shortId(s.session_id)}
-                    </span>
-                  </button>
-                  <div className="session-meta">
-                    <span className="muted">{timeOf(s.createdAt)}</span>
-                    <span className="session-actions">
-                      <button
-                        onClick={() => onRestore(s.session_id)}
-                        title="Restore thread to the active list"
-                      >
-                        Restore
-                      </button>
-                      <button
-                        onClick={() => onKill(s.session_id)}
-                        title="Kill session and delete its local history"
-                      >
-                        Del
-                      </button>
-                    </span>
-                  </div>
-                </li>
-              ))}
+            {archived.map((s) => (
+              <li key={s.session_id} className="session-item archived">
+                <button
+                  className="session-select"
+                  onClick={() => onSelect(s.session_id)}
+                  title={s.session_id}
+                >
+                  <span
+                    className="dot"
+                    data-running={s.running}
+                    title={s.running ? "running" : "stopped"}
+                  />
+                  <span className="session-title">
+                    {s.title || shortId(s.session_id)}
+                  </span>
+                </button>
+                <div className="session-meta">
+                  <span className="muted">{timeOf(s.createdAt)}</span>
+                  <span className="session-actions">
+                    <button
+                      onClick={() => onRestore(s.session_id)}
+                      title="Restore thread to the active list"
+                    >
+                      Restore
+                    </button>
+                    <button
+                      onClick={() => onKill(s.session_id)}
+                      title="Kill session and delete its local history"
+                    >
+                      Del
+                    </button>
+                  </span>
+                </div>
+              </li>
+            ))}
           </ul>
         </div>
       )}

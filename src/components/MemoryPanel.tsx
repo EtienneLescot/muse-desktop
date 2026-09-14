@@ -37,7 +37,7 @@ export function MemoryPanel({
 }: Props) {
   const [text, setText] = useState("");
   const [source, setSource] = useState("user");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   function submit(): void {
     if (text.trim().length === 0) return;

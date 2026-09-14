@@ -79,7 +79,7 @@ export function ProjectsPanel({
     <div className="projects-panel">
       <div className="session-list-header">
         <span>
-          Projects ({projects.length}/{MAX_PROJECTS})
+          Projets ({projects.length}/{MAX_PROJECTS})
         </span>
       </div>
       <div className="project-create">
@@ -87,15 +87,15 @@ export function ProjectsPanel({
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="New project name"
-          aria-label="New project name"
+          placeholder="Nom du projet"
+          aria-label="Nom du projet"
           maxLength={80}
         />
         <textarea
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
-          placeholder="Instructions prepended to sent input (optional)"
-          aria-label="New project instructions"
+          placeholder="Instructions ajoutées aux demandes (facultatif)"
+          aria-label="Instructions du projet"
           rows={2}
         />
         <button
@@ -104,7 +104,7 @@ export function ProjectsPanel({
           title={
             projects.length >= MAX_PROJECTS
               ? "Project quota reached"
-              : "Create project"
+              : "Créer le projet"
           }
         >
           + Add project
@@ -116,7 +116,7 @@ export function ProjectsPanel({
         </p>
       )}
       {projects.length === 0 && (
-        <p className="muted">No projects yet. Group threads and share instructions.</p>
+        <p className="muted">Aucun projet pour le moment. Group threads and share instructions.</p>
       )}
       <ul className="project-items">
         {projects.map((p) => (

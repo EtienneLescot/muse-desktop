@@ -693,6 +693,9 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
  */
 export function useMuseSessions(): UseMuseSessions {
   const [sessions, setSessions] = useState<MuseSession[]>([]);
+  // Do not persist the initial empty render before boot restores history.
+  // A state gate also protects StrictMode's setup/cleanup/setup replay.
+  const [historyReady, setHistoryReady] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
@@ -911,6 +914,7 @@ export function useMuseSessions(): UseMuseSessions {
           ? storedActive
           : (stored.find((s) => s.archived !== true)?.session_id ?? null),
       );
+      setHistoryReady(true);
     }
 
     // Outside the Tauri webview there is no backend: local history stays
@@ -997,12 +1001,14 @@ export function useMuseSessions(): UseMuseSessions {
 
   // Write-through persistence.
   useEffect(() => {
+    if (!historyReady) return;
     saveSessions(sessions.map(({ running: _r, ...rest }) => rest));
-  }, [sessions]);
+  }, [sessions, historyReady]);
 
   useEffect(() => {
+    if (!historyReady) return;
     saveActiveId(activeId);
-  }, [activeId]);
+  }, [activeId, historyReady]);
 
   useEffect(() => {
     saveAllowlist(allowlist);
