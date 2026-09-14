@@ -27,9 +27,9 @@ const NEXT_DECISION: Record<AllowDecision, AllowDecision> = {
 };
 
 function badgeText(resolved: ResolvedApproval): string {
-  if (resolved.networkDefaultDeny) return "réseau sans règle : refusé";
-  if (resolved.rule === null) return "aucune règle : demande";
-  return `règle : ${resolved.rule.decision}`;
+  if (resolved.networkDefaultDeny) return "network: no rule — denied";
+  if (resolved.rule === null) return "no rule — prompt";
+  return `rule: ${resolved.rule.decision}`;
 }
 
 /**
@@ -129,10 +129,10 @@ export function ApprovalPanel({
                 className={`rule-badge rule-${resolved.decision}`}
                 title={
                   resolved.rule !== null
-                    ? `Motif « ${resolved.rule.scope !== "" ? `${resolved.rule.pattern} · ${resolved.rule.scope}` : resolved.rule.pattern} »`
+                    ? `Pattern ${resolved.rule.scope !== "" ? `${resolved.rule.pattern} · ${resolved.rule.scope}` : resolved.rule.pattern}`
                     : resolved.networkDefaultDeny
-                      ? "Scope réseau sans règle allow : refus effectif"
-                      : "Aucune règle allowlist ne correspond"
+                      ? "Network scope without an allow rule: effectively denied"
+                      : "No matching allowlist rule"
                 }
               >
                 {badgeText(resolved)}
@@ -140,7 +140,7 @@ export function ApprovalPanel({
               <pre>{a.summary}</pre>
               {scopes.length > 0 && (
                 <div className="muted approval-scope" title="Host scope">
-                  scope : {scopes.join(" · ")}
+                  scope: {scopes.join(" · ")}
                 </div>
               )}
             </div>
@@ -167,7 +167,7 @@ export function ApprovalPanel({
               {allowChoice !== undefined && (
                 <button
                   className="remember"
-                  title={`Approuver et mémoriser : motif « ${allowChoice.scope !== "" ? `${a.toolName} · ${allowChoice.scope}` : a.toolName} » en allow`}
+                  title={`Approve and remember: pattern "${allowChoice.scope !== "" ? `${a.toolName} · ${allowChoice.scope}` : a.toolName}" as allow`}
                   onClick={() => onRemember(a, allowChoice.choiceId)}
                 >
                   Toujours autoriser
@@ -180,32 +180,32 @@ export function ApprovalPanel({
       {rules.length > 0 && (
         <div className="allowlist">
           <div className="muted allowlist-title">
-            Allowlist ({rules.length}) — motif + scope persistés après restart
+            Allowlist ({rules.length}) — pattern + scope persisted across restarts
           </div>
           <ul className="allowlist-rows">
             {rules.map((r) => (
               <li key={r.id} className="allowlist-row">
                 <button
                   className={`rule-badge rule-${r.decision}`}
-                  title="Changer la décision (allow → prompt → forbidden)"
+                  title="Cycle decision (allow → prompt → forbidden)"
                   onClick={() => onRuleDecision(r.id, NEXT_DECISION[r.decision])}
                 >
                   {r.decision}
                 </button>
-                <code className="allowlist-pattern" title="Motif mémorisé">
+                <code className="allowlist-pattern" title="Remembered pattern">
                   {r.pattern}
                 </code>
                 {r.scope !== "" && (
-                  <span className="muted allowlist-scope" title="Scope mémorisé">
+                  <span className="muted allowlist-scope" title="Remembered scope">
                     {r.scope}
                   </span>
                 )}
                 <button
                   className="allowlist-revoke"
-                  title="Révoquer cette règle"
+                  title="Revoke this rule"
                   onClick={() => onRevoke(r.id)}
                 >
-                  Révoquer
+                  Revoke
                 </button>
               </li>
             ))}

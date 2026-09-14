@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for muse-desktop dev (V1, unsigned local builds).",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "shell:allow-execute",
@@ -10,6 +12,10 @@
     "shell:allow-kill",
     "shell:allow-stdin-write",
     "dialog:allow-open",
-    "dialog:allow-message"
+    "dialog:allow-message",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging"
   ]
 }

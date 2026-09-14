@@ -44,11 +44,8 @@ pub fn new_command_id() -> String {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
     let mut rand = [0u8; 10];
-    // Best-effort randomness; collisions only risk duplicate idempotency keys.
-    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
-        use std::io::Read;
-        let _ = f.read_exact(&mut rand);
-    }
+    // OS randomness on Windows as well as Unix.
+    rand.copy_from_slice(&uuid::Uuid::new_v4().as_bytes()[..10]);
     let r = u128::from_be_bytes([
         0, 0, 0, 0, 0, 0, rand[0], rand[1], rand[2], rand[3], rand[4], rand[5], rand[6], rand[7],
         rand[8], rand[9],

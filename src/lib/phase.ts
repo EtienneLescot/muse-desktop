@@ -7,12 +7,12 @@
  *
  * The placeholder entry carries empty text while open: the first delta
  * coalesces into it, so no label ever leaks into the streamed content. The
- * "réflexion…" label is rendered by StreamView, never stored in the log.
+ * "thinking…" label is rendered by StreamView, never stored in the log.
  */
 import type { LogEntry } from "./persist";
 
 /** Label rendered (never stored) for an open entry with no text yet. */
-export const REFLEXIVE_LABEL = "réflexion…";
+export const REFLEXIVE_LABEL = "thinking…";
 
 /** Item kinds routed to the subagent lane (mirrors main.rs routing). */
 const SUBAGENT_ITEM_KINDS = new Set(["subagent", "workflow", "reminderchild"]);

@@ -42,7 +42,7 @@ export function ImportPanel({ imported, notes, onImportText, onDismiss }: Props)
         className="collab-paste"
         value={pasted}
         onChange={(e) => setPasted(e.target.value)}
-        placeholder="Coller ici le contenu d'un fichier de config…"
+        placeholder="Paste the contents of a config file here…"
         aria-label="Config file content"
         rows={3}
       />
@@ -51,7 +51,7 @@ export function ImportPanel({ imported, notes, onImportText, onDismiss }: Props)
           Importer le texte
         </button>
         <button type="button" onClick={() => fileRef.current?.click()}>
-          Choisir un fichier…
+          Choose a file…
         </button>
         <input
           ref={fileRef}
@@ -71,15 +71,15 @@ export function ImportPanel({ imported, notes, onImportText, onDismiss }: Props)
         </ul>
       )}
       {imported.length === 0 ? (
-        <p className="muted">Aucune session reprise pour l'instant.</p>
+        <p className="muted">No imported conversations yet.</p>
       ) : (
         <ul className="collab-list">
           {imported.map((s) => (
             <li key={s.id} className="collab-row">
               <span title={s.id}>{s.title}</span>
               <span className="muted">{s.source}</span>
-              <button type="button" onClick={() => onDismiss(s.id)} title="Retirer de la liste des reprises">
-                Retirer
+              <button type="button" onClick={() => onDismiss(s.id)} title="Remove from the resume list">
+                Remove
               </button>
             </li>
           ))}

@@ -33,13 +33,13 @@ function timeOf(ts: number): string {
 function roleLabel(e: LogEntry): string {
   switch (e.role) {
     case "user":
-      return "Vous";
+      return "You";
     case "assistant":
       return "Muse";
     case "subagent":
       return `Agent ${e.agentId ?? ""}`;
     case "tool":
-      return "Outil";
+      return "Tool";
     case "system":
       return "Information";
   }
@@ -111,7 +111,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
     <div className="stream" onScroll={onScroll} role="log" aria-live="off">
       {entries.length === 0 && (
         <p className="muted">
-          Commencez la conversation. Votre historique est conservé localement.
+          Start a conversation. Your history is saved locally.
         </p>
       )}
       {entries.map((e) => {
@@ -157,7 +157,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                   onClick={() => controls.onInterrupt(agentOf(e))}
                   title="subagent/interrupt"
                 >
-                  Interrompre
+                  Interrupt
                 </button>
                 <button
                   type="button"
@@ -165,7 +165,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                   onClick={() => controls.onStop(agentOf(e))}
                   title="subagent/stop"
                 >
-                  Arrêter
+                  Stop
                 </button>
                 <button
                   type="button"
@@ -173,7 +173,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                   onClick={() => controls.onResume(agentOf(e))}
                   title="subagent/resume"
                 >
-                  Reprendre
+                  Resume
                 </button>
                 <button
                   type="button"
@@ -184,7 +184,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                   }}
                   title="subagent/followupTask"
                 >
-                  Préciser
+                  Follow up
                 </button>
                 <button
                   type="button"
@@ -192,7 +192,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                   onClick={() => void runResult(e, "result")}
                   title="subagent/readResult"
                 >
-                  Lire le résultat
+                  Read result
                 </button>
                 {e.childSessionId && (
                   <button
@@ -201,7 +201,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                     onClick={() => void runResult(e, "drilldown")}
                     title="session/read"
                   >
-                    Conversation de l’agent
+                    Agent conversation
                   </button>
                 )}
               </div>
@@ -211,7 +211,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                 <input
                   type="text"
                   value={followupText}
-                  placeholder="Votre instruction pour cet agent…"
+                  placeholder="Your instruction for this agent…"
                   onChange={(ev) => setFollowupText(ev.target.value)}
                   onKeyDown={(ev) => {
                     if (ev.key === "Enter") sendFollowup(e);
@@ -220,10 +220,10 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                       setFollowupText("");
                     }
                   }}
-                  aria-label="Instruction pour cet agent"
+                  aria-label="Follow-up instruction"
                 />
                 <button type="button" onClick={() => sendFollowup(e)}>
-                  Envoyer
+                  Send
                 </button>
               </div>
             )}
@@ -265,7 +265,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
             bottomRef.current?.scrollIntoView({ block: "end" });
           }}
         >
-          ↓ Derniers messages
+          ↓ Latest messages
         </button>
       )}
     </div>

@@ -5,14 +5,14 @@
  * Zero imports: runnable under the built-in node:test runner and reusable
  * from the Composer and the hook without side effects.
  *
- * - A memory entry is `{ id, text, source, createdAt }` (AC: datée/sourcée).
+ * - A memory entry is `{ id, text, source, createdAt }` (AC: dated/sourced).
  * - Entries older than STALE_AFTER_MS (30 days) are stale: callers must
  *   surface the age badge / warning and never silently override current
  *   evidence with a stale entry (stale 0.92-1.00 [arXiv] per SPEC US-20).
  * - Entries are @-mentionable as `@mem/<id-prefix>` chips: expansion
  *   inlines the entry text flagged with source + age (stale flagged).
- * - The SCAN nudge is a lightweight periodic reminder (re-répétition
- *   allégée 20-300 tokens [HN]) to review memories, not an auto-rewrite.
+ * - The SCAN nudge is a lightweight periodic reminder (a 20-300 token
+ *   light re-echo [HN]) to review memories, not an auto-rewrite.
  *
  * Persistence lives under `muse-desktop.memory.*` localStorage keys,
  * best-effort like persist.ts / compact.ts.
@@ -77,11 +77,11 @@ export function isStale(entry: MemoryEntry, now: number): boolean {
   return now - entry.createdAt > STALE_AFTER_MS;
 }
 
-/** Short age badge: `aujourd'hui`, `12 j`, or `45 j · stale`. */
+/** Short age badge: `today`, `12 d`, or `45 d · stale`. */
 export function ageLabel(entry: MemoryEntry, now: number): string {
   const d = ageDays(entry, now);
-  if (d < 1) return "aujourd'hui";
-  return isStale(entry, now) ? `${d} j · stale` : `${d} j`;
+  if (d < 1) return "today";
+  return isStale(entry, now) ? `${d} d · stale` : `${d} d`;
 }
 
 /** Build an entry, or null when the text is blank (never store empties). */
@@ -164,7 +164,7 @@ export function findMemoryByPrefix(
 
 /**
  * Expand `@mem/<prefix>` tokens into quoted context blocks. Stale entries
- * are inlined FLAGGED (`stale — à vérifier`, never a silent override);
+ * are inlined FLAGGED (`stale — review needed`, never a silent override);
  * unknown prefixes are left verbatim and reported in `missing` so the
  * caller can warn instead of silently dropping them.
  */
@@ -189,8 +189,8 @@ export function expandMemoryMentions(
       if (!used.some((u) => u.id === entry.id)) used.push(entry);
       const stale = isStale(entry, now);
       out +=
-        `> [mémoire ${entry.source} · ${ageLabel(entry, now)}] ${entry.text}` +
-        (stale ? "\n> ⚠ stale (> 30 j) — à vérifier, ne pas écraser la preuve courante" : "");
+        `> [memory ${entry.source} · ${ageLabel(entry, now)}] ${entry.text}` +
+        (stale ? "\n> ⚠ stale (> 30 d) — review needed, do not overwrite the current evidence" : "");
     }
     cursor = t.end;
   }
@@ -227,10 +227,10 @@ export function buildScanNudge(entries: MemoryEntry[], now: number): string {
         )
       : "—";
   return (
-    `SCAN mémoire (${entries.length} entrée(s), plus ancienne : ${oldest}) : ` +
+    `SCAN memory (${entries.length} entries, oldest: ${oldest}): ` +
     (stale > 0
-      ? `${stale} entrée(s) stale (> 30 j) — relire avant usage.`
-      : `aucune entrée stale — rien à revoir.`)
+      ? `${stale} stale entries (> 30 d) — re-read before use.`
+      : `no stale entries — nothing to review.`)
   );
 }
 

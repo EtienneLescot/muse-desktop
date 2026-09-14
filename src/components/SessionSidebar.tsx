@@ -122,26 +122,26 @@ export function SessionSidebar({
           className="session-select"
           aria-current={isActive ? "page" : undefined}
           onClick={() => onSelect(s.session_id)}
-          title={s.title || "Nouvelle conversation"}
+          title={s.title || "New conversation"}
         >
           <span
             className="dot"
             data-running={s.running}
-            title={s.running ? "En cours" : "Au repos"}
+            title={s.running ? "Working" : "Idle"}
           />
           <span className="session-title">
-            {s.title?.replace(/^Session [\w-]+$/, "Nouvelle conversation") ||
-              "Nouvelle conversation"}
+            {s.title?.replace(/^Session [\w-]+$/, "New conversation") ||
+              "New conversation"}
           </span>
           {pending > 0 && (
-            <span className="badge" title={`${pending} réponse(s) attendue(s)`}>
+            <span className="badge" title={`${pending} response(s) needed`}>
               {pending}
             </span>
           )}
         </button>
         <button
           className="conversation-more icon"
-          aria-label={`Actions : ${s.title || "Nouvelle conversation"}`}
+          aria-label={`Actions : ${s.title || "New conversation"}`}
           aria-haspopup="dialog"
           onClick={() => {
             setSelected(s);
@@ -160,12 +160,12 @@ export function SessionSidebar({
     <div className="session-list" role="navigation" aria-label="Conversations">
       <div
         className="section-label threads-label"
-        title="↑↓ pour parcourir · Ctrl+Tab pour changer de conversation"
+        title="↑↓ to navigate · Ctrl+Tab to switch conversations"
       >
         <span>
           Conversations ({active.length}
-          <span aria-live="polite" title={`${runningCount} en cours`}>
-            {runningCount > 0 ? `, ${runningCount} en cours` : ""}
+          <span aria-live="polite" title={`${runningCount} working`}>
+            {runningCount > 0 ? `, ${runningCount} working` : ""}
           </span>
           )
         </span>
@@ -174,19 +174,19 @@ export function SessionSidebar({
           className="icon"
           onClick={onNew}
           disabled={!canStart}
-          title="Nouvelle conversation"
-          aria-label="Nouvelle conversation"
+          title="New conversation"
+          aria-label="New conversation"
         >
           +
         </button>
       </div>
       {active.length === 0 && (
-        <p className="muted">Vos conversations apparaîtront ici.</p>
+        <p className="muted">Your conversations will appear here.</p>
       )}
       {groups === null ? (
         <ul
           className="session-items"
-          aria-label="Conversations récentes"
+          aria-label="Recent conversations"
           onKeyDown={onListKeyDown}
         >
           {active.map(renderThread)}
@@ -200,7 +200,7 @@ export function SessionSidebar({
               </summary>
               <ul
                 className="session-items"
-                aria-label={`Conversations du projet ${g.project.name}`}
+                aria-label={`Conversations in ${g.project.name}`}
               >
                 {g.items.map(renderThread)}
               </ul>
@@ -209,11 +209,11 @@ export function SessionSidebar({
           {groups.ungrouped.length > 0 && (
             <div className="project-group">
               <div className="project-group-header muted">
-                Sans projet ({groups.ungrouped.length})
+                Ungrouped ({groups.ungrouped.length})
               </div>
               <ul
                 className="session-items"
-                aria-label="Conversations sans projet"
+                aria-label="Ungrouped conversations"
               >
                 {groups.ungrouped.map(renderThread)}
               </ul>
@@ -223,25 +223,25 @@ export function SessionSidebar({
       )}
       {showArchived && archived.length > 0 && (
         <div className="archived-section">
-          <div className="section-label">Archivés ({archived.length})</div>
+          <div className="section-label">Archived ({archived.length})</div>
           <ul className="session-items" aria-label="Archived threads">
             {archived.map((s) => (
               <li key={s.session_id} className="session-item archived">
                 <button
                   className="session-select"
                   onClick={() => onSelect(s.session_id)}
-                  title={s.title || "Nouvelle conversation"}
+                  title={s.title || "New conversation"}
                 >
                   <span
                     className="dot"
                     data-running={s.running}
-                    title={s.running ? "En cours" : "Au repos"}
+                    title={s.running ? "Working" : "Idle"}
                   />
                   <span className="session-title">
                     {s.title?.replace(
                       /^Session [\w-]+$/,
-                      "Nouvelle conversation",
-                    ) || "Nouvelle conversation"}
+                      "New conversation",
+                    ) || "New conversation"}
                   </span>
                 </button>
                 <div className="session-meta">
@@ -269,24 +269,24 @@ export function SessionSidebar({
       <dialog
         ref={dialog}
         className="conversation-actions-dialog"
-        aria-label="Actions de la conversation"
+        aria-label="Conversation actions"
         onCancel={closeActions}
       >
         <header>
           <h2>
-            {confirmDelete ? "Supprimer cette conversation ?" : selected?.title}
+            {confirmDelete ? "Delete this conversation?" : selected?.title}
           </h2>
-          <button className="icon" aria-label="Fermer" onClick={closeActions}>
+          <button className="icon" aria-label="Close" onClick={closeActions}>
             <Icon name="close" />
           </button>
         </header>
         {confirmDelete ? (
           <>
             <p>
-              Son historique local sera supprimé. Cette action est définitive.
+              Its local history will be deleted. This cannot be undone.
             </p>
             <div className="dialog-buttons">
-              <button onClick={() => setConfirmDelete(false)}>Annuler</button>
+              <button onClick={() => setConfirmDelete(false)}>Cancel</button>
               <button
                 className="danger"
                 onClick={() => {
@@ -294,7 +294,7 @@ export function SessionSidebar({
                   closeActions();
                 }}
               >
-                Supprimer la conversation
+                Delete conversation
               </button>
             </div>
           </>
@@ -310,7 +310,7 @@ export function SessionSidebar({
                 }
               }}
             >
-              <label htmlFor="conversation-name">Nom de la conversation</label>
+              <label htmlFor="conversation-name">Conversation name</label>
               <div>
                 <input
                   id="conversation-name"
@@ -319,7 +319,7 @@ export function SessionSidebar({
                   onChange={(event) => setRename(event.target.value)}
                 />
                 <button type="submit" disabled={!rename.trim()}>
-                  Renommer
+                  Rename
                 </button>
               </div>
             </form>
@@ -330,7 +330,7 @@ export function SessionSidebar({
                   closeActions();
                 }}
               >
-                Arrêter la réponse
+                Stop response
               </button>
             )}
             <button
@@ -340,10 +340,10 @@ export function SessionSidebar({
               }}
             >
               <Icon name="archive" />
-              Archiver la conversation
+              Archive conversation
             </button>
             <button className="danger" onClick={() => setConfirmDelete(true)}>
-              Supprimer…
+              Delete…
             </button>
           </div>
         )}

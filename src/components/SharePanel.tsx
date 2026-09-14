@@ -27,47 +27,47 @@ export function SharePanel({
   onDownload,
 }: Props) {
   return (
-    <section className="collab-panel" aria-label="Exports de conversation">
+    <section className="collab-panel" aria-label="Conversation exports">
       <header className="collab-head">
-        <strong>Exporter la conversation</strong>
+        <strong>Export conversation</strong>
         <label className="collab-mode">
           Mode{" "}
           <select
             value={mode}
             onChange={(e) => onModeChange(e.target.value as ShareMode)}
-            aria-label="Mode d’export"
+            aria-label="Export mode"
           >
-            <option value="manual">Manuel</option>
-            <option value="auto">Automatique</option>
-            <option value="disabled">Désactivé</option>
+            <option value="manual">Manual</option>
+            <option value="auto">Automatic</option>
+            <option value="disabled">Disabled</option>
           </select>
         </label>
       </header>
       {mode === "disabled" ? (
         <p className="muted">
-          Partage désactivé — le partage est refusé dans ce mode.
+          Exports are disabled in this mode.
         </p>
       ) : (
         <div className="collab-actions">
           <button
             type="button"
             onClick={() => onShare("markdown")}
-            title="Exporter cette conversation en markdown"
+            title="Export this conversation as markdown"
           >
-            Préparer un export Markdown
+            Prepare Markdown export
           </button>
           <button
             type="button"
             onClick={() => onShare("json")}
-            title="Exporter cette conversation en JSON"
+            title="Export this conversation as JSON"
           >
-            Préparer un export JSON
+            Prepare JSON export
           </button>
         </div>
       )}
       {bundles.length === 0 ? (
         <p className="muted">
-          Les exports sont enregistrés localement, puis téléchargeables.
+          Exports are saved locally and can be downloaded.
         </p>
       ) : (
         <ul className="collab-list">
@@ -78,27 +78,27 @@ export function SharePanel({
               <button
                 type="button"
                 onClick={() => onCopy(b)}
-                title="Copier l'id du bundle local"
+                title="Copy local export ID"
               >
-                Copier l’identifiant
+                Copy ID
               </button>
               <button
                 type="button"
                 onClick={() => onDownload(b)}
-                title="Télécharger le bundle"
+                title="Download export"
               >
-                Télécharger
+                Download
               </button>
               <button
                 type="button"
                 className="danger"
                 onClick={() => onUnshare(b.bundleId)}
-                title="Supprimer cet export local"
+                title="Delete this local export"
               >
-                Supprimer l’export
+                Delete export
               </button>
               <span className="muted" hidden={sessionId === b.sessionId}>
-                autre conversation
+                other conversation
               </span>
             </li>
           ))}

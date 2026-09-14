@@ -53,7 +53,7 @@ export function MemoryPanel({
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        <span>Mémoire</span>
+        <span>Memory</span>
         <span className="memory-count" aria-label={`${memories.length} entries`}>
           {memories.length}
         </span>
@@ -74,7 +74,7 @@ export function MemoryPanel({
             </div>
           )}
           {memories.length === 0 ? (
-            <p className="muted">Aucune entrée — la mémoire se remplit ici.</p>
+            <p className="muted">No memories yet. Add useful context here.</p>
           ) : (
             <ul className="memory-list">
               {memories.map((m) => {

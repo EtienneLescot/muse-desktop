@@ -2,6 +2,8 @@
 
 App desktop Windows/Mac (Tauri + React + Vite) autour du harnais Muse Code.
 
+![Muse-Desktop sous Windows — écran d'accueil](assets/screenshot-windows.png)
+
 Le backend agentique reste le CLI `muse` packagé en sidecar.
 
 Docs :

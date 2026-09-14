@@ -212,29 +212,29 @@ export function buildSummary(sourceSessionId: string, log: LogEntry[]): ThreadSu
 /** Render a summary as prefill markdown for a fresh thread. */
 export function formatSummaryText(s: ThreadSummary): string {
   const lines: string[] = [
-    `Suite du thread ${s.sourceSessionId.slice(0, 8)} (résumé local, ${s.entryCount} entrées) :`,
+    `Continuation of thread ${s.sourceSessionId.slice(0, 8)} (local summary, ${s.entryCount} entries):`,
     "",
   ];
   if (s.firstUser !== "") {
-    lines.push("Demande initiale :", s.firstUser, "");
+    lines.push("Initial request:", s.firstUser, "");
   }
   if (s.context.length > 0) {
-    lines.push("Contexte :");
+    lines.push("Context:");
     for (const c of s.context) lines.push(`- ${c}`);
     lines.push("");
   }
   if (s.decisions.length > 0) {
-    lines.push("Décisions :");
+    lines.push("Decisions:");
     for (const d of s.decisions) lines.push(`- ${d}`);
     lines.push("");
   }
   if (s.todos.length > 0) {
-    lines.push("À faire :");
+    lines.push("To do:");
     for (const t of s.todos) lines.push(`- ${t}`);
     lines.push("");
   }
   if (s.lastAssistant !== "") {
-    lines.push("Dernier état :", s.lastAssistant);
+    lines.push("Last state:", s.lastAssistant);
   }
   return lines.join("\n").trimEnd();
 }

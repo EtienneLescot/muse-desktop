@@ -171,7 +171,7 @@ function InputCard({
                 maxLength={500}
                 value={picks[q.id]?.text ?? ""}
                 onChange={(e) => setText(q.id, e.target.value)}
-                placeholder="Votre réponse (500 caractères maximum)…"
+                placeholder="Your answer (500 characters maximum)…"
                 aria-label={q.question}
               />
             )}
@@ -187,18 +187,18 @@ function InputCard({
         <button
           type="button"
           className="approve"
-          title="Envoyer la réponse (Ctrl+Enter)"
+          title="Send answer (Ctrl+Enter)"
           onClick={submit}
         >
-          Envoyer la réponse
+          Send answer
         </button>
         <button
           type="button"
           className="deny"
-          title="Ignorer cette demande (Échap)"
+          title="Skip this request (Escape)"
           onClick={() => onSkip(request.session_id, request.input_id)}
         >
-          Ignorer
+          Skip
         </button>
       </div>
     </div>

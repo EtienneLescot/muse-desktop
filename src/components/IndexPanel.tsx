@@ -127,7 +127,7 @@ export function IndexPanel({
             </button>
             {paused ? (
               <button type="button" onClick={onResume}>
-                Reprendre
+                Resume
               </button>
             ) : (
               <button

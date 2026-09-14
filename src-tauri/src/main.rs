@@ -386,6 +386,13 @@ fn resolve_sidecar() -> Result<PathBuf, String> {
     // 1. Next to the app exe (bundled layout, and dev if staged there).
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
+            // Tauri strips the target suffix and stages externalBin next to
+            // the installed app executable (not in the dev binaries folder).
+            let bundled = dir.join(if cfg!(windows) { "muse.exe" } else { "muse" });
+            tried.push(bundled.clone());
+            if bundled.is_file() {
+                return Ok(bundled);
+            }
             let p = dir.join(&file);
             tried.push(p.clone());
             if p.is_file() {
@@ -1691,7 +1698,8 @@ mod tests {
         let v = check_scope_pure(&scope_root(), &PathBuf::from("/etc/passwd"));
         assert!(!v.in_scope, "{}", v.reason);
         assert!(v.reason.contains("outside"), "{}", v.reason);
-        assert!(v.reason.contains("/etc/passwd"), "{}", v.reason);
+        let expected = normalize_lexical(&PathBuf::from("/etc/passwd"));
+        assert!(v.reason.contains(expected.to_string_lossy().as_ref()), "{}", v.reason);
     }
 
     #[test]

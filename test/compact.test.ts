@@ -125,10 +125,10 @@ describe("extractive summary", () => {
       entry("assistant", "TODO: changelog entry"),
     ]);
     const text = formatSummaryText(s);
-    assert.match(text, /Suite du thread session-/);
-    assert.match(text, /Contexte/);
-    assert.match(text, /Décisions/);
-    assert.match(text, /À faire/);
+    assert.match(text, /Continuation of thread session-/);
+    assert.match(text, /Context:/);
+    assert.match(text, /Decisions:/);
+    assert.match(text, /To do:/);
   });
 });
 

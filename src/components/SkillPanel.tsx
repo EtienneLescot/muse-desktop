@@ -27,7 +27,7 @@ export function SkillPanel({ skills, onToggle, onInvoke, onTraceSuggest }: Props
 
   return (
     <section className="integration-panel" aria-label="Skills">
-      <h3>Compétences</h3>
+      <h3>Skills</h3>
       <ul className="integration-list">
         {skills.map((s) => {
           const view = getSkillDetail(s, false);
@@ -41,7 +41,7 @@ export function SkillPanel({ skills, onToggle, onInvoke, onTraceSuggest }: Props
                 <small>{view.description}</small>
                 {s.viewOnly && <small className="muted">view-only</small>}
               </span>
-              <label className="integration-toggle" title={s.enabled ? "Désactiver" : "Activer"}>
+              <label className="integration-toggle" title={s.enabled ? "Disable" : "Enable"}>
                 <input
                   type="checkbox"
                   checked={s.enabled}
@@ -49,13 +49,13 @@ export function SkillPanel({ skills, onToggle, onInvoke, onTraceSuggest }: Props
                 />
               </label>
               <button type="button" onClick={() => onInvoke(s.name)} disabled={!s.enabled}>
-                Exécuter
+                Run
               </button>
             </li>
           );
         })}
       </ul>
-      <h4>Auto-suggestion (tracée dans le log)</h4>
+      <h4>Suggestions (recorded in activity)</h4>
       <form
         className="integration-form"
         onSubmit={(ev) => {
@@ -65,12 +65,12 @@ export function SkillPanel({ skills, onToggle, onInvoke, onTraceSuggest }: Props
       >
         <input
           type="text"
-          placeholder="Brouillon à tester…"
-          aria-label="Brouillon pour tester l'auto-suggestion"
+          placeholder="Draft to check…"
+          aria-label="Draft to check for suggestions"
           value={draft}
           onChange={(ev) => setDraft(ev.target.value)}
         />
-        <button type="submit">Suggérer</button>
+        <button type="submit">Suggest</button>
       </form>
       {suggestions.length > 0 && (
         <ul className="integration-list">
@@ -81,7 +81,7 @@ export function SkillPanel({ skills, onToggle, onInvoke, onTraceSuggest }: Props
                 <small className="muted">{s.reason}</small>
               </span>
               <button type="button" onClick={() => onInvoke(s.skillName)}>
-                Exécuter
+                Run
               </button>
             </li>
           ))}
