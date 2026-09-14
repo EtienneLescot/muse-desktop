@@ -1,8 +1,5 @@
 import { useState } from "react";
-import {
-  CURATED_CONNECTORS,
-  type ConnectorEntry,
-} from "../lib/connectors";
+import { CURATED_CONNECTORS, type ConnectorEntry } from "../lib/connectors";
 
 interface Props {
   installed: ConnectorEntry[];
@@ -39,8 +36,12 @@ export function ConnectorPanel({
   const installedIds = new Set(installed.map((e) => e.id));
 
   return (
-    <section className="integration-panel" aria-label="Connectors">
+    <section className="integration-panel" aria-label="Connecteurs">
       <h3>Connecteurs</h3>
+      <p className="muted">
+        Catalogue de configuration. L’exécution des outils MCP n’est pas encore
+        connectée.
+      </p>
       <ul className="integration-list">
         {CURATED_CONNECTORS.map((c) => {
           const done = installedIds.has(c.id);
@@ -54,10 +55,10 @@ export function ConnectorPanel({
                 </small>
               </span>
               {done ? (
-                <span className="integration-flag">installé</span>
+                <span className="integration-flag">configuré</span>
               ) : (
                 <button type="button" onClick={() => onInstall(c.id)}>
-                  Installer
+                  Ajouter
                 </button>
               )}
             </li>
@@ -66,7 +67,10 @@ export function ConnectorPanel({
       </ul>
       {installed.length > 0 && (
         <>
-          <h4>Installés{toolNames.length > 0 && ` — ${toolNames.length} outil(s)`}</h4>
+          <h4>
+            Configurés
+            {toolNames.length > 0 && ` — ${toolNames.length} outil(s)`}
+          </h4>
           <ul className="integration-list">
             {installed.map((e) => (
               <li key={e.id} className="integration-row">
@@ -83,7 +87,10 @@ export function ConnectorPanel({
                         : (e.guardMessage ?? "aucun outil listé")}
                   </small>
                 </span>
-                <label className="integration-toggle" title={e.status === "disabled" ? "Activer" : "Désactiver"}>
+                <label
+                  className="integration-toggle"
+                  title={e.status === "disabled" ? "Activer" : "Désactiver"}
+                >
                   <input
                     type="checkbox"
                     checked={e.status !== "disabled"}
@@ -103,7 +110,8 @@ export function ConnectorPanel({
         className="integration-form"
         onSubmit={(ev) => {
           ev.preventDefault();
-          if (remoteName.trim().length === 0 || remoteUrl.trim().length === 0) return;
+          if (remoteName.trim().length === 0 || remoteUrl.trim().length === 0)
+            return;
           if (onAddRemote(remoteName.trim(), remoteUrl.trim())) {
             setRemoteName("");
             setRemoteUrl("");

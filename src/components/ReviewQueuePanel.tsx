@@ -8,24 +8,35 @@ interface Props {
   onDiscard: (id: string) => void;
 }
 
-function targetLabel(item: ReviewItem, sessionTitle: (id: string) => string): string {
+function targetLabel(
+  item: ReviewItem,
+  sessionTitle: (id: string) => string,
+): string {
   const r = item.threadReuse;
-  if (r.kind === "active") return "active thread";
-  if (r.kind === "new") return "new thread";
+  if (r.kind === "active") return "conversation active";
+  if (r.kind === "new") return "nouvelle conversation";
   return sessionTitle(r.sessionId);
 }
 
 /**
  * US-9 review queue: due schedules land here and wait — nothing auto-sends.
  * Approve sends the instructions as normal turn input into the recorded
- * target thread; Discard drops the entry.
+ * target thread; Ignorer drops the entry.
  */
-export function ReviewQueuePanel({ items, sessionTitle, onApprove, onDiscard }: Props) {
+export function ReviewQueuePanel({
+  items,
+  sessionTitle,
+  onApprove,
+  onDiscard,
+}: Props) {
   if (items.length === 0) return null;
   return (
-    <section className="review-queue" aria-label="Automation review queue">
+    <section
+      className="review-queue"
+      aria-label="Demandes planifiées à valider"
+    >
       <header className="review-head">
-        Review queue
+        Demandes à valider
         <span className="schedules-count" title={`${items.length} pending`}>
           {items.length}
         </span>
@@ -45,16 +56,16 @@ export function ReviewQueuePanel({ items, sessionTitle, onApprove, onDiscard }: 
               type="button"
               className="review-approve"
               onClick={() => onApprove(item.id)}
-              title="Send as turn input into the target thread"
+              title="Envoyer les instructions à la conversation cible"
             >
-              Approve &amp; send
+              Valider et envoyer
             </button>
             <button
               type="button"
               onClick={() => onDiscard(item.id)}
-              title="Drop this entry"
+              title="Ignorer cette demande"
             >
-              Discard
+              Ignorer
             </button>
           </div>
         </div>

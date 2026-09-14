@@ -16,7 +16,10 @@ interface ProjectsPanelProps {
   globalSettings: ProjectSettings;
   onCreate: (name: string, instructions: string) => void;
   onDelete: (id: string) => void;
-  onUpdate: (id: string, patch: { name?: string; instructions?: string }) => void;
+  onUpdate: (
+    id: string,
+    patch: { name?: string; instructions?: string },
+  ) => void;
   onAttach: (sessionId: string, projectId: string | null) => void;
   onSetGlobal: (patch: Partial<ProjectSettings>) => void;
   onSetOverride: (
@@ -40,7 +43,10 @@ const SETTING_KEYS: (keyof ProjectSettings)[] = [
   "autoCompact",
 ];
 
-function formatSetting(key: keyof ProjectSettings, value: string | boolean): string {
+function formatSetting(
+  key: keyof ProjectSettings,
+  value: string | boolean,
+): string {
   if (key === "autoCompact") return value === true ? "on" : "off";
   return String(value);
 }
@@ -116,7 +122,10 @@ export function ProjectsPanel({
         </p>
       )}
       {projects.length === 0 && (
-        <p className="muted">Aucun projet pour le moment. Group threads and share instructions.</p>
+        <p className="muted">
+          Aucun projet pour le moment. Regroupez vos conversations et leurs
+          instructions.
+        </p>
       )}
       <ul className="project-items">
         {projects.map((p) => (
@@ -124,7 +133,10 @@ export function ProjectsPanel({
             key={p.id}
             project={p}
             threadCount={threadsInProject(threadProjects, p.id).length}
-            activeAttached={activeSessionId !== null && threadProjects[activeSessionId] === p.id}
+            activeAttached={
+              activeSessionId !== null &&
+              threadProjects[activeSessionId] === p.id
+            }
             hasActiveThread={activeSessionId !== null}
             globalSettings={globalSettings}
             effective={settingsFor(p.id)}
@@ -141,59 +153,62 @@ export function ProjectsPanel({
         ))}
       </ul>
       {!hideGlobalSettings && (
-      <details className="project-global">
-        <summary>Global settings (project defaults)</summary>
-        <div className="project-settings">
-          <label className="project-setting">
-            <span>Model</span>
-            <input
-              type="text"
-              value={globalSettings.model}
-              onChange={(e) => onSetGlobal({ model: e.target.value })}
-              aria-label="Global model"
-            />
-          </label>
-          <label className="project-setting">
-            <span>Sandbox</span>
-            <select
-              value={globalSettings.sandbox}
-              onChange={(e) =>
-                onSetGlobal({ sandbox: e.target.value as ProjectSettings["sandbox"] })
-              }
-              aria-label="Global sandbox"
-            >
-              <option value="read-only">read-only</option>
-              <option value="workspace">workspace</option>
-              <option value="full">full</option>
-            </select>
-          </label>
-          <label className="project-setting">
-            <span>Network</span>
-            <select
-              value={globalSettings.networkDefault}
-              onChange={(e) =>
-                onSetGlobal({
-                  networkDefault: e.target.value as ProjectSettings["networkDefault"],
-                })
-              }
-              aria-label="Global network default"
-            >
-              <option value="allow">allow</option>
-              <option value="prompt">prompt</option>
-              <option value="deny">deny</option>
-            </select>
-          </label>
-          <label className="project-setting">
-            <span>Auto-compact</span>
-            <input
-              type="checkbox"
-              checked={globalSettings.autoCompact}
-              onChange={(e) => onSetGlobal({ autoCompact: e.target.checked })}
-              aria-label="Global auto-compact"
-            />
-          </label>
-        </div>
-      </details>
+        <details className="project-global">
+          <summary>Global settings (project defaults)</summary>
+          <div className="project-settings">
+            <label className="project-setting">
+              <span>Model</span>
+              <input
+                type="text"
+                value={globalSettings.model}
+                onChange={(e) => onSetGlobal({ model: e.target.value })}
+                aria-label="Global model"
+              />
+            </label>
+            <label className="project-setting">
+              <span>Sandbox</span>
+              <select
+                value={globalSettings.sandbox}
+                onChange={(e) =>
+                  onSetGlobal({
+                    sandbox: e.target.value as ProjectSettings["sandbox"],
+                  })
+                }
+                aria-label="Global sandbox"
+              >
+                <option value="read-only">Lecture seule</option>
+                <option value="workspace">Projet</option>
+                <option value="full">Étendus</option>
+              </select>
+            </label>
+            <label className="project-setting">
+              <span>Network</span>
+              <select
+                value={globalSettings.networkDefault}
+                onChange={(e) =>
+                  onSetGlobal({
+                    networkDefault: e.target
+                      .value as ProjectSettings["networkDefault"],
+                  })
+                }
+                aria-label="Global network default"
+              >
+                <option value="allow">Autoriser</option>
+                <option value="prompt">Demander</option>
+                <option value="deny">Refuser</option>
+              </select>
+            </label>
+            <label className="project-setting">
+              <span>Auto-compact</span>
+              <input
+                type="checkbox"
+                checked={globalSettings.autoCompact}
+                onChange={(e) => onSetGlobal({ autoCompact: e.target.checked })}
+                aria-label="Global auto-compact"
+              />
+            </label>
+          </div>
+        </details>
       )}
     </div>
   );
@@ -230,10 +245,13 @@ function ProjectRow({
   onSetOverride,
 }: ProjectRowProps) {
   const [draftName, setDraftName] = useState(project.name);
-  const [draftInstructions, setDraftInstructions] = useState(project.instructions);
+  const [draftInstructions, setDraftInstructions] = useState(
+    project.instructions,
+  );
   const diff = diffProjectSettings(globalSettings, project.settings);
   const dirty =
-    draftName.trim() !== project.name || draftInstructions.trim() !== project.instructions;
+    draftName.trim() !== project.name ||
+    draftInstructions.trim() !== project.instructions;
 
   return (
     <li className="project-item">
@@ -241,7 +259,7 @@ function ProjectRow({
         <summary>
           <span className="project-name">{project.name}</span>
           <span className="muted">
-            {threadCount} thread{threadCount === 1 ? "" : "s"}
+            {threadCount} conversation{threadCount === 1 ? "" : "s"}
           </span>
           {diff.length > 0 && (
             <span className="project-diff-flag" title="Has settings overrides">
@@ -251,7 +269,7 @@ function ProjectRow({
         </summary>
         <div className="project-detail">
           <label className="project-setting">
-            <span>Name</span>
+            <span>Nom</span>
             <input
               type="text"
               value={draftName}
@@ -275,29 +293,35 @@ function ProjectRow({
                 onUpdate({ name: draftName, instructions: draftInstructions })
               }
               disabled={!dirty}
-              title="Save name and instructions"
+              title="Enregistrer le nom et les instructions"
             >
-              Save
+              Enregistrer
             </button>
             {hasActiveThread &&
               (activeAttached ? (
-                <button onClick={onDetachActive} title="Detach the active thread">
-                  Detach thread
+                <button
+                  onClick={onDetachActive}
+                  title="Retirer la conversation active du projet"
+                >
+                  Retirer la conversation
                 </button>
               ) : (
-                <button onClick={onAttachActive} title="Attach the active thread">
-                  Attach thread
+                <button
+                  onClick={onAttachActive}
+                  title="Ajouter la conversation active au projet"
+                >
+                  Ajouter la conversation
                 </button>
               ))}
             <button
               onClick={onDelete}
               title={`Delete project ${project.name} (threads become ungrouped)`}
             >
-              Del
+              Supprimer le projet
             </button>
           </div>
           <div className="project-settings">
-            <span className="muted">Overrides (inherit global unless set)</span>
+            <span className="muted">Préférences propres au projet</span>
             {SETTING_KEYS.map((key) => (
               <OverrideRow
                 key={key}
@@ -310,9 +334,12 @@ function ProjectRow({
             ))}
           </div>
           {diff.length === 0 ? (
-            <p className="muted">Fully inherits global settings.</p>
+            <p className="muted">Ce projet utilise les préférences globales.</p>
           ) : (
-            <ul className="project-diff" aria-label="Global versus project settings diff">
+            <ul
+              className="project-diff"
+              aria-label="Global versus project settings diff"
+            >
               {diff.map((d) => (
                 <li key={d.key}>
                   {d.key}: {formatSetting(d.key, d.global)} →{" "}
@@ -358,9 +385,10 @@ function OverrideRow({
   }
 
   function onText(e: ChangeEvent<HTMLInputElement | HTMLSelectElement>): void {
-    const v = e.target.type === "checkbox" && "checked" in e.target
-      ? (e.target as HTMLInputElement).checked
-      : e.target.value;
+    const v =
+      e.target.type === "checkbox" && "checked" in e.target
+        ? (e.target as HTMLInputElement).checked
+        : e.target.value;
     commit(v);
   }
 
@@ -378,9 +406,9 @@ function OverrideRow({
         onChange={onText}
         aria-label={`Project sandbox (global ${globalValue})`}
       >
-        <option value="read-only">read-only</option>
-        <option value="workspace">workspace</option>
-        <option value="full">full</option>
+        <option value="read-only">Lecture seule</option>
+        <option value="workspace">Projet</option>
+        <option value="full">Étendus</option>
       </select>
     ) : settingKey === "networkDefault" ? (
       <select
@@ -388,9 +416,9 @@ function OverrideRow({
         onChange={onText}
         aria-label={`Project network (global ${globalValue})`}
       >
-        <option value="allow">allow</option>
-        <option value="prompt">prompt</option>
-        <option value="deny">deny</option>
+        <option value="allow">Autoriser</option>
+        <option value="prompt">Demander</option>
+        <option value="deny">Refuser</option>
       </select>
     ) : (
       <input

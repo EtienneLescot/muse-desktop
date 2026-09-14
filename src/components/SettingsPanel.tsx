@@ -4,7 +4,7 @@
  * - Workspace root display (read-only) + a path probe: an out-of-scope
  *   attempt routes to the existing scope-guard prompt path via
  *   `checkPathScope` instead of being applied silently.
- * - Sandbox mode select (workspace-confined default); network/elevated
+ * - Préférence d’isolation select (workspace-confined default); network/elevated
  *   need their explicit permission toggle persisted alongside.
  * - Hidden web-search default note.
  * - Model picker over the live host catalog when reachable (US-31):
@@ -103,7 +103,7 @@ export function SettingsPanel({
   }
 
   return (
-    <section className="settings-panel" aria-label="Settings">
+    <section className="settings-panel" aria-label="Paramètres">
       <header className="settings-head">
         <h2>Paramètres</h2>
         {onClose && (
@@ -121,8 +121,8 @@ export function SettingsPanel({
       <div className="settings-group">
         <h3>Dossier par défaut</h3>
         <p className="settings-note">
-          Each thread keeps its own folder (shown in its topbar); this only
-          pre-fills creation.
+          Ce dossier est proposé pour les nouvelles conversations. Les
+          conversations existantes conservent leur propre dossier.
         </p>
         <WorkspacePicker workspace={workspace} onPick={onPickWorkspace} />
       </div>
@@ -144,7 +144,7 @@ export function SettingsPanel({
               if (e.key === "Enter") void runProbe();
             }}
             placeholder="/absolute/path/to/check"
-            aria-label="Path to check against the workspace"
+            aria-label="Chemin à vérifier"
           />
           <button
             type="button"
@@ -162,7 +162,11 @@ export function SettingsPanel({
       </div>
 
       <div className="settings-group">
-        <h3>Sandbox</h3>
+        <h3>Isolation · Préférences</h3>
+        <p className="settings-note">
+          Ces préférences ne modifient pas encore l’isolation du moteur en
+          cours.
+        </p>
         <label className="settings-label" htmlFor="settings-sandbox-mode">
           Isolation (limitée au projet par défaut)
         </label>
@@ -170,7 +174,7 @@ export function SettingsPanel({
           id="settings-sandbox-mode"
           value={sandbox.mode}
           onChange={(e) => pickMode(e.target.value as SandboxMode)}
-          aria-label="Sandbox mode"
+          aria-label="Préférence d’isolation"
         >
           <option value="workspace">Limité au projet</option>
           <option value="network" disabled={!sandbox.networkAllowed}>
@@ -207,14 +211,14 @@ export function SettingsPanel({
           Autoriser les droits étendus (autorisation enregistrée)
         </label>
         <p className="settings-note">
-          Mode effectif : <strong>{effective}</strong>
+          Préférence enregistrée : <strong>{effective}</strong>
           {!canSelectMode(sandbox, sandbox.mode) &&
-            " — the selected mode stays workspace-confined until its permission is granted."}
+            " — autorisation nécessaire pour cette préférence."}
         </p>
       </div>
 
       <div className="settings-group">
-        <h3>Web search</h3>
+        <h3>Recherche web</h3>
         <p className="settings-note">{WEB_SEARCH_DEFAULT_NOTE}</p>
       </div>
 
@@ -227,7 +231,8 @@ export function SettingsPanel({
         {liveModels === null ? (
           <>
             <p className="settings-note">
-              Sample registry in the app — not a live backend list.
+              Exemples de configuration. Connectez le moteur pour connaître les
+              modèles disponibles.
               {modelsError !== null && ` (${modelsError})`}
             </p>
             <label className="settings-label" htmlFor="settings-provider">
@@ -237,7 +242,7 @@ export function SettingsPanel({
               id="settings-provider"
               value={providerId}
               onChange={(e) => onProviderChange(e.target.value)}
-              aria-label="Provider and model"
+              aria-label="Fournisseur et modèle"
             >
               {CONFIGURED_PROVIDERS.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -246,13 +251,13 @@ export function SettingsPanel({
               ))}
             </select>
             <p className="settings-note">
-              Project: {workspace ?? "aucun dossier sélectionné"}
+              Projet : {workspace ?? "aucun dossier sélectionné"}
             </p>
           </>
         ) : (
           <>
             <p className="settings-note">
-              Live host catalog snapshot ({liveModels.length} model
+              Catalogue du moteur ({liveModels.length} modèle
               {liveModels.length === 1 ? "" : "s"}).
               <button
                 type="button"
@@ -263,7 +268,7 @@ export function SettingsPanel({
               </button>
             </p>
             <label className="settings-label" htmlFor="settings-model">
-              Modèle de la tâche active
+              Modèle de la conversation active
             </label>
             <select
               id="settings-model"
@@ -272,19 +277,19 @@ export function SettingsPanel({
                 if (e.target.value.length > 0) onSelectModel(e.target.value);
               }}
               disabled={activeSessionId === null}
-              aria-label="Live model for the active session"
+              aria-label="Modèle de la conversation active"
             >
               {liveModels.map((m) => (
                 <option key={m.modelId} value={m.modelId}>
                   {m.displayLabel}
-                  {m.isDefault ? " (default)" : ""}
-                  {m.isActive ? " (active)" : ""}
+                  {m.isDefault ? " (par défaut)" : ""}
+                  {m.isActive ? " (actif)" : ""}
                 </option>
               ))}
             </select>
             {activeSessionId === null && (
               <p className="settings-note">
-                Start or select a session to change its model.
+                Ouvrez une conversation pour choisir son modèle.
               </p>
             )}
           </>

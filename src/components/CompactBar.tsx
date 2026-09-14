@@ -32,16 +32,31 @@ interface Props {
  * - Server half: host occupancy (`used/window · pressure`) plus a
  *   « Compact server » button, emphasized from `warning` pressure up.
  */
-export function CompactBar({ entryCount, summary, onCompact, onNewFromSummary, usage, onServerCompact }: Props) {
+export function CompactBar({
+  entryCount,
+  summary,
+  onCompact,
+  onNewFromSummary,
+  usage,
+  onServerCompact,
+}: Props) {
   const warn = needsCompaction(entryCount);
   const suggestServer = suggestsServerCompaction(usage);
-  if (!warn && summary === null && !suggestServer && usage === null) return null;
+  if (!warn && summary === null && !suggestServer && usage === null)
+    return null;
   const auto = needsAutoCompaction(entryCount);
 
   return (
-    <div className="compact-bar" role="status" aria-label="Thread compaction">
+    <div
+      className="compact-bar"
+      role="status"
+      aria-label="Résumé de la conversation"
+    >
       {usage !== null && (
-        <span className="compact-text" title="Occupation du contexte côté host (live)">
+        <span
+          className="compact-text"
+          title="Occupation du contexte côté host (live)"
+        >
           Contexte : {formatUsage(usage)}
         </span>
       )}
@@ -58,34 +73,48 @@ export function CompactBar({ entryCount, summary, onCompact, onNewFromSummary, u
       {summary === null ? (
         <>
           <span className="compact-text">
-            Long thread — {entryCount} / {COMPACT_AUTO_ENTRIES} entrées. Compactez pour
-            continuer léger.
+            Conversation longue — {entryCount} / {COMPACT_AUTO_ENTRIES} entrées.
+            Compactez pour continuer léger.
           </span>
-          <button type="button" onClick={onCompact} title="Résumer ce thread en local (aucun appel modèle)">
+          <button
+            type="button"
+            onClick={onCompact}
+            title="Résumer cette conversation en local (aucun appel modèle)"
+          >
             Compacter
           </button>
         </>
       ) : (
         <>
-          <span className="compact-flag" title={`Résumé du ${new Date(summary.createdAt).toLocaleString()}`}>
+          <span
+            className="compact-flag"
+            title={`Résumé du ${new Date(summary.createdAt).toLocaleString()}`}
+          >
             compacté
           </span>
           <span className="compact-text">
-            {auto ? "Résumé automatique" : "Résumé prêt"} — {summary.entryCount} entrées :{" "}
-            {summary.decisions.length} décision(s), {summary.context.length} contexte,{" "}
-            {summary.todos.length} à-faire.
+            {auto ? "Résumé automatique" : "Résumé prêt"} — {summary.entryCount}{" "}
+            entrées : {summary.decisions.length} décision(s),{" "}
+            {summary.context.length} contexte, {summary.todos.length} à-faire.
             {entryCount >= COMPACT_WARN_ENTRIES && (
-              <> (log actuel : {entryCount} / {COMPACT_AUTO_ENTRIES})</>
+              <>
+                {" "}
+                (log actuel : {entryCount} / {COMPACT_AUTO_ENTRIES})
+              </>
             )}
           </span>
-          <button type="button" onClick={onCompact} title="Reconstruire le résumé local">
+          <button
+            type="button"
+            onClick={onCompact}
+            title="Reconstruire le résumé local"
+          >
             Recompacter
           </button>
           <button
             type="button"
             className="compact-primary"
             onClick={onNewFromSummary}
-            title="Ouvrir un thread neuf pré-rempli de ce résumé"
+            title="Ouvrir une nouvelle conversation pré-rempli de ce résumé"
           >
             New From Summary
           </button>

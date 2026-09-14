@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
 
 interface Props {
   /** Default folder for the new thread; null until the user picks one. */
   workspace: string | null;
   onPickWorkspace: (path: string) => void;
-  onNewSession: () => void | Promise<void>;
+  onNewSession: () => Promise<string | null>;
   onDraft?: (text: string) => void;
   backendMissing?: boolean;
   /** US-33: explicit sidecar failure rendered instead of the blank screen. */
@@ -27,14 +27,30 @@ export function EmptySessionScreen({
   backendMissing,
   sidecarError,
 }: Props) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() => {
+    try {
+      return sessionStorage.getItem("muse-desktop.welcome-draft") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("muse-desktop.welcome-draft", draft);
+    } catch {
+      /* Best effort. */
+    }
+  }, [draft]);
   const [starting, setStarting] = useState(false);
   async function start() {
     if (!workspace || backendMissing || starting) return;
     setStarting(true);
     try {
-      onDraft?.(draft);
-      await onNewSession();
+      const id = await onNewSession();
+      if (id !== null) {
+        onDraft?.(draft);
+        try { sessionStorage.removeItem("muse-desktop.welcome-draft"); } catch { /* Best effort. */ }
+      }
     } finally {
       setStarting(false);
     }
@@ -78,7 +94,7 @@ export function EmptySessionScreen({
       </div>
       <div className="welcome-draft">
         <textarea
-          aria-label="Décrivez votre tâche"
+          aria-label="Votre premier message"
           placeholder="Décrivez ce que vous voulez construire…"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -88,7 +104,7 @@ export function EmptySessionScreen({
             {backendMissing
               ? "Disponible dans l’application desktop"
               : workspace
-                ? "Votre demande sera prête à envoyer."
+                ? "Votre brouillon sera conservé dans la conversation."
                 : "Choisissez un dossier pour commencer."}
           </small>
           <button
@@ -96,7 +112,7 @@ export function EmptySessionScreen({
             onClick={() => void start()}
             disabled={!workspace || backendMissing || starting}
           >
-            {starting ? "Ouverture…" : "Créer la tâche"}
+            {starting ? "Ouverture…" : "Ouvrir la conversation"}
             <Icon name="plus" />
           </button>
         </div>

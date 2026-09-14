@@ -26,6 +26,7 @@ import {
 import { COMPOSER_SHORTCUT_TITLES } from "../lib/a11y";
 
 interface Props {
+  draftKey: string;
   modelControl?: ReactNode;
   disabled: boolean;
   running: boolean;
@@ -100,6 +101,7 @@ function isMissingCommand(err: unknown): boolean {
  * exists (US-22), otherwise the send is blocked with an explicit message.
  */
 export function Composer({
+  draftKey,
   modelControl,
   disabled,
   running,
@@ -112,7 +114,20 @@ export function Composer({
   memoryInsert,
   onMemoryInsertConsumed,
 }: Props) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => {
+    try {
+      return sessionStorage.getItem(`muse-desktop.draft.${draftKey}`) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(`muse-desktop.draft.${draftKey}`, text);
+    } catch {
+      /* Draft stays in memory. */
+    }
+  }, [draftKey, text]);
   const [caret, setCaret] = useState(0);
   const [selIndex, setSelIndex] = useState(0);
   const [blocked, setBlocked] = useState<string | null>(null);
@@ -122,6 +137,13 @@ export function Composer({
     workspace !== null ? loadRecents(workspace) : [],
   );
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const area = areaRef.current;
+    if (area) {
+      area.style.height = "auto";
+      area.style.height = `${Math.min(area.scrollHeight, 240)}px`;
+    }
+  }, [text]);
 
   useEffect(() => {
     setRecents(workspace !== null ? loadRecents(workspace) : []);
@@ -361,6 +383,7 @@ export function Composer({
   }
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
+    if (e.nativeEvent.isComposing) return;
     if (dropdownOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
       e.preventDefault();
       const d = e.key === "ArrowDown" ? 1 : -1;

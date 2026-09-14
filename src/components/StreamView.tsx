@@ -37,11 +37,11 @@ function roleLabel(e: LogEntry): string {
     case "assistant":
       return "Muse";
     case "subagent":
-      return `subagent:${e.agentId ?? "agent"}`;
+      return `Agent ${e.agentId ?? ""}`;
     case "tool":
-      return "tool";
+      return "Outil";
     case "system":
-      return "sys";
+      return "Information";
   }
 }
 
@@ -57,6 +57,7 @@ function agentOf(e: LogEntry): string {
  */
 export function StreamView({ entries, sessionId, controls }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
   const stickRef = useRef(true);
   const [followupFor, setFollowupFor] = useState<string | null>(null);
   const [followupText, setFollowupText] = useState("");
@@ -65,6 +66,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
 
   useEffect(() => {
     stickRef.current = true;
+    setAwayFromBottom(false);
   }, [sessionId]);
 
   useEffect(() => {
@@ -74,6 +76,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
   function onScroll(e: React.UIEvent<HTMLDivElement>): void {
     const el = e.currentTarget;
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    setAwayFromBottom(!stickRef.current);
   }
 
   async function runResult(
@@ -154,7 +157,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                   onClick={() => controls.onInterrupt(agentOf(e))}
                   title="subagent/interrupt"
                 >
-                  Interrupt
+                  Interrompre
                 </button>
                 <button
                   type="button"
@@ -162,7 +165,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                   onClick={() => controls.onStop(agentOf(e))}
                   title="subagent/stop"
                 >
-                  Stop
+                  Arrêter
                 </button>
                 <button
                   type="button"
@@ -170,7 +173,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                   onClick={() => controls.onResume(agentOf(e))}
                   title="subagent/resume"
                 >
-                  Resume
+                  Reprendre
                 </button>
                 <button
                   type="button"
@@ -181,7 +184,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                   }}
                   title="subagent/followupTask"
                 >
-                  Follow-up
+                  Préciser
                 </button>
                 <button
                   type="button"
@@ -189,7 +192,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                   onClick={() => void runResult(e, "result")}
                   title="subagent/readResult"
                 >
-                  Read result
+                  Lire le résultat
                 </button>
                 {e.childSessionId && (
                   <button
@@ -198,7 +201,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                     onClick={() => void runResult(e, "drilldown")}
                     title="session/read"
                   >
-                    Child session
+                    Conversation de l’agent
                   </button>
                 )}
               </div>
@@ -208,7 +211,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                 <input
                   type="text"
                   value={followupText}
-                  placeholder="Follow-up task for this subagent…"
+                  placeholder="Votre instruction pour cet agent…"
                   onChange={(ev) => setFollowupText(ev.target.value)}
                   onKeyDown={(ev) => {
                     if (ev.key === "Enter") sendFollowup(e);
@@ -217,10 +220,10 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                       setFollowupText("");
                     }
                   }}
-                  aria-label="Follow-up task"
+                  aria-label="Instruction pour cet agent"
                 />
                 <button type="button" onClick={() => sendFollowup(e)}>
-                  Send
+                  Envoyer
                 </button>
               </div>
             )}
@@ -253,6 +256,18 @@ export function StreamView({ entries, sessionId, controls }: Props) {
         );
       })}
       <div ref={bottomRef} />
+      {awayFromBottom && (
+        <button
+          className="jump-to-latest"
+          onClick={() => {
+            stickRef.current = true;
+            setAwayFromBottom(false);
+            bottomRef.current?.scrollIntoView({ block: "end" });
+          }}
+        >
+          ↓ Derniers messages
+        </button>
+      )}
     </div>
   );
 }

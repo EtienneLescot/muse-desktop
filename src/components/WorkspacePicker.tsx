@@ -33,10 +33,11 @@ export function WorkspacePicker({ workspace, onPick }: Props) {
   return (
     <div className="workspace-picker">
       <button className="workspace-button" onClick={pick}>
-        Choisir un dossier
+        {workspace ? "Changer de dossier" : "Choisir un dossier"}
       </button>
       <span className="workspace-path" title={workspace ?? ""}>
-        {workspace ?? "Aucun dossier sélectionné"}
+        {workspace?.split(/[\\/]/).filter(Boolean).pop() ??
+          "Aucun dossier sélectionné"}
       </span>
       {error && <span className="error">{error}</span>}
     </div>
