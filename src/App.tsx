@@ -169,7 +169,6 @@ export default function App() {
   const [workPanel, setWorkPanel] = useState<
     "artifacts" | "browser" | "memory" | "tools" | null
   >(null);
-  const [starterDraft, setStarterDraft] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchIndex, setSearchIndex] = useState(0);
@@ -195,7 +194,6 @@ export default function App() {
     setPage(next);
   };
   const newTask = () => {
-    setStarterDraft(null);
     openPage("task");
     setActive(null);
   };
@@ -219,7 +217,6 @@ export default function App() {
         event.preventDefault();
         setPage("task");
         setSettingsOpen(false);
-        setStarterDraft(null);
         setActive(null);
       }
     };
@@ -717,8 +714,12 @@ export default function App() {
               <EmptySessionScreen
                 workspace={workspace}
                 onPickWorkspace={setWorkspace}
-                onNewSession={startSession}
-                onDraft={setStarterDraft}
+                onStart={async (draft) => {
+                  const id = await startSession();
+                  if (id === null || draft.trim() === "") return id !== null;
+                  await sendInput(id, draft);
+                  return true;
+                }}
                 backendMissing={backendMissing}
                 sidecarError={sidecarPanel}
               />
@@ -814,11 +815,8 @@ export default function App() {
                     workspace={active.workspace}
                     onSend={(text) => void sendInput(active.session_id, text)}
                     onCancel={() => void cancelSession(active.session_id)}
-                    prefill={prefill ?? starterDraft}
-                    onPrefillConsumed={() => {
-                      clearPrefill();
-                      setStarterDraft(null);
-                    }}
+                    prefill={prefill}
+                    onPrefillConsumed={clearPrefill}
                     memories={memories}
                     memoryInsert={memoryInsert}
                     onMemoryInsertConsumed={() => setMemoryInsert(null)}
