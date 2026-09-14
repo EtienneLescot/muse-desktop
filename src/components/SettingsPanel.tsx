@@ -105,16 +105,21 @@ export function SettingsPanel({
   return (
     <section className="settings-panel" aria-label="Settings">
       <header className="settings-head">
-        <h2>Settings</h2>
+        <h2>Paramètres</h2>
         {onClose && (
-          <button type="button" className="icon" aria-label="Close settings" onClick={onClose}>
+          <button
+            type="button"
+            className="icon"
+            aria-label="Fermer les paramètres"
+            onClick={onClose}
+          >
             ×
           </button>
         )}
       </header>
 
       <div className="settings-group">
-        <h3>Default folder for new threads</h3>
+        <h3>Dossier par défaut</h3>
         <p className="settings-note">
           Each thread keeps its own folder (shown in its topbar); this only
           pre-fills creation.
@@ -122,9 +127,9 @@ export function SettingsPanel({
         <WorkspacePicker workspace={workspace} onPick={onPickWorkspace} />
       </div>
       <div className="settings-group">
-        <h3>Scope probe</h3>
+        <h3>Vérifier un chemin</h3>
         <label className="settings-label" htmlFor="settings-path-probe">
-          Check a path against the workspace
+          Vérifier l’accès à un chemin dans le projet
         </label>
         <div className="settings-row">
           <input
@@ -146,7 +151,7 @@ export function SettingsPanel({
             onClick={() => void runProbe()}
             disabled={probe.trim().length === 0 || probing}
           >
-            {probing ? "…" : "Check"}
+            {probing ? "…" : "Vérifier"}
           </button>
         </div>
         {probeResult !== null && (
@@ -159,7 +164,7 @@ export function SettingsPanel({
       <div className="settings-group">
         <h3>Sandbox</h3>
         <label className="settings-label" htmlFor="settings-sandbox-mode">
-          Sandbox mode (default: workspace-confined)
+          Isolation (limitée au projet par défaut)
         </label>
         <select
           id="settings-sandbox-mode"
@@ -167,12 +172,18 @@ export function SettingsPanel({
           onChange={(e) => pickMode(e.target.value as SandboxMode)}
           aria-label="Sandbox mode"
         >
-          <option value="workspace">Workspace-confined</option>
+          <option value="workspace">Limité au projet</option>
           <option value="network" disabled={!sandbox.networkAllowed}>
-            Network{!sandbox.networkAllowed ? " (needs permission below)" : ""}
+            Réseau
+            {!sandbox.networkAllowed
+              ? " (autorisation requise ci-dessous)"
+              : ""}
           </option>
           <option value="elevated" disabled={!sandbox.elevatedAllowed}>
-            Elevated{!sandbox.elevatedAllowed ? " (needs permission below)" : ""}
+            Droits étendus
+            {!sandbox.elevatedAllowed
+              ? " (autorisation requise ci-dessous)"
+              : ""}
           </option>
         </select>
         <label className="settings-check">
@@ -183,7 +194,7 @@ export function SettingsPanel({
               onSandboxChange({ ...sandbox, networkAllowed: e.target.checked })
             }
           />
-          Allow network sandbox (explicit permission, persisted)
+          Autoriser le réseau (autorisation enregistrée)
         </label>
         <label className="settings-check">
           <input
@@ -193,10 +204,10 @@ export function SettingsPanel({
               onSandboxChange({ ...sandbox, elevatedAllowed: e.target.checked })
             }
           />
-          Allow elevated sandbox (explicit permission, persisted)
+          Autoriser les droits étendus (autorisation enregistrée)
         </label>
         <p className="settings-note">
-          Effective mode: <strong>{effective}</strong>
+          Mode effectif : <strong>{effective}</strong>
           {!canSelectMode(sandbox, sandbox.mode) &&
             " — the selected mode stays workspace-confined until its permission is granted."}
         </p>
@@ -208,7 +219,11 @@ export function SettingsPanel({
       </div>
 
       <div className="settings-group">
-        <h3>{liveModels === null ? "Configured providers" : "Live models"}</h3>
+        <h3>
+          {liveModels === null
+            ? "Fournisseurs configurés"
+            : "Modèles disponibles"}
+        </h3>
         {liveModels === null ? (
           <>
             <p className="settings-note">
@@ -216,7 +231,7 @@ export function SettingsPanel({
               {modelsError !== null && ` (${modelsError})`}
             </p>
             <label className="settings-label" htmlFor="settings-provider">
-              Provider / model (saved per project)
+              Fournisseur / modèle (enregistré par projet)
             </label>
             <select
               id="settings-provider"
@@ -231,7 +246,7 @@ export function SettingsPanel({
               ))}
             </select>
             <p className="settings-note">
-              Project: {workspace ?? "none selected yet"}
+              Project: {workspace ?? "aucun dossier sélectionné"}
             </p>
           </>
         ) : (
@@ -244,11 +259,11 @@ export function SettingsPanel({
                 className="settings-link"
                 onClick={onRefreshModels}
               >
-                Refresh
+                Actualiser
               </button>
             </p>
             <label className="settings-label" htmlFor="settings-model">
-              Model (applies to the active session)
+              Modèle de la tâche active
             </label>
             <select
               id="settings-model"

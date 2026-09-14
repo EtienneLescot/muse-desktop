@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { LogEntry } from "../lib/persist";
 import { REFLEXIVE_LABEL } from "../lib/phase";
 import { subagentSummary } from "../lib/subagent";
+import { MessageContent } from "./MessageContent";
 
 /** US-6 controls for one sub-agent block. Read-result and drill-down resolve
  *  to display text (also logged as system lines by the hook); the rest are
@@ -32,9 +33,9 @@ function timeOf(ts: number): string {
 function roleLabel(e: LogEntry): string {
   switch (e.role) {
     case "user":
-      return "you";
+      return "Vous";
     case "assistant":
-      return "muse";
+      return "Muse";
     case "subagent":
       return `subagent:${e.agentId ?? "agent"}`;
     case "tool":
@@ -75,7 +76,10 @@ export function StreamView({ entries, sessionId, controls }: Props) {
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }
 
-  async function runResult(entry: LogEntry, kind: "result" | "drilldown"): Promise<void> {
+  async function runResult(
+    entry: LogEntry,
+    kind: "result" | "drilldown",
+  ): Promise<void> {
     if (!controls || busy === entry.id) return;
     setBusy(entry.id);
     try {
@@ -104,8 +108,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
     <div className="stream" onScroll={onScroll} role="log" aria-live="off">
       {entries.length === 0 && (
         <p className="muted">
-          No messages yet. Type a prompt below — history is stored locally and
-          restored on restart.
+          Commencez la conversation. Votre historique est conservé localement.
         </p>
       )}
       {entries.map((e) => {
@@ -139,7 +142,9 @@ export function StreamView({ entries, sessionId, controls }: Props) {
               {e.open && <span className="caret" aria-hidden="true" />}
             </pre>
             {e.childSessionId && (
-              <div className="muted subagent-child">child: {e.childSessionId}</div>
+              <div className="muted subagent-child">
+                child: {e.childSessionId}
+              </div>
             )}
             {controls && (
               <div className="subagent-controls">
@@ -219,21 +224,30 @@ export function StreamView({ entries, sessionId, controls }: Props) {
                 </button>
               </div>
             )}
-            {shown[e.id] && <pre className="subagent-result">{shown[e.id]}</pre>}
+            {shown[e.id] && (
+              <pre className="subagent-result">{shown[e.id]}</pre>
+            )}
           </details>
         ) : (
           <div key={e.id} className={`msg ${e.role}`}>
             <span className="role">{roleLabel(e)}</span>
-            <pre>
-              {reflexive ? (
-                <span className="muted">{REFLEXIVE_LABEL}</span>
-              ) : (
-                e.text
-              )}
-              {e.open && e.role === "assistant" && (
-                <span className="caret" aria-hidden="true" />
-              )}
-            </pre>
+            {e.role === "assistant" && !reflexive ? (
+              <>
+                <MessageContent text={e.text} />
+                {e.open && <span className="caret" aria-hidden="true" />}
+              </>
+            ) : (
+              <pre>
+                {reflexive ? (
+                  <span className="muted">{REFLEXIVE_LABEL}</span>
+                ) : (
+                  e.text
+                )}
+                {e.open && e.role === "assistant" && (
+                  <span className="caret" aria-hidden="true" />
+                )}
+              </pre>
+            )}
             <span className="ts">{timeOf(e.ts)}</span>
           </div>
         );

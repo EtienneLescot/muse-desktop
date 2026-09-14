@@ -32,7 +32,9 @@ import {
 import { IndexPanel } from "./components/IndexPanel";
 import { BrowserPanel } from "./components/BrowserPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
+import { Icon } from "./components/Icon";
 import "./App.css";
+import "./Desktop.css";
 
 function initialTheme(): Theme {
   let stored: string | null = null;
@@ -151,7 +153,6 @@ export default function App() {
     ackScanNudge,
     error,
     backendMissing,
-    evtCount,
   } = useMuseSessions();
 
   // US-20: one `@mem/…` token the panel asked the composer to insert.
@@ -159,6 +160,45 @@ export default function App() {
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [page, setPage] = useState<
+    "task" | "projects" | "automations" | "extensions" | "library" | "archives"
+  >("task");
+  const [collapsed, setCollapsed] = useState(false);
+  const [workPanel, setWorkPanel] = useState<
+    "artifacts" | "browser" | "memory" | "tools" | null
+  >("artifacts");
+  const [starterDraft, setStarterDraft] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (searchOpen) searchDialog.current?.showModal();
+    else searchDialog.current?.close();
+  }, [searchOpen]);
+  const openPage = (next: typeof page) => {
+    setSettingsOpen(false);
+    setPage(next);
+  };
+  const newTask = () => {
+    openPage("task");
+    setActive(null);
+  };
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        setPage("task");
+        setSettingsOpen(false);
+        setActive(null);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [setActive]);
 
   useEffect(() => {
     document.body.classList.toggle("dark", theme === "dark");
@@ -173,14 +213,16 @@ export default function App() {
 
   const pendingCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const a of approvals) counts[a.session_id] = (counts[a.session_id] ?? 0) + 1;
-    for (const r of inputRequests) counts[r.session_id] = (counts[r.session_id] ?? 0) + 1;
+    for (const a of approvals)
+      counts[a.session_id] = (counts[a.session_id] ?? 0) + 1;
+    for (const r of inputRequests)
+      counts[r.session_id] = (counts[r.session_id] ?? 0) + 1;
     return counts;
   }, [approvals, inputRequests]);
 
   const workspaceName = useMemo(() => {
     if (workspace === null) return null;
-    const parts = workspace.split("/").filter((p) => p.length > 0);
+    const parts = workspace.split(/[\\/]/).filter((p) => p.length > 0);
     return parts[parts.length - 1] ?? workspace;
   }, [workspace]);
 
@@ -189,7 +231,11 @@ export default function App() {
   const orchestrationAgents = useMemo(() => {
     const seen: string[] = [];
     for (const e of activeLog) {
-      if (e.role === "subagent" && typeof e.agentId === "string" && !seen.includes(e.agentId)) {
+      if (
+        e.role === "subagent" &&
+        typeof e.agentId === "string" &&
+        !seen.includes(e.agentId)
+      ) {
         seen.push(e.agentId);
       }
     }
@@ -199,7 +245,11 @@ export default function App() {
   // US-32: one polite live region announces stream running/stopped
   // transitions plus approval/input arrivals (not every render).
   const [liveMessage, setLiveMessage] = useState("");
-  const prevLive = useRef<{ running: boolean | null; approvals: number; inputs: number }>({
+  const prevLive = useRef<{
+    running: boolean | null;
+    approvals: number;
+    inputs: number;
+  }>({
     running: null,
     approvals: 0,
     inputs: 0,
@@ -217,10 +267,16 @@ export default function App() {
       msg = streamStatusMessage(liveRunning);
     } else if (activeApprovals.length > prev.approvals) {
       const last = activeApprovals[activeApprovals.length - 1];
-      msg = approvalAnnouncement(activeApprovals.length - prev.approvals, last?.toolName);
+      msg = approvalAnnouncement(
+        activeApprovals.length - prev.approvals,
+        last?.toolName,
+      );
     } else if (activeInputRequests.length > prev.inputs) {
       const last = activeInputRequests[activeInputRequests.length - 1];
-      msg = inputAnnouncement(activeInputRequests.length - prev.inputs, last?.tool_name);
+      msg = inputAnnouncement(
+        activeInputRequests.length - prev.inputs,
+        last?.tool_name,
+      );
     } else if (prev.running !== null && prev.running !== liveRunning) {
       msg = streamStatusMessage(liveRunning);
     }
@@ -242,7 +298,11 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Tab" && e.ctrlKey) {
         e.preventDefault();
-        const next = cycleThreadId(activeThreadIds, activeId, e.shiftKey ? -1 : 1);
+        const next = cycleThreadId(
+          activeThreadIds,
+          activeId,
+          e.shiftKey ? -1 : 1,
+        );
         if (next !== null) setActive(next);
       }
     };
@@ -264,9 +324,9 @@ export default function App() {
   );
 
   return (
-    <div className="app">
+    <div className={`app desktop-app ${collapsed ? "nav-collapsed" : ""}`}>
       <a className="skip-link" href="#composer">
-        Skip to composer
+        Aller à la saisie
       </a>
       <div className="sr-only" aria-live="polite" role="status">
         {liveMessage}
@@ -274,44 +334,65 @@ export default function App() {
       <aside className="sidebar" aria-label="Sidebar">
         <div className="brand">
           <span className="muse-logo">
-            <img src="muse-logo.png" alt="Muse logo" />
+            <img src="muse-logo.png" alt="" />
           </span>
-          <span className="brand-text">
-            Muse<small>DESKTOP</small>
-          </span>
+          <span className="brand-text">Muse-Desktop</span>
           <button
-            type="button"
-            className="icon theme-toggle"
-            aria-pressed={theme === "dark"}
-            aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-            title={theme === "dark" ? "Light theme" : "Dark theme"}
-            onClick={() => setTheme((t) => nextTheme(t))}
+            className="icon"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={
+              collapsed ? "Déplier la navigation" : "Réduire la navigation"
+            }
           >
-            {theme === "dark" ? (
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
-              </svg>
-            )}
+            <Icon name="panel" />
           </button>
         </div>
+        <nav className="primary-nav" aria-label="Navigation principale">
+          <button onClick={newTask} title="Nouvelle tâche · Ctrl+N">
+            <Icon name="plus" />
+            <span>Nouvelle tâche</span>
+          </button>
+          <button
+            onClick={() => setSearchOpen(true)}
+            title="Rechercher · Ctrl+K"
+          >
+            <Icon name="search" />
+            <span>Rechercher</span>
+          </button>
+          <button
+            aria-current={page === "automations" ? "page" : undefined}
+            onClick={() => openPage("automations")}
+          >
+            <Icon name="clock" />
+            <span>Automatisations</span>
+          </button>
+          <button
+            aria-current={page === "extensions" ? "page" : undefined}
+            onClick={() => openPage("extensions")}
+          >
+            <Icon name="grid" />
+            <span>Extensions</span>
+          </button>
+          <button
+            aria-current={page === "library" ? "page" : undefined}
+            onClick={() => openPage("library")}
+          >
+            <Icon name="folder" />
+            <span>Bibliothèque</span>
+          </button>
+        </nav>
         <div className="sidebar-scroll">
           <SessionSidebar
             sessions={sessions}
-            activeId={activeId}
+            showArchived={page === "archives"}
+            activeId={page === "task" && !settingsOpen ? activeId : null}
             pendingCounts={pendingCounts}
             compactedIds={Object.keys(summaries)}
-            onSelect={setActive}
-            onNew={() => {
-              // No default folder yet: show the empty screen, where the
-              // folder is picked per thread at creation time.
-              if (workspace === null) setActive(null);
-              else void startSession();
+            onSelect={(id) => {
+              openPage("task");
+              setActive(id);
             }}
+            onNew={newTask}
             onCancel={cancelSession}
             onKill={killSession}
             onArchive={archiveSession}
@@ -320,89 +401,88 @@ export default function App() {
             projects={projects}
             threadProjects={threadProjects}
           />
-          <div className="section-label">Projets</div>
-          <div className="side-section">
-            <ProjectsPanel
-              projects={projects}
-              threadProjects={threadProjects}
-              projectError={projectError}
-              activeSessionId={activeId}
-              globalSettings={globalSettings}
-              onCreate={(name, instructions) => createProject(name, instructions)}
-              onDelete={deleteProject}
-              onUpdate={updateProject}
-              onAttach={attachThread}
-              onSetGlobal={setGlobalSettings}
-              onSetOverride={setProjectOverride}
-              settingsFor={settingsFor}
-              hideGlobalSettings
-            />
+          <button
+            className="sidebar-manage"
+            onClick={() => openPage("projects")}
+          >
+            <Icon name="folder" />
+            Gérer les projets
+            <Icon name="plus" />
+          </button>
+          <button
+            className="sidebar-manage"
+            onClick={() => openPage("archives")}
+          >
+            <Icon name="archive" />
+            Tâches archivées
+          </button>
+        </div>
+        <div className="sidebar-footer">
+          <button
+            type="button"
+            className="account"
+            aria-label="Profil — Paramètres"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <span className="avatar" aria-hidden="true">
+              M
+            </span>
+            <span className="account-name">Mon profil</span>
+          </button>
+        </div>
+      </aside>
+      <main className="conversation" aria-label="Conversation">
+        <header className="desktop-topbar">
+          <div className="breadcrumb">
+            <Icon name="folder" />
+            <span>
+              {(active && page === "task"
+                ? active.workspace.split(/[\\/]/).pop()
+                : workspaceName) || "Espace personnel"}
+            </span>
+            <span className="separator">/</span>
+            <span>
+              {settingsOpen
+                ? "Paramètres"
+                : page === "task"
+                  ? active?.title || "Nouvelle tâche"
+                  : {
+                      projects: "Projets",
+                      automations: "Automatisations",
+                      extensions: "Extensions",
+                      library: "Bibliothèque",
+                      archives: "Archives",
+                    }[page]}
+            </span>
           </div>
-          <div className="section-label">Automatisations</div>
-          <div className="side-section">
-            <SchedulesPanel
-              schedules={schedules}
-              sessions={sessions}
-              activeId={activeId}
-              onCreate={(input) => {
-                createSchedule(input);
-              }}
-              onToggle={(id, enabled) => setScheduleEnabled(id, enabled)}
-              onDelete={(id) => deleteSchedule(id)}
-              onRunNow={(id) => runScheduleNow(id)}
-            />
+          <div className="top-actions">
+            <span className="pill">
+              <span className="dot" />
+              {backendMissing ? "Aperçu web" : "Local"}
+            </span>
+            <button
+              className="icon"
+              onClick={() => setTheme(nextTheme(theme))}
+              aria-label="Changer de thème"
+            >
+              <Icon name="sun" />
+            </button>
+            {active && page === "task" && !settingsOpen && (
+              <button
+                className="icon"
+                onClick={() => setWorkPanel(workPanel ? null : "artifacts")}
+                aria-label="Afficher le panneau de travail"
+                aria-expanded={workPanel !== null}
+              >
+                <Icon name="panel" />
+              </button>
+            )}
           </div>
-          <div className="section-label">Intégrations</div>
-          <div className="side-section">
-            <ConnectorPanel
-              installed={connectors}
-              toolNames={connectorTools.map((t) => t.name)}
-              remoteNotice={remoteNotice}
-              onInstall={(dirId) => installConnectorById(dirId)}
-              onUninstall={(id) => uninstallConnectorById(id)}
-              onToggle={(id, enabled) => setConnectorEnabledById(id, enabled)}
-              onAddRemote={(name, url) => addRemoteConnector(name, url)}
-            />
-            <SkillPanel
-              skills={skills}
-              onToggle={(name, enabled) => setSkillEnabledByName(name, enabled)}
-              onInvoke={(name) => {
-                if (activeId !== null) invokeSkill(activeId, name, "");
-              }}
-              onTraceSuggest={(text) =>
-                activeId !== null ? traceSkillSuggestions(activeId, text) : []
-              }
-            />
-          </div>
-          <div className="section-label">Bibliothèque</div>
-          <div className="side-section">
-            <IndexPanel
-            enabled={index.enabled}
-            paused={index.paused}
-            fileCount={index.fileCount}
-            lineCount={index.lineCount}
-            builtAt={index.builtAt}
-            lastSummary={index.lastSummary}
-            hasSource={index.hasSource}
-            query={index.query}
-            results={index.results}
-            onToggle={index.setIndexEnabled}
-            onPause={() => index.setIndexPaused(true)}
-            onResume={() => index.setIndexPaused(false)}
-            onFilesPicked={(files) => void index.indexPickedFiles(files)}
-            onRescan={() => void index.rescanIndexFiles()}
-            onRebuild={() => void index.rebuildIndex()}
-            onDelete={index.deleteIndex}
-            onQueryChange={index.setIndexQuery}
-          />
-            <ImportPanel
-              imported={importedSessions}
-              notes={importNotes}
-              onImportText={(source, content) => importConfigText(source, content)}
-              onDismiss={dismissImport}
-            />
-          </div>
-          {settingsOpen && (
+        </header>
+        {settingsOpen ? (
+          <section className="destination-page">
+            <div className="eyebrow">À VOTRE FAÇON</div>
+            <h1>Paramètres</h1>{" "}
             <SettingsPanel
               workspace={workspace}
               onPickWorkspace={setWorkspace}
@@ -420,192 +500,459 @@ export default function App() {
               checkPathScope={checkPathScope}
               onClose={() => setSettingsOpen(false)}
             />
-          )}
-        </div>
-        <div className="sidebar-footer">
-          <button
-            type="button"
-            className="account"
-            title={workspace ?? "No workspace selected"}
-            aria-label={
-              workspace === null
-                ? "Profile: no default folder, activate to open settings"
-                : `Profile: default folder ${workspace}, activate to open settings`
-            }
-            onClick={() => setSettingsOpen(true)}
-          >
-            <span className="avatar" aria-hidden="true">
-              {(workspaceName?.slice(0, 1).toUpperCase() ?? "M")}
-            </span>
-            <span className="account-text">
-              <span className="account-name">{workspaceName ?? "No workspace"}</span>
-              <small>Local profile</small>
-            </span>
-          </button>
-          <button
-            type="button"
-            className="gear"
-            aria-expanded={settingsOpen}
-            aria-label={settingsOpen ? "Close settings" : "Open settings"}
-            title="Settings"
-            onClick={() => setSettingsOpen((v) => !v)}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
-            </svg>
-          </button>
-        </div>
-      </aside>
-      <main className="conversation" aria-label="Conversation">
-        {backendMissing && (
-          <div className="error-banner">
-            Preview mode: no Tauri backend here. Run inside the desktop app for
-            live sessions; local history still works.
-          </div>
-        )}
-        {sidecarKind !== null
-          ? (active !== null && sidecarPanel)
-          : (error && <div className="error-banner">{error}</div>)}
-        {active === null ? (
-          <EmptySessionScreen
-            workspace={workspace}
-            onPickWorkspace={setWorkspace}
-            onNewSession={startSession}
-            sidecarError={sidecarPanel}
-          />
-        ) : (
-          <div className="session-view">
-            <div className="session-center">
-            <header className="topbar">
-              <span className="dot" data-running={active.running} />
-              <h2>{active.title || active.session_id.slice(0, 8)}</h2>
-              <span className="muted session-path" title={active.workspace}>
-                {active.workspace}
-              </span>
-              <span className="muted">{active.running ? "running" : "stopped"}</span>
-              <span className="muted" title="backend events received (temporary)">
-                ev:{evtCount}
-              </span>
-            </header>
-            <ApprovalPanel
-              approvals={activeApprovals}
-              rules={allowlist}
-              onDecision={approve}
-              onRemember={(a, choiceId) => void rememberApproval(a, choiceId)}
-              decisionFor={allowDecisionFor}
-              onRevoke={revokeAllowRule}
-              onRuleDecision={setAllowRuleDecision}
-            />
-            <InputPanel
-              requests={activeInputRequests}
-              onAnswer={(sid, iid, answers) => void answerInput(sid, iid, answers)}
-              onSkip={(sid, iid) => void cancelInput(sid, iid)}
-            />
-            <ReviewQueuePanel
-              items={reviewQueue}
-              sessionTitle={(sid) =>
-                sessions.find((s) => s.session_id === sid)?.title ??
-                sid.slice(0, 8)
+          </section>
+        ) : page !== "task" ? (
+          <section className="destination-page">
+            <div className="eyebrow">VOTRE ESPACE DE TRAVAIL</div>
+            <h1>
+              {
+                {
+                  projects: "Projets",
+                  automations: "Automatisations",
+                  extensions: "Extensions",
+                  library: "Bibliothèque",
+                  archives: "Archives",
+                }[page]
               }
-              onApprove={(id) => void approveReview(id)}
-              onDiscard={(id) => discardReview(id)}
-            />
-            <StreamView
-              entries={activeLog}
-              sessionId={active.session_id}
-              controls={{
-                onInterrupt: (agentId) =>
-                  void subagentInterrupt(active.session_id, agentId),
-                onStop: (agentId) => void subagentStop(active.session_id, agentId),
-                onResume: (agentId) =>
-                  void subagentResume(active.session_id, agentId),
-                onFollowup: (agentId, task) =>
-                  void subagentFollowup(active.session_id, agentId, task),
-                onReadResult: (agentId) =>
-                  subagentReadResult(active.session_id, agentId),
-                onDrilldown: (entry) =>
-                  subagentDrilldown(active.session_id, entry.childSessionId),
-              }}
-            />
-            <CompactBar
-              entryCount={activeLog.length}
-              summary={summaries[active.session_id] ?? null}
-              onCompact={() => compactSession(active.session_id)}
-              onNewFromSummary={() => void newFromSummary(active.session_id)}
-              usage={usageBySession[active.session_id] ?? null}
-              onServerCompact={() => void serverCompact(active.session_id)}
-            />
-            <OrchestrationPanel agents={orchestrationAgents} />
-            <SharePanel
-              sessionId={active.session_id}
-              mode={shareMode}
-              bundles={sessionBundles(active.session_id)}
-              onModeChange={setShareMode}
-              onShare={(format) => void shareSession(active.session_id, format)}
-              onUnshare={unshareBundle}
-              onCopy={(b: ShareBundle) => {
-                try {
-                  void navigator.clipboard?.writeText(b.bundleId);
-                } catch {
-                  // clipboard unavailable: the id stays visible for manual copy
-                }
-              }}
-              onDownload={(b: ShareBundle) => {
-                const ext = b.format === "json" ? "json" : "md";
-                const blob = new Blob([b.body], {
-                  type: b.format === "json" ? "application/json" : "text/markdown",
-                });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `${b.bundleId}.${ext}`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
-              }}
-            />
-            <ChannelPanel experimental={channelsExperimental} />
-            <BrowserPanel
-              annotations={browserAnnotations}
-              permissions={browserPermissions}
-              onAddAnnotation={addBrowserAnnotation}
-              onRemoveAnnotation={removeBrowserAnnotation}
-              onSetPermission={setBrowserAppPermission}
-            />
-            <MemoryPanel
-              memories={memories}
-              now={Date.now()}
-              scanNudge={scanNudge}
-              onAdd={(text, source) => addMemoryEntry(text, source)}
-              onRemove={removeMemoryEntry}
-              onAckScan={ackScanNudge}
-              onMention={(query) => setMemoryInsert(query)}
-            />
-            <Composer
-              disabled={workspace === null || backendMissing}
-              running={active.running}
-              workspace={workspace}
-              onSend={(text) => void sendInput(active.session_id, text)}
-              onCancel={() => void cancelSession(active.session_id)}
-              prefill={prefill}
-              onPrefillConsumed={clearPrefill}
-              memories={memories}
-              memoryInsert={memoryInsert}
-              onMemoryInsertConsumed={() => setMemoryInsert(null)}
-            />
-            </div>
-            <ArtifactsPane
-              sessionId={active.session_id}
-              log={activeLog}
-              artifacts={artifacts[active.session_id] ?? []}
-              onRestore={restoreArtifact}
-              onComment={commentArtifact}
-            />
-          </div>
+            </h1>
+            <p className="page-description">
+              {
+                {
+                  projects: "Organisez vos projets et leurs instructions.",
+                  automations: "Confiez vos tâches récurrentes à Muse.",
+                  extensions: "Vos outils et compétences dans un même espace.",
+                  library:
+                    "Retrouvez vos fichiers et importez votre historique.",
+                  archives: "Les tâches mises de côté restent accessibles.",
+                }[page]
+              }
+            </p>
+            {page === "projects" && (
+              <>
+                {" "}
+                <ProjectsPanel
+                  projects={projects}
+                  threadProjects={threadProjects}
+                  projectError={projectError}
+                  activeSessionId={activeId}
+                  globalSettings={globalSettings}
+                  onCreate={(name, instructions) =>
+                    createProject(name, instructions)
+                  }
+                  onDelete={deleteProject}
+                  onUpdate={updateProject}
+                  onAttach={attachThread}
+                  onSetGlobal={setGlobalSettings}
+                  onSetOverride={setProjectOverride}
+                  settingsFor={settingsFor}
+                  hideGlobalSettings
+                />
+              </>
+            )}
+            {page === "automations" && (
+              <>
+                {" "}
+                <SchedulesPanel
+                  schedules={schedules}
+                  sessions={sessions}
+                  activeId={activeId}
+                  onCreate={(input) => {
+                    createSchedule(input);
+                  }}
+                  onToggle={(id, enabled) => setScheduleEnabled(id, enabled)}
+                  onDelete={(id) => deleteSchedule(id)}
+                  onRunNow={(id) => runScheduleNow(id)}
+                />
+              </>
+            )}
+            {page === "extensions" && (
+              <div className="destination-grid">
+                {" "}
+                <ConnectorPanel
+                  installed={connectors}
+                  toolNames={connectorTools.map((t) => t.name)}
+                  remoteNotice={remoteNotice}
+                  onInstall={(dirId) => installConnectorById(dirId)}
+                  onUninstall={(id) => uninstallConnectorById(id)}
+                  onToggle={(id, enabled) =>
+                    setConnectorEnabledById(id, enabled)
+                  }
+                  onAddRemote={(name, url) => addRemoteConnector(name, url)}
+                />{" "}
+                <SkillPanel
+                  skills={skills}
+                  onToggle={(name, enabled) =>
+                    setSkillEnabledByName(name, enabled)
+                  }
+                  onInvoke={(name) => {
+                    if (activeId !== null) invokeSkill(activeId, name, "");
+                  }}
+                  onTraceSuggest={(text) =>
+                    activeId !== null
+                      ? traceSkillSuggestions(activeId, text)
+                      : []
+                  }
+                />
+              </div>
+            )}
+            {page === "library" && (
+              <div className="destination-grid">
+                {" "}
+                <IndexPanel
+                  enabled={index.enabled}
+                  paused={index.paused}
+                  fileCount={index.fileCount}
+                  lineCount={index.lineCount}
+                  builtAt={index.builtAt}
+                  lastSummary={index.lastSummary}
+                  hasSource={index.hasSource}
+                  query={index.query}
+                  results={index.results}
+                  onToggle={index.setIndexEnabled}
+                  onPause={() => index.setIndexPaused(true)}
+                  onResume={() => index.setIndexPaused(false)}
+                  onFilesPicked={(files) => void index.indexPickedFiles(files)}
+                  onRescan={() => void index.rescanIndexFiles()}
+                  onRebuild={() => void index.rebuildIndex()}
+                  onDelete={index.deleteIndex}
+                  onQueryChange={index.setIndexQuery}
+                />{" "}
+                <ImportPanel
+                  imported={importedSessions}
+                  notes={importNotes}
+                  onImportText={(source, content) =>
+                    importConfigText(source, content)
+                  }
+                  onDismiss={dismissImport}
+                />
+              </div>
+            )}
+            {page === "archives" && (
+              <div className="archive-list">
+                {sessions
+                  .filter((session) => session.archived)
+                  .map((session) => (
+                    <div className="archive-row" key={session.session_id}>
+                      <button
+                        onClick={() => {
+                          openPage("task");
+                          setActive(session.session_id);
+                        }}
+                      >
+                        {session.title || session.session_id.slice(0, 8)}
+                      </button>
+                      <button
+                        onClick={() => restoreSession(session.session_id)}
+                      >
+                        Restaurer
+                      </button>
+                    </div>
+                  ))}
+                {!sessions.some((session) => session.archived) && (
+                  <p className="muted">Aucune tâche archivée.</p>
+                )}
+              </div>
+            )}
+          </section>
+        ) : (
+          <>
+            {backendMissing && (
+              <div className="preview-notice">
+                Aperçu web · Ouvrez l’application desktop pour travailler avec
+                Muse. Votre historique local reste consultable.
+              </div>
+            )}
+            {sidecarKind !== null
+              ? active !== null && sidecarPanel
+              : error && <div className="error-banner">{error}</div>}
+            {active === null ? (
+              <EmptySessionScreen
+                workspace={workspace}
+                onPickWorkspace={setWorkspace}
+                onNewSession={startSession}
+                onDraft={setStarterDraft}
+                backendMissing={backendMissing}
+                sidecarError={sidecarPanel}
+              />
+            ) : (
+              <div className="session-view">
+                <div className="session-center">
+                  <header className="task-heading">
+                    <div className="eyebrow">
+                      {active.workspace.split(/[\\/]/).pop()} / TÂCHE
+                    </div>
+                    <h1>{active.title || "Nouvelle conversation"}</h1>
+                    <div className="task-metadata">
+                      <span className="dot" data-running={active.running} />
+                      {active.running ? "En cours" : "Prête"}
+                      <span>·</span>
+                      <span title={active.workspace}>{active.workspace}</span>
+                    </div>
+                  </header>
+                  <ApprovalPanel
+                    approvals={activeApprovals}
+                    rules={allowlist}
+                    onDecision={approve}
+                    onRemember={(a, choiceId) =>
+                      void rememberApproval(a, choiceId)
+                    }
+                    decisionFor={allowDecisionFor}
+                    onRevoke={revokeAllowRule}
+                    onRuleDecision={setAllowRuleDecision}
+                  />
+                  <InputPanel
+                    requests={activeInputRequests}
+                    onAnswer={(sid, iid, answers) =>
+                      void answerInput(sid, iid, answers)
+                    }
+                    onSkip={(sid, iid) => void cancelInput(sid, iid)}
+                  />
+                  <ReviewQueuePanel
+                    items={reviewQueue}
+                    sessionTitle={(sid) =>
+                      sessions.find((s) => s.session_id === sid)?.title ??
+                      sid.slice(0, 8)
+                    }
+                    onApprove={(id) => void approveReview(id)}
+                    onDiscard={(id) => discardReview(id)}
+                  />
+                  <StreamView
+                    entries={activeLog}
+                    sessionId={active.session_id}
+                    controls={{
+                      onInterrupt: (agentId) =>
+                        void subagentInterrupt(active.session_id, agentId),
+                      onStop: (agentId) =>
+                        void subagentStop(active.session_id, agentId),
+                      onResume: (agentId) =>
+                        void subagentResume(active.session_id, agentId),
+                      onFollowup: (agentId, task) =>
+                        void subagentFollowup(active.session_id, agentId, task),
+                      onReadResult: (agentId) =>
+                        subagentReadResult(active.session_id, agentId),
+                      onDrilldown: (entry) =>
+                        subagentDrilldown(
+                          active.session_id,
+                          entry.childSessionId,
+                        ),
+                    }}
+                  />
+
+                  <Composer
+                    disabled={backendMissing}
+                    modelControl={
+                      <>
+                        <button
+                          onClick={() => setSettingsOpen(true)}
+                          aria-label="Réglages du modèle"
+                        >
+                          {liveModels?.find((model) => model.isActive)
+                            ?.displayLabel || "Modèle"}
+                        </button>
+                        <span>Local</span>
+                      </>
+                    }
+                    running={active.running}
+                    workspace={active.workspace}
+                    onSend={(text) => void sendInput(active.session_id, text)}
+                    onCancel={() => void cancelSession(active.session_id)}
+                    prefill={prefill ?? starterDraft}
+                    onPrefillConsumed={() => {
+                      clearPrefill();
+                      setStarterDraft(null);
+                    }}
+                    memories={memories}
+                    memoryInsert={memoryInsert}
+                    onMemoryInsertConsumed={() => setMemoryInsert(null)}
+                  />
+                </div>
+                {workPanel && (
+                  <aside className="work-panel">
+                    <nav className="work-tabs" aria-label="Panneau de travail">
+                      {(
+                        [
+                          ["artifacts", "Fichiers"],
+                          ["browser", "Navigateur"],
+                          ["memory", "Mémoire"],
+                          ["tools", "Activité"],
+                        ] as const
+                      ).map(([id, label]) => (
+                        <button
+                          key={id}
+                          aria-pressed={workPanel === id}
+                          onClick={() => setWorkPanel(id)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <button
+                        className="icon"
+                        aria-label="Fermer le panneau"
+                        onClick={() => setWorkPanel(null)}
+                      >
+                        <Icon name="close" />
+                      </button>
+                    </nav>
+                    <div className="work-panel-body">
+                      {workPanel === "artifacts" && (
+                        <>
+                          {" "}
+                          <ArtifactsPane
+                            sessionId={active.session_id}
+                            log={activeLog}
+                            artifacts={artifacts[active.session_id] ?? []}
+                            onRestore={restoreArtifact}
+                            onComment={commentArtifact}
+                          />
+                        </>
+                      )}
+                      {workPanel === "browser" && (
+                        <>
+                          {" "}
+                          <BrowserPanel
+                            annotations={browserAnnotations}
+                            permissions={browserPermissions}
+                            onAddAnnotation={addBrowserAnnotation}
+                            onRemoveAnnotation={removeBrowserAnnotation}
+                            onSetPermission={setBrowserAppPermission}
+                          />
+                        </>
+                      )}
+                      {workPanel === "memory" && (
+                        <>
+                          {" "}
+                          <MemoryPanel
+                            memories={memories}
+                            now={Date.now()}
+                            scanNudge={scanNudge}
+                            onAdd={(text, source) =>
+                              addMemoryEntry(text, source)
+                            }
+                            onRemove={removeMemoryEntry}
+                            onAckScan={ackScanNudge}
+                            onMention={(query) => setMemoryInsert(query)}
+                          />
+                        </>
+                      )}
+                      {workPanel === "tools" && (
+                        <>
+                          {" "}
+                          <CompactBar
+                            entryCount={activeLog.length}
+                            summary={summaries[active.session_id] ?? null}
+                            onCompact={() => compactSession(active.session_id)}
+                            onNewFromSummary={() =>
+                              void newFromSummary(active.session_id)
+                            }
+                            usage={usageBySession[active.session_id] ?? null}
+                            onServerCompact={() =>
+                              void serverCompact(active.session_id)
+                            }
+                          />{" "}
+                          <OrchestrationPanel agents={orchestrationAgents} />{" "}
+                          <SharePanel
+                            sessionId={active.session_id}
+                            mode={shareMode}
+                            bundles={sessionBundles(active.session_id)}
+                            onModeChange={setShareMode}
+                            onShare={(format) =>
+                              void shareSession(active.session_id, format)
+                            }
+                            onUnshare={unshareBundle}
+                            onCopy={(b: ShareBundle) => {
+                              try {
+                                void navigator.clipboard?.writeText(b.bundleId);
+                              } catch {
+                                // clipboard unavailable: the id stays visible for manual copy
+                              }
+                            }}
+                            onDownload={(b: ShareBundle) => {
+                              const ext = b.format === "json" ? "json" : "md";
+                              const blob = new Blob([b.body], {
+                                type:
+                                  b.format === "json"
+                                    ? "application/json"
+                                    : "text/markdown",
+                              });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `${b.bundleId}.${ext}`;
+                              document.body.appendChild(a);
+                              a.click();
+                              a.remove();
+                              URL.revokeObjectURL(url);
+                            }}
+                          />{" "}
+                          <ChannelPanel experimental={channelsExperimental} />
+                        </>
+                      )}
+                    </div>
+                  </aside>
+                )}
+              </div>
+            )}
+          </>
         )}
       </main>
+      <footer className="desktop-status">
+        <span className="dot" />
+        {backendMissing ? "Aperçu · Backend non connecté" : "Muse connecté"}
+        <span className="status-workspace">
+          {workspaceName || "Aucun dossier sélectionné"}
+        </span>
+        <span className="status-brand">Muse-Desktop</span>
+      </footer>
+      <dialog
+        ref={searchDialog}
+        className="task-search"
+        onCancel={() => setSearchOpen(false)}
+        onClose={() => setSearchOpen(false)}
+      >
+        <header>
+          <h2>Rechercher une tâche</h2>
+          <button
+            aria-label="Fermer la recherche"
+            onClick={() => setSearchOpen(false)}
+          >
+            <Icon name="close" />
+          </button>
+        </header>
+        <input
+          autoFocus
+          aria-label="Rechercher une tâche"
+          placeholder="Rechercher dans les projets…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="search-results">
+          {sessions
+            .filter((session) =>
+              (session.title + " " + session.workspace)
+                .toLowerCase()
+                .includes(search.toLowerCase()),
+            )
+            .map((session) => (
+              <button
+                key={session.session_id}
+                onClick={() => {
+                  setActive(session.session_id);
+                  openPage("task");
+                  setSearchOpen(false);
+                }}
+              >
+                <Icon name="code" />
+                {session.title || session.session_id.slice(0, 8)}
+                <small>{session.archived ? "Archivée" : ""}</small>
+              </button>
+            ))}
+          {!sessions.some((session) =>
+            (session.title + " " + session.workspace)
+              .toLowerCase()
+              .includes(search.toLowerCase()),
+          ) && <p className="muted">Aucune tâche trouvée.</p>}
+        </div>
+      </dialog>
     </div>
   );
 }

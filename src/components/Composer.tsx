@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   buildEnrichedText,
@@ -26,6 +26,7 @@ import {
 import { COMPOSER_SHORTCUT_TITLES } from "../lib/a11y";
 
 interface Props {
+  modelControl?: ReactNode;
   disabled: boolean;
   running: boolean;
   /** Absolute workspace root; null while none is picked. */
@@ -98,7 +99,19 @@ function isMissingCommand(err: unknown): boolean {
  * the workspace asks the backend `check_scope` permission when that command
  * exists (US-22), otherwise the send is blocked with an explicit message.
  */
-export function Composer({ disabled, running, workspace, onSend, onCancel, prefill, onPrefillConsumed, memories, memoryInsert, onMemoryInsertConsumed }: Props) {
+export function Composer({
+  modelControl,
+  disabled,
+  running,
+  workspace,
+  onSend,
+  onCancel,
+  prefill,
+  onPrefillConsumed,
+  memories,
+  memoryInsert,
+  onMemoryInsertConsumed,
+}: Props) {
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [selIndex, setSelIndex] = useState(0);
@@ -137,19 +150,24 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
   );
 
   // US-20: `@mem/<id>` tokens in the text, resolved against the entries.
-  const memTokens: (MemoryMentionToken & { entry: MemoryEntry | null })[] = useMemo(
-    () =>
-      parseMemoryMentions(text).map((t) => ({
-        ...t,
-        entry: memories !== undefined ? findMemoryByPrefix(memories, t.idPrefix) : null,
-      })),
-    [text, memories],
-  );
+  const memTokens: (MemoryMentionToken & { entry: MemoryEntry | null })[] =
+    useMemo(
+      () =>
+        parseMemoryMentions(text).map((t) => ({
+          ...t,
+          entry:
+            memories !== undefined
+              ? findMemoryByPrefix(memories, t.idPrefix)
+              : null,
+        })),
+      [text, memories],
+    );
 
   // US-20: insert one `@mem/…` token from the panel or the completion.
   useEffect(() => {
     if (memoryInsert === null || memoryInsert === undefined) return;
-    const sep = text === "" || text.endsWith(" ") || text.endsWith("\n") ? "" : " ";
+    const sep =
+      text === "" || text.endsWith(" ") || text.endsWith("\n") ? "" : " ";
     const insert = `${sep}@${memoryInsert} `;
     const next = text + insert;
     setText(next);
@@ -189,13 +207,21 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
     const out: ResolvedMention[] = [];
     for (const r of recents) {
       if (q !== "" && !r.relPath.toLowerCase().includes(q)) continue;
-      const m = { ...resolveMention(workspace, r.relPath), start: active.start, end: active.end };
+      const m = {
+        ...resolveMention(workspace, r.relPath),
+        start: active.start,
+        end: active.end,
+      };
       if (seen.has(m.absPath)) continue;
       seen.add(m.absPath);
       out.push(m);
     }
     if (active.query !== "") {
-      const literal = { ...resolveMention(workspace, active.query), start: active.start, end: active.end };
+      const literal = {
+        ...resolveMention(workspace, active.query),
+        start: active.start,
+        end: active.end,
+      };
       if (!seen.has(literal.absPath)) out.push(literal);
     }
     return out.slice(0, 8);
@@ -205,7 +231,8 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
   // `@mem` button inserts directly, so keyboard send is untouched).
   const memCandidates: MemoryEntry[] = useMemo(() => {
     if (memories === undefined || active === null) return [];
-    if (!(active.query === "mem/" || active.query.startsWith("mem/"))) return [];
+    if (!(active.query === "mem/" || active.query.startsWith("mem/")))
+      return [];
     const rest = active.query.slice(4).toLowerCase();
     return memories
       .filter(
@@ -223,9 +250,13 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
-  const activeKey = active !== null ? `${active.start}-${active.end}-${active.query}` : null;
+  const activeKey =
+    active !== null ? `${active.start}-${active.end}-${active.query}` : null;
   const dropdownOpen =
-    active !== null && candidates.length > 0 && !disabled && dismissedKey !== activeKey;
+    active !== null &&
+    candidates.length > 0 &&
+    !disabled &&
+    dismissedKey !== activeKey;
   const memDropdownOpen =
     memCandidates.length > 0 && !disabled && dismissedKey !== activeKey;
 
@@ -315,10 +346,10 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
     }
     if (fresh.length > 0) {
       setRecents((cur) => {
-        const next = [...fresh, ...cur.filter((r) => !fresh.some((f) => f.absPath === r.absPath))].slice(
-          0,
-          RECENT_CAP,
-        );
+        const next = [
+          ...fresh,
+          ...cur.filter((r) => !fresh.some((f) => f.absPath === r.absPath)),
+        ].slice(0, RECENT_CAP);
         saveRecents(workspace, next);
         return next;
       });
@@ -364,170 +395,200 @@ export function Composer({ disabled, running, workspace, onSend, onCancel, prefi
     <div className="composer-wrap" id="composer">
       <div className="composer">
         <div className="composer-main">
-        {mentions.length > 0 && (
-          <ul className="mention-chips" aria-label="Resolved mentions">
-            {mentions.map((m, i) => (
-              <li
-                key={`${m.start}-${m.end}-${i}`}
-                className={m.inScope ? "mention-chip" : "mention-chip mention-chip-out"}
-                title={m.absPath}
-              >
-                <span className="mention-chip-path">{m.inScope ? m.relPath : m.absPath}</span>
-                {!m.inScope && <span className="mention-chip-flag">hors-scope</span>}
-                <button
-                  type="button"
-                  className="mention-chip-remove"
-                  aria-label={`Remove mention ${m.query}`}
-                  onClick={() => removeMention(m)}
-                >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {memTokens.length > 0 && (
-          <ul className="mention-chips" aria-label="Memory context">
-            {memTokens.map((t, i) => {
-              const stale = t.entry !== null && isStale(t.entry, Date.now());
-              return (
+          {mentions.length > 0 && (
+            <ul className="mention-chips" aria-label="Resolved mentions">
+              {mentions.map((m, i) => (
                 <li
-                  key={`${t.start}-${t.end}-${i}`}
+                  key={`${m.start}-${m.end}-${i}`}
                   className={
-                    t.entry === null
-                      ? "mention-chip mention-chip-out"
-                      : stale
-                        ? "mention-chip mention-chip-mem mention-chip-stale"
-                        : "mention-chip mention-chip-mem"
+                    m.inScope ? "mention-chip" : "mention-chip mention-chip-out"
                   }
-                  title={
-                    t.entry === null
-                      ? `Unknown memory @mem/${t.idPrefix}`
-                      : `${t.entry.text} — ${t.entry.source}`
-                  }
+                  title={m.absPath}
                 >
                   <span className="mention-chip-path">
-                    {t.entry === null ? `@mem/${t.idPrefix}?` : memoryChipLabel(t.entry)}
+                    {m.inScope ? m.relPath : m.absPath}
                   </span>
-                  {t.entry !== null && (
-                    <span className="mention-chip-flag">{ageLabel(t.entry, Date.now())}</span>
+                  {!m.inScope && (
+                    <span className="mention-chip-flag">hors-scope</span>
                   )}
                   <button
                     type="button"
                     className="mention-chip-remove"
-                    aria-label={`Remove memory mention ${t.idPrefix}`}
-                    onClick={() => removeMemToken(t)}
+                    aria-label={`Remove mention ${m.query}`}
+                    onClick={() => removeMention(m)}
                   >
                     ×
                   </button>
                 </li>
-              );
-            })}
-          </ul>
-        )}
-        {dropdownOpen && (
-          <ul className="mention-list" role="listbox" aria-label="Mention completions">
-            {candidates.map((c, i) => (
-              <li
-                key={c.absPath}
-                role="option"
-                aria-selected={i === selIndex}
-                className={i === selIndex ? "mention-item mention-item-active" : "mention-item"}
-                onMouseDown={(e) => {
-                  // Select before the textarea loses focus/caret.
-                  e.preventDefault();
-                  applyCandidate(c);
-                }}
-              >
-                <span className="mention-item-path">{c.inScope ? c.relPath : c.absPath}</span>
-                {c.inScope ? (
-                  <span className="mention-item-scope">workspace</span>
-                ) : (
-                  <span className="mention-item-scope mention-item-scope-out">hors-scope</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        {memDropdownOpen && (
-          <ul className="mention-list" role="listbox" aria-label="Memory completions">
-            {memCandidates.map((m) => (
-              <li
-                key={m.id}
-                role="option"
-                aria-selected={false}
-                className="mention-item"
-                onMouseDown={(e) => {
-                  // Select before the textarea loses focus/caret.
-                  e.preventDefault();
-                  applyMemoryCandidate(m);
-                }}
-              >
-                <span className="mention-item-path">{memoryChipLabel(m)}</span>
-                <span
+              ))}
+            </ul>
+          )}
+          {memTokens.length > 0 && (
+            <ul className="mention-chips" aria-label="Memory context">
+              {memTokens.map((t, i) => {
+                const stale = t.entry !== null && isStale(t.entry, Date.now());
+                return (
+                  <li
+                    key={`${t.start}-${t.end}-${i}`}
+                    className={
+                      t.entry === null
+                        ? "mention-chip mention-chip-out"
+                        : stale
+                          ? "mention-chip mention-chip-mem mention-chip-stale"
+                          : "mention-chip mention-chip-mem"
+                    }
+                    title={
+                      t.entry === null
+                        ? `Unknown memory @mem/${t.idPrefix}`
+                        : `${t.entry.text} — ${t.entry.source}`
+                    }
+                  >
+                    <span className="mention-chip-path">
+                      {t.entry === null
+                        ? `@mem/${t.idPrefix}?`
+                        : memoryChipLabel(t.entry)}
+                    </span>
+                    {t.entry !== null && (
+                      <span className="mention-chip-flag">
+                        {ageLabel(t.entry, Date.now())}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="mention-chip-remove"
+                      aria-label={`Remove memory mention ${t.idPrefix}`}
+                      onClick={() => removeMemToken(t)}
+                    >
+                      ×
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {dropdownOpen && (
+            <ul
+              className="mention-list"
+              role="listbox"
+              aria-label="Mention completions"
+            >
+              {candidates.map((c, i) => (
+                <li
+                  key={c.absPath}
+                  role="option"
+                  aria-selected={i === selIndex}
                   className={
-                    isStale(m, Date.now())
-                      ? "mention-item-scope mention-item-scope-out"
-                      : "mention-item-scope"
+                    i === selIndex
+                      ? "mention-item mention-item-active"
+                      : "mention-item"
                   }
+                  onMouseDown={(e) => {
+                    // Select before the textarea loses focus/caret.
+                    e.preventDefault();
+                    applyCandidate(c);
+                  }}
                 >
-                  mémoire · {m.source} · {ageLabel(m, Date.now())}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <textarea
-          ref={areaRef}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            syncCaret(e.target);
-          }}
-          onKeyDown={onKey}
-          onKeyUp={(e) => syncCaret(e.currentTarget)}
-          onClick={(e) => syncCaret(e.currentTarget)}
-          onSelect={(e) => syncCaret(e.currentTarget)}
-          disabled={disabled}
-          rows={3}
-          placeholder={
-            disabled
-              ? "Pick a workspace and start a session first."
-              : "Type a prompt… (Enter to send, @ for files, /compact to summarize, /fanout n \"task\" for parallel agents)"
-          }
-          aria-label="Prompt input"
-          aria-expanded={dropdownOpen || memDropdownOpen}
-          aria-autocomplete="list"
-          title={COMPOSER_SHORTCUT_TITLES.textarea}
-        />
-        {blocked !== null && (
-          <div className="mention-error" role="alert">
-            {blocked}
-          </div>
-        )}
-      </div>
-      <div className="composer-actions">
-        {running && (
-          <button onClick={onCancel} title={COMPOSER_SHORTCUT_TITLES.stop}>
-            Stop
+                  <span className="mention-item-path">
+                    {c.inScope ? c.relPath : c.absPath}
+                  </span>
+                  {c.inScope ? (
+                    <span className="mention-item-scope">workspace</span>
+                  ) : (
+                    <span className="mention-item-scope mention-item-scope-out">
+                      hors-scope
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {memDropdownOpen && (
+            <ul
+              className="mention-list"
+              role="listbox"
+              aria-label="Memory completions"
+            >
+              {memCandidates.map((m) => (
+                <li
+                  key={m.id}
+                  role="option"
+                  aria-selected={false}
+                  className="mention-item"
+                  onMouseDown={(e) => {
+                    // Select before the textarea loses focus/caret.
+                    e.preventDefault();
+                    applyMemoryCandidate(m);
+                  }}
+                >
+                  <span className="mention-item-path">
+                    {memoryChipLabel(m)}
+                  </span>
+                  <span
+                    className={
+                      isStale(m, Date.now())
+                        ? "mention-item-scope mention-item-scope-out"
+                        : "mention-item-scope"
+                    }
+                  >
+                    mémoire · {m.source} · {ageLabel(m, Date.now())}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <textarea
+            ref={areaRef}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              syncCaret(e.target);
+            }}
+            onKeyDown={onKey}
+            onKeyUp={(e) => syncCaret(e.currentTarget)}
+            onClick={(e) => syncCaret(e.currentTarget)}
+            onSelect={(e) => syncCaret(e.currentTarget)}
+            disabled={disabled}
+            rows={3}
+            placeholder={
+              disabled
+                ? "Ouvrez l’application desktop pour poursuivre."
+                : "Demandez à Muse de poursuivre…"
+            }
+            aria-label="Message à Muse"
+            aria-expanded={dropdownOpen || memDropdownOpen}
+            aria-autocomplete="list"
+            title={COMPOSER_SHORTCUT_TITLES.textarea}
+          />
+          {blocked !== null && (
+            <div className="mention-error" role="alert">
+              {blocked}
+            </div>
+          )}
+        </div>
+        <div className="composer-actions">
+          <div className="composer-context">{modelControl}</div>
+          {running && (
+            <button onClick={onCancel} title={COMPOSER_SHORTCUT_TITLES.stop}>
+              Arrêter
+            </button>
+          )}
+          <button
+            className="send"
+            aria-label="Envoyer le message"
+            title={COMPOSER_SHORTCUT_TITLES.send}
+            onClick={() => void send()}
+            disabled={disabled || text.trim().length === 0 || checking}
+          >
+            {checking ? "…" : "↑"}
           </button>
-        )}
-        <button
-          className="send"
-          aria-label="Send prompt"
-          title={COMPOSER_SHORTCUT_TITLES.send}
-          onClick={() => void send()}
-          disabled={disabled || text.trim().length === 0 || checking}
-        >
-          {checking ? "…" : "↑"}
-        </button>
-      </div>
+        </div>
       </div>
       <p
         className="composer-hint"
         title="Enter sends, Shift+Enter inserts a newline, Escape dismisses completions"
       >
-        Enter to send · Shift+Enter for a new line · Esc dismisses completions
+        Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne · @ pour le
+        contexte
       </p>
     </div>
   );

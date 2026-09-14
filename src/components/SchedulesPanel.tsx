@@ -32,9 +32,11 @@ function describeSchedule(s: Schedule): string {
 }
 
 function describeReuse(r: ThreadReuse, sessions: SessionRef[]): string {
-  if (r.kind === "active") return "active thread";
-  if (r.kind === "new") return "new thread";
-  return sessions.find((s) => s.session_id === r.sessionId)?.title ?? "thread gone";
+  if (r.kind === "active") return "Tâche active";
+  if (r.kind === "new") return "Nouvelle tâche";
+  return (
+    sessions.find((s) => s.session_id === r.sessionId)?.title ?? "thread gone"
+  );
 }
 
 /**
@@ -86,38 +88,41 @@ export function SchedulesPanel({
   }
 
   return (
-    <details className="schedules" aria-label="Automations">
-      <summary className="schedules-summary">
-        Automations
+    <section className="schedules" aria-label="Automatisations">
+      <h2 className="schedules-summary">
+        Nouvelle automatisation
         {schedules.length > 0 && (
-          <span className="schedules-count" title={`${schedules.length} schedule(s)`}>
+          <span
+            className="schedules-count"
+            title={`${schedules.length} schedule(s)`}
+          >
             {schedules.length}
           </span>
         )}
-      </summary>
+      </h2>
       <div className="sched-form">
         <input
           type="text"
-          placeholder="Name (e.g. morning standup)"
-          aria-label="Schedule name"
+          placeholder="Nom (ex. revue quotidienne)"
+          aria-label="Nom de l’automatisation"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
         <textarea
-          placeholder="Instructions sent on approve"
-          aria-label="Schedule instructions"
+          placeholder="Instructions exécutées après validation"
+          aria-label="Instructions"
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
           rows={2}
         />
         <div className="sched-row">
           <select
-            aria-label="Trigger type"
+            aria-label="Fréquence"
             value={triggerKind}
             onChange={(e) => setTriggerKind(e.target.value as TriggerKind)}
           >
-            <option value="once">one-shot</option>
-            <option value="cron">cron</option>
+            <option value="once">Une seule fois</option>
+            <option value="cron">Récurrente (cron)</option>
           </select>
           {triggerKind === "once" ? (
             <input
@@ -139,13 +144,13 @@ export function SchedulesPanel({
         </div>
         <div className="sched-row">
           <select
-            aria-label="Target thread"
+            aria-label="Tâche cible"
             value={reuseKind}
             onChange={(e) => setReuseKind(e.target.value as ReuseKind)}
           >
-            <option value="active">active thread</option>
-            <option value="new">new thread</option>
-            <option value="session">specific thread</option>
+            <option value="active">Tâche active</option>
+            <option value="new">Nouvelle tâche</option>
+            <option value="session">Tâche existante</option>
           </select>
           {reuseKind === "session" && (
             <select
@@ -153,7 +158,7 @@ export function SchedulesPanel({
               value={reuseSession}
               onChange={(e) => setReuseSession(e.target.value)}
             >
-              <option value="">choose…</option>
+              <option value="">Choisir…</option>
               {sessions.map((s) => (
                 <option key={s.session_id} value={s.session_id}>
                   {s.title || s.session_id.slice(0, 8)}
@@ -163,8 +168,8 @@ export function SchedulesPanel({
           )}
         </div>
         {formError !== null && <div className="error">{formError}</div>}
-        <button type="button" onClick={submit}>
-          Add schedule
+        <button type="button" className="primary" onClick={submit}>
+          Créer l’automatisation
         </button>
       </div>
       {schedules.length > 0 && (
@@ -193,21 +198,21 @@ export function SchedulesPanel({
                   onClick={() => onRunNow(s.id)}
                   title="Enqueue a review entry now"
                 >
-                  Run now
+                  Exécuter
                 </button>
                 <button
                   type="button"
                   className="sched-danger"
                   onClick={() => onDelete(s.id)}
-                  title="Delete schedule"
+                  title="Supprimer schedule"
                 >
-                  Delete
+                  Supprimer
                 </button>
               </div>
             </li>
           ))}
         </ul>
       )}
-    </details>
+    </section>
   );
 }

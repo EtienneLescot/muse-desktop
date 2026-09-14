@@ -17,6 +17,12 @@ export function WorkspacePicker({ workspace, onPick }: Props) {
   async function pick() {
     try {
       setError(null);
+      if (!("__TAURI_INTERNALS__" in window)) {
+        setError(
+          "Le sélecteur de dossier est disponible dans l’application desktop.",
+        );
+        return;
+      }
       const dir = await open({ directory: true, multiple: false });
       if (typeof dir === "string" && dir.length > 0) onPick(dir);
     } catch (e) {
@@ -26,11 +32,11 @@ export function WorkspacePicker({ workspace, onPick }: Props) {
 
   return (
     <div className="workspace-picker">
-      <button className="primary" onClick={pick}>
-        Choose workspace folder
+      <button className="workspace-button" onClick={pick}>
+        Choisir un dossier
       </button>
       <span className="workspace-path" title={workspace ?? ""}>
-        {workspace ?? "no workspace selected"}
+        {workspace ?? "Aucun dossier sélectionné"}
       </span>
       {error && <span className="error">{error}</span>}
     </div>
