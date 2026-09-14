@@ -7,8 +7,8 @@ interface Props {
   /** Default folder for the new thread; null until the user picks one. */
   workspace: string | null;
   onPickWorkspace: (path: string) => void;
-  onNewSession: () => Promise<string | null>;
-  onDraft?: (text: string) => void;
+  /** Creates the session and sends the first message right away. */
+  onStart: (draft: string) => Promise<boolean>;
   backendMissing?: boolean;
   /** US-33: explicit sidecar failure rendered instead of the blank screen. */
   sidecarError?: ReactNode | null;
@@ -17,13 +17,13 @@ interface Props {
 /**
  * Empty session screen shown when no session is active. Codex-like: the
  * folder is chosen here, per thread, at creation time — there is no
- * global folder lock in the sidebar.
+ * global folder lock in the sidebar. Starting sends the typed message
+ * immediately; nothing waits in the composer.
  */
 export function EmptySessionScreen({
   workspace,
   onPickWorkspace,
-  onNewSession,
-  onDraft,
+  onStart,
   backendMissing,
   sidecarError,
 }: Props) {
@@ -42,13 +42,13 @@ export function EmptySessionScreen({
     }
   }, [draft]);
   const [starting, setStarting] = useState(false);
+  const canStart = workspace !== null && !backendMissing && !starting;
   async function start() {
-    if (!workspace || backendMissing || starting) return;
+    if (!canStart) return;
     setStarting(true);
     try {
-      const id = await onNewSession();
-      if (id !== null) {
-        onDraft?.(draft);
+      const sent = await onStart(draft);
+      if (sent) {
         try { sessionStorage.removeItem("muse-desktop.welcome-draft"); } catch { /* Best effort. */ }
       }
     } finally {
@@ -98,22 +98,30 @@ export function EmptySessionScreen({
           placeholder="Describe what you want to build…"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void start();
+            }
+          }}
         />
         <div>
           <small>
             {backendMissing
               ? "Available in the desktop app"
               : workspace
-                ? "Your draft will be kept in the conversation."
+                ? draft.trim() === ""
+                  ? "Press start to open the conversation."
+                  : "Your message is sent as soon as you start."
                 : "Choose a folder to get started."}
           </small>
           <button
             className="primary"
             onClick={() => void start()}
-            disabled={!workspace || backendMissing || starting}
+            disabled={!canStart}
           >
-            {starting ? "Opening…" : "Open conversation"}
-            <Icon name="plus" />
+            {starting ? "Starting…" : "Start conversation"}
+            <Icon name="arrow-right" />
           </button>
         </div>
       </div>
