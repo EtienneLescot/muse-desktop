@@ -1,8 +1,5 @@
 import { useRef } from "react";
-import {
-  SUPPORTED_EXTENSIONS,
-  type LineHit,
-} from "../lib/indexer";
+import { SUPPORTED_EXTENSIONS, type LineHit } from "../lib/indexer";
 
 interface Props {
   enabled: boolean;
@@ -130,7 +127,7 @@ export function IndexPanel({
             </button>
             {paused ? (
               <button type="button" onClick={onResume}>
-                Resume
+                Reprendre
               </button>
             ) : (
               <button

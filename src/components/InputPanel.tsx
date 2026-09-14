@@ -8,7 +8,11 @@ import {
 
 interface Props {
   requests: InputRequest[];
-  onAnswer: (sessionId: string, inputId: string, answers: InputAnswer[]) => void;
+  onAnswer: (
+    sessionId: string,
+    inputId: string,
+    answers: InputAnswer[],
+  ) => void;
   onSkip: (sessionId: string, inputId: string) => void;
 }
 
@@ -23,7 +27,12 @@ export function InputPanel({ requests, onAnswer, onSkip }: Props) {
   return (
     <section className="approvals" role="region" aria-label="Pending input">
       {requests.map((r) => (
-        <InputCard key={`${r.session_id}:${r.input_id}`} request={r} onAnswer={onAnswer} onSkip={onSkip} />
+        <InputCard
+          key={`${r.session_id}:${r.input_id}`}
+          request={r}
+          onAnswer={onAnswer}
+          onSkip={onSkip}
+        />
       ))}
     </section>
   );
@@ -52,11 +61,17 @@ function InputCard({
   }, [request.input_id]);
 
   function setLabels(qid: string, labels: string[]): void {
-    setPicks((cur) => ({ ...cur, [qid]: { labels, text: cur[qid]?.text ?? "" } }));
+    setPicks((cur) => ({
+      ...cur,
+      [qid]: { labels, text: cur[qid]?.text ?? "" },
+    }));
   }
 
   function setText(qid: string, text: string): void {
-    setPicks((cur) => ({ ...cur, [qid]: { labels: cur[qid]?.labels ?? [], text } }));
+    setPicks((cur) => ({
+      ...cur,
+      [qid]: { labels: cur[qid]?.labels ?? [], text },
+    }));
   }
 
   function submit(): void {
@@ -89,19 +104,33 @@ function InputCard({
       onKeyDown={onCardKeyDown}
     >
       <div className="approval-text">
-        <strong>Input needed{request.tool_name !== "input" ? `: ${request.tool_name}` : ""}</strong>
+        <strong>
+          Input needed
+          {request.tool_name !== "input" ? `: ${request.tool_name}` : ""}
+        </strong>
         {request.questions.map((q) => (
-          <div key={q.id} className="input-question" role="group" aria-label={q.question}>
+          <div
+            key={q.id}
+            className="input-question"
+            role="group"
+            aria-label={q.question}
+          >
             {q.header.length > 0 && <div className="muted">{q.header}</div>}
             <div>{q.question}</div>
             {q.options.length > 0 ? (
               q.mode === "single" ? (
-                <div className="approval-actions" role="group" aria-label={`${q.question} — choices`}>
+                <div
+                  className="approval-actions"
+                  role="group"
+                  aria-label={`${q.question} — choices`}
+                >
                   {q.options.map((o) => (
                     <button
                       key={o.label}
                       type="button"
-                      className={picks[q.id]?.labels[0] === o.label ? "approve" : ""}
+                      className={
+                        picks[q.id]?.labels[0] === o.label ? "approve" : ""
+                      }
                       title={`${o.description} (Enter to pick)`.trim()}
                       aria-pressed={picks[q.id]?.labels[0] === o.label}
                       onClick={() => setLabels(q.id, [o.label])}
@@ -113,7 +142,11 @@ function InputCard({
               ) : (
                 <div className="approval-actions">
                   {q.options.map((o) => (
-                    <label key={o.label} className="check" title={o.description}>
+                    <label
+                      key={o.label}
+                      className="check"
+                      title={o.description}
+                    >
                       <input
                         type="checkbox"
                         checked={picks[q.id]?.labels.includes(o.label) ?? false}
@@ -138,7 +171,7 @@ function InputCard({
                 maxLength={500}
                 value={picks[q.id]?.text ?? ""}
                 onChange={(e) => setText(q.id, e.target.value)}
-                placeholder="Type your answer (max 500 chars)…"
+                placeholder="Votre réponse (500 caractères maximum)…"
                 aria-label={q.question}
               />
             )}
@@ -154,18 +187,18 @@ function InputCard({
         <button
           type="button"
           className="approve"
-          title="Send answer (Ctrl+Enter)"
+          title="Envoyer la réponse (Ctrl+Enter)"
           onClick={submit}
         >
-          Send answer
+          Envoyer la réponse
         </button>
         <button
           type="button"
           className="deny"
-          title="Skip this input (Escape)"
+          title="Ignorer cette demande (Échap)"
           onClick={() => onSkip(request.session_id, request.input_id)}
         >
-          Skip
+          Ignorer
         </button>
       </div>
     </div>

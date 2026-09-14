@@ -771,3 +771,197 @@
   margin: 0;
   white-space: pre;
 }
+
+/* Conversation polish: stable rows, progressive actions and calm surfaces. */
+.search-results button.search-highlight {
+  background: var(--pale);
+  color: var(--blue);
+}
+.conversation-rename {
+  padding-bottom: 14px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.conversation-rename label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.conversation-rename > div {
+  display: flex;
+  gap: 6px;
+}
+.conversation-rename input {
+  width: 100%;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+.desktop-app .empty-session {
+  padding-block: 28px;
+  gap: 12px;
+}
+.desktop-app .empty-session > .muse-logo {
+  width: 64px;
+  height: 48px;
+}
+.desktop-app .empty-session h2 {
+  font-size: 32px;
+}
+.desktop-app .welcome-suggestions {
+  margin-top: 4px;
+}
+.desktop-app .welcome-suggestions button {
+  padding: 14px 16px;
+}
+.desktop-app .welcome-suggestions small {
+  display: none;
+}
+.desktop-app .welcome-suggestions svg {
+  margin-bottom: 0;
+}
+.desktop-app .empty-session .workspace-picker {
+  flex-direction: row;
+  gap: 10px;
+}
+.desktop-app .session-item {
+  position: relative;
+  min-height: 38px;
+  padding: 0;
+}
+.desktop-app .session-select {
+  padding: 10px 35px 10px 10px;
+  min-height: 38px;
+}
+.desktop-app .session-select .session-title {
+  font-size: 12px;
+  line-height: 18px;
+}
+.desktop-app .conversation-more {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  opacity: 0;
+  width: 28px;
+  height: 30px;
+}
+.conversation-more svg {
+  stroke-linecap: round;
+  stroke-width: 4;
+}
+.desktop-app .session-item:hover .conversation-more,
+.desktop-app .session-item:focus-within .conversation-more {
+  opacity: 1;
+}
+.conversation-actions-dialog {
+  width: min(420px, calc(100vw - 48px));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 24px 80px #0003;
+}
+.conversation-actions-dialog::backdrop {
+  background: #10243a40;
+  backdrop-filter: blur(4px);
+}
+.conversation-actions-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.conversation-actions-dialog h2 {
+  font-size: 16px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.conversation-actions-dialog p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.conversation-action-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 16px;
+}
+.conversation-action-list button {
+  justify-content: flex-start;
+  padding: 12px;
+  border-radius: 8px;
+}
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+.desktop-app .project-group summary {
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+}
+.desktop-app .project-group summary:hover {
+  background: var(--pale);
+}
+.jump-to-latest {
+  position: sticky;
+  bottom: 4px;
+  align-self: center;
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: 0 4px 16px #0001;
+  font-size: 12px;
+  padding: 8px 16px;
+}
+.desktop-app .composer textarea {
+  max-height: 240px;
+  min-height: 64px;
+  resize: none;
+}
+.desktop-app .composer:focus-within {
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 5%, transparent);
+}
+.desktop-app .task-heading .eyebrow {
+  display: none;
+}
+.desktop-app .task-heading h1 {
+  font-size: 23px;
+  margin-top: 0;
+}
+.desktop-app .task-heading {
+  padding-top: 24px;
+}
+.desktop-app .stream {
+  scroll-behavior: auto;
+}
+.desktop-app .destination-page {
+  max-width: 1100px;
+  width: 100%;
+  margin-inline: auto;
+}
+.desktop-app button:disabled {
+  cursor: not-allowed;
+}
+.desktop-app button:focus-visible,
+.desktop-app summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-app *,
+  .desktop-app *::before,
+  .desktop-app *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

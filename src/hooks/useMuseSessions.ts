@@ -440,7 +440,7 @@ interface UseMuseSessions {
   setSessionModel: (sessionId: string, modelId: string) => Promise<void>;
   /** w-settings: route a path through the scope-guard prompt path. */
   checkPathScope: (path: string) => Promise<ScopeVerdict>;
-  startSession: () => Promise<void>;
+  startSession: () => Promise<string | null>;
   sendInput: (sessionId: string, text: string) => Promise<void>;
   approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<void>;
   /** US-15: persisted allowlist rules + effective decision per request. */
@@ -478,6 +478,7 @@ interface UseMuseSessions {
   /** US-23 opt-in local index (panel state + folder-pick indexing). */
   index: IndexApi;
   /** US-5: move a thread to the archived list (persisted flag). */
+  renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
   restoreSession: (sessionId: string) => void;
@@ -1626,7 +1627,7 @@ export function useMuseSessions(): UseMuseSessions {
   }, [workspace]);
 
   const startSession = useCallback(async () => {
-    await startSessionRow();
+    return await startSessionRow();
   }, [startSessionRow]);
 
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
@@ -2118,6 +2119,11 @@ export function useMuseSessions(): UseMuseSessions {
   // US-5: archive/restore flip the persisted `archived` flag (the
   // sessions write-through effect persists it); archiving the active
   // thread moves selection to the first remaining active thread.
+  const renameSession = useCallback((sessionId: string, title: string) => {
+    const next = title.trim().slice(0, 120);
+    if (next) setSessions(cur => cur.map(s => s.session_id === sessionId ? { ...s, title: next } : s));
+  }, []);
+
   const archiveSession = useCallback(
     (sessionId: string) => {
       setSessions((cur) => withArchivedFlag(cur, sessionId, true));
@@ -2572,6 +2578,7 @@ export function useMuseSessions(): UseMuseSessions {
     cancelInput,
     cancelSession,
     killSession,
+    renameSession,
     archiveSession,
     restoreSession,
     projects,

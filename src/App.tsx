@@ -82,6 +82,7 @@ export default function App() {
     cancelInput,
     cancelSession,
     killSession,
+    renameSession,
     archiveSession,
     restoreSession,
     projects,
@@ -166,11 +167,24 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [workPanel, setWorkPanel] = useState<
     "artifacts" | "browser" | "memory" | "tools" | null
-  >("artifacts");
+  >(null);
   const [starterDraft, setStarterDraft] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchIndex, setSearchIndex] = useState(0);
+  const searchResults = sessions.filter((session) =>
+    (session.title + " " + session.workspace)
+      .toLocaleLowerCase("fr")
+      .includes(search.toLocaleLowerCase("fr")),
+  );
+  useEffect(() => setSearchIndex(0), [search, searchOpen]);
   const searchDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (searchOpen)
+      searchDialog.current
+        ?.querySelector(".search-highlight")
+        ?.scrollIntoView({ block: "nearest" });
+  }, [searchIndex, searchOpen]);
   useEffect(() => {
     if (searchOpen) searchDialog.current?.showModal();
     else searchDialog.current?.close();
@@ -180,11 +194,22 @@ export default function App() {
     setPage(next);
   };
   const newTask = () => {
+    setStarterDraft(null);
     openPage("task");
     setActive(null);
   };
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        if (event.key === ",") {
+          event.preventDefault();
+          setSettingsOpen((value) => !value);
+        }
+        if (event.key.toLowerCase() === "b") {
+          event.preventDefault();
+          setCollapsed((value) => !value);
+        }
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSearchOpen(true);
@@ -193,6 +218,7 @@ export default function App() {
         event.preventDefault();
         setPage("task");
         setSettingsOpen(false);
+        setStarterDraft(null);
         setActive(null);
       }
     };
@@ -303,7 +329,11 @@ export default function App() {
           activeId,
           e.shiftKey ? -1 : 1,
         );
-        if (next !== null) setActive(next);
+        if (next !== null) {
+          setActive(next);
+          setPage("task");
+          setSettingsOpen(false);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -331,7 +361,7 @@ export default function App() {
       <div className="sr-only" aria-live="polite" role="status">
         {liveMessage}
       </div>
-      <aside className="sidebar" aria-label="Sidebar">
+      <aside className="sidebar" aria-label="Navigation latérale">
         <div className="brand">
           <span className="muse-logo">
             <img src="muse-logo.png" alt="" />
@@ -348,18 +378,24 @@ export default function App() {
           </button>
         </div>
         <nav className="primary-nav" aria-label="Navigation principale">
-          <button onClick={newTask} title="Nouvelle tâche · Ctrl+N">
+          <button
+            onClick={newTask}
+            aria-label="Nouvelle conversation"
+            title="Nouvelle conversation · Ctrl+N"
+          >
             <Icon name="plus" />
-            <span>Nouvelle tâche</span>
+            <span>Nouvelle conversation</span>
           </button>
           <button
             onClick={() => setSearchOpen(true)}
+            aria-label="Rechercher"
             title="Rechercher · Ctrl+K"
           >
             <Icon name="search" />
             <span>Rechercher</span>
           </button>
           <button
+            aria-label="Automatisations"
             aria-current={page === "automations" ? "page" : undefined}
             onClick={() => openPage("automations")}
           >
@@ -367,6 +403,7 @@ export default function App() {
             <span>Automatisations</span>
           </button>
           <button
+            aria-label="Extensions"
             aria-current={page === "extensions" ? "page" : undefined}
             onClick={() => openPage("extensions")}
           >
@@ -374,6 +411,7 @@ export default function App() {
             <span>Extensions</span>
           </button>
           <button
+            aria-label="Bibliothèque"
             aria-current={page === "library" ? "page" : undefined}
             onClick={() => openPage("library")}
           >
@@ -384,7 +422,7 @@ export default function App() {
         <div className="sidebar-scroll">
           <SessionSidebar
             sessions={sessions}
-            showArchived={page === "archives"}
+            showArchived={false}
             activeId={page === "task" && !settingsOpen ? activeId : null}
             pendingCounts={pendingCounts}
             compactedIds={Object.keys(summaries)}
@@ -395,6 +433,7 @@ export default function App() {
             onNew={newTask}
             onCancel={cancelSession}
             onKill={killSession}
+            onRename={renameSession}
             onArchive={archiveSession}
             onRestore={restoreSession}
             canStart
@@ -414,7 +453,7 @@ export default function App() {
             onClick={() => openPage("archives")}
           >
             <Icon name="archive" />
-            Tâches archivées
+            Conversations archivées
           </button>
         </div>
         <div className="sidebar-footer">
@@ -438,14 +477,14 @@ export default function App() {
             <span>
               {(active && page === "task"
                 ? active.workspace.split(/[\\/]/).pop()
-                : workspaceName) || "Espace personnel"}
+                : workspaceName) || "Muse-Desktop"}
             </span>
             <span className="separator">/</span>
             <span>
               {settingsOpen
                 ? "Paramètres"
                 : page === "task"
-                  ? active?.title || "Nouvelle tâche"
+                  ? active?.title || "Nouvelle conversation"
                   : {
                       projects: "Projets",
                       automations: "Automatisations",
@@ -471,7 +510,11 @@ export default function App() {
               <button
                 className="icon"
                 onClick={() => setWorkPanel(workPanel ? null : "artifacts")}
-                aria-label="Afficher le panneau de travail"
+                aria-label={
+                  workPanel
+                    ? "Masquer le panneau de travail"
+                    : "Afficher le panneau de travail"
+                }
                 aria-expanded={workPanel !== null}
               >
                 <Icon name="panel" />
@@ -519,11 +562,13 @@ export default function App() {
               {
                 {
                   projects: "Organisez vos projets et leurs instructions.",
-                  automations: "Confiez vos tâches récurrentes à Muse.",
+                  automations:
+                    "Planifiez des demandes à valider avant leur exécution.",
                   extensions: "Vos outils et compétences dans un même espace.",
                   library:
                     "Retrouvez vos fichiers et importez votre historique.",
-                  archives: "Les tâches mises de côté restent accessibles.",
+                  archives:
+                    "Les conversations mises de côté restent accessibles.",
                 }[page]
               }
             </p>
@@ -649,7 +694,7 @@ export default function App() {
                     </div>
                   ))}
                 {!sessions.some((session) => session.archived) && (
-                  <p className="muted">Aucune tâche archivée.</p>
+                  <p className="muted">Aucune conversation archivée.</p>
                 )}
               </div>
             )}
@@ -679,7 +724,7 @@ export default function App() {
                 <div className="session-center">
                   <header className="task-heading">
                     <div className="eyebrow">
-                      {active.workspace.split(/[\\/]/).pop()} / TÂCHE
+                      {active.workspace.split(/[\\/]/).pop()} / CONVERSATION
                     </div>
                     <h1>{active.title || "Nouvelle conversation"}</h1>
                     <div className="task-metadata">
@@ -689,6 +734,14 @@ export default function App() {
                       <span title={active.workspace}>{active.workspace}</span>
                     </div>
                   </header>
+                  {active.archived && (
+                    <div className="preview-notice">
+                      Conversation archivée{" "}
+                      <button onClick={() => restoreSession(active.session_id)}>
+                        Restaurer pour poursuivre
+                      </button>
+                    </div>
+                  )}
                   <ApprovalPanel
                     approvals={activeApprovals}
                     rules={allowlist}
@@ -739,7 +792,9 @@ export default function App() {
                   />
 
                   <Composer
-                    disabled={backendMissing}
+                    key={active.session_id}
+                    draftKey={active.session_id}
+                    disabled={backendMissing || active.archived === true}
                     modelControl={
                       <>
                         <button
@@ -771,7 +826,7 @@ export default function App() {
                     <nav className="work-tabs" aria-label="Panneau de travail">
                       {(
                         [
-                          ["artifacts", "Fichiers"],
+                          ["artifacts", "Contenus"],
                           ["browser", "Navigateur"],
                           ["memory", "Mémoire"],
                           ["tools", "Activité"],
@@ -884,7 +939,9 @@ export default function App() {
                               URL.revokeObjectURL(url);
                             }}
                           />{" "}
-                          <ChannelPanel experimental={channelsExperimental} />
+                          {channelsExperimental && (
+                            <ChannelPanel experimental={channelsExperimental} />
+                          )}
                         </>
                       )}
                     </div>
@@ -897,7 +954,7 @@ export default function App() {
       </main>
       <footer className="desktop-status">
         <span className="dot" />
-        {backendMissing ? "Aperçu · Backend non connecté" : "Muse connecté"}
+        {backendMissing ? "Aperçu web" : "Exécution locale"}
         <span className="status-workspace">
           {workspaceName || "Aucun dossier sélectionné"}
         </span>
@@ -906,11 +963,12 @@ export default function App() {
       <dialog
         ref={searchDialog}
         className="task-search"
+        aria-label="Rechercher une conversation"
         onCancel={() => setSearchOpen(false)}
         onClose={() => setSearchOpen(false)}
       >
         <header>
-          <h2>Rechercher une tâche</h2>
+          <h2>Rechercher une conversation</h2>
           <button
             aria-label="Fermer la recherche"
             onClick={() => setSearchOpen(false)}
@@ -920,37 +978,54 @@ export default function App() {
         </header>
         <input
           autoFocus
-          aria-label="Rechercher une tâche"
-          placeholder="Rechercher dans les projets…"
+          aria-label="Rechercher une conversation"
+          placeholder="Titre de conversation ou dossier…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(event) => {
+            if (!searchResults.length || event.nativeEvent.isComposing) return;
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              setSearchIndex(
+                (i) =>
+                  (i +
+                    (event.key === "ArrowDown" ? 1 : -1) +
+                    searchResults.length) %
+                  searchResults.length,
+              );
+            }
+            if (event.key === "Enter") {
+              event.preventDefault();
+              setActive(
+                searchResults[Math.min(searchIndex, searchResults.length - 1)]
+                  .session_id,
+              );
+              openPage("task");
+              setSearchOpen(false);
+            }
+          }}
         />
         <div className="search-results">
-          {sessions
-            .filter((session) =>
-              (session.title + " " + session.workspace)
-                .toLowerCase()
-                .includes(search.toLowerCase()),
-            )
-            .map((session) => (
-              <button
-                key={session.session_id}
-                onClick={() => {
-                  setActive(session.session_id);
-                  openPage("task");
-                  setSearchOpen(false);
-                }}
-              >
-                <Icon name="code" />
-                {session.title || session.session_id.slice(0, 8)}
-                <small>{session.archived ? "Archivée" : ""}</small>
-              </button>
-            ))}
+          {searchResults.map((session, index) => (
+            <button
+              key={session.session_id}
+              className={index === searchIndex ? "search-highlight" : undefined}
+              onClick={() => {
+                setActive(session.session_id);
+                openPage("task");
+                setSearchOpen(false);
+              }}
+            >
+              <Icon name="code" />
+              {session.title || session.session_id.slice(0, 8)}
+              <small>{session.archived ? "Archivée" : ""}</small>
+            </button>
+          ))}
           {!sessions.some((session) =>
             (session.title + " " + session.workspace)
               .toLowerCase()
               .includes(search.toLowerCase()),
-          ) && <p className="muted">Aucune tâche trouvée.</p>}
+          ) && <p className="muted">Aucune conversation trouvée.</p>}
         </div>
       </dialog>
     </div>

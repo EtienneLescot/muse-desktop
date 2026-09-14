@@ -26,16 +26,17 @@ type ReuseKind = "active" | "new" | "session";
 
 function describeSchedule(s: Schedule): string {
   if (s.trigger.kind === "once") {
-    return `once ${new Date(s.trigger.at).toLocaleString()}`;
+    return `Le ${new Date(s.trigger.at).toLocaleString()}`;
   }
   return `cron ${s.trigger.cron}`;
 }
 
 function describeReuse(r: ThreadReuse, sessions: SessionRef[]): string {
-  if (r.kind === "active") return "Tâche active";
-  if (r.kind === "new") return "Nouvelle tâche";
+  if (r.kind === "active") return "Conversation active";
+  if (r.kind === "new") return "Nouvelle conversation";
   return (
-    sessions.find((s) => s.session_id === r.sessionId)?.title ?? "thread gone"
+    sessions.find((s) => s.session_id === r.sessionId)?.title ??
+    "Conversation introuvable"
   );
 }
 
@@ -127,7 +128,7 @@ export function SchedulesPanel({
           {triggerKind === "once" ? (
             <input
               type="datetime-local"
-              aria-label="One-shot date and time"
+              aria-label="Date et heure"
               value={at}
               onChange={(e) => setAt(e.target.value)}
             />
@@ -144,17 +145,17 @@ export function SchedulesPanel({
         </div>
         <div className="sched-row">
           <select
-            aria-label="Tâche cible"
+            aria-label="Conversation cible"
             value={reuseKind}
             onChange={(e) => setReuseKind(e.target.value as ReuseKind)}
           >
-            <option value="active">Tâche active</option>
-            <option value="new">Nouvelle tâche</option>
-            <option value="session">Tâche existante</option>
+            <option value="active">Conversation active</option>
+            <option value="new">Nouvelle conversation</option>
+            <option value="session">Conversation existante</option>
           </select>
           {reuseKind === "session" && (
             <select
-              aria-label="Specific thread"
+              aria-label="Conversation existante"
               value={reuseSession}
               onChange={(e) => setReuseSession(e.target.value)}
             >
