@@ -50,12 +50,12 @@ export function ArtifactsPane({
   return (
     <aside
       className="artifacts-pane"
-      aria-label="Résumé et contenus de la conversation"
+      aria-label="Conversation summary and content"
     >
       <div
         className="artifacts-tabs"
         role="tablist"
-        aria-label="Contenus de la conversation"
+        aria-label="Conversation content"
       >
         <button
           type="button"
@@ -68,7 +68,7 @@ export function ArtifactsPane({
           }
           onClick={() => setTab("summary")}
         >
-          Résumé
+          Summary
         </button>
         <button
           type="button"
@@ -81,7 +81,7 @@ export function ArtifactsPane({
           }
           onClick={() => setTab("artifacts")}
         >
-          Contenus{artifacts.length > 0 ? ` (${artifacts.length})` : ""}
+          Content{artifacts.length > 0 ? ` (${artifacts.length})` : ""}
         </button>
       </div>
 
@@ -90,16 +90,16 @@ export function ArtifactsPane({
           <section>
             <h3>Conversation</h3>
             <p className="muted">
-              {recap.total} message(s) — {recap.counts.user} vous,{" "}
+              {recap.total} message(s) — {recap.counts.user} you,{" "}
               {recap.counts.assistant} assistant, {recap.counts.subagent}{" "}
-              sous-agent, {recap.counts.tool} outil, {recap.counts.system}{" "}
-              système.
+              subagent, {recap.counts.tool} outil, {recap.counts.system}{" "}
+              system.
             </p>
           </section>
           <section>
-            <h3>Fichiers évoqués</h3>
+            <h3>Referenced files</h3>
             {recap.filesMentioned.length === 0 ? (
-              <p className="muted">Aucun fichier détecté pour l’instant.</p>
+              <p className="muted">No files detected yet.</p>
             ) : (
               <ul className="artifacts-list">
                 {recap.filesMentioned.map((f) => (
@@ -111,10 +111,10 @@ export function ArtifactsPane({
             )}
           </section>
           <section>
-            <h3>Décisions</h3>
+            <h3>Decisions</h3>
             {recap.decisions.length === 0 ? (
               <p className="muted">
-                Aucune décision enregistrée pour l’instant.
+                No decisions recorded yet.
               </p>
             ) : (
               <ul className="artifacts-list">
@@ -129,8 +129,8 @@ export function ArtifactsPane({
         <div className="artifacts-body">
           {artifacts.length === 0 ? (
             <p className="muted">
-              Les extraits de code et les documents des réponses de Muse
-              apparaîtront ici.
+              Code snippets and documents from Muse's responses
+              will appear here.
             </p>
           ) : (
             artifacts.map((a) => {
@@ -185,9 +185,9 @@ export function ArtifactsPane({
                       type="button"
                       className="artifact-restore"
                       onClick={() => onRestore(sessionId, a.id, ver.v)}
-                      title="Insérer cette version dans votre brouillon"
+                      title="Insert this version into your draft"
                     >
-                      Réutiliser v{ver.v}
+                      Reuse v{ver.v}
                     </button>
                   </div>
                   <pre className="artifact-code">{ver.text}</pre>
@@ -197,7 +197,7 @@ export function ArtifactsPane({
                       type="text"
                       className="artifact-comment"
                       value={draft}
-                      placeholder="Commentaire ancré à cette version…"
+                      placeholder="Comment on this version…"
                       onChange={(e) =>
                         setDrafts((cur) => ({
                           ...cur,

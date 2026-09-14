@@ -1,4 +1,10 @@
 /* Desktop composition. Shared colors and radii live in App.css. */
+.desktop-topbar, .brand { user-select: none; }
+.window-controls { display: flex; align-items: center; gap: 2px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--line); position: relative; }
+.window-controls button { width: 34px; height: 32px; padding: 9px; border-radius: 7px; color: var(--muted); }
+.window-controls button svg { width: 14px; height: 14px; stroke-width: 1.6; }
+.window-controls .window-close:hover { background: #c42b1c; color: white; }
+.window-error { position: absolute; top: 40px; right: 0; width: 230px; background: var(--surface); color: var(--danger); padding: 10px; border: 1px solid var(--line); border-radius: 8px; z-index: 10; font-size: 12px; }
 .desktop-app {
   grid-template-rows: minmax(0, 1fr) 28px;
 }

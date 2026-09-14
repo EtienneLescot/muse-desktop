@@ -99,9 +99,9 @@ describe("stale boundary (30 days)", () => {
   });
 
   it("age labels badge fresh vs stale", () => {
-    assert.equal(ageLabel(entry(0), NOW), "aujourd'hui");
-    assert.equal(ageLabel(entry(12), NOW), "12 j");
-    assert.match(ageLabel(entry(45), NOW), /45 j · stale/);
+    assert.equal(ageLabel(entry(0), NOW), "today");
+    assert.equal(ageLabel(entry(12), NOW), "12 d");
+    assert.match(ageLabel(entry(45), NOW), /45 d · stale/);
   });
 
   it("future-dated entries clamp to today", () => {
@@ -168,9 +168,9 @@ describe("expandMemoryMentions", () => {
       [fresh, stale],
       NOW,
     );
-    assert.ok(text.includes("[mémoire user · 3 j] use pnpm"));
-    assert.ok(text.includes("[mémoire user · 45 j · stale] old flag --force"));
-    assert.ok(text.includes("⚠ stale (> 30 j)"));
+    assert.ok(text.includes("[memory user · 3 d] use pnpm"));
+    assert.ok(text.includes("[memory user · 45 d · stale] old flag --force"));
+    assert.ok(text.includes("⚠ stale (> 30 d)"));
     assert.equal(used.length, 2);
     assert.deepEqual(missing, []);
   });
@@ -203,13 +203,13 @@ describe("SCAN nudge", () => {
 
   it("nudge text is lightweight and points at the stale backlog", () => {
     const nudge = buildScanNudge([entry(5), entry(60)], NOW);
-    assert.ok(nudge.includes("2 entrée(s)"));
-    assert.ok(nudge.includes("1 entrée(s) stale"));
+    assert.ok(nudge.includes("2 entries"));
+    assert.ok(nudge.includes("1 stale entries"));
     assert.ok(nudge.length < 300, "stays a lightweight nudge");
   });
 
   it("clean store nudges with nothing to review", () => {
-    assert.ok(buildScanNudge([entry(1)], NOW).includes("aucune entrée stale"));
+    assert.ok(buildScanNudge([entry(1)], NOW).includes("no stale entries"));
   });
 });
 

@@ -4,7 +4,7 @@
  * - Workspace root display (read-only) + a path probe: an out-of-scope
  *   attempt routes to the existing scope-guard prompt path via
  *   `checkPathScope` instead of being applied silently.
- * - Préférence d’isolation select (workspace-confined default); network/elevated
+ * - Isolation preference select (workspace-confined default); network/elevated
  *   need their explicit permission toggle persisted alongside.
  * - Hidden web-search default note.
  * - Model picker over the live host catalog when reachable (US-31):
@@ -103,14 +103,14 @@ export function SettingsPanel({
   }
 
   return (
-    <section className="settings-panel" aria-label="Paramètres">
+    <section className="settings-panel" aria-label="Settings">
       <header className="settings-head">
-        <h2>Paramètres</h2>
+        <h2>Settings</h2>
         {onClose && (
           <button
             type="button"
             className="icon"
-            aria-label="Fermer les paramètres"
+            aria-label="Close settings"
             onClick={onClose}
           >
             ×
@@ -119,17 +119,17 @@ export function SettingsPanel({
       </header>
 
       <div className="settings-group">
-        <h3>Dossier par défaut</h3>
+        <h3>Default folder</h3>
         <p className="settings-note">
-          Ce dossier est proposé pour les nouvelles conversations. Les
-          conversations existantes conservent leur propre dossier.
+          This folder is suggested for new conversations. Existing
+          conversations keep their own folder.
         </p>
         <WorkspacePicker workspace={workspace} onPick={onPickWorkspace} />
       </div>
       <div className="settings-group">
-        <h3>Vérifier un chemin</h3>
+        <h3>Check a path</h3>
         <label className="settings-label" htmlFor="settings-path-probe">
-          Vérifier l’accès à un chemin dans le projet
+          Check access to a path in the project
         </label>
         <div className="settings-row">
           <input
@@ -144,14 +144,14 @@ export function SettingsPanel({
               if (e.key === "Enter") void runProbe();
             }}
             placeholder="/absolute/path/to/check"
-            aria-label="Chemin à vérifier"
+            aria-label="Path to check"
           />
           <button
             type="button"
             onClick={() => void runProbe()}
             disabled={probe.trim().length === 0 || probing}
           >
-            {probing ? "…" : "Vérifier"}
+            {probing ? "…" : "Check"}
           </button>
         </div>
         {probeResult !== null && (
@@ -162,31 +162,31 @@ export function SettingsPanel({
       </div>
 
       <div className="settings-group">
-        <h3>Isolation · Préférences</h3>
+        <h3>Isolation preferences</h3>
         <p className="settings-note">
-          Ces préférences ne modifient pas encore l’isolation du moteur en
-          cours.
+          These preferences do not yet change the isolation of the running
+          engine.
         </p>
         <label className="settings-label" htmlFor="settings-sandbox-mode">
-          Isolation (limitée au projet par défaut)
+          Isolation (workspace by default)
         </label>
         <select
           id="settings-sandbox-mode"
           value={sandbox.mode}
           onChange={(e) => pickMode(e.target.value as SandboxMode)}
-          aria-label="Préférence d’isolation"
+          aria-label="Isolation preference"
         >
-          <option value="workspace">Limité au projet</option>
+          <option value="workspace">Workspace only</option>
           <option value="network" disabled={!sandbox.networkAllowed}>
-            Réseau
+            Network
             {!sandbox.networkAllowed
-              ? " (autorisation requise ci-dessous)"
+              ? " (permission required below)"
               : ""}
           </option>
           <option value="elevated" disabled={!sandbox.elevatedAllowed}>
-            Droits étendus
+            Elevated access
             {!sandbox.elevatedAllowed
-              ? " (autorisation requise ci-dessous)"
+              ? " (permission required below)"
               : ""}
           </option>
         </select>
@@ -198,7 +198,7 @@ export function SettingsPanel({
               onSandboxChange({ ...sandbox, networkAllowed: e.target.checked })
             }
           />
-          Autoriser le réseau (autorisation enregistrée)
+          Allow network access (saved permission)
         </label>
         <label className="settings-check">
           <input
@@ -208,41 +208,41 @@ export function SettingsPanel({
               onSandboxChange({ ...sandbox, elevatedAllowed: e.target.checked })
             }
           />
-          Autoriser les droits étendus (autorisation enregistrée)
+          Allow elevated access (saved permission)
         </label>
         <p className="settings-note">
-          Préférence enregistrée : <strong>{effective}</strong>
+          Saved preference : <strong>{effective}</strong>
           {!canSelectMode(sandbox, sandbox.mode) &&
-            " — autorisation nécessaire pour cette préférence."}
+            " — permission required for this preference."}
         </p>
       </div>
 
       <div className="settings-group">
-        <h3>Recherche web</h3>
+        <h3>Web search</h3>
         <p className="settings-note">{WEB_SEARCH_DEFAULT_NOTE}</p>
       </div>
 
       <div className="settings-group">
         <h3>
           {liveModels === null
-            ? "Fournisseurs configurés"
-            : "Modèles disponibles"}
+            ? "Configured providers"
+            : "Available models"}
         </h3>
         {liveModels === null ? (
           <>
             <p className="settings-note">
-              Exemples de configuration. Connectez le moteur pour connaître les
-              modèles disponibles.
+              Example configurations. Connect the engine to see the
+              available models.
               {modelsError !== null && ` (${modelsError})`}
             </p>
             <label className="settings-label" htmlFor="settings-provider">
-              Fournisseur / modèle (enregistré par projet)
+              Provider / model (saved per project)
             </label>
             <select
               id="settings-provider"
               value={providerId}
               onChange={(e) => onProviderChange(e.target.value)}
-              aria-label="Fournisseur et modèle"
+              aria-label="Provider and model"
             >
               {CONFIGURED_PROVIDERS.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -251,24 +251,24 @@ export function SettingsPanel({
               ))}
             </select>
             <p className="settings-note">
-              Projet : {workspace ?? "aucun dossier sélectionné"}
+              Project: {workspace ?? "no folder selected"}
             </p>
           </>
         ) : (
           <>
             <p className="settings-note">
-              Catalogue du moteur ({liveModels.length} modèle
+              Engine catalog ({liveModels.length} model
               {liveModels.length === 1 ? "" : "s"}).
               <button
                 type="button"
                 className="settings-link"
                 onClick={onRefreshModels}
               >
-                Actualiser
+                Refresh
               </button>
             </p>
             <label className="settings-label" htmlFor="settings-model">
-              Modèle de la conversation active
+              Model for the active conversation
             </label>
             <select
               id="settings-model"
@@ -277,19 +277,19 @@ export function SettingsPanel({
                 if (e.target.value.length > 0) onSelectModel(e.target.value);
               }}
               disabled={activeSessionId === null}
-              aria-label="Modèle de la conversation active"
+              aria-label="Model for the active conversation"
             >
               {liveModels.map((m) => (
                 <option key={m.modelId} value={m.modelId}>
                   {m.displayLabel}
-                  {m.isDefault ? " (par défaut)" : ""}
-                  {m.isActive ? " (actif)" : ""}
+                  {m.isDefault ? " (default)" : ""}
+                  {m.isActive ? " (active)" : ""}
                 </option>
               ))}
             </select>
             {activeSessionId === null && (
               <p className="settings-note">
-                Ouvrez une conversation pour choisir son modèle.
+                Open a conversation to choose its model.
               </p>
             )}
           </>

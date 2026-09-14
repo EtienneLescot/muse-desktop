@@ -1,0 +1,9 @@
+[package]
+name = "muse-wsl-bridge"
+version = "0.1.0"
+edition = "2021"
+[[bin]]
+name = "muse-wsl-bridge"
+path = "../muse-wsl-bridge.rs"
+[dependencies]
+serde_json = "1"

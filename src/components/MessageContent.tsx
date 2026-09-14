@@ -19,11 +19,11 @@ function Inline({ text }: { text: string }) {
   );
 }
 function CodeBlock({ text, language }: { text: string; language: string }) {
-  const [status, setStatus] = useState("Copier");
+  const [status, setStatus] = useState("Copy");
   async function copy() {
     try {
       await navigator.clipboard.writeText(text);
-      setStatus("Copié");
+      setStatus("Copied");
     } catch {
       setStatus("Copie indisponible");
     }

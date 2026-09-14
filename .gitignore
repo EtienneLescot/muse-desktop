@@ -19,3 +19,6 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 *.swp
+
+# Local WSL adapter build
+scripts/wsl-bridge/target/

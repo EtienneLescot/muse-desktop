@@ -85,7 +85,7 @@ export function ProjectsPanel({
     <div className="projects-panel">
       <div className="session-list-header">
         <span>
-          Projets ({projects.length}/{MAX_PROJECTS})
+          Projects ({projects.length}/{MAX_PROJECTS})
         </span>
       </div>
       <div className="project-create">
@@ -93,15 +93,15 @@ export function ProjectsPanel({
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Nom du projet"
-          aria-label="Nom du projet"
+          placeholder="Project name"
+          aria-label="Project name"
           maxLength={80}
         />
         <textarea
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
-          placeholder="Instructions ajoutées aux demandes (facultatif)"
-          aria-label="Instructions du projet"
+          placeholder="Instructions included with requests (optional)"
+          aria-label="Project instructions"
           rows={2}
         />
         <button
@@ -110,7 +110,7 @@ export function ProjectsPanel({
           title={
             projects.length >= MAX_PROJECTS
               ? "Project quota reached"
-              : "Créer le projet"
+              : "Create project"
           }
         >
           + Add project
@@ -123,7 +123,7 @@ export function ProjectsPanel({
       )}
       {projects.length === 0 && (
         <p className="muted">
-          Aucun projet pour le moment. Regroupez vos conversations et leurs
+          No projects yet. Regroupez vos conversations et leurs
           instructions.
         </p>
       )}
@@ -176,9 +176,9 @@ export function ProjectsPanel({
                 }
                 aria-label="Global sandbox"
               >
-                <option value="read-only">Lecture seule</option>
-                <option value="workspace">Projet</option>
-                <option value="full">Étendus</option>
+                <option value="read-only">Read only</option>
+                <option value="workspace">Project</option>
+                <option value="full">Full access</option>
               </select>
             </label>
             <label className="project-setting">
@@ -193,9 +193,9 @@ export function ProjectsPanel({
                 }
                 aria-label="Global network default"
               >
-                <option value="allow">Autoriser</option>
-                <option value="prompt">Demander</option>
-                <option value="deny">Refuser</option>
+                <option value="allow">Allow</option>
+                <option value="prompt">Ask</option>
+                <option value="deny">Deny</option>
               </select>
             </label>
             <label className="project-setting">
@@ -269,7 +269,7 @@ function ProjectRow({
         </summary>
         <div className="project-detail">
           <label className="project-setting">
-            <span>Nom</span>
+            <span>Name</span>
             <input
               type="text"
               value={draftName}
@@ -293,35 +293,35 @@ function ProjectRow({
                 onUpdate({ name: draftName, instructions: draftInstructions })
               }
               disabled={!dirty}
-              title="Enregistrer le nom et les instructions"
+              title="Save name and instructions"
             >
-              Enregistrer
+              Save
             </button>
             {hasActiveThread &&
               (activeAttached ? (
                 <button
                   onClick={onDetachActive}
-                  title="Retirer la conversation active du projet"
+                  title="Detach the active conversation from this project"
                 >
-                  Retirer la conversation
+                  Detach conversation
                 </button>
               ) : (
                 <button
                   onClick={onAttachActive}
-                  title="Ajouter la conversation active au projet"
+                  title="Attach the active conversation to this project"
                 >
-                  Ajouter la conversation
+                  Attach conversation
                 </button>
               ))}
             <button
               onClick={onDelete}
               title={`Delete project ${project.name} (threads become ungrouped)`}
             >
-              Supprimer le projet
+              Delete project
             </button>
           </div>
           <div className="project-settings">
-            <span className="muted">Préférences propres au projet</span>
+            <span className="muted">Project preferences</span>
             {SETTING_KEYS.map((key) => (
               <OverrideRow
                 key={key}
@@ -334,7 +334,7 @@ function ProjectRow({
             ))}
           </div>
           {diff.length === 0 ? (
-            <p className="muted">Ce projet utilise les préférences globales.</p>
+            <p className="muted">This project inherits the global preferences.</p>
           ) : (
             <ul
               className="project-diff"
@@ -406,9 +406,9 @@ function OverrideRow({
         onChange={onText}
         aria-label={`Project sandbox (global ${globalValue})`}
       >
-        <option value="read-only">Lecture seule</option>
-        <option value="workspace">Projet</option>
-        <option value="full">Étendus</option>
+        <option value="read-only">Read only</option>
+        <option value="workspace">Project</option>
+        <option value="full">Full access</option>
       </select>
     ) : settingKey === "networkDefault" ? (
       <select
@@ -416,9 +416,9 @@ function OverrideRow({
         onChange={onText}
         aria-label={`Project network (global ${globalValue})`}
       >
-        <option value="allow">Autoriser</option>
-        <option value="prompt">Demander</option>
-        <option value="deny">Refuser</option>
+        <option value="allow">Allow</option>
+        <option value="prompt">Ask</option>
+        <option value="deny">Deny</option>
       </select>
     ) : (
       <input

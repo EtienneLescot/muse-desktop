@@ -36,11 +36,11 @@ export function ConnectorPanel({
   const installedIds = new Set(installed.map((e) => e.id));
 
   return (
-    <section className="integration-panel" aria-label="Connecteurs">
-      <h3>Connecteurs</h3>
+    <section className="integration-panel" aria-label="Connectors">
+      <h3>Connectors</h3>
       <p className="muted">
-        Catalogue de configuration. L’exécution des outils MCP n’est pas encore
-        connectée.
+        Configuration catalog. MCP tool execution is not yet
+        connected.
       </p>
       <ul className="integration-list">
         {CURATED_CONNECTORS.map((c) => {
@@ -55,10 +55,10 @@ export function ConnectorPanel({
                 </small>
               </span>
               {done ? (
-                <span className="integration-flag">configuré</span>
+                <span className="integration-flag">configured</span>
               ) : (
                 <button type="button" onClick={() => onInstall(c.id)}>
-                  Ajouter
+                  Add
                 </button>
               )}
             </li>
@@ -68,8 +68,8 @@ export function ConnectorPanel({
       {installed.length > 0 && (
         <>
           <h4>
-            Configurés
-            {toolNames.length > 0 && ` — ${toolNames.length} outil(s)`}
+            Configured
+            {toolNames.length > 0 && ` — ${toolNames.length} tool(s)`}
           </h4>
           <ul className="integration-list">
             {installed.map((e) => (
@@ -77,19 +77,19 @@ export function ConnectorPanel({
                 <span className="integration-main">
                   <strong>
                     {e.name}
-                    {e.kind === "remote" && <small> (distant)</small>}
+                    {e.kind === "remote" && <small> (remote)</small>}
                   </strong>
                   <small className="muted">
                     {e.status === "disabled"
-                      ? "désactivé"
+                      ? "disabled"
                       : e.tools.length > 0
                         ? e.tools.map((t) => t.name).join(" · ")
-                        : (e.guardMessage ?? "aucun outil listé")}
+                        : (e.guardMessage ?? "no tools listed")}
                   </small>
                 </span>
                 <label
                   className="integration-toggle"
-                  title={e.status === "disabled" ? "Activer" : "Désactiver"}
+                  title={e.status === "disabled" ? "Enable" : "Disable"}
                 >
                   <input
                     type="checkbox"
@@ -98,14 +98,14 @@ export function ConnectorPanel({
                   />
                 </label>
                 <button type="button" onClick={() => onUninstall(e.id)}>
-                  Retirer
+                  Remove
                 </button>
               </li>
             ))}
           </ul>
         </>
       )}
-      <h4>Connecteur distant (1 seul)</h4>
+      <h4>Remote connector (one maximum)</h4>
       <form
         className="integration-form"
         onSubmit={(ev) => {
@@ -120,19 +120,19 @@ export function ConnectorPanel({
       >
         <input
           type="text"
-          placeholder="Nom"
-          aria-label="Nom du connecteur distant"
+          placeholder="Name"
+          aria-label="Remote connector name"
           value={remoteName}
           onChange={(ev) => setRemoteName(ev.target.value)}
         />
         <input
           type="url"
           placeholder="https://…"
-          aria-label="URL publique HTTPS du connecteur distant"
+          aria-label="Public HTTPS connector URL"
           value={remoteUrl}
           onChange={(ev) => setRemoteUrl(ev.target.value)}
         />
-        <button type="submit">Ajouter</button>
+        <button type="submit">Add</button>
       </form>
       {remoteNotice !== null && (
         <p className="integration-notice" role="status">

@@ -432,7 +432,7 @@ export function Composer({
                     {m.inScope ? m.relPath : m.absPath}
                   </span>
                   {!m.inScope && (
-                    <span className="mention-chip-flag">hors-scope</span>
+                    <span className="mention-chip-flag">out of scope</span>
                   )}
                   <button
                     type="button"
@@ -518,7 +518,7 @@ export function Composer({
                     <span className="mention-item-scope">workspace</span>
                   ) : (
                     <span className="mention-item-scope mention-item-scope-out">
-                      hors-scope
+                      out of scope
                     </span>
                   )}
                 </li>
@@ -553,7 +553,7 @@ export function Composer({
                         : "mention-item-scope"
                     }
                   >
-                    mémoire · {m.source} · {ageLabel(m, Date.now())}
+                    memory · {m.source} · {ageLabel(m, Date.now())}
                   </span>
                 </li>
               ))}
@@ -574,10 +574,10 @@ export function Composer({
             rows={3}
             placeholder={
               disabled
-                ? "Ouvrez l’application desktop pour poursuivre."
-                : "Demandez à Muse de poursuivre…"
+                ? "Open the desktop app to continue."
+                : "Ask Muse to continue…"
             }
-            aria-label="Message à Muse"
+            aria-label="Message Muse"
             aria-expanded={dropdownOpen || memDropdownOpen}
             aria-autocomplete="list"
             title={COMPOSER_SHORTCUT_TITLES.textarea}
@@ -592,12 +592,12 @@ export function Composer({
           <div className="composer-context">{modelControl}</div>
           {running && (
             <button onClick={onCancel} title={COMPOSER_SHORTCUT_TITLES.stop}>
-              Arrêter
+              Stop
             </button>
           )}
           <button
             className="send"
-            aria-label="Envoyer le message"
+            aria-label="Send message"
             title={COMPOSER_SHORTCUT_TITLES.send}
             onClick={() => void send()}
             disabled={disabled || text.trim().length === 0 || checking}
@@ -610,8 +610,8 @@ export function Composer({
         className="composer-hint"
         title="Enter sends, Shift+Enter inserts a newline, Escape dismisses completions"
       >
-        Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne · @ pour le
-        contexte
+        Enter to send · Shift + Enter for a new line · @ for
+        context
       </p>
     </div>
   );

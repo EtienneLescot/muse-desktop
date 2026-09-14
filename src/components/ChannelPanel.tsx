@@ -15,14 +15,14 @@ export function ChannelPanel({ experimental }: Props) {
     <section className="collab-panel" aria-label="Co-editing channels (experimental)">
       <header className="collab-head">
         <strong>Channels</strong>
-        <span className="collab-flag" title="Transport non spécifié : aucun relais temps réel implémenté">
-          expérimental
+        <span className="collab-flag" title="Transport unspecified: no real-time relay implemented">
+          experimental
         </span>
       </header>
       <p className="muted" role="status">
         {ch.enabled
-          ? `Canal expérimental activé — état : ${ch.status}. La co-édition temps réel n'est pas connectée.`
-          : "Canaux co-édition désactivés (stub expérimental, non connecté)."}
+          ? `Experimental channel enabled — status: ${ch.status}. Real-time co-editing is not connected.`
+          : "Co-editing channels disabled (experimental stub, not connected)."}
       </p>
     </section>
   );

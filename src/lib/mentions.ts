@@ -4,7 +4,7 @@
  * No imports: safe to unit-test on the built-in node:test runner and to
  * reuse from the Composer. Scope verdicts here are a client-side fallback
  * (path containment under the workspace root); when the backend exposes a
- * `check_scope` command (US-22 chantier parallèle) the Composer prefers it
+ * `check_scope` command (US-22 parallel workstream) the Composer prefers it
  * and only falls back to these helpers when the command is missing.
  */
 

@@ -81,7 +81,7 @@ export { buildAnswers, parseInputRequest } from "../lib/input";
 // deliver the same buffered events twice and duplicate streamed text).
 import { createPollChain, enqueuePoll } from "../lib/poll";
 // US-10 reflexive phase: kind→phase mapping + placeholder entries, so the
-// stream shows "réflexion…" synchronously on send and on `item/started`
+// stream shows "thinking…" synchronously on send and on `item/started`
 // even before the first delta lands.
 import {
   dropEmptyPlaceholders,
@@ -1135,9 +1135,9 @@ export function useMuseSessions(): UseMuseSessions {
       ts: Date.now(),
       role: "system",
       text:
-        `Thread compacté — résumé local prêt (${summary.entryCount} entrées : ` +
-        `${summary.decisions.length} décision(s), ${summary.context.length} contexte, ` +
-        `${summary.todos.length} à-faire). Ouvrez un thread neuf via « New From Summary ».`,
+        `Thread compacted — local summary ready (${summary.entryCount} entries: ` +
+        `${summary.decisions.length} decisions, ${summary.context.length} context, ` +
+        `${summary.todos.length} to-dos). Open a new thread via "New From Summary".`,
     };
     setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
     appendLog(sessionId, [note]);
@@ -1181,8 +1181,8 @@ export function useMuseSessions(): UseMuseSessions {
       role: "system",
       text:
         status === "noop"
-          ? "Compactage serveur : rien à compacter (noop)."
-          : "Compactage serveur accepté — le host travaille en arrière-plan.",
+          ? "Server compaction: nothing to compact (noop)."
+          : "Server compaction accepted — the host is working in the background.",
     };
     setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
     appendLog(sessionId, [note]);

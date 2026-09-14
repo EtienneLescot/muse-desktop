@@ -33,6 +33,7 @@ import { IndexPanel } from "./components/IndexPanel";
 import { BrowserPanel } from "./components/BrowserPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
+import { WindowControls, dragWindow } from "./components/WindowControls";
 import "./App.css";
 import "./Desktop.css";
 
@@ -356,13 +357,13 @@ export default function App() {
   return (
     <div className={`app desktop-app ${collapsed ? "nav-collapsed" : ""}`}>
       <a className="skip-link" href="#composer">
-        Aller à la saisie
+        Skip to message input
       </a>
       <div className="sr-only" aria-live="polite" role="status">
         {liveMessage}
       </div>
-      <aside className="sidebar" aria-label="Navigation latérale">
-        <div className="brand">
+      <aside className="sidebar" aria-label="Sidebar">
+        <div className="brand" onMouseDown={dragWindow}>
           <span className="muse-logo">
             <img src="muse-logo.png" alt="" />
           </span>
@@ -371,36 +372,36 @@ export default function App() {
             className="icon"
             onClick={() => setCollapsed(!collapsed)}
             aria-label={
-              collapsed ? "Déplier la navigation" : "Réduire la navigation"
+              collapsed ? "Expand sidebar" : "Collapse sidebar"
             }
           >
             <Icon name="panel" />
           </button>
         </div>
-        <nav className="primary-nav" aria-label="Navigation principale">
+        <nav className="primary-nav" aria-label="Main navigation">
           <button
             onClick={newTask}
-            aria-label="Nouvelle conversation"
-            title="Nouvelle conversation · Ctrl+N"
+            aria-label="New conversation"
+            title="New conversation · Ctrl+N"
           >
             <Icon name="plus" />
-            <span>Nouvelle conversation</span>
+            <span>New conversation</span>
           </button>
           <button
             onClick={() => setSearchOpen(true)}
-            aria-label="Rechercher"
-            title="Rechercher · Ctrl+K"
+            aria-label="Search"
+            title="Search · Ctrl+K"
           >
             <Icon name="search" />
-            <span>Rechercher</span>
+            <span>Search</span>
           </button>
           <button
-            aria-label="Automatisations"
+            aria-label="Automations"
             aria-current={page === "automations" ? "page" : undefined}
             onClick={() => openPage("automations")}
           >
             <Icon name="clock" />
-            <span>Automatisations</span>
+            <span>Automations</span>
           </button>
           <button
             aria-label="Extensions"
@@ -411,12 +412,12 @@ export default function App() {
             <span>Extensions</span>
           </button>
           <button
-            aria-label="Bibliothèque"
+            aria-label="Library"
             aria-current={page === "library" ? "page" : undefined}
             onClick={() => openPage("library")}
           >
             <Icon name="folder" />
-            <span>Bibliothèque</span>
+            <span>Library</span>
           </button>
         </nav>
         <div className="sidebar-scroll">
@@ -445,7 +446,7 @@ export default function App() {
             onClick={() => openPage("projects")}
           >
             <Icon name="folder" />
-            Gérer les projets
+            Manage projects
             <Icon name="plus" />
           </button>
           <button
@@ -453,25 +454,25 @@ export default function App() {
             onClick={() => openPage("archives")}
           >
             <Icon name="archive" />
-            Conversations archivées
+            Archived conversations
           </button>
         </div>
         <div className="sidebar-footer">
           <button
             type="button"
             className="account"
-            aria-label="Profil — Paramètres"
+            aria-label="Profile — Settings"
             onClick={() => setSettingsOpen(true)}
           >
             <span className="avatar" aria-hidden="true">
               M
             </span>
-            <span className="account-name">Mon profil</span>
+            <span className="account-name">My profile</span>
           </button>
         </div>
       </aside>
       <main className="conversation" aria-label="Conversation">
-        <header className="desktop-topbar">
+        <header className="desktop-topbar" onMouseDown={dragWindow}>
           <div className="breadcrumb">
             <Icon name="folder" />
             <span>
@@ -482,14 +483,14 @@ export default function App() {
             <span className="separator">/</span>
             <span>
               {settingsOpen
-                ? "Paramètres"
+                ? "Settings"
                 : page === "task"
-                  ? active?.title || "Nouvelle conversation"
+                  ? active?.title || "New conversation"
                   : {
-                      projects: "Projets",
-                      automations: "Automatisations",
+                      projects: "Projects",
+                      automations: "Automations",
                       extensions: "Extensions",
-                      library: "Bibliothèque",
+                      library: "Library",
                       archives: "Archives",
                     }[page]}
             </span>
@@ -497,14 +498,15 @@ export default function App() {
           <div className="top-actions">
             <span className="pill">
               <span className="dot" />
-              {backendMissing ? "Aperçu web" : "Local"}
+              {backendMissing ? "Web preview" : "Local"}
             </span>
             <button
               className="icon"
               onClick={() => setTheme(nextTheme(theme))}
-              aria-label="Changer de thème"
+              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+              title={theme === "dark" ? "Light theme" : "Dark theme"}
             >
-              <Icon name="sun" />
+              <Icon name={theme === "dark" ? "sun" : "moon"} />
             </button>
             {active && page === "task" && !settingsOpen && (
               <button
@@ -512,20 +514,21 @@ export default function App() {
                 onClick={() => setWorkPanel(workPanel ? null : "artifacts")}
                 aria-label={
                   workPanel
-                    ? "Masquer le panneau de travail"
-                    : "Afficher le panneau de travail"
+                    ? "Hide work panel"
+                    : "Show work panel"
                 }
                 aria-expanded={workPanel !== null}
               >
                 <Icon name="panel" />
               </button>
             )}
+            <WindowControls />
           </div>
         </header>
         {settingsOpen ? (
           <section className="destination-page">
-            <div className="eyebrow">À VOTRE FAÇON</div>
-            <h1>Paramètres</h1>{" "}
+            <div className="eyebrow">MAKE IT YOURS</div>
+            <h1>Settings</h1>{" "}
             <SettingsPanel
               workspace={workspace}
               onPickWorkspace={setWorkspace}
@@ -546,14 +549,14 @@ export default function App() {
           </section>
         ) : page !== "task" ? (
           <section className="destination-page">
-            <div className="eyebrow">VOTRE ESPACE DE TRAVAIL</div>
+            <div className="eyebrow">YOUR WORKSPACE</div>
             <h1>
               {
                 {
-                  projects: "Projets",
-                  automations: "Automatisations",
+                  projects: "Projects",
+                  automations: "Automations",
                   extensions: "Extensions",
-                  library: "Bibliothèque",
+                  library: "Library",
                   archives: "Archives",
                 }[page]
               }
@@ -561,14 +564,14 @@ export default function App() {
             <p className="page-description">
               {
                 {
-                  projects: "Organisez vos projets et leurs instructions.",
+                  projects: "Organize your projects and instructions.",
                   automations:
-                    "Planifiez des demandes à valider avant leur exécution.",
-                  extensions: "Vos outils et compétences dans un même espace.",
+                    "Schedule requests to review before they run.",
+                  extensions: "Your tools and skills, all in one place.",
                   library:
-                    "Retrouvez vos fichiers et importez votre historique.",
+                    "Find your files and import your history.",
                   archives:
-                    "Les conversations mises de côté restent accessibles.",
+                    "Archived conversations remain available here.",
                 }[page]
               }
             </p>
@@ -689,12 +692,12 @@ export default function App() {
                       <button
                         onClick={() => restoreSession(session.session_id)}
                       >
-                        Restaurer
+                        Restore
                       </button>
                     </div>
                   ))}
                 {!sessions.some((session) => session.archived) && (
-                  <p className="muted">Aucune conversation archivée.</p>
+                  <p className="muted">No archived conversations.</p>
                 )}
               </div>
             )}
@@ -703,8 +706,8 @@ export default function App() {
           <>
             {backendMissing && (
               <div className="preview-notice">
-                Aperçu web · Ouvrez l’application desktop pour travailler avec
-                Muse. Votre historique local reste consultable.
+                Web preview · Open the desktop app to work with
+                Muse. Your local history is still available.
               </div>
             )}
             {sidecarKind !== null
@@ -726,19 +729,19 @@ export default function App() {
                     <div className="eyebrow">
                       {active.workspace.split(/[\\/]/).pop()} / CONVERSATION
                     </div>
-                    <h1>{active.title || "Nouvelle conversation"}</h1>
+                    <h1>{active.title || "New conversation"}</h1>
                     <div className="task-metadata">
                       <span className="dot" data-running={active.running} />
-                      {active.running ? "En cours" : "Prête"}
+                      {active.running ? "Working" : "Ready"}
                       <span>·</span>
                       <span title={active.workspace}>{active.workspace}</span>
                     </div>
                   </header>
                   {active.archived && (
                     <div className="preview-notice">
-                      Conversation archivée{" "}
+                      Archived conversation{" "}
                       <button onClick={() => restoreSession(active.session_id)}>
-                        Restaurer pour poursuivre
+                        Restore to continue
                       </button>
                     </div>
                   )}
@@ -799,10 +802,10 @@ export default function App() {
                       <>
                         <button
                           onClick={() => setSettingsOpen(true)}
-                          aria-label="Réglages du modèle"
+                          aria-label="Model settings"
                         >
                           {liveModels?.find((model) => model.isActive)
-                            ?.displayLabel || "Modèle"}
+                            ?.displayLabel || "Model"}
                         </button>
                         <span>Local</span>
                       </>
@@ -823,13 +826,13 @@ export default function App() {
                 </div>
                 {workPanel && (
                   <aside className="work-panel">
-                    <nav className="work-tabs" aria-label="Panneau de travail">
+                    <nav className="work-tabs" aria-label="Work panel">
                       {(
                         [
-                          ["artifacts", "Contenus"],
-                          ["browser", "Navigateur"],
-                          ["memory", "Mémoire"],
-                          ["tools", "Activité"],
+                          ["artifacts", "Content"],
+                          ["browser", "Browser"],
+                          ["memory", "Memory"],
+                          ["tools", "Activity"],
                         ] as const
                       ).map(([id, label]) => (
                         <button
@@ -842,7 +845,7 @@ export default function App() {
                       ))}
                       <button
                         className="icon"
-                        aria-label="Fermer le panneau"
+                        aria-label="Close panel"
                         onClick={() => setWorkPanel(null)}
                       >
                         <Icon name="close" />
@@ -954,23 +957,23 @@ export default function App() {
       </main>
       <footer className="desktop-status">
         <span className="dot" />
-        {backendMissing ? "Aperçu web" : "Exécution locale"}
+        {backendMissing ? "Web preview" : "Local execution"}
         <span className="status-workspace">
-          {workspaceName || "Aucun dossier sélectionné"}
+          {workspaceName || "No folder selected"}
         </span>
         <span className="status-brand">Muse-Desktop</span>
       </footer>
       <dialog
         ref={searchDialog}
         className="task-search"
-        aria-label="Rechercher une conversation"
+        aria-label="Search conversations"
         onCancel={() => setSearchOpen(false)}
         onClose={() => setSearchOpen(false)}
       >
         <header>
-          <h2>Rechercher une conversation</h2>
+          <h2>Search conversations</h2>
           <button
-            aria-label="Fermer la recherche"
+            aria-label="Close search"
             onClick={() => setSearchOpen(false)}
           >
             <Icon name="close" />
@@ -978,8 +981,8 @@ export default function App() {
         </header>
         <input
           autoFocus
-          aria-label="Rechercher une conversation"
-          placeholder="Titre de conversation ou dossier…"
+          aria-label="Search conversations"
+          placeholder="Conversation title or folder…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(event) => {
@@ -1018,14 +1021,14 @@ export default function App() {
             >
               <Icon name="code" />
               {session.title || session.session_id.slice(0, 8)}
-              <small>{session.archived ? "Archivée" : ""}</small>
+              <small>{session.archived ? "Archived" : ""}</small>
             </button>
           ))}
           {!sessions.some((session) =>
             (session.title + " " + session.workspace)
               .toLowerCase()
               .includes(search.toLowerCase()),
-          ) && <p className="muted">Aucune conversation trouvée.</p>}
+          ) && <p className="muted">No conversations found.</p>}
         </div>
       </dialog>
     </div>

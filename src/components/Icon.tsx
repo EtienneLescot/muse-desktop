@@ -1,4 +1,8 @@
 const paths = {
+  minimize: "M5 12h14",
+  maximize: "M5 5h14v14H5z",
+  restore: "M8 8h12v12H8zM4 16V4h12",
+  moon: "M20.9 13.1A9 9 0 0 1 10.9 3.1 9 9 0 1 0 20.9 13.1Z",
   more: "M5 12h.01M12 12h.01M19 12h.01",
   plus: "M12 5v14M5 12h14",
   search: "M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0",
@@ -11,7 +15,7 @@ const paths = {
   globe:
     "M2 12h20M12 2c7 6 7 14 0 20-7-6-7-14 0-20M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
   code: "m8 6-6 6 6 6m8-12 6 6-6 6",
-  sun: "M12 2v2m0 16v2M2 12h2m16 0h2M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0",
+  sun: "M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
 };
 export function Icon({ name }: { name: keyof typeof paths }) {
   return (

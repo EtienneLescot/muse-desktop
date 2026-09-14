@@ -64,55 +64,55 @@ export function EmptySessionScreen({
         <img src="muse-logo.png" alt="Muse logo" />
       </span>
       <h2>
-        Vos idées.
+        Your ideas.
         <br />
-        Un peu plus loin.
+        A little further.
       </h2>
-      <p>Construisez, explorez et livrez avec Muse.</p>
+      <p>Build, explore, and ship with Muse.</p>
       <WorkspacePicker workspace={workspace} onPick={onPickWorkspace} />
       <div className="welcome-suggestions">
         {[
           [
-            "Créer une interface",
-            "Crée une page d’accueil avec les composants du projet.",
+            "Build an interface",
+            "Create a landing page using this project's components.",
           ],
           [
-            "Explorer le projet",
-            "Explique la structure du projet et ses principaux composants.",
+            "Explore the project",
+            "Explain the project structure and its main components.",
           ],
           [
-            "Revoir le code",
-            "Analyse les modifications et propose une revue de code.",
+            "Review code",
+            "Analyze the changes and provide a code review.",
           ],
         ].map(([title, prompt]) => (
           <button key={title} onClick={() => setDraft(prompt)}>
             <Icon name="code" />
             {title}
-            <small>Commencer avec Muse ↗</small>
+            <small>Start with Muse ↗</small>
           </button>
         ))}
       </div>
       <div className="welcome-draft">
         <textarea
-          aria-label="Votre premier message"
-          placeholder="Décrivez ce que vous voulez construire…"
+          aria-label="Your first message"
+          placeholder="Describe what you want to build…"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />
         <div>
           <small>
             {backendMissing
-              ? "Disponible dans l’application desktop"
+              ? "Available in the desktop app"
               : workspace
-                ? "Votre brouillon sera conservé dans la conversation."
-                : "Choisissez un dossier pour commencer."}
+                ? "Your draft will be kept in the conversation."
+                : "Choose a folder to get started."}
           </small>
           <button
             className="primary"
             onClick={() => void start()}
             disabled={!workspace || backendMissing || starting}
           >
-            {starting ? "Ouverture…" : "Ouvrir la conversation"}
+            {starting ? "Opening…" : "Open conversation"}
             <Icon name="plus" />
           </button>
         </div>

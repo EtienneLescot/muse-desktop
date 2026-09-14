@@ -50,14 +50,14 @@ export function CompactBar({
     <div
       className="compact-bar"
       role="status"
-      aria-label="Résumé de la conversation"
+      aria-label="Conversation summary"
     >
       {usage !== null && (
         <span
           className="compact-text"
-          title="Occupation du contexte côté host (live)"
+          title="Live engine context usage"
         >
-          Contexte : {formatUsage(usage)}
+          Context : {formatUsage(usage)}
         </span>
       )}
       {suggestServer && (
@@ -65,7 +65,7 @@ export function CompactBar({
           type="button"
           className="compact-primary"
           onClick={onServerCompact}
-          title="Compacter le contexte côté serveur (session/compact, asynchrone)"
+          title="Compact the engine context"
         >
           Compact server
         </button>
@@ -73,13 +73,13 @@ export function CompactBar({
       {summary === null ? (
         <>
           <span className="compact-text">
-            Conversation longue — {entryCount} / {COMPACT_AUTO_ENTRIES} entrées.
-            Compactez pour continuer léger.
+            Long conversation — {entryCount} / {COMPACT_AUTO_ENTRIES} entries.
+            Summarize to keep the conversation focused.
           </span>
           <button
             type="button"
             onClick={onCompact}
-            title="Résumer cette conversation en local (aucun appel modèle)"
+            title="Summarize this conversation locally"
           >
             Compacter
           </button>
@@ -88,14 +88,14 @@ export function CompactBar({
         <>
           <span
             className="compact-flag"
-            title={`Résumé du ${new Date(summary.createdAt).toLocaleString()}`}
+            title={`Summary du ${new Date(summary.createdAt).toLocaleString()}`}
           >
-            compacté
+            summarized
           </span>
           <span className="compact-text">
-            {auto ? "Résumé automatique" : "Résumé prêt"} — {summary.entryCount}{" "}
-            entrées : {summary.decisions.length} décision(s),{" "}
-            {summary.context.length} contexte, {summary.todos.length} à-faire.
+            {auto ? "Automatic summary" : "Summary ready"} — {summary.entryCount}{" "}
+            entries : {summary.decisions.length} decision(s),{" "}
+            {summary.context.length} context, {summary.todos.length} to do.
             {entryCount >= COMPACT_WARN_ENTRIES && (
               <>
                 {" "}
@@ -106,7 +106,7 @@ export function CompactBar({
           <button
             type="button"
             onClick={onCompact}
-            title="Reconstruire le résumé local"
+            title="Rebuild local summary"
           >
             Recompacter
           </button>
@@ -114,7 +114,7 @@ export function CompactBar({
             type="button"
             className="compact-primary"
             onClick={onNewFromSummary}
-            title="Ouvrir une nouvelle conversation pré-rempli de ce résumé"
+            title="Open a new conversation with this summary"
           >
             New From Summary
           </button>

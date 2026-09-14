@@ -13,15 +13,15 @@ function targetLabel(
   sessionTitle: (id: string) => string,
 ): string {
   const r = item.threadReuse;
-  if (r.kind === "active") return "conversation active";
-  if (r.kind === "new") return "nouvelle conversation";
+  if (r.kind === "active") return "active conversation";
+  if (r.kind === "new") return "new conversation";
   return sessionTitle(r.sessionId);
 }
 
 /**
  * US-9 review queue: due schedules land here and wait — nothing auto-sends.
  * Approve sends the instructions as normal turn input into the recorded
- * target thread; Ignorer drops the entry.
+ * target thread; Skip drops the entry.
  */
 export function ReviewQueuePanel({
   items,
@@ -33,10 +33,10 @@ export function ReviewQueuePanel({
   return (
     <section
       className="review-queue"
-      aria-label="Demandes planifiées à valider"
+      aria-label="Scheduled requests to review"
     >
       <header className="review-head">
-        Demandes à valider
+        Requests to review
         <span className="schedules-count" title={`${items.length} pending`}>
           {items.length}
         </span>
@@ -56,16 +56,16 @@ export function ReviewQueuePanel({
               type="button"
               className="review-approve"
               onClick={() => onApprove(item.id)}
-              title="Envoyer les instructions à la conversation cible"
+              title="Send instructions to the target conversation"
             >
-              Valider et envoyer
+              Approve and send
             </button>
             <button
               type="button"
               onClick={() => onDiscard(item.id)}
-              title="Ignorer cette demande"
+              title="Skip this request"
             >
-              Ignorer
+              Skip
             </button>
           </div>
         </div>
