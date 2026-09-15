@@ -100,7 +100,7 @@ export function SessionSidebar({
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const rows = Array.from(
       e.currentTarget.querySelectorAll<HTMLButtonElement>(".session-select"),
-    );
+    ).filter((row) => !row.closest("details:not([open])"));
     const i = rows.indexOf(document.activeElement as HTMLButtonElement);
     if (i < 0) return;
     e.preventDefault();

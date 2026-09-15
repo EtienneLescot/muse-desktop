@@ -37,6 +37,7 @@ export function WorkspacePicker({ workspace, onPick }: Props) {
       </button>
       <span className="workspace-path" title={workspace ?? ""}>
         {workspace?.split(/[\\/]/).filter(Boolean).pop() ??
+          workspace ??
           "No folder selected"}
       </span>
       {error && <span className="error">{error}</span>}
