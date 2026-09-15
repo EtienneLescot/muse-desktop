@@ -25,7 +25,7 @@ function CodeBlock({ text, language }: { text: string; language: string }) {
       await navigator.clipboard.writeText(text);
       setStatus("Copied");
     } catch {
-      setStatus("Copie indisponible");
+      setStatus("Copy unavailable");
     }
   }
   return (
