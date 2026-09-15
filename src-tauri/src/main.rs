@@ -21,6 +21,7 @@
 
 mod msp;
 mod hosts;
+mod resume;
 use hosts::Hosts;
 
 use std::collections::HashMap;
@@ -197,6 +198,7 @@ fn extract_subagent_meta(item: &Value) -> Option<SubagentMeta> {
 const EVENT_BUFFER_CAP: usize = 2000;
 
 struct AppState {
+    resume_mutex: tokio::sync::Mutex<()>,
     hosts: Mutex<Hosts<MspClient>>,
     workspace: Mutex<Option<PathBuf>>,
     sessions: Mutex<HashMap<String, SessionMeta>>,
@@ -1008,6 +1010,51 @@ async fn start_session(
     Ok(meta)
 }
 
+/// Explicitly attach a saved durable session; never create a replacement ID.
+#[tauri::command]
+async fn resume_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    workspace_path: String,
+) -> Result<SessionMeta, String> {
+    let _resume = state.resume_mutex.lock().await;
+    let root = resolve_workspace(&state, Some(workspace_path))?;
+    if session_client(&state, &session_id).is_ok() {
+        let owner_root = state.hosts.lock().map_err(|e| e.to_string())?.session_workspace(&session_id)?;
+        if owner_root != root { return Err("conversation belongs to a different workspace".into()); }
+        return state.sessions.lock().map_err(|e| e.to_string())?.get(&session_id).cloned()
+            .ok_or_else(|| "conversation metadata is unavailable".into());
+    }
+    let client = ensure_host(&app, &state, &root).await?;
+    let read = client.request("session/read", json!({"sessionId":session_id,"excludeItems":true})).await?;
+    resume::validate(read.get("session").ok_or("session/read returned no conversation")?, &session_id, &root)?;
+    // Register before resume: pending approval/input events may immediately
+    // follow the response, before this awaiting task is scheduled again.
+    let mut meta = SessionMeta { session_id: session_id.clone(), workspace: root.display().to_string(), running: false };
+    state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
+    state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client)?;
+    let result = client.request("session/resume", resume::params(&session_id, new_command_id())).await;
+    match result {
+        Ok(result) => {
+            let session = result.get("session").ok_or_else(|| "session/resume returned no conversation".to_string());
+            let checked = session.and_then(|s| { resume::validate(s, &session_id, &root)?; Ok(s) });
+            match checked {
+                Ok(session) => {
+                    meta.running = session.get("status").and_then(Value::as_str) == Some("running");
+                    state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
+                    Ok(meta)
+                }
+                Err(error) => { state.hosts.lock().map_err(|e| e.to_string())?.forget(&session_id); Err(error) }
+            }
+        }
+        Err(error) => {
+            state.hosts.lock().map_err(|e| e.to_string())?.forget(&session_id);
+            Err(format!("could not reconnect conversation: {error}"))
+        }
+    }
+}
+
 /// Drain backend events after `since` (None = head cursor only, no replay).
 /// The UI polls this every ~300ms instead of `listen` push delivery.
 #[tauri::command]
@@ -1486,6 +1533,8 @@ async fn kill_session(
     state: State<'_, AppState>,
     session_id: String,
 ) -> Result<(), String> {
+    // A late resume must not resurrect a conversation the user just deleted.
+    let _resume = state.resume_mutex.lock().await;
     // Retire ownership before accepting further notifications for this session.
     // The host process is shared by all sessions, so it is NOT killed here:
     // end the turn (best effort) and forget local records.
@@ -1801,6 +1850,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
+            resume_mutex: tokio::sync::Mutex::new(()),
             hosts: Mutex::new(Hosts::default()),
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
@@ -1813,6 +1863,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
+            resume_session,
             restore_sessions,
             send_input,
             approve,

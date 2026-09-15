@@ -23,6 +23,8 @@ import type {
 export const MSP_METHODS_SENT: MspMethod[] = [
   "initialize",
   "session/start",
+  "session/read",
+  "session/resume",
   "session/list",
   "turn/start",
   "turn/interrupt",

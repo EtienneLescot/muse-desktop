@@ -441,6 +441,9 @@ interface UseMuseSessions {
   /** w-settings: route a path through the scope-guard prompt path. */
   checkPathScope: (path: string) => Promise<ScopeVerdict>;
   startSession: () => Promise<string | null>;
+  reconnectSession: (id: string) => Promise<void>;
+  reconnectingId: string | null;
+  connectedIds: string[];
   sendInput: (sessionId: string, text: string) => Promise<void>;
   approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<void>;
   /** US-15: persisted allowlist rules + effective decision per request. */
@@ -825,6 +828,7 @@ export function useMuseSessions(): UseMuseSessions {
   threadProjectsRef.current = threadProjects;
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
+  const [connectedIds, setConnectedIds] = useState<string[]>([]);
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
   // Mirror of "any session running", read by the poll loop to pick cadence.
   // Plain ref (not state): the loop lives outside render, StrictMode-safe.
@@ -931,6 +935,7 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         const restored = await invoke<BackendSessionMeta[]>("restore_sessions");
         if (cancelled) return;
+        setConnectedIds(restored.map((s) => s.session_id));
         setSessions((cur) => {
           const next = [...cur];
           for (const meta of restored) {
@@ -1293,6 +1298,7 @@ export function useMuseSessions(): UseMuseSessions {
     // Deleted stays deleted: late in-flight events for a killed session are
     // dropped instead of resurrecting its row.
     if (tombstoned.current?.has(sid)) return;
+    if (kind === "host_exited") setConnectedIds((cur) => cur.filter((id) => id !== sid));
     if (kind === "output") {
       ensureSessionRow(sid, null);
       const { itemId, text } = parseChunk(payload);
@@ -1616,6 +1622,7 @@ export function useMuseSessions(): UseMuseSessions {
         createdAt: Date.now(),
         running: meta.running,
       };
+      setConnectedIds((cur) => [...new Set([...cur, meta.session_id])]);
       setSessions((cur) => [...cur, record]);
       setLogs((cur) => (cur[meta.session_id] ? cur : { ...cur, [meta.session_id]: [] }));
       setActiveId(meta.session_id);
@@ -1625,6 +1632,28 @@ export function useMuseSessions(): UseMuseSessions {
       return null;
     }
   }, [workspace]);
+
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+  const reconnectSession = useCallback(async (id: string) => {
+    const session = sessions.find((s) => s.session_id === id);
+    if (!session || !isTauriRuntime()) return;
+    setReconnectingId(id);
+    setError(null);
+    try {
+      const meta = await invoke<BackendSessionMeta>("resume_session", {
+        sessionId: id, workspacePath: session.workspace,
+      });
+      if (tombstoned.current?.has(id)) return;
+      setConnectedIds((cur) => [...new Set([...cur, id])]);
+      setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
+      kickPoll();
+      await refreshModels(id);
+    } catch (e) {
+      setError(`Reconnect failed: ${String(e)}. Your saved messages are still available.`);
+    } finally {
+      setReconnectingId(null);
+    }
+  }, [sessions, kickPoll, refreshModels]);
 
   const startSession = useCallback(async () => {
     return await startSessionRow();
@@ -2562,6 +2591,9 @@ export function useMuseSessions(): UseMuseSessions {
     setSessionModel,
     checkPathScope,
     startSession,
+    reconnectSession,
+    reconnectingId,
+    connectedIds,
     sendInput,
     approve,
     allowlist,
