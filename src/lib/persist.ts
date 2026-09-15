@@ -11,6 +11,7 @@
  * All writes are confined to these keys; nothing is written outside them.
  */
 
+import { MAX_OUTBOX_ENTRIES, type OutboxEntry } from "./outbox.ts";
 import type {
   Project,
   ProjectSettings,
@@ -48,6 +49,12 @@ export interface LogEntry {
   objective?: string;
   subagentRole?: string;
   depth?: number;
+  /**
+   * M0-03 idempotency key on user entries: stable across retries of the
+   * same logical send, so a retry reuses this entry instead of appending
+   * a duplicate bubble.
+   */
+  clientMessageId?: string;
 }
 
 const SESSIONS_KEY = "muse-desktop.sessions.v1";
@@ -313,4 +320,50 @@ export function loadGlobalSettings(
 
 export function saveGlobalSettings(settings: ProjectSettings): void {
   write(GLOBAL_SETTINGS_KEY, settings);
+}
+
+/**
+ * M0-03 outbox: durable retryable outgoing messages, one key per session
+ * (`sending` entries are recovered as failed/ambiguous on boot; `accepted`
+ * ones are removed). Best-effort writes like everything else here — a
+ * storage failure keeps the live send working, only restart-recovery loses
+ * its safety net, which the UI reports as a plain send failure.
+ */
+const outboxKey = (sessionId: string) => `muse-desktop.outbox.v1.${sessionId}`;
+
+function isValidOutboxEntry(e: unknown): e is OutboxEntry {
+  if (typeof e !== "object" || e === null) return false;
+  const r = e as Record<string, unknown>;
+  return (
+    typeof r.clientMessageId === "string" &&
+    r.clientMessageId.length > 0 &&
+    typeof r.sessionId === "string" &&
+    r.sessionId.length > 0 &&
+    typeof r.text === "string" &&
+    typeof r.outgoingText === "string" &&
+    (r.state === "sending" || r.state === "accepted" || r.state === "failed") &&
+    (r.error === null || typeof r.error === "string") &&
+    typeof r.ambiguous === "boolean" &&
+    typeof r.createdAt === "number" &&
+    typeof r.updatedAt === "number" &&
+    typeof r.attempts === "number"
+  );
+}
+
+export function loadOutbox(sessionId: string): OutboxEntry[] {
+  const raw = read<unknown>(outboxKey(sessionId), []);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isValidOutboxEntry).slice(-MAX_OUTBOX_ENTRIES);
+}
+
+export function saveOutbox(sessionId: string, entries: OutboxEntry[]): void {
+  write(outboxKey(sessionId), entries.slice(-MAX_OUTBOX_ENTRIES));
+}
+
+export function dropOutbox(sessionId: string): void {
+  try {
+    localStorage.removeItem(outboxKey(sessionId));
+  } catch {
+    // best-effort
+  }
 }

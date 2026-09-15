@@ -1494,6 +1494,47 @@ async fn subagent_drilldown(
         })
 }
 
+/// M0-03: after an ambiguous send (ack timeout, restart mid-flight) the
+/// frontend must verify the server conversation before retransmitting, so
+/// one logical send can never become two accepted turns. Reuses the
+/// registered `session/read` method — no new MSP RPC.
+#[tauri::command]
+async fn check_input_reached(
+    state: State<'_, AppState>,
+    session_id: String,
+    text: String,
+) -> Result<bool, String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let client = session_client(&state, &session_id)?;
+    let read = client
+        .request(
+            SESSION_READ_METHOD,
+            json!({"commandId": new_command_id(), "sessionId": session_id}),
+        )
+        .await
+        .map_err(|e| format!("session/read unavailable for {session_id}: {e}"))?;
+    Ok(input_reached(&read, &text))
+}
+
+/// True when the exact outgoing text appears anywhere in the conversation
+/// payload. Structural exact-match scan over every string value: a false
+/// negative only means the caller resends (the previous behavior), while a
+/// false positive requires the very same text to already be delivered.
+fn input_reached(read: &Value, text: &str) -> bool {
+    if text.trim().is_empty() {
+        return false;
+    }
+    fn scan(v: &Value, text: &str) -> bool {
+        match v {
+            Value::String(s) => s == text,
+            Value::Array(items) => items.iter().any(|i| scan(i, text)),
+            Value::Object(map) => map.values().any(|v| scan(v, text)),
+            _ => false,
+        }
+    }
+    scan(read, text)
+}
+
 #[tauri::command]
 async fn cancel_session(
     app: AppHandle,
@@ -1562,6 +1603,28 @@ async fn kill_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn input_reached_finds_exact_text_anywhere_in_conversation() {
+        let read = json!({
+            "session": {"sessionId": "sess-1", "path": "durable.jsonl"},
+            "events": [
+                {"itemId": "i1", "role": "user", "content": [
+                    {"type": "text", "text": "hello there"}
+                ]},
+                {"itemId": "i2", "role": "assistant", "content": [
+                    {"type": "text", "text": "hi there, how can I help?"}
+                ]}
+            ]
+        });
+        assert!(input_reached(&read, "hello there"));
+        assert!(!input_reached(&read, "hello"));
+        assert!(!input_reached(&read, "hello there "));
+        assert!(!input_reached(&read, "hi"));
+        assert!(!input_reached(&read, ""));
+        assert!(!input_reached(&read, "   "));
+        assert!(!input_reached(&Value::Null, "hello there"));
+    }
 
     fn sample_prompt() -> Value {
         json!({
@@ -1883,6 +1946,7 @@ fn main() {
             subagent_followup,
             subagent_read_result,
             subagent_drilldown,
+            check_input_reached,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build muse-desktop app")

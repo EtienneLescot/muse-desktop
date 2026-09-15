@@ -24,6 +24,9 @@ import {
 } from "../lib/memory";
 // US-32: composer shortcuts documented in the UI via title attributes.
 import { COMPOSER_SHORTCUT_TITLES } from "../lib/a11y";
+// M0-03: sends return an explicit result — the draft is cleared only on
+// the supervisor's admission ack, never on a failed or ambiguous send.
+import type { SendResult } from "../lib/outbox";
 
 interface Props {
   sessionId?: string;
@@ -33,7 +36,11 @@ interface Props {
   running: boolean;
   /** Absolute workspace root; null while none is picked. */
   workspace: string | null;
-  onSend: (text: string) => void;
+  /**
+   * M0-03: resolves with an explicit send result. ok=true lets the
+   * composer clear the draft; ok=false keeps it (retryable outbox entry).
+   */
+  onSend: (text: string) => Promise<SendResult>;
   onCancel: () => void;
   /** US-4: summary text to load into the box after « New From Summary ». */
   prefill?: string | null;
@@ -134,6 +141,9 @@ export function Composer({
   const [selIndex, setSelIndex] = useState(0);
   const [blocked, setBlocked] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  // M0-03: one send in flight per composer — double Enter/click waits
+  // instead of firing a second identical turn.
+  const [sending, setSending] = useState(false);
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
   const [recents, setRecents] = useState<RecentMention[]>(() =>
     workspace !== null ? loadRecents(workspace) : [],
@@ -314,7 +324,7 @@ export function Composer({
   }
 
   async function send(): Promise<void> {
-    if (text.trim().length === 0 || disabled || checking) return;
+    if (text.trim().length === 0 || disabled || checking || sending) return;
     // US-20: expand `@mem/` tokens first (works even without a workspace:
     // memories are global). Unknown ids block explicitly, never silently.
     const memExpanded = expandMemoryMentions(text, memories ?? [], Date.now());
@@ -324,65 +334,76 @@ export function Composer({
       );
       return;
     }
+    let toSend: string;
     if (workspace === null || mentions.length === 0) {
-      setBlocked(null);
-      onSend(memExpanded.text);
-      setText("");
-      setCaret(0);
-      return;
-    }
-    const outScoped = mentions.filter((m) => !m.inScope);
-    if (outScoped.length > 0) {
-      // Permission path: prefer the backend check_scope verdict (US-22);
-      // without that command, fall back to blocking the send explicitly.
-      setChecking(true);
-      try {
-        for (const m of outScoped) {
-          const granted = await invoke<unknown>("check_scope", {
-            path: m.absPath,
-            sessionId,
-          });
-          if (!interpretScopeVerdict(granted)) {
-            setBlocked(
-              `Workspace permission denied for ${m.absPath}: the send was blocked.`,
-            );
-            return;
+      toSend = memExpanded.text;
+    } else {
+      const outScoped = mentions.filter((m) => !m.inScope);
+      if (outScoped.length > 0) {
+        // Permission path: prefer the backend check_scope verdict (US-22);
+        // without that command, fall back to blocking the send explicitly.
+        setChecking(true);
+        try {
+          for (const m of outScoped) {
+            const granted = await invoke<unknown>("check_scope", {
+              path: m.absPath,
+              sessionId,
+            });
+            if (!interpretScopeVerdict(granted)) {
+              setBlocked(
+                `Workspace permission denied for ${m.absPath}: the send was blocked.`,
+              );
+              return;
+            }
           }
+        } catch (e) {
+          setBlocked(
+            isMissingCommand(e)
+              ? outOfScopeMessage(mentions)
+              : `Scope check failed (${String(e)}): the send was blocked.`,
+          );
+          return;
+        } finally {
+          setChecking(false);
         }
-      } catch (e) {
-        setBlocked(
-          isMissingCommand(e)
-            ? outOfScopeMessage(mentions)
-            : `Scope check failed (${String(e)}): the send was blocked.`,
-        );
-        return;
-      } finally {
-        setChecking(false);
       }
-    }
-    // US-20: file mentions enrich first, then memory blocks are expanded
-    // on the enriched text (stale entries flagged, never silent).
-    const { text: enriched } = buildEnrichedText(workspace, memExpanded.text);
-    const fresh: RecentMention[] = [];
-    for (const m of mentions) {
-      if (!m.inScope) continue;
-      if (fresh.some((r) => r.absPath === m.absPath)) continue;
-      fresh.push({ relPath: m.relPath, absPath: m.absPath });
-    }
-    if (fresh.length > 0) {
-      setRecents((cur) => {
-        const next = [
-          ...fresh,
-          ...cur.filter((r) => !fresh.some((f) => f.absPath === r.absPath)),
-        ].slice(0, RECENT_CAP);
-        saveRecents(workspace, next);
-        return next;
-      });
+      // US-20: file mentions enrich first, then memory blocks are expanded
+      // on the enriched text (stale entries flagged, never silent).
+      const { text: enriched } = buildEnrichedText(workspace, memExpanded.text);
+      const fresh: RecentMention[] = [];
+      for (const m of mentions) {
+        if (!m.inScope) continue;
+        if (fresh.some((r) => r.absPath === m.absPath)) continue;
+        fresh.push({ relPath: m.relPath, absPath: m.absPath });
+      }
+      if (fresh.length > 0) {
+        setRecents((cur) => {
+          const next = [
+            ...fresh,
+            ...cur.filter((r) => !fresh.some((f) => f.absPath === r.absPath)),
+          ].slice(0, RECENT_CAP);
+          saveRecents(workspace, next);
+          return next;
+        });
+      }
+      toSend = enriched;
     }
     setBlocked(null);
-    onSend(enriched);
-    setText("");
-    setCaret(0);
+    // M0-03: clear the draft only on the supervisor's admission ack. A
+    // refusal (or ambiguous timeout) keeps the text in the box and in
+    // sessionStorage — the message stays recoverable and retryable.
+    setSending(true);
+    try {
+      const res = await onSend(toSend);
+      if (res.ok) {
+        setText("");
+        setCaret(0);
+      } else {
+        setBlocked(res.error ?? "The message was not sent.");
+      }
+    } finally {
+      setSending(false);
+    }
   }
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
@@ -603,9 +624,9 @@ export function Composer({
             aria-label="Send message"
             title={COMPOSER_SHORTCUT_TITLES.send}
             onClick={() => void send()}
-            disabled={disabled || text.trim().length === 0 || checking}
+            disabled={disabled || text.trim().length === 0 || checking || sending}
           >
-            {checking ? "…" : "↑"}
+            {checking || sending ? "…" : "↑"}
           </button>
         </div>
       </div>
