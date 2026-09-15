@@ -1,5 +1,7 @@
 # Roadmap — état d'avancement (2026-09-13, `main` @ `4d1f92c`)
 
+> Historique : ce bilan compte les stories fusionnées, pas la parité fonctionnelle. Pour l'état actuel par design, UI, câblage et validation, consulter la [roadmap opérationnelle](../ROADMAP.md) et l'[audit du 15 septembre](2026-09-15-codex-parity-audit.md).
+
 Arbre propre, poussé sur `origin/main`. Gates : `tsc` propre, 343/343 tests
 node, 23/23 tests Rust, `vite build` vert (node Linux
 `~/.nvm/versions/node/v22.16.0`, le `node` du PATH étant un shim Windows cassé).
