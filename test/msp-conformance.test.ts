@@ -12,11 +12,13 @@ const unique = (xs: readonly string[]): boolean =>
 
 describe("msp conformance surface", () => {
   it("sends a fixed set of SDK-known methods, no duplicates", () => {
-    assert.equal(MSP_METHODS_SENT.length, 8);
+    assert.equal(MSP_METHODS_SENT.length, 10);
     assert.ok(unique(MSP_METHODS_SENT));
     for (const m of [
       "initialize",
       "session/start",
+      "session/read",
+      "session/resume",
       "session/list",
       "turn/start",
       "turn/interrupt",
