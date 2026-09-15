@@ -26,6 +26,7 @@ import {
 import { COMPOSER_SHORTCUT_TITLES } from "../lib/a11y";
 
 interface Props {
+  sessionId?: string;
   draftKey: string;
   modelControl?: ReactNode;
   disabled: boolean;
@@ -101,6 +102,7 @@ function isMissingCommand(err: unknown): boolean {
  * exists (US-22), otherwise the send is blocked with an explicit message.
  */
 export function Composer({
+  sessionId,
   draftKey,
   modelControl,
   disabled,
@@ -338,6 +340,7 @@ export function Composer({
         for (const m of outScoped) {
           const granted = await invoke<unknown>("check_scope", {
             path: m.absPath,
+            sessionId,
           });
           if (!interpretScopeVerdict(granted)) {
             setBlocked(

@@ -137,6 +137,7 @@ pub struct MspClient {
     next_id: AtomicU64,
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Value, RpcError>>>>>,
     notify_tx: mpsc::UnboundedSender<(String, Value)>,
+    closed: tokio::sync::watch::Sender<bool>,
 }
 
 impl MspClient {
@@ -149,7 +150,12 @@ impl MspClient {
             next_id: AtomicU64::new(1),
             pending: Arc::new(Mutex::new(HashMap::new())),
             notify_tx,
+            closed: tokio::sync::watch::channel(false).0,
         }
+    }
+
+    pub fn closed_receiver(&self) -> tokio::sync::watch::Receiver<bool> {
+        self.closed.subscribe()
     }
 
     /// Feed one parsed frame from the host's stdout into response routing
@@ -207,6 +213,7 @@ impl MspClient {
     /// Kill the host process. One-way door: the owner builds a fresh client
     /// on respawn, so a killed client is never reused.
     pub async fn shutdown(&self) {
+        self.closed.send_replace(true);
         let child = self.child.lock().await.take();
         if let Some(c) = child {
             let _ = c.kill();
@@ -220,6 +227,21 @@ impl MspClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn shutting_down_one_client_wakes_only_its_consumers() {
+        let (a_tx, _) = mpsc::unbounded_channel();
+        let (b_tx, _) = mpsc::unbounded_channel();
+        let a = MspClient::new(Arc::new(Mutex::new(None)), a_tx);
+        let b = MspClient::new(Arc::new(Mutex::new(None)), b_tx);
+        let mut closed_a = a.closed_receiver();
+        let closed_b = b.closed_receiver();
+        a.shutdown().await;
+        closed_a.changed().await.unwrap();
+        assert!(*closed_a.borrow());
+        assert!(!*closed_b.borrow());
+        assert!(*a.closed_receiver().borrow());
+    }
 
     #[test]
     fn command_ids_look_like_uuidv7() {
