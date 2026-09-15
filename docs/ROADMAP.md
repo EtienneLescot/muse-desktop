@@ -55,11 +55,11 @@ Preuves principales : [backend](../src-tauri/src/main.rs), [sessions](../src/hoo
 
 ### Livraison M0-03 — 15 septembre 2026
 
-- **Envoi sans perte — implémenté, tests unitaires passés** : chaque envoi logique porte un `clientMessageId` stable (entrée d'outbox durable par session dans `muse-desktop.outbox.v1.*`, états sending/accepted/failed). Le brouillon du composer n'est vidé qu'à l'acquittement du superviseur ; un refus laisse le texte dans le champ, un échec crée une entrée réessayable (bannière Retry/Discard) routée par `sessionId`, jamais par la conversation affichée. Un timeout d'acquittement (15 s) ou un redémarrage en plein envoi marque l'entrée ambiguë : la reprise vérifie la conversation serveur via `session/read` (`check_input_reached`, scan exact) avant toute retransmission — un envoi logique ne peut pas devenir deux tours. Le retry réutilise l'expansion stockée (skill/fanout/projet) et l'entrée de log existante, sans jamais doubler le texte.
-- **Tests** : `npm test` (360 passés, dont outbox : machine à états, récupération au boot, persistance, clé conservée dans le log) ; `npm run build` ; `cargo test --bin muse-desktop` (32 passés, dont le scan exact `input_reached`). Aucun tour modèle.
+- **Envoi sans perte — implémenté, tests unitaires passés** : chaque envoi logique porte un `clientMessageId` stable et un `commandId` UUIDv7 dérivé, persisté dans l'outbox par session (`muse-desktop.outbox.v1.*`, états sending/accepted/failed). Le brouillon du composer n'est vidé qu'à l'acquittement du superviseur ; un refus laisse le texte dans le champ, un échec crée une entrée réessayable (bannière Retry/Discard) routée par `sessionId`, jamais par la conversation affichée. Un timeout d'acquittement (15 s) ou un redémarrage en plein envoi marque l'entrée ambiguë : la reprise vérifie `commandId`/`turnId` dans la réponse structurée de `session/read` avant toute retransmission — un envoi logique ne peut pas devenir deux tours. Le retry réutilise l'expansion stockée (skill/fanout/projet) et l'entrée de log existante, sans jamais doubler le texte. Une requête Tauri encore pendante conserve aussi le verrou de session jusqu'à sa résolution.
+- **Tests** : `npm test` (360 passés, dont outbox : machine à états, récupération au boot, identité serveur, persistance, clé conservée dans le log) ; `npm run build` ; `cargo test --bin muse-desktop` (32 passés, dont la vérification structurée `input_reached`). Aucun tour modèle.
 - **À valider** : E2E natif — moteur coupé pendant l'envoi, refus serveur, double-clic, fermeture/rechargement, changement de conversation, échec du premier prompt, IME et saisie pendant l'attente. Le parent M0-03 reste ouvert jusqu'à cette preuve.
 
-Validation de cette livraison : build frontend et 346 tests Node ; suite Rust incluant les scénarios de routage A/B, collision d'identité, session supprimée, fin d'un host, ancienne génération et fermeture du superviseur.
+Validation de cette livraison : build frontend et 360 tests Node ; suite Rust (32 tests) incluant les scénarios de routage A/B, collision d'identité, session supprimée, fin d'un host, ancienne génération et fermeture du superviseur.
 
 **Sortie M0 :** scénario natif créer → envoyer → stream → approuver → répondre → interrompre → réessayer, puis redémarrage et deux projets simultanés. Aucun réglage ne prétend modifier une capacité qu'il ne contrôle pas. Validation Windows d'abord ; support macOS/Linux qualifié séparément.
 
@@ -70,7 +70,7 @@ Validation de cette livraison : build frontend et 346 tests Node ; suite Rust in
 - **M0-02c — reste à faire** : importer le suffixe d'historique manquant, valider les demandes en attente réellement réémises et poursuivre un tour de bout en bout dans la webview native. La reprise demande uniquement les métadonnées (`excludeItems`) et conserve l'historique local actuel ; elle ne prétend pas le resynchroniser complètement.
 - Limite Windows : conversion des chemins du bridge pour les montages WSL standards `/mnt/<lecteur>/`. Un montage personnalisé non résolvable échoue explicitement ; les chemins ne sont pas devinés.
 
-Preuves : [validation de reprise](../src-tauri/src/resume.rs), commande `resume_session` dans le backend et `reconnectSession` dans le hook. Suite Rust : 31 tests ; suite Node : 346 tests ; build frontend réussi.
+Preuves : [validation de reprise](../src-tauri/src/resume.rs), commande `resume_session` dans le backend et `reconnectSession` dans le hook. Suite Rust : 32 tests ; suite Node : 360 tests ; build frontend réussi.
 
 ## M1 — Terminer le workflow quotidien de développement
 

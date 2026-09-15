@@ -1208,24 +1208,31 @@ async fn set_model(
 async fn send_input(
     state: State<'_, AppState>,
     session_id: String,
+    command_id: String,
     text: String,
-) -> Result<(), String> {
+) -> Result<Value, String> {
+    if command_id.trim().is_empty() {
+        return Err("empty commandId".to_string());
+    }
     if text.trim().is_empty() {
         return Err("empty input".to_string());
     }
     let client = session_client(&state, &session_id)?;
-    client
+    let result = client
         .request(
             "turn/start",
             json!({
-                "commandId": new_command_id(),
+                // The frontend persists this id before the request starts.
+                // Reusing it makes an ambiguous retry idempotent at the
+                // supervisor boundary instead of admitting a second turn.
+                "commandId": command_id,
                 "sessionId": session_id,
                 "input": [{"type": "text", "text": text}],
             }),
         )
         .await?;
     mark_running(&state, &session_id, true);
-    Ok(())
+    Ok(result)
 }
 
 #[tauri::command]
@@ -1502,9 +1509,10 @@ async fn subagent_drilldown(
 async fn check_input_reached(
     state: State<'_, AppState>,
     session_id: String,
-    text: String,
+    command_id: String,
 ) -> Result<bool, String> {
     let session_id = require_non_empty(&session_id, "sessionId")?;
+    let command_id = require_non_empty(&command_id, "commandId")?;
     let client = session_client(&state, &session_id)?;
     let read = client
         .request(
@@ -1513,26 +1521,30 @@ async fn check_input_reached(
         )
         .await
         .map_err(|e| format!("session/read unavailable for {session_id}: {e}"))?;
-    Ok(input_reached(&read, &text))
+    Ok(input_reached(&read, &command_id))
 }
 
-/// True when the exact outgoing text appears anywhere in the conversation
-/// payload. Structural exact-match scan over every string value: a false
-/// negative only means the caller resends (the previous behavior), while a
-/// false positive requires the very same text to already be delivered.
-fn input_reached(read: &Value, text: &str) -> bool {
-    if text.trim().is_empty() {
+/// True when the server exposes the stable command/turn identifier in its
+/// structured session/read payload.  Never inspect arbitrary text: a user or
+/// assistant repeating the same words must not be mistaken for delivery.
+fn input_reached(read: &Value, command_id: &str) -> bool {
+    if command_id.trim().is_empty() {
         return false;
     }
-    fn scan(v: &Value, text: &str) -> bool {
+    fn scan(v: &Value, command_id: &str) -> bool {
         match v {
-            Value::String(s) => s == text,
-            Value::Array(items) => items.iter().any(|i| scan(i, text)),
-            Value::Object(map) => map.values().any(|v| scan(v, text)),
+            Value::Array(items) => items.iter().any(|i| scan(i, command_id)),
+            Value::Object(map) => {
+                ["commandId", "turnId"].iter().any(|key| {
+                    map.get(*key)
+                        .and_then(Value::as_str)
+                        .is_some_and(|value| value == command_id)
+                }) || map.values().any(|v| scan(v, command_id))
+            }
             _ => false,
         }
     }
-    scan(read, text)
+    scan(read, command_id)
 }
 
 #[tauri::command]
@@ -1605,25 +1617,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn input_reached_finds_exact_text_anywhere_in_conversation() {
+    fn input_reached_matches_only_server_turn_identifiers() {
         let read = json!({
             "session": {"sessionId": "sess-1", "path": "durable.jsonl"},
             "events": [
-                {"itemId": "i1", "role": "user", "content": [
-                    {"type": "text", "text": "hello there"}
-                ]},
-                {"itemId": "i2", "role": "assistant", "content": [
-                    {"type": "text", "text": "hi there, how can I help?"}
-                ]}
+                {"itemId": "i1", "role": "user", "text": "hello there",
+                 "commandId": "cmd-1", "turnId": "turn-1"},
+                {"itemId": "i2", "role": "assistant", "text": "cmd-1"}
             ]
         });
-        assert!(input_reached(&read, "hello there"));
-        assert!(!input_reached(&read, "hello"));
-        assert!(!input_reached(&read, "hello there "));
-        assert!(!input_reached(&read, "hi"));
+        assert!(input_reached(&read, "cmd-1"));
+        assert!(input_reached(&read, "turn-1"));
+        // The same string in a transcript field is not evidence of delivery.
+        assert!(!input_reached(&read, "hello there"));
         assert!(!input_reached(&read, ""));
-        assert!(!input_reached(&read, "   "));
-        assert!(!input_reached(&Value::Null, "hello there"));
+        assert!(!input_reached(&Value::Null, "cmd-1"));
     }
 
     fn sample_prompt() -> Value {

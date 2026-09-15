@@ -148,6 +148,12 @@ export function Composer({
   const [recents, setRecents] = useState<RecentMention[]>(() =>
     workspace !== null ? loadRecents(workspace) : [],
   );
+  // Keep the latest editable draft available to the async send completion.
+  // A user can continue typing while the supervisor acknowledges a turn.
+  const textRef = useRef(text);
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const area = areaRef.current;
@@ -325,6 +331,7 @@ export function Composer({
 
   async function send(): Promise<void> {
     if (text.trim().length === 0 || disabled || checking || sending) return;
+    const draftAtSend = text;
     // US-20: expand `@mem/` tokens first (works even without a workspace:
     // memories are global). Unknown ids block explicitly, never silently.
     const memExpanded = expandMemoryMentions(text, memories ?? [], Date.now());
@@ -395,7 +402,9 @@ export function Composer({
     setSending(true);
     try {
       const res = await onSend(toSend);
-      if (res.ok) {
+      // Do not erase text typed while the async send was in flight. The
+      // admission ack belongs to the captured draft only.
+      if (res.ok && textRef.current === draftAtSend) {
         setText("");
         setCaret(0);
       } else {

@@ -1,12 +1,13 @@
 /**
  * M0-03 lossless send: client-side outbox for outgoing turns.
  *
- * Every logical send carries a stable `clientMessageId` idempotency key
- * that survives retries, conversation switches and app restarts. An entry
+ * Every logical send carries a stable `clientMessageId` plus a persisted
+ * server `commandId` idempotency key that survive retries, conversation
+ * switches and app restarts. An entry
  * walks sending → accepted (acknowledged: it leaves the outbox) or failed
  * (kept durably, retryable). A failure is `ambiguous` when no definitive
  * server answer arrived (ack timeout, restart mid-flight): retrying such
- * an entry must verify the server conversation before retransmitting, so
+ * an entry must verify the server conversation by identifier before retransmitting, so
  * one logical send can never become two accepted turns.
  *
  * Pure and dependency-free, unit-tested in test/outbox.test.ts.
@@ -17,6 +18,13 @@ export type OutboxState = "sending" | "accepted" | "failed";
 export interface OutboxEntry {
   /** Idempotency key: one logical send, stable across retries. */
   clientMessageId: string;
+  /**
+   * Stable UUIDv7 command id sent to the supervisor.  It is derived once
+   * from the client id and persisted so an ambiguous retry is idempotent at
+   * the protocol boundary.  Entries written by pre-M0-03 builds may omit it
+   * and cannot be verified automatically.
+   */
+  serverCommandId?: string;
   /** Target session — a retry never routes by the selected conversation. */
   sessionId: string;
   /** Original composer text (what the user typed). */
@@ -63,6 +71,7 @@ export function sendFailed(
 
 export function createOutboxEntry(init: {
   clientMessageId: string;
+  serverCommandId?: string;
   sessionId: string;
   text: string;
   outgoingText: string;
@@ -70,6 +79,9 @@ export function createOutboxEntry(init: {
 }): OutboxEntry {
   return {
     clientMessageId: init.clientMessageId,
+    ...(init.serverCommandId !== undefined
+      ? { serverCommandId: init.serverCommandId }
+      : {}),
     sessionId: init.sessionId,
     text: init.text,
     outgoingText: init.outgoingText,
@@ -80,6 +92,28 @@ export function createOutboxEntry(init: {
     updatedAt: init.now,
     attempts: 1,
   };
+}
+
+/**
+ * Derive a protocol-valid, stable UUIDv7 command id from a logical client
+ * message id.  The timestamp is fixed at first-send time; retries reuse the
+ * persisted result, so this function is called at most once per send.
+ */
+export function commandIdFromClientMessageId(
+  clientMessageId: string,
+  now = Date.now(),
+): string | undefined {
+  const source = clientMessageId.replaceAll("-", "").toLowerCase();
+  if (!/^[0-9a-f]{32}$/.test(source)) return undefined;
+  const timestamp = Math.max(0, Math.floor(now))
+    .toString(16)
+    .padStart(12, "0")
+    .slice(-12);
+  const chars = (timestamp + source.slice(12)).split("");
+  chars[12] = "7"; // UUID version 7
+  chars[16] = "8"; // RFC 9562 variant 10xx
+  const hex = chars.join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** A retry attempt starts: attempts grow, ambiguity from the past is kept. */
