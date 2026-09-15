@@ -798,6 +798,7 @@ export default function App() {
                   <Composer
                     key={active.session_id}
                     draftKey={active.session_id}
+                    sessionId={active.session_id}
                     disabled={backendMissing || active.archived === true}
                     modelControl={
                       <>

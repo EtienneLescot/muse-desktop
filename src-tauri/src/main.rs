@@ -1,11 +1,10 @@
-//! muse-desktop supervisor: one shared `muse serve` MSP host, sessions multiplexed.
+//! muse-desktop supervisor: one `muse serve` MSP host per canonical workspace.
 //!
 //! Design notes (grounded in `muse serve --help` + the exported MSP schema):
-//! - `muse serve` is a session host over stdio: sandbox posture is fixed at
-//!   spawn, and ONE host loads every session. So this layer keeps a SINGLE
-//!   sidecar child and multiplexes sessions by `sessionId` — not one process
-//!   per session (that would strand durability and force one sandbox posture
-//!   negotiation per session for no benefit).
+//! - Sandbox posture is fixed at spawn. Sessions in one canonical workspace
+//!   share its engine; different workspaces retain independent engines.
+//! - Commands and notifications require explicit session ownership; a global
+//!   workspace preference never selects the engine for an existing session.
 //! - Approval mode is intentionally NOT selected on the wire: the host seals
 //!   a startup ceiling and rejects selections (`approval_mode_ceiling`), so
 //!   `session/start` omits it and inherits the sealed default.
@@ -21,6 +20,8 @@
 //! Payloads always carry `session_id` so the hook demultiplexes sessions.
 
 mod msp;
+mod hosts;
+use hosts::Hosts;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -144,14 +145,6 @@ struct PendingApproval {
     requirement_id: Value,
 }
 
-/// One live sidecar host: workspace it was spawned for, MSP client, and a
-/// capped ring of its recent stderr lines (surfaced when the host dies, since
-/// stderr has no session to route to).
-struct Host {
-    workspace: PathBuf,
-    client: std::sync::Arc<MspClient>,
-}
-
 /// Sub-agent identity captured from `item/started` for kind `subagent`.
 /// Feeds the UI drill-down (childSessionId) and the control commands
 /// (agent id = item id). Pure data, no sidecar calls.
@@ -204,10 +197,10 @@ fn extract_subagent_meta(item: &Value) -> Option<SubagentMeta> {
 const EVENT_BUFFER_CAP: usize = 2000;
 
 struct AppState {
-    host: Mutex<Option<Host>>,
+    hosts: Mutex<Hosts<MspClient>>,
     workspace: Mutex<Option<PathBuf>>,
     sessions: Mutex<HashMap<String, SessionMeta>>,
-    approvals: Mutex<HashMap<String, PendingApproval>>,
+    approvals: Mutex<HashMap<(String, String), PendingApproval>>,
     /// (session_id, item_id) -> MSP item kind (`agentMessage`, `subagent`,
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
     /// its own. Scoped by session: bare item ids may repeat across sessions.
@@ -263,7 +256,7 @@ fn mark_running(state: &State<AppState>, session_id: &str, running: bool) {
 }
 
 /// Spawn (or reuse) the sidecar host for `root`, running the MSP handshake.
-/// One host per workspace: a different workspace respawns (kills) the old one.
+/// Reuse the workspace host without stopping engines owned by other projects.
 async fn ensure_host(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -273,32 +266,19 @@ async fn ensure_host(
     // both pass the check below and spawn two hosts (loser shut down, its
     // in-flight requests failing spuriously).
     let _creation = state.host_mutex.lock().await;
-    {
-        let host = state.host.lock().map_err(|e| format!("state lock: {e}"))?;
-        if let Some(h) = host.as_ref() {
-            if h.workspace == *root {
-                return Ok(h.client.clone());
-            }
-        }
+    if let Some(client) = state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.workspace(root) {
+        return Ok(client);
     }
-    // Different workspace (or first use): shut the old host down outside the lock.
-    let old = state
-        .host
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?
-        .take();
-    if let Some(h) = old {
-        h.client.shutdown().await;
-    }
-
     let (rx, child) = spawn_sidecar(app, root)?;
     let shared: SharedChild = std::sync::Arc::new(tokio::sync::Mutex::new(Some(child)));
     let (notify_tx, notify_rx) = mpsc::unbounded_channel::<(String, Value)>();
     let client = std::sync::Arc::new(MspClient::new(shared, notify_tx));
     let stderr_tail = std::sync::Arc::new(Mutex::new(Vec::<String>::new()));
 
+    state.hosts.lock().map_err(|e| format!("state lock: {e}"))?
+        .insert(root.clone(), client.clone());
     pump_stdout(app.clone(), rx, client.clone(), stderr_tail.clone());
-    pump_notifications(app.clone(), notify_rx);
+    pump_notifications(app.clone(), notify_rx, client.clone());
 
     // A failed handshake must kill the just-spawned child: dropping the
     // handle never kills the process, so an early Err here would leak one
@@ -318,6 +298,7 @@ async fn ensure_host(
         client.notify("initialized", Value::Null).await
     };
     if let Err(e) = handshake.await {
+        state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.remove(&client);
         client.shutdown().await;
         return Err(format!(
             "MSP handshake failed ({e}). Host stderr: {}",
@@ -325,14 +306,6 @@ async fn ensure_host(
         ));
     }
 
-    state
-        .host
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?
-        .replace(Host {
-            workspace: root.clone(),
-            client: client.clone(),
-        });
     Ok(client)
 }
 
@@ -429,7 +402,7 @@ fn spawn_sidecar(
 }
 
 /// Forward the host's stdout frames into the MSP client; stash stderr for
-/// diagnostics; announce host death to every known session.
+/// diagnostics; announce host death only to sessions owned by this client.
 fn pump_stdout(
     app: AppHandle,
     mut rx: tauri::async_runtime::Receiver<CommandEvent>,
@@ -457,11 +430,8 @@ fn pump_stdout(
                 }
                 CommandEvent::Terminated(payload) => {
                     let state: State<AppState> = app.state();
-                    let ids: Vec<String> = state
-                        .sessions
-                        .lock()
-                        .map(|t| t.keys().cloned().collect())
-                        .unwrap_or_default();
+                    let ids = state.hosts.lock().map(|mut hosts| hosts.remove(&client)).unwrap_or_default();
+                    client.shutdown().await;
                     let why = format!(
                         "sidecar host exited (code {:?}, signal {:?}). {}",
                         payload.code,
@@ -511,11 +481,21 @@ fn push_stderr(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>, line: String) {
 fn pump_notifications(
     app: AppHandle,
     mut rx: mpsc::UnboundedReceiver<(String, Value)>,
+    client: std::sync::Arc<MspClient>,
 ) {
     tauri::async_runtime::spawn(async move {
-        while let Some((method, params)) = rx.recv().await {
+        let mut closed = client.closed_receiver();
+        loop {
+            if *closed.borrow() { break; }
+            let event = tokio::select! {
+                _ = closed.changed() => break,
+                event = rx.recv() => event,
+            };
+            let Some((method, params)) = event else { break; };
             let state: State<AppState> = app.state();
-            route_notification(&app, &state, &method, &params);
+            let sid = params.get("sessionId").and_then(Value::as_str).unwrap_or("");
+            let owned = state.hosts.lock().map(|h| h.owns(sid, &client)).unwrap_or(false);
+            if owned { route_notification(&app, &state, &method, &params); }
         }
     });
 }
@@ -667,7 +647,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
             let requirement = p.get("currentRequirementId").cloned().unwrap_or(Value::Null);
             if let Ok(mut approvals) = state.approvals.lock() {
                 approvals.insert(
-                    approval_id.to_string(),
+                    (sid.to_string(), approval_id.to_string()),
                     PendingApproval {
                         session_id: sid.to_string(),
                         requirement_id: requirement,
@@ -711,7 +691,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
             if method == "approval/resolved" {
                 if let Some(aid) = p.get("approvalId").and_then(Value::as_str) {
                     if let Ok(mut approvals) = state.approvals.lock() {
-                        approvals.remove(aid);
+                        approvals.remove(&(sid.to_string(), aid.to_string()));
                     }
                 }
             }
@@ -922,16 +902,18 @@ fn check_scope_pure(canonical_root: &std::path::Path, canonical_candidate: &std:
 /// (the US-18 `@`-mention flow maps that to ask/deny). Missing or
 /// unresolvable workspace, and empty paths, are hard errors.
 #[tauri::command]
-fn check_scope(state: State<'_, AppState>, path: String) -> Result<ScopeCheck, String> {
+fn check_scope(state: State<'_, AppState>, path: String, session_id: Option<String>) -> Result<ScopeCheck, String> {
     if path.trim().is_empty() {
         return Err("empty path".to_string());
     }
-    let root = state
+    let root = if let Some(sid) = session_id {
+        state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.session_workspace(&sid)?
+    } else { state
         .workspace
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
         .clone()
-        .ok_or_else(|| "no workspace selected — pick a folder first".to_string())?;
+        .ok_or_else(|| "no workspace selected — pick a folder first".to_string())? };
     let canonical_root = root
         .canonicalize()
         .map_err(|e| format!("cannot resolve workspace {}: {e}", root.display()))?;
@@ -1011,6 +993,7 @@ async fn start_session(
         .or_else(|| session.get("id").and_then(Value::as_str))
         .ok_or("session/start: response has no session id")?
         .to_string();
+    state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.bind(&session_id, &root, &client)?;
     let running = session.get("status").and_then(Value::as_str).map(|s| s == "running").unwrap_or(false);
     let meta = SessionMeta {
         session_id: session_id.clone(),
@@ -1047,42 +1030,19 @@ fn poll_events(state: State<'_, AppState>, since: Option<u64>) -> Result<PollRes
 
 #[tauri::command]
 async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>, String> {
-    // No host yet (fresh boot before any workspace): nothing live to report;
-    // the frontend restores its persisted history on its own.
-    let client = {
-        state
-            .host
-            .lock()
-            .map_err(|e| format!("state lock: {e}"))?
-            .as_ref()
-            .map(|h| h.client.clone())
-    };
-    let Some(client) = client else {
-        return Ok(Vec::new());
-    };
-    let res = client.request("session/list", json!({})).await?;
+    let clients = state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.snapshot();
     let mut out = Vec::new();
-    if let Some(sessions) = res.get("sessions").and_then(Value::as_array) {
-        for s in sessions {
-            let Some(sid) = s
-                .get("sessionId")
-                .and_then(Value::as_str)
-                .or_else(|| s.get("id").and_then(Value::as_str))
-            else {
-                continue;
-            };
-            let ws = s
-                .get("workspaceRoot")
-                .and_then(Value::as_str)
-                .or_else(|| s.get("workspace").and_then(Value::as_str))
-                .unwrap_or("")
-                .to_string();
-            let running = s.get("status").and_then(Value::as_str).map(|v| v == "running").unwrap_or(false);
-            out.push(SessionMeta {
-                session_id: sid.to_string(),
-                workspace: ws,
-                running,
-            });
+    for (_, client) in clients {
+        let res = client.request("session/list", json!({})).await?;
+        if let Some(sessions) = res.get("sessions").and_then(Value::as_array) {
+            for s in sessions {
+                let Some(sid) = s.get("sessionId").or_else(|| s.get("id")).and_then(Value::as_str) else { continue };
+                if !state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.owns(sid, &client) { continue; }
+                if let Some(mut meta) = state.sessions.lock().map_err(|e| format!("state lock: {e}"))?.get(sid).cloned() {
+                    meta.running = s.get("status").and_then(Value::as_str) == Some("running");
+                    out.push(meta);
+                }
+            }
         }
     }
     Ok(out)
@@ -1098,16 +1058,12 @@ async fn list_models(
     state: State<'_, AppState>,
     session_id: Option<String>,
 ) -> Result<Vec<ModelEntry>, String> {
-    let client = {
-        state
-            .host
-            .lock()
-            .map_err(|e| format!("state lock: {e}"))?
-            .as_ref()
-            .map(|h| h.client.clone())
-    };
-    let Some(client) = client else {
-        return Ok(Vec::new());
+    let client = if let Some(sid) = session_id.as_deref().filter(|id| !id.trim().is_empty()) {
+        session_client(&state, sid)?
+    } else {
+        let root = state.workspace.lock().map_err(|e| format!("state lock: {e}"))?.clone();
+        let Some(client) = root.and_then(|root| state.hosts.lock().ok()?.workspace(&root)) else { return Ok(Vec::new()); };
+        client
     };
     let mut params = json!({});
     if let Some(sid) = session_id {
@@ -1135,17 +1091,7 @@ async fn list_models(
 /// `run_active` (a turn is streaming — wait for it to finish).
 #[tauri::command]
 async fn compact_session(state: State<'_, AppState>, session_id: String) -> Result<String, String> {
-    let client = {
-        state
-            .host
-            .lock()
-            .map_err(|e| format!("state lock: {e}"))?
-            .as_ref()
-            .map(|h| h.client.clone())
-    };
-    let Some(client) = client else {
-        return Err("no sidecar host — start a session first".to_string());
-    };
+    let client = session_client(&state, &session_id)?;
     let res = client
         .request(
             "session/compact",
@@ -1190,17 +1136,7 @@ async fn set_model(
     if model_id.trim().is_empty() {
         return Err("empty model id".to_string());
     }
-    let client = {
-        state
-            .host
-            .lock()
-            .map_err(|e| format!("state lock: {e}"))?
-            .as_ref()
-            .map(|h| h.client.clone())
-    };
-    let Some(client) = client else {
-        return Err("no sidecar host — start a session first".to_string());
-    };
+    let client = session_client(&state, &session_id)?;
     let mut model = json!({ "modelId": model_id });
     if let Some(p) = provider_id.filter(|s| !s.trim().is_empty()) {
         model["providerId"] = json!(p);
@@ -1230,17 +1166,7 @@ async fn send_input(
     if text.trim().is_empty() {
         return Err("empty input".to_string());
     }
-    let client = {
-        state
-            .host
-            .lock()
-            .map_err(|e| format!("state lock: {e}"))?
-            .as_ref()
-            .map(|h| h.client.clone())
-    };
-    let Some(client) = client else {
-        return Err("no sidecar host — start a session first".to_string());
-    };
+    let client = session_client(&state, &session_id)?;
     client
         .request(
             "turn/start",
@@ -1268,7 +1194,7 @@ async fn approve(
             .lock()
             .map_err(|e| format!("state lock: {e}"))?;
         let pending = approvals
-            .get(&approval_id)
+            .get(&(session_id.clone(), approval_id.clone()))
             .ok_or_else(|| format!("unknown or stale approval: {approval_id}"))?;
         // The requirement token belongs to exactly one session: a mismatched
         // caller id (stale click after a session switch, mis-paired id) must
@@ -1280,17 +1206,7 @@ async fn approve(
         }
         pending.requirement_id.clone()
     };
-    let client = {
-        state
-            .host
-            .lock()
-            .map_err(|e| format!("state lock: {e}"))?
-            .as_ref()
-            .map(|h| h.client.clone())
-    };
-    let Some(client) = client else {
-        return Err("no sidecar host — start a session first".to_string());
-    };
+    let client = session_client(&state, &session_id)?;
     // A stale requirementId is rejected by the host (-32053) and surfaces as
     // this command's error: a decision can never silently satisfy a new stage.
     let res = client
@@ -1310,7 +1226,7 @@ async fn approve(
     // decide cannot replay it.
     if res.get("terminal").and_then(Value::as_bool).unwrap_or(true) {
         if let Ok(mut approvals) = state.approvals.lock() {
-            approvals.remove(&approval_id);
+            approvals.remove(&(session_id.clone(), approval_id.clone()));
         }
     }
     Ok(())
@@ -1347,17 +1263,7 @@ async fn answer_input(
             }
         }
     }
-    let client = {
-        state
-            .host
-            .lock()
-            .map_err(|e| format!("state lock: {e}"))?
-            .as_ref()
-            .map(|h| h.client.clone())
-    };
-    let Some(client) = client else {
-        return Err("no sidecar host — start a session first".to_string());
-    };
+    let client = session_client(&state, &session_id)?;
     client
         .request(
             "userInput/answer",
@@ -1379,17 +1285,7 @@ async fn cancel_input(
     session_id: String,
     user_input_id: String,
 ) -> Result<(), String> {
-    let client = {
-        state
-            .host
-            .lock()
-            .map_err(|e| format!("state lock: {e}"))?
-            .as_ref()
-            .map(|h| h.client.clone())
-    };
-    let Some(client) = client else {
-        return Err("no sidecar host — start a session first".to_string());
-    };
+    let client = session_client(&state, &session_id)?;
     client
         .request(
             "userInput/cancel",
@@ -1461,14 +1357,8 @@ fn subagent_followup_payload(
     Ok((method, params))
 }
 
-fn subagent_client(state: &State<'_, AppState>) -> Result<std::sync::Arc<MspClient>, String> {
-    state
-        .host
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?
-        .as_ref()
-        .map(|h| h.client.clone())
-        .ok_or_else(|| "no sidecar host — start a session first".to_string())
+fn session_client(state: &AppState, session_id: &str) -> Result<std::sync::Arc<MspClient>, String> {
+    state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.session(session_id)
 }
 
 async fn subagent_control(
@@ -1478,7 +1368,7 @@ async fn subagent_control(
     agent_id: &str,
 ) -> Result<(), String> {
     let (method, params) = subagent_control_payload(method, session_id, agent_id)?;
-    subagent_client(state)?.request(&method, params).await?;
+    session_client(state, session_id)?.request(&method, params).await?;
     Ok(())
 }
 
@@ -1517,7 +1407,7 @@ async fn subagent_followup(
     task: String,
 ) -> Result<(), String> {
     let (method, params) = subagent_followup_payload(&session_id, &agent_id, &task)?;
-    subagent_client(&state)?.request(&method, params).await?;
+    session_client(&state, &session_id)?.request(&method, params).await?;
     Ok(())
 }
 
@@ -1529,7 +1419,7 @@ async fn subagent_read_result(
 ) -> Result<Value, String> {
     let (method, params) =
         subagent_control_payload(SUBAGENT_READ_RESULT_METHOD, &session_id, &agent_id)?;
-    Ok(subagent_client(&state)?.request(&method, params).await?)
+    Ok(session_client(&state, &session_id)?.request(&method, params).await?)
 }
 
 /// Open a sub-agent's child session transcript via `session/read` when the
@@ -1547,7 +1437,7 @@ async fn subagent_drilldown(
         "commandId": new_command_id(),
         "sessionId": child,
     });
-    subagent_client(&state)?
+    session_client(&state, &session_id)?
         .request(SESSION_READ_METHOD, params)
         .await
         .map_err(|e| {
@@ -1571,11 +1461,7 @@ async fn cancel_session(
 async fn interrupt_session(app: &AppHandle, state: &State<'_, AppState>, session_id: &str) {
     // Clone the client out of the lock first: the std guard must never be
     // held across an await (it is !Send through the child handle).
-    let client = state
-        .host
-        .lock()
-        .ok()
-        .and_then(|h| h.as_ref().map(|x| x.client.clone()));
+    let client = session_client(state, session_id).ok();
     if let Some(c) = client {
         // Best effort: no running turn means the host rejects this; the
         // session is stopped either way.
@@ -1600,9 +1486,11 @@ async fn kill_session(
     state: State<'_, AppState>,
     session_id: String,
 ) -> Result<(), String> {
+    // Retire ownership before accepting further notifications for this session.
     // The host process is shared by all sessions, so it is NOT killed here:
     // end the turn (best effort) and forget local records.
     interrupt_session(&app, &state, &session_id).await;
+    if let Ok(mut hosts) = state.hosts.lock() { hosts.forget(&session_id); }
     if let Ok(mut sessions) = state.sessions.lock() {
         sessions.remove(&session_id);
     }
@@ -1913,7 +1801,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
-            host: Mutex::new(None),
+            hosts: Mutex::new(Hosts::default()),
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
@@ -1948,14 +1836,12 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("failed to build muse-desktop app")
         .run(|app, event| {
-            // Clean shutdown: kill the shared sidecar host so no `muse`
+            // Clean shutdown: kill every workspace sidecar so no `muse`
             // process survives app exit.
             if let RunEvent::Exit = event {
                 let state: State<AppState> = app.state();
-                let host = state.host.lock().map(|mut h| h.take()).unwrap_or(None);
-                if let Some(h) = host {
-                    tauri::async_runtime::block_on(h.client.shutdown());
-                }
+                let clients = state.hosts.lock().map(|mut h| h.drain()).unwrap_or_default();
+                for client in clients { tauri::async_runtime::block_on(client.shutdown()); }
             }
         });
 }

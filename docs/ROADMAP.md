@@ -27,7 +27,7 @@ Priorité immédiate. Ne pas ajouter de nouvelles surfaces avant de sécuriser c
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
-| M0-01 | A continue à travailler quand on ouvre le projet B | — | Présente | Partielle | À faire | Remplacer le host unique par un routage compatible avec l'isolation moteur ; démarrer A/B et vérifier flux, commandes et approbations sans mélange ni interruption |
+| M0-01 | A continue à travailler quand on ouvre le projet B | — | Présente | Câblée | Unitaire | Routage isolé implémenté sur la branche fix/workspace-host-isolation ; coexistence de deux moteurs réels vérifiée sans tour modèle. Reste : E2E natif A/B avec flux et approbations simultanés ; voir sous-tickets ci-dessous |
 | M0-02 | Reprendre une conversation après fermeture ou panne du moteur | À définir | Partielle | Partielle | Unitaire | Réconcilier historique local et sessions moteur ; récupération explicite sans faux état « actif » ; redémarrer puis poursuivre réellement |
 | M0-03 | Ne perdre aucun texte lors d'un envoi rejeté | À définir | Partielle | Partielle | UI | Conserver brouillon ou message réessayable jusqu'à acquittement ; couper le moteur pendant l'envoi, retrouver le texte et réessayer sans doublon |
 | M0-04 | Arrêter et reprendre avec des états fiables | Adapté | Présente | Câblée | Unitaire | Tester arrêt avant premier token, pendant outil et après fin ; distinguer demande d'arrêt et arrêt confirmé |
@@ -43,6 +43,15 @@ Priorité immédiate. Ne pas ajouter de nouvelles surfaces avant de sécuriser c
 | M0-14 | Disposer de contrôles reproductibles avant fusion | — | — | Absente | À faire | Ajouter CI build/Node/Rust et scénarios natifs ; conserver fixtures sans secrets et preuves par plateforme ; CI verte sur chaque PR |
 
 Preuves principales : [backend](../src-tauri/src/main.rs), [sessions](../src/hooks/useMuseSessions.ts), [Composer](../src/components/Composer.tsx), [paramètres](../src/components/SettingsPanel.tsx), [conformité MSP](../src/lib/msp.ts), [bridge Windows](../scripts/wsl-bridge/README.md).
+
+### Livraison M0-01 — 15 septembre 2026
+
+- **M0-01a — implémenté, tests unitaires passés** : registre de moteurs par chemin canonique, appartenance explicite des sessions, routage de toutes les commandes par session, isolation des approbations et des événements de terminaison, arrêt de tous les moteurs à la fermeture. Les contrôles de chemins du compositeur utilisent désormais le workspace de sa session.
+- **M0-01b — smoke moteur passé** : Windows + bridge WSL, deux `muse serve` réels, initialize/initialized, session/start A/B, model/list sur chaque session puis sur A après fermeture de B. Aucun tour modèle envoyé. Ce test exerce les moteurs/bridge ; les tests Rust exercent le registre du superviseur.
+- **M0-01c — à valider** : scénario complet via l'UI native, deux tours concurrents avec approbations et arrêt d'un moteur ; qualification macOS/Linux. Le parent M0-01 reste ouvert jusqu'à cette preuve.
+- La reprise de sessions historiques après redémarrage reste M0-02 : une session sans moteur propriétaire connu échoue explicitement, sans être envoyée à un moteur arbitraire. La restauration live n'importe pas aveuglément des sessions appartenant à un autre host.
+
+Validation de cette livraison : build frontend et 346 tests Node ; suite Rust incluant les scénarios de routage A/B, collision d'identité, session supprimée, fin d'un host, ancienne génération et fermeture du superviseur.
 
 **Sortie M0 :** scénario natif créer → envoyer → stream → approuver → répondre → interrompre → réessayer, puis redémarrage et deux projets simultanés. Aucun réglage ne prétend modifier une capacité qu'il ne contrôle pas. Validation Windows d'abord ; support macOS/Linux qualifié séparément.
 
