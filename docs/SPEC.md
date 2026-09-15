@@ -1,5 +1,7 @@
 # muse-desktop — Spec produit & technique
 
+> Ce document conserve les intentions et analyses initiales ; certaines hypothèses et descriptions techniques sont historiques. L'avancement réel et les critères de livraison sont suivis dans la [roadmap opérationnelle](ROADMAP.md), sur la base de l'[audit de parité du 15 septembre](plans/2026-09-15-codex-parity-audit.md).
+
 > Générée le 2026-09-13 par recherche multi-références (Codex Desktop,
 > Claude Desktop, Antigravity, OpenCode, Zed + audit du code existant).
 > Positionnement : client desktop dédié, optimisé et brandé **Meta Muse**,
