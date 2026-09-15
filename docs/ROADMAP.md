@@ -28,7 +28,7 @@ Priorité immédiate. Ne pas ajouter de nouvelles surfaces avant de sécuriser c
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
 | M0-01 | A continue à travailler quand on ouvre le projet B | — | Présente | Câblée | Unitaire | Routage isolé implémenté sur la branche fix/workspace-host-isolation ; coexistence de deux moteurs réels vérifiée sans tour modèle. Reste : E2E natif A/B avec flux et approbations simultanés ; voir sous-tickets ci-dessous |
-| M0-02 | Reprendre une conversation après fermeture ou panne du moteur | À définir | Partielle | Partielle | Unitaire | Réconcilier historique local et sessions moteur ; récupération explicite sans faux état « actif » ; redémarrer puis poursuivre réellement |
+| M0-02 | Reprendre une conversation après fermeture ou panne du moteur | Adapté | Présente | Partielle | UI | Reconnexion explicite câblée via session/read + session/resume ; tests moteur sans tour et UI avec IPC simulé réussis. Reste : historique manquant côté client, demandes en attente et reprise d'un tour via UI native |
 | M0-03 | Ne perdre aucun texte lors d'un envoi rejeté | À définir | Partielle | Partielle | UI | Conserver brouillon ou message réessayable jusqu'à acquittement ; couper le moteur pendant l'envoi, retrouver le texte et réessayer sans doublon |
 | M0-04 | Arrêter et reprendre avec des états fiables | Adapté | Présente | Câblée | Unitaire | Tester arrêt avant premier token, pendant outil et après fin ; distinguer demande d'arrêt et arrêt confirmé |
 | M0-05 | Répondre aux permissions/questions même après incident | Adapté | Présente | Câblée | Unitaire | Recharger les demandes en attente si le protocole le permet ; invalider les demandes périmées ; vérifier rejet, correction et absence de replay |
@@ -54,6 +54,15 @@ Preuves principales : [backend](../src-tauri/src/main.rs), [sessions](../src/hoo
 Validation de cette livraison : build frontend et 346 tests Node ; suite Rust incluant les scénarios de routage A/B, collision d'identité, session supprimée, fin d'un host, ancienne génération et fermeture du superviseur.
 
 **Sortie M0 :** scénario natif créer → envoyer → stream → approuver → répondre → interrompre → réessayer, puis redémarrage et deux projets simultanés. Aucun réglage ne prétend modifier une capacité qu'il ne contrôle pas. Validation Windows d'abord ; support macOS/Linux qualifié séparément.
+
+### Livraison M0-02 — reconnexion explicite
+
+- **M0-02a — câblé** : action Reconnect pour une conversation non rattachée ; validation de son identité, de son historique durable et de son dossier avant session/resume. Pas de création silencieuse d'une nouvelle session. Envoi indisponible tant que la reconnexion n'est pas confirmée.
+- **M0-02b — validé partiellement** : un moteur réel crée la session, se ferme, puis un nouveau moteur relit/reprend le même identifiant et répond au catalogue. Aucun tour modèle envoyé. Test React/Chromium avec IPC simulé : échec visible, messages conservés, nouvel essai avec le bon dossier, action retirée après succès.
+- **M0-02c — reste à faire** : importer le suffixe d'historique manquant, valider les demandes en attente réellement réémises et poursuivre un tour de bout en bout dans la webview native. La reprise demande uniquement les métadonnées (`excludeItems`) et conserve l'historique local actuel ; elle ne prétend pas le resynchroniser complètement.
+- Limite Windows : conversion des chemins du bridge pour les montages WSL standards `/mnt/<lecteur>/`. Un montage personnalisé non résolvable échoue explicitement ; les chemins ne sont pas devinés.
+
+Preuves : [validation de reprise](../src-tauri/src/resume.rs), commande `resume_session` dans le backend et `reconnectSession` dans le hook. Suite Rust : 31 tests ; suite Node : 346 tests ; build frontend réussi.
 
 ## M1 — Terminer le workflow quotidien de développement
 

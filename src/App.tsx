@@ -72,6 +72,9 @@ export default function App() {
     checkPathScope,
     setActive,
     startSession,
+    reconnectSession,
+    reconnectingId,
+    connectedIds,
     sendInput,
     approve,
     allowlist,
@@ -493,6 +496,14 @@ export default function App() {
             </span>
           </div>
           <div className="top-actions">
+            {active && page === "task" && !settingsOpen && !backendMissing && !connectedIds.includes(active.session_id) && (
+              <button className="workspace-button"
+                disabled={reconnectingId !== null || active.running}
+                onClick={() => void reconnectSession(active.session_id)}
+                title="Reconnect this saved conversation to its workspace engine">
+                {reconnectingId === active.session_id ? "Reconnecting…" : "Reconnect"}
+              </button>
+            )}
             <span className="pill">
               <span className="dot" />
               {backendMissing ? "Web preview" : "Local"}
@@ -799,7 +810,7 @@ export default function App() {
                     key={active.session_id}
                     draftKey={active.session_id}
                     sessionId={active.session_id}
-                    disabled={backendMissing || active.archived === true}
+                    disabled={backendMissing || active.archived === true || !connectedIds.includes(active.session_id)}
                     modelControl={
                       <>
                         <button
