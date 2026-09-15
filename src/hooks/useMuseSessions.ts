@@ -32,6 +32,7 @@ import {
 // unit-tested); durable per-session storage extends ../lib/persist.
 import {
   createOutboxEntry,
+  commandIdFromClientMessageId,
   failedOutbox,
   findOutbox,
   markFailed,
@@ -1804,10 +1805,10 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   // M0-03: at most one in-flight send per session. This guard is the
-  // express serialization of the send cycle: taken before any await,
-  // released in `finally`, keyed by session (never by the selected
-  // conversation), so a retry of one session cannot race another send of
-  // the same session while other sessions keep sending freely.
+  // express serialization of the send cycle: taken before any await and
+  // released when the underlying invoke settles, keyed by session (never by
+  // the selected conversation), so a retry cannot race a still-pending turn
+  // while other sessions keep sending freely.
   const inFlightSends = useRef<Set<string>>(new Set());
 
   /** Outbox state + disk for one session (functional update, no stale read). */
@@ -1860,7 +1861,7 @@ export function useMuseSessions(): UseMuseSessions {
       }
       // First send runs the expansion pipeline; a retry reuses the stored
       // byte-identical expansion, so skill/project expansion never doubles.
-      let outgoing = trimmed;
+      let outgoing = prior !== null ? prior.outgoingText : trimmed;
       let fanout: ReturnType<typeof parseFanoutCommand> = null;
       if (prior === null) {
         // w-integrations US-25: `/skill-name args` expands to the skill
@@ -1911,7 +1912,22 @@ export function useMuseSessions(): UseMuseSessions {
         outgoing = buildProjectInput(outgoing, project);
       }
       const originalText = prior !== null ? prior.text : trimmed;
+      // A retry keeps the exact command id from the durable entry. Legacy
+      // ambiguous entries have no server id and cannot be checked safely.
+      const serverCommandId =
+        prior?.serverCommandId ??
+        commandIdFromClientMessageId(clientMessageId, Date.now());
+      if (serverCommandId === undefined) {
+        return sendFailed(
+          clientMessageId,
+          prior?.ambiguous
+            ? "this send predates durable server identity and cannot be verified safely"
+            : "could not create a durable server command id",
+        );
+      }
       inFlightSends.current.add(sessionId);
+      let requestPending = false;
+      let underlyingSettled = false;
       try {
         // One user entry per logical send: a retry finds its entry by
         // clientMessageId and never appends a duplicate bubble.
@@ -1932,9 +1948,10 @@ export function useMuseSessions(): UseMuseSessions {
         // creates the entry, so a crash/reload mid-flight stays recoverable.
         const entry =
           prior !== null
-            ? markSending(prior, Date.now())
+            ? { ...markSending(prior, Date.now()), serverCommandId }
             : createOutboxEntry({
                 clientMessageId,
+                serverCommandId,
                 sessionId,
                 text: originalText,
                 outgoingText: outgoing,
@@ -1961,7 +1978,21 @@ export function useMuseSessions(): UseMuseSessions {
         let ambiguous = false;
         try {
           setError(null);
-          await withAckTimeout(invoke("send_input", { sessionId, text: outgoing }));
+          // Tauri cannot cancel an in-flight invoke. Keep the logical lane
+          // occupied until the underlying request settles, even if the UI
+          // timeout fires first; this prevents a second turn admission race.
+          const request = invoke("send_input", {
+            sessionId,
+            commandId: serverCommandId,
+            text: outgoing,
+          });
+          requestPending = true;
+          const release = (): void => {
+            underlyingSettled = true;
+            inFlightSends.current.delete(sessionId);
+          };
+          void request.then(release, release);
+          await withAckTimeout(request);
           acked = true;
         } catch (e) {
           failure = e instanceof Error ? e.message : String(e);
@@ -1993,7 +2024,12 @@ export function useMuseSessions(): UseMuseSessions {
         // running server-side; late events or Retry's server check settle it.
         return sendFailed(clientMessageId, failure);
       } finally {
-        inFlightSends.current.delete(sessionId);
+        // A non-timed-out request has already settled and released the lane.
+        // An ambiguous timeout deliberately leaves it occupied until the
+        // underlying invoke's release continuation runs.
+        if (!requestPending || underlyingSettled) {
+          inFlightSends.current.delete(sessionId);
+        }
       }
     },
     [kickPoll, doCompact],
@@ -2008,14 +2044,26 @@ export function useMuseSessions(): UseMuseSessions {
         );
         return;
       }
+      if (inFlightSends.current.has(entry.sessionId)) {
+        setError(
+          "the previous send is still pending; wait for it to settle before retrying",
+        );
+        return;
+      }
       if (entry.ambiguous) {
         // Ambiguous outcome: verify the server conversation before any
         // retransmission — if the turn is already there, never resend (one
         // logical send can never become two accepted turns).
+        if (entry.serverCommandId === undefined) {
+          setError(
+            "this ambiguous send cannot be verified because it has no server command id",
+          );
+          return;
+        }
         try {
           const reached = await invoke<boolean>("check_input_reached", {
             sessionId: entry.sessionId,
-            text: entry.outgoingText,
+            commandId: entry.serverCommandId,
           });
           if (reached) {
             updateOutbox(entry.sessionId, (cur) =>
@@ -2036,7 +2084,9 @@ export function useMuseSessions(): UseMuseSessions {
           // with the real transport error instead of hiding behind the probe.
         }
       }
-      await sendInput(entry.sessionId, entry.text, entry.clientMessageId);
+      // Retries send the expanded bytes stored in the outbox. Re-expanding
+      // the original composer text could change skill/fanout/project output.
+      await sendInput(entry.sessionId, entry.outgoingText, entry.clientMessageId);
     },
     [sendInput],
   );

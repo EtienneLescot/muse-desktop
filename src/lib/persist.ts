@@ -337,6 +337,8 @@ function isValidOutboxEntry(e: unknown): e is OutboxEntry {
   return (
     typeof r.clientMessageId === "string" &&
     r.clientMessageId.length > 0 &&
+    (r.serverCommandId === undefined ||
+      (typeof r.serverCommandId === "string" && r.serverCommandId.length > 0)) &&
     typeof r.sessionId === "string" &&
     r.sessionId.length > 0 &&
     typeof r.text === "string" &&
