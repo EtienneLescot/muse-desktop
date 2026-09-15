@@ -26,6 +26,7 @@ npm run tauri -- dev
 - [Product and technical specification](docs/SPEC.md)
 - [Implementation plan](docs/plans/2026-09-07-muse-desktop.md)
 - [Operational roadmap and feature status](docs/ROADMAP.md)
+- [Detailed implementation plan for coding agents](docs/plans/2026-09-15-agent-implementation-plan.md)
 - [Codex parity audit](docs/plans/2026-09-15-codex-parity-audit.md)
 - [Conversation UX refinements](docs/plans/2026-09-14-conversation-polish.md)
 
