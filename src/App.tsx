@@ -76,6 +76,9 @@ export default function App() {
     reconnectingId,
     connectedIds,
     sendInput,
+    pendingSends,
+    retrySend,
+    discardSend,
     approve,
     allowlist,
     allowDecisionFor,
@@ -237,6 +240,12 @@ export default function App() {
   }, [theme]);
 
   const active = sessions.find((s) => s.session_id === activeId) ?? null;
+  // M0-03: retryable sends of the viewed conversation only — a retry never
+  // routes by this view, it goes to the entry's own sessionId.
+  const activePendingSends =
+    active !== null
+      ? pendingSends.filter((entry) => entry.sessionId === active.session_id)
+      : [];
 
   const pendingCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -501,7 +510,7 @@ export default function App() {
                 disabled={reconnectingId !== null || active.running}
                 onClick={() => void reconnectSession(active.session_id)}
                 title="Reconnect this saved conversation to its workspace engine">
-                {reconnectingId === active.session_id ? "Reconnecting�" : "Reconnect"}
+                {reconnectingId === active.session_id ? "Reconnecting…" : "Reconnect"}
               </button>
             )}
             <span className="pill">
@@ -728,8 +737,11 @@ export default function App() {
                 onStart={async (draft) => {
                   const id = await startSession();
                   if (id === null || draft.trim() === "") return id !== null;
-                  await sendInput(id, draft);
-                  return true;
+                  // M0-03: honest result — when the first send fails the
+                  // welcome draft must not be reported as sent; the text
+                  // stays recoverable via the retryable pending-send notice.
+                  const res = await sendInput(id, draft);
+                  return res.ok;
                 }}
                 backendMissing={backendMissing}
                 sidecarError={sidecarPanel}
@@ -806,6 +818,36 @@ export default function App() {
                     }}
                   />
 
+                  {activePendingSends.map((entry) => (
+                    <div
+                      className="pending-send"
+                      role="status"
+                      key={entry.clientMessageId}
+                    >
+                      <span
+                        className="pending-send-text"
+                        title={entry.text}
+                      >
+                        Unsent message:{" "}
+                        {entry.text.length > 80
+                          ? `${entry.text.slice(0, 80)}…`
+                          : entry.text}
+                      </span>
+                      {entry.error !== null && (
+                        <span className="pending-send-error">{entry.error}</span>
+                      )}
+                      <button
+                        onClick={() => void retrySend(entry.clientMessageId)}
+                      >
+                        Retry
+                      </button>
+                      <button
+                        onClick={() => discardSend(entry.clientMessageId)}
+                      >
+                        Discard
+                      </button>
+                    </div>
+                  ))}
                   <Composer
                     key={active.session_id}
                     draftKey={active.session_id}
@@ -825,7 +867,7 @@ export default function App() {
                     }
                     running={active.running}
                     workspace={active.workspace}
-                    onSend={(text) => void sendInput(active.session_id, text)}
+                    onSend={(text) => sendInput(active.session_id, text)}
                     onCancel={() => void cancelSession(active.session_id)}
                     prefill={prefill}
                     onPrefillConsumed={clearPrefill}

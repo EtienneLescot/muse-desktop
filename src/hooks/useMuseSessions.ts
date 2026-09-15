@@ -4,9 +4,11 @@ import { isTauriRuntime } from "../lib/env";
 import {
   appendLog,
   dropLog,
+  dropOutbox,
   loadActiveId,
   loadGlobalSettings,
   loadLog,
+  loadOutbox,
   loadProjects,
   loadSessions,
   loadThreadProjects,
@@ -16,6 +18,7 @@ import {
   saveActiveId,
   saveGlobalSettings,
   saveLog,
+  saveOutbox,
   saveProjects,
   saveSessions,
   saveThreadProjects,
@@ -25,6 +28,23 @@ import {
   type LogRole,
   type StoredSession,
 } from "../lib/persist";
+// M0-03 lossless send: outbox state machine + explicit SendResult (pure,
+// unit-tested); durable per-session storage extends ../lib/persist.
+import {
+  createOutboxEntry,
+  failedOutbox,
+  findOutbox,
+  markFailed,
+  markSending,
+  recoverInterrupted,
+  removeOutbox,
+  sendAccepted,
+  sendFailed,
+  upsertOutbox,
+  type OutboxEntry,
+  type SendResult,
+} from "../lib/outbox";
+export type { OutboxEntry, SendResult } from "../lib/outbox";
 // Input-prompt helpers live in ../lib/input (dependency-free, unit-tested).
 // Only parseInputRequest + the locally used types are imported; the rest is
 // re-exported below for consumers (InputPanel).
@@ -444,7 +464,23 @@ interface UseMuseSessions {
   reconnectSession: (id: string) => Promise<void>;
   reconnectingId: string | null;
   connectedIds: string[];
-  sendInput: (sessionId: string, text: string) => Promise<void>;
+  /**
+   * M0-03: send one turn and get an explicit result. `retryKey` re-sends
+   * an existing outbox entry (same clientMessageId, byte-identical
+   * expansion). ok=true means the supervisor acknowledged admission — the
+   * draft may be cleared; ok=false leaves the text recoverable.
+   */
+  sendInput: (
+    sessionId: string,
+    text: string,
+    retryKey?: string,
+  ) => Promise<SendResult>;
+  /** Failed outgoing messages across sessions (retryable, durable). */
+  pendingSends: OutboxEntry[];
+  /** Re-send a failed entry: verifies the server first when ambiguous. */
+  retrySend: (clientMessageId: string) => Promise<void>;
+  /** Give up on a failed entry: drops it and its undelivered user entry. */
+  discardSend: (clientMessageId: string) => void;
   approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<void>;
   /** US-15: persisted allowlist rules + effective decision per request. */
   allowlist: AllowRule[];
@@ -631,6 +667,34 @@ function parseChunk(payload: string): { itemId?: string; text: string } {
     }
   }
   return { text: payload };
+}
+
+/**
+ * M0-03: the supervisor resolves `send_input` on admission, not turn end.
+ * A missing resolution after this long is an *ambiguous* outcome (the turn
+ * may or may not have started): the entry recovers as failed/ambiguous and
+ * a retry must verify the server conversation before retransmitting.
+ */
+const ACK_TIMEOUT_MS = 15000;
+const ACK_TIMEOUT_MSG =
+  `no acknowledgment after ${ACK_TIMEOUT_MS / 1000}s — the outcome is unknown; ` +
+  "retry checks the server before resending";
+
+/** Rejects with ACK_TIMEOUT_MSG when the invoke never settles in time. */
+function withAckTimeout<T>(p: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(ACK_TIMEOUT_MSG)), ACK_TIMEOUT_MS);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
 }
 
 /** Index of the last open entry matching role (+agentId), -1 when none. */
@@ -848,6 +912,31 @@ export function useMuseSessions(): UseMuseSessions {
   if (tombstoned.current === null) {
     tombstoned.current = new Set(loadTombstones());
   }
+  // M0-03 outbox: durable retryable sends per session, restored once. An
+  // entry still `sending` at boot means the app died or reloaded mid-flight:
+  // the outcome is unknown, so it recovers as failed/ambiguous (a retry
+  // then verifies the server before retransmitting). Lazy init survives
+  // StrictMode remounts: recovery is idempotent (failed entries are kept,
+  // accepted ones are pruned defensively).
+  const [outbox, setOutbox] = useState<Record<string, OutboxEntry[]>>(() => {
+    const restored: Record<string, OutboxEntry[]> = {};
+    for (const s of loadSessions()) {
+      if (tombstoned.current?.has(s.session_id)) continue;
+      const { entries, recovered } = recoverInterrupted(
+        loadOutbox(s.session_id),
+        Date.now(),
+      );
+      const live = entries.filter((e) => e.state !== "accepted");
+      if (recovered > 0 || live.length !== entries.length) {
+        saveOutbox(s.session_id, live);
+      }
+      if (live.length > 0) restored[s.session_id] = live;
+    }
+    return restored;
+  });
+  // Latest outbox for the render-detached send path (same pattern as logsRef).
+  const outboxRef = useRef<Record<string, OutboxEntry[]>>({});
+  outboxRef.current = outbox;
 
   // One drain of the backend event buffer, shared by the periodic tick and
   // the immediate post-send kick. Stable across renders: it only touches refs
@@ -1714,97 +1803,267 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
+  // M0-03: at most one in-flight send per session. This guard is the
+  // express serialization of the send cycle: taken before any await,
+  // released in `finally`, keyed by session (never by the selected
+  // conversation), so a retry of one session cannot race another send of
+  // the same session while other sessions keep sending freely.
+  const inFlightSends = useRef<Set<string>>(new Set());
+
+  /** Outbox state + disk for one session (functional update, no stale read). */
+  function updateOutbox(
+    sessionId: string,
+    update: (cur: OutboxEntry[]) => OutboxEntry[],
+  ): void {
+    setOutbox((cur) => {
+      const list = cur[sessionId] ?? [];
+      const next = update(list);
+      if (next === list) return cur;
+      saveOutbox(sessionId, next);
+      return { ...cur, [sessionId]: next };
+    });
+  }
+
+  /** Find a pending entry across every session (the key is global). */
+  function findPendingEverywhere(clientMessageId: string): OutboxEntry | null {
+    for (const list of Object.values(outboxRef.current)) {
+      const hit = findOutbox(list, clientMessageId);
+      if (hit !== null) return hit;
+    }
+    return null;
+  }
+
   const sendInput = useCallback(
-    async (sessionId: string, text: string) => {
+    async (sessionId: string, text: string, retryKey?: string): Promise<SendResult> => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      if (!trimmed) return sendFailed(null, "the message is empty");
       // US-4: `/compact` is intercepted at send time and never reaches the
       // model — it builds the local extractive summary of this thread.
+      // Local action, no server round trip: no outbox entry, nothing to ack.
       if (isCompactCommand(trimmed)) {
         doCompact(sessionId);
-        return;
+        return sendAccepted("local-compact");
       }
-      // w-integrations US-25: `/skill-name args` expands to the skill
-      // instructions (traced in the log) and sends as the turn.
+      if (inFlightSends.current.has(sessionId)) {
+        return sendFailed(
+          retryKey ?? null,
+          "a send is already in progress for this conversation",
+        );
+      }
+      const clientMessageId = retryKey ?? newId();
+      const prior =
+        retryKey !== undefined
+          ? findOutbox(outboxRef.current[sessionId] ?? [], retryKey)
+          : null;
+      if (retryKey !== undefined && prior === null) {
+        return sendFailed(retryKey, "the message to retry no longer exists");
+      }
+      // First send runs the expansion pipeline; a retry reuses the stored
+      // byte-identical expansion, so skill/project expansion never doubles.
       let outgoing = trimmed;
-      const skillCmd = parseSkillCommand(trimmed);
-      if (skillCmd !== null) {
-        const skill = resolveSkill(skillsRef.current, skillCmd.name);
-        if (skill === null) {
+      let fanout: ReturnType<typeof parseFanoutCommand> = null;
+      if (prior === null) {
+        // w-integrations US-25: `/skill-name args` expands to the skill
+        // instructions (traced in the log) and sends as the turn.
+        const skillCmd = parseSkillCommand(trimmed);
+        if (skillCmd !== null) {
+          const skill = resolveSkill(skillsRef.current, skillCmd.name);
+          if (skill === null) {
+            pushLog(sessionId, [
+              {
+                id: newId(),
+                ts: Date.now(),
+                role: "system",
+                text: `unknown skill /${skillCmd.name}: install or enable it first.`,
+              },
+            ]);
+            setError(`unknown skill /${skillCmd.name}`);
+            return sendFailed(clientMessageId, `unknown skill /${skillCmd.name}`);
+          }
           pushLog(sessionId, [
             {
               id: newId(),
               ts: Date.now(),
               role: "system",
-              text: `unknown skill /${skillCmd.name}: install or enable it first.`,
+              text: formatSkillInvokeTrace(skill.name, skillCmd.args),
             },
           ]);
-          setError(`unknown skill /${skillCmd.name}`);
-          return;
+          outgoing = buildSkillInvocation(skill, skillCmd.args);
         }
-        pushLog(sessionId, [
-          {
-            id: newId(),
-            ts: Date.now(),
-            role: "system",
-            text: formatSkillInvokeTrace(skill.name, skillCmd.args),
-          },
-        ]);
-        outgoing = buildSkillInvocation(skill, skillCmd.args);
-      }
-      // US-7: `/fanout <n> "<task>"` never reaches the model as typed —
-      // it becomes one parent-turn prompt instructing N parallel
-      // subagents. A FIFO note is logged when n exceeds the lanes.
-      const fanout = parseFanoutCommand(outgoing);
-      if (fanout !== null) {
-        outgoing = buildFanoutPrompt(fanout);
-        const note = fanoutQueueNote(fanout.count);
-        if (note !== null) {
-          pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: note }]);
+        // US-7: `/fanout <n> "<task>"` never reaches the model as typed —
+        // it becomes one parent-turn prompt instructing N parallel
+        // subagents. A FIFO note is logged when n exceeds the lanes.
+        fanout = parseFanoutCommand(outgoing);
+        if (fanout !== null) {
+          outgoing = buildFanoutPrompt(fanout);
+          const note = fanoutQueueNote(fanout.count);
+          if (note !== null) {
+            pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: note }]);
+          }
         }
+        // US-3: the thread's project instructions ride along with the sent
+        // input (the stored log keeps the expanded turn text).
+        const attachedId = threadProjectsRef.current[sessionId] ?? null;
+        const project =
+          attachedId !== null
+            ? (projectsRef.current.find((p) => p.id === attachedId) ?? null)
+            : null;
+        outgoing = buildProjectInput(outgoing, project);
       }
-      // US-3: the thread's project instructions ride along with the sent
-      // input (the stored log keeps the raw user text).
-      const attachedId = threadProjectsRef.current[sessionId] ?? null;
-      const project =
-        attachedId !== null
-          ? (projectsRef.current.find((p) => p.id === attachedId) ?? null)
-          : null;
-      outgoing = buildProjectInput(outgoing, project);
-      closeOpenBlocks(sessionId);
-      pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "user", text: outgoing }]);
-      // US-10: reflexive indicator synchronously (<200ms), before the first
-      // delta or even `item/started` can arrive. The first chunk coalesces
-      // into this entry, so no catch-up burst ever paints.
-      ensurePlaceholder(sessionId);
-      setSessions((cur) =>
-        cur.map((s) =>
-          s.session_id === sessionId
-            ? {
-                ...s,
-                title: s.title.startsWith("Session ") ? shortTitle(fanout !== null ? fanout.task : trimmed) : s.title,
-                running: true,
-              }
-            : s,
-        ),
-      );
+      const originalText = prior !== null ? prior.text : trimmed;
+      inFlightSends.current.add(sessionId);
       try {
-        setError(null);
-        await invoke("send_input", { sessionId, text: outgoing });
-        // Drain immediately: the next slow tick could be ~1s away, which
-        // would delay the first tokens and dump them as one catch-up burst.
-        kickPoll();
-      } catch (e) {
-        setError(`send_input failed: ${String(e)}`);
-        // The turn never started: withdraw the reflexive placeholder.
-        dropPlaceholder(sessionId);
+        // One user entry per logical send: a retry finds its entry by
+        // clientMessageId and never appends a duplicate bubble.
+        const log = logsRef.current[sessionId] ?? loadLog(sessionId);
+        if (!log.some((e) => e.clientMessageId === clientMessageId)) {
+          closeOpenBlocks(sessionId);
+          pushLog(sessionId, [
+            {
+              id: newId(),
+              ts: Date.now(),
+              role: "user",
+              text: outgoing,
+              clientMessageId,
+            },
+          ]);
+        }
+        // Outbox: a retry re-enters sending (attempts grow); a first send
+        // creates the entry, so a crash/reload mid-flight stays recoverable.
+        const entry =
+          prior !== null
+            ? markSending(prior, Date.now())
+            : createOutboxEntry({
+                clientMessageId,
+                sessionId,
+                text: originalText,
+                outgoingText: outgoing,
+                now: Date.now(),
+              });
+        updateOutbox(sessionId, (cur) => upsertOutbox(cur, entry));
+        // US-10: reflexive indicator synchronously (<200ms), before the first
+        // delta or even `item/started` can arrive. The first chunk coalesces
+        // into this entry, so no catch-up burst ever paints.
+        ensurePlaceholder(sessionId);
         setSessions((cur) =>
-          cur.map((s) => (s.session_id === sessionId ? { ...s, running: false } : s)),
+          cur.map((s) =>
+            s.session_id === sessionId
+              ? {
+                  ...s,
+                  title: s.title.startsWith("Session ") ? shortTitle(originalText) : s.title,
+                  running: true,
+                }
+              : s,
+          ),
         );
+        let acked = false;
+        let failure = "";
+        let ambiguous = false;
+        try {
+          setError(null);
+          await withAckTimeout(invoke("send_input", { sessionId, text: outgoing }));
+          acked = true;
+        } catch (e) {
+          failure = e instanceof Error ? e.message : String(e);
+          ambiguous = failure === ACK_TIMEOUT_MSG;
+          if (!ambiguous) failure = `send_input failed: ${failure}`;
+        }
+        if (acked) {
+          // Admission acknowledged: the entry leaves the outbox (the draft
+          // may be cleared) and the turn streams from here.
+          updateOutbox(sessionId, (cur) => removeOutbox(cur, clientMessageId));
+          // Drain immediately: the next slow tick could be ~1s away, which
+          // would delay the first tokens and dump them as one catch-up burst.
+          kickPoll();
+          return sendAccepted(clientMessageId);
+        }
+        updateOutbox(sessionId, (cur) =>
+          upsertOutbox(cur, markFailed(entry, failure, Date.now(), ambiguous)),
+        );
+        setError(failure);
+        if (!ambiguous) {
+          // Definitive refusal: the turn never started, so withdraw the
+          // reflexive placeholder; the entry stays retryable (same key).
+          dropPlaceholder(sessionId);
+          setSessions((cur) =>
+            cur.map((s) => (s.session_id === sessionId ? { ...s, running: false } : s)),
+          );
+        }
+        // Ambiguous: keep the live indicators — the turn may still be
+        // running server-side; late events or Retry's server check settle it.
+        return sendFailed(clientMessageId, failure);
+      } finally {
+        inFlightSends.current.delete(sessionId);
       }
     },
     [kickPoll, doCompact],
   );
+
+  const retrySend = useCallback(
+    async (clientMessageId: string): Promise<void> => {
+      const entry = findPendingEverywhere(clientMessageId);
+      if (entry === null) {
+        setError(
+          `retry failed: pending message ${clientMessageId.slice(0, 8)} not found`,
+        );
+        return;
+      }
+      if (entry.ambiguous) {
+        // Ambiguous outcome: verify the server conversation before any
+        // retransmission — if the turn is already there, never resend (one
+        // logical send can never become two accepted turns).
+        try {
+          const reached = await invoke<boolean>("check_input_reached", {
+            sessionId: entry.sessionId,
+            text: entry.outgoingText,
+          });
+          if (reached) {
+            updateOutbox(entry.sessionId, (cur) =>
+              removeOutbox(cur, entry.clientMessageId),
+            );
+            pushLog(entry.sessionId, [
+              {
+                id: newId(),
+                ts: Date.now(),
+                role: "system",
+                text: "Retry check: the turn was already delivered — not resent.",
+              },
+            ]);
+            return;
+          }
+        } catch {
+          // Probe unavailable (host down): the resend below fails visibly
+          // with the real transport error instead of hiding behind the probe.
+        }
+      }
+      await sendInput(entry.sessionId, entry.text, entry.clientMessageId);
+    },
+    [sendInput],
+  );
+
+  const discardSend = useCallback((clientMessageId: string): void => {
+    const entry = findPendingEverywhere(clientMessageId);
+    if (entry === null) return;
+    updateOutbox(entry.sessionId, (cur) => removeOutbox(cur, clientMessageId));
+    setLogs((cur) => {
+      const log = cur[entry.sessionId];
+      if (!log) return cur;
+      const kept = log.filter(
+        (e) => !(e.role === "user" && e.clientMessageId === clientMessageId),
+      );
+      const next: LogEntry[] = [
+        ...kept,
+        {
+          id: newId(),
+          ts: Date.now(),
+          role: "system",
+          text: "Unsent message discarded.",
+        },
+      ];
+      saveLog(entry.sessionId, next);
+      return { ...cur, [entry.sessionId]: next };
+    });
+  }, []);
 
   /**
    * w-integrations US-25: invoke `/name args` from a button (the composer
@@ -2109,6 +2368,14 @@ export function useMuseSessions(): UseMuseSessions {
         return next;
       });
       dropLog(sessionId);
+      // M0-03: a deleted thread takes its retryable sends with it.
+      dropOutbox(sessionId);
+      setOutbox((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       setApprovals((cur) => cur.filter((a) => a.session_id !== sessionId));
       setInputRequests((cur) => cur.filter((r) => r.session_id !== sessionId));
       // US-4: a killed thread takes its summary with it.
@@ -2410,6 +2677,9 @@ export function useMuseSessions(): UseMuseSessions {
   const activeLog = (activeId !== null && logs[activeId]) || [];
   const activeApprovals = approvals.filter((a) => a.session_id === activeId);
   const activeInputRequests = inputRequests.filter((r) => r.session_id === activeId);
+  // M0-03: retryable sends across sessions (the UI filters by active view;
+  // a retry always routes by the entry's own sessionId).
+  const pendingSends = failedOutbox(Object.values(outbox).flat());
   // w-settings: provider id selected for the current project (workspace).
   const providerId = providerForProject(providerMap, workspace);
 
@@ -2595,6 +2865,9 @@ export function useMuseSessions(): UseMuseSessions {
     reconnectingId,
     connectedIds,
     sendInput,
+    pendingSends,
+    retrySend,
+    discardSend,
     approve,
     allowlist,
     allowDecisionFor,
