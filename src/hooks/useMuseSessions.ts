@@ -305,6 +305,7 @@ import {
   loadConnectors,
   localConnectorIdForName,
   registerLocalConnector,
+  rollbackLocalConnector,
   refreshLocalConnector,
   requestRemoteConnector,
   saveConnectors,
@@ -969,12 +970,15 @@ interface UseMuseSessions {
     name: string,
     command: string,
     tools: ConnectorTool[],
+    serverVersion?: string,
   ) => boolean;
   /** M3-01/M3-03: re-probe and persist tools for an existing local server. */
   refreshLocalMcp: (
     id: string,
     workspacePath?: string | null,
   ) => Promise<LocalMcpProbeResult | null>;
+  /** M3-03: restore the previous verified local tool catalog. */
+  rollbackLocalMcp: (id: string) => boolean;
   /** M3-01: currently live persistent local MCP process ids. */
   mcpRunningIds: string[];
   /** M3-01: start a configured local MCP process explicitly. */
@@ -4036,13 +4040,19 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const registerLocalConnectorByProbe = useCallback(
-    (name: string, command: string, tools: ConnectorTool[]): boolean => {
+    (
+      name: string,
+      command: string,
+      tools: ConnectorTool[],
+      serverVersion?: string,
+    ): boolean => {
       const id = localConnectorIdForName(name);
       const result = registerLocalConnector(connectorsRef.current, {
         id,
         name,
         command,
         tools,
+        serverVersion,
       });
       if (result === null) {
         setError("local MCP connector could not be saved: name, command and tools are required");
@@ -4208,6 +4218,7 @@ export function useMuseSessions(): UseMuseSessions {
         id,
         result.tools,
         Date.now(),
+        result.serverVersion,
       );
       if (updated === null) {
         setError("local MCP probe returned no valid tools");
@@ -4218,6 +4229,16 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [],
   );
+
+  const rollbackLocalMcp = useCallback((id: string): boolean => {
+    const result = rollbackLocalConnector(connectorsRef.current, id);
+    if (result === null) {
+      setError("local MCP rollback is unavailable for this connector");
+      return false;
+    }
+    setConnectors(result.registry);
+    return true;
+  }, []);
 
   // MCP servers may announce a changed tool catalog while idle. Polling only
   // asks the native registry to drain queued notifications; it performs no
@@ -5421,6 +5442,7 @@ export function useMuseSessions(): UseMuseSessions {
     callLocalMcp,
     registerLocalConnector: registerLocalConnectorByProbe,
     refreshLocalMcp,
+    rollbackLocalMcp,
     mcpRunningIds,
     startLocalMcp,
     stopLocalMcp,

@@ -403,9 +403,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** ConnectorPanel/registry/runtime. Dépend M3-01/02.
 
-**État :** un probe local réussi peut enregistrer la commande et les outils découverts dans le registre persistant. Une nouvelle liste remplace l'entrée existante sans réactiver une extension désactivée ; `listConnectorTools` retire immédiatement ses outils lorsque le statut passe à `disabled`. Les connecteurs locaux enregistrés peuvent être démarrés, arrêtés et rafraîchis explicitement depuis le panneau ; un échec ou une liste vide ne remplace pas la dernière version utilisable, et `tools/list_changed` déclenche le même rafraîchissement via le chemin SSOT.
+**État :** un probe local réussi peut enregistrer la commande, la version serveur et les outils découverts dans le registre persistant. Une nouvelle liste remplace l'entrée existante sans réactiver une extension désactivée ; `listConnectorTools` retire immédiatement ses outils lorsque le statut passe à `disabled`. Les connecteurs locaux enregistrés peuvent être démarrés, arrêtés et rafraîchis explicitement depuis le panneau ; un échec ou une liste vide ne remplace pas la dernière version utilisable, et `tools/list_changed` déclenche le même rafraîchissement via le chemin SSOT. Une copie de la précédente révision est conservée pour un rollback explicite, une seule étape.
 
-**Reste :** package/version/source, mise à jour/rollback, arrêt pendant appel et bridge vers les outils réellement visibles par le moteur Muse ; la politique d'autorisation par appel reste à intégrer.
+**Reste :** package/version/source réel, mise à jour/rollback de distribution, arrêt pendant appel et bridge vers les outils réellement visibles par le moteur Muse ; la politique d'autorisation par appel reste à intégrer.
 
 **Acceptation :** installation ratée, mise à jour incompatible, désactivation pendant appel et suppression ; registre et runtime cohérents.
 

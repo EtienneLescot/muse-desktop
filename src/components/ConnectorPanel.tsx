@@ -28,9 +28,16 @@ interface Props {
     toolName: string,
     argumentsText: string,
   ) => Promise<LocalMcpCallResult | null>;
-  onRegisterLocal: (name: string, command: string, tools: ConnectorTool[]) => boolean;
+  onRegisterLocal: (
+    name: string,
+    command: string,
+    tools: ConnectorTool[],
+    serverVersion?: string,
+  ) => boolean;
   /** Re-probe and persist tools for an existing local MCP connector. */
   onRefreshLocal: (id: string) => Promise<LocalMcpProbeResult | null>;
+  /** Restore the previous verified local tool catalog. */
+  onRollbackLocal: (id: string) => boolean;
   /** Currently running persistent local MCP process ids. */
   mcpRunningIds: string[];
   /** Start/stop a configured local MCP process explicitly. */
@@ -65,6 +72,7 @@ export function ConnectorPanel({
   onCallLocal,
   onRegisterLocal,
   onRefreshLocal,
+  onRollbackLocal,
   mcpRunningIds,
   onStartLocal,
   onStopLocal,
@@ -163,7 +171,12 @@ export function ConnectorPanel({
                   type="button"
                   disabled={!localName.trim() || localSaved}
                   onClick={() => {
-                    const saved = onRegisterLocal(localName, localCommand, localProbe.tools);
+                    const saved = onRegisterLocal(
+                      localName,
+                      localCommand,
+                      localProbe.tools,
+                      localProbe.serverVersion,
+                    );
                     if (saved) {
                       setLocalSaved(true);
                       setLocalConnectorId(localConnectorIdForName(localName));
@@ -251,6 +264,9 @@ export function ConnectorPanel({
                         ? e.tools.map((t) => t.name).join(" · ")
                         : (e.guardMessage ?? "no tools listed")}
                   </small>
+                  {e.kind === "local" && e.serverVersion && (
+                    <small className="muted">Server v{e.serverVersion}</small>
+                  )}
                 </span>
                 <label
                   className="integration-toggle"
@@ -365,6 +381,25 @@ export function ConnectorPanel({
                     >
                       {refreshingId === e.id ? "Refreshing…" : "Refresh tools"}
                     </button>
+                    {e.previousTools && e.previousTools.length > 0 && (
+                      <button
+                        type="button"
+                        className="integration-action"
+                        disabled={refreshingId !== null}
+                        onClick={() => {
+                          const rolledBack = onRollbackLocal(e.id);
+                          setRefreshFeedback({
+                            id: e.id,
+                            tone: rolledBack ? "success" : "error",
+                            message: rolledBack
+                              ? "Previous tool catalog restored."
+                              : "Rollback unavailable; the current catalog was kept.",
+                          });
+                        }}
+                      >
+                        Roll back
+                      </button>
+                    )}
                   </>
                 )}
                 <button type="button" onClick={() => onUninstall(e.id)}>

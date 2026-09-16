@@ -178,6 +178,7 @@ export default function App() {
     callLocalMcp,
     registerLocalConnector,
     refreshLocalMcp,
+    rollbackLocalMcp,
     mcpRunningIds,
     startLocalMcp,
     stopLocalMcp,
@@ -817,6 +818,7 @@ export default function App() {
                   }
                   onRegisterLocal={registerLocalConnector}
                   onRefreshLocal={(id) => refreshLocalMcp(id, workspace)}
+                  onRollbackLocal={rollbackLocalMcp}
                   mcpRunningIds={mcpRunningIds}
                   onStartLocal={(id) => startLocalMcp(id, workspace)}
                   onStopLocal={stopLocalMcp}

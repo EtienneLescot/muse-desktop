@@ -71,6 +71,11 @@ export interface ConnectorEntry {
   command?: string;
   /** Local-only: last successful tools/list timestamp. */
   lastProbeAt?: number;
+  /** Local-only: server version reported by the last successful probe. */
+  serverVersion?: string;
+  /** Local-only: one-step rollback snapshot from the previous tools/list. */
+  previousTools?: ConnectorTool[];
+  previousServerVersion?: string;
   /** Remote-only: human-readable guard failure, if the entry is blocked. */
   guardMessage?: string;
   addedAt: number;
@@ -213,6 +218,7 @@ export function registerLocalConnector(
     name: string;
     command: string;
     tools: ConnectorTool[];
+    serverVersion?: string;
   },
   now: number = Date.now(),
 ): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
@@ -233,6 +239,13 @@ export function registerLocalConnector(
     status: existing?.status === "disabled" ? "disabled" : "installed",
     command,
     lastProbeAt: now,
+    ...(spec.serverVersion?.trim() ? { serverVersion: spec.serverVersion.trim() } : {}),
+    ...(existing?.tools?.length
+      ? { previousTools: existing.tools.map((tool) => ({ ...tool })) }
+      : {}),
+    ...(existing?.serverVersion
+      ? { previousServerVersion: existing.serverVersion }
+      : {}),
     addedAt: existing?.addedAt ?? now,
   };
   if (entry.tools.some((tool) => tool.name.length === 0)) return null;
@@ -256,6 +269,7 @@ export function refreshLocalConnector(
   id: string,
   tools: ConnectorTool[],
   now: number = Date.now(),
+  serverVersion?: string,
 ): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
   const existing = findConnector(registry, id);
   if (existing === null || existing.kind !== "local" || !existing.command) {
@@ -271,7 +285,42 @@ export function refreshLocalConnector(
     ...existing,
     tools: nextTools,
     lastProbeAt: now,
+    previousTools: existing.tools.map((tool) => ({ ...tool })),
+    ...(existing.serverVersion
+      ? { previousServerVersion: existing.serverVersion }
+      : {}),
+    ...(serverVersion?.trim() ? { serverVersion: serverVersion.trim() } : {}),
   };
+  return {
+    registry: registry.map((item) => (item.id === id ? entry : item)),
+    entry,
+  };
+}
+
+/** Restore the immediately preceding valid tools/list snapshot. */
+export function rollbackLocalConnector(
+  registry: ConnectorEntry[],
+  id: string,
+): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
+  const existing = findConnector(registry, id);
+  if (
+    existing === null ||
+    existing.kind !== "local" ||
+    !existing.command ||
+    !existing.previousTools ||
+    existing.previousTools.length === 0
+  ) {
+    return null;
+  }
+  const entry: ConnectorEntry = {
+    ...existing,
+    tools: existing.previousTools.map((tool) => ({ ...tool })),
+    ...(existing.previousServerVersion
+      ? { serverVersion: existing.previousServerVersion }
+      : {}),
+  };
+  delete entry.previousTools;
+  delete entry.previousServerVersion;
   return {
     registry: registry.map((item) => (item.id === id ? entry : item)),
     entry,
@@ -431,6 +480,17 @@ export function loadConnectors(): ConnectorEntry[] {
           : "installed",
       command: typeof e.command === "string" ? e.command : undefined,
       lastProbeAt: typeof e.lastProbeAt === "number" ? e.lastProbeAt : undefined,
+      serverVersion: typeof e.serverVersion === "string" ? e.serverVersion : undefined,
+      previousTools: Array.isArray(e.previousTools)
+        ? e.previousTools.filter(
+            (t): t is ConnectorTool =>
+              typeof t === "object" &&
+              t !== null &&
+              typeof (t as ConnectorTool).name === "string",
+          )
+        : undefined,
+      previousServerVersion:
+        typeof e.previousServerVersion === "string" ? e.previousServerVersion : undefined,
     }));
 }
 

@@ -18,6 +18,7 @@ import {
   REMOTE_LIMIT_MESSAGE,
   requestRemoteConnector,
   registerLocalConnector,
+  rollbackLocalConnector,
   refreshLocalConnector,
   setConnectorEnabled,
   uninstallConnector,
@@ -82,12 +83,14 @@ describe("verified local MCP connector registration", () => {
         name: "Demo",
         command: "node server.js",
         tools: [{ name: "demo.read", description: "Read demo data" }],
+        serverVersion: "1.2.3",
       },
       1234,
     );
     assert.ok(result);
     assert.equal(result.entry.command, "node server.js");
     assert.equal(result.entry.lastProbeAt, 1234);
+    assert.equal(result.entry.serverVersion, "1.2.3");
     assert.deepEqual(listConnectorTools(result.registry).map((tool) => tool.name), ["demo.read"]);
   });
 
@@ -133,6 +136,43 @@ describe("verified local MCP connector registration", () => {
     assert.equal(refreshed.entry.addedAt, first.entry.addedAt);
     assert.equal(refreshed.entry.lastProbeAt, 2000);
     assert.deepEqual(refreshed.entry.tools, [{ name: "two", description: "new" }]);
+    assert.deepEqual(refreshed.entry.previousTools, [{ name: "one", description: "old" }]);
+  });
+
+  it("restores the previous catalog without changing identity or disabled status", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "old" }],
+      serverVersion: "1.0.0",
+    }, 1000);
+    assert.ok(first);
+    const updated = refreshLocalConnector(
+      setConnectorEnabled(first.registry, "local-mcp-demo", false).registry,
+      "local-mcp-demo",
+      [{ name: "two", description: "new" }],
+      2000,
+      "2.0.0",
+    );
+    assert.ok(updated);
+    const rolledBack = rollbackLocalConnector(updated.registry, "local-mcp-demo");
+    assert.ok(rolledBack);
+    assert.equal(rolledBack.entry.status, "disabled");
+    assert.equal(rolledBack.entry.serverVersion, "1.0.0");
+    assert.deepEqual(rolledBack.entry.tools, [{ name: "one", description: "old" }]);
+    assert.equal(rolledBack.entry.previousTools, undefined);
+  });
+
+  it("refuses rollback when no previous catalog exists", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "" }],
+    });
+    assert.ok(first);
+    assert.equal(rollbackLocalConnector(first.registry, "local-mcp-demo"), null);
   });
 
   it("rejects refresh for unknown entries and empty tools", () => {
