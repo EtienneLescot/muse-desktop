@@ -1821,6 +1821,27 @@ async fn file_read(
         .map_err(|e| format!("file read task failed: {e}"))?
 }
 
+/// Open a verified workspace entry with the user's default system handler.
+/// The UI only sends a relative path from the active conversation; resolving
+/// and canonicalizing it here prevents a stale or hostile renderer from
+/// opening a path outside that conversation's workspace.
+#[tauri::command]
+#[allow(deprecated)]
+async fn file_open(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+) -> Result<(), String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    let target = tokio::task::spawn_blocking(move || files::resolve_for_open(&root, &path))
+        .await
+        .map_err(|e| format!("file open validation task failed: {e}"))??;
+    app.shell()
+        .open(target.to_string_lossy().into_owned(), None)
+        .map_err(|e| format!("could not open workspace path: {e}"))
+}
+
 /// Build the frontend `input_request` payload from a `userInput/requested`
 /// notification. Pure (unit-tested): questions forwarded verbatim (capped),
 /// ids threaded through for the answer round-trip.
@@ -3531,6 +3552,7 @@ fn main() {
             terminal_close,
             files_list,
             file_read,
+            file_open,
             list_models,
             set_model,
             compact_session,

@@ -233,13 +233,13 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 
 ### Livraison M1-07 — fichiers réels du workspace
 
-- **Contrat backend :** `files_list(sessionId, relativePath?, limit?)` et `file_read(sessionId, path, maxChars?)` résolvent le workspace de la conversation, refusent les chemins absolus/traversal et les symlinks qui sortent de la racine, puis exécutent les lectures hors thread UI.
+- **Contrat backend :** `files_list(sessionId, relativePath?, limit?)`, `file_read(sessionId, path, maxChars?)` et `file_open(sessionId, path)` résolvent le workspace de la conversation, refusent les chemins absolus/traversal et les symlinks qui sortent de la racine, puis exécutent les opérations hors thread UI.
 - **Bornage et fraîcheur :** le listing est limité à 500 entrées (200 par défaut) et la lecture à 512 Ko/120 000 caractères. Les fichiers binaires sont identifiés sans décodage forcé ; chaque réponse porte `observedAt`, et un rafraîchissement explicite remplace le snapshot précédent.
-- **UX :** l’onglet **Files** affiche le chemin courant, remonte d’un niveau, recharge le dossier et ouvre les répertoires à la demande. Un fichier texte est prévisualisé depuis le disque ; les fichiers binaires, symlinks inaccessibles et résultats tronqués sont signalés dans le panneau.
+- **UX :** l’onglet **Files** affiche le chemin courant, remonte d’un niveau, recharge le dossier et ouvre les répertoires à la demande. Un fichier texte est prévisualisé depuis le disque et propose **Open in app** pour le handler système par défaut ; les fichiers binaires, symlinks inaccessibles et résultats tronqués sont signalés dans le panneau.
 - **SSOT :** l’état `filesBySession` appartient au hook de sessions ; les réponses asynchrones obsolètes sont ignorées par séquence de requête, afin qu’un changement d’onglet ou de conversation ne remplace pas un aperçu plus récent.
 - **Fraîcheur de vue :** tant que l'onglet Files reste ouvert, le dossier courant est relu périodiquement et l'heure du dernier snapshot est visible. Ce rafraîchissement ne remplace pas encore un watcher natif événementiel.
-- **Validation :** tests Rust du service sur un workspace temporaire (listing borné, texte, binaire, traversée et chemins absolus), puis suite Node/TypeScript/Vite. La qualification native Windows/macOS/Linux et le scénario E2E avec fichiers renommés/disparus restent à exécuter.
-- **Limites assumées :** cette tranche prévisualise le contenu actuel et ne prétend pas ouvrir une application externe ni surveiller le disque en continu. Les pièces jointes restent M1-08.
+- **Validation :** tests Rust du service sur un workspace temporaire (listing borné, texte, binaire, traversée, chemins absolus et résolution d’ouverture), puis suite Node/TypeScript/Vite. La qualification native Windows/macOS/Linux et le scénario E2E avec fichiers renommés/disparus restent à exécuter.
+- **Limites assumées :** l’ouverture est un geste explicite vers le handler système par défaut ; Muse ne lance aucune commande avec le contenu du fichier et ne surveille pas encore le disque en continu. Les pièces jointes restent M1-08.
 
 ### Livraison M1-08 — pièces jointes structurées
 

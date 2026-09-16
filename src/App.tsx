@@ -230,6 +230,7 @@ export default function App() {
     filesForSession,
     listWorkspaceFiles,
     readWorkspaceFile,
+    openWorkspacePath,
     browserAnnotations,
     addBrowserAnnotation,
     removeBrowserAnnotation,
@@ -1216,6 +1217,7 @@ export default function App() {
                           state={filesForSession(active.session_id)}
                           onList={listWorkspaceFiles}
                           onRead={readWorkspaceFile}
+                          onOpen={openWorkspacePath}
                         />
                       )}
                       {workPanel === "browser" && (

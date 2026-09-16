@@ -188,6 +188,21 @@ pub fn read(
     })
 }
 
+/// Resolve one existing workspace entry for an explicit "open in system"
+/// action. The same traversal and symlink guards as `list`/`read` apply; the
+/// caller receives a canonical path only after the entry is proven to remain
+/// inside the workspace root.
+pub fn resolve_for_open(root: &Path, relative_path: &str) -> Result<PathBuf, String> {
+    let canonical_root = canonical_root(root)?;
+    let path = resolve_path(&canonical_root, relative_path)?;
+    let metadata = fs::metadata(&path)
+        .map_err(|e| format!("cannot inspect {}: {e}", relative_path.trim()))?;
+    if !metadata.is_file() && !metadata.is_dir() {
+        return Err(format!("workspace path cannot be opened: {}", relative_path.trim()));
+    }
+    Ok(path)
+}
+
 fn canonical_root(root: &Path) -> Result<PathBuf, String> {
     root.canonicalize()
         .map_err(|e| format!("cannot resolve workspace {}: {e}", root.display()))
@@ -304,6 +319,18 @@ mod tests {
         assert!(resolve_path(&root.canonicalize().unwrap(), "../outside.txt").is_err());
         assert!(resolve_path(&root.canonicalize().unwrap(), "C:\\\\secret.txt").is_err());
         assert!(resolve_path(&root.canonicalize().unwrap(), "ok.txt").is_ok());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn resolve_for_open_keeps_files_and_directories_in_workspace() {
+        let root = temp_root();
+        fs::create_dir(root.join("src")).unwrap();
+        fs::write(root.join("src/main.ts"), "console.log('Muse')\n").unwrap();
+        assert!(resolve_for_open(&root, "src/main.ts").unwrap().is_file());
+        assert!(resolve_for_open(&root, "src").unwrap().is_dir());
+        assert!(resolve_for_open(&root, "../outside").is_err());
+        assert!(resolve_for_open(&root, "missing.txt").is_err());
         let _ = fs::remove_dir_all(root);
     }
 }

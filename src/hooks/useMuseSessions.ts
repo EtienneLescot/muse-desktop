@@ -875,6 +875,8 @@ interface UseMuseSessions {
   filesForSession: (sessionId: string) => FilesBrowserState;
   listWorkspaceFiles: (sessionId: string, path?: string) => Promise<void>;
   readWorkspaceFile: (sessionId: string, path: string) => Promise<void>;
+  /** M1-07: open a verified workspace entry in the system handler. */
+  openWorkspacePath: (sessionId: string, path: string) => Promise<void>;
   /** US-5: move a thread to the archived list (persisted flag). */
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -5643,6 +5645,21 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
+  const openWorkspacePath = useCallback(
+    async (sessionId: string, path: string): Promise<void> => {
+      if (!isTauriRuntime()) {
+        setError("Opening workspace files requires the Muse Desktop runtime.");
+        return;
+      }
+      try {
+        await invoke("file_open", { sessionId, path });
+      } catch (e) {
+        setError(`file_open failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+    [],
+  );
+
   // US-23 search over the stored index (empty unless opted in). Search
   // keeps working while paused — pause only suspends indexing updates.
   const indexResults = searchIndex(indexStore, indexEnabled ? indexQuery : "");
@@ -5862,6 +5879,7 @@ export function useMuseSessions(): UseMuseSessions {
     filesForSession,
     listWorkspaceFiles,
     readWorkspaceFile,
+    openWorkspacePath,
     error,
     evtCount,
   };

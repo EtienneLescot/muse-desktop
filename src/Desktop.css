@@ -690,6 +690,26 @@
   color: var(--muted);
   font-size: 10px;
 }
+.file-preview-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.file-preview-actions button {
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 8px;
+  background: var(--surface, var(--bg));
+  color: var(--text);
+  padding: 4px 9px;
+  font-size: 10px;
+  cursor: pointer;
+}
+.file-preview-actions button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
 .file-preview-head strong {
   min-width: 0;
   overflow: hidden;

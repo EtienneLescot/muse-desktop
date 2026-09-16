@@ -10,6 +10,7 @@ interface Props {
   state: FilesBrowserState;
   onList: (sessionId: string, path?: string) => Promise<void>;
   onRead: (sessionId: string, path: string) => Promise<void>;
+  onOpen: (sessionId: string, path: string) => Promise<void>;
 }
 
 function formatSize(size: number | null): string {
@@ -37,7 +38,7 @@ function formatObservedAt(observedAt: number | null): string {
 }
 
 /** M1-07 real disk browser. Every row comes from the Rust Files service. */
-export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
+export function FilesPanel({ sessionId, state, onList, onRead, onOpen }: Props) {
   useEffect(() => {
     if (state.entries.length === 0 && !state.loading && state.observedAt === null) {
       void onList(sessionId, ".");
@@ -131,7 +132,16 @@ export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
             <>
               <div className="file-preview-head">
                 <strong title={preview.path}>{preview.path}</strong>
-                <span>{formatSize(preview.size)}{preview.truncated ? " · preview clipped" : ""}</span>
+                <span className="file-preview-actions">
+                  <span>{formatSize(preview.size)}{preview.truncated ? " · preview clipped" : ""}</span>
+                  <button
+                    type="button"
+                    onClick={() => void onOpen(sessionId, preview.path)}
+                    title="Open this file with the system default application"
+                  >
+                    Open in app
+                  </button>
+                </span>
               </div>
               <pre className="file-preview-code">{preview.content}</pre>
             </>
