@@ -284,6 +284,14 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Limites :** les profils de setup persistants, variables d'environnement autorisées, annulation live et création atomique session → worktree restent à concevoir pour M2-05/M2-06. Le setup est donc une action explicite et locale, sans promesse de readiness globale du projet.
 - **Validation :** tests Rust des chemins, commandes réussies/échouées et bornes ; tests Node de validation de commande ; TypeScript, Vite et Cargo doivent rester verts avant livraison.
 
+### Livraison M2-05 — plan de handoff Local ↔ Worktree
+
+- **Préconditions :** **Prepare handoff** produit un plan local en lecture seule à partir du statut Git observé. Il expose le workspace source, le worktree cible, les conflits, les changements non commités, l’état de la cible et la disponibilité de la branche.
+- **UX :** les contrôles sont intégrés à chaque worktree créé. Les checks sont signalés `pass`, `warn` ou `blocked`, puis les étapes proposées restent visibles dans une disclosure ; aucune bascule ne se déclenche implicitement.
+- **Sécurité :** une cible absente, sale ou déjà utilisée et tout conflit source bloquent le plan. Un statut non rafraîchi ou des changements source deviennent des avertissements explicites demandant une nouvelle observation ou un snapshot.
+- **Limites :** le transfert effectif (arrêt/reprise atomique du host, déplacement du contexte et rollback sur conflit) reste bloqué par l’absence de contrat MSP multi-workspace ; ce lot livre le plan et les préconditions pour éviter les changements silencieux.
+- **Validation :** tests purs des scénarios propre, sale, conflit, cible absente et branche utilisée ; TypeScript et Vite restent verts.
+
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 
 ## M2 — Projets et travail parallèle isolé
@@ -294,7 +302,7 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 | M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Intégration | Héritage global/projet visible et modèle effectif appliqué à la création d'une session ; sandbox/réseau/auto-compact restent en attente d'un contrat moteur vérifié |
 | M2-03 | Créer automatiquement un worktree pour une conversation | Adapté | Présente | Partielle | Intégration | Création Git réelle, persistance et suppression confirmée livrées ; restent retention avancée et session atomique dans le worktree |
 | M2-04 | Préparer l'environnement du worktree | Adapté | Présente | Partielle | Intégration | Commande explicite, états et sortie bornée livrés ; restent profils persistants, variables autorisées, annulation live et readiness globale |
-| M2-05 | Passer de Local à Worktree et inversement | À définir | Absente | Absente | À faire | Transférer contexte et changements ; traiter conflits, fichiers ignorés et branche déjà utilisée ; aucune perte de travail |
+| M2-05 | Passer de Local à Worktree et inversement | Adapté | Présente | Partielle | Intégration | Plan de handoff et préconditions livrés ; restent transfert atomique du host, déplacement de contexte, conflits fichiers ignorés et rollback |
 | M2-06 | Nettoyer les worktrees sans supprimer du travail | À définir | Absente | Absente | À faire | Lier archive et rétention, détecter dirty/running ; nettoyage uniquement sûr, confirmation explicite si nécessaire |
 | M2-07 | Piloter les sous-agents réels | Adapté | Présente | Câblée | Unitaire | Vérifier followup/stop/resume/result/drilldown sur agents vivants ; identité et états corrects jusqu'à terminaison |
 | M2-08 | Exécuter plusieurs writers sans collision | À définir | Partielle | Partielle | Unitaire | Associer writers aux espaces isolés, file réelle et limites explicites ; tests de modifications concurrentes et résultats séparés |
