@@ -17,6 +17,7 @@ import {
   loadConnectors,
   REMOTE_LIMIT_MESSAGE,
   requestRemoteConnector,
+  registerLocalConnector,
   setConnectorEnabled,
   uninstallConnector,
   VPN_FAILURE_MESSAGE,
@@ -68,6 +69,45 @@ describe("installConnector (1-click local, no JSON)", () => {
 
   it("refuses unknown ids (no manual JSON path)", () => {
     assert.equal(installConnector([], "evil-custom", 1000), null);
+  });
+});
+
+describe("verified local MCP connector registration", () => {
+  it("stores the command and real tools after a successful probe", () => {
+    const result = registerLocalConnector(
+      [],
+      {
+        id: "local-mcp-demo",
+        name: "Demo",
+        command: "node server.js",
+        tools: [{ name: "demo.read", description: "Read demo data" }],
+      },
+      1234,
+    );
+    assert.ok(result);
+    assert.equal(result.entry.command, "node server.js");
+    assert.equal(result.entry.lastProbeAt, 1234);
+    assert.deepEqual(listConnectorTools(result.registry).map((tool) => tool.name), ["demo.read"]);
+  });
+
+  it("updates an existing connector without re-enabling a disabled entry", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "" }],
+    });
+    assert.ok(first);
+    const disabled = setConnectorEnabled(first.registry, "local-mcp-demo", false).registry;
+    const refreshed = registerLocalConnector(disabled, {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo --new",
+      tools: [{ name: "two", description: "" }],
+    });
+    assert.ok(refreshed);
+    assert.equal(refreshed.entry.status, "disabled");
+    assert.equal(refreshed.entry.command, "demo --new");
   });
 });
 

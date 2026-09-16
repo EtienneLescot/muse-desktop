@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   CURATED_CONNECTORS,
   type ConnectorEntry,
+  type ConnectorTool,
   type LocalMcpCallResult,
   type LocalMcpProbeResult,
 } from "../lib/connectors";
@@ -26,6 +27,7 @@ interface Props {
     toolName: string,
     argumentsText: string,
   ) => Promise<LocalMcpCallResult | null>;
+  onRegisterLocal: (name: string, command: string, tools: ConnectorTool[]) => boolean;
   workspace: string | null;
 }
 
@@ -47,13 +49,16 @@ export function ConnectorPanel({
   onAddRemote,
   onProbeLocal,
   onCallLocal,
+  onRegisterLocal,
   workspace,
 }: Props) {
   const [remoteName, setRemoteName] = useState("");
   const [remoteUrl, setRemoteUrl] = useState("");
+  const [localName, setLocalName] = useState("");
   const [localCommand, setLocalCommand] = useState("");
   const [localProbe, setLocalProbe] = useState<LocalMcpProbeResult | null>(null);
   const [localCall, setLocalCall] = useState<LocalMcpCallResult | null>(null);
+  const [localSaved, setLocalSaved] = useState(false);
   const [localBusy, setLocalBusy] = useState<"probe" | "call" | null>(null);
   const [localTool, setLocalTool] = useState("");
   const [localArgs, setLocalArgs] = useState("{}");
@@ -85,9 +90,21 @@ export function ConnectorPanel({
             const result = await onProbeLocal(localCommand);
             setLocalProbe(result);
             setLocalTool(result?.tools[0]?.name ?? "");
+            setLocalSaved(false);
             setLocalBusy(null);
           }}
         >
+          <input
+            type="text"
+            value={localName}
+            onChange={(event) => {
+              setLocalName(event.target.value);
+              setLocalSaved(false);
+            }}
+            placeholder="Server name"
+            aria-label="Local MCP server name"
+            maxLength={120}
+          />
           <input
             type="text"
             value={localCommand}
@@ -109,6 +126,16 @@ export function ConnectorPanel({
             </p>
             {localProbe.tools.length > 0 && (
               <>
+                <button
+                  type="button"
+                  disabled={!localName.trim() || localSaved}
+                  onClick={() => {
+                    const saved = onRegisterLocal(localName, localCommand, localProbe.tools);
+                    if (saved) setLocalSaved(true);
+                  }}
+                >
+                  {localSaved ? "Saved" : "Save connector"}
+                </button>
                 <label>
                   Tool
                   <select value={localTool} onChange={(event) => setLocalTool(event.target.value)}>

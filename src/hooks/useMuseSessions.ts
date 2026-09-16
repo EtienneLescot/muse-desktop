@@ -252,6 +252,7 @@ import {
   installConnector,
   listConnectorTools,
   loadConnectors,
+  registerLocalConnector,
   requestRemoteConnector,
   saveConnectors,
   setConnectorEnabled,
@@ -825,6 +826,12 @@ interface UseMuseSessions {
     argumentsText: string,
     workspacePath?: string | null,
   ) => Promise<LocalMcpCallResult | null>;
+  /** M3-03: persist a local server after a successful probe. */
+  registerLocalConnector: (
+    name: string,
+    command: string,
+    tools: ConnectorTool[],
+  ) => boolean;
   /** w-integrations US-26: last remote-guard refusal message, if any. */
   remoteNotice: string | null;
   /** w-integrations US-24: 1-click install from the curated directory. */
@@ -3314,6 +3321,25 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
+  const registerLocalConnectorByProbe = useCallback(
+    (name: string, command: string, tools: ConnectorTool[]): boolean => {
+      const id = `local-mcp-${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const result = registerLocalConnector(connectorsRef.current, {
+        id,
+        name,
+        command,
+        tools,
+      });
+      if (result === null) {
+        setError("local MCP connector could not be saved: name, command and tools are required");
+        return false;
+      }
+      setConnectors(result.registry);
+      return true;
+    },
+    [],
+  );
+
   const togglePinned = useCallback((sessionId: string) => {
     setSessions((cur) => {
       const current = cur.find((session) => session.session_id === sessionId);
@@ -4348,6 +4374,7 @@ export function useMuseSessions(): UseMuseSessions {
     connectorTools,
     probeLocalMcp,
     callLocalMcp,
+    registerLocalConnector: registerLocalConnectorByProbe,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,

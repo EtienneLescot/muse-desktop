@@ -65,6 +65,10 @@ export interface ConnectorEntry {
   status: ConnectorStatus;
   /** Remote-only: the configured endpoint URL. */
   url?: string;
+  /** Local-only: explicit command used to probe/call this server. */
+  command?: string;
+  /** Local-only: last successful tools/list timestamp. */
+  lastProbeAt?: number;
   /** Remote-only: human-readable guard failure, if the entry is blocked. */
   guardMessage?: string;
   addedAt: number;
@@ -192,6 +196,45 @@ export function installConnector(
     addedAt: now,
   };
   return { registry: [...registry, entry], entry, already: false };
+}
+
+/** Register a local server only after a real tools/list response. */
+export function registerLocalConnector(
+  registry: ConnectorEntry[],
+  spec: {
+    id: string;
+    name: string;
+    command: string;
+    tools: ConnectorTool[];
+  },
+  now: number = Date.now(),
+): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
+  const id = spec.id.trim();
+  const name = spec.name.trim();
+  const command = spec.command.trim();
+  if (!id || !name || !command || spec.tools.length === 0) return null;
+  const existing = findConnector(registry, id);
+  const entry: ConnectorEntry = {
+    id,
+    name,
+    description: "Verified local MCP server.",
+    kind: "local",
+    tools: spec.tools.map((tool) => ({
+      name: tool.name.trim(),
+      description: tool.description.trim(),
+    })),
+    status: existing?.status === "disabled" ? "disabled" : "installed",
+    command,
+    lastProbeAt: now,
+    addedAt: existing?.addedAt ?? now,
+  };
+  if (entry.tools.some((tool) => tool.name.length === 0)) return null;
+  return {
+    registry: existing
+      ? registry.map((item) => (item.id === id ? entry : item))
+      : [...registry, entry],
+    entry,
+  };
 }
 
 /** Remove an entry by id. Missing ids are a no-op (`removed: false`). */
@@ -364,6 +407,8 @@ export function loadConnectors(): ConnectorEntry[] {
         e.status === "installed" || e.status === "disabled" || e.status === "error"
           ? e.status
           : "installed",
+      command: typeof e.command === "string" ? e.command : undefined,
+      lastProbeAt: typeof e.lastProbeAt === "number" ? e.lastProbeAt : undefined,
     }));
   } catch {
     return [];
