@@ -276,6 +276,7 @@ import {
   setSkillEnabled,
   suggestSkills,
   type Skill,
+  type SkillResourceContext,
   type SkillSuggestion,
 } from "../lib/skills";
 import {
@@ -2545,6 +2546,31 @@ export function useMuseSessions(): UseMuseSessions {
             setError(`unknown skill /${skillCmd.name}`);
             return sendFailed(clientMessageId, `unknown skill /${skillCmd.name}`);
           }
+          let resources: SkillResourceContext[] = [];
+          if (skill.discovered && skill.path && (skill.resources?.length ?? 0) > 0) {
+            try {
+              const loaded = await invoke<{
+                resources: SkillResourceContext[];
+                errors: Array<{ path: string; message: string }>;
+              }>("skills_read_resources", {
+                workspace: workspace?.trim() || null,
+                skillPath: skill.path,
+                resourcePaths: skill.resources ?? [],
+              });
+              if (loaded.errors.length > 0) {
+                const detail = loaded.errors.map((item) => `${item.path}: ${item.message}`).join("; ");
+                pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: `skill /${skill.name} resources unavailable: ${detail}` }]);
+                setError(`skill /${skill.name} resources unavailable`);
+                return sendFailed(clientMessageId, `skill /${skill.name} resources unavailable`);
+              }
+              resources = loaded.resources;
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: `skill /${skill.name} could not load resources: ${message}` }]);
+              setError(`skill /${skill.name} could not load resources`);
+              return sendFailed(clientMessageId, `skill /${skill.name} could not load resources`);
+            }
+          }
           pushLog(sessionId, [
             {
               id: newId(),
@@ -2553,7 +2579,7 @@ export function useMuseSessions(): UseMuseSessions {
               text: formatSkillInvokeTrace(skill.name, skillCmd.args),
             },
           ]);
-          outgoing = buildSkillInvocation(skill, skillCmd.args);
+          outgoing = buildSkillInvocation(skill, skillCmd.args, resources);
         }
         // US-7: `/fanout <n> "<task>"` never reaches the model as typed —
         // it becomes one parent-turn prompt instructing N parallel
@@ -2725,7 +2751,7 @@ export function useMuseSessions(): UseMuseSessions {
         }
       }
     },
-    [kickPoll, doCompact],
+    [kickPoll, doCompact, workspace],
   );
 
   const steerInput = useCallback(

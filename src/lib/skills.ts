@@ -56,6 +56,12 @@ export interface SkillCommand {
   args: string;
 }
 
+export interface SkillResourceContext {
+  path: string;
+  content: string;
+  truncated: boolean;
+}
+
 /** Storage key (all writes confined to `muse-desktop.*`). */
 export const SKILLS_KEY = "muse-desktop.skills.v1";
 
@@ -194,12 +200,21 @@ export function formatSkillInvokeTrace(name: string, args: string): string {
  * View-only metadata never leaks extra detail — invocation always runs
  * with the full instructions, explicitly granted here.
  */
-export function buildSkillInvocation(skill: Skill, args: string): string {
+export function buildSkillInvocation(
+  skill: Skill,
+  args: string,
+  resources: SkillResourceContext[] = [],
+): string {
   const detail = getSkillDetail(skill, true);
   const body = detail.instructions ?? "";
+  const resourceText = resources.length > 0
+    ? `\n\nResources (loaded from ${skill.path ?? "skill directory"}):\n${resources
+        .map((resource) => `<skill-resource path="${resource.path}"${resource.truncated ? " truncated" : ""}>\n${resource.content}\n</skill-resource>`)
+        .join("\n")}`
+    : "";
   return args.length > 0
-    ? `[${skill.name}] ${body}\n\nRequest: ${args}`
-    : `[${skill.name}] ${body}`;
+    ? `[${skill.name}] ${body}${resourceText}\n\nRequest: ${args}`
+    : `[${skill.name}] ${body}${resourceText}`;
 }
 
 /**

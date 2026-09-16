@@ -413,6 +413,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** invocation explicite, chargement des instructions et ressources via contrat moteur ; progression/découverte avec trace compréhensible. Les suggestions ne doivent pas prétendre exécuter une skill.
 
+**État au 16/09/2026 :** une invocation slash d'une skill découverte relit ses ressources relatives juste avant l'envoi via `skills_read_resources`. Les contenus sont bornés, balisés avec leur chemin, et un fichier disparu fait échouer l'envoi avec une entrée système explicite ; les retries réutilisent l'expansion de l'outbox. Le host reçoit encore du texte enrichi, faute de part `skill` documentée avec ressources.
+
 **Acceptation :** invocation réelle avec ressource, skill supprimée entre suggestion et envoi, permission refusée ; pas de double insertion au retry.
 
 ### M3-06 — Scheduler réel
