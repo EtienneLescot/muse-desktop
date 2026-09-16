@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
 import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
 import { cycleThreadId, selectActiveThreads } from "./lib/threads";
@@ -27,7 +28,7 @@ import { TerminalPanel } from "./components/TerminalPanel";
 import { FilesPanel } from "./components/FilesPanel";
 import type { ShareBundle } from "./lib/sharing";
 import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
-import { diagnosticsJson } from "./lib/diagnostics";
+import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -442,7 +443,13 @@ export default function App() {
     />
   );
 
-  function exportDiagnostics(): void {
+  async function exportDiagnostics(): Promise<void> {
+    let native: NativeDiagnosticsSnapshot | null = null;
+    try {
+      native = await invoke<NativeDiagnosticsSnapshot>("collect_diagnostics");
+    } catch {
+      // Web preview and older native builds use the renderer counters below.
+    }
     const payload = diagnosticsJson({
       workspace,
       sessionCount: sessions.length,
@@ -456,6 +463,7 @@ export default function App() {
       eventCount: evtCount,
       backendMissing,
       error,
+      native,
     });
     const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);

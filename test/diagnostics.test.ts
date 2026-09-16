@@ -15,6 +15,15 @@ const input = {
   eventCount: 12,
   backendMissing: false,
   error: "Bearer abc123 token=secret-value",
+  native: {
+    schema: "muse-desktop.native-diagnostics.v1",
+    workspaceConfigured: true,
+    hostCount: 1,
+    sessionCount: 2,
+    runningSessionCount: 1,
+    pendingApprovalCount: 1,
+    eventBufferCount: 5,
+  },
 };
 
 describe("M0-07 diagnostics", () => {
@@ -24,6 +33,7 @@ describe("M0-07 diagnostics", () => {
     assert.equal(snapshot.workspaceConfigured, true);
     assert.equal(snapshot.backend, "local");
     assert.equal(snapshot.counts.sessionCount, 2);
+    assert.equal(snapshot.native?.eventBufferCount, 5);
     assert.equal(snapshot.lastError, "Bearer [redacted] token=[redacted]");
     assert.equal(JSON.stringify(snapshot).includes("C:/private/project"), false);
   });

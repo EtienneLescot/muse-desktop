@@ -229,6 +229,21 @@ struct AppState {
     setup_cancellations: Mutex<HashMap<(String, String), Arc<AtomicBool>>>,
 }
 
+/// Native side of the bounded diagnostics export. It contains operational
+/// counters only; workspace paths, prompts and transcript payloads stay out
+/// of this contract.
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeDiagnosticsSnapshot {
+    pub schema: String,
+    pub workspace_configured: bool,
+    pub host_count: usize,
+    pub session_count: usize,
+    pub running_session_count: usize,
+    pub pending_approval_count: usize,
+    pub event_buffer_count: usize,
+}
+
 const DIAGNOSTIC_MAX_LINES: usize = 20;
 const DIAGNOSTIC_LINE_LIMIT: usize = 1000;
 const DIAGNOSTIC_TOTAL_LIMIT: usize = 8000;
@@ -1116,6 +1131,54 @@ async fn git_restore(
     })
     .await
     .map_err(|e| format!("git restore task failed: {e}"))?
+}
+
+/// Return native supervisor counters for the explicit local diagnostics
+/// export. Every field is a bounded count and every lock failure is visible to
+/// the caller instead of producing a partial, misleading snapshot.
+#[tauri::command]
+fn collect_diagnostics(state: State<'_, AppState>) -> Result<NativeDiagnosticsSnapshot, String> {
+    let workspace_configured = state
+        .workspace
+        .lock()
+        .map_err(|e| format!("workspace diagnostics lock: {e}"))?
+        .is_some();
+    let (host_count, host_session_count) = {
+        let hosts = state
+            .hosts
+            .lock()
+            .map_err(|e| format!("host diagnostics lock: {e}"))?;
+        (hosts.client_count(), hosts.session_count())
+    };
+    let (session_count, running_session_count) = {
+        let sessions = state
+            .sessions
+            .lock()
+            .map_err(|e| format!("session diagnostics lock: {e}"))?;
+        (
+            sessions.len(),
+            sessions.values().filter(|meta| meta.running).count(),
+        )
+    };
+    let pending_approval_count = state
+        .approvals
+        .lock()
+        .map_err(|e| format!("approval diagnostics lock: {e}"))?
+        .len();
+    let event_buffer_count = state
+        .event_buffer
+        .lock()
+        .map_err(|e| format!("event diagnostics lock: {e}"))?
+        .len();
+    Ok(NativeDiagnosticsSnapshot {
+        schema: "muse-desktop.native-diagnostics.v1".to_string(),
+        workspace_configured,
+        host_count,
+        session_count: session_count.max(host_session_count),
+        running_session_count,
+        pending_approval_count,
+        event_buffer_count,
+    })
 }
 
 /// Apply one selected hunk after checking the exact Review observation.
@@ -3113,6 +3176,7 @@ fn main() {
             subagent_read_result,
             subagent_drilldown,
             check_input_reached,
+            collect_diagnostics,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build muse-desktop app")

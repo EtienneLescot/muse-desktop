@@ -15,6 +15,17 @@ export interface DiagnosticsInput {
   eventCount: number;
   backendMissing: boolean;
   error: string | null;
+  native?: NativeDiagnosticsSnapshot | null;
+}
+
+export interface NativeDiagnosticsSnapshot {
+  schema: "muse-desktop.native-diagnostics.v1";
+  workspaceConfigured: boolean;
+  hostCount: number;
+  sessionCount: number;
+  runningSessionCount: number;
+  pendingApprovalCount: number;
+  eventBufferCount: number;
 }
 
 export interface DiagnosticsSnapshot {
@@ -23,9 +34,10 @@ export interface DiagnosticsSnapshot {
   platform: string;
   userAgent: string;
   workspaceConfigured: boolean;
-  counts: Omit<DiagnosticsInput, "workspace" | "backendMissing" | "error">;
+  counts: Omit<DiagnosticsInput, "workspace" | "backendMissing" | "error" | "native">;
   backend: "web-preview" | "local";
   lastError: string | null;
+  native: NativeDiagnosticsSnapshot | null;
 }
 
 function bounded(value: string, max = MAX_ERROR_CHARS): string {
@@ -70,6 +82,7 @@ export function buildDiagnosticsSnapshot(
     },
     backend: input.backendMissing ? "web-preview" : "local",
     lastError: redactDiagnostic(input.error),
+    native: input.native ?? null,
   };
 }
 
