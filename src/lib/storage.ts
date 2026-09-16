@@ -18,7 +18,18 @@ export interface StorageIssue {
 
 const MAX_ISSUES = 50;
 const ISSUE_MESSAGE_LIMIT = 300;
+/** Keep recovery exports bounded even when a broken webview stores a huge value. */
+export const RECOVERY_RAW_LIMIT = 120_000;
 let issues: StorageIssue[] = [];
+
+function boundRecoveryRaw(raw: string): { raw: string; truncated: boolean } {
+  const chars = Array.from(raw);
+  if (chars.length <= RECOVERY_RAW_LIMIT) return { raw, truncated: false };
+  return {
+    raw: chars.slice(0, RECOVERY_RAW_LIMIT).join(""),
+    truncated: true,
+  };
+}
 
 function storage(): Storage | null {
   try {
@@ -174,7 +185,12 @@ export function exportStorageSnapshot(prefix = "muse-desktop."): string {
       try {
         entries[key] = JSON.parse(raw);
       } catch {
-        entries[key] = { raw, parseError: true };
+        const bounded = boundRecoveryRaw(raw);
+        entries[key] = {
+          raw: bounded.raw,
+          parseError: true,
+          ...(bounded.truncated ? { truncated: true } : {}),
+        };
       }
     }
   }

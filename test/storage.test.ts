@@ -11,6 +11,7 @@ import {
   removeStorageKey,
   writeStorageJson,
   writeStorageString,
+  RECOVERY_RAW_LIMIT,
 } from "../src/lib/storage.ts";
 
 function fakeStorage(initial: Record<string, string> = {}) {
@@ -93,6 +94,23 @@ describe("defensive storage facade", () => {
     });
     assert.equal(snapshot.entries.unrelated, undefined);
     assert.equal(values.get("unrelated"), "should not export");
+  });
+
+  it("bounds oversized damaged values while marking them recoverable", () => {
+    const oversized = "💥".repeat(RECOVERY_RAW_LIMIT + 25);
+    fakeStorage({ "muse-desktop.corrupt.v1": oversized });
+    const snapshot = JSON.parse(exportStorageSnapshot()) as {
+      entries: Record<string, unknown>;
+    };
+    const entry = snapshot.entries["muse-desktop.corrupt.v1"] as {
+      raw: string;
+      parseError: boolean;
+      truncated?: boolean;
+    };
+    assert.equal(entry.parseError, true);
+    assert.equal(entry.truncated, true);
+    assert.equal(Array.from(entry.raw).length, RECOVERY_RAW_LIMIT);
+    assert.equal(entry.raw.endsWith("💥"), true);
   });
 
   it("removes a key through the same safe facade", () => {
