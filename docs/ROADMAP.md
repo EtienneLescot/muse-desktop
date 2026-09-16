@@ -149,7 +149,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-07 | Consulter les vrais fichiers du projet | Adapté | Présente | Câblée | Intégration | Listing paresseux et lecture bornée du workspace livrés ; restent ouverture native, watcher/état obsolète et qualification E2E sur gros dépôts |
 | M1-08 | Ajouter fichiers et images à une demande | Adapté | Présente | Câblée | Intégration | Texte borné et images base64 sont envoyés comme parts MSP réelles ; restent validation live sur les modèles image, dimensions et reprise d’un fichier disparu |
 | M1-09 | Créer une branche de conversation fidèle | Adapté | Présente | Câblée | Intégration | Fork serveur depuis le dernier tour terminé livré ; restent le sélecteur d’une ancre MSP précise, qualification du point invalide et reprise live |
-| M1-10 | Réorienter une exécution ou mettre un message en attente | À définir | Absente | Absente | À faire | Exploiter steer/queue selon capacités servies ; états visibles, annulation, ordre et absence de double envoi |
+| M1-10 | Réorienter une exécution ou mettre un message en attente | Adapté | Partielle | Locale | Unitaire | Queue MSP par défaut et disposition `queued`/`steered` visibles ; restent le pilotage explicite, unqueue et ordre persistant |
 | M1-11 | Choisir un modèle disponible et suivre le contexte | Adapté | Présente | Câblée | Unitaire | Consolider tests live list/setModel/compact, erreurs et persistance ; fallback explicitement non live ; état confirmé par le moteur |
 | M1-12 | Retrouver et organiser les conversations | Adapté | Partielle | Locale | UI | Étendre recherche à l'historique, épinglage/ordre et états non lus ; préserver les résultats au redémarrage sans déplacer le focus |
 | M1-13 | Lire une longue conversation confortablement | Adapté | Présente | Partielle | UI | Vérifier rendu Markdown/code/liens et outils ; mesurer longue session, mémoire et scroll ; virtualiser si les mesures l'exigent |
@@ -230,6 +230,13 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **UX :** une action **Fork conversation** est disponible dans l’en-tête de la conversation. Elle crée une conversation nommée `Branch of …`, sélectionne immédiatement la branche et recopie uniquement les entrées locales terminées ; les brouillons et items ouverts ne sont pas partagés.
 - **SSOT :** l’identité et la provenance durables restent celles du serveur ; le journal local sert uniquement à rendre la continuité visible avant le prochain événement MSP.
 - **Validation :** le contrat est câblé et compilé avec les suites Rust/Node/TypeScript/Vite de la branche. Restent un essai live avec une session active, les erreurs `forkBoundaryInvalid` et le choix d’une ancre `lastTurnId` précise.
+
+### Livraison M1-10 — admission queue rendue visible
+
+- **Contrat moteur :** le schéma stable définit `turn/start.ifBusy` avec `queue` comme comportement par défaut et renvoie une disposition d’admission `started`, `queued` ou `steered`.
+- **UX :** après l’accusé de réception, Muse ajoute une information discrète dans la conversation lorsque la demande est mise en file ou absorbée par le tour courant ; l’utilisateur ne voit plus un simple état `Thinking` sans explication.
+- **Transport :** les notifications `turn/started` conservent maintenant `turnId` et `commandId` dans leur payload relayé, afin que le futur pilotage puisse cibler le bon tour sans course.
+- **Reste :** `turn/steer` explicite, `turn/unqueue`, annulation ciblée et une file persistante avec actions UI sont à câbler après qualification live des capacités du modèle.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 
