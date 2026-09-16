@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LogEntry } from "../lib/persist";
 import { REFLEXIVE_LABEL } from "../lib/phase";
 import { subagentSummary } from "../lib/subagent";
+import {
+  initialStreamWindowStart,
+  maxStreamWindowStart,
+  nextStreamWindowStart,
+  prependStreamWindowStart,
+  shouldWindowStream,
+} from "../lib/streamWindow";
 import {
   classifyStreamHealth,
   formatElapsed,
@@ -101,6 +108,22 @@ export function StreamView({
   const [busy, setBusy] = useState<string | null>(null);
   const [retryingFailure, setRetryingFailure] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [windowStart, setWindowStart] = useState(() =>
+    initialStreamWindowStart(entries.length),
+  );
+  const windowStartsRef = useRef<Record<string, number>>({});
+  const windowSessionRef = useRef<string | null>(sessionId);
+  const previousEntryCountRef = useRef(entries.length);
+  const prependScrollRef = useRef<{ top: number; height: number } | null>(null);
+  const jumpLatestRef = useRef(false);
+  const loadingOlderRef = useRef(false);
+
+  const streamWindowed = shouldWindowStream(entries.length);
+  const maxWindowStart = maxStreamWindowStart(entries.length);
+  const safeWindowStart = streamWindowed
+    ? Math.min(Math.max(0, windowStart), maxWindowStart)
+    : 0;
+  const visibleEntries = streamWindowed ? entries.slice(safeWindowStart) : entries;
 
   // Keep the quiet-stream message current without making the transcript
   // itself reflow. The interval only exists while the host reports a live
@@ -110,6 +133,43 @@ export function StreamView({
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [running]);
+
+  useEffect(() => {
+    const key = sessionId ?? "";
+    const saved = windowStartsRef.current[key];
+    const next = initialStreamWindowStart(entries.length, saved);
+    windowSessionRef.current = sessionId;
+    previousEntryCountRef.current = entries.length;
+    prependScrollRef.current = null;
+    jumpLatestRef.current = false;
+    loadingOlderRef.current = false;
+    setWindowStart(next);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (windowSessionRef.current !== sessionId) return;
+    const previousLength = previousEntryCountRef.current;
+    previousEntryCountRef.current = entries.length;
+    setWindowStart((current) => {
+      const next = nextStreamWindowStart(current, previousLength, entries.length);
+      if (sessionId !== null) windowStartsRef.current[sessionId] = next;
+      return next;
+    });
+  }, [entries.length, sessionId]);
+
+  useLayoutEffect(() => {
+    const anchor = prependScrollRef.current;
+    const stream = streamRef.current;
+    if (anchor !== null && stream !== null) {
+      stream.scrollTop = anchor.top + (stream.scrollHeight - anchor.height);
+      prependScrollRef.current = null;
+      loadingOlderRef.current = false;
+    }
+    if (jumpLatestRef.current && stream !== null) {
+      jumpLatestRef.current = false;
+      stream.scrollTop = stream.scrollHeight;
+    }
+  }, [safeWindowStart, windowStart]);
 
   useEffect(() => {
     stickRef.current = true;
@@ -133,11 +193,42 @@ export function StreamView({
     if (stickRef.current) {
       bottomRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
     }
-  }, [entries]);
+  }, [entries, safeWindowStart]);
+
+  function loadOlderMessages(): void {
+    if (!streamWindowed || safeWindowStart <= 0 || loadingOlderRef.current) return;
+    const stream = streamRef.current;
+    if (stream !== null) {
+      prependScrollRef.current = {
+        top: stream.scrollTop,
+        height: stream.scrollHeight,
+      };
+    }
+    const next = prependStreamWindowStart(safeWindowStart);
+    loadingOlderRef.current = true;
+    if (sessionId !== null) windowStartsRef.current[sessionId] = next;
+    setWindowStart(next);
+  }
+
+  function jumpToLatest(): void {
+    if (streamWindowed && safeWindowStart !== maxWindowStart) {
+      jumpLatestRef.current = true;
+      if (sessionId !== null) windowStartsRef.current[sessionId] = maxWindowStart;
+      setWindowStart(maxWindowStart);
+    }
+    stickRef.current = true;
+    setAwayFromBottom(false);
+    bottomRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+  }
 
   function onScroll(e: React.UIEvent<HTMLDivElement>): void {
     const el = e.currentTarget;
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (streamWindowed && el.scrollTop < 120) loadOlderMessages();
+    if (streamWindowed && stickRef.current && safeWindowStart !== maxWindowStart) {
+      if (sessionId !== null) windowStartsRef.current[sessionId] = maxWindowStart;
+      setWindowStart(maxWindowStart);
+    }
     if (sessionId !== null) scrollTopsRef.current[sessionId] = el.scrollTop;
     setAwayFromBottom(!stickRef.current);
   }
@@ -214,12 +305,23 @@ export function StreamView({
       aria-label="Conversation messages"
       data-entry-count={entries.length}
     >
+      {streamWindowed && safeWindowStart > 0 && (
+        <div className="stream-window-notice" role="status" aria-live="polite">
+          <button type="button" onClick={loadOlderMessages}>
+            Load older messages
+          </button>
+          <span>
+            Showing messages {safeWindowStart + 1}–{entries.length} of {entries.length}.
+            Scroll to the top to load more.
+          </span>
+        </div>
+      )}
       {entries.length === 0 && (
         <p className="muted">
           Start a conversation. Your history is saved locally.
         </p>
       )}
-      {entries.map((e) => {
+      {visibleEntries.map((e) => {
         // US-10 reflexive phase: an open entry with no text yet (send just
         // happened, or `item/started` arrived before the first delta) shows
         // a plain muted label. The label is rendered, never stored: the
@@ -454,11 +556,7 @@ export function StreamView({
       {awayFromBottom && (
         <button
           className="jump-to-latest"
-          onClick={() => {
-            stickRef.current = true;
-            setAwayFromBottom(false);
-            bottomRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
-          }}
+          onClick={jumpToLatest}
         >
           ↓ Latest messages
         </button>
