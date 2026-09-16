@@ -263,10 +263,10 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 
 - **Contrat backend :** `git_worktree_create(sessionId, branch, relativePath, baseRef)` résout le dépôt de la conversation, exige une branche et une base explicites, et n’accepte qu’un chemin relatif sous `.muse/worktrees/`.
 - **Git réel :** la création utilise `git worktree add -b … … …` hors thread UI. Les chemins existants, références de type option, traversées et échecs Git sont refusés avant toute promesse ; le résultat renvoie dépôt, chemin canonique, branche, base et horodatage.
-- **UX :** le panneau d’orchestration conserve le plan manuel et ajoute **Create worktree** par agent. Le bouton devient **Created** après le retour Git, tandis que le snippet reste disponible pour les environnements sans backend.
+- **UX :** le panneau d’orchestration conserve le plan manuel et ajoute **Create worktree** par agent. Le bouton devient **Created** après le retour Git et reste visible après redémarrage ; une suppression exige une confirmation explicite, tandis que le snippet reste disponible pour les environnements sans backend.
 - **Sécurité :** les identifiants d’agents sont transformés en segments de chemin sûrs et dédoublonnés avant affichage ou appel natif.
-- **Limites :** le record n’est pas encore persistant, la suppression/retention et la création atomique d’une session dans le worktree restent M2-04/M2-05 ; le host MSP mono-workspace empêche de prétendre à une bascule automatique sans contrat supplémentaire.
-- **Validation :** 59 tests Rust couvrent checkout réel, refs et chemins ; les suites Node, TypeScript et Vite restent à exécuter sur la branche.
+- **Limites :** la suppression/retention avancée et la création atomique d’une session dans le worktree restent M2-04/M2-05 ; le host MSP mono-workspace empêche de prétendre à une bascule automatique sans contrat supplémentaire.
+- **Validation :** 60 tests Rust couvrent checkout réel, refs et chemins ; la persistance locale est couverte par le test de bornage des records, et les suites Node, TypeScript et Vite restent vertes.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 
@@ -276,7 +276,7 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 |---|---|---|---|---|---|---|
 | M2-01 | Un projet représente des dossiers persistants | Adapté | Présente | Câblée | Intégration | Racine persistante, sélection de dossier et création de conversation dans cette racine livrées ; restent migration explicite des anciens groupes et environnement/worktree |
 | M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Intégration | Héritage global/projet visible et modèle effectif appliqué à la création d'une session ; sandbox/réseau/auto-compact restent en attente d'un contrat moteur vérifié |
-| M2-03 | Créer automatiquement un worktree pour une conversation | Adapté | Présente | Partielle | Intégration | Création Git réelle par agent et garde des chemins livrées ; restent record persistant, suppression sûre et session atomique dans le worktree |
+| M2-03 | Créer automatiquement un worktree pour une conversation | Adapté | Présente | Partielle | Intégration | Création Git réelle, persistance et suppression confirmée livrées ; restent retention avancée et session atomique dans le worktree |
 | M2-04 | Préparer l'environnement du worktree | À définir | Absente | Absente | À faire | Scripts/actions de setup avec progression et erreurs ; dépendances nécessaires disponibles avant le premier tour |
 | M2-05 | Passer de Local à Worktree et inversement | À définir | Absente | Absente | À faire | Transférer contexte et changements ; traiter conflits, fichiers ignorés et branche déjà utilisée ; aucune perte de travail |
 | M2-06 | Nettoyer les worktrees sans supprimer du travail | À définir | Absente | Absente | À faire | Lier archive et rétention, détecter dirty/running ; nettoyage uniquement sûr, confirmation explicite si nécessaire |

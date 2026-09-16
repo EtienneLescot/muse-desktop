@@ -13,6 +13,7 @@ import {
   loadSessions,
   loadThreadProjects,
   loadTombstones,
+  loadWorktrees,
   loadWorkspace,
   newId,
   saveActiveId,
@@ -23,6 +24,7 @@ import {
   saveSessions,
   saveThreadProjects,
   saveTombstones,
+  saveWorktrees,
   saveWorkspace,
   type LogEntry,
   type LogRole,
@@ -574,6 +576,9 @@ interface UseMuseSessions {
     sessionId: string,
     plan: WorktreePlan,
   ) => Promise<WorktreeRecord | null>;
+  worktrees: WorktreeRecord[];
+  /** Remove one managed worktree after explicit user confirmation in the UI. */
+  removeWorktree: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
   startSession: () => Promise<string | null>;
   startSessionInWorkspace: (
     workspacePath: string,
@@ -1117,6 +1122,7 @@ export function useMuseSessions(): UseMuseSessions {
   const [globalSettings, setGlobalSettingsState] = useState<ProjectSettings>(
     () => loadGlobalSettings(DEFAULT_PROJECT_SETTINGS),
   );
+  const [worktrees, setWorktrees] = useState<WorktreeRecord[]>(() => loadWorktrees());
   const [projectError, setProjectError] = useState<string | null>(null);
   // Fresh copies for the render-detached send path (same pattern as
   // logsRef): sendInput reads these so instructions never go stale.
@@ -1364,6 +1370,10 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveProjects(projects);
   }, [projects]);
+
+  useEffect(() => {
+    saveWorktrees(worktrees);
+  }, [worktrees]);
 
   useEffect(() => {
     saveThreadProjects(threadProjects);
@@ -2102,15 +2112,38 @@ export function useMuseSessions(): UseMuseSessions {
     async (sessionId: string, plan: WorktreePlan): Promise<WorktreeRecord | null> => {
       try {
         setError(null);
-        return await invoke<WorktreeRecord>("git_worktree_create", {
+        const result = await invoke<WorktreeRecord>("git_worktree_create", {
           sessionId,
           branch: plan.branch,
           relativePath: plan.path,
           baseRef: plan.base,
         });
+        setWorktrees((current) => [
+          ...current.filter((record) => record.path !== result.path),
+          result,
+        ]);
+        return result;
       } catch (e) {
         setError(`worktree creation failed: ${e instanceof Error ? e.message : String(e)}`);
         return null;
+      }
+    },
+    [],
+  );
+
+  const removeWorktree = useCallback(
+    async (sessionId: string, record: WorktreeRecord): Promise<boolean> => {
+      try {
+        setError(null);
+        await invoke("git_worktree_remove", {
+          sessionId,
+          path: record.path,
+        });
+        setWorktrees((current) => current.filter((item) => item.path !== record.path));
+        return true;
+      } catch (e) {
+        setError(`worktree removal failed: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
       }
     },
     [],
@@ -4081,6 +4114,8 @@ export function useMuseSessions(): UseMuseSessions {
     setSessionModel,
     checkPathScope,
     createWorktree,
+    worktrees,
+    removeWorktree,
     startSession,
     startSessionInWorkspace,
     forkSession,

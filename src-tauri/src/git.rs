@@ -717,6 +717,33 @@ pub fn create_worktree(
     })
 }
 
+/// Remove a managed worktree after verifying that its canonical path remains
+/// below `.muse/worktrees/`. This operation is intentionally forceful only
+/// after the UI's explicit confirmation; paths outside the managed root are
+/// rejected before Git runs.
+pub fn remove_worktree(root: &Path, path: &str) -> Result<(), String> {
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    let managed_root = canonical.join(".muse").join("worktrees");
+    let managed_root = managed_root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve managed worktree root: {e}"))?;
+    let candidate = Path::new(path.trim())
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve worktree path: {e}"))?;
+    if candidate == managed_root || !candidate.starts_with(&managed_root) {
+        return Err("worktree path is outside .muse/worktrees".to_string());
+    }
+    let relative = candidate
+        .strip_prefix(&canonical)
+        .map_err(|_| "worktree path is outside the repository".to_string())?
+        .to_string_lossy()
+        .replace('\\', "/");
+    git_command(&canonical, &["worktree", "remove", "--force", &relative])?;
+    Ok(())
+}
+
 /// Commit the current index after checking the status/diff observation used
 /// by the Review UI. Git hook failures and empty indexes remain user-visible.
 pub fn commit(
@@ -996,6 +1023,17 @@ mod tests {
         assert!(create_worktree(&root, "-bad", ".muse/worktrees/one", "HEAD").is_err());
         assert!(create_worktree(&root, "task/one", ".muse/worktrees/existing", "HEAD").is_err());
         assert!(create_worktree(&root, "task/two", ".muse/worktrees/two", "--bad").is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn remove_worktree_stays_confined_to_managed_root() {
+        let root = fixture_repo();
+        let created = create_worktree(&root, "task/remove", ".muse/worktrees/remove", "HEAD")
+            .unwrap();
+        remove_worktree(&root, &created.path).unwrap();
+        assert!(!Path::new(&created.path).exists());
+        assert!(remove_worktree(&root, root.to_string_lossy().as_ref()).is_err());
         let _ = fs::remove_dir_all(root);
     }
 

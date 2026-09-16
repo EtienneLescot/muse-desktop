@@ -18,6 +18,11 @@ interface Props {
     sessionId: string,
     plan: WorktreePlan,
   ) => Promise<WorktreeRecord | null>;
+  worktrees: WorktreeRecord[];
+  onRemoveWorktree: (
+    sessionId: string,
+    record: WorktreeRecord,
+  ) => Promise<boolean>;
 }
 
 /**
@@ -25,12 +30,17 @@ interface Props {
  * setup snippet + pre-flight HEAD-hash compare (report-only). Returns
  * null until at least one subagent entry exists in the active thread.
  */
-export function OrchestrationPanel({ agents, sessionId, onCreateWorktree }: Props) {
+export function OrchestrationPanel({
+  agents,
+  sessionId,
+  onCreateWorktree,
+  worktrees,
+  onRemoveWorktree,
+}: Props) {
   const [baseline, setBaseline] = useState("");
   const [current, setCurrent] = useState("");
   const [report, setReport] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [created, setCreated] = useState<Record<string, WorktreeRecord>>({});
   const [creating, setCreating] = useState<string | null>(null);
 
   const plans = useMemo(() => planWorktrees(agents), [agents]);
@@ -52,10 +62,9 @@ export function OrchestrationPanel({ agents, sessionId, onCreateWorktree }: Prop
   }
 
   async function create(plan: WorktreePlan): Promise<void> {
-    if (creating !== null || created[plan.agent]) return;
+    if (creating !== null || worktrees.some((record) => record.branch === plan.branch)) return;
     setCreating(plan.agent);
-    const result = await onCreateWorktree(sessionId, plan);
-    if (result !== null) setCreated((current) => ({ ...current, [plan.agent]: result }));
+    await onCreateWorktree(sessionId, plan);
     setCreating(null);
   }
 
@@ -79,10 +88,26 @@ export function OrchestrationPanel({ agents, sessionId, onCreateWorktree }: Prop
               <code>{p.path}</code>
               <span className="muted">{p.branch}</span>
             </div>
-            {created[p.agent] ? (
-              <span className="orchestration-created" title={created[p.agent].path}>
-                Created
-              </span>
+            {worktrees.find((record) => record.branch === p.branch) ? (
+              <>
+                <span
+                  className="orchestration-created"
+                  title={worktrees.find((record) => record.branch === p.branch)?.path}
+                >
+                  Created
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const record = worktrees.find((item) => item.branch === p.branch);
+                    if (!record || !window.confirm(`Remove worktree ${record.path}?`)) return;
+                    void onRemoveWorktree(sessionId, record);
+                  }}
+                  title="Remove this worktree from Git"
+                >
+                  Remove
+                </button>
+              </>
             ) : (
               <button
                 type="button"

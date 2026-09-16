@@ -1185,6 +1185,19 @@ async fn git_worktree_create(
     .map_err(|e| format!("worktree create task failed: {e}"))?
 }
 
+/// Remove a managed worktree after the user confirms the destructive action.
+#[tauri::command]
+async fn git_worktree_remove(
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+) -> Result<(), String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || git::remove_worktree(&root, &path))
+        .await
+        .map_err(|e| format!("worktree remove task failed: {e}"))?
+}
+
 /// Open (or reuse) the persistent PTY owned by a conversation workspace.
 #[tauri::command]
 fn terminal_open(
@@ -2775,6 +2788,7 @@ fn main() {
             git_push,
             git_create_pr,
             git_worktree_create,
+            git_worktree_remove,
             terminal_open,
             terminal_write,
             terminal_resize,

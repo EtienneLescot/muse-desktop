@@ -17,6 +17,7 @@ import type {
   ProjectSettings,
   ThreadProjectMap,
 } from "./projects.ts";
+import type { WorktreeRecord } from "./worktrees.ts";
 import {
   readStorageJson,
   removeStorageKey,
@@ -255,6 +256,7 @@ export function newId(): string {
 const PROJECTS_KEY = "muse-desktop.projects.v1";
 const THREAD_PROJECTS_KEY = "muse-desktop.thread-projects.v1";
 const GLOBAL_SETTINGS_KEY = "muse-desktop.settings.v1";
+const WORKTREES_KEY = "muse-desktop.worktrees.v1";
 
 function isValidProjectRow(p: unknown): p is Project {
   if (typeof p !== "object" || p === null) return false;
@@ -265,7 +267,8 @@ function isValidProjectRow(p: unknown): p is Project {
     typeof r.name === "string" &&
     typeof r.instructions === "string" &&
     typeof r.createdAt === "number" &&
-    (r.pinned === undefined || typeof r.pinned === "boolean")
+    (r.workspace === undefined || typeof r.workspace === "string") &&
+    (r.settings === undefined || (typeof r.settings === "object" && r.settings !== null))
   );
 }
 
@@ -277,6 +280,29 @@ export function loadProjects(): Project[] {
 
 export function saveProjects(projects: Project[]): void {
   write(PROJECTS_KEY, projects);
+}
+
+function isValidWorktreeRecord(value: unknown): value is WorktreeRecord {
+  if (typeof value !== "object" || value === null) return false;
+  const r = value as Record<string, unknown>;
+  return (
+    typeof r.repoRoot === "string" && r.repoRoot.length > 0 &&
+    typeof r.path === "string" && r.path.length > 0 &&
+    typeof r.branch === "string" && r.branch.length > 0 &&
+    typeof r.base === "string" && r.base.length > 0 &&
+    typeof r.createdAt === "number" && Number.isFinite(r.createdAt)
+  );
+}
+
+/** Load bounded worktree records; stale Git paths remain visible for cleanup. */
+export function loadWorktrees(): WorktreeRecord[] {
+  const raw = read<unknown>(WORKTREES_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isValidWorktreeRecord).slice(-100);
+}
+
+export function saveWorktrees(worktrees: WorktreeRecord[]): void {
+  write(WORKTREES_KEY, worktrees.slice(-100));
 }
 
 export function loadThreadProjects(): ThreadProjectMap {
