@@ -49,7 +49,7 @@ export function normalizeWriterPath(value: string): string | null {
   if (typeof value !== "string") return null;
   let path = value.trim().replace(/\\/g, "/");
   path = path.replace(/^\.\//, "").replace(/\/+/g, "/");
-  if (path.length === 0 || path.startsWith("/") || path.includes(":/")) return null;
+  if (path.length === 0 || path.startsWith("/") || path.includes(":")) return null;
   const segments = path.split("/");
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) return null;
   return segments.join("/").toLowerCase();

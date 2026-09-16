@@ -11,6 +11,7 @@ describe("writer target paths", () => {
     assert.equal(normalizeWriterPath(" ./Src\\App.tsx "), "src/app.tsx");
     assert.equal(normalizeWriterPath("../secrets.env"), null);
     assert.equal(normalizeWriterPath("C:/outside.ts"), null);
+    assert.equal(normalizeWriterPath("C:relative.ts"), null);
   });
 
   it("parses bounded unique paths and reports invalid entries", () => {
