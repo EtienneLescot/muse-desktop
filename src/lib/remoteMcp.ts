@@ -39,6 +39,11 @@ export interface RemoteMcpSession {
   nextRequestId: number;
 }
 
+/** Authentication/session failures are safe to retry after a fresh initialize. */
+export function isRemoteMcpAuthenticationError(message: string): boolean {
+  return /remote MCP authentication was rejected or expired/i.test(message);
+}
+
 export type RemoteRequest = (
   input: RequestInfo | URL,
   init?: RequestInit,

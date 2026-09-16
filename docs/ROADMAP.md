@@ -400,7 +400,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
 | M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; processus persistant par connecteur, Start/Stop, rafraîchissement manuel et hot-reload `list_changed` livrés ; reste l'injection dans le host Muse |
-| M3-02 | Connecter un serveur MCP distant | Adapté | Présente | Partielle | Unitaire | Transport streamable HTTP/SSE, bearer token en mémoire, session et bouton de reconnexion explicite livrés ; restent OAuth/secret-store natif, refresh automatique après expiration et qualification réseau multiplateforme |
+| M3-02 | Connecter un serveur MCP distant | Adapté | Présente | Partielle | Unitaire | Transport streamable HTTP/SSE, bearer token en mémoire, session, reconnexion explicite et renouvellement automatique d'une session expirée livrés ; restent OAuth/secret-store natif et qualification réseau multiplateforme |
 | M3-03 | Installer/désactiver une extension réellement utilisable | Adapté | Présente | Partielle | Intégration | Enregistrement post-probe, runtime persistant explicite, hot-list, hot-reload et rollback d'une révision du registre livrés ; restent package/update/source et injection dans le moteur |
 | M3-04 | Découvrir les skills du disque et du projet | Adapté | Présente | Partielle | Intégration | Scanner borné `SKILL.md`, ressources relatives, priorité projet/repo/équipe et rechargement explicite livrés ; bridge natif et notifications restent ouverts |
 | M3-05 | Invoquer une skill avec son vrai contexte | Adapté | Présente | Partielle | Intégration | Lecture fraîche des ressources relatives, provenance balisée, refus explicite si ressource disparue et retry sans double insertion livrés ; part `skill` native et progression restent à qualifier |
@@ -419,7 +419,8 @@ Preuves : [connecteurs](../src/lib/connectors.ts), [skills](../src/lib/skills.ts
 - **Session et secrets** : `Mcp-Session-Id` est repris sur les requêtes suivantes. Le bearer token et l'identifiant de session vivent uniquement dans une référence mémoire du hook ; le registre persiste l'URL, la version et le catalogue vérifié, jamais le secret.
 - **UX** : Extensions propose **Connect and list tools**, un champ de token masqué, un appel de test et **Reconnect** après une perte de session. Le catalogue ne passe à `installed` qu'après l'échange réel ; les erreurs réseau/auth restent visibles et une connexion perdue devient **Disconnected**.
 - **Garde-fous** : l'endpoint doit être public et HTTPS, le plan conserve une seule entrée distante et les descriptions/outils sont bornés. Une reconnexion après relance exige une nouvelle saisie du token.
-- **Limites** : OAuth, stockage sécurisé natif, renouvellement automatique et test réseau macOS/Linux restent à concevoir ; le host Muse ne reçoit pas encore ces outils comme capacités natives.
+- **Reconnexion automatique bornée** : une réponse 401/403 relance une seule fois `initialize` + `tools/list` avec le bearer conservé en mémoire, puis rejoue l'appel seulement après un nouveau handshake. Les timeouts, erreurs réseau et réponses ambiguës ne sont jamais rejoués automatiquement.
+- **Limites** : OAuth, stockage sécurisé natif et test réseau macOS/Linux restent à concevoir ; le host Muse ne reçoit pas encore ces outils comme capacités natives.
 - **Validation** : quatre tests Node couvrent la continuité de session, bearer token, SSE, refus privé/HTTP et réponse mal corrélée ; TypeScript et build Vite restent verts.
 
 ### Livraison M3-07 — fuseau explicite et DST

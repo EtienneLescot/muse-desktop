@@ -319,6 +319,7 @@ import {
 } from "../lib/connectors";
 import {
   callRemoteMcp as callRemoteMcpTransport,
+  isRemoteMcpAuthenticationError,
   probeRemoteMcp as probeRemoteMcpTransport,
   type RemoteMcpCallResult,
   type RemoteMcpProbeResult,
@@ -3152,12 +3153,50 @@ export function useMuseSessions(): UseMuseSessions {
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        if (isRemoteMcpAuthenticationError(message) && session.token.trim()) {
+          // A 401/403 can mean that only the MCP session expired. Re-run the
+          // initialize/tools-list handshake once with the in-memory bearer
+          // token, then retry the call exactly once. Network timeouts and
+          // ambiguous tool outcomes remain non-retryable.
+          const entry = findConnector(connectorsRef.current, id);
+          const name = entry?.kind === "remote" ? entry.name : id.replace(/^remote-/, "");
+          try {
+            const refreshed = await probeRemoteMcpTransport(session.url, session.token);
+            const registered = registerRemoteConnector(connectorsRef.current, {
+              id,
+              name,
+              url: session.url,
+              tools: refreshed.tools,
+              protocolVersion: refreshed.protocolVersion,
+              serverVersion: refreshed.serverVersion,
+            });
+            if (registered !== null) {
+              const nextSession: RemoteMcpSession = {
+                url: session.url,
+                token: session.token,
+                sessionId: refreshed.sessionId,
+                protocolVersion: refreshed.protocolVersion,
+                nextRequestId: 3,
+              };
+              remoteSessionsRef.current[id] = nextSession;
+              setConnectors(registered.registry);
+              setRemoteConnectedIds((current) => [...new Set([...current, id])]);
+              const retried = await callRemoteMcpTransport(nextSession, toolName, args);
+              setRemoteNotice(null);
+              return retried;
+            }
+          } catch {
+            // Fall through to the normal disconnected state below. The
+            // original failure remains actionable without hiding it behind a
+            // second retry loop.
+          }
+        }
         setRemoteNotice(message);
         disconnectRemoteMcp(id);
         return null;
       }
     },
-    [disconnectRemoteMcp],
+    [connectorsRef, disconnectRemoteMcp],
   );
 
   const setSkillEnabledByName = useCallback((name: string, enabled: boolean): void => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { callRemoteMcp, probeRemoteMcp, type RemoteRequest } from "../src/lib/remoteMcp.ts";
+import { callRemoteMcp, isRemoteMcpAuthenticationError, probeRemoteMcp, type RemoteRequest } from "../src/lib/remoteMcp.ts";
 
 function response(body: unknown, headers: Record<string, string> = {}, status = 200): Response {
   return new Response(typeof body === "string" ? body : JSON.stringify(body), {
@@ -87,4 +87,10 @@ test("remote MCP rejects private endpoints, HTTP errors and mismatched responses
     }),
     /did not match/,
   );
+});
+
+test("remote MCP identifies only the retryable authentication/session failure", () => {
+  assert.equal(isRemoteMcpAuthenticationError("remote MCP authentication was rejected or expired"), true);
+  assert.equal(isRemoteMcpAuthenticationError("remote MCP request timed out"), false);
+  assert.equal(isRemoteMcpAuthenticationError("remote MCP returned HTTP 500"), false);
 });

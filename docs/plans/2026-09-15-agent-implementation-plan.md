@@ -403,7 +403,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **État au 16/09/2026 :** `src/lib/remoteMcp.ts` implémente le transport streamable HTTP/SSE avec `initialize`, `notifications/initialized`, `tools/list` et `tools/call`, corrélation JSON-RPC, `Mcp-Session-Id`, timeout borné et messages d'erreur pour les réponses 401/403, HTTP et JSON invalides. `ConnectorPanel` exige une action **Connect and list tools**, affiche le catalogue réellement reçu, propose **Reconnect** après une perte de session et garde le bearer token dans une référence mémoire du hook ; `connectors.ts` ne persiste que l'URL et la dernière révision vérifiée. Quatre tests injectent le transport pour couvrir JSON, SSE, session, refus réseau/auth et id incohérent.
 
-**Reste :** OAuth/refresh et secret-store Tauri natif, reconnexion automatique après expiration, test réseau sur chaque OS et bridge des outils vers le host Muse. Tant que ces contrats ne sont pas vérifiés, une relance exige une nouvelle connexion explicite et le host ne voit pas les outils comme capacités natives.
+**Reste :** OAuth/refresh et secret-store Tauri natif, test réseau sur chaque OS et bridge des outils vers le host Muse. La reconnexion automatique est limitée aux 401/403 : elle refait un handshake avec le bearer conservé en mémoire et rejoue un seul appel ; une relance de l'application exige toujours une nouvelle connexion explicite.
 
 **Acceptation :** serveur réel de test, token expiré, refus réseau et déconnexion ; statut UI confirmé par échange effectif.
 
