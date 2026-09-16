@@ -8,6 +8,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   compareHeadHashes,
+  parseSetupEnvAllowlist,
+  MAX_SETUP_ENV_NAMES,
   MAX_SETUP_COMMAND_CHARS,
   planWorktrees,
   validateSetupCommand,
@@ -118,6 +120,15 @@ describe("worktree setup command validation", () => {
   it("bounds command length", () => {
     assert.match(
       validateSetupCommand("x".repeat(MAX_SETUP_COMMAND_CHARS + 1)) ?? "",
+      /limited/,
+    );
+  });
+
+  it("parses a bounded, de-duplicated environment allowlist", () => {
+    assert.deepEqual(parseSetupEnvAllowlist("NODE_ENV, PATH node_env").names, ["NODE_ENV", "PATH"]);
+    assert.match(parseSetupEnvAllowlist("BAD-NAME").error ?? "", /Invalid/);
+    assert.match(
+      parseSetupEnvAllowlist(Array.from({ length: MAX_SETUP_ENV_NAMES + 1 }, (_, i) => `VAR_${i}`).join(",")).error ?? "",
       /limited/,
     );
   });

@@ -4,7 +4,9 @@ import { buildHandoffPlan, type HandoffPlan } from "../lib/handoff";
 import type { GitStatusSnapshot } from "../lib/git";
 import {
   compareHeadHashes,
+  DEFAULT_SETUP_ENV_NAMES,
   MAX_SETUP_COMMAND_CHARS,
+  parseSetupEnvAllowlist,
   planWorktrees,
   validateSetupCommand,
   worktreeShellSnippet,
@@ -49,6 +51,7 @@ interface Props {
     sessionId: string,
     record: WorktreeRecord,
     command: string,
+    envAllowlist: string[],
   ) => Promise<WorktreeSetupResult | null>;
   onCancelSetup: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
   sourceStatus: GitStatusSnapshot | null;
@@ -78,6 +81,7 @@ export function OrchestrationPanel({
   const [copied, setCopied] = useState(false);
   const [creating, setCreating] = useState<string | null>(null);
   const [setupCommand, setSetupCommand] = useState("");
+  const [envAllowlistText, setEnvAllowlistText] = useState("");
   const [setupError, setSetupError] = useState<string | null>(null);
   const [setupRunning, setSetupRunning] = useState<string | null>(null);
   const [setupProfiles, setSetupProfiles] = useState<SetupProfile[]>(() =>
@@ -102,6 +106,7 @@ export function OrchestrationPanel({
     setSetupProfiles(loadSetupProfiles(workspace));
     setSelectedProfileId("");
     setProfileName("");
+    setEnvAllowlistText("");
   }, [workspace]);
 
   const plans = useMemo(() => planWorktrees(agents), [agents]);
@@ -141,9 +146,14 @@ export function OrchestrationPanel({
       setSetupError(validation);
       return;
     }
+    const env = parseSetupEnvAllowlist(envAllowlistText);
+    if (env.error !== null) {
+      setSetupError(env.error);
+      return;
+    }
     setSetupError(null);
     setSetupRunning(record.branch);
-    const result = await onRunSetup(sessionId, record, setupCommand);
+    const result = await onRunSetup(sessionId, record, setupCommand, env.names);
     if (result !== null) {
       setSetupByBranch((current) => ({ ...current, [record.branch]: result }));
     }
@@ -157,9 +167,15 @@ export function OrchestrationPanel({
   }
 
   function saveProfile(): void {
+    const env = parseSetupEnvAllowlist(envAllowlistText);
+    if (env.error !== null) {
+      setSetupError(env.error);
+      return;
+    }
     const result = upsertSetupProfile(workspace, setupProfiles, {
       name: profileName,
       command: setupCommand,
+      envAllowlist: env.names,
     });
     if (result.profile === null) {
       setSetupError("Profile name and setup command are required.");
@@ -168,6 +184,7 @@ export function OrchestrationPanel({
     setSetupProfiles(result.profiles);
     setSelectedProfileId(result.profile.id);
     setProfileName(result.profile.name);
+    setEnvAllowlistText(result.profile.envAllowlist.join(", "));
     setSetupError(null);
   }
 
@@ -176,10 +193,12 @@ export function OrchestrationPanel({
     const profile = setupProfiles.find((item) => item.id === id);
     if (profile === undefined) {
       setProfileName("");
+      setEnvAllowlistText("");
       return;
     }
     setProfileName(profile.name);
     setSetupCommand(profile.command);
+    setEnvAllowlistText(profile.envAllowlist.join(", "));
     setSetupError(null);
   }
 
@@ -188,6 +207,7 @@ export function OrchestrationPanel({
     setSetupProfiles((current) => removeSetupProfile(workspace, current, selectedProfileId));
     setSelectedProfileId("");
     setProfileName("");
+    setEnvAllowlistText("");
   }
 
   function prepareHandoff(record: WorktreeRecord): void {
@@ -287,6 +307,21 @@ export function OrchestrationPanel({
         <span className="muted">
           Runs only after you click Run setup, inside the selected worktree.
         </span>
+        <label htmlFor="worktree-setup-env">Extra environment names</label>
+        <input
+          id="worktree-setup-env"
+          value={envAllowlistText}
+          onChange={(event) => {
+            setEnvAllowlistText(event.target.value);
+            setSetupError(null);
+          }}
+          placeholder="e.g. NODE_ENV, RUSTUP_HOME"
+          spellCheck={false}
+          aria-describedby="worktree-setup-env-help"
+        />
+        <span className="muted" id="worktree-setup-env-help">
+          Only these extra names are passed. Safe defaults always include {DEFAULT_SETUP_ENV_NAMES.slice(0, 4).join(", ")}.
+        </span>
         {setupError !== null && <span className="orchestration-setup-error">{setupError}</span>}
       </div>
       <ul className="orchestration-list">
@@ -384,6 +419,9 @@ export function OrchestrationPanel({
                       {setupByBranch[p.branch].exitCode === null
                         ? ""
                         : ` · exit ${setupByBranch[p.branch].exitCode}`}
+                      {(setupByBranch[p.branch].environmentKeys?.length ?? 0) > 0
+                        ? ` · env ${setupByBranch[p.branch].environmentKeys?.length ?? 0} keys`
+                        : " · no inherited env"}
                     </summary>
                     <pre>{setupByBranch[p.branch].output || "(no output)"}</pre>
                   </details>

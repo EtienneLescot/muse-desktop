@@ -40,6 +40,17 @@ describe("M2-04 setup profiles", () => {
     assert.equal(loadSetupProfiles(workspace)[0]?.command, "npm install");
   });
 
+  it("persists extra environment names per profile", () => {
+    const workspace = "/repo";
+    const created = upsertSetupProfile(workspace, [], {
+      name: "Node",
+      command: "npm ci",
+      envAllowlist: ["NODE_ENV", "PATH", "node_env", "BAD-NAME"],
+    }, 100);
+    assert.deepEqual(created.profile?.envAllowlist, ["NODE_ENV", "PATH"]);
+    assert.deepEqual(loadSetupProfiles(workspace)[0]?.envAllowlist, ["NODE_ENV", "PATH"]);
+  });
+
   it("rejects blank input and removes one profile", () => {
     const workspace = "/repo";
     assert.equal(upsertSetupProfile(workspace, [], { name: " ", command: "npm ci" }).profile, null);

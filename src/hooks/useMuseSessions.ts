@@ -662,6 +662,7 @@ interface UseMuseSessions {
     sessionId: string,
     record: WorktreeRecord,
     command: string,
+    envAllowlist: string[],
   ) => Promise<WorktreeSetupResult | null>;
   /** M2-04: request cancellation of the active setup process, if any. */
   cancelWorktreeSetup: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
@@ -2486,6 +2487,7 @@ export function useMuseSessions(): UseMuseSessions {
       sessionId: string,
       record: WorktreeRecord,
       command: string,
+      envAllowlist: string[],
     ): Promise<WorktreeSetupResult | null> => {
       const validation = validateSetupCommand(command);
       if (validation !== null) {
@@ -2503,6 +2505,7 @@ export function useMuseSessions(): UseMuseSessions {
             path: record.path,
             command: command.trim(),
             operationId,
+            envAllowlist,
           });
         } finally {
           if (setupOperationsRef.current.get(operationKey) === operationId) {

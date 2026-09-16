@@ -36,6 +36,7 @@ export interface WorktreeSetupResult {
   output: string;
   exitCode: number | null;
   durationMs: number;
+  environmentKeys: string[];
 }
 
 export interface WorktreeReadiness {
@@ -62,6 +63,62 @@ export interface WorktreeInspection {
 }
 
 export const MAX_SETUP_COMMAND_CHARS = 2_000;
+export const MAX_SETUP_ENV_NAMES = 40;
+export const DEFAULT_SETUP_ENV_NAMES = [
+  "PATH",
+  "PATHEXT",
+  "SystemRoot",
+  "ComSpec",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+  "HOME",
+  "USERPROFILE",
+  "LANG",
+  "LC_ALL",
+  "TERM",
+] as const;
+
+const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** Normalize user-entered environment names without inventing values. */
+export function normalizeSetupEnvAllowlist(names: readonly string[]): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of names) {
+    if (typeof raw !== "string") continue;
+    const name = raw.trim();
+    const key = name.toLowerCase();
+    if (name.length === 0 || !ENV_NAME_RE.test(name) || seen.has(key)) continue;
+    seen.add(key);
+    result.push(name);
+    if (result.length >= MAX_SETUP_ENV_NAMES) break;
+  }
+  return result;
+}
+
+/** Parse the comma/newline separated extra names shown in the setup panel. */
+export function parseSetupEnvAllowlist(input: string): {
+  names: string[];
+  error: string | null;
+} {
+  const rawNames = input.split(/[\s,;]+/).map((name) => name.trim()).filter(Boolean);
+  const invalid = rawNames.find((name) => !ENV_NAME_RE.test(name));
+  if (invalid !== undefined) {
+    return {
+      names: [],
+      error: `Invalid environment variable name: ${invalid}`,
+    };
+  }
+  const names = normalizeSetupEnvAllowlist(rawNames);
+  if (rawNames.length > MAX_SETUP_ENV_NAMES) {
+    return {
+      names: [],
+      error: `Environment allowlist is limited to ${MAX_SETUP_ENV_NAMES} names.`,
+    };
+  }
+  return { names, error: null };
+}
 
 export function validateSetupCommand(command: string): string | null {
   const value = command.trim();

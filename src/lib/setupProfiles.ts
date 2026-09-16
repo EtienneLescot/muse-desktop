@@ -8,6 +8,7 @@
  */
 
 import { readStorageJson, writeStorageJson } from "./storage.ts";
+import { normalizeSetupEnvAllowlist } from "./worktrees.ts";
 
 export const SETUP_PROFILES_KEY = "muse-desktop.worktree-setup-profiles.v1";
 export const MAX_SETUP_PROFILES = 50;
@@ -16,6 +17,8 @@ export interface SetupProfile {
   id: string;
   name: string;
   command: string;
+  /** Extra environment names explicitly allowed for this profile. */
+  envAllowlist: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -23,6 +26,7 @@ export interface SetupProfile {
 export interface SetupProfileInput {
   name: string;
   command: string;
+  envAllowlist?: string[];
 }
 
 function scopeKey(workspace: string): string {
@@ -60,7 +64,17 @@ export function loadSetupProfiles(workspace: string): SetupProfile[] {
   if (key.length === 0) return [];
   const raw = profileStore()[key];
   if (!Array.isArray(raw)) return [];
-  return raw.filter(validProfile).slice(-MAX_SETUP_PROFILES);
+  return raw
+    .filter(validProfile)
+    .map((profile) => ({
+      ...profile,
+      // Older profiles predate the allowlist and intentionally receive no
+      // extra names; the runner still applies its safe platform defaults.
+      envAllowlist: normalizeSetupEnvAllowlist(
+        Array.isArray(profile.envAllowlist) ? profile.envAllowlist : [],
+      ),
+    }))
+    .slice(-MAX_SETUP_PROFILES);
 }
 
 function persistSetupProfiles(workspace: string, profiles: SetupProfile[]): void {
@@ -80,13 +94,14 @@ export function upsertSetupProfile(
 ): { profiles: SetupProfile[]; profile: SetupProfile | null } {
   const name = input.name.trim();
   const command = input.command.trim();
+  const envAllowlist = normalizeSetupEnvAllowlist(input.envAllowlist ?? []);
   if (scopeKey(workspace).length === 0 || name.length === 0 || command.length === 0) {
     return { profiles, profile: null };
   }
   const index = profiles.findIndex((profile) => profile.name.toLowerCase() === name.toLowerCase());
   const profile = index >= 0
-    ? { ...profiles[index], name, command, updatedAt: now }
-    : { id: makeId(), name, command, createdAt: now, updatedAt: now };
+    ? { ...profiles[index], name, command, envAllowlist, updatedAt: now }
+    : { id: makeId(), name, command, envAllowlist, createdAt: now, updatedAt: now };
   const next = index >= 0
     ? profiles.map((row, i) => i === index ? profile : row)
     : [...profiles, profile].slice(-MAX_SETUP_PROFILES);

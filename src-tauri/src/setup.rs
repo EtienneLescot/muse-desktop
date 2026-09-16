@@ -6,6 +6,7 @@
 
 use serde::Serialize;
 use std::env;
+use std::ffi::OsString;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -17,6 +18,21 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const MAX_COMMAND_CHARS: usize = 2_000;
 const MAX_OUTPUT_CHARS: usize = 200_000;
 const MAX_RUNTIME: Duration = Duration::from_secs(10 * 60);
+const MAX_ENV_NAMES: usize = 40;
+const DEFAULT_ENV_ALLOWLIST: &[&str] = &[
+    "PATH",
+    "PATHEXT",
+    "SystemRoot",
+    "ComSpec",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "HOME",
+    "USERPROFILE",
+    "LANG",
+    "LC_ALL",
+    "TERM",
+];
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +41,7 @@ pub struct SetupResult {
     pub output: String,
     pub exit_code: Option<i32>,
     pub duration_ms: u64,
+    pub environment_keys: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
@@ -95,6 +112,58 @@ fn executable_on_path(name: &str) -> bool {
             file.is_file()
         })
     })
+}
+
+fn valid_env_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(first) if first == '_' || first.is_ascii_alphabetic() => {}
+        _ => return false,
+    }
+    chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+fn setup_environment(extra_names: &[String]) -> Result<Vec<(OsString, OsString)>, String> {
+    if extra_names.len() > MAX_ENV_NAMES {
+        return Err(format!("environment allowlist is limited to {MAX_ENV_NAMES} names"));
+    }
+    let mut allowed = DEFAULT_ENV_ALLOWLIST
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect::<Vec<_>>();
+    for raw in extra_names {
+        let name = raw.trim();
+        if name.is_empty() {
+            continue;
+        }
+        if name.len() > 128 || !valid_env_name(name) {
+            return Err(format!("invalid environment variable name: {name}"));
+        }
+        let exists = allowed.iter().any(|current| {
+            if cfg!(windows) {
+                current.eq_ignore_ascii_case(name)
+            } else {
+                current == name
+            }
+        });
+        if !exists {
+            allowed.push(name.to_string());
+        }
+    }
+    let mut selected = Vec::new();
+    for (key, value) in env::vars_os() {
+        let key_text = key.to_string_lossy();
+        if allowed.iter().any(|name| {
+            if cfg!(windows) {
+                name.eq_ignore_ascii_case(&key_text)
+            } else {
+                name == key_text.as_ref()
+            }
+        }) {
+            selected.push((key, value));
+        }
+    }
+    Ok(selected)
 }
 
 /// Inspect a managed worktree without executing project code. The result is
@@ -170,6 +239,19 @@ pub fn run_with_cancel(
     command: &str,
     cancel: Option<Arc<AtomicBool>>,
 ) -> Result<SetupResult, String> {
+    run_with_cancel_and_env(root, path, command, &[], cancel)
+}
+
+/// Run setup with an explicit extra environment-name allowlist. Safe
+/// platform variables are always retained; all other inherited variables are
+/// removed before the child starts.
+pub fn run_with_cancel_and_env(
+    root: &Path,
+    path: &str,
+    command: &str,
+    extra_env_names: &[String],
+    cancel: Option<Arc<AtomicBool>>,
+) -> Result<SetupResult, String> {
     let command = command.trim();
     if command.is_empty() {
         return Err("setup command must not be empty".to_string());
@@ -178,6 +260,11 @@ pub fn run_with_cancel(
         return Err(format!("setup command is limited to {MAX_COMMAND_CHARS} characters"));
     }
     let cwd = managed_worktree(root, path)?;
+    let environment = setup_environment(extra_env_names)?;
+    let environment_keys = environment
+        .iter()
+        .map(|(key, _)| key.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
     let mut child = if cfg!(windows) {
         let mut cmd = Command::new("cmd");
         cmd.args(["/D", "/S", "/C", command]);
@@ -189,6 +276,8 @@ pub fn run_with_cancel(
     };
     let mut child = child
         .current_dir(&cwd)
+        .env_clear()
+        .envs(environment)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -242,6 +331,7 @@ pub fn run_with_cancel(
         output: clip(output),
         exit_code: status.code(),
         duration_ms: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        environment_keys,
     })
 }
 
@@ -309,5 +399,12 @@ mod tests {
         assert!(result.tools.iter().any(|tool| tool.name == "node"));
         assert!(result.tools.iter().any(|tool| tool.name == "npm"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn setup_environment_rejects_invalid_names_and_keeps_path() {
+        assert!(setup_environment(&["BAD-NAME".to_string()]).is_err());
+        let selected = setup_environment(&["PATH".to_string()]).unwrap();
+        assert!(selected.iter().any(|(key, _)| key.to_string_lossy().eq_ignore_ascii_case("PATH")));
     }
 }

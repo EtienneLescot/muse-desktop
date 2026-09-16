@@ -1228,6 +1228,7 @@ async fn worktree_setup_run(
     path: String,
     command: String,
     operation_id: String,
+    env_allowlist: Vec<String>,
 ) -> Result<setup::SetupResult, String> {
     let root = workspace_for_inspection(&state, &session_id)?;
     let key = (session_id, operation_id);
@@ -1238,7 +1239,7 @@ async fn worktree_setup_run(
         .map_err(|_| "setup cancellation registry is unavailable".to_string())?
         .insert(key.clone(), cancel.clone());
     let joined = tokio::task::spawn_blocking(move || {
-        setup::run_with_cancel(&root, &path, &command, Some(cancel))
+        setup::run_with_cancel_and_env(&root, &path, &command, &env_allowlist, Some(cancel))
     })
     .await;
     if let Ok(mut active) = state.setup_cancellations.lock() {
