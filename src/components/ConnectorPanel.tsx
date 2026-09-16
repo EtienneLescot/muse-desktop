@@ -62,6 +62,12 @@ export function ConnectorPanel({
   const [localBusy, setLocalBusy] = useState<"probe" | "call" | null>(null);
   const [localTool, setLocalTool] = useState("");
   const [localArgs, setLocalArgs] = useState("{}");
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [refreshFeedback, setRefreshFeedback] = useState<{
+    id: string;
+    message: string;
+    tone: "success" | "error";
+  } | null>(null);
   const installedIds = new Set(installed.map((e) => e.id));
 
   return (
@@ -223,9 +229,59 @@ export function ConnectorPanel({
                     onChange={(ev) => onToggle(e.id, ev.target.checked)}
                   />
                 </label>
+                {e.kind === "local" && e.command && (
+                  <button
+                    type="button"
+                    className="integration-action"
+                    disabled={refreshingId !== null}
+                    onClick={async () => {
+                      const command = e.command;
+                      if (!command) return;
+                      setRefreshingId(e.id);
+                      setRefreshFeedback(null);
+                      const result = await onProbeLocal(command);
+                      if (result === null) {
+                        setRefreshFeedback({
+                          id: e.id,
+                          tone: "error",
+                          message: "Refresh failed. The previous tool list was kept.",
+                        });
+                      } else if (result.tools.length === 0) {
+                        setRefreshFeedback({
+                          id: e.id,
+                          tone: "error",
+                          message: "The server returned no tools. The previous list was kept.",
+                        });
+                      } else if (!onRegisterLocal(e.name, command, result.tools)) {
+                        setRefreshFeedback({
+                          id: e.id,
+                          tone: "error",
+                          message: "Refresh could not be saved. The previous tool list was kept.",
+                        });
+                      } else {
+                        setRefreshFeedback({
+                          id: e.id,
+                          tone: "success",
+                          message: `Tools refreshed · ${result.tools.length} discovered · ${result.durationMs} ms`,
+                        });
+                      }
+                      setRefreshingId(null);
+                    }}
+                  >
+                    {refreshingId === e.id ? "Refreshing…" : "Refresh tools"}
+                  </button>
+                )}
                 <button type="button" onClick={() => onUninstall(e.id)}>
                   Remove
                 </button>
+                {refreshFeedback?.id === e.id && (
+                  <small
+                    className={`integration-refresh-feedback ${refreshFeedback.tone}`}
+                    role="status"
+                  >
+                    {refreshFeedback.message}
+                  </small>
+                )}
               </li>
             ))}
           </ul>

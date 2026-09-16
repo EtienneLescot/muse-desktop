@@ -359,12 +359,14 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 - **Appel réel :** `mcp_local_call` refait le handshake, appelle `tools/call` avec des arguments JSON et renvoie le résultat/isError. Chaque opération possède son processus borné (30 s) ; aucun serveur n'est lancé en arrière-plan ou au démarrage.
 - **UX :** Extensions contient un panneau **Local MCP server** avec commande, workspace effectif, liste des outils découverts, arguments JSON et résultat repliable. Les erreurs de démarrage, handshake, JSON ou timeout restent visibles via le store d'erreur.
 - **Garde-fous :** commande ≤2 000 caractères, nom d'outil ≤200 caractères, sortie ≤200 000 caractères et maximum 500 outils ; stdin et stderr du serveur ne sont pas exposés à la conversation.
-- **Limites :** les outils découverts ne sont pas encore injectés dans le catalogue MSP de Muse et aucun processus persistant/hot-reload `list_changed` n'est maintenu. Cette tranche prouve le transport local et l'appel contrôlé, pas la parité MCP complète.
+- **Rafraîchissement explicite :** chaque connecteur MCP local enregistré avec une commande expose **Refresh tools**. Le probe refait le handshake et `tools/list`, remplace la liste persistée si elle est valide et conserve l'ancienne liste en cas d'échec ou de réponse vide ; le statut désactivé reste inchangé.
+- **Limites :** les outils découverts ne sont pas encore injectés dans le catalogue MSP de Muse et aucun processus persistant/hot-reload `list_changed` n'est maintenu. Cette tranche prouve le transport local, l'appel contrôlé et la récupération manuelle, pas la parité MCP complète.
 - **Validation :** tests Rust de framing et parsing des outils, tests Node existants, TypeScript, Vite et Cargo verts.
 
 ### Livraison M3-03 — cycle de vie d'un connecteur MCP local
 
 - **Enregistrement vérifié :** après un probe `tools/list` réussi, l'utilisateur peut enregistrer le nom, la commande et les outils réellement découverts dans le registre local persistant.
+- **Rafraîchissement manuel :** les entrées locales issues d'une commande affichent **Refresh tools**. Une réussite met à jour les outils et `lastProbeAt` via le même chemin SSOT ; une erreur ou une liste vide laisse la dernière version utilisable et explique l'échec dans la ligne du connecteur.
 - **Cohérence :** une mise à jour remplace les outils et la commande du même identifiant sans réactiver silencieusement un connecteur désactivé ; la liste hot-reloadée respecte toujours le statut `installed/disabled`.
 - **Limites :** l'enregistrement ne lance pas le serveur en arrière-plan et les outils restent un catalogue local tant que le host Muse ne fournit pas de bridge MCP. Mise à jour de package, rollback et permissions d'appel restent à traiter.
 - **Validation :** tests Node d'enregistrement, mise à jour et conservation du statut désactivé ; TypeScript et Vite verts.
@@ -390,7 +392,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
-| M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; restent injection dans le host Muse, processus persistant et hot-reload |
+| M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; rafraîchissement manuel des outils enregistrés livré ; restent injection dans le host Muse, processus persistant et hot-reload |
 | M3-02 | Connecter un serveur MCP distant | À définir | Partielle | Locale | Unitaire | Transport/auth/secrets, restrictions et reconnexion ; aucun statut « connecté » sans échange réel |
 | M3-03 | Installer/désactiver une extension réellement utilisable | Adapté | Présente | Partielle | Intégration | Enregistrement post-probe et hot-list du registre livrés ; restent runtime persistant, package/update/rollback et injection dans le moteur |
 | M3-04 | Découvrir les skills du disque et du projet | Adapté | Présente | Partielle | Intégration | Scanner borné `SKILL.md`, ressources relatives, priorité projet/repo/équipe et rechargement explicite livrés ; bridge natif et notifications restent ouverts |

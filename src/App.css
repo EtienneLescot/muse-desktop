@@ -3773,6 +3773,7 @@ body.dark .composer textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .review-item {
@@ -4098,6 +4099,20 @@ body.dark .composer textarea::placeholder {
 .integration-action:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.integration-refresh-feedback {
+  flex-basis: 100%;
+  padding-left: 2px;
+  font-size: 0.72rem;
+}
+
+.integration-refresh-feedback.success {
+  color: var(--success, #2aa876);
+}
+
+.integration-refresh-feedback.error {
+  color: var(--danger);
 }
 
 .skill-scan-result {
