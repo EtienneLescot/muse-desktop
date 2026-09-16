@@ -139,6 +139,11 @@ import {
   type ContextUsage,
   type ThreadSummary,
 } from "../lib/compact";
+import {
+  engineErrorSummary,
+  parseTurnCompletion,
+  type EngineErrorDetails,
+} from "../lib/engineError";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
 // endpoint exists); children surface as `subagent` entries as usual.
 import {
@@ -2522,8 +2527,24 @@ export function useMuseSessions(): UseMuseSessions {
         // Legacy status payloads have no id; the click path still reconciles.
       }
     }
-    if (payload && !isApprovalStatus) {
-      pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text: `[${kind}] ${payload}` }]);
+    if (!isApprovalStatus) {
+      const completion = isStoppedKind(kind)
+        ? parseTurnCompletion(kind, payload)
+        : null;
+      if (completion?.error !== null && completion?.error !== undefined) {
+        const failure: EngineErrorDetails = completion.error;
+        pushLog(sid, [{
+          id: newId(),
+          ts: Date.now(),
+          role: "system",
+          text: engineErrorSummary(failure),
+          engineError: failure,
+        }]);
+      } else if (completion === null && payload) {
+        // Preserve diagnostics for legacy/non-terminal status events while
+        // keeping ordinary completed/cancelled turns quiet in the transcript.
+        pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text: `[${kind}] ${payload}` }]);
+      }
     }
     // Closing a (re)start would kill the just-painted placeholder; only
     // settle blocks for turn-end statuses. Approval updates are protocol

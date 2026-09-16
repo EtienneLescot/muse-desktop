@@ -699,6 +699,87 @@ body.dark .avatar {
   padding: 8px 12px;
 }
 
+/* M0-07: terminal engine failures stay calm and inspectable. The stable
+   category/retry posture is visible in the summary; the host message remains
+   available in the disclosure for support without flooding the transcript. */
+.engine-error {
+  margin-top: 6px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 92%, var(--danger) 8%);
+  overflow: hidden;
+}
+
+.engine-error summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.engine-error summary::-webkit-details-marker {
+  display: none;
+}
+
+.engine-error summary::before {
+  content: "›";
+  color: var(--danger);
+  font-size: 1.1rem;
+  line-height: 0.7;
+  transition: transform 0.15s ease;
+}
+
+.engine-error[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.engine-error-kind {
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--font-code);
+  font-size: 0.72rem;
+}
+
+.engine-error > p {
+  margin: 0;
+  padding: 0 12px 8px 28px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.engine-error .engine-error-reason {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.engine-error dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0 12px 10px 28px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.engine-error dl div {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.engine-error dt {
+  font-weight: 600;
+}
+
+.engine-error dd {
+  margin: 0;
+}
+
 .msg.subagent {
   background: var(--code-bg);
   border: 1px solid var(--line);

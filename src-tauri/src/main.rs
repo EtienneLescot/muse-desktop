@@ -959,19 +959,25 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
         ),
         "turn/completed" => {
             let terminal = p.get("terminal").and_then(Value::as_str).unwrap_or("completed");
-            let detail = p
-                .get("reason")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .or_else(|| {
-                    p.get("error")
-                        .and_then(|e| e.get("message"))
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                })
-                .unwrap_or_default();
             mark_running(state, sid, false);
-            emit(app, "status", sid, terminal, detail);
+            // A failed turn is a terminal view event, so preserve the stable
+            // error object instead of flattening it into a message string.
+            // Older hosts may omit fields; nulls keep the envelope additive
+            // and let the renderer fall back to the legacy reason.
+            emit(
+                app,
+                "status",
+                sid,
+                terminal,
+                json!({
+                    "terminal": terminal,
+                    "turnId": p.get("turnId"),
+                    "reason": p.get("reason"),
+                    "error": p.get("error"),
+                    "durationMs": p.get("durationMs"),
+                })
+                .to_string(),
+            );
         }
         "turn/retracted" | "turn/unqueued" | "turn/retryScheduled" => {
             emit(app, "status", sid, method, p.to_string())

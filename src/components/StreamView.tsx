@@ -357,7 +357,24 @@ export function StreamView({
         ) : (
           <div key={e.id} className={`msg ${e.role}`}>
             <span className="role">{roleLabel(e)}</span>
-            {e.role === "assistant" && !reflexive ? (
+            {e.engineError ? (
+              <details className="engine-error" open>
+                <summary>
+                  <strong>{e.engineError.retryable ? "Turn failed · retryable" : "Turn failed"}</strong>
+                  <span className="engine-error-kind">{e.engineError.kind}</span>
+                </summary>
+                <p>{e.engineError.message}</p>
+                {e.engineError.reason && e.engineError.reason !== e.engineError.message && (
+                  <p className="engine-error-reason">{e.engineError.reason}</p>
+                )}
+                <dl>
+                  <div><dt>Retryable</dt><dd>{e.engineError.retryable ? "Yes" : "No"}</dd></div>
+                  {e.engineError.durationMs !== undefined && (
+                    <div><dt>Duration</dt><dd>{Math.round(e.engineError.durationMs / 1000)}s</dd></div>
+                  )}
+                </dl>
+              </details>
+            ) : e.role === "assistant" && !reflexive ? (
               <>
                 <MessageContent text={e.text} />
                 {e.open && <span className="caret" aria-hidden="true" />}

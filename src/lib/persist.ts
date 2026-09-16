@@ -23,6 +23,7 @@ import {
   removeStorageKey,
   writeStorageJson,
 } from "./storage.ts";
+import type { EngineErrorDetails } from "./engineError.ts";
 
 export interface StoredSession {
   session_id: string;
@@ -68,6 +69,8 @@ export interface LogEntry {
    * a duplicate bubble.
    */
   clientMessageId?: string;
+  /** M0-07: structured terminal failure details, when a turn failed. */
+  engineError?: EngineErrorDetails;
 }
 
 const SESSIONS_KEY = "muse-desktop.sessions.v1";
@@ -108,6 +111,22 @@ function isValidSession(s: unknown): s is StoredSession {
 function isValidEntry(e: unknown): e is LogEntry {
   if (typeof e !== "object" || e === null) return false;
   const r = e as Record<string, unknown>;
+  const error = r.engineError;
+  const validEngineError =
+    error === undefined ||
+    (typeof error === "object" &&
+      error !== null &&
+      !Array.isArray(error) &&
+      typeof (error as Record<string, unknown>).kind === "string" &&
+      typeof (error as Record<string, unknown>).message === "string" &&
+      typeof (error as Record<string, unknown>).retryable === "boolean" &&
+      ((error as Record<string, unknown>).reason === undefined ||
+        typeof (error as Record<string, unknown>).reason === "string") &&
+      ((error as Record<string, unknown>).turnId === undefined ||
+        typeof (error as Record<string, unknown>).turnId === "string") &&
+      ((error as Record<string, unknown>).durationMs === undefined ||
+        (typeof (error as Record<string, unknown>).durationMs === "number" &&
+          Number.isFinite((error as Record<string, unknown>).durationMs))));
   return (
     typeof r.id === "string" &&
     typeof r.ts === "number" &&
@@ -117,7 +136,8 @@ function isValidEntry(e: unknown): e is LogEntry {
       r.role === "subagent" ||
       r.role === "system" ||
       r.role === "tool") &&
-    typeof r.text === "string"
+    typeof r.text === "string" &&
+    validEngineError
   );
 }
 
