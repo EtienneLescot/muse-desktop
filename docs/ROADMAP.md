@@ -375,8 +375,9 @@ Preuves : [connecteurs](../src/lib/connectors.ts), [skills](../src/lib/skills.ts
 - **Inbox persistante :** les runs `completed` et `failed`, ainsi que les demandes `approval` et `input`, créent une notification locale bornée, avec titre, aperçu/erreur, horodatage, cible de conversation et clé d'idempotence. Une même occurrence ou demande ne peut pas être ajoutée deux fois.
 - **UX :** Automations expose les six dernières notifications, un badge non-lu, **Open conversation** et **Mark read**. La permission desktop est activable à la demande ; si l'OS refuse ou ne fournit pas l'API, l'inbox reste la surface de secours.
 - **Silence au démarrage :** les notifications déjà présentes sont hydratées comme historique et ne déclenchent pas un toast à chaque relance. Les nouvelles notifications non lues sont envoyées au meilleur effort via l'API `Notification` du webview.
-- **Limites :** aucun plugin Tauri/OS n'est encore installé ; l'application doit rester ouverte pour recevoir un toast. Le service natif, les préférences muettes et les tests multi-instance restent à faire.
-- **Validation :** suite Node 429 tests, TypeScript et build Vite verts ; la qualification native du permission prompt reste à exécuter sur Windows/macOS/Linux.
+- **Bridge desktop :** `tauri-plugin-notification` est enregistré avec la permission `notification:default`, ce qui permet au constructeur `Notification` du webview d'atteindre le service OS dans un build Tauri.
+- **Limites :** les préférences muettes, les actions de clic OS et les tests multi-instance restent à faire ; l'application doit rester ouverte pour recevoir les événements du host.
+- **Validation :** suite Node 429 tests, TypeScript, build Vite et 68 tests Rust verts ; la qualification native du permission prompt reste à exécuter sur Windows/macOS/Linux.
 
 ## M4 — Parité étendue
 

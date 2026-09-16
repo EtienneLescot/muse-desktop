@@ -451,7 +451,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** `src/lib/notifications.ts`, `useMuseSessions` et `SchedulesPanel` ; dépend M3-08/M0-12.
 
-**État au 16/09/2026 :** l'inbox locale est livrée pour les runs terminés/échoués et pour les demandes d'autorisation ou de réponse utilisateur : chaque entrée conserve une clé d'idempotence, un aperçu, la session cible et un état non-lu ; Automations permet l'ouverture de la conversation et le marquage lu. L'API `Notification` du webview est utilisée à la demande quand la permission est accordée, avec un fallback explicite dans l'app et sans rejouer les historiques au démarrage. Le plugin Tauri/OS et les préférences muettes restent ouverts.
+**État au 16/09/2026 :** l'inbox locale est livrée pour les runs terminés/échoués et pour les demandes d'autorisation ou de réponse utilisateur : chaque entrée conserve une clé d'idempotence, un aperçu, la session cible et un état non-lu ; Automations permet l'ouverture de la conversation et le marquage lu. L'API `Notification` du webview est utilisée à la demande quand la permission est accordée, avec un fallback explicite dans l'app et sans rejouer les historiques au démarrage. Le plugin Tauri officiel est enregistré avec sa permission desktop ; les préférences muettes et les actions de clic OS restent ouvertes.
 
 **Travail restant :** service natif OS/Tauri, préférences muettes et notifications de demandes utilisateur. Pas de notification par token ou tick.
 
