@@ -241,6 +241,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** image réellement reçue, fichier texte, limite dépassée, fichier supprimé, annulation et retry sans pièce jointe orpheline.
 
+**État au 16/09/2026 :** contrat stable vérifié depuis le binaire embarqué (`TurnInputPart` = `text|image|skill`). Le composeur envoie les fichiers texte et images via des parts structurées, avec ingestion sélecteur/glisser-déposer/coller, bornes et suppression avant envoi ; l’outbox conserve le payload exact pour les retries. Les essais live par modèle image, la persistance du brouillon avant envoi et la qualification native restent ouverts.
+
 ### M1-09 — Fork serveur
 
 **Code :** sessions, actions conversation, MSP session/fork. Dépend M0-02/08.

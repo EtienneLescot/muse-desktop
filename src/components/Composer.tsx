@@ -29,6 +29,14 @@ import { COMPOSER_SHORTCUT_TITLES } from "../lib/a11y";
 import type { SendResult } from "../lib/outbox";
 import type { AuthorizationMode } from "../lib/authorization";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
+import {
+  attachmentKey,
+  buildTurnInputParts,
+  MAX_ATTACHMENTS,
+  readAttachment,
+  type ComposerAttachment,
+  type TurnInputPart,
+} from "../lib/attachments";
 
 interface Props {
   sessionId?: string;
@@ -42,7 +50,7 @@ interface Props {
    * M0-03: resolves with an explicit send result. ok=true lets the
    * composer clear the draft; ok=false keeps it (retryable outbox entry).
    */
-  onSend: (text: string) => Promise<SendResult>;
+  onSend: (text: string, inputParts?: TurnInputPart[]) => Promise<SendResult>;
   onCancel: () => void;
   /** US-4: summary text to load into the box after « New From Summary ». */
   prefill?: string | null;
@@ -64,6 +72,12 @@ interface RecentMention {
 
 const RECENT_KEY = "muse-desktop.mentions.v1";
 const RECENT_CAP = 20;
+
+function formatAttachmentSize(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function loadRecents(workspace: string): RecentMention[] {
   try {
@@ -152,15 +166,21 @@ export function Composer({
   // instead of firing a second identical turn.
   const [sending, setSending] = useState(false);
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [recents, setRecents] = useState<RecentMention[]>(() =>
     workspace !== null ? loadRecents(workspace) : [],
   );
   // Keep the latest editable draft available to the async send completion.
   // A user can continue typing while the supervisor acknowledges a turn.
   const textRef = useRef(text);
+  const attachmentsRef = useRef(attachments);
   useEffect(() => {
     textRef.current = text;
   }, [text]);
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const area = areaRef.current;
@@ -337,8 +357,10 @@ export function Composer({
   }
 
   async function send(): Promise<void> {
-    if (text.trim().length === 0 || disabled || checking || sending) return;
+    if ((text.trim().length === 0 && attachmentsRef.current.length === 0) || disabled || checking || sending) return;
     const draftAtSend = text;
+    const attachmentsAtSend = attachmentsRef.current;
+    const attachmentsAtSendKey = attachmentKey(attachmentsAtSend);
     // US-20: expand `@mem/` tokens first (works even without a workspace:
     // memories are global). Unknown ids block explicitly, never silently.
     const memExpanded = expandMemoryMentions(text, memories ?? [], Date.now());
@@ -408,18 +430,54 @@ export function Composer({
     // sessionStorage — the message stays recoverable and retryable.
     setSending(true);
     try {
-      const res = await onSend(toSend);
+      const res = await onSend(toSend, buildTurnInputParts(toSend, attachmentsAtSend));
       // Do not erase text typed while the async send was in flight. The
       // admission ack belongs to the captured draft only.
       if (res.ok && textRef.current === draftAtSend) {
         setText("");
         setCaret(0);
+        if (attachmentKey(attachmentsRef.current) === attachmentsAtSendKey) {
+          setAttachments([]);
+        }
       } else {
         setBlocked(res.error ?? "The message was not sent.");
       }
     } finally {
       setSending(false);
     }
+  }
+
+  async function addFiles(files: FileList | File[]): Promise<void> {
+    if (disabled) return;
+    const incoming = Array.from(files);
+    if (incoming.length === 0) return;
+    setAttachmentError(null);
+    const room = Math.max(0, MAX_ATTACHMENTS - attachmentsRef.current.length);
+    if (room === 0) {
+      setAttachmentError(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+      return;
+    }
+    const next: ComposerAttachment[] = [];
+    const failures: string[] = [];
+    for (const file of incoming.slice(0, room)) {
+      if (attachmentsRef.current.some((attachment) => attachment.name === file.name && attachment.size === file.size)) {
+        continue;
+      }
+      try {
+        next.push(await readAttachment(file));
+      } catch (error) {
+        failures.push(`${file.name}: ${String(error).replace(/^Error:\s*/, "")}`);
+      }
+    }
+    if (next.length > 0) {
+      setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
+    }
+    if (failures.length > 0) setAttachmentError(failures.join(" · "));
+  }
+
+  function removeAttachment(id: string): void {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== id));
+    setAttachmentError(null);
   }
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
@@ -456,7 +514,17 @@ export function Composer({
 
   return (
     <div className="composer-wrap" id="composer">
-      <div className="composer">
+      <div
+        className="composer"
+        onDragOver={(event) => {
+          if (!disabled) event.preventDefault();
+        }}
+        onDrop={(event) => {
+          if (disabled) return;
+          event.preventDefault();
+          void addFiles(event.dataTransfer.files);
+        }}
+      >
         <div className="composer-main">
           {mentions.length > 0 && (
             <ul className="mention-chips" aria-label="Resolved mentions">
@@ -599,6 +667,30 @@ export function Composer({
               ))}
             </ul>
           )}
+          {attachments.length > 0 && (
+            <ul className="attachment-chips" aria-label="Attached files">
+              {attachments.map((attachment) => (
+                <li className="attachment-chip" key={attachment.id}>
+                  <span className={`attachment-kind attachment-kind-${attachment.kind}`} aria-hidden="true">
+                    {attachment.kind === "image" ? "▧" : "▤"}
+                  </span>
+                  <span className="attachment-name" title={attachment.name}>{attachment.name}</span>
+                  <span className="attachment-size">{formatAttachmentSize(attachment.size)}</span>
+                  <button
+                    type="button"
+                    className="attachment-remove"
+                    aria-label={`Remove attachment ${attachment.name}`}
+                    onClick={() => removeAttachment(attachment.id)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {attachmentError !== null && (
+            <div className="attachment-error" role="alert">{attachmentError}</div>
+          )}
           <textarea
             ref={areaRef}
             value={text}
@@ -610,6 +702,12 @@ export function Composer({
             onKeyUp={(e) => syncCaret(e.currentTarget)}
             onClick={(e) => syncCaret(e.currentTarget)}
             onSelect={(e) => syncCaret(e.currentTarget)}
+            onPaste={(event) => {
+              const images = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+              if (images.length === 0) return;
+              event.preventDefault();
+              void addFiles(images);
+            }}
             disabled={disabled}
             rows={3}
             placeholder={
@@ -630,6 +728,20 @@ export function Composer({
         </div>
         <div className="composer-actions">
           <div className="composer-context">
+            <label className="composer-attach" title="Attach text files or images">
+              <input
+                type="file"
+                accept="image/*,text/*,.md,.mdx,.ts,.tsx,.js,.jsx,.json,.css,.html,.rs,.py,.go,.java,.sh,.yaml,.yml,.toml"
+                multiple
+                disabled={disabled || attachments.length >= MAX_ATTACHMENTS}
+                onChange={(event) => {
+                  void addFiles(event.currentTarget.files ?? []);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <span aria-hidden="true">＋</span>
+              <span>Attach</span>
+            </label>
             <AuthorizationModeControl
               mode={authorizationMode}
               onChange={onAuthorizationModeChange}

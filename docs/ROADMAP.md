@@ -147,7 +147,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-05 | Ouvrir et utiliser un terminal du projet | Adapté | Présente | Câblée | Unitaire | Socle PTY persistant livré : shell lié au cwd de la conversation, entrée/sortie bornées, resize et fermeture contrôlée. Reste : validation native Windows/macOS/Linux, rendu ANSI riche et raccourcis interactifs |
 | M1-06 | Faire lire au moteur la sortie du terminal | Adapté | Présente | Locale | Unitaire | Handoff explicite **Add output to prompt** livré : sortie bornée, attribuée au terminal/cwd et insérée dans le prochain message. Reste : outil/contexte moteur natif après vérification de capacité MSP |
 | M1-07 | Consulter les vrais fichiers du projet | Adapté | Présente | Câblée | Intégration | Listing paresseux et lecture bornée du workspace livrés ; restent ouverture native, watcher/état obsolète et qualification E2E sur gros dépôts |
-| M1-08 | Ajouter fichiers et images à une demande | À définir | Partielle | Partielle | Unitaire | Les mentions actuelles enrichissent du texte ; concevoir pièces jointes, drag/drop et limites ; preuve que le moteur reçoit le contenu/type attendu |
+| M1-08 | Ajouter fichiers et images à une demande | Adapté | Présente | Câblée | Intégration | Texte borné et images base64 sont envoyés comme parts MSP réelles ; restent validation live sur les modèles image, dimensions et reprise d’un fichier disparu |
 | M1-09 | Créer une branche de conversation fidèle | Maquette | Partielle | Locale | Unitaire | Utiliser session/fork si disponible ; choisir le point source ; conserver contexte et dossier ; ne pas confondre avec « nouvelle depuis résumé » |
 | M1-10 | Réorienter une exécution ou mettre un message en attente | À définir | Absente | Absente | À faire | Exploiter steer/queue selon capacités servies ; états visibles, annulation, ordre et absence de double envoi |
 | M1-11 | Choisir un modèle disponible et suivre le contexte | Adapté | Présente | Câblée | Unitaire | Consolider tests live list/setModel/compact, erreurs et persistance ; fallback explicitement non live ; état confirmé par le moteur |
@@ -213,6 +213,15 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **SSOT :** l’état `filesBySession` appartient au hook de sessions ; les réponses asynchrones obsolètes sont ignorées par séquence de requête, afin qu’un changement d’onglet ou de conversation ne remplace pas un aperçu plus récent.
 - **Validation :** tests Rust du service sur un workspace temporaire (listing borné, texte, binaire, traversée et chemins absolus), puis suite Node/TypeScript/Vite. La qualification native Windows/macOS/Linux et le scénario E2E avec fichiers renommés/disparus restent à exécuter.
 - **Limites assumées :** cette tranche prévisualise le contenu actuel et ne prétend pas ouvrir une application externe ni surveiller le disque en continu. Les pièces jointes restent M1-08.
+
+### Livraison M1-08 — pièces jointes structurées
+
+- **Contrat moteur vérifié :** le binaire Muse embarqué a été interrogé avec `muse schema generate-ts --out …`. `turn/start.input` accepte les parts `text`, `image` (`mediaType`, `base64Data`, dimensions optionnelles) et `skill`; il n’existe pas de part fichier arbitraire.
+- **UX :** le composeur accepte plusieurs images ou fichiers texte par sélecteur, glisser-déposer et collage d’image. Les pièces jointes apparaissent en chips supprimables avant envoi, avec limites et erreurs dans le contexte du champ.
+- **Payload :** les textes sont transmis comme parts `text` explicitement balisées avec leur nom/MIME ; les images gardent leur MIME et leur payload base64. Les chemins locaux ne sont jamais envoyés comme faux fichiers.
+- **Fiabilité :** `turn/start` valide côté Rust le type, le MIME, le base64, les dimensions et les bornes (8 parts, texte 120 000 caractères, image 5 Mo). L’outbox persiste les parts exactes afin qu’un retry ambigu ne perde ni image ni fichier.
+- **Validation :** 57 tests Rust (dont validation des parts), 390 tests Node (détection/assemblage et outbox), TypeScript et build Vite. La réception avec chaque modèle image et la qualification native restent à exécuter.
+- **Limites assumées :** les formats non textuels autres que les images sont refusés explicitement ; les pièces jointes ne sont pas conservées dans le brouillon après fermeture de l’app avant envoi, et aucun upload externe n’est introduit.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 

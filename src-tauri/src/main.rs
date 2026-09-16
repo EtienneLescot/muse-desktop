@@ -26,6 +26,7 @@ mod terminal;
 mod files;
 use hosts::Hosts;
 
+use base64::Engine as _;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -1688,13 +1689,19 @@ async fn send_input(
     session_id: String,
     command_id: String,
     text: String,
+    input_parts: Option<Value>,
 ) -> Result<Value, String> {
     if command_id.trim().is_empty() {
         return Err("empty commandId".to_string());
     }
-    if text.trim().is_empty() {
+    // Preserve the legacy command contract for callers that do not provide
+    // structured parts. Attachment-only sends intentionally pass `Some` and
+    // are validated below instead of being rejected as empty text.
+    if input_parts.is_none() && text.trim().is_empty() {
         return Err("empty input".to_string());
     }
+    let input = input_parts.unwrap_or_else(|| json!([{ "type": "text", "text": text }]));
+    validate_turn_input_parts(&input)?;
     let client = session_client(&state, &session_id)?;
     let result = client
         .request(
@@ -1705,12 +1712,90 @@ async fn send_input(
                 // supervisor boundary instead of admitting a second turn.
                 "commandId": command_id,
                 "sessionId": session_id,
-                "input": [{"type": "text", "text": text}],
+                "input": input,
             }),
         )
         .await?;
     mark_running(&state, &session_id, true);
     Ok(result)
+}
+
+const MAX_TURN_INPUT_PARTS: usize = 8;
+const MAX_TURN_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+
+/// Validate the stable MSP `turn/start.input` subset before it reaches the
+/// sidecar. The host remains authoritative, but rejecting malformed or
+/// oversized browser payloads here keeps errors local and predictable.
+fn validate_turn_input_parts(input: &Value) -> Result<(), String> {
+    let parts = input
+        .as_array()
+        .ok_or_else(|| "inputParts must be a JSON array".to_string())?;
+    if parts.is_empty() {
+        return Err("inputParts must contain at least one part".to_string());
+    }
+    if parts.len() > MAX_TURN_INPUT_PARTS {
+        return Err(format!(
+            "inputParts cannot contain more than {MAX_TURN_INPUT_PARTS} parts"
+        ));
+    }
+    for (index, part) in parts.iter().enumerate() {
+        let object = part
+            .as_object()
+            .ok_or_else(|| format!("inputParts[{index}] must be an object"))?;
+        let kind = object
+            .get("type")
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("inputParts[{index}].type is required"))?;
+        match kind {
+            "text" => {
+                let value = object
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| format!("inputParts[{index}].text is required"))?;
+                if value.trim().is_empty() {
+                    return Err(format!("inputParts[{index}].text must not be empty"));
+                }
+                if value.chars().count() > 120_000 {
+                    return Err(format!("inputParts[{index}].text exceeds 120000 characters"));
+                }
+            }
+            "image" => {
+                let media_type = object
+                    .get("mediaType")
+                    .and_then(Value::as_str)
+                    .filter(|value| value.starts_with("image/"))
+                    .ok_or_else(|| {
+                        format!("inputParts[{index}].mediaType must be an image MIME type")
+                    })?;
+                let encoded = object
+                    .get("base64Data")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| format!("inputParts[{index}].base64Data is required"))?;
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .map_err(|_| format!("inputParts[{index}].base64Data is invalid"))?;
+                if decoded.is_empty() || decoded.len() > MAX_TURN_IMAGE_BYTES {
+                    return Err(format!(
+                        "inputParts[{index}] image exceeds the {} MB limit",
+                        MAX_TURN_IMAGE_BYTES / 1024 / 1024
+                    ));
+                }
+                if object.get("width").is_some() != object.get("height").is_some() {
+                    return Err(format!(
+                        "inputParts[{index}].width and height must be provided together"
+                    ));
+                }
+                let _ = media_type;
+            }
+            other => {
+                return Err(format!(
+                    "inputParts[{index}] has unsupported type {other:?}"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -2268,6 +2353,29 @@ mod tests {
         assert!(build_input_request_payload(&bad).is_none());
         let empty = json!({"userInputId": "x", "questions": []});
         assert!(build_input_request_payload(&empty).is_none());
+    }
+
+    #[test]
+    fn turn_input_parts_accept_text_and_bounded_image() {
+        let valid = json!([
+            {"type": "text", "text": "Review this"},
+            {"type": "image", "mediaType": "image/png", "base64Data": "AQID"}
+        ]);
+        assert!(validate_turn_input_parts(&valid).is_ok());
+    }
+
+    #[test]
+    fn turn_input_parts_reject_unknown_or_malformed_images() {
+        let unknown = json!([{"type": "file", "path": "README.md"}]);
+        assert!(validate_turn_input_parts(&unknown).is_err());
+        let malformed = json!([
+            {"type": "image", "mediaType": "image/png", "base64Data": "not-base64"}
+        ]);
+        assert!(validate_turn_input_parts(&malformed).is_err());
+        let mismatched_dimensions = json!([
+            {"type": "image", "mediaType": "image/png", "base64Data": "AQID", "width": 2}
+        ]);
+        assert!(validate_turn_input_parts(&mismatched_dimensions).is_err());
     }
 
     fn scope_root() -> PathBuf {
