@@ -337,11 +337,19 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 | M2-05 | Passer de Local à Worktree et inversement | Adapté | Présente | Partielle | Intégration | Plan de handoff et préconditions livrés ; restent transfert atomique du host, déplacement de contexte, conflits fichiers ignorés et rollback |
 | M2-06 | Nettoyer les worktrees sans supprimer du travail | Adapté | Présente | Partielle | Intégration | Inspection Git, garde contre les marqueurs d'activité et branches référencées, refus des worktrees sales, aperçu multi-cibles et politique de rétention guidée livrés ; reste la reprise après interruption et la qualification des processus externes |
 | M2-07 | Piloter les sous-agents réels | Adapté | Présente | Câblée | Unitaire | Vérifier followup/stop/resume/result/drilldown sur agents vivants ; identité et états corrects jusqu'à terminaison |
-| M2-08 | Exécuter plusieurs writers sans collision | À définir | Partielle | Partielle | Unitaire | Associer writers aux espaces isolés, file réelle et limites explicites ; tests de modifications concurrentes et résultats séparés |
+| M2-08 | Exécuter plusieurs writers sans collision | Adapté | Présente | Partielle | Unitaire | Pré-vol des fichiers cibles, détection des recouvrements, lanes bornées et file FIFO livrés ; reste le dispatch writer natif, l'annulation et la collecte de résultats |
 
 Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/worktrees.ts), [orchestration](../src/components/OrchestrationPanel.tsx), [fan-out](../src/lib/fanout.ts).
 
 **Dépendances :** M0-01/02 et M1-01 avant M2-03 ; M2-03 avant M2-04/05/06/08. **Sortie M2 :** deux conversations modifient/testent des espaces indépendants ; redémarrage, transfert et nettoyage préservent les changements.
+
+### Livraison M2-08 — coordination des writers
+
+- **Pré-vol :** le panneau d'orchestration permet de déclarer les fichiers relatifs qu'un writer peut modifier. Les chemins sont normalisés, bornés et les traversées ou chemins absolus sont ignorés avec un signal lisible.
+- **Collision :** deux writers qui ciblent le même fichier ou un sous-dossier commun sont bloqués ensemble avant exécution. Un writer sans worktree ou sans liste de cibles reste respectivement bloqué ou en attente de précision ; aucun overwrite implicite n'est autorisé.
+- **File :** les writers prêts reçoivent une lane déterministe dans la limite `cores - 2` bornée à 4–8 ; les suivants apparaissent en file FIFO. Le calcul est pur dans `src/lib/writerQueue.ts` et conserve le même ordre que le fan-out.
+- **Limites :** le protocole MSP actuel ne fournit pas de commande de lancement, d'annulation ou de verrou de fichiers pour des writers réels. Cette tranche livre le garde-fou et l'UX de préparation ; elle ne simule pas une exécution ni une fusion de changements.
+- **Validation :** 454 tests Node couvrent normalisation, bornage, collisions, worktree manquant et file FIFO ; TypeScript et Vite restent verts.
 
 ### Livraison M3-01 — transport MCP local explicite
 

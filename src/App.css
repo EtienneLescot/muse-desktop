@@ -2253,6 +2253,73 @@ body.dark .composer textarea::placeholder {
   color: var(--muted);
   font-size: 0.72rem;
 }
+.orchestration-writers {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--blue) 12%);
+}
+.orchestration-writers summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.orchestration-writers > p {
+  margin: 6px 0;
+  font-size: 0.7rem;
+}
+.orchestration-writers ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.orchestration-writers li {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(130px, 1fr);
+  align-items: center;
+  gap: 6px 10px;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  font-size: 0.7rem;
+}
+.orchestration-writers li label {
+  display: grid;
+  grid-template-columns: minmax(68px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.orchestration-writers li input {
+  min-width: 0;
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.7rem;
+}
+.orchestration-writers li > span {
+  color: var(--muted);
+}
+.orchestration-writers li[data-status="ready"] > span {
+  color: var(--success, #2aa876);
+}
+.orchestration-writers li[data-status="conflict"] > span,
+.orchestration-writers li[data-status="blocked"] > span {
+  color: var(--danger);
+}
+.orchestration-writers li[data-status="needsPaths"] > span {
+  color: var(--warning, #c48721);
+}
+.orchestration-writers li small {
+  grid-column: 1 / -1;
+  color: var(--warning, #c48721);
+}
 
 /* ---- US-12 + US-21 artifacts pane: right-side column next to the thread. */
 /* Later equal-specificity rule: session-view becomes a row (center + pane). */

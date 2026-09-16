@@ -371,7 +371,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** fanout.ts, orchestration, worktrees. Dépend M2-03/07.
 
-**Travail :** vérifier comment l'orchestration moteur reçoit les dossiers des writers ; ne pas promettre une isolation que le prompt seul ne garantit pas. Modéliser quota/file réelle, espace attribué et collecte des résultats ; intégration des changements séparée de l'exécution.
+**État :** le panneau d'orchestration expose un pré-vol par writer : chemins relatifs déclarés, normalisation bornée, refus des traversées et détection des recouvrements (fichier ou sous-dossier). Un writer sans worktree ou sans cible ne peut pas être marqué prêt. Les writers sans collision reçoivent des lanes déterministes (`cores - 2`, borné 4–8) et les suivants sont représentés en file FIFO dans `src/lib/writerQueue.ts` ; le calcul reste pur et partage l'ordre du fan-out.
+
+**Reste :** le protocole MSP n'expose pas encore de lancement, d'annulation ou de verrouillage de fichiers pour des writers réels. Ajouter un dispatch natif seulement après contrat vérifié, puis collecter les résultats et proposer une intégration séparée des changements.
 
 **Acceptation :** deux writers modifient le même nom de fichier dans deux checkouts ; aucun overwrite ; limites et annulation correspondent aux états réels.
 

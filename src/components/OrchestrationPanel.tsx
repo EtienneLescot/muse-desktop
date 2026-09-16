@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fanoutQueueNote } from "../lib/fanout";
+import { fanoutLanes, fanoutQueueNote } from "../lib/fanout";
+import {
+  parseWriterPaths,
+  planWriterQueue,
+  type WriterQueueStatus,
+} from "../lib/writerQueue";
 import { buildHandoffPlan, type HandoffPlan } from "../lib/handoff";
 import type { GitStatusSnapshot } from "../lib/git";
 import {
@@ -97,6 +102,7 @@ export function OrchestrationPanel({
   const [copied, setCopied] = useState(false);
   const [creating, setCreating] = useState<string | null>(null);
   const [openingBranch, setOpeningBranch] = useState<string | null>(null);
+  const [writerTargets, setWriterTargets] = useState<Record<string, string>>({});
   const [setupCommand, setSetupCommand] = useState("");
   const [envAllowlistText, setEnvAllowlistText] = useState("");
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -149,6 +155,22 @@ export function OrchestrationPanel({
     .filter((record): record is WorktreeRecord => record !== undefined);
   const inspectionSummary = summarizeWorktreeInspections(createdRecords, inspectionByBranch);
   const queueNote = fanoutQueueNote(plans.length);
+  const writerQueue = useMemo(
+    () =>
+      planWriterQueue(
+        plans.map((plan) => {
+          const record = recordFor(plan);
+          return {
+            agent: plan.agent,
+            worktreePath: record?.path ?? plan.path,
+            hasWorktree: record !== undefined,
+            targetPaths: parseWriterPaths(writerTargets[plan.agent] ?? "").paths,
+          };
+        }),
+        fanoutLanes(),
+      ),
+    [plans, worktrees, workspace, writerTargets],
+  );
   if (plans.length === 0) return null;
 
   function onCompare(): void {
@@ -338,6 +360,50 @@ export function OrchestrationPanel({
         </p>
       )}
       {queueNote !== null && <p className="muted">{queueNote}</p>}
+      <details className="orchestration-writers" open>
+        <summary>
+          Writer coordination · {writerQueue.ready} ready · {writerQueue.queued} queued
+          {writerQueue.blocked > 0 ? ` · ${writerQueue.blocked} blocked` : ""}
+        </summary>
+        <p className="muted">
+          Declare the files each writer may change. Writers without a worktree or with overlapping paths stay blocked; extra writers queue FIFO after {writerQueue.lanes} lanes.
+        </p>
+        <ul>
+          {writerQueue.rows.map((row) => {
+            const parsed = parseWriterPaths(writerTargets[row.agent] ?? "");
+            const statusLabel: Record<WriterQueueStatus, string> = {
+              blocked: "Create its worktree first",
+              needsPaths: "Declare target files",
+              conflict: `Blocked · overlaps ${row.conflictsWith.join(", ")}`,
+              ready: `Ready · lane ${row.lane}`,
+              queued: `Queued · position ${row.queuePosition}`,
+            };
+            return (
+              <li key={row.agent} data-status={row.status}>
+                <label>
+                  <strong>{row.agent}</strong>
+                  <input
+                    value={writerTargets[row.agent] ?? ""}
+                    onChange={(event) =>
+                      setWriterTargets((current) => ({
+                        ...current,
+                        [row.agent]: event.target.value,
+                      }))
+                    }
+                    placeholder="Files, e.g. src/App.tsx, src/lib/foo.ts"
+                    aria-label={`Target files for ${row.agent}`}
+                    spellCheck={false}
+                  />
+                </label>
+                <span>{statusLabel[row.status]}</span>
+                {parsed.invalid.length > 0 && (
+                  <small>Ignored invalid paths: {parsed.invalid.join(", ")}</small>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </details>
       <div className="orchestration-setup">
         <div className="orchestration-profiles">
           <label htmlFor="worktree-setup-profile">Profile</label>
