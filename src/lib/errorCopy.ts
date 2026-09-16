@@ -29,6 +29,7 @@ const FRIENDLY_PATTERNS: ErrorPattern[] = [
   [/^terminal_.* failed\b/i, "The terminal action could not be completed."],
   [/^subagent_.* failed\b/i, "The sub-agent action could not be completed."],
   [/^window action failed\b/i, "The window action could not be completed."],
+  [/^native browser .* failed\b/i, "The native browser could not be opened."],
   [/^retry failed\b/i, "The previous message could not be retried."],
   [/^restore failed\b/i, "The recovery action could not be completed."],
   [/^git (?:status|diff|stage|restore|commit|push|create_pr).*failed\b/i, "The Git action could not be completed."],

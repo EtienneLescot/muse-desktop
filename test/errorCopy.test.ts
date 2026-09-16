@@ -32,5 +32,9 @@ describe("M0-11 generated error copy", () => {
       userFacingError("window action failed: native window unavailable"),
       "The window action could not be completed. — native window unavailable",
     );
+    assert.equal(
+      userFacingError("native browser open failed: invalid URL"),
+      "The native browser could not be opened. — invalid URL",
+    );
   });
 });

@@ -5,6 +5,8 @@ import {
   type BrowserAnnotation,
   type BrowserAppPermission,
 } from "../lib/browserAnnotate";
+import { isTauriRuntime } from "../lib/env";
+import { userFacingError } from "../lib/errorCopy";
 
 interface Props {
   annotations: BrowserAnnotation[];
@@ -36,6 +38,7 @@ export function BrowserPanel({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [frameKey, setFrameKey] = useState(0);
   const [frameError, setFrameError] = useState<string | null>(null);
+  const [nativeBrowserStatus, setNativeBrowserStatus] = useState<string | null>(null);
   const [selection, setSelection] = useState("");
   const [comment, setComment] = useState("");
   const [appName, setAppName] = useState("");
@@ -70,6 +73,7 @@ export function BrowserPanel({
     setUrl(next);
     setCurrentUrl(next);
     setFrameError(null);
+    setNativeBrowserStatus(null);
     setFrameKey((key) => key + 1);
   };
 
@@ -86,6 +90,28 @@ export function BrowserPanel({
     setHistoryIndex(nextIndex);
     navigate(history[nextIndex], false);
   };
+
+  async function openNativeBrowser(): Promise<void> {
+    if (!renderable || normalized === null) return;
+    if (!isTauriRuntime()) {
+      setNativeBrowserStatus("The native browser is available in the desktop build.");
+      return;
+    }
+    setNativeBrowserStatus("Opening native browser…");
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("open_native_browser", { url: normalized });
+      setNativeBrowserStatus("Opened in the Muse Browser window.");
+    } catch (error) {
+      setNativeBrowserStatus(
+        userFacingError(
+          `native browser open failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+    }
+  }
 
   const toggleApp = (app: string, allowed: boolean) => {
     onSetPermission(app, allowed);
@@ -122,8 +148,22 @@ export function BrowserPanel({
           <button type="button" onClick={goBack} disabled={historyIndex <= 0} aria-label="Back">←</button>
           <button type="button" onClick={goForward} disabled={historyIndex < 0 || historyIndex >= history.length - 1} aria-label="Forward">→</button>
           <button type="button" onClick={() => renderable && setFrameKey((key) => key + 1)} disabled={!renderable}>Reload</button>
+          <button
+            type="button"
+            className="browser-native-open"
+            onClick={() => void openNativeBrowser()}
+            disabled={!renderable}
+            title="Open this page in a native Muse Browser window"
+          >
+            Open native
+          </button>
           {normalized && <span className="browser-current-url" title={normalized}>{normalized}</span>}
         </div>
+        {nativeBrowserStatus && (
+          <div className="muted browser-native-status" role="status" aria-live="polite">
+            {nativeBrowserStatus}
+          </div>
+        )}
         {url.trim().length > 0 && addressNormalized === null && (
           <div className="muted" role="note">
             That URL can&apos;t be shown here (http/https only).

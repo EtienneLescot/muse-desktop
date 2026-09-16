@@ -4614,6 +4614,21 @@ body.dark .composer textarea::placeholder {
   opacity: 0.45;
 }
 
+.browser-native-open {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line)) !important;
+  color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg)) !important;
+}
+
+.browser-native-open:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg)) !important;
+}
+
+.browser-native-status {
+  margin-top: var(--space-1);
+  font-size: 0.75rem;
+}
+
 .browser-nav-row {
   display: flex;
   align-items: center;

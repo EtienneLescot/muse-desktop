@@ -37,7 +37,7 @@ use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager, RunEvent, State};
+use tauri::{AppHandle, Manager, RunEvent, State, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::mpsc;
@@ -329,6 +329,72 @@ fn redact_diagnostic(input: &str) -> String {
         }
     }
     truncate(&out, DIAGNOSTIC_LINE_LIMIT)
+}
+
+const NATIVE_BROWSER_LABEL: &str = "muse-browser";
+const MAX_BROWSER_URL_CHARS: usize = 4096;
+
+/// Normalize and validate a URL before it is handed to a native webview.
+/// The renderer performs the same normalization for its preview, but this
+/// boundary must also protect direct or stale IPC callers.
+fn validate_native_browser_url(raw: &str) -> Result<Url, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("browser URL must not be empty".to_string());
+    }
+    if trimmed.chars().count() > MAX_BROWSER_URL_CHARS {
+        return Err(format!(
+            "browser URL is limited to {MAX_BROWSER_URL_CHARS} characters"
+        ));
+    }
+    let candidate = if trimmed.contains("://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{trimmed}")
+    };
+    let url = candidate
+        .parse::<Url>()
+        .map_err(|_| "browser URL is not valid".to_string())?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("only http and https URLs can open in the native browser".to_string());
+    }
+    if url.host_str().is_none() {
+        return Err("browser URL must include a host".to_string());
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("browser URLs with embedded credentials are not allowed".to_string());
+    }
+    Ok(url)
+}
+
+/// Open a verified URL in one dedicated native webview window. Reusing the
+/// label keeps the browser surface single-instance and predictable.
+#[tauri::command]
+async fn open_native_browser(app: AppHandle, url: String) -> Result<String, String> {
+    let parsed = validate_native_browser_url(&url)?;
+    if let Some(window) = app.get_webview_window(NATIVE_BROWSER_LABEL) {
+        window
+            .navigate(parsed)
+            .map_err(|e| format!("could not navigate native browser: {e}"))?;
+        window
+            .show()
+            .map_err(|e| format!("could not show native browser: {e}"))?;
+        window
+            .set_focus()
+            .map_err(|e| format!("could not focus native browser: {e}"))?;
+        return Ok("reused".to_string());
+    }
+    WebviewWindowBuilder::new(
+        &app,
+        NATIVE_BROWSER_LABEL,
+        WebviewUrl::External(parsed),
+    )
+    .title("Muse Browser")
+    .inner_size(1180.0, 800.0)
+    .min_inner_size(720.0, 480.0)
+    .build()
+    .map_err(|e| format!("could not open native browser: {e}"))?;
+    Ok("opened".to_string())
 }
 
 /// Reasoning items are streamed through the same `item/delta` notification as
@@ -3226,6 +3292,49 @@ mod tests {
     }
 
     #[test]
+    fn native_browser_url_accepts_http_https_and_bare_hosts() {
+        assert_eq!(
+            validate_native_browser_url("https://example.com/docs")
+                .unwrap()
+                .scheme(),
+            "https"
+        );
+        assert_eq!(
+            validate_native_browser_url("example.com/docs")
+                .unwrap()
+                .as_str(),
+            "https://example.com/docs"
+        );
+        assert_eq!(
+            validate_native_browser_url("http://localhost:4173/")
+                .unwrap()
+                .host_str(),
+            Some("localhost")
+        );
+    }
+
+    #[test]
+    fn native_browser_url_rejects_non_web_schemes_credentials_and_invalid_hosts() {
+        for value in [
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "data:text/plain,hello",
+            "https://user:password@example.com/",
+            "https://",
+            "   ",
+        ] {
+            assert!(validate_native_browser_url(value).is_err(), "accepted {value}");
+        }
+    }
+
+    #[test]
+    fn native_browser_url_is_bounded() {
+        let value = format!("https://example.com/{}", "a".repeat(MAX_BROWSER_URL_CHARS));
+        let error = validate_native_browser_url(&value).unwrap_err();
+        assert!(error.contains("limited"));
+    }
+
+    #[test]
     fn input_payload_drops_bad_modes_but_keeps_good() {
         let mut p = sample_prompt();
         p["questions"][0]["selection"]["mode"] = json!("ranked");
@@ -3434,6 +3543,7 @@ fn main() {
             subagent_drilldown,
             check_input_reached,
             collect_diagnostics,
+            open_native_browser,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build muse-desktop app")

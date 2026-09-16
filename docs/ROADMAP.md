@@ -468,7 +468,7 @@ Ces écarts restent visibles pour une ambition de parité complète. Leur faisab
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
-| M4-01 | Naviguer dans un vrai navigateur intégré | À définir | Partielle | Locale | Unitaire | Navigation URL normalisée, historique précédent/suivant, rechargement et erreurs d'iframe livrés ; remplacer l'iframe limitée par une surface native avec sessions maîtrisées |
+| M4-01 | Naviguer dans un vrai navigateur intégré | Adapté | Présente | Partielle | Unitaire | Navigation URL normalisée, historique précédent/suivant, rechargement et erreurs d'iframe livrés ; action **Open native** ouvre une webview Tauri dédiée avec validation http(s) et réutilisation de fenêtre ; cookies, téléchargements et sessions maîtrisées restent à qualifier |
 | M4-02 | Annoter visuellement une page et transmettre le contexte | À définir | Partielle | Locale | Unitaire | Ancre URL normalisée et sélection textuelle livrées ; capture réelle, région/iframe/zoom et contexte visuel restent à concevoir |
 | M4-03 | Faire piloter le navigateur par Muse | À définir | Absente | Absente | À faire | Observation/actions et permissions ; scénario web complet reproductible |
 | M4-04 | Faire piloter une application desktop | À définir | Absente | Absente | À faire | Runtime par OS et consentement effectif ; exécution interrompable et attribution claire des actions |
@@ -482,9 +482,9 @@ Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux]
 
 ### Livraison M4-01/M4-02 — navigation intégrée bornée
 
-- **Navigation :** BrowserPanel normalise l'adresse, conserve un historique local précédent/suivant, expose Reload et affiche l'URL réellement chargée. Les erreurs de protocole et de chargement restent dans la surface du navigateur.
+- **Navigation :** BrowserPanel normalise l'adresse, conserve un historique local précédent/suivant, expose Reload et affiche l'URL réellement chargée. Les erreurs de protocole et de chargement restent dans la surface du navigateur. **Open native** ouvre désormais une webview Tauri dédiée (`muse-browser`) dans le build desktop ; la commande native revalide le schéma, l'hôte, l'absence de credentials et la taille de l'URL, puis réutilise la fenêtre existante.
 - **Annotations :** les commentaires sont ancrés à l'URL normalisée courante ; changer de page ne mélange plus les notes des autres pages.
-- **Limites :** l'iframe sandboxée ne fournit ni cookies/onglets d'un navigateur complet ni capture visuelle. Le remplacement par une webview dédiée et la sélection réelle restent le prochain lot M4.
+- **Limites :** l'iframe sandboxée reste le repli du web preview et ne fournit ni cookies/onglets d'un navigateur complet ni capture visuelle. Les sessions/cookies, téléchargements, capture visuelle et qualification WebView2 restent à qualifier. Décision : `docs/plans/2026-09-17-native-browser-surface.md`.
 
 ### Livraison M4-09 — bundle Windows x64 (première passe)
 
