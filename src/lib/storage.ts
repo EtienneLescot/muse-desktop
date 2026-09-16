@@ -196,6 +196,17 @@ export interface StorageImportResult {
   errors: string[];
 }
 
+export interface StorageSnapshotEntry {
+  key: string;
+  existing: boolean;
+  parseError: boolean;
+}
+
+export interface StorageSnapshotPreview {
+  entries: StorageSnapshotEntry[];
+  errors: string[];
+}
+
 export interface StorageMigrationResult {
   migrated: number;
   skipped: number;
@@ -203,6 +214,60 @@ export interface StorageMigrationResult {
 }
 
 export const STORAGE_MIGRATION_KEY = "muse-desktop.storage-migrations.v1";
+
+/**
+ * Validate a recovery snapshot and inspect which namespaced keys already
+ * exist. Values stay in the serialized snapshot; the preview only exposes
+ * key names and whether restoring would replace an existing entry.
+ */
+export function inspectStorageSnapshot(
+  serialized: string,
+  prefix = "muse-desktop.",
+): StorageSnapshotPreview {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return { entries: [], errors: ["Recovery snapshot is not valid JSON."] };
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return { entries: [], errors: ["Recovery snapshot must be a JSON object."] };
+  }
+  const snapshot = parsed as Record<string, unknown>;
+  if (snapshot.format !== "muse-desktop-storage" || snapshot.version !== 1) {
+    return { entries: [], errors: ["Unsupported recovery snapshot format or version."] };
+  }
+  const values = snapshot.entries;
+  if (typeof values !== "object" || values === null || Array.isArray(values)) {
+    return { entries: [], errors: ["Recovery snapshot has no valid entries map."] };
+  }
+  const entries: StorageSnapshotEntry[] = [];
+  const errors: string[] = [];
+  const store = storage();
+  if (store === null) {
+    record(prefix, "unavailable", "local storage is unavailable");
+    return { entries: [], errors: ["Local storage is unavailable."] };
+  }
+  for (const [key, value] of Object.entries(values as Record<string, unknown>)) {
+    if (!key.startsWith(prefix) || key.length === prefix.length) {
+      errors.push(`Skipped non-namespaced key: ${key}`);
+      continue;
+    }
+    let existing = false;
+    try {
+      existing = store.getItem(key) !== null;
+    } catch (error) {
+      record(key, "unavailable", `local storage read failed: ${String(error)}`);
+      errors.push(`Could not inspect existing key: ${key}`);
+      continue;
+    }
+    const parseError = typeof value === "object" && value !== null &&
+      (value as Record<string, unknown>).parseError === true &&
+      typeof (value as Record<string, unknown>).raw === "string";
+    entries.push({ key, existing, parseError });
+  }
+  return { entries, errors };
+}
 
 /**
  * Legacy aliases from the pre-namespaced prototype. Migration is deliberately
@@ -304,6 +369,7 @@ export function importStorageSnapshot(
   serialized: string,
   prefix = "muse-desktop.",
   overwrite = false,
+  selectedKeys?: readonly string[],
 ): StorageImportResult {
   const result: StorageImportResult = { imported: 0, skipped: 0, errors: [] };
   let parsed: unknown;
@@ -328,10 +394,15 @@ export function importStorageSnapshot(
     record(prefix, "unavailable", "local storage is unavailable");
     return { ...result, errors: ["Local storage is unavailable."] };
   }
+  const selected = selectedKeys === undefined ? null : new Set(selectedKeys);
   for (const [key, value] of Object.entries(entries as Record<string, unknown>)) {
     if (!key.startsWith(prefix) || key.length === prefix.length) {
       result.skipped += 1;
       result.errors.push(`Skipped non-namespaced key: ${key}`);
+      continue;
+    }
+    if (selected !== null && !selected.has(key)) {
+      result.skipped += 1;
       continue;
     }
     let encoded: string;

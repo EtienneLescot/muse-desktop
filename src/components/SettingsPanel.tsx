@@ -37,9 +37,11 @@ import { userFacingError } from "../lib/errorCopy";
 import {
   consumeStorageIssues,
   exportStorageSnapshot,
+  inspectStorageSnapshot,
   importStorageSnapshot,
   migrateLegacyStorage,
   type StorageIssue,
+  type StorageSnapshotPreview,
 } from "../lib/storage";
 
 interface Props {
@@ -100,6 +102,11 @@ export function SettingsPanel({
   const [storageIssues, setStorageIssues] = useState<StorageIssue[]>(() =>
     consumeStorageIssues(),
   );
+  const [recoveryPreview, setRecoveryPreview] = useState<{
+    serialized: string;
+    snapshot: StorageSnapshotPreview;
+  } | null>(null);
+  const [selectedRecoveryKeys, setSelectedRecoveryKeys] = useState<string[]>([]);
 
   const effective = effectiveSandboxMode(sandbox);
 
@@ -160,27 +167,60 @@ export function SettingsPanel({
     }
   }
 
-  async function importLocalData(file: File): Promise<void> {
+  async function inspectLocalData(file: File): Promise<void> {
     try {
-      let imported = importStorageSnapshot(await file.text());
-      if (imported.skipped > 0 && window.confirm(
-        `${imported.skipped} existing or invalid entries were skipped. Replace existing Muse data with this snapshot?`,
-      )) {
-        imported = importStorageSnapshot(await file.text(), "muse-desktop.", true);
+      const serialized = await file.text();
+      const snapshot = inspectStorageSnapshot(serialized);
+      if (snapshot.entries.length === 0) {
+        setRecoveryPreview(null);
+        setSelectedRecoveryKeys([]);
+        setExportStatus(snapshot.errors.join(" ") || "No recoverable Muse entries found.");
+        return;
       }
-      const issues = consumeStorageIssues();
-      if (issues.length > 0) setStorageIssues((previous) => [...previous, ...issues]);
+      setRecoveryPreview({ serialized, snapshot });
+      setSelectedRecoveryKeys(snapshot.entries.filter((entry) => !entry.existing).map((entry) => entry.key));
       setExportStatus(
-        imported.errors.length > 0
-          ? `Recovery restored ${imported.imported} entries with ${imported.errors.length} warnings.`
-          : `Recovery restored ${imported.imported} entries. Reloading Muse…`,
+        snapshot.errors.length > 0
+          ? `Recovery snapshot ready with ${snapshot.errors.length} warnings. Choose entries to restore.`
+          : "Recovery snapshot ready. Choose entries to restore.",
       );
-      if (imported.imported > 0) window.setTimeout(() => window.location.reload(), 500);
     } catch (error) {
       setExportStatus(userFacingError(`Recovery import failed: ${String(error)}`));
     } finally {
       if (importInput.current) importInput.current.value = "";
     }
+  }
+
+  function restoreSelectedData(): void {
+    if (recoveryPreview === null) return;
+    if (selectedRecoveryKeys.length === 0) {
+      setExportStatus("Choose at least one entry to restore.");
+      return;
+    }
+    const imported = importStorageSnapshot(
+      recoveryPreview.serialized,
+      "muse-desktop.",
+      true,
+      selectedRecoveryKeys,
+    );
+    const issues = consumeStorageIssues();
+    if (issues.length > 0) setStorageIssues((previous) => [...previous, ...issues]);
+    setExportStatus(
+      imported.errors.length > 0
+        ? `Recovery restored ${imported.imported} entries with ${imported.errors.length} warnings.`
+        : `Recovery restored ${imported.imported} entries. Reloading Muse…`,
+    );
+    if (imported.imported > 0) {
+      setRecoveryPreview(null);
+      setSelectedRecoveryKeys([]);
+      window.setTimeout(() => window.location.reload(), 500);
+    }
+  }
+
+  function cancelRecovery(): void {
+    setRecoveryPreview(null);
+    setSelectedRecoveryKeys([]);
+    setExportStatus("Recovery restore cancelled.");
   }
 
   function migrateLocalData(): void {
@@ -379,12 +419,53 @@ export function SettingsPanel({
             hidden
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
-              if (file) void importLocalData(file);
+              if (file) void inspectLocalData(file);
             }}
           />
         </div>
         {exportStatus !== null && (
           <p className="settings-note" role="status">{exportStatus}</p>
+        )}
+        {recoveryPreview !== null && (
+          <div className="settings-recovery" role="group" aria-labelledby="settings-recovery-title">
+            <div className="settings-recovery-head">
+              <strong id="settings-recovery-title">Choose data to restore</strong>
+              <span className="muted">{recoveryPreview.snapshot.entries.length} entries</span>
+            </div>
+            <p className="settings-note">
+              New entries are selected by default. Existing entries stay unchecked until you explicitly choose to replace them.
+            </p>
+            <div className="settings-recovery-list">
+              {recoveryPreview.snapshot.entries.map((entry) => (
+                <label key={entry.key} className="settings-recovery-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedRecoveryKeys.includes(entry.key)}
+                    onChange={() => setSelectedRecoveryKeys((current) =>
+                      current.includes(entry.key)
+                        ? current.filter((key) => key !== entry.key)
+                        : [...current, entry.key])}
+                  />
+                  <span>
+                    <code>{entry.key}</code>
+                    <small>
+                      {entry.existing ? "Replace existing" : "Add new"}
+                      {entry.parseError ? " · raw value" : ""}
+                    </small>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="settings-recovery-actions">
+              <button type="button" className="primary" onClick={restoreSelectedData}>
+                Restore selected
+              </button>
+              <button type="button" onClick={cancelRecovery}>Cancel</button>
+            </div>
+            {recoveryPreview.snapshot.errors.length > 0 && (
+              <small className="muted">{recoveryPreview.snapshot.errors.join(" · ")}</small>
+            )}
+          </div>
         )}
         {storageIssues.length > 0 && (
           <div className="settings-storage-warning" role="status">

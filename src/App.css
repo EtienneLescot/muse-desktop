@@ -3191,6 +3191,74 @@ body.dark .composer textarea::placeholder {
   color: var(--muted);
 }
 
+.settings-recovery {
+  border: 1px solid color-mix(in srgb, var(--blue) 46%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-recovery-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.settings-recovery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 190px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--blue) 65%, var(--line)) transparent;
+}
+
+.settings-recovery-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 6px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.settings-recovery-item:hover,
+.settings-recovery-item:focus-within {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+}
+
+.settings-recovery-item > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-recovery-item code {
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.settings-recovery-item small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.settings-recovery-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .capability-line {
   display: inline-flex;
   align-items: center;
