@@ -1050,6 +1050,52 @@ async fn git_diff(
         .map_err(|e| format!("git diff task failed: {e}"))?
 }
 
+/// Stage selected repository-relative files after checking the status and
+/// optional diff snapshot observed by the Review panel.
+#[tauri::command]
+async fn git_stage(
+    state: State<'_, AppState>,
+    session_id: String,
+    paths: Vec<String>,
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+    expected_patch: Option<String>,
+) -> Result<git::GitStatusSnapshot, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || {
+        git::stage(&root, &paths, expected_head, expected_status, expected_patch)
+    })
+    .await
+    .map_err(|e| format!("git stage task failed: {e}"))?
+}
+
+/// Restore selected files from the index (`staged`) or worktree (`unstaged`).
+/// The backend refuses untracked deletion and stale observations.
+#[tauri::command]
+async fn git_restore(
+    state: State<'_, AppState>,
+    session_id: String,
+    paths: Vec<String>,
+    scope: String,
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+    expected_patch: Option<String>,
+) -> Result<git::GitStatusSnapshot, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || {
+        git::restore(
+            &root,
+            &paths,
+            &scope,
+            expected_head,
+            expected_status,
+            expected_patch,
+        )
+    })
+    .await
+    .map_err(|e| format!("git restore task failed: {e}"))?
+}
+
 /// Build the frontend `input_request` payload from a `userInput/requested`
 /// notification. Pure (unit-tested): questions forwarded verbatim (capped),
 /// ids threaded through for the answer round-trip.
@@ -2346,6 +2392,8 @@ fn main() {
             check_scope,
             git_status,
             git_diff,
+            git_stage,
+            git_restore,
             list_models,
             set_model,
             compact_session,

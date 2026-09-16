@@ -156,6 +156,8 @@ export default function App() {
     gitReview,
     refreshGitStatus,
     loadGitDiff,
+    stageGitFiles,
+    restoreGitFiles,
     browserAnnotations,
     addBrowserAnnotation,
     removeBrowserAnnotation,
@@ -960,6 +962,8 @@ export default function App() {
                           review={gitReview(active.session_id)}
                           onRefreshStatus={refreshGitStatus}
                           onLoadDiff={loadGitDiff}
+                          onStageFiles={stageGitFiles}
+                          onRestoreFiles={restoreGitFiles}
                           onSendComment={async (anchor: ReviewAnchor, body: string) => {
                             const result = await sendInput(
                               active.session_id,

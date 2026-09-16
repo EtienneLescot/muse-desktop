@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   shortRepoName,
   statusCode,
+  type GitMutationExpectation,
   type GitDiffScope,
   type GitReviewState,
   type GitStatusSnapshot,
@@ -23,6 +24,17 @@ interface Props {
     scope: GitDiffScope,
     baseRef?: string,
   ) => Promise<GitReviewState["diff"]>;
+  onStageFiles: (
+    sessionId: string,
+    paths: string[],
+    expected: GitMutationExpectation,
+  ) => Promise<GitStatusSnapshot | null>;
+  onRestoreFiles: (
+    sessionId: string,
+    paths: string[],
+    scope: "staged" | "unstaged",
+    expected: GitMutationExpectation,
+  ) => Promise<GitStatusSnapshot | null>;
   onSendComment: (anchor: ReviewAnchor, body: string) => Promise<boolean>;
 }
 
@@ -41,6 +53,8 @@ export function ReviewPanel({
   review,
   onRefreshStatus,
   onLoadDiff,
+  onStageFiles,
+  onRestoreFiles,
   onSendComment,
 }: Props) {
   const [scope, setScope] = useState<GitDiffScope>("unstaged");
@@ -51,6 +65,9 @@ export function ReviewPanel({
   const [commentError, setCommentError] = useState<string | null>(null);
   const [commentSending, setCommentSending] = useState(false);
   const [commentSent, setCommentSent] = useState(false);
+  const [mutationBusy, setMutationBusy] = useState<"stage" | "unstage" | "discard" | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   useEffect(() => {
     setSelectedPath(null);
@@ -58,6 +75,9 @@ export function ReviewPanel({
     setCommentDraft("");
     setCommentError(null);
     setCommentSent(false);
+    setMutationBusy(null);
+    setMutationError(null);
+    setConfirmDiscard(false);
     setScope("unstaged");
     setBaseRef("");
     void onRefreshStatus(sessionId);
@@ -82,6 +102,11 @@ export function ReviewPanel({
     () => selectedRows.find((row) => row.key === selectedLineKey) ?? null,
     [selectedRows, selectedLineKey],
   );
+  const selectedStatus = useMemo(
+    () =>
+      review.status?.files.find((file) => file.path === selectedPath) ?? null,
+    [review.status, selectedPath],
+  );
 
   useEffect(() => {
     const first = review.diff?.files[0]?.path ?? null;
@@ -92,6 +117,8 @@ export function ReviewPanel({
     setSelectedLineKey(null);
     setCommentError(null);
     setCommentSent(false);
+    setMutationError(null);
+    setConfirmDiscard(false);
   }, [selectedPath, review.diff?.observedAt]);
 
   async function loadDiff(): Promise<void> {
@@ -152,6 +179,44 @@ export function ReviewPanel({
       setCommentSent(true);
     } finally {
       setCommentSending(false);
+    }
+  }
+
+  function expectationFor(scope: "staged" | "unstaged"): GitMutationExpectation | null {
+    if (!review.status) return null;
+    const patch =
+      review.diff?.scope === scope && review.diff.patchTruncated === false
+        ? review.diff.patch
+        : null;
+    return {
+      head: review.status.head,
+      statusFingerprint: review.status.fingerprint,
+      patch,
+    };
+  }
+
+  async function runMutation(action: "stage" | "unstage" | "discard"): Promise<void> {
+    if (!selectedStatus || !review.status) return;
+    const scope = action === "stage" ? "unstaged" : action === "unstage" ? "staged" : "unstaged";
+    const expected = expectationFor(scope);
+    if (!expected) return;
+    setMutationBusy(action);
+    setMutationError(null);
+    try {
+      const next =
+        action === "stage"
+          ? await onStageFiles(sessionId, [selectedStatus.path], expected)
+          : await onRestoreFiles(sessionId, [selectedStatus.path], scope, expected);
+      if (next === null) {
+        setMutationError("Action not applied. Refresh the repository and try again.");
+        return;
+      }
+      setSelectedLineKey(null);
+      setCommentDraft("");
+      setCommentSent(false);
+      setConfirmDiscard(false);
+    } finally {
+      setMutationBusy(null);
     }
   }
 
@@ -254,6 +319,66 @@ export function ReviewPanel({
               {review.loading ? "Loading…" : "Load diff"}
             </button>
           </div>
+
+          {selectedStatus !== null && (
+            <div className="review-file-actions" aria-label="File actions">
+              {selectedStatus.unstaged || selectedStatus.untracked ? (
+                <button
+                  type="button"
+                  className="review-action"
+                  disabled={mutationBusy !== null}
+                  onClick={() => void runMutation("stage")}
+                >
+                  {mutationBusy === "stage" ? "Staging…" : "Stage file"}
+                </button>
+              ) : null}
+              {selectedStatus.staged ? (
+                <button
+                  type="button"
+                  className="review-action"
+                  disabled={mutationBusy !== null}
+                  onClick={() => void runMutation("unstage")}
+                >
+                  {mutationBusy === "unstage" ? "Unstaging…" : "Unstage file"}
+                </button>
+              ) : null}
+              {selectedStatus.unstaged && !selectedStatus.untracked && !confirmDiscard ? (
+                <button
+                  type="button"
+                  className="review-action review-action-danger"
+                  disabled={mutationBusy !== null}
+                  onClick={() => setConfirmDiscard(true)}
+                >
+                  Discard changes…
+                </button>
+              ) : null}
+              {selectedStatus.unstaged && !selectedStatus.untracked && confirmDiscard ? (
+                <>
+                  <span className="review-confirm-label">Discard this file?</span>
+                  <button
+                    type="button"
+                    className="review-action review-action-danger"
+                    disabled={mutationBusy !== null}
+                    onClick={() => void runMutation("discard")}
+                  >
+                    {mutationBusy === "discard" ? "Discarding…" : "Confirm discard"}
+                  </button>
+                  <button
+                    type="button"
+                    className="review-action"
+                    disabled={mutationBusy !== null}
+                    onClick={() => setConfirmDiscard(false)}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : null}
+              {selectedStatus.untracked && (
+                <span className="muted review-action-note">Untracked files are never deleted here.</span>
+              )}
+              {mutationError && <span className="review-action-error" role="alert">{mutationError}</span>}
+            </div>
+          )}
 
           {review.diff !== null && (
             <div className="review-diff" aria-label={`${review.diff.scope} diff`}>

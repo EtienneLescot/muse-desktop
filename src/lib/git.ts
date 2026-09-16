@@ -22,6 +22,7 @@ export interface GitStatusSnapshot {
   upstream: string | null;
   ahead: number;
   behind: number;
+  fingerprint: string;
   files: GitStatusFile[];
   observedAt: number;
 }
@@ -59,6 +60,14 @@ export interface GitReviewState {
   diff: GitDiffSnapshot | null;
   loading: boolean;
   error: string | null;
+}
+
+/** Exact observation sent with a mutating Review action. */
+export interface GitMutationExpectation {
+  head: string | null;
+  statusFingerprint: string;
+  /** Null when the displayed patch was bounded and cannot be compared safely. */
+  patch: string | null;
 }
 
 export const EMPTY_GIT_REVIEW: GitReviewState = {
