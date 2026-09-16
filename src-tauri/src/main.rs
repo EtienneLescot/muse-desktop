@@ -948,7 +948,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
             emit(app, "status", sid, terminal, detail);
         }
         "turn/retracted" | "turn/unqueued" | "turn/retryScheduled" => {
-            emit(app, "status", sid, method, String::new())
+            emit(app, "status", sid, method, p.to_string())
         }
         "userInput/requested" => {
             // The turn suspends until answered: surface as an answerable
@@ -1995,6 +1995,31 @@ async fn send_input(
     Ok(result)
 }
 
+/// Reclaim one queued turn before the host launches it. This is deliberately
+/// separate from `cancel_session`: an interrupt targets the running turn,
+/// while an unqueue only wins the queued-turn race and never upgrades to a
+/// cancellation after launch.
+#[tauri::command]
+async fn unqueue_turn(
+    state: State<'_, AppState>,
+    session_id: String,
+    turn_id: String,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let turn_id = require_non_empty(&turn_id, "turnId")?;
+    let client = session_client(&state, &session_id)?;
+    client
+        .request(
+            "turn/unqueue",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": session_id,
+                "turnId": turn_id,
+            }),
+        )
+        .await
+}
+
 /// Inject guidance into the currently running turn without creating a new
 /// queued turn. The renderer supplies the turn id it observed in the latest
 /// admission/start acknowledgement; the host rejects stale targets.
@@ -2945,6 +2970,7 @@ fn main() {
             read_session_history,
             restore_sessions,
             send_input,
+            unqueue_turn,
             steer_input,
             approve,
             answer_input,

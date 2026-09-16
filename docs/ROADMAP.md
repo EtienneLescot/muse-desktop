@@ -151,7 +151,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-07 | Consulter les vrais fichiers du projet | Adapté | Présente | Câblée | Intégration | Listing paresseux et lecture bornée du workspace livrés ; restent ouverture native, watcher/état obsolète et qualification E2E sur gros dépôts |
 | M1-08 | Ajouter fichiers et images à une demande | Adapté | Présente | Câblée | Intégration | Texte borné et images base64 sont envoyés comme parts MSP réelles ; restent validation live sur les modèles image, dimensions et reprise d’un fichier disparu |
 | M1-09 | Créer une branche de conversation fidèle | Adapté | Présente | Câblée | Intégration | Fork serveur depuis le dernier tour terminé livré ; restent le sélecteur d’une ancre MSP précise, qualification du point invalide et reprise live |
-| M1-10 | Réorienter une exécution ou mettre un message en attente | Adapté | Partielle | Locale | Unitaire | Queue MSP par défaut et disposition `queued`/`steered` visibles ; restent le pilotage explicite, unqueue et ordre persistant |
+| M1-10 | Réorienter une exécution ou mettre un message en attente | Adapté | Présente | Câblée | Unitaire | Queue MSP par défaut et disposition `queued`/`steered` visibles ; les tours admis en queue restent listés dans la conversation et peuvent être retirés avant lancement via `turn/unqueue`. Reste : ordre persistant et qualification live |
 | M1-11 | Choisir un modèle disponible et suivre le contexte | Adapté | Présente | Câblée | Unitaire | Consolider tests live list/setModel/compact, erreurs et persistance ; fallback explicitement non live ; état confirmé par le moteur |
 | M1-12 | Retrouver et organiser les conversations | Adapté | Présente | Câblée | Unitaire | Recherche, épinglage, ordre manuel et indicateurs non lus persistants livrés ; la virtualisation des listes reste conditionnée aux mesures de performance |
 | M1-13 | Lire une longue conversation confortablement | Adapté | Présente | Partielle | UI | Containment de rendu et scroll instantané livrés pour les longues listes ; reste à mesurer une session native de 2 000 entrées, mémoire/latence et décider d'une fenêtre virtuelle réelle si nécessaire |
@@ -238,7 +238,8 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Contrat moteur :** le schéma stable définit `turn/start.ifBusy` avec `queue` comme comportement par défaut et renvoie une disposition d’admission `started`, `queued` ou `steered`.
 - **UX :** après l’accusé de réception, Muse ajoute une information discrète dans la conversation lorsque la demande est mise en file ou absorbée par le tour courant ; l’utilisateur ne voit plus un simple état `Thinking` sans explication.
 - **Transport :** les notifications `turn/started` conservent maintenant `turnId` et `commandId` dans leur payload relayé, afin que le futur pilotage puisse cibler le bon tour sans course.
-- **Reste :** `turn/steer` explicite, `turn/unqueue`, annulation ciblée et une file persistante avec actions UI sont à câbler après qualification live des capacités du modèle.
+- **M1-10a — livré** : l'accusé `queued` conserve `turnId`, le fil affiche les messages en attente dans l'ordre et l'action **Remove from queue** appelle `turn/unqueue`. L'événement `turn/started` ou `turn/unqueued` retire la carte ; un échec d'admission laisse la file visible. La queue reste en mémoire de session et n'est pas rejouée après relance tant que le host ne fournit pas de snapshot de queue.
+- **Reste :** ordre persistant et qualification live du reclaim après course lancement/retrait.
 
 ### Livraison M1-12 — recherche et épinglage des conversations
 

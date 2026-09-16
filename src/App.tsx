@@ -66,6 +66,7 @@ export default function App() {
     activeLog,
     approvals,
     activeApprovals,
+    queuedTurns,
     inputRequests,
     activeInputRequests,
     workspace,
@@ -96,6 +97,7 @@ export default function App() {
     connectedIds,
     sendInput,
     steerInput,
+    unqueueTurn,
     pendingSends,
     retrySend,
     discardSend,
@@ -956,6 +958,28 @@ export default function App() {
                     }}
                   />
 
+                  {queuedTurns.length > 0 && (
+                    <section className="queued-turns" aria-label="Queued messages">
+                      <div className="queued-turns-head">
+                        <strong>Queued messages</strong>
+                        <span className="muted">They will run in order</span>
+                      </div>
+                      {queuedTurns.map((turn) => (
+                        <div className="queued-turn" key={turn.turn_id}>
+                          <span className="queued-turn-text" title={turn.text}>
+                            {turn.text.length > 120 ? `${turn.text.slice(0, 120)}…` : turn.text}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void unqueueTurn(active.session_id, turn.turn_id)}
+                            title="Remove this message from the host queue"
+                          >
+                            Remove from queue
+                          </button>
+                        </div>
+                      ))}
+                    </section>
+                  )}
                   {activePendingSends.map((entry) => (
                     <div
                       className="pending-send"

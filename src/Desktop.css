@@ -160,6 +160,41 @@
 .pending-send button {
   flex: none;
 }
+/* M1-10: queued turns stay visible and can be reclaimed before launch. */
+.queued-turns {
+  margin: 0 32px 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+.queued-turns-head,
+.queued-turn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.queued-turns-head {
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+.queued-turn {
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+.queued-turn-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.queued-turn button {
+  flex: none;
+  font-size: 11px;
+}
 .task-heading {
   padding: 30px 32px 15px;
   flex: none;

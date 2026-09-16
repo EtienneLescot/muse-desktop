@@ -32,6 +32,7 @@ export const MSP_METHODS_SENT: MspMethod[] = [
   "session/compact",
   "session/setModel",
   "turn/start",
+  "turn/unqueue",
   "turn/interrupt",
   "session/setApprovalMode",
   "approval/decide",

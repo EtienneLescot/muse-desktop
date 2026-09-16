@@ -596,6 +596,14 @@ export interface ApprovalRequest {
   choices: ApprovalChoice[];
 }
 
+/** A turn admitted to the host queue and still reclaimable. */
+export interface QueuedTurn {
+  session_id: string;
+  turn_id: string;
+  text: string;
+  createdAt: number;
+}
+
 interface UseMuseSessions {
   sessions: MuseSession[];
   activeId: string | null;
@@ -603,6 +611,8 @@ interface UseMuseSessions {
   activeLog: LogEntry[];
   approvals: ApprovalRequest[];
   activeApprovals: ApprovalRequest[];
+  /** M1-10: queued turns that can still be reclaimed before launch. */
+  queuedTurns: QueuedTurn[];
   /** Default folder for new threads (persisted); each thread keeps its own. */
   workspace: string | null;
   /** Change the default folder for new threads (not a global lock). */
@@ -677,6 +687,8 @@ interface UseMuseSessions {
     text: string,
     inputParts?: TurnInputPart[],
   ) => Promise<SendResult>;
+  /** Reclaim one queued turn; never interrupts a running turn. */
+  unqueueTurn: (sessionId: string, turnId: string) => Promise<boolean>;
   /** Failed outgoing messages across sessions (retryable, durable). */
   pendingSends: OutboxEntry[];
   /** Re-send a failed entry: verifies the server first when ambiguous. */
@@ -1100,6 +1112,7 @@ export function useMuseSessions(): UseMuseSessions {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [queuedTurnsBySession, setQueuedTurnsBySession] = useState<Record<string, QueuedTurn[]>>({});
   // Global authorization posture. This is intentionally kept separate from
   // sandbox settings: changing the posture must not mutate host capabilities.
   const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
@@ -2222,9 +2235,32 @@ export function useMuseSessions(): UseMuseSessions {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         if (typeof obj.turnId === "string" && obj.turnId.length > 0) {
           turnIdsRef.current[sid] = obj.turnId;
+          setQueuedTurnsBySession((cur) => {
+            const queued = cur[sid];
+            if (!queued || !queued.some((turn) => turn.turn_id === obj.turnId)) return cur;
+            const next = { ...cur, [sid]: queued.filter((turn) => turn.turn_id !== obj.turnId) };
+            if (next[sid].length === 0) delete next[sid];
+            return next;
+          });
         }
       } catch {
         // Older supervisor builds may emit an empty started payload.
+      }
+    }
+    if (kind === "turn/unqueued") {
+      try {
+        const obj = JSON.parse(payload) as Record<string, unknown>;
+        const queuedTurnId = typeof obj.turnId === "string" ? obj.turnId : "";
+        if (queuedTurnId.length > 0) {
+          setQueuedTurnsBySession((cur) => {
+            const queued = cur[sid] ?? [];
+            const next = { ...cur, [sid]: queued.filter((turn) => turn.turn_id !== queuedTurnId) };
+            if (next[sid].length === 0) delete next[sid];
+            return next;
+          });
+        }
+      } catch {
+        // Keep the queue card until the explicit command result settles.
       }
     }
     if (isRunningKind(kind)) {
@@ -2943,6 +2979,18 @@ export function useMuseSessions(): UseMuseSessions {
           if (typeof ack === "object" && ack !== null) {
             const admission = ack as { disposition?: unknown; turnId?: unknown };
             if (admission.disposition === "queued") {
+              if (typeof admission.turnId === "string" && admission.turnId.length > 0) {
+                const queued: QueuedTurn = {
+                  session_id: sessionId,
+                  turn_id: admission.turnId,
+                  text: originalText,
+                  createdAt: Date.now(),
+                };
+                setQueuedTurnsBySession((cur) => ({
+                  ...cur,
+                  [sessionId]: [...(cur[sessionId] ?? []).filter((turn) => turn.turn_id !== queued.turn_id), queued],
+                }));
+              }
               pushLog(sessionId, [
                 {
                   id: newId(),
@@ -3469,6 +3517,24 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, []);
 
+  const unqueueTurn = useCallback(async (sessionId: string, turnId: string): Promise<boolean> => {
+    try {
+      setError(null);
+      await invoke("unqueue_turn", { sessionId, turnId });
+      setQueuedTurnsBySession((cur) => {
+        const queued = cur[sessionId] ?? [];
+        const next = { ...cur, [sessionId]: queued.filter((turn) => turn.turn_id !== turnId) };
+        if (next[sessionId].length === 0) delete next[sessionId];
+        return next;
+      });
+      kickPoll();
+      return true;
+    } catch (e) {
+      setError(`turn/unqueue failed: ${String(e)}`);
+      return false;
+    }
+  }, [kickPoll]);
+
   const killSession = useCallback(
     async (sessionId: string) => {
       try {
@@ -3498,6 +3564,12 @@ export function useMuseSessions(): UseMuseSessions {
       });
       setApprovals((cur) => cur.filter((a) => a.session_id !== sessionId));
       setInputRequests((cur) => cur.filter((r) => r.session_id !== sessionId));
+      setQueuedTurnsBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       // US-4: a killed thread takes its summary with it.
       // US-12 + US-21: and its artifacts.
       dropSummary(sessionId);
@@ -4672,6 +4744,7 @@ export function useMuseSessions(): UseMuseSessions {
   runningRef.current = sessions.some((s) => s.running);
   // Latest event handler for the render-detached poll drain.
   handleEventRef.current = handleEvent;
+  const activeQueuedTurns = activeId === null ? [] : (queuedTurnsBySession[activeId] ?? []);
 
   return {
     sessions,
@@ -4680,6 +4753,7 @@ export function useMuseSessions(): UseMuseSessions {
     activeLog,
     approvals,
     activeApprovals,
+    queuedTurns: activeQueuedTurns,
     inputRequests,
     activeInputRequests,
     workspace,
@@ -4711,6 +4785,7 @@ export function useMuseSessions(): UseMuseSessions {
     connectedIds,
     sendInput,
     steerInput,
+    unqueueTurn,
     pendingSends,
     retrySend,
     discardSend,
