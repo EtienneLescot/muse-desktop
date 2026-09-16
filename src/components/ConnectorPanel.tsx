@@ -210,6 +210,18 @@ export function ConnectorPanel({
     void executeRemoteCall(call.connectorId, call.toolName, call.argumentsText);
   }
 
+  async function reconnectRemote(entry: ConnectorEntry): Promise<void> {
+    if (entry.kind !== "remote" || !entry.url || remoteBusy !== null) return;
+    setRemoteName(entry.name);
+    setRemoteUrl(entry.url);
+    setRemoteBusy("probe");
+    setRemoteCall(null);
+    const result = await onProbeRemote(entry.name, entry.url, remoteToken);
+    setRemoteProbe(result);
+    setRemoteTool(result?.tools[0]?.name ?? "");
+    setRemoteBusy(null);
+  }
+
   return (
     <section className="integration-panel" aria-label="Connectors">
       <h3>Connectors</h3>
@@ -649,6 +661,16 @@ export function ConnectorPanel({
               setRemoteCall(null);
             }}>
               Disconnect
+            </button>
+          )}
+          {!remoteConnectedIds.includes(entry.id) && (
+            <button
+              type="button"
+              className="integration-action"
+              disabled={remoteBusy !== null || !entry.url}
+              onClick={() => void reconnectRemote(entry)}
+            >
+              {remoteBusy === "probe" ? "Reconnecting…" : "Reconnect"}
             </button>
           )}
         </div>
