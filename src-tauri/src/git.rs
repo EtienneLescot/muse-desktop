@@ -822,6 +822,10 @@ mod tests {
             );
         };
         run(&["init", "--quiet"]);
+        // Keep commit tests independent of the runner's global Git identity.
+        // CI images intentionally have no user.name/user.email configured.
+        run(&["config", "user.email", "test@example.com"]);
+        run(&["config", "user.name", "Muse test"]);
         fs::write(root.join("main.txt"), "one\n").unwrap();
         run(&["add", "--", "main.txt"]);
         run(&[
