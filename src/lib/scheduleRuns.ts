@@ -38,6 +38,8 @@ export interface ScheduleRun {
   resultPreview?: string;
   /** Inbox unread marker, independent of the business status. */
   unread?: boolean;
+  /** Archived rows stay durable but are hidden from the default inbox view. */
+  archived?: boolean;
   status: ScheduleRunStatus;
   error?: string;
 }
@@ -108,6 +110,33 @@ export function completeRun(
 
 export function markRunRead(runs: ScheduleRun[], idValue: string): ScheduleRun[] {
   return runs.map((run) => run.id === idValue ? { ...run, unread: false } : run);
+}
+
+export function archiveRun(runs: ScheduleRun[], idValue: string): ScheduleRun[] {
+  return runs.map((run) => run.id === idValue ? { ...run, archived: true } : run);
+}
+
+export function restoreRun(runs: ScheduleRun[], idValue: string): ScheduleRun[] {
+  return runs.map((run) => run.id === idValue ? { ...run, archived: false } : run);
+}
+
+/** Promote a failed run or a delayed retry to the front of the local queue. */
+export function retryRunNow(runs: ScheduleRun[], idValue: string, now = Date.now()): ScheduleRun[] {
+  return runs.map((run) => {
+    if (run.id !== idValue) return run;
+    const attempt = run.attempt ?? 1;
+    const retryable = run.status === "failed" || (run.status === "queued" && run.nextRetryAt !== undefined);
+    if (!retryable || attempt >= MAX_RUN_ATTEMPTS) return run;
+    return {
+      ...run,
+      status: "queued",
+      nextRetryAt: now,
+      finishedAt: undefined,
+      unread: false,
+      archived: false,
+      error: undefined,
+    };
+  });
 }
 
 /** Exponential backoff, bounded so a local timer remains predictable. */
@@ -186,6 +215,7 @@ function validRun(value: unknown): value is ScheduleRun {
     (row.nextRetryAt === undefined || typeof row.nextRetryAt === "number") &&
     (row.resultPreview === undefined || typeof row.resultPreview === "string") &&
     (row.unread === undefined || typeof row.unread === "boolean") &&
+    (row.archived === undefined || typeof row.archived === "boolean") &&
     (row.error === undefined || typeof row.error === "string");
 }
 

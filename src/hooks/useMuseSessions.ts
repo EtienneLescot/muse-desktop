@@ -213,6 +213,7 @@ import {
 } from "../lib/schedules";
 export type { ReviewItem, Schedule, ScheduleInput, ThreadReuse } from "../lib/schedules";
 import {
+  archiveRun,
   appendRun,
   cancelRun,
   completeRun,
@@ -222,6 +223,8 @@ import {
   markRunStarted,
   markRunRead,
   queueRunRetry,
+  restoreRun,
+  retryRunNow,
   saveScheduleRuns,
   settleRun,
   type ScheduleRun,
@@ -836,6 +839,10 @@ interface UseMuseSessions {
   cancelScheduleRun: (id: string) => void;
   /** M3-08: clear the independent inbox unread marker. */
   markScheduleRunRead: (id: string) => void;
+  /** M3-08: archive or restore a run in the inbox. */
+  setScheduleRunArchived: (id: string, archived: boolean) => void;
+  /** M3-08: promote a failed/delayed retry to the local scheduler now. */
+  retryScheduleRunNow: (id: string) => void;
   /** M3-09: durable completion/failure notifications for scheduled runs. */
   notifications: MuseNotification[];
   notificationPermission: NotificationPermission;
@@ -4033,6 +4040,14 @@ export function useMuseSessions(): UseMuseSessions {
   const markScheduleRunRead = useCallback((id: string): void => {
     setScheduleRuns((cur) => markRunRead(cur, id));
   }, []);
+
+  const setScheduleRunArchived = useCallback((id: string, archived: boolean): void => {
+    setScheduleRuns((cur) => archived ? archiveRun(cur, id) : restoreRun(cur, id));
+  }, []);
+
+  const retryScheduleRunNow = useCallback((id: string): void => {
+    setScheduleRuns((cur) => retryRunNow(cur, id, Date.now()));
+  }, []);
   // w-collab US-27: explicit share / un-share + mode toggle. Manual mode
   // shares only here; auto additionally refreshes on turn end (see
   // refreshAutoShare); disabled refuses (createShareBundle returns null).
@@ -4909,6 +4924,8 @@ export function useMuseSessions(): UseMuseSessions {
     runScheduleNow,
     cancelScheduleRun,
     markScheduleRunRead,
+    setScheduleRunArchived,
+    retryScheduleRunNow,
     approveReview: approveReviewCb,
     discardReview: discardReviewCb,
     shareMode: shareState.mode,

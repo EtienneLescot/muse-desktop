@@ -449,7 +449,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** statuts queued/running/succeeded/failed/cancelled, timestamps, résumé, cible et lien conversation. Actions ouvrir/retry/archiver ; non-lu séparé de statut métier.
 
-**État au 16/09/2026 :** Automations affiche les huit derniers runs avec statut, horodatage, aperçu borné, erreur, indicateur non-lu, ouverture de la conversation et marquage lu. Un run passe à `completed` au premier statut d'arrêt du host et conserve l'aperçu de la dernière réponse assistant ; avant cet événement, il reste `running` même si `send_input` a été acquitté. Le filtrage, l'archivage et les résumés riches restent à faire.
+**État au 16/09/2026 :** Automations affiche les huit derniers runs avec statut, horodatage, aperçu borné, erreur, indicateur non-lu, ouverture de la conversation et marquage lu. Un run passe à `completed` au premier statut d'arrêt du host et conserve l'aperçu de la dernière réponse assistant ; avant cet événement, il reste `running` même si `send_input` a été acquitté. La liste propose désormais les filtres Active/Unread/Queued/Running/Completed/Failed/Archived, l'archivage durable et la restauration, ainsi que Retry now pour une erreur ou une retry différée.
+
+**Limite restante :** le résumé métier riche et un signal de fin de run fourni directement par le host restent à qualifier.
 
 **Acceptation :** aucun résultat présenté avant terminaison, historique durable et ouverture de la bonne session après restart.
 
@@ -459,7 +461,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **État au 16/09/2026 :** l'inbox locale est livrée pour les runs terminés/échoués et pour les demandes d'autorisation ou de réponse utilisateur : chaque entrée conserve une clé d'idempotence, un aperçu, la session cible et un état non-lu ; Automations permet l'ouverture de la conversation et le marquage lu. L'API `Notification` du webview est utilisée à la demande quand la permission est accordée, avec un fallback explicite dans l'app et sans rejouer les historiques au démarrage. La préférence de silence desktop est persistée séparément ; un clic sur un toast tente de restaurer la fenêtre Tauri avant de laisser l'inbox ouvrir la session. Le plugin Tauri officiel est enregistré avec sa permission desktop ; le service natif quand l'app est fermée et le routage OS direct restent ouverts.
 
-**Travail restant :** service natif OS/Tauri, préférences muettes et notifications de demandes utilisateur. Pas de notification par token ou tick.
+**Travail restant :** service natif OS/Tauri quand l'application est fermée et routage OS direct vers la session. Pas de notification par token ou tick.
 
 **Acceptation :** notification unique, clic ouvre la cible, cible supprimée, OS refuse et mode muet respecté.
 

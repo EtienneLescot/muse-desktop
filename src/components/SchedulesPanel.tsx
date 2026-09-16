@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   validateScheduleInput,
   type Schedule,
@@ -35,6 +35,8 @@ interface Props {
   onCancelRun: (id: string) => void;
   onOpenRun: (run: ScheduleRun) => void;
   onMarkRunRead: (id: string) => void;
+  onSetRunArchived: (id: string, archived: boolean) => void;
+  onRetryRunNow: (id: string) => void;
   onEnableNotifications: () => Promise<NotificationPermission>;
   onSetNotificationsMuted: (muted: boolean) => void;
   onMarkNotificationRead: (id: string) => void;
@@ -43,6 +45,7 @@ interface Props {
 
 type TriggerKind = "once" | "cron";
 type ReuseKind = "active" | "new" | "session";
+type RunFilter = "all" | "unread" | "queued" | "running" | "completed" | "failed" | "archived";
 
 function describeSchedule(s: Schedule): string {
   if (s.trigger.kind === "once") {
@@ -61,7 +64,7 @@ function describeReuse(r: ThreadReuse, sessions: SessionRef[]): string {
 }
 
 function describeRunStatus(status: ScheduleRun["status"]): string {
-  if (status === "completed") return "Dispatched";
+  if (status === "completed") return "Completed";
   if (status === "running") return "Running";
   if (status === "failed") return "Failed";
   return "Queued";
@@ -96,6 +99,8 @@ export function SchedulesPanel({
   onCancelRun,
   onOpenRun,
   onMarkRunRead,
+  onSetRunArchived,
+  onRetryRunNow,
   onEnableNotifications,
   onSetNotificationsMuted,
   onMarkNotificationRead,
@@ -110,6 +115,18 @@ export function SchedulesPanel({
   const [reuseSession, setReuseSession] = useState("");
   const [missedPolicy, setMissedPolicy] = useState<ScheduleMissedPolicy>("latest");
   const [formError, setFormError] = useState<string | null>(null);
+  const [runFilter, setRunFilter] = useState<RunFilter>("all");
+
+  const visibleRuns = useMemo(() => runs
+    .filter((run) => {
+      if (runFilter === "archived") return run.archived === true;
+      if (run.archived === true) return false;
+      if (runFilter === "all") return true;
+      if (runFilter === "unread") return run.unread === true;
+      return run.status === runFilter;
+    })
+    .slice(-8)
+    .reverse(), [runFilter, runs]);
 
   function submit(): void {
     const input: ScheduleInput = {
@@ -282,9 +299,27 @@ export function SchedulesPanel({
       )}
       {runs.length > 0 && (
         <div className="schedule-runs" aria-label="Recent automation runs">
-          <h3>Recent runs</h3>
-          <ul className="sched-list">
-            {runs.slice(-8).reverse().map((run) => (
+          <div className="schedule-notifications-head">
+            <h3>Recent runs</h3>
+            <select
+              className="run-filter"
+              aria-label="Filter automation runs"
+              value={runFilter}
+              onChange={(e) => setRunFilter(e.target.value as RunFilter)}
+            >
+              <option value="all">Active</option>
+              <option value="unread">Unread</option>
+              <option value="queued">Queued</option>
+              <option value="running">Running</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          {visibleRuns.length === 0 ? (
+            <p className="muted notification-empty">No runs match this filter.</p>
+          ) : <ul className="sched-list">
+            {visibleRuns.map((run) => (
               <li key={run.id} className="sched-item schedule-run" data-status={run.status}>
                 <div className="sched-head">
                   <strong>{run.scheduleName}</strong>
@@ -309,14 +344,33 @@ export function SchedulesPanel({
                     </button>
                   )}
                   {run.status === "queued" && run.nextRetryAt !== undefined && (
-                    <button type="button" onClick={() => onCancelRun(run.id)} title="Cancel this retry">
-                      Cancel retry
+                    <>
+                      <button type="button" onClick={() => onRetryRunNow(run.id)} title="Retry this run now">
+                        Retry now
+                      </button>
+                      <button type="button" onClick={() => onCancelRun(run.id)} title="Cancel this retry">
+                        Cancel retry
+                      </button>
+                    </>
+                  )}
+                  {run.status === "failed" && (run.attempt ?? 1) < 3 && (
+                    <button type="button" onClick={() => onRetryRunNow(run.id)} title="Retry this run now">
+                      Retry now
+                    </button>
+                  )}
+                  {run.archived === true ? (
+                    <button type="button" onClick={() => onSetRunArchived(run.id, false)} title="Restore this run">
+                      Restore
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => onSetRunArchived(run.id, true)} title="Archive this run">
+                      Archive
                     </button>
                   )}
                 </div>
               </li>
             ))}
-          </ul>
+          </ul>}
         </div>
       )}
       <div className="schedule-notifications" aria-label="Automation notifications">

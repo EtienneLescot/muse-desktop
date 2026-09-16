@@ -145,6 +145,8 @@ export default function App() {
     runScheduleNow,
     cancelScheduleRun,
     markScheduleRunRead,
+    setScheduleRunArchived,
+    retryScheduleRunNow,
     approveReview,
     discardReview,
     shareMode,
@@ -737,6 +739,8 @@ export default function App() {
                   onRunNow={(id) => runScheduleNow(id)}
                   onCancelRun={(id) => cancelScheduleRun(id)}
                   onMarkRunRead={(id) => markScheduleRunRead(id)}
+                  onSetRunArchived={(id, archived) => setScheduleRunArchived(id, archived)}
+                  onRetryRunNow={(id) => retryScheduleRunNow(id)}
                   onEnableNotifications={enableNotifications}
                   onSetNotificationsMuted={setNotificationsMuted}
                   onMarkNotificationRead={markNotificationRead}

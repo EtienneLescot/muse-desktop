@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   appendRun,
+  archiveRun,
   cancelRun,
   completeRun,
   createScheduleRun,
@@ -10,6 +11,8 @@ import {
   loadScheduleRuns,
   markRunStarted,
   markRunRead,
+  restoreRun,
+  retryRunNow,
   MAX_RUN_ATTEMPTS,
   queueRunRetry,
   retryDelayMs,
@@ -118,5 +121,21 @@ describe("M3-06 schedule run ledger", () => {
       { nope: true },
     ]));
     assert.deepEqual(loadScheduleRuns(), [valid]);
+  });
+
+  it("archives, restores and promotes a retry without changing its identity", () => {
+    const initial = run();
+    const archived = archiveRun([initial], initial.id);
+    assert.equal(archived[0].archived, true);
+    const restored = restoreRun(archived, initial.id);
+    assert.equal(restored[0].archived, false);
+    const failed = settleRun(markRunStarted([restored[0]], initial.id, 2000), initial.id, "failed", 2100, "workspace unavailable");
+    const retried = retryRunNow(failed, initial.id, 2200)[0];
+    assert.equal(retried.id, initial.id);
+    assert.equal(retried.status, "queued");
+    assert.equal(retried.nextRetryAt, 2200);
+    assert.equal(retried.finishedAt, undefined);
+    const exhausted = retryRunNow([{ ...failed[0], attempt: MAX_RUN_ATTEMPTS }], initial.id, 2300)[0];
+    assert.equal(exhausted.status, "failed");
   });
 });
