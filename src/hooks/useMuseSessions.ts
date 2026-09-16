@@ -2531,7 +2531,7 @@ export function useMuseSessions(): UseMuseSessions {
       }
     }
     if (!isApprovalStatus) {
-      const completion = isStoppedKind(kind)
+      const completion = kind !== "host_exited" && isStoppedKind(kind)
         ? parseTurnCompletion(kind, payload)
         : null;
       if (completion?.error !== null && completion?.error !== undefined) {

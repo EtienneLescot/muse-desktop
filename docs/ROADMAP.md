@@ -70,7 +70,7 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 - **M0-07c — export local livré** : Settings propose **Export diagnostics**. Le JSON reste borné aux compteurs de sessions/événements, états d'attente, backend et dernière erreur rédigée ; le workspace et le transcript ne sont jamais exportés.
 - **M0-07d — compteurs natifs livrés** : le bridge expose `collect_diagnostics`, qui renvoie un snapshot `muse-desktop.native-diagnostics.v1` avec état de workspace, hosts, sessions, sessions en cours, approbations en attente et taille du buffer d'événements. L'export Settings l'intègre quand l'application tourne dans Tauri et retombe sur les compteurs renderer en web preview.
 - **M0-07e — erreurs de tour structurées livrées** : `turn/completed` conserve l'enveloppe d'erreur MSP (`kind`, `message`, `retryable`, durée et raison) au lieu de la réduire à une chaîne. Le journal persiste ce détail et `StreamView` l'affiche dans une carte calme et repliable avec **Retry turn** lorsque le host juge l'envoi réessayable ; le bouton reprend le dernier prompt utilisateur avant l'échec. Les hôtes anciens retombent sur leur raison texte, avec masquage des secrets courants.
-- **Validation** : suite Rust à 76 tests sur le backend, suite Node à 491 tests avec secrets synthétiques, compteurs invalides, résumé multi-worktree, export JSON et erreurs terminales structurées ; TypeScript/Vite verts.
+- **Validation** : suite Rust à 76 tests sur le backend, suite Node à 492 tests avec secrets synthétiques, compteurs invalides, résumé multi-worktree, export JSON et erreurs terminales structurées ; TypeScript/Vite verts.
 
 ### Livraison M0-09 — persistance récupérable
 

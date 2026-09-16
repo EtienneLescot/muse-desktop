@@ -106,7 +106,10 @@ export function findRetryPrompt(
   failureEntryId: string,
 ): string | null {
   const failureIndex = entries.findIndex((entry) => entry.id === failureEntryId);
-  const before = failureIndex >= 0 ? entries.slice(0, failureIndex) : entries;
+  // A stale failure card must never fall back to an unrelated, newer prompt.
+  // The caller can surface a recoverable message and let the user resubmit.
+  if (failureIndex < 0) return null;
+  const before = entries.slice(0, failureIndex);
   return [...before]
     .reverse()
     .find((entry) => entry.role === "user" && entry.text.trim().length > 0)

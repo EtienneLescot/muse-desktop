@@ -50,6 +50,6 @@ describe("M0-07 structured engine failures", () => {
       { id: "u3", role: "user", text: "later" },
     ];
     assert.equal(findRetryPrompt(entries, "f1"), "second");
-    assert.equal(findRetryPrompt(entries, "missing"), "later");
+    assert.equal(findRetryPrompt(entries, "missing"), null);
   });
 });
