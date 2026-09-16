@@ -2167,6 +2167,15 @@ export function useMuseSessions(): UseMuseSessions {
       ...cur,
       [sessionId]: { requestedAt: Date.now(), source },
     }));
+    // A successful decision means the host accepted work again even when an
+    // older/reconnected session snapshot still says idle. Let the liveness
+    // row represent that bridge until the next terminal or progress event.
+    setSessions((cur) =>
+      cur.map((session) =>
+        session.session_id === sessionId ? { ...session, running: true } : session,
+      ),
+    );
+    setConnectionState(sessionId, "connected");
   }
 
   function clearResumePending(sessionId: string): void {
