@@ -38,6 +38,17 @@ export interface WorktreeSetupResult {
   durationMs: number;
 }
 
+export interface WorktreeInspection {
+  repoRoot: string;
+  path: string;
+  branch: string | null;
+  head: string | null;
+  clean: boolean;
+  conflicted: boolean;
+  fileCount: number;
+  observedAt: number;
+}
+
 export const MAX_SETUP_COMMAND_CHARS = 2_000;
 
 export function validateSetupCommand(command: string): string | null {

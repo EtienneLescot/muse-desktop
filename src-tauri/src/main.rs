@@ -1199,6 +1199,19 @@ async fn git_worktree_remove(
         .map_err(|e| format!("worktree remove task failed: {e}"))?
 }
 
+/// Inspect a managed worktree before cleanup or a handoff decision.
+#[tauri::command]
+async fn git_worktree_inspect(
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+) -> Result<git::GitWorktreeInspection, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || git::inspect_worktree(&root, &path))
+        .await
+        .map_err(|e| format!("worktree inspect task failed: {e}"))?
+}
+
 /// Run an explicitly requested setup command in a managed worktree. The
 /// command is bounded and never started by project import or app startup.
 #[tauri::command]
@@ -2805,6 +2818,7 @@ fn main() {
             git_create_pr,
             git_worktree_create,
             git_worktree_remove,
+            git_worktree_inspect,
             worktree_setup_run,
             terminal_open,
             terminal_write,
