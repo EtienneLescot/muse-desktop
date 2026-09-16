@@ -335,7 +335,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **État :** une commande saisie par l'utilisateur peut être lancée explicitement dans un worktree géré déjà créé. Le runner Rust valide le confinement, borne la commande et la sortie, neutralise stdin, expose les états `ready/failed/timedOut/cancelled`, conserve la durée, le code de sortie et les clés d'environnement retenues, puis permet une relance ou une annulation ciblée depuis le panneau d'orchestration. Les profils nommés sont persistés par workspace avec des noms d'environnement supplémentaires ; aucun setup importé n'est exécuté au démarrage. **Check readiness** ajoute une pré-vérification en lecture seule des manifests et des exécutables requis (`ready`, `blocked`, `needsSetup`) sans lancer de code projet.
 
-**Reste :** création atomique et signal partagé avec la création de session. L'allowlist ne persiste jamais de valeurs et conserve la commande explicite et la SSOT du hook de sessions.
+**Reste :** transaction atomique Git + création de session et rollback partagé en cas d'échec. Le panneau permet déjà d'ouvrir explicitement une conversation dans un worktree créé, mais cette action en deux temps ne doit pas être présentée comme une bascule atomique. L'allowlist ne persiste jamais de valeurs et conserve la commande explicite et la SSOT du hook de sessions.
 
 **Acceptation :** dépendances installées dans le bon worktree, setup échoué/cancelled et retry ; aucun premier tour annoncé prêt prématurément.
 

@@ -1220,6 +1220,9 @@ export default function App() {
                             onCreateWorktree={createWorktree}
                             worktrees={worktrees}
                             onRemoveWorktree={removeWorktree}
+                            onOpenWorktree={async (record) =>
+                              startSessionInWorkspace(record.path, activeProjectSettings)
+                            }
                             onInspectWorktree={inspectWorktree}
                             onCheckReadiness={checkWorktreeReadiness}
                             onRunSetup={runWorktreeSetup}

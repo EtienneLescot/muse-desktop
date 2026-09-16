@@ -47,6 +47,8 @@ interface Props {
     sessionId: string,
     record: WorktreeRecord,
   ) => Promise<boolean>;
+  /** Open a new conversation rooted at a created worktree. */
+  onOpenWorktree: (record: WorktreeRecord) => Promise<string | null>;
   onInspectWorktree: (
     sessionId: string,
     record: WorktreeRecord,
@@ -77,6 +79,7 @@ export function OrchestrationPanel({
   onCreateWorktree,
   worktrees,
   onRemoveWorktree,
+  onOpenWorktree,
   onInspectWorktree,
   onCheckReadiness,
   onRunSetup,
@@ -88,6 +91,7 @@ export function OrchestrationPanel({
   const [report, setReport] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [creating, setCreating] = useState<string | null>(null);
+  const [openingBranch, setOpeningBranch] = useState<string | null>(null);
   const [setupCommand, setSetupCommand] = useState("");
   const [envAllowlistText, setEnvAllowlistText] = useState("");
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -277,6 +281,13 @@ export function OrchestrationPanel({
     setInspecting(null);
   }
 
+  async function openWorktree(record: WorktreeRecord): Promise<void> {
+    if (openingBranch !== null) return;
+    setOpeningBranch(record.branch);
+    await onOpenWorktree(record);
+    setOpeningBranch(null);
+  }
+
   async function checkReadiness(record: WorktreeRecord): Promise<void> {
     if (checkingReadiness !== null) return;
     setCheckingReadiness(record.branch);
@@ -422,6 +433,17 @@ export function OrchestrationPanel({
                   title="Inspect Git status before cleanup"
                 >
                   {inspecting === recordFor(p)?.branch ? "Inspecting…" : "Inspect"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const record = recordFor(p);
+                    if (record) void openWorktree(record);
+                  }}
+                  disabled={openingBranch !== null}
+                  title="Open a new conversation in this worktree"
+                >
+                  {openingBranch === recordFor(p)?.branch ? "Opening…" : "Open conversation"}
                 </button>
                 <button
                   type="button"
