@@ -261,6 +261,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** Composer, `mentions.ts`, service fichiers, adaptation TurnInputPart. Dépend M1-07 et de la vérification des capacités moteur M0-08.
 
+**État au 17/09/2026 :** les images attachées détectent leurs dimensions via l'API `Image` quand elle est disponible, les affichent dans le chip du composer avec une miniature locale, puis les transmettent comme champs optionnels du part MSP. Le fallback sans DOM conserve le payload précédent ; la qualification live sur modèles image et la reprise d'un fichier disparu restent ouvertes.
+
 **Travail :** définir référence structurée type/MIME/taille/nom/source, drag/drop/coller image, suppression avant envoi, limites et erreurs. Employer le format accepté par Muse ; si non supporté, afficher l'indisponibilité, pas un faux nom de fichier dans le prompt.
 
 **Acceptation :** image réellement reçue, fichier texte, limite dépassée, fichier supprimé, annulation et retry sans pièce jointe orpheline.

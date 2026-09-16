@@ -1634,6 +1634,16 @@ body.dark .composer textarea::placeholder {
   font-size: 11px;
 }
 
+.attachment-thumb {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  object-fit: cover;
+  background: var(--surface);
+}
+
 .attachment-kind {
   color: var(--blue);
   font-size: 14px;

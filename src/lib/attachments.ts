@@ -31,6 +31,8 @@ export interface ComposerAttachment {
   kind: "image" | "text";
   content?: string;
   base64Data?: string;
+  width?: number;
+  height?: number;
 }
 
 export interface AttachmentFailure {
@@ -100,6 +102,20 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function readImageDimensions(dataUrl: string): Promise<{ width: number; height: number } | undefined> {
+  if (typeof Image === "undefined") return Promise.resolve(undefined);
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+      resolve(width > 0 && height > 0 ? { width, height } : undefined);
+    };
+    image.onerror = () => resolve(undefined);
+    image.src = dataUrl;
+  });
+}
+
 function attachmentId(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}:${file.type}`;
 }
@@ -125,8 +141,18 @@ export async function readAttachment(file: File): Promise<ComposerAttachment> {
       throw new Error(`image exceeds the ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)} MB limit`);
     }
     const mediaType = file.type.toLowerCase();
-    const base64Data = imagePayload(await readAsDataUrl(file), mediaType);
-    return { id: attachmentId(file), name: file.name, mediaType, size: file.size, kind: "image", base64Data };
+    const dataUrl = await readAsDataUrl(file);
+    const base64Data = imagePayload(dataUrl, mediaType);
+    const dimensions = await readImageDimensions(dataUrl);
+    return {
+      id: attachmentId(file),
+      name: file.name,
+      mediaType,
+      size: file.size,
+      kind: "image",
+      base64Data,
+      ...(dimensions ?? {}),
+    };
   }
   if (!isTextAttachment(file)) {
     throw new Error("only text files and images can be attached");
@@ -166,7 +192,13 @@ export function buildTurnInputParts(
         text: `\n\n<attached-file name="${escapeAttribute(attachment.name)}" media-type="${escapeAttribute(attachment.mediaType)}">\n${attachment.content}\n</attached-file>`,
       });
     } else if (attachment.kind === "image" && attachment.base64Data !== undefined) {
-      parts.push({ type: "image", mediaType: attachment.mediaType, base64Data: attachment.base64Data });
+      parts.push({
+        type: "image",
+        mediaType: attachment.mediaType,
+        base64Data: attachment.base64Data,
+        ...(attachment.width !== undefined ? { width: attachment.width } : {}),
+        ...(attachment.height !== undefined ? { height: attachment.height } : {}),
+      });
     }
   }
   return parts;

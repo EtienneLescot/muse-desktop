@@ -697,11 +697,24 @@ export function Composer({
             <ul className="attachment-chips" aria-label="Attached files">
               {attachments.map((attachment) => (
                 <li className="attachment-chip" key={attachment.id}>
+                  {attachment.kind === "image" && attachment.base64Data !== undefined && (
+                    <img
+                      className="attachment-thumb"
+                      src={`data:${attachment.mediaType};base64,${attachment.base64Data}`}
+                      alt=""
+                      aria-hidden="true"
+                    />
+                  )}
                   <span className={`attachment-kind attachment-kind-${attachment.kind}`} aria-hidden="true">
                     {attachment.kind === "image" ? "▧" : "▤"}
                   </span>
                   <span className="attachment-name" title={attachment.name}>{attachment.name}</span>
-                  <span className="attachment-size">{formatAttachmentSize(attachment.size)}</span>
+                  <span className="attachment-size">
+                    {formatAttachmentSize(attachment.size)}
+                    {attachment.width !== undefined && attachment.height !== undefined
+                      ? ` · ${attachment.width}×${attachment.height}`
+                      : ""}
+                  </span>
                   <button
                     type="button"
                     className="attachment-remove"
