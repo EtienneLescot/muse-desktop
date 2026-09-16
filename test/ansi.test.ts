@@ -25,5 +25,28 @@ describe("terminal ANSI rendering", () => {
       { text: "red", style: { color: "rgb(255, 0, 0)" } },
     ]);
   });
-});
 
+  it("supports truecolor, italic, inverse and strike styles", () => {
+    assert.deepEqual(parseAnsi("\x1b[3;7;9;38;2;12;34;56;48;2;200;210;220mrich\x1b[0mplain"), [
+      {
+        text: "rich",
+        style: {
+          color: "rgb(12, 34, 56)",
+          backgroundColor: "rgb(200, 210, 220)",
+          fontStyle: "italic",
+          textDecoration: "line-through",
+          filter: "invert(1)",
+        },
+      },
+      { text: "plain", style: {} },
+    ]);
+  });
+
+  it("turns off underline independently from strike-through", () => {
+    assert.deepEqual(parseAnsi("\x1b[4;9munderstrike\x1b[24mstrike\x1b[29mplain"), [
+      { text: "understrike", style: { textDecoration: "underline line-through" } },
+      { text: "strike", style: { textDecoration: "line-through" } },
+      { text: "plain", style: {} },
+    ]);
+  });
+});

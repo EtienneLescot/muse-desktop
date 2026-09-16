@@ -225,7 +225,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** saisie interactive, ANSI, resize, serveur long, changement de vue, fermeture/restart et Unicode ; pas de processus orphelin.
 
-**État au 16/09/2026 :** socle livré dans la PR M1-05. `portable-pty` fournit un shell natif Windows/Unix dans un registre Rust persistant ; le panneau Terminal ouvre/réutilise le terminal de la conversation, draine une sortie bornée, écrit l’entrée, redimensionne et ferme explicitement le processus. La vue traduit désormais les styles ANSI SGR usuels sans interpréter le contenu comme HTML ; la validation native interactive, l'ANSI avancé et les contrôles clavier restent à exécuter séparément.
+**État au 16/09/2026 :** socle livré dans la PR M1-05. `portable-pty` fournit un shell natif Windows/Unix dans un registre Rust persistant ; le panneau Terminal ouvre/réutilise le terminal de la conversation, draine une sortie bornée, écrit l’entrée, redimensionne et ferme explicitement le processus. La vue traduit désormais les styles ANSI SGR usuels et avancés (16/256/24 bits, gras, atténué, italique, souligné, barré, inversion) sans interpréter le contenu comme HTML ; la validation native interactive et les contrôles clavier restent à exécuter séparément.
 
 ### M1-06 — Terminal comme contexte
 
