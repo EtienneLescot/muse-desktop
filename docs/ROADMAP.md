@@ -372,11 +372,11 @@ Preuves : [connecteurs](../src/lib/connectors.ts), [skills](../src/lib/skills.ts
 
 ### Livraison M3-09 — notifications de runs
 
-- **Inbox persistante :** les runs `completed` et `failed` créent une notification locale bornée, avec titre, aperçu/erreur, horodatage, cible de conversation et clé d'idempotence. Une même occurrence terminale ne peut pas être ajoutée deux fois.
+- **Inbox persistante :** les runs `completed` et `failed`, ainsi que les demandes `approval` et `input`, créent une notification locale bornée, avec titre, aperçu/erreur, horodatage, cible de conversation et clé d'idempotence. Une même occurrence ou demande ne peut pas être ajoutée deux fois.
 - **UX :** Automations expose les six dernières notifications, un badge non-lu, **Open conversation** et **Mark read**. La permission desktop est activable à la demande ; si l'OS refuse ou ne fournit pas l'API, l'inbox reste la surface de secours.
 - **Silence au démarrage :** les notifications déjà présentes sont hydratées comme historique et ne déclenchent pas un toast à chaque relance. Les nouvelles notifications non lues sont envoyées au meilleur effort via l'API `Notification` du webview.
-- **Limites :** aucun plugin Tauri/OS n'est encore installé ; l'application doit rester ouverte pour recevoir un toast et les événements « besoin utilisateur » ne sont pas encore convertis en notifications. Le service natif, les préférences muettes et les tests multi-instance restent à faire.
-- **Validation :** suite Node 428 tests, TypeScript et build Vite verts ; la qualification native du permission prompt reste à exécuter sur Windows/macOS/Linux.
+- **Limites :** aucun plugin Tauri/OS n'est encore installé ; l'application doit rester ouverte pour recevoir un toast. Le service natif, les préférences muettes et les tests multi-instance restent à faire.
+- **Validation :** suite Node 429 tests, TypeScript et build Vite verts ; la qualification native du permission prompt reste à exécuter sur Windows/macOS/Linux.
 
 ## M4 — Parité étendue
 

@@ -228,6 +228,8 @@ import {
 export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
 import {
   appendNotification,
+  buildApprovalNotification,
+  buildInputNotification,
   buildRunNotification,
   deliverDesktopNotification,
   loadNotifications,
@@ -1541,6 +1543,45 @@ export function useMuseSessions(): UseMuseSessions {
       deliverDesktopNotification(item);
     }
   }, [notifications]);
+
+  // Approval and answerable-input prompts are attention notifications. They
+  // are in-memory host state, so an app restart does not replay stale prompts.
+  const observedAttentionRequests = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const current = new Set([
+      ...approvals.map((item) => `approval:${item.session_id}:${item.request_id}`),
+      ...inputRequests.map((item) => `input:${item.session_id}:${item.input_id}`),
+    ]);
+    if (observedAttentionRequests.current === null) {
+      observedAttentionRequests.current = current;
+      return;
+    }
+    const previous = observedAttentionRequests.current;
+    const freshApprovals = approvals.filter((item) =>
+      !previous.has(`approval:${item.session_id}:${item.request_id}`),
+    );
+    const freshInputs = inputRequests.filter((item) =>
+      !previous.has(`input:${item.session_id}:${item.input_id}`),
+    );
+    observedAttentionRequests.current = current;
+    const built = [
+      ...freshApprovals.map((item) => buildApprovalNotification({
+        sessionId: item.session_id,
+        requestId: item.request_id,
+        toolName: item.toolName,
+        summary: item.summary,
+      })),
+      ...freshInputs.map((item) => buildInputNotification({
+        sessionId: item.session_id,
+        inputId: item.input_id,
+        toolName: item.tool_name,
+        questionCount: item.questions.length,
+      })),
+    ];
+    if (built.length > 0) {
+      setNotifications((cur) => built.reduce(appendNotification, cur));
+    }
+  }, [approvals, inputRequests]);
 
   const enableNotifications = useCallback(async (): Promise<NotificationPermission> => {
     const next = await requestNotificationPermission();

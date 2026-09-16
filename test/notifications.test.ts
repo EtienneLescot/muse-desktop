@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   appendNotification,
+  buildApprovalNotification,
+  buildInputNotification,
   buildRunNotification,
   loadNotifications,
   markNotificationRead,
@@ -52,6 +54,27 @@ describe("M3-09 notification records", () => {
     assert.equal(unreadNotificationCount(appended), 1);
     const read = markNotificationRead(appended, notification.id);
     assert.equal(unreadNotificationCount(read), 0);
+  });
+
+  it("creates one attention notification per approval or input request", () => {
+    const approval = buildApprovalNotification({
+      sessionId: "session-1",
+      requestId: "approval-1",
+      toolName: "bash",
+      summary: "List the project files",
+    }, 4000);
+    const input = buildInputNotification({
+      sessionId: "session-1",
+      inputId: "input-1",
+      toolName: "setup",
+      questionCount: 2,
+    }, 5000);
+    assert.equal(approval.kind, "approval-needed");
+    assert.equal(approval.dedupeKey, "approval:session-1:approval-1");
+    assert.match(approval.body, /bash/);
+    assert.equal(input.kind, "input-needed");
+    assert.equal(input.dedupeKey, "input:session-1:input-1");
+    assert.match(input.body, /2 questions/);
   });
 
   it("round-trips valid records and drops malformed local storage entries", () => {

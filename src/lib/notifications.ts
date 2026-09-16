@@ -1,6 +1,6 @@
 import type { ScheduleRun } from "./scheduleRuns";
 
-export type MuseNotificationKind = "run-completed" | "run-failed";
+export type MuseNotificationKind = "run-completed" | "run-failed" | "approval-needed" | "input-needed";
 
 export interface MuseNotification {
   id: string;
@@ -41,6 +41,56 @@ export function buildRunNotification(run: ScheduleRun, now = run.finishedAt ?? D
   };
 }
 
+export interface ApprovalNotificationInput {
+  sessionId: string;
+  requestId: string;
+  toolName?: string;
+  summary?: string;
+}
+
+export function buildApprovalNotification(
+  input: ApprovalNotificationInput,
+  now = Date.now(),
+): MuseNotification {
+  const tool = input.toolName?.trim() || "an action";
+  const summary = input.summary?.trim();
+  return {
+    id: makeId(),
+    kind: "approval-needed",
+    dedupeKey: `approval:${input.sessionId}:${input.requestId}`,
+    title: "Approval needed",
+    body: summary ? `${tool}: ${summary}`.slice(0, 320) : `Muse is waiting for approval to continue ${tool}.`,
+    createdAt: now,
+    sessionId: input.sessionId,
+    unread: true,
+  };
+}
+
+export interface InputNotificationInput {
+  sessionId: string;
+  inputId: string;
+  toolName?: string;
+  questionCount?: number;
+}
+
+export function buildInputNotification(
+  input: InputNotificationInput,
+  now = Date.now(),
+): MuseNotification {
+  const tool = input.toolName?.trim() || "Muse";
+  const count = input.questionCount === 1 ? "one question" : `${Math.max(1, input.questionCount ?? 0)} questions`;
+  return {
+    id: makeId(),
+    kind: "input-needed",
+    dedupeKey: `input:${input.sessionId}:${input.inputId}`,
+    title: "Muse needs your input",
+    body: `${tool} is waiting for ${count} before continuing.`,
+    createdAt: now,
+    sessionId: input.sessionId,
+    unread: true,
+  };
+}
+
 export function appendNotification(
   notifications: MuseNotification[],
   notification: MuseNotification,
@@ -64,7 +114,7 @@ function validNotification(value: unknown): value is MuseNotification {
   if (typeof value !== "object" || value === null) return false;
   const row = value as Record<string, unknown>;
   return typeof row.id === "string" && row.id.length > 0 &&
-    (row.kind === "run-completed" || row.kind === "run-failed") &&
+    (row.kind === "run-completed" || row.kind === "run-failed" || row.kind === "approval-needed" || row.kind === "input-needed") &&
     typeof row.dedupeKey === "string" && row.dedupeKey.length > 0 &&
     typeof row.title === "string" && typeof row.body === "string" &&
     typeof row.createdAt === "number" && Number.isFinite(row.createdAt) &&
