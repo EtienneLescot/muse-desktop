@@ -23,6 +23,7 @@ import {
   type WorktreeReadiness,
 } from "../lib/worktrees";
 import { CapabilityBadge } from "./CapabilityBadge";
+import { userFacingError } from "../lib/errorCopy";
 import {
   loadSetupProfiles,
   removeSetupProfile,
@@ -567,7 +568,7 @@ export function OrchestrationPanel({
                   .map((intent) => (
                     <span className="orchestration-cleanup-status" key={`${intent.repoRoot}:${intent.path}`}>
                       {intent.status === "pending" ? "Cleanup pending after restart" : `Cleanup failed · attempt ${intent.attempts}`}
-                      {intent.error ? ` · ${intent.error}` : ""}
+                      {intent.error ? ` · ${userFacingError(intent.error)}` : ""}
                     </span>
                   ))}
                 {setupRunning === recordFor(p)?.branch ? (

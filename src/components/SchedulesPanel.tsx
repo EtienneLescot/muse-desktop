@@ -9,6 +9,7 @@ import {
 } from "../lib/schedules";
 import { MAX_RUN_ATTEMPTS, type ScheduleRun } from "../lib/scheduleRuns";
 import type { MuseNotification, NotificationPermission } from "../lib/notifications";
+import { userFacingError } from "../lib/errorCopy";
 
 interface SessionRef {
   session_id: string;
@@ -355,7 +356,7 @@ export function SchedulesPanel({
                   {run.nextRetryAt ? ` · retry at ${new Date(run.nextRetryAt).toLocaleTimeString()}` : ""}
                 </span>
                 {run.resultPreview && <span className="run-preview">{run.resultPreview}</span>}
-                {run.error && <small className="error">{run.error}</small>}
+                {run.error && <small className="error">{userFacingError(run.error)}</small>}
                 <details className="run-details">
                   <summary>Inspect run</summary>
                   <dl className="run-details-grid">
@@ -384,7 +385,7 @@ export function SchedulesPanel({
                   {run.error && (
                     <div className="run-output run-output-error">
                       <span className="run-detail-label">Failure</span>
-                      <p>{run.error}</p>
+                      <p>{userFacingError(run.error)}</p>
                     </div>
                   )}
                 </details>
