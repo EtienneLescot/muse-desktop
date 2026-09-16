@@ -17,6 +17,7 @@ import {
   type ReviewAnchor,
   type ReviewPatchLine,
 } from "../lib/reviewComments";
+import { userFacingError } from "../lib/errorCopy";
 
 interface Props {
   sessionId: string;
@@ -474,7 +475,7 @@ export function ReviewPanel({
 
       {review.error !== null && (
         <div className="review-error" role="alert">
-          Git review unavailable: {review.error}
+          Git review unavailable: {userFacingError(review.error)}
         </div>
       )}
 

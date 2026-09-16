@@ -24,6 +24,7 @@ import {
 } from "../lib/memory";
 // US-32: composer shortcuts documented in the UI via title attributes.
 import { COMPOSER_SHORTCUT_TITLES } from "../lib/a11y";
+import { userFacingError } from "../lib/errorCopy";
 // M0-03: sends return an explicit result — the draft is cleared only on
 // the supervisor's admission ack, never on a failed or ambiguous send.
 import type { SendResult } from "../lib/outbox";
@@ -390,7 +391,7 @@ export function Composer({
           setBlocked(
             isMissingCommand(e)
               ? outOfScopeMessage(mentions)
-              : `Scope check failed (${String(e)}): the send was blocked.`,
+              : `${userFacingError(`scope check failed: ${String(e)}`)} The send was blocked.`,
           );
           return;
         } finally {

@@ -149,7 +149,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** inventaire des libellés et erreurs générées par l'app, cohérence conversation/projet/run, raccourcis Ctrl/Cmd et états focus. `primaryModifier()` fournit maintenant le libellé OS des infobulles globales, sidebar et input. Centraliser les textes réutilisés si utile ; ne pas traduire les contenus utilisateur ou moteur.
 
-**État au 17/09/2026 :** `userFacingError` centralise la copie anglaise calme des erreurs techniques sur le bandeau global, les fichiers, les projets, les paramètres et les demandes d'entrée. Les détails restent bornés et masqués, tandis que les textes utilisateur et moteur sont conservés tels quels. Les titres et erreurs spécifiques des panneaux secondaires restent à auditer sur la webview native.
+**État au 17/09/2026 :** `userFacingError` centralise la copie anglaise calme des erreurs techniques sur le bandeau global, les fichiers, les projets, les paramètres, les demandes d'entrée, les sélecteurs de dossier, le composer et la revue Git. Les détails restent bornés et masqués, tandis que les textes utilisateur et moteur sont conservés tels quels. Les titres et erreurs spécifiques des panneaux secondaires restent à auditer sur la webview native.
 
 **Acceptation :** checklist accueil/conversation/archives/paramètres/extensions et erreurs ; aucune régression du profil fixe, des thèmes ou de la zone de drag. Captures light/dark et tailles desktop cibles.
 

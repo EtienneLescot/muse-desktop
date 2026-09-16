@@ -4,6 +4,7 @@ import {
   startupRecoverySteps,
   type SidecarErrorKind,
 } from "../lib/sidecarError";
+import { userFacingError } from "../lib/errorCopy";
 
 interface Props {
   kind: SidecarErrorKind;
@@ -35,7 +36,7 @@ export function SidecarErrorPanel({
       const dir = await open({ directory: true, multiple: false });
       if (typeof dir === "string" && dir.length > 0) onPickWorkspace(dir);
     } catch (e) {
-      setPickerError(`folder picker failed: ${String(e)}`);
+      setPickerError(userFacingError(`folder picker failed: ${String(e)}`));
     }
   }
 

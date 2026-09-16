@@ -12,11 +12,13 @@ const FRIENDLY_PATTERNS: ErrorPattern[] = [
   [/^recovery import failed\b/i, "The recovery snapshot could not be imported."],
   [/^start_session failed\b/i, "This conversation could not be started."],
   [/^send_input failed\b/i, "Your message could not be sent."],
+  [/^scope check failed\b/i, "The workspace scope check could not be completed."],
   [/^turn\/steer failed\b/i, "This turn could not be redirected."],
   [/^cancel_session failed\b/i, "This conversation could not be stopped."],
   [/^(?:approve|answer_input) failed\b/i, "Your response could not be submitted."],
   [/^model catalog unavailable\b/i, "The model list is unavailable."],
   [/^set model failed\b/i, "The model could not be changed."],
+  [/^server compact failed\b/i, "This conversation could not be compacted."],
   [/^reconnect failed\b/i, "This conversation could not be reconnected."],
   [/^worktree .* failed\b/i, "The worktree action could not be completed."],
   [/^local MCP .* failed\b/i, "The local MCP action could not be completed."],
@@ -28,6 +30,7 @@ const FRIENDLY_PATTERNS: ErrorPattern[] = [
   [/^subagent_.* failed\b/i, "The sub-agent action could not be completed."],
   [/^retry failed\b/i, "The previous message could not be retried."],
   [/^restore failed\b/i, "The recovery action could not be completed."],
+  [/^git (?:status|diff|stage|restore|commit|push|create_pr).*failed\b/i, "The Git action could not be completed."],
 ];
 
 function asText(error: unknown): string {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { userFacingError } from "../lib/errorCopy";
 
 interface Props {
   workspace: string | null;
@@ -26,7 +27,7 @@ export function WorkspacePicker({ workspace, onPick }: Props) {
       const dir = await open({ directory: true, multiple: false });
       if (typeof dir === "string" && dir.length > 0) onPick(dir);
     } catch (e) {
-      setError(`folder picker failed: ${String(e)}`);
+      setError(userFacingError(`folder picker failed: ${String(e)}`));
     }
   }
 
