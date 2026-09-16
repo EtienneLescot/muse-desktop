@@ -2,6 +2,7 @@ import { useEffect, useState, type MouseEvent } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Icon } from "./Icon";
+import { userFacingError } from "../lib/errorCopy";
 
 export function dragWindow(event: MouseEvent<HTMLElement>) {
   if (!isTauri() || event.button !== 0 ||
@@ -29,7 +30,7 @@ export function WindowControls() {
   if (!isTauri()) return null;
   async function act(action: "minimize" | "toggleMaximize" | "close") {
     try { setError(null); await getCurrentWindow()[action](); }
-    catch { setError("Unable to change the window."); }
+    catch (error) { setError(userFacingError(`window action failed: ${String(error)}`, "Unable to change the window.")); }
   }
   return <div className="window-controls" aria-label="Window controls">
     <button aria-label="Minimize window" title="Minimize" onClick={() => void act("minimize")}><Icon name="minimize" /></button>

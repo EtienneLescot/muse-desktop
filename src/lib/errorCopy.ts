@@ -28,6 +28,7 @@ const FRIENDLY_PATTERNS: ErrorPattern[] = [
   [/^index .* failed\b/i, "The workspace index action could not be completed."],
   [/^terminal_.* failed\b/i, "The terminal action could not be completed."],
   [/^subagent_.* failed\b/i, "The sub-agent action could not be completed."],
+  [/^window action failed\b/i, "The window action could not be completed."],
   [/^retry failed\b/i, "The previous message could not be retried."],
   [/^restore failed\b/i, "The recovery action could not be completed."],
   [/^git (?:status|diff|stage|restore|commit|push|create_pr).*failed\b/i, "The Git action could not be completed."],

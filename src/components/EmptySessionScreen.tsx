@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
 import type { AuthorizationMode } from "../lib/authorization";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
+import { userFacingError } from "../lib/errorCopy";
 import {
   buildTurnInputParts,
   MAX_ATTACHMENTS,
@@ -76,7 +77,7 @@ export function EmptySessionScreen({
       try {
         next.push(await readAttachment(file));
       } catch (error) {
-        failures.push(`${file.name}: ${String(error).replace(/^Error:\s*/, "")}`);
+        failures.push(`${file.name}: ${userFacingError(error, "This attachment could not be read.")}`);
       }
     }
     if (next.length > 0) setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));

@@ -421,7 +421,7 @@ export function SettingsPanel({
             <p className="settings-note">
               Example configurations. Connect the engine to see the
               available models.
-              {modelsError !== null && ` (${modelsError})`}
+              {modelsError !== null && ` (${userFacingError(modelsError)})`}
             </p>
             <label className="settings-label" htmlFor="settings-provider">
               Provider / model (saved per project)

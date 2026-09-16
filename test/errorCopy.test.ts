@@ -18,4 +18,19 @@ describe("M0-11 generated error copy", () => {
   it("leaves already user-facing copy unchanged", () => {
     assert.equal(userFacingError("Choose a workspace folder first."), "Choose a workspace folder first.");
   });
+
+  it("covers secondary panel actions without exposing protocol prefixes", () => {
+    assert.equal(
+      userFacingError("skills scan failed: permission denied"),
+      "The skills scan could not be completed. — permission denied",
+    );
+    assert.equal(
+      userFacingError("model catalog unavailable: host disconnected"),
+      "The model list is unavailable. — host disconnected",
+    );
+    assert.equal(
+      userFacingError("window action failed: native window unavailable"),
+      "The window action could not be completed. — native window unavailable",
+    );
+  });
 });

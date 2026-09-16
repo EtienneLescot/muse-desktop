@@ -461,7 +461,7 @@ export function Composer({
       try {
         next.push(await readAttachment(file));
       } catch (error) {
-        failures.push(`${file.name}: ${String(error).replace(/^Error:\s*/, "")}`);
+        failures.push(`${file.name}: ${userFacingError(error, "This attachment could not be read.")}`);
       }
     }
     if (next.length > 0) {
