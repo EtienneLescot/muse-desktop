@@ -67,6 +67,15 @@ describe("US-3 project creation", () => {
     assert.equal(res.projects.length, 1);
   });
 
+  it("keeps a trimmed workspace folder when provided", () => {
+    const res = createProject([], {
+      name: "Docs",
+      workspace: "  C:\\work\\docs  ",
+    });
+    assert.equal(res.error, null);
+    assert.equal(res.project?.workspace, "C:\\work\\docs");
+  });
+
   it("refuses a blank name", () => {
     const res = createProject([], { name: "   " });
     assert.equal(res.project, null);
@@ -120,6 +129,14 @@ describe("US-3 thread attach / detach", () => {
     assert.equal(renamed[0].instructions, "ci strict");
     const kept = updateProject(renamed, "p0", { name: "   " });
     assert.equal(kept[0].name, "Site");
+  });
+
+  it("updates and clears the project workspace folder", () => {
+    const projects = fill(1);
+    const set = updateProject(projects, "p0", { workspace: "  C:\\work\\site  " });
+    assert.equal(set[0].workspace, "C:\\work\\site");
+    const cleared = updateProject(set, "p0", { workspace: "   " });
+    assert.equal(cleared[0].workspace, undefined);
   });
 });
 
@@ -204,13 +221,19 @@ describe("US-3/US-30 sanitize + persistence", () => {
       rawSet(k, v);
     };
     const projects = fill(2);
-    saveProjects(updateProject(projects, "p0", { instructions: "ship it" }));
+    saveProjects(
+      updateProject(projects, "p0", {
+        instructions: "ship it",
+        workspace: "C:\\work\\site",
+      }),
+    );
     saveThreadProjects({ s1: "p0" });
     saveGlobalSettings({ ...DEFAULT_PROJECT_SETTINGS, sandbox: "full" });
     assert.ok(seen.length > 0);
     assert.ok(seen.every((k) => k.startsWith("muse-desktop.")));
     const back = loadProjects();
     assert.equal(back.find((p) => p.id === "p0")?.instructions, "ship it");
+    assert.equal(back.find((p) => p.id === "p0")?.workspace, "C:\\work\\site");
     assert.deepEqual(loadThreadProjects(), { s1: "p0" });
     assert.equal(loadGlobalSettings(DEFAULT_PROJECT_SETTINGS).sandbox, "full");
     // Corrupt payloads fall back safely.

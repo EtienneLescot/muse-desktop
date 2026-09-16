@@ -100,7 +100,7 @@ OpenCode : lien public `opncd.ai/s/<id>`, modes manual(/share défaut)/auto/disa
 
 ### 3.11 Personnalisation / config
 - **US-29 (M-V1) :** workspace persistant + activeId restaurés (+ `set_workspace` source de vérité côté Rust). **AC :** restart → même workspace/session active ; `start_session` sans workspace → erreur `Pick a workspace folder first` côté front / `no workspace selected` côté back, jamais d'écran vide ; titre auto = 1er input (42 chars max) sauf titre déjà renommé ; input vide → refusé (`empty input`).
-- **US-30 (S-V2) :** modèle project-centric : 1 projet = 1+ dossiers (frontend+backend), settings agents/sécurité/MCP isolés par projet hérités du global + override [Antigravity codelabs] ; app standalone Mac/Linux/Windows + scheduled tasks ; IDE/CLI/SDK/VSCode/JetBrains/Zed à côté. **AC :** override projet prouvé par diff global/projet.
+- **US-30 (S-V2) :** modèle project-centric : 1 projet = 1+ dossiers (frontend+backend), settings agents/sécurité/MCP isolés par projet hérités du global + override [Antigravity codelabs] ; app standalone Mac/Linux/Windows + scheduled tasks ; IDE/CLI/SDK/VSCode/JetBrains/Zed à côté. **AC :** override projet prouvé par diff global/projet. **État M2-01 :** le premier dossier racine est désormais optionnel, persistant et sélectionnable depuis Projects ; les dossiers multiples, l'environnement/worktree et la migration guidée restent à implémenter.
 - **US-31 (S-V2) :** providers multiples + locaux (75+ via AI SDK/Models.dev, reco GPT-5.x/Claude 4.5/Gemini 3 Pro) [ref-opencode]. [TROU : backend modèle muse non sourcé — ne pas promettre sans preuve.]
 
 ### 3.12 Accessibilité / i18n

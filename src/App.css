@@ -2017,6 +2017,25 @@ body.dark .composer textarea::placeholder {
   gap: 6px;
 }
 
+.project-workspace-picker,
+.project-workspace-setting {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-workspace-picker span,
+.project-workspace-setting .workspace-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .project-create input[type="text"],
 .project-detail input[type="text"],
 .project-detail textarea,

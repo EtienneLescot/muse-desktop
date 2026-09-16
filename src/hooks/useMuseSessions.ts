@@ -569,6 +569,7 @@ interface UseMuseSessions {
   /** w-settings: route a path through the scope-guard prompt path. */
   checkPathScope: (path: string) => Promise<ScopeVerdict>;
   startSession: () => Promise<string | null>;
+  startSessionInWorkspace: (workspacePath: string) => Promise<string | null>;
   /** M1-09: create a server-side branch from completed conversation turns. */
   forkSession: (sessionId: string) => Promise<string | null>;
   reconnectSession: (id: string) => Promise<void>;
@@ -694,10 +695,10 @@ interface UseMuseSessions {
   threadProjects: ThreadProjectMap;
   /** Last project refusal (quota / blank name); null when clean. */
   projectError: string | null;
-  createProject: (name: string, instructions?: string) => void;
+  createProject: (name: string, instructions?: string, workspace?: string) => void;
   /** Delete a project; its threads become ungrouped (no orphans). */
   deleteProject: (id: string) => void;
-  updateProject: (id: string, patch: { name?: string; instructions?: string }) => void;
+  updateProject: (id: string, patch: { name?: string; instructions?: string; workspace?: string }) => void;
   /** Attach a thread to a project (null detaches). */
   attachThread: (sessionId: string, projectId: string | null) => void;
   /** Project a thread is attached to (null = ungrouped/unknown). */
@@ -2092,13 +2093,13 @@ export function useMuseSessions(): UseMuseSessions {
 
   // Shared session creation (US-4 `newFromSummary` reuses it so the fresh
   // thread goes through the exact same backend + state path as `+ New`).
-  const startSessionRow = useCallback(async (): Promise<string | null> => {
+  const startSessionRow = useCallback(async (workspaceOverride?: string): Promise<string | null> => {
     try {
       setError(null);
       // Live React state first: localStorage writes are best-effort and may
       // silently fail, which previously enabled the buttons while sending
       // workspace_path=null ("no workspace selected" from the backend).
-      const ws = workspace ?? loadWorkspace() ?? undefined;
+      const ws = workspaceOverride?.trim() || workspace || loadWorkspace() || undefined;
       if (ws === undefined) {
         setError("Pick a workspace folder first.");
         return null;
@@ -2156,6 +2157,11 @@ export function useMuseSessions(): UseMuseSessions {
   const startSession = useCallback(async () => {
     return await startSessionRow();
   }, [startSessionRow]);
+
+  const startSessionInWorkspace = useCallback(
+    async (workspacePath: string) => startSessionRow(workspacePath),
+    [startSessionRow],
+  );
 
   const [forkingId, setForkingId] = useState<string | null>(null);
   const forkSession = useCallback(
@@ -3095,8 +3101,8 @@ export function useMuseSessions(): UseMuseSessions {
   // US-3 + US-30 project actions. Creation past MAX_PROJECTS is refused
   // client-side with the explicit quota message in projectError.
   const createProject = useCallback(
-    (name: string, instructions?: string) => {
-      const res = createProjectRow(projects, { name, instructions });
+    (name: string, instructions?: string, workspacePath?: string) => {
+      const res = createProjectRow(projects, { name, instructions, workspace: workspacePath });
       setProjectError(res.error);
       if (res.project !== null) setProjects(res.projects);
     },
@@ -3112,7 +3118,7 @@ export function useMuseSessions(): UseMuseSessions {
     [projects, threadProjects],
   );
 
-  const updateProject = useCallback((id: string, patch: { name?: string; instructions?: string }) => {
+  const updateProject = useCallback((id: string, patch: { name?: string; instructions?: string; workspace?: string }) => {
     setProjects((cur) => updateProjectRow(cur, id, patch));
   }, []);
 
@@ -4034,6 +4040,7 @@ export function useMuseSessions(): UseMuseSessions {
     setSessionModel,
     checkPathScope,
     startSession,
+    startSessionInWorkspace,
     forkSession,
     reconnectSession,
     reconnectingId,

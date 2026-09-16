@@ -295,7 +295,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** `projects.ts`, ProjectsPanel, persistance et backend workspace. Dépend M0-09.
 
-**Travail :** Project avec racines identifiées, racine par défaut et environnement ; migrer groupes existants sans deviner de dossier si ambigu. La conversation garde sa racine même après modification du défaut.
+**État :** Câblé côté modèle et UI locale. `Project.workspace` est optionnel et persiste sous le schéma existant ; le panneau Projects fournit le sélecteur natif, l’édition et la remise à zéro du dossier. `New conversation here` réutilise le chemin `start_session` du hook, crée la session dans la racine choisie puis rattache la conversation au projet.
+
+**Reste :** migration guidée des anciens groupes sans racine, validation native d’un dossier déplacé ou supprimé, et choix explicite d’un environnement/worktree. Ne jamais déduire un dossier depuis le nom du projet.
 
 **Acceptation :** projet multi-dossiers, dossier déplacé, ancien groupe sans racine et nouvelle conversation dans le bon workspace.
 
