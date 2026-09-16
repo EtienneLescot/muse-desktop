@@ -17,6 +17,7 @@ import {
   loadConnectors,
   REMOTE_LIMIT_MESSAGE,
   requestRemoteConnector,
+  registerRemoteConnector,
   registerLocalConnector,
   rollbackLocalConnector,
   refreshLocalConnector,
@@ -309,6 +310,43 @@ describe("remote guard (US-26: single remote + public internet)", () => {
     assert.equal(isPublicHttpUrl("http://mcp.acme.com/rpc"), false);
     assert.equal(isPublicHttpUrl("https://127.0.0.1/x"), false);
     assert.equal(isPublicHttpUrl("not a url"), false);
+  });
+
+  it("registers a remote only after a verified tool catalogue", () => {
+    const r = registerRemoteConnector([], {
+      id: "remote-acme",
+      name: "Acme",
+      url: "https://mcp.acme.com/rpc",
+      protocolVersion: "2025-06-18",
+      serverVersion: "2.0",
+      tools: [{ name: "echo", description: "Echo" }],
+    }, 123);
+    assert.ok(r);
+    assert.equal(r.entry.status, "installed");
+    assert.equal(r.entry.lastProbeAt, 123);
+    assert.equal(r.entry.protocolVersion, "2025-06-18");
+    assert.equal(r.entry.serverVersion, "2.0");
+    assert.equal(r.entry.tools[0].name, "echo");
+  });
+
+  it("keeps a disabled remote disabled when it reconnects", () => {
+    const first = registerRemoteConnector([], {
+      id: "remote-acme",
+      name: "Acme",
+      url: "https://mcp.acme.com/rpc",
+      tools: [{ name: "old", description: "" }],
+    });
+    assert.ok(first);
+    const disabled = setConnectorEnabled(first.registry, "remote-acme", false).registry;
+    const refreshed = registerRemoteConnector(disabled, {
+      id: "remote-acme",
+      name: "Acme",
+      url: "https://mcp.acme.com/rpc",
+      tools: [{ name: "new", description: "" }],
+    });
+    assert.ok(refreshed);
+    assert.equal(refreshed.entry.status, "disabled");
+    assert.equal(refreshed.entry.tools[0].name, "new");
   });
 });
 

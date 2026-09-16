@@ -308,6 +308,7 @@ import {
   rollbackLocalConnector,
   refreshLocalConnector,
   requestRemoteConnector,
+  registerRemoteConnector,
   saveConnectors,
   setConnectorEnabled,
   uninstallConnector,
@@ -316,6 +317,13 @@ import {
   type LocalMcpProbeResult,
   type ConnectorTool,
 } from "../lib/connectors";
+import {
+  callRemoteMcp as callRemoteMcpTransport,
+  probeRemoteMcp as probeRemoteMcpTransport,
+  type RemoteMcpCallResult,
+  type RemoteMcpProbeResult,
+  type RemoteMcpSession,
+} from "../lib/remoteMcp.ts";
 // w-integrations (US-25): slash-invokable + auto-suggested skills with
 // progressive disclosure (pure, unit-tested).
 import {
@@ -994,6 +1002,22 @@ interface UseMuseSessions {
     toolName: string,
     argumentsText: string,
   ) => Promise<LocalMcpCallResult | null>;
+  /** M3-02: IDs with an authenticated remote MCP session in memory. */
+  remoteConnectedIds: string[];
+  /** M3-02: perform a real remote initialize + tools/list exchange. */
+  probeRemoteMcp: (
+    name: string,
+    url: string,
+    token?: string,
+  ) => Promise<RemoteMcpProbeResult | null>;
+  /** M3-02: call a tool through the in-memory remote session. */
+  callRemoteMcp: (
+    id: string,
+    toolName: string,
+    argumentsText: string,
+  ) => Promise<RemoteMcpCallResult | null>;
+  /** M3-02: drop the in-memory token/session and mark the entry disconnected. */
+  disconnectRemoteMcp: (id: string) => void;
   /** w-integrations US-26: last remote-guard refusal message, if any. */
   remoteNotice: string | null;
   /** w-integrations US-24: 1-click install from the curated directory. */
@@ -1002,11 +1026,6 @@ interface UseMuseSessions {
   uninstallConnectorById: (id: string) => void;
   /** w-integrations US-24: enable/disable an installed connector. */
   setConnectorEnabledById: (id: string, enabled: boolean) => void;
-  /**
-   * w-integrations US-26: request a remote entry. False when the
-   * single-remote or public-internet guard refused (see remoteNotice).
-   */
-  addRemoteConnector: (name: string, url: string) => boolean;
   /** w-integrations US-25: skills (builtins merged over stored). */
   skills: Skill[];
   /** w-integrations US-25: enable/disable a skill by slash name. */
@@ -1243,6 +1262,10 @@ export function useMuseSessions(): UseMuseSessions {
   // Start/Refresh, never during hydration.
   const [mcpRunningIds, setMcpRunningIds] = useState<string[]>([]);
   const mcpPollBusyRef = useRef(false);
+  // Remote bearer tokens and MCP session ids are process memory only. They
+  // intentionally never enter the connector registry or localStorage.
+  const remoteSessionsRef = useRef<Record<string, RemoteMcpSession>>({});
+  const [remoteConnectedIds, setRemoteConnectedIds] = useState<string[]>([]);
   const [remoteNotice, setRemoteNotice] = useState<string | null>(null);
   // w-integrations US-25: skills, builtins merged over stored overrides.
   const [skills, setSkills] = useState<Skill[]>(() => mergeBuiltinSkills(loadSkills()));
@@ -2997,6 +3020,19 @@ export function useMuseSessions(): UseMuseSessions {
     setConnectors(r.registry);
   }, []);
 
+  const disconnectRemoteMcp = useCallback((id: string): void => {
+    delete remoteSessionsRef.current[id];
+    setRemoteConnectedIds((current) => current.filter((item) => item !== id));
+    setConnectors((current) => current.map((entry) => {
+      if (entry.id !== id || entry.kind !== "remote") return entry;
+      return {
+        ...entry,
+        status: "error",
+        guardMessage: "Disconnected. Connect again to verify the remote endpoint.",
+      };
+    }));
+  }, []);
+
   const uninstallConnectorById = useCallback(async (id: string): Promise<void> => {
     if (mcpRunningIds.includes(id)) {
       try {
@@ -3007,8 +3043,9 @@ export function useMuseSessions(): UseMuseSessions {
         return;
       }
     }
+    if (remoteConnectedIds.includes(id)) disconnectRemoteMcp(id);
     setConnectors((cur) => uninstallConnector(cur, id).registry);
-  }, [mcpRunningIds]);
+  }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
 
   const setConnectorEnabledById = useCallback((id: string, enabled: boolean): void => {
     setConnectors((cur) => setConnectorEnabled(cur, id, enabled).registry);
@@ -3024,19 +3061,102 @@ export function useMuseSessions(): UseMuseSessions {
           setError(`local MCP disable failed to stop server: ${e instanceof Error ? e.message : String(e)}`);
         });
     }
-  }, [mcpRunningIds]);
+    if (!enabled && remoteConnectedIds.includes(id)) disconnectRemoteMcp(id);
+  }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
 
-  const addRemoteConnector = useCallback((name: string, url: string): boolean => {
-    const id = `remote-${name.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
-    const r = requestRemoteConnector(connectorsRef.current, { id, name, url });
-    if (!r.ok) {
-      setRemoteNotice(r.message);
-      return false;
-    }
-    setRemoteNotice(null);
-    setConnectors(r.registry);
-    return true;
-  }, []);
+  const probeRemoteMcp = useCallback(
+    async (
+      name: string,
+      url: string,
+      token = "",
+    ): Promise<RemoteMcpProbeResult | null> => {
+      const trimmedName = name.trim();
+      const endpoint = url.trim();
+      const id = `remote-${trimmedName.toLowerCase().replace(/[\s_]+/g, "-")}`;
+      if (!trimmedName || !endpoint) {
+        setRemoteNotice("Remote connector name and URL are required.");
+        return null;
+      }
+      const existing = findConnector(connectorsRef.current, id);
+      if (existing?.kind !== "remote") {
+        const guard = requestRemoteConnector(connectorsRef.current, { id, name: trimmedName, url: endpoint });
+        if (!guard.ok) {
+          setRemoteNotice(guard.message);
+          return null;
+        }
+      }
+      setRemoteNotice(null);
+      try {
+        const result = await probeRemoteMcpTransport(endpoint, token);
+        const registered = registerRemoteConnector(connectorsRef.current, {
+          id,
+          name: trimmedName,
+          url: endpoint,
+          tools: result.tools,
+          protocolVersion: result.protocolVersion,
+          serverVersion: result.serverVersion,
+        });
+        if (registered === null) {
+          setRemoteNotice("Remote MCP returned an invalid tool catalogue.");
+          return null;
+        }
+        remoteSessionsRef.current[id] = {
+          url: endpoint,
+          token,
+          sessionId: result.sessionId,
+          protocolVersion: result.protocolVersion,
+          nextRequestId: 3,
+        };
+        setConnectors(registered.registry);
+        setRemoteConnectedIds((current) => [...new Set([...current, id])]);
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setRemoteNotice(message);
+        setConnectors((current) => current.map((entry) =>
+          entry.id === id && entry.kind === "remote"
+            ? { ...entry, status: "error", guardMessage: message }
+            : entry,
+        ));
+        return null;
+      }
+    },
+    [],
+  );
+
+  const callRemoteMcp = useCallback(
+    async (
+      id: string,
+      toolName: string,
+      argumentsText: string,
+    ): Promise<RemoteMcpCallResult | null> => {
+      const session = remoteSessionsRef.current[id];
+      if (!session) {
+        setRemoteNotice("Remote connector is disconnected. Connect it before calling a tool.");
+        return null;
+      }
+      let args: unknown = {};
+      if (argumentsText.trim()) {
+        try {
+          args = JSON.parse(argumentsText);
+        } catch {
+          setRemoteNotice("Remote tool arguments must be valid JSON.");
+          return null;
+        }
+      }
+      try {
+        const result = await callRemoteMcpTransport(session, toolName, args);
+        setRemoteNotice(null);
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setRemoteNotice(message);
+        disconnectRemoteMcp(id);
+        return null;
+      }
+    },
+    [disconnectRemoteMcp],
+  );
 
   const setSkillEnabledByName = useCallback((name: string, enabled: boolean): void => {
     setSkills((cur) => setSkillEnabled(cur, name, enabled).skills);
@@ -5447,11 +5567,14 @@ export function useMuseSessions(): UseMuseSessions {
     startLocalMcp,
     stopLocalMcp,
     callRegisteredLocalMcp,
+    remoteConnectedIds,
+    probeRemoteMcp,
+    callRemoteMcp,
+    disconnectRemoteMcp,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
     setConnectorEnabledById,
-    addRemoteConnector,
     skills,
     setSkillEnabledByName,
     traceSkillSuggestions,

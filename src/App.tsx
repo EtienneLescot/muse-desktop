@@ -183,11 +183,14 @@ export default function App() {
     startLocalMcp,
     stopLocalMcp,
     callRegisteredLocalMcp,
+    remoteConnectedIds,
+    probeRemoteMcp,
+    callRemoteMcp,
+    disconnectRemoteMcp,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
     setConnectorEnabledById,
-    addRemoteConnector,
     skills,
     setSkillEnabledByName,
     traceSkillSuggestions,
@@ -823,13 +826,16 @@ export default function App() {
                   onStartLocal={(id) => startLocalMcp(id, workspace)}
                   onStopLocal={stopLocalMcp}
                   onCallRegisteredLocal={callRegisteredLocalMcp}
+                  remoteConnectedIds={remoteConnectedIds}
+                  onProbeRemote={probeRemoteMcp}
+                  onCallRemote={callRemoteMcp}
+                  onDisconnectRemote={disconnectRemoteMcp}
                   remoteNotice={remoteNotice}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}
                   onToggle={(id, enabled) =>
                     setConnectorEnabledById(id, enabled)
                   }
-                  onAddRemote={(name, url) => addRemoteConnector(name, url)}
                 />{" "}
                 <SkillPanel
                   skills={skills}

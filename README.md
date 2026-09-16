@@ -31,6 +31,8 @@ The NSIS installer is written to `src-tauri/target/release/bundle/nsis/`. Releas
 
 On Windows, `powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1` performs the same build after checking that the x64 sidecar is present. Pass `-Bundle msi` or `-Bundle all` when another bundle format is needed.
 
+Remote MCP endpoints can be tested from **Extensions** with a public HTTPS URL. Muse performs a real `initialize`/`tools/list` exchange (JSON or SSE) before saving the catalogue; bearer tokens remain in memory and must be entered again after a relaunch. OAuth and native secret-store integration are still planned.
+
 ## Documentation
 
 - [Product and technical specification](docs/SPEC.md)

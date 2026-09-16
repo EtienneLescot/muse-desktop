@@ -4255,6 +4255,24 @@ body.dark .composer textarea::placeholder {
   padding: 6px 8px;
 }
 
+.integration-remote-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--pale);
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.integration-remote-status .integration-action {
+  color: var(--text);
+}
+
 /* w-collab (US-27/US-28/US-34): share + channel stub + import panels.
  * Additive only; reuses the existing tokens above (both themes). */
 .collab-panel {

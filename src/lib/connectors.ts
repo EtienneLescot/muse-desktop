@@ -8,10 +8,11 @@
  *   without restart: `listConnectorTools` re-reads the registry on every
  *   call, so there is no cache to invalidate; `diffTools` mirrors the
  *   `notifications/tools/list_changed` semantics for the UI.
- * - US-26: REMOTE registry entries exist for bookkeeping only (no real
- *   transport here). A single-remote guard plus an explicit
+ * - US-26: REMOTE entries are accepted only after a real initialize/tools
+ *   exchange in `remoteMcp.ts`. A single-remote guard plus an explicit
  *   public-internet/allowlist message applies; private/VPN-style hosts are
- *   refused with a documented failure message.
+ *   refused with a documented failure message. Tokens never enter this
+ *   persisted registry.
  *
  * Persistence lives under `muse-desktop.connectors.v1` (localStorage,
  * best-effort). Under node:test there is no localStorage, so load/save
@@ -20,7 +21,7 @@
 
 import { readStorageJson, writeStorageJson } from "./storage.ts";
 
-/** Local (in-process/sidecar) vs remote (HTTP/SSE, bookkeeping only). */
+/** Local (in-process/sidecar) vs remote (streamable HTTP/SSE). */
 export type ConnectorKind = "local" | "remote";
 
 /** Lifecycle state of a registry entry. */
@@ -73,6 +74,8 @@ export interface ConnectorEntry {
   lastProbeAt?: number;
   /** Local-only: server version reported by the last successful probe. */
   serverVersion?: string;
+  /** Protocol version reported by the last successful MCP probe. */
+  protocolVersion?: string;
   /** Local-only: one-step rollback snapshot from the previous tools/list. */
   previousTools?: ConnectorTool[];
   previousServerVersion?: string;
@@ -416,8 +419,10 @@ export type RemoteRequestResult =
   | { ok: false; registry: ConnectorEntry[]; code: RemoteGuardCode; message: string };
 
 /**
- * Request a REMOTE connector entry (bookkeeping only — no real transport
- * in this client). Guards, in order:
+ * Validate the guards for a REMOTE connector before a transport attempt.
+ * This legacy helper returns a provisional row for callers that only need to
+ * inspect the plan limit; real registration must use `registerRemoteConnector`
+ * after a successful exchange. Guards, in order:
  * 1. single-remote limit (any existing remote entry blocks a new one);
  * 2. public-internet/allowlist check on the URL (private/VPN hosts are
  *    refused with the documented VPN failure message).
@@ -448,6 +453,49 @@ export function requestRemoteConnector(
     addedAt: now,
   };
   return { ok: true, registry: [...registry, entry], entry };
+}
+
+/** Register a remote endpoint only after a real initialize + tools/list exchange. */
+export function registerRemoteConnector(
+  registry: ConnectorEntry[],
+  spec: {
+    id: string;
+    name: string;
+    url: string;
+    tools: ConnectorTool[];
+    protocolVersion?: string;
+    serverVersion?: string;
+  },
+  now: number = Date.now(),
+): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
+  const id = spec.id.trim();
+  const name = spec.name.trim();
+  const url = spec.url.trim();
+  if (!id || !name || !isPublicHttpUrl(url) || !Array.isArray(spec.tools)) return null;
+  const tools = spec.tools
+    .map((tool) => ({ name: tool.name.trim(), description: tool.description.trim() }))
+    .filter((tool) => tool.name.length > 0 && tool.name.length <= 200);
+  if (tools.length !== spec.tools.length) return null;
+  const existing = findConnector(registry, id);
+  const entry: ConnectorEntry = {
+    id,
+    name,
+    description: `Verified remote MCP endpoint ${url}.`,
+    kind: "remote",
+    tools,
+    status: existing?.status === "disabled" ? "disabled" : "installed",
+    url,
+    lastProbeAt: now,
+    ...(spec.protocolVersion?.trim() ? { protocolVersion: spec.protocolVersion.trim() } : {}),
+    ...(spec.serverVersion?.trim() ? { serverVersion: spec.serverVersion.trim() } : {}),
+    addedAt: existing?.addedAt ?? now,
+  };
+  return {
+    registry: existing
+      ? registry.map((item) => (item.id === id ? entry : item))
+      : [...registry, entry],
+    entry,
+  };
 }
 
 function isValidEntry(e: unknown): e is ConnectorEntry {
@@ -481,6 +529,7 @@ export function loadConnectors(): ConnectorEntry[] {
       command: typeof e.command === "string" ? e.command : undefined,
       lastProbeAt: typeof e.lastProbeAt === "number" ? e.lastProbeAt : undefined,
       serverVersion: typeof e.serverVersion === "string" ? e.serverVersion : undefined,
+      protocolVersion: typeof e.protocolVersion === "string" ? e.protocolVersion : undefined,
       previousTools: Array.isArray(e.previousTools)
         ? e.previousTools.filter(
             (t): t is ConnectorTool =>

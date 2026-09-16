@@ -7,6 +7,7 @@ import {
   type LocalMcpCallResult,
   type LocalMcpProbeResult,
 } from "../lib/connectors";
+import type { RemoteMcpCallResult, RemoteMcpProbeResult } from "../lib/remoteMcp.ts";
 import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
@@ -18,8 +19,6 @@ interface Props {
   onInstall: (dirId: string) => void;
   onUninstall: (id: string) => void;
   onToggle: (id: string, enabled: boolean) => void;
-  /** Returns false when the guard refused (message lands in remoteNotice). */
-  onAddRemote: (name: string, url: string) => boolean;
   /** Probe an explicit local MCP stdio command. */
   onProbeLocal: (command: string) => Promise<LocalMcpProbeResult | null>;
   /** Call one tool on the probed local MCP command. */
@@ -49,6 +48,20 @@ interface Props {
     toolName: string,
     argumentsText: string,
   ) => Promise<LocalMcpCallResult | null>;
+  /** M3-02: real remote initialize + tools/list exchange. */
+  onProbeRemote: (
+    name: string,
+    url: string,
+    token?: string,
+  ) => Promise<RemoteMcpProbeResult | null>;
+  /** M3-02: call a tool on an authenticated in-memory remote session. */
+  onCallRemote: (
+    id: string,
+    toolName: string,
+    argumentsText: string,
+  ) => Promise<RemoteMcpCallResult | null>;
+  remoteConnectedIds: string[];
+  onDisconnectRemote: (id: string) => void;
   workspace: string | null;
 }
 
@@ -67,7 +80,6 @@ export function ConnectorPanel({
   onInstall,
   onUninstall,
   onToggle,
-  onAddRemote,
   onProbeLocal,
   onCallLocal,
   onRegisterLocal,
@@ -77,10 +89,20 @@ export function ConnectorPanel({
   onStartLocal,
   onStopLocal,
   onCallRegisteredLocal,
+  onProbeRemote,
+  onCallRemote,
+  remoteConnectedIds,
+  onDisconnectRemote,
   workspace,
 }: Props) {
   const [remoteName, setRemoteName] = useState("");
   const [remoteUrl, setRemoteUrl] = useState("");
+  const [remoteToken, setRemoteToken] = useState("");
+  const [remoteProbe, setRemoteProbe] = useState<RemoteMcpProbeResult | null>(null);
+  const [remoteCall, setRemoteCall] = useState<RemoteMcpCallResult | null>(null);
+  const [remoteTool, setRemoteTool] = useState("");
+  const [remoteArgs, setRemoteArgs] = useState("{}");
+  const [remoteBusy, setRemoteBusy] = useState<"probe" | "call" | null>(null);
   const [localName, setLocalName] = useState("");
   const [localCommand, setLocalCommand] = useState("");
   const [localProbe, setLocalProbe] = useState<LocalMcpProbeResult | null>(null);
@@ -418,17 +440,31 @@ export function ConnectorPanel({
           </ul>
         </>
       )}
-      <h4>Remote connector (one maximum)</h4>
+      <h4>Remote MCP connector (one maximum)</h4>
+      <p className="muted">
+        Connect to a public HTTPS MCP endpoint. The bearer token stays in
+        memory and is cleared when you disconnect or close the app.
+      </p>
       <form
         className="integration-form"
-        onSubmit={(ev) => {
+        onSubmit={async (ev) => {
           ev.preventDefault();
-          if (remoteName.trim().length === 0 || remoteUrl.trim().length === 0)
+          if (
+            remoteName.trim().length === 0 ||
+            remoteUrl.trim().length === 0 ||
+            remoteBusy !== null
+          )
             return;
-          if (onAddRemote(remoteName.trim(), remoteUrl.trim())) {
-            setRemoteName("");
-            setRemoteUrl("");
-          }
+          setRemoteBusy("probe");
+          setRemoteCall(null);
+          const result = await onProbeRemote(
+            remoteName.trim(),
+            remoteUrl.trim(),
+            remoteToken,
+          );
+          setRemoteProbe(result);
+          setRemoteTool(result?.tools[0]?.name ?? "");
+          setRemoteBusy(null);
         }}
       >
         <input
@@ -445,8 +481,74 @@ export function ConnectorPanel({
           value={remoteUrl}
           onChange={(ev) => setRemoteUrl(ev.target.value)}
         />
-        <button type="submit">Add</button>
+        <input
+          type="password"
+          placeholder="Bearer token (optional)"
+          aria-label="Remote MCP bearer token"
+          value={remoteToken}
+          autoComplete="off"
+          onChange={(ev) => setRemoteToken(ev.target.value)}
+        />
+        <button type="submit" disabled={remoteBusy !== null}>
+          {remoteBusy === "probe" ? "Connecting…" : "Connect and list tools"}
+        </button>
       </form>
+      {remoteProbe && (
+        <div className="local-mcp-result" aria-label="Remote MCP connection result">
+          <p className="integration-notice" role="status">
+            Connected to {remoteProbe.serverName} {remoteProbe.serverVersion} · {remoteProbe.tools.length} tool(s) · {remoteProbe.durationMs} ms
+          </p>
+          {remoteProbe.tools.length > 0 && (
+            <>
+              <label>
+                Tool
+                <select value={remoteTool} onChange={(ev) => setRemoteTool(ev.target.value)}>
+                  {remoteProbe.tools.map((tool) => (
+                    <option key={tool.name} value={tool.name}>{tool.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Arguments (JSON)
+                <textarea value={remoteArgs} onChange={(ev) => setRemoteArgs(ev.target.value)} rows={3} spellCheck={false} />
+              </label>
+              <button
+                type="button"
+                disabled={!remoteTool || remoteBusy !== null}
+                onClick={async () => {
+                  setRemoteBusy("call");
+                  const id = `remote-${remoteName.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
+                  const result = await onCallRemote(id, remoteTool, remoteArgs);
+                  setRemoteCall(result);
+                  setRemoteBusy(null);
+                }}
+              >
+                {remoteBusy === "call" ? "Calling…" : "Call tool"}
+              </button>
+              {remoteCall && (
+                <pre className="local-mcp-output">{JSON.stringify(remoteCall.result, null, 2)}</pre>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {installed.filter((entry) => entry.kind === "remote").map((entry) => (
+        <div className="integration-remote-status" key={entry.id}>
+          <span>
+            {remoteConnectedIds.includes(entry.id) ? "Connected" : "Disconnected"}
+            {entry.serverVersion ? ` · server v${entry.serverVersion}` : ""}
+          </span>
+          {remoteConnectedIds.includes(entry.id) && (
+            <button type="button" className="integration-action" onClick={() => {
+              onDisconnectRemote(entry.id);
+              setRemoteProbe(null);
+              setRemoteCall(null);
+            }}>
+              Disconnect
+            </button>
+          )}
+        </div>
+      ))}
       {remoteNotice !== null && (
         <p className="integration-notice" role="status">
           {remoteNotice}
