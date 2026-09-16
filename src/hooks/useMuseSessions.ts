@@ -582,6 +582,12 @@ export interface MuseEvent {
   payload: string;
 }
 
+/** Latest host event observed for one session (live only, never persisted). */
+export interface StreamActivity {
+  lastEventAt: number;
+  lastEventKind: string;
+}
+
 /** One buffered backend event with its sequence number (poll transport). */
 interface DrainedEvent extends MuseEvent {
   seq: number;
@@ -630,6 +636,9 @@ interface UseMuseSessions {
   activeLog: LogEntry[];
   approvals: ApprovalRequest[];
   activeApprovals: ApprovalRequest[];
+  /** M0-02: latest live event used to explain quiet/stalled turns. */
+  streamActivityBySession: Record<string, StreamActivity>;
+  activeStreamActivity: StreamActivity | null;
   /** M1-10: queued turns that can still be reclaimed before launch. */
   queuedTurns: QueuedTurn[];
   /** Default folder for new threads (persisted); each thread keeps its own. */
@@ -1164,6 +1173,12 @@ export function useMuseSessions(): UseMuseSessions {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  // M0-02: keep a live heartbeat separate from the transcript. Persisted
+  // entries can be old after a restart and must never masquerade as current
+  // host activity.
+  const [streamActivityBySession, setStreamActivityBySession] = useState<
+    Record<string, StreamActivity>
+  >({});
   const [queuedTurnsBySession, setQueuedTurnsBySession] = useState<Record<string, QueuedTurn[]>>({});
   // Global authorization posture. This is intentionally kept separate from
   // sandbox settings: changing the posture must not mutate host capabilities.
@@ -1933,6 +1948,22 @@ export function useMuseSessions(): UseMuseSessions {
     setSessions((cur) => withUnreadFlag(cur, sessionId, true));
   }
 
+  const touchStreamActivity = useCallback(
+    (sessionId: string, kind: string, at = Date.now()): void => {
+      setStreamActivityBySession((cur) => {
+        const previous = cur[sessionId];
+        if (previous?.lastEventAt === at && previous.lastEventKind === kind) {
+          return cur;
+        }
+        return {
+          ...cur,
+          [sessionId]: { lastEventAt: at, lastEventKind: kind },
+        };
+      });
+    },
+    [],
+  );
+
   function closeOpenBlocks(sessionId: string, itemId?: string): void {
     setLogs((cur) => {
       const log = cur[sessionId];
@@ -2012,6 +2043,9 @@ export function useMuseSessions(): UseMuseSessions {
     // Deleted stays deleted: late in-flight events for a killed session are
     // dropped instead of resurrecting its row.
     if (tombstoned.current?.has(sid)) return;
+    // Keep this heartbeat independent from log timestamps: a host status
+    // event can prove progress even when it has no user-facing log line.
+    touchStreamActivity(sid, kind);
     if (
       activeId !== sid &&
       (kind === "output" ||
@@ -3122,6 +3156,7 @@ export function useMuseSessions(): UseMuseSessions {
         // US-10: reflexive indicator synchronously (<200ms), before the first
         // delta or even `item/started` can arrive. The first chunk coalesces
         // into this entry, so no catch-up burst ever paints.
+        touchStreamActivity(sessionId, "client/send");
         ensurePlaceholder(sessionId);
         setSessions((cur) =>
           cur.map((s) =>
@@ -3228,7 +3263,7 @@ export function useMuseSessions(): UseMuseSessions {
         }
       }
     },
-    [kickPoll, doCompact, workspace],
+    [kickPoll, doCompact, touchStreamActivity, workspace],
   );
 
   const steerInput = useCallback(
@@ -3276,6 +3311,7 @@ export function useMuseSessions(): UseMuseSessions {
         pushLog(sessionId, [
           { id: newId(), ts: Date.now(), role: "system", text: "Guidance accepted by the current turn." },
         ]);
+        touchStreamActivity(sessionId, "client/steer");
         kickPoll();
         return sendAccepted(clientMessageId);
       } catch (error) {
@@ -3284,7 +3320,7 @@ export function useMuseSessions(): UseMuseSessions {
         return sendFailed(clientMessageId, `turn/steer failed: ${message}`);
       }
     },
-    [kickPoll],
+    [kickPoll, touchStreamActivity],
   );
 
   const retrySend = useCallback(
@@ -3572,6 +3608,7 @@ export function useMuseSessions(): UseMuseSessions {
         }
         // The turn resumes after a decision: drain now, don't wait a tick.
         // US-10: reflexive placeholder synchronously, same as after send.
+        touchStreamActivity(sessionId, "client/approval");
         ensurePlaceholder(sessionId);
         kickPoll();
         return true;
@@ -3580,7 +3617,7 @@ export function useMuseSessions(): UseMuseSessions {
         return false;
       }
     },
-    [kickPoll],
+    [kickPoll, touchStreamActivity],
   );
 
   // Balanced mode removes repetitive prompts for local workspace actions;
@@ -4274,13 +4311,14 @@ export function useMuseSessions(): UseMuseSessions {
         // resumes. On error (-32057) the panel stays for a corrected answer.
         // Drain now so the resumed turn paints from its first tokens.
         // US-10: reflexive placeholder synchronously, same as after send.
+        touchStreamActivity(sessionId, "client/input");
         ensurePlaceholder(sessionId);
         kickPoll();
       } catch (e) {
         setError(`answer_input failed: ${String(e)}`);
       }
     },
-    [kickPoll],
+    [kickPoll, touchStreamActivity],
   );
 
   const cancelInput = useCallback(async (sessionId: string, inputId: string) => {
@@ -4981,6 +5019,9 @@ export function useMuseSessions(): UseMuseSessions {
   // Latest event handler for the render-detached poll drain.
   handleEventRef.current = handleEvent;
   const activeQueuedTurns = activeId === null ? [] : (queuedTurnsBySession[activeId] ?? []);
+  const activeStreamActivity = activeId === null
+    ? null
+    : (streamActivityBySession[activeId] ?? null);
 
   return {
     sessions,
@@ -4989,6 +5030,8 @@ export function useMuseSessions(): UseMuseSessions {
     activeLog,
     approvals,
     activeApprovals,
+    streamActivityBySession,
+    activeStreamActivity,
     queuedTurns: activeQueuedTurns,
     inputRequests,
     activeInputRequests,

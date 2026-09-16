@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import type { LogEntry } from "../lib/persist";
 import { REFLEXIVE_LABEL } from "../lib/phase";
 import { subagentSummary } from "../lib/subagent";
+import {
+  classifyStreamHealth,
+  formatElapsed,
+  streamHealthLabel,
+  type StreamHealth,
+} from "../lib/streamHealth";
 import { MessageContent } from "./MessageContent";
 
 /** US-6 controls for one sub-agent block. Read-result and drill-down resolve
@@ -19,6 +25,13 @@ export interface SubagentControls {
 interface Props {
   entries: LogEntry[];
   sessionId: string | null;
+  running?: boolean;
+  lastEventAt?: number | null;
+  pendingApprovals?: number;
+  pendingInputs?: number;
+  reconnecting?: boolean;
+  onReconnect?: () => void;
+  onCancel?: () => void;
   controls?: SubagentControls;
 }
 
@@ -57,7 +70,18 @@ function agentOf(e: LogEntry): string {
  * collapsible blocks grouped by agent id, each with its US-6 controls
  * (interrupt/stop/resume/follow-up/read-result/drill-down).
  */
-export function StreamView({ entries, sessionId, controls }: Props) {
+export function StreamView({
+  entries,
+  sessionId,
+  running = false,
+  lastEventAt = null,
+  pendingApprovals = 0,
+  pendingInputs = 0,
+  reconnecting = false,
+  onReconnect,
+  onCancel,
+  controls,
+}: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [awayFromBottom, setAwayFromBottom] = useState(false);
   const stickRef = useRef(true);
@@ -65,6 +89,16 @@ export function StreamView({ entries, sessionId, controls }: Props) {
   const [followupText, setFollowupText] = useState("");
   const [shown, setShown] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Keep the quiet-stream message current without making the transcript
+  // itself reflow. The interval only exists while the host reports a live
+  // turn and is automatically cleaned up when it settles.
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
 
   useEffect(() => {
     stickRef.current = true;
@@ -113,6 +147,34 @@ export function StreamView({ entries, sessionId, controls }: Props) {
   }
 
   if (sessionId === null) return null;
+
+  const health = classifyStreamHealth({
+    running,
+    lastEventAt,
+    pendingApprovals,
+    pendingInputs,
+    now,
+  });
+  const elapsed = lastEventAt === null ? null : formatElapsed(now - lastEventAt);
+
+  function healthDetail(status: StreamHealth): string {
+    switch (status) {
+      case "working":
+        return elapsed === null
+          ? "Live updates are arriving."
+          : `Last update ${elapsed} ago.`;
+      case "waiting-approval":
+        return "Choose an authorization option above to continue this conversation.";
+      case "waiting-input":
+        return "Muse needs your answer before it can continue.";
+      case "waiting-host":
+        return "The turn is marked active, but no host event has reached this window yet.";
+      case "stalled":
+        return `No host event for ${elapsed ?? "a while"}. Muse may still be working.`;
+      case "idle":
+        return "";
+    }
+  }
 
   return (
     <div
@@ -297,6 +359,33 @@ export function StreamView({ entries, sessionId, controls }: Props) {
           </div>
         );
       })}
+      {health !== "idle" && (
+        <div
+          className={`stream-health stream-health-${health}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="stream-health-indicator" aria-hidden="true" />
+          <span className="stream-health-copy">
+            <strong>{streamHealthLabel(health)}</strong>
+            <span>{healthDetail(health)}</span>
+          </span>
+          {(health === "stalled" || health === "waiting-host") && (
+            <span className="stream-health-actions">
+              {onReconnect && (
+                <button type="button" onClick={onReconnect} disabled={reconnecting}>
+                  {reconnecting ? "Reconnecting…" : "Reconnect"}
+                </button>
+              )}
+              {onCancel && (
+                <button type="button" className="quiet" onClick={onCancel}>
+                  Stop
+                </button>
+              )}
+            </span>
+          )}
+        </div>
+      )}
       <div ref={bottomRef} />
       {awayFromBottom && (
         <button

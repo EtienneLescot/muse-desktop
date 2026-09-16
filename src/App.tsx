@@ -68,6 +68,7 @@ export default function App() {
     activeLog,
     approvals,
     activeApprovals,
+    activeStreamActivity,
     queuedTurns,
     inputRequests,
     activeInputRequests,
@@ -986,6 +987,13 @@ export default function App() {
                   <StreamView
                     entries={activeLog}
                     sessionId={active.session_id}
+                    running={active.running}
+                    lastEventAt={activeStreamActivity?.lastEventAt ?? null}
+                    pendingApprovals={activeApprovals.length}
+                    pendingInputs={activeInputRequests.length}
+                    reconnecting={reconnectingId === active.session_id}
+                    onReconnect={() => void reconnectSession(active.session_id)}
+                    onCancel={() => void cancelSession(active.session_id)}
                     controls={{
                       onInterrupt: (agentId) =>
                         void subagentInterrupt(active.session_id, agentId),

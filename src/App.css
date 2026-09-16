@@ -542,6 +542,104 @@ body.dark .avatar {
   scroll-behavior: auto;
 }
 
+/* M0-02: a calm, inline heartbeat for quiet turns. It sits in the stream so
+   the explanation stays next to the latest message and never covers the
+   conversation with a modal warning. */
+.stream-health {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 94%, var(--blue) 6%);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.stream-health-indicator {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
+}
+
+.stream-health-working .stream-health-indicator {
+  animation: stream-health-pulse 1.5s ease-in-out infinite;
+}
+
+.stream-health-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stream-health-copy strong {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.stream-health-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-health-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex: none;
+}
+
+.stream-health-actions button {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 48%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blue) 12%, var(--surface));
+  color: var(--text);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.stream-health-actions button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--blue) 20%, var(--surface));
+}
+
+.stream-health-actions button.quiet {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.stream-health-stalled {
+  border-color: color-mix(in srgb, var(--warning, #d89024) 42%, var(--line));
+  background: color-mix(in srgb, var(--surface) 94%, var(--warning, #d89024) 6%);
+}
+
+.stream-health-stalled .stream-health-indicator {
+  background: var(--warning, #d89024);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning, #d89024) 16%, transparent);
+}
+
+.stream-health-waiting-approval .stream-health-indicator,
+.stream-health-waiting-input .stream-health-indicator {
+  background: var(--blue);
+}
+
+@keyframes stream-health-pulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
 /* M1-13: let the browser skip layout/paint for messages outside the viewport
    while retaining their DOM, semantics and native find/select behaviour. */
 .stream > .msg {
