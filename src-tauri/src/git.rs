@@ -40,8 +40,40 @@ pub struct GitStatusSnapshot {
     pub ahead: u64,
     pub behind: u64,
     pub fingerprint: String,
+    pub remotes: Vec<GitRemote>,
     pub files: Vec<GitStatusFile>,
     pub observed_at: u64,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRemote {
+    pub name: String,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitResult {
+    pub hash: String,
+    pub branch: Option<String>,
+    pub subject: String,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitPushResult {
+    pub remote: String,
+    pub branch: String,
+    pub head: String,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitPrResult {
+    pub url: String,
+    pub base: String,
+    pub head: String,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -108,6 +140,37 @@ fn status_fingerprint_parts(parts: &[&[u8]]) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{hash:016x}")
+}
+
+fn redact_remote_url(raw: &str) -> String {
+    let Some(scheme) = raw.find("://") else {
+        return raw.to_string();
+    };
+    let authority_start = scheme + 3;
+    let Some(at) = raw[authority_start..].find('@') else {
+        return raw.to_string();
+    };
+    format!(
+        "{}***@{}",
+        &raw[..authority_start],
+        &raw[authority_start + at + 1..]
+    )
+}
+
+fn parse_remotes(bytes: &[u8]) -> Vec<GitRemote> {
+    let mut remotes = Vec::new();
+    for line in decode(bytes).lines() {
+        let mut parts = line.split_whitespace();
+        let Some(name) = parts.next() else { continue };
+        let Some(url) = parts.next() else { continue };
+        if !remotes.iter().any(|remote: &GitRemote| remote.name == name) {
+            remotes.push(GitRemote {
+                name: name.to_string(),
+                url: redact_remote_url(url),
+            });
+        }
+    }
+    remotes
 }
 
 fn git_command(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
@@ -213,6 +276,7 @@ pub fn parse_status(bytes: &[u8], repo_root: &str) -> GitStatusSnapshot {
         ahead,
         behind,
         fingerprint: status_fingerprint(bytes),
+        remotes: Vec::new(),
         files,
         observed_at: now_ms(),
     }
@@ -357,7 +421,13 @@ pub fn status(root: &Path) -> Result<GitStatusSnapshot, String> {
     // observation even when the path/status pair is unchanged.
     let unstaged = git_command(
         &canonical,
-        &["diff", "--no-ext-diff", "--binary", "--full-index", "--no-color"],
+        &[
+            "diff",
+            "--no-ext-diff",
+            "--binary",
+            "--full-index",
+            "--no-color",
+        ],
     )
     .unwrap_or_default();
     let staged = git_command(
@@ -373,6 +443,9 @@ pub fn status(root: &Path) -> Result<GitStatusSnapshot, String> {
     )
     .unwrap_or_default();
     snapshot.fingerprint = status_fingerprint_parts(&[&bytes, &unstaged, &staged]);
+    snapshot.remotes = git_command(&canonical, &["remote", "-v"])
+        .map(|output| parse_remotes(&output))
+        .unwrap_or_default();
     snapshot.head = head(&canonical);
     Ok(snapshot)
 }
@@ -425,7 +498,10 @@ fn validate_paths(paths: &[String]) -> Result<(), String> {
         let candidate = Path::new(path);
         if candidate.is_absolute()
             || candidate.components().any(|component| {
-                matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))
+                matches!(
+                    component,
+                    Component::ParentDir | Component::RootDir | Component::Prefix(_)
+                )
             })
         {
             return Err(format!("repository path is outside the workspace: {path}"));
@@ -444,18 +520,24 @@ fn verify_mutation_observation(
     let current = status(root)?;
     if let Some(expected) = expected_head.filter(|value| !value.trim().is_empty()) {
         if current.head.as_deref() != Some(expected) {
-            return Err("repository HEAD changed; refresh Review before applying this action".to_string());
+            return Err(
+                "repository HEAD changed; refresh Review before applying this action".to_string(),
+            );
         }
     }
     if let Some(expected) = expected_status.filter(|value| !value.trim().is_empty()) {
         if current.fingerprint != expected {
-            return Err("repository status changed; refresh Review before applying this action".to_string());
+            return Err(
+                "repository status changed; refresh Review before applying this action".to_string(),
+            );
         }
     }
     if let Some(expected) = expected_patch {
         let actual = diff(root, scope, None)?.patch;
         if actual != expected {
-            return Err("the selected diff changed; refresh Review before applying this action".to_string());
+            return Err(
+                "the selected diff changed; refresh Review before applying this action".to_string(),
+            );
         }
     }
     Ok(current)
@@ -517,13 +599,186 @@ pub fn restore(
             .iter()
             .any(|file| paths.iter().any(|path| path == &file.path) && file.untracked)
     {
-        return Err("untracked files are not deleted by Review; remove them explicitly in the project".to_string());
+        return Err(
+            "untracked files are not deleted by Review; remove them explicitly in the project"
+                .to_string(),
+        );
     }
-    let flag = if scope == "staged" { "--staged" } else { "--worktree" };
+    let flag = if scope == "staged" {
+        "--staged"
+    } else {
+        "--worktree"
+    };
     let mut args = vec!["restore", flag, "--"];
     args.extend(paths.iter().map(String::as_str));
     git_command(&canonical, &args)?;
     status(&canonical)
+}
+
+fn validate_ref(value: &str, label: &str) -> Result<(), String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(format!("{label} must not be empty"));
+    }
+    if value.starts_with('-') || value.contains('\0') || value.chars().any(char::is_whitespace) {
+        return Err(format!("{label} is not a safe Git reference"));
+    }
+    Ok(())
+}
+
+/// Commit the current index after checking the status/diff observation used
+/// by the Review UI. Git hook failures and empty indexes remain user-visible.
+pub fn commit(
+    root: &Path,
+    message: &str,
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+    expected_patch: Option<String>,
+) -> Result<GitCommitResult, String> {
+    let message = message.trim();
+    if message.is_empty() {
+        return Err("commit message must not be empty".to_string());
+    }
+    if message.chars().count() > 500 {
+        return Err("commit message is limited to 500 characters".to_string());
+    }
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    let current = verify_mutation_observation(
+        &canonical,
+        "staged",
+        expected_head.as_deref(),
+        expected_status.as_deref(),
+        expected_patch.as_deref(),
+    )?;
+    if !current.files.iter().any(|file| file.staged) {
+        return Err("nothing staged to commit".to_string());
+    }
+    git_command(&canonical, &["commit", "-m", message])?;
+    let hash =
+        head(&canonical).ok_or_else(|| "commit succeeded but HEAD is unavailable".to_string())?;
+    let subject = git_command(&canonical, &["log", "-1", "--format=%s"])
+        .map(|bytes| decode(&bytes).trim().to_string())
+        .unwrap_or_else(|_| message.to_string());
+    let branch = git_command(&canonical, &["branch", "--show-current"])
+        .ok()
+        .map(|bytes| decode(&bytes).trim().to_string())
+        .filter(|value| !value.is_empty());
+    Ok(GitCommitResult {
+        hash,
+        branch,
+        subject,
+    })
+}
+
+/// Push an explicit branch to an explicit remote. The refspec is written as
+/// `HEAD:refs/heads/<branch>` so the current checkout can never redirect the
+/// push to another branch by default.
+pub fn push(
+    root: &Path,
+    remote: &str,
+    branch: &str,
+    expected_head: Option<String>,
+) -> Result<GitPushResult, String> {
+    validate_ref(remote, "remote")?;
+    validate_ref(branch, "branch")?;
+    let expected = expected_head
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "push requires an observed HEAD".to_string())?;
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    let current =
+        head(&canonical).ok_or_else(|| "cannot push without a repository HEAD".to_string())?;
+    if current != expected {
+        return Err("repository HEAD changed; refresh Review before pushing".to_string());
+    }
+    let remotes = git_command(&canonical, &["remote"])?;
+    if !decode(&remotes)
+        .lines()
+        .any(|name| name.trim() == remote.trim())
+    {
+        return Err(format!("remote does not exist: {remote}"));
+    }
+    let refspec = format!("HEAD:refs/heads/{branch}");
+    git_command(&canonical, &["push", remote.trim(), &refspec])?;
+    Ok(GitPushResult {
+        remote: remote.trim().to_string(),
+        branch: branch.trim().to_string(),
+        head: current,
+    })
+}
+
+fn gh_command(root: &Path, args: &[&str]) -> Result<String, String> {
+    let output = Command::new("gh")
+        .args(args)
+        .current_dir(root)
+        .env("GH_NO_UPDATE_NOTIFIER", "1")
+        .output()
+        .map_err(|e| format!("could not start GitHub CLI: {e}"))?;
+    if !output.status.success() {
+        let detail = decode(&output.stderr).trim().to_string();
+        return Err(if detail.is_empty() {
+            format!("gh {} failed with {}", args.join(" "), output.status)
+        } else {
+            detail
+        });
+    }
+    Ok(decode(&output.stdout))
+}
+
+/// Create a GitHub pull request through the user's existing `gh` auth. No
+/// credentials are read from or written to web storage, and merge is never
+/// attempted by this command.
+pub fn create_pr(
+    root: &Path,
+    title: &str,
+    body: &str,
+    base: &str,
+    head_branch: &str,
+) -> Result<GitPrResult, String> {
+    let title = title.trim();
+    let body = body.trim();
+    if title.is_empty() {
+        return Err("pull request title must not be empty".to_string());
+    }
+    if title.chars().count() > 200 || body.chars().count() > 20_000 {
+        return Err("pull request title/body exceeds its size limit".to_string());
+    }
+    validate_ref(base, "base branch")?;
+    validate_ref(head_branch, "head branch")?;
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    let output = gh_command(
+        &canonical,
+        &[
+            "pr",
+            "create",
+            "--base",
+            base.trim(),
+            "--head",
+            head_branch.trim(),
+            "--title",
+            title,
+            "--body",
+            body,
+        ],
+    )?;
+    let url = output
+        .lines()
+        .rev()
+        .flat_map(str::split_whitespace)
+        .map(|value| value.trim_matches(|c: char| matches!(c, ')' | ']' | '.' | ',')))
+        .find(|value| value.starts_with("https://") || value.starts_with("http://"))
+        .ok_or_else(|| "GitHub CLI created a pull request but returned no URL".to_string())?;
+    Ok(GitPrResult {
+        url: url.to_string(),
+        base: base.trim().to_string(),
+        head: head_branch.trim().to_string(),
+    })
 }
 
 #[cfg(test)]
@@ -548,7 +803,12 @@ mod tests {
                 .current_dir(&root)
                 .output()
                 .unwrap();
-            assert!(output.status.success(), "git {:?}: {}", args, decode(&output.stderr));
+            assert!(
+                output.status.success(),
+                "git {:?}: {}",
+                args,
+                decode(&output.stderr)
+            );
         };
         run(&["init", "--quiet"]);
         fs::write(root.join("main.txt"), "one\n").unwrap();
@@ -677,5 +937,52 @@ mod tests {
         .unwrap_err();
         assert!(error.contains("status changed"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn commit_returns_new_hash_and_subject() {
+        let root = fixture_repo();
+        fs::write(root.join("main.txt"), "one\ntwo\n").unwrap();
+        let before = status(&root).unwrap();
+        let unstaged = diff(&root, "unstaged", None).unwrap();
+        let path = vec!["main.txt".to_string()];
+        let staged = stage(
+            &root,
+            &path,
+            before.head,
+            Some(before.fingerprint),
+            Some(unstaged.patch),
+        )
+        .unwrap();
+        let staged_diff = diff(&root, "staged", None).unwrap();
+        let result = commit(
+            &root,
+            "Add second line",
+            staged.head.clone(),
+            Some(staged.fingerprint),
+            Some(staged_diff.patch),
+        )
+        .unwrap();
+        assert_ne!(result.hash, "");
+        assert_eq!(result.subject, "Add second line");
+        assert_ne!(result.hash, staged.head.unwrap_or_default());
+        assert!(status(&root).unwrap().files.is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn push_requires_an_existing_explicit_remote() {
+        let root = fixture_repo();
+        let head_hash = status(&root).unwrap().head;
+        let error = push(&root, "origin", "main", head_hash).unwrap_err();
+        assert!(error.contains("remote does not exist"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn refs_reject_option_injection_and_whitespace() {
+        assert!(validate_ref("--force", "branch").is_err());
+        assert!(validate_ref("feature bad", "branch").is_err());
+        assert!(validate_ref("feature/review", "branch").is_ok());
     }
 }

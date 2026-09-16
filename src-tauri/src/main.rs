@@ -1096,6 +1096,62 @@ async fn git_restore(
     .map_err(|e| format!("git restore task failed: {e}"))?
 }
 
+/// Commit the staged index after checking the Review observation.
+#[tauri::command]
+async fn git_commit(
+    state: State<'_, AppState>,
+    session_id: String,
+    message: String,
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+    expected_patch: Option<String>,
+) -> Result<git::GitCommitResult, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || {
+        git::commit(
+            &root,
+            &message,
+            expected_head,
+            expected_status,
+            expected_patch,
+        )
+    })
+    .await
+    .map_err(|e| format!("git commit task failed: {e}"))?
+}
+
+/// Push an explicit remote/branch refspec after checking the observed HEAD.
+#[tauri::command]
+async fn git_push(
+    state: State<'_, AppState>,
+    session_id: String,
+    remote: String,
+    branch: String,
+    expected_head: Option<String>,
+) -> Result<git::GitPushResult, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || git::push(&root, &remote, &branch, expected_head))
+        .await
+        .map_err(|e| format!("git push task failed: {e}"))?
+}
+
+/// Create a GitHub pull request through the user's existing `gh` auth. Merge
+/// is intentionally outside this command.
+#[tauri::command]
+async fn git_create_pr(
+    state: State<'_, AppState>,
+    session_id: String,
+    title: String,
+    body: String,
+    base: String,
+    head: String,
+) -> Result<git::GitPrResult, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || git::create_pr(&root, &title, &body, &base, &head))
+        .await
+        .map_err(|e| format!("pull request task failed: {e}"))?
+}
+
 /// Build the frontend `input_request` payload from a `userInput/requested`
 /// notification. Pure (unit-tested): questions forwarded verbatim (capped),
 /// ids threaded through for the answer round-trip.
@@ -2394,6 +2450,9 @@ fn main() {
             git_diff,
             git_stage,
             git_restore,
+            git_commit,
+            git_push,
+            git_create_pr,
             list_models,
             set_model,
             compact_session,

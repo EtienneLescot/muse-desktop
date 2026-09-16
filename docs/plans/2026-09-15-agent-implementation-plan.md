@@ -201,6 +201,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** dépôt test, hook échoué, rien à commiter, branche sans upstream, push rejeté et PR existante. Aucun push vers une autre branche par défaut implicite.
 
+**État au 16/09/2026 :** commit, push et création de PR GitHub sont câblés dans le service Git sessionné. Le commit est protégé par l’observation de l’index ; le push utilise un refspec explicite et `gh pr create` réutilise l’authentification locale sans credential web. Les hooks/auth live, rejets distants, PR existantes et qualification native restent à couvrir avec un dépôt de test contrôlé.
+
 ### M1-05 — Terminal PTY
 
 **Code :** nouveau service PTY Rust et panneau Terminal. Dépend M0-01/14.

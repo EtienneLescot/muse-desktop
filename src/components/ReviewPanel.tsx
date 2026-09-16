@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   shortRepoName,
   statusCode,
+  type GitCommitResult,
   type GitMutationExpectation,
   type GitDiffScope,
+  type GitPrResult,
+  type GitPushResult,
   type GitReviewState,
   type GitStatusSnapshot,
 } from "../lib/git";
@@ -35,6 +38,24 @@ interface Props {
     scope: "staged" | "unstaged",
     expected: GitMutationExpectation,
   ) => Promise<GitStatusSnapshot | null>;
+  onCommit: (
+    sessionId: string,
+    message: string,
+    expected: GitMutationExpectation,
+  ) => Promise<GitCommitResult | null>;
+  onPush: (
+    sessionId: string,
+    remote: string,
+    branch: string,
+    expectedHead: string | null,
+  ) => Promise<GitPushResult | null>;
+  onCreatePr: (
+    sessionId: string,
+    title: string,
+    body: string,
+    base: string,
+    head: string,
+  ) => Promise<GitPrResult | null>;
   onSendComment: (anchor: ReviewAnchor, body: string) => Promise<boolean>;
 }
 
@@ -55,6 +76,9 @@ export function ReviewPanel({
   onLoadDiff,
   onStageFiles,
   onRestoreFiles,
+  onCommit,
+  onPush,
+  onCreatePr,
   onSendComment,
 }: Props) {
   const [scope, setScope] = useState<GitDiffScope>("unstaged");
@@ -68,6 +92,16 @@ export function ReviewPanel({
   const [mutationBusy, setMutationBusy] = useState<"stage" | "unstage" | "discard" | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [commitMessage, setCommitMessage] = useState("");
+  const [pushRemote, setPushRemote] = useState("");
+  const [pushBranch, setPushBranch] = useState("");
+  const [prTitle, setPrTitle] = useState("");
+  const [prBody, setPrBody] = useState("");
+  const [prBase, setPrBase] = useState("main");
+  const [shipBusy, setShipBusy] = useState<"commit" | "push" | "pr" | null>(null);
+  const [commitResult, setCommitResult] = useState<GitCommitResult | null>(null);
+  const [pushResult, setPushResult] = useState<GitPushResult | null>(null);
+  const [prResult, setPrResult] = useState<GitPrResult | null>(null);
 
   useEffect(() => {
     setSelectedPath(null);
@@ -78,6 +112,16 @@ export function ReviewPanel({
     setMutationBusy(null);
     setMutationError(null);
     setConfirmDiscard(false);
+    setCommitMessage("");
+    setPushRemote("");
+    setPushBranch("");
+    setPrTitle("");
+    setPrBody("");
+    setPrBase("main");
+    setShipBusy(null);
+    setCommitResult(null);
+    setPushResult(null);
+    setPrResult(null);
     setScope("unstaged");
     setBaseRef("");
     void onRefreshStatus(sessionId);
@@ -112,6 +156,16 @@ export function ReviewPanel({
     const first = review.diff?.files[0]?.path ?? null;
     setSelectedPath((current) => current ?? first);
   }, [review.diff]);
+
+  useEffect(() => {
+    const firstRemote = review.status?.remotes[0]?.name ?? "";
+    if (firstRemote) setPushRemote((current) => current || firstRemote);
+    const branch = review.status?.branch ?? "";
+    if (branch) {
+      setPushBranch((current) => current || branch);
+      setPrTitle((current) => current || `Muse changes on ${branch}`);
+    }
+  }, [review.status?.remotes, review.status?.branch]);
 
   useEffect(() => {
     setSelectedLineKey(null);
@@ -217,6 +271,63 @@ export function ReviewPanel({
       setConfirmDiscard(false);
     } finally {
       setMutationBusy(null);
+    }
+  }
+
+  async function commitStaged(): Promise<void> {
+    const expected = expectationFor("staged");
+    if (!expected || commitMessage.trim().length === 0) return;
+    setShipBusy("commit");
+    setCommitResult(null);
+    try {
+      const result = await onCommit(sessionId, commitMessage, expected);
+      if (result) {
+        setCommitResult(result);
+        setCommitMessage("");
+      }
+    } finally {
+      setShipBusy(null);
+    }
+  }
+
+  async function pushBranchNow(): Promise<void> {
+    if (!review.status || pushRemote.trim().length === 0 || pushBranch.trim().length === 0) return;
+    setShipBusy("push");
+    setPushResult(null);
+    try {
+      const result = await onPush(
+        sessionId,
+        pushRemote.trim(),
+        pushBranch.trim(),
+        review.status.head,
+      );
+      if (result) setPushResult(result);
+    } finally {
+      setShipBusy(null);
+    }
+  }
+
+  async function createPullRequest(): Promise<void> {
+    if (
+      prTitle.trim().length === 0 ||
+      prBase.trim().length === 0 ||
+      pushBranch.trim().length === 0
+    ) {
+      return;
+    }
+    setShipBusy("pr");
+    setPrResult(null);
+    try {
+      const result = await onCreatePr(
+        sessionId,
+        prTitle,
+        prBody,
+        prBase.trim(),
+        pushBranch.trim(),
+      );
+      if (result) setPrResult(result);
+    } finally {
+      setShipBusy(null);
     }
   }
 
@@ -379,6 +490,69 @@ export function ReviewPanel({
               {mutationError && <span className="review-action-error" role="alert">{mutationError}</span>}
             </div>
           )}
+
+          <section className="review-ship" aria-label="Ship changes">
+            <div className="review-ship-head">
+              <div>
+                <span className="eyebrow">SHIP CHANGES</span>
+                <strong>Commit, push and open a pull request</strong>
+              </div>
+              <span className="muted">Every destination is explicit</span>
+            </div>
+            <div className="review-ship-row">
+              <input
+                value={commitMessage}
+                onChange={(event) => setCommitMessage(event.target.value)}
+                placeholder="Commit message"
+                aria-label="Commit message"
+              />
+              <button
+                type="button"
+                className="review-action"
+                disabled={shipBusy !== null || !review.status?.files.some((file) => file.staged) || commitMessage.trim().length === 0}
+                onClick={() => void commitStaged()}
+              >
+                {shipBusy === "commit" ? "Committing…" : "Commit staged"}
+              </button>
+            </div>
+            {commitResult && (
+              <div className="review-ship-result">Committed {commitResult.hash.slice(0, 8)} · {commitResult.subject}</div>
+            )}
+            <div className="review-ship-row">
+              <select value={pushRemote} onChange={(event) => setPushRemote(event.target.value)} aria-label="Push remote">
+                <option value="">Choose remote</option>
+                {(review.status?.remotes ?? []).map((remote) => (
+                  <option key={remote.name} value={remote.name}>{remote.name} · {remote.url}</option>
+                ))}
+              </select>
+              <input value={pushBranch} onChange={(event) => setPushBranch(event.target.value)} placeholder="Target branch" aria-label="Push branch" />
+              <button
+                type="button"
+                className="review-action"
+                disabled={shipBusy !== null || pushRemote.trim().length === 0 || pushBranch.trim().length === 0 || !review.status?.head}
+                onClick={() => void pushBranchNow()}
+              >
+                {shipBusy === "push" ? "Pushing…" : "Push branch"}
+              </button>
+            </div>
+            {pushResult && <div className="review-ship-result">Pushed {pushResult.remote} → {pushResult.branch} · {pushResult.head.slice(0, 8)}</div>}
+            <div className="review-ship-pr">
+              <div className="review-ship-row">
+                <input value={prTitle} onChange={(event) => setPrTitle(event.target.value)} placeholder="Pull request title" aria-label="Pull request title" />
+                <input value={prBase} onChange={(event) => setPrBase(event.target.value)} placeholder="Base branch" aria-label="Pull request base branch" />
+                <button
+                  type="button"
+                  className="review-action"
+                  disabled={shipBusy !== null || prTitle.trim().length === 0 || prBase.trim().length === 0 || pushBranch.trim().length === 0}
+                  onClick={() => void createPullRequest()}
+                >
+                  {shipBusy === "pr" ? "Opening…" : "Open pull request"}
+                </button>
+              </div>
+              <textarea value={prBody} onChange={(event) => setPrBody(event.target.value)} placeholder="Describe the change (optional)" aria-label="Pull request description" rows={2} />
+              {prResult && <a className="review-ship-result review-ship-link" href={prResult.url} target="_blank" rel="noreferrer">Open pull request · {prResult.head} → {prResult.base}</a>}
+            </div>
+          </section>
 
           {review.diff !== null && (
             <div className="review-diff" aria-label={`${review.diff.scope} diff`}>

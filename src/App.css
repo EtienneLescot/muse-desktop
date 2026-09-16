@@ -2345,6 +2345,79 @@ body.dark .composer textarea::placeholder {
   color: var(--danger);
 }
 
+.review-ship {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 88%, var(--pale));
+}
+
+.review-ship-head,
+.review-ship-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.review-ship-head {
+  justify-content: space-between;
+  font-size: 0.76rem;
+}
+
+.review-ship-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-ship-row input,
+.review-ship-row select,
+.review-ship-pr textarea {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 0.74rem;
+}
+
+.review-ship-row select {
+  max-width: 240px;
+}
+
+.review-ship-pr {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-ship-pr textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.review-ship-result {
+  color: #24a579;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.review-ship-link {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.review-ship-link:hover {
+  text-decoration: underline;
+}
+
 .review-patch {
   flex: 1;
   min-height: 140px;
