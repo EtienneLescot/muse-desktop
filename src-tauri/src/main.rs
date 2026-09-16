@@ -61,10 +61,14 @@ pub struct DrainedEvent {
     pub payload: String,
 }
 
-/// Poll result: current head cursor plus events after `since`.
+/// Poll result: current head cursor plus events after `since`. `truncated`
+/// makes event loss explicit when the renderer fell behind the bounded ring;
+/// the caller can then re-read durable history and pending requests.
 #[derive(Debug, Serialize, Clone)]
 pub struct PollResult {
     pub head: u64,
+    pub oldest: Option<u64>,
+    pub truncated: bool,
     pub events: Vec<DrainedEvent>,
 }
 
@@ -2200,6 +2204,10 @@ async fn list_pending_requests(
 
 /// Drain backend events after `since` (None = head cursor only, no replay).
 /// The UI polls this every ~300ms instead of `listen` push delivery.
+fn event_buffer_gap(since: u64, oldest: Option<u64>) -> bool {
+    oldest.is_some_and(|first| since.saturating_add(1) < first)
+}
+
 #[tauri::command]
 fn poll_events(state: State<'_, AppState>, since: Option<u64>) -> Result<PollResult, String> {
     let head = state
@@ -2212,8 +2220,12 @@ fn poll_events(state: State<'_, AppState>, since: Option<u64>) -> Result<PollRes
         .event_buffer
         .lock()
         .map_err(|e| format!("state lock: {e}"))?;
+    let oldest = buf.front().map(|event| event.seq);
+    let truncated = event_buffer_gap(since, oldest);
     Ok(PollResult {
         head,
+        oldest,
+        truncated,
         events: buf.iter().filter(|e| e.seq > since).cloned().collect(),
     })
 }
@@ -2941,6 +2953,14 @@ mod tests {
         assert_eq!(host_approval_mode("workspace"), Some("promptUnmatched"));
         assert_eq!(host_approval_mode("yolo"), Some("allowAll"));
         assert_eq!(host_approval_mode("deny"), None);
+    }
+
+    #[test]
+    fn event_buffer_gap_is_reported_only_when_frames_were_dropped() {
+        assert!(!event_buffer_gap(9, Some(10)));
+        assert!(!event_buffer_gap(10, Some(10)));
+        assert!(event_buffer_gap(9, Some(11)));
+        assert!(!event_buffer_gap(99, None));
     }
 
     #[test]

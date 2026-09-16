@@ -628,6 +628,8 @@ interface DrainedEvent extends MuseEvent {
 
 interface PollResult {
   head: number;
+  oldest?: number | null;
+  truncated?: boolean;
   events: DrainedEvent[];
 }
 
@@ -1228,6 +1230,27 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
   return { session_id: sessionId, request_id: trimmed, summary: trimmed, toolName: "tool", choices: [] };
 }
 
+function parsePendingSnapshot(
+  sessionId: string,
+  pending: unknown,
+): { approvals: ApprovalRequest[]; inputs: InputRequest[] } {
+  if (typeof pending !== "object" || pending === null) {
+    return { approvals: [], inputs: [] };
+  }
+  const raw = pending as { approvals?: unknown; userInputs?: unknown };
+  const approvals = Array.isArray(raw.approvals)
+    ? raw.approvals
+        .map((item) => parseApproval(sessionId, JSON.stringify(item) ?? ""))
+        .filter((item) => item.request_id.length > 0)
+    : [];
+  const inputs = Array.isArray(raw.userInputs)
+    ? raw.userInputs
+        .map((item) => parseInputRequest(sessionId, JSON.stringify(item) ?? ""))
+        .filter((item): item is InputRequest => item !== null)
+    : [];
+  return { approvals, inputs };
+}
+
 /**
  * Session-multiplexing hook.
  *
@@ -1244,6 +1267,8 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
  */
 export function useMuseSessions(): UseMuseSessions {
   const [sessions, setSessions] = useState<MuseSession[]>([]);
+  const sessionsRef = useRef<MuseSession[]>([]);
+  sessionsRef.current = sessions;
   // Do not persist the initial empty render before boot restores history.
   // A state gate also protects StrictMode's setup/cleanup/setup replay.
   const [historyReady, setHistoryReady] = useState(false);
@@ -1476,6 +1501,52 @@ export function useMuseSessions(): UseMuseSessions {
       const res = await invoke<PollResult>("poll_events", { since: cursorRef.current });
       if (!aliveRef.current) return;
       cursorRef.current = res.head;
+      if (res.truncated === true) {
+        // The native ring is intentionally bounded. Reconcile the sessions
+        // that could have lost a request or terminal item before applying the
+        // surviving tail, so an approval can never disappear into a silent
+        // "thinking" state after a burst of host events.
+        const candidates = new Set(
+          sessionsRef.current
+            .filter((session) => session.running)
+            .map((session) => session.session_id),
+        );
+        for (const event of res.events) candidates.add(event.session_id);
+        setError(
+          `Some host updates were dropped${res.oldest === null || res.oldest === undefined ? "" : ` (oldest available event ${res.oldest})`}. Refreshing active conversation state.`,
+        );
+        await Promise.allSettled(
+          [...candidates].slice(0, 50).map(async (sessionId) => {
+            try {
+              const pending = await invoke<unknown>("list_pending_requests", { sessionId });
+              const parsed = parsePendingSnapshot(sessionId, pending);
+              setApprovals((cur) => [
+                ...cur.filter((item) => item.session_id !== sessionId),
+                ...parsed.approvals,
+              ]);
+              setInputRequests((cur) => [
+                ...cur.filter((item) => item.session_id !== sessionId),
+                ...parsed.inputs,
+              ]);
+            } catch {
+              // Older hosts may not implement the pull path; history below
+              // still provides a useful recovery and the stale action remains.
+            }
+            try {
+              const history = await invoke<unknown>("read_session_history", { sessionId });
+              const remote = historyItemsToLogEntries(extractHistoryItems(history));
+              if (remote.length === 0) return;
+              const local = logsRef.current[sessionId] ?? loadLog(sessionId);
+              const merged = mergeHistoryLog(local, remote);
+              setLogs((cur) => ({ ...cur, [sessionId]: merged }));
+              saveLog(sessionId, merged);
+            } catch {
+              // History reconciliation is additive; keep the local transcript
+              // and let the stream health row offer Reconnect/Stop if needed.
+            }
+          }),
+        );
+      }
       const apply = handleEventRef.current;
       for (const e of res.events) apply(e);
     } catch (err) {
@@ -2976,17 +3047,7 @@ export function useMuseSessions(): UseMuseSessions {
           sessionId: id,
         });
         if (typeof pending === "object" && pending !== null) {
-          const raw = pending as { approvals?: unknown; userInputs?: unknown };
-          const nextApprovals = Array.isArray(raw.approvals)
-            ? raw.approvals
-                .map((item) => parseApproval(id, JSON.stringify(item) ?? ""))
-                .filter((item) => item.request_id.length > 0)
-            : [];
-          const nextInputs = Array.isArray(raw.userInputs)
-            ? raw.userInputs
-                .map((item) => parseInputRequest(id, JSON.stringify(item) ?? ""))
-                .filter((item): item is InputRequest => item !== null)
-            : [];
+          const { approvals: nextApprovals, inputs: nextInputs } = parsePendingSnapshot(id, pending);
           setApprovals((cur) => [
             ...cur.filter((item) => item.session_id !== id),
             ...nextApprovals,
