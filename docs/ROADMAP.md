@@ -270,7 +270,7 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 
 - **Recherche :** la boîte `Search conversations` parcourt désormais titre, dossier et texte des journaux locaux, avec un extrait de la première correspondance et la navigation clavier conservée.
 - **Organisation :** une conversation peut être épinglée depuis son menu. Le drapeau est validé, persisté dans `muse-desktop.sessions.v1` et remonte avant les conversations en cours puis les plus récentes.
-- **Limites :** la virtualisation des listes reste à mesurer avant de l’ajouter.
+- **Limites :** les conversations courtes restent entièrement rendues ; les très longues listes utilisent la fenêtre bornée décrite dans M1-13.
 
 ### Livraison M1-12 — ordre et lecture non lus
 
@@ -278,15 +278,16 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Lecture :** une sortie reçue dans une autre conversation marque celle-ci **new** ; l’ouverture de la conversation efface l’indicateur via `setActive`, sans toucher aux messages ni aux compteurs d’autorisation.
 - **SSOT :** `StoredSession` porte `unread` et `sortOrder`, le hook persiste les changements et la sidebar ne conserve aucun ordre local.
 - **Validation :** tri par rang, déplacement, marqueur non lu et restauration sont couverts par les tests Node ; TypeScript et build Vite restent verts.
-- **Limites :** la virtualisation d’une longue liste reste conditionnée à une mesure réelle de mémoire et de temps de rendu.
+- **Limites :** la virtualisation de la sidebar reste conditionnée à une mesure réelle de mémoire et de temps de rendu ; le transcript dispose déjà d’une fenêtre bornée.
 
 ### Livraison M1-13 — rendu de longues conversations
 
-- **Rendu :** chaque message conserve son nœud et ses attributs d’accessibilité, mais le navigateur peut ignorer la mise en page et la peinture des messages hors viewport grâce à `content-visibility: auto` et `contain-intrinsic-size`. Cette optimisation fonctionne aussi pour les blocs Thinking repliables, les outils et les sous-agents.
+- **Rendu :** jusqu’à 600 entrées, chaque message conserve son nœud et ses attributs d’accessibilité ; au-delà, le DOM affiche une fenêtre de 160 messages avec 120 messages chargés à la demande. `content-visibility: auto` et `contain-intrinsic-size` réduisent encore le coût des lignes présentes. Cette optimisation fonctionne aussi pour les blocs Thinking repliables, les outils et les sous-agents.
 - **Scroll :** les mises à jour de streaming utilisent un alignement instantané au dernier message ; les animations de scroll ne s'empilent plus à chaque delta et le bouton **Latest messages** reste explicite lorsque l’utilisateur lit plus haut.
+- **Fenêtre :** **Load older messages** et le scroll en haut préchargent une page tout en compensant la hauteur précédente pour éviter un saut. Le retour au bas recale la fenêtre sur les messages récents ; la position et l’index de fenêtre restent séparés par conversation pendant la session.
 - **Position de lecture :** chaque conversation conserve le dernier `scrollTop` observé en mémoire de vue et le restaure au retour dans le fil ; un nouveau fil reste positionné sur ses derniers messages.
-- **Observabilité :** le journal porte `data-entry-count` afin de mesurer en UI native la taille de session, et `aria-label="Conversation messages"` garde une cible stable pour les essais assistifs.
-- **Limites :** le DOM reste volontairement complet pour préserver recherche, sélection et reprise de scroll. Une fenêtre virtuelle avec mesure de hauteur ne sera ajoutée qu’après un scénario natif de 2 000 entrées et la collecte mémoire/latence prévue par M1-13.
+- **Observabilité :** le journal porte `data-entry-count` afin de mesurer en UI native la taille complète de session, et `aria-label="Conversation messages"` garde une cible stable pour les essais assistifs. Les helpers de fenêtre sont purs et couverts par tests.
+- **Limites :** les messages hors fenêtre ne sont pas présents dans le DOM, donc la recherche native du navigateur et la sélection multi-page ne portent que sur la fenêtre chargée. La recherche Muse et l’historique durable restent complets ; une virtualisation à hauteur mesurée pourra remplacer cette pagination si les mesures natives l’exigent.
 - **Validation :** TypeScript, build Vite et suite Node complets restent verts ; la mesure native et la qualification lecteur d’écran sont encore à produire.
 
 ### Livraison M2-01 — racines de projet

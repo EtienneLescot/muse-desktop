@@ -299,7 +299,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** sidebar, recherche App, `threads.ts`, stockage. Dépend M0-09/12.
 
-**Travail :** index de recherche locale sur historique, pagination et extraits ; épinglage et ordre explicites ; non-lus distincts de running. Migration du tri existant sans perdre dates/titres. La première tranche fournit recherche, épinglage, ordre et non-lus ; il reste la mesure avant virtualisation.
+**Travail :** index de recherche locale sur historique, pagination et extraits ; épinglage et ordre explicites ; non-lus distincts de running. Migration du tri existant sans perdre dates/titres. La première tranche fournit recherche, épinglage, ordre et non-lus ; la virtualisation concerne le transcript M1-13, tandis que la sidebar reste conditionnée à une mesure.
 
 **Acceptation :** recherche accentuée/multilingue, archive, suppression, gros historique, clavier et restart ; aucune session supprimée réindexée.
 
@@ -307,7 +307,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** StreamView/MessageContent, blocs et CSS. Dépend M0-14.
 
-**Travail :** mesurer temps de rendu/mémoire/scroll sur fixture longue. La première optimisation applique `content-visibility: auto`, une taille intrinsèque de secours et un scroll instantané pendant le streaming ; le DOM reste complet pour préserver recherche, sélection/copie et les blocs accessibles. La position de lecture est conservée par conversation afin qu'un changement de fil ne fasse pas perdre le contexte. Exposer un compteur d’entrées stable pour les mesures UI natives, puis virtualiser seulement si les budgets mesurés l’exigent. Liens/code/outils accessibles, état « nouveaux messages » sans saut si l'utilisateur lit plus haut.
+**Travail :** mesurer temps de rendu/mémoire/scroll sur fixture longue. Le transcript applique `content-visibility: auto`, une taille intrinsèque de secours et un scroll instantané pendant le streaming ; au-delà de 600 entrées, une fenêtre de 160 messages charge les 120 précédents à la demande avec compensation de hauteur. La position de lecture et l’index de fenêtre sont conservés par conversation afin qu'un changement de fil ne fasse pas perdre le contexte. Exposer un compteur d’entrées stable pour les mesures UI natives. Liens/code/outils accessibles, état « nouveaux messages » sans saut si l'utilisateur lit plus haut. La recherche Muse reste complète dans le journal durable ; la recherche native du navigateur reste limitée à la fenêtre DOM chargée.
 
 **Acceptation :** streaming entrelacé, sélection/copie, blocs volumineux, retour bas de page et thème ; fixer les budgets mesurés dans la PR.
 
