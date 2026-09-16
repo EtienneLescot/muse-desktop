@@ -32,9 +32,9 @@ export interface StreamHealthInput {
  * or input request never gets mislabeled as a stalled model.
  */
 export function classifyStreamHealth(input: StreamHealthInput): StreamHealth {
-  if (!input.running) return "idle";
   if (input.pendingApprovals > 0) return "waiting-approval";
   if (input.pendingInputs > 0) return "waiting-input";
+  if (!input.running) return "idle";
   if (input.lastEventAt === null) return "waiting-host";
   const elapsed = Math.max(0, input.now - input.lastEventAt);
   return elapsed >= STREAM_STALE_AFTER_MS ? "stalled" : "working";

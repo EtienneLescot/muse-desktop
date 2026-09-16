@@ -20,6 +20,10 @@ describe("stream health", () => {
     assert.equal(classifyStreamHealth({ ...base, pendingApprovals: 1 }), "waiting-approval");
     assert.equal(classifyStreamHealth({ ...base, pendingInputs: 1 }), "waiting-input");
     assert.equal(
+      classifyStreamHealth({ ...base, running: false, pendingApprovals: 1 }),
+      "waiting-approval",
+    );
+    assert.equal(
       classifyStreamHealth({
         ...base,
         now: base.lastEventAt + STREAM_STALE_AFTER_MS + 1,
