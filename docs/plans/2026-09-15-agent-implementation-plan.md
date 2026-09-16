@@ -530,4 +530,4 @@ Limites restantes et dépendances :
 Prochain sous-ticket concret :
 ```
 
-Ne déclarer un parent terminé que lorsque tous ses critères d'acceptation sont couverts. Le premier prochain lot conseillé est **M0-03 (envoi sans perte)**, tout en gardant ouverts M0-01c/M0-02c pour la validation native et la réconciliation complète.
+Ne déclarer un parent terminé que lorsque tous ses critères d'acceptation sont couverts. Le prochain lot conseillé est la **preuve native M0-01c/M0-02c** (deux workspaces, panne/reconnexion, approbation et reprise d'un tour), maintenant que les chemins renderer et liveness sont câblés. En parallèle, M2-08 reste conditionné à la découverte d'un contrat writer/spawn stable dans le moteur ; aucune commande native ne doit être inventée pour fermer ce point.
