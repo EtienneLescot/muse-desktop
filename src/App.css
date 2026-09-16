@@ -1950,6 +1950,72 @@ body.dark .composer textarea::placeholder {
   word-break: break-word;
 }
 
+.startup-probe {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 86%, var(--bg));
+  padding: 9px 10px;
+}
+
+.startup-probe header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.startup-probe h3 {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.startup-probe ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.startup-probe li {
+  display: grid;
+  grid-template-columns: 8px 80px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 0.78rem;
+}
+
+.startup-probe-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.startup-probe li[data-status="ready"] .startup-probe-dot {
+  background: var(--green);
+}
+
+.startup-probe li[data-status="missing"] .startup-probe-dot,
+.startup-probe li[data-status="blocked"] .startup-probe-dot {
+  background: var(--danger);
+}
+
+.startup-probe-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.startup-probe-detail {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidecar-error-help {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);

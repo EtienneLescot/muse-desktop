@@ -447,6 +447,21 @@ export type SessionConnectionState =
   | "connected"
   | "error";
 
+/** M0-10: one bounded native first-launch prerequisite check. */
+export interface StartupCheck {
+  status: "ready" | "missing" | "blocked" | "unknown";
+  detail: string;
+}
+
+export interface StartupProbe {
+  platform: string;
+  sidecar: StartupCheck;
+  wsl: StartupCheck | null;
+  museCli: StartupCheck | null;
+  workspace: StartupCheck | null;
+  checkedAt: number;
+}
+
 /** US-23 local index surface (opt-in, default off). */
 export interface IndexApi {
   enabled: boolean;
@@ -1069,6 +1084,10 @@ interface UseMuseSessions {
   evtCount: number;
   /** True when the Tauri backend is unreachable (plain-browser preview). */
   backendMissing: boolean;
+  /** M0-10: latest native prerequisite probe (null in web preview). */
+  startupProbe: StartupProbe | null;
+  /** M0-10: rerun the bounded first-launch prerequisite probe. */
+  probeStartup: (workspacePath?: string | null) => Promise<StartupProbe | null>;
 }
 
 interface BackendSessionMeta {
@@ -1430,6 +1449,25 @@ export function useMuseSessions(): UseMuseSessions {
     Record<string, SessionConnectionState>
   >({});
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
+  const [startupProbe, setStartupProbe] = useState<StartupProbe | null>(null);
+
+  const probeStartup = useCallback(
+    async (workspacePath?: string | null): Promise<StartupProbe | null> => {
+      if (!isTauriRuntime()) return null;
+      try {
+        const result = await invoke<StartupProbe>("probe_startup", {
+          workspacePath: workspacePath ?? workspace ?? null,
+        });
+        setStartupProbe(result);
+        return result;
+      } catch {
+        // Older native bundles can lack the optional probe command. The
+        // regular start error remains the source of truth in that case.
+        return null;
+      }
+    },
+    [workspace],
+  );
   // M1-01: review snapshots are owned by the hook so the panel never reads
   // stale or cross-session Git state. A refresh replaces the snapshot; the
   // observed HEAD in each result is the basis for later mutating actions.
@@ -1711,6 +1749,14 @@ export function useMuseSessions(): UseMuseSessions {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollOnce]);
+
+  // Run the read-only first-launch probe whenever the selected workspace
+  // changes. It never blocks boot and intentionally does not surface a
+  // second global error when an older bundle does not expose the command.
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void probeStartup(workspace);
+  }, [probeStartup, workspace]);
 
   // Write-through persistence.
   useEffect(() => {
@@ -5882,5 +5928,7 @@ export function useMuseSessions(): UseMuseSessions {
     openWorkspacePath,
     error,
     evtCount,
+    startupProbe,
+    probeStartup,
   };
 }

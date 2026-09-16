@@ -141,6 +141,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** diagnostic sans secrets de WSL/distribution, binaire, version, dossier accessible et authentification. Afficher étapes de correction et bouton Réessayer. Distinguer UI Windows native et moteur WSL ; pas d'installation implicite non maîtrisée.
 
+**État au 17/09/2026 :** `probe_startup` exécute une sonde native read-only et bornée (sidecar, WSL, `~/.local/bin/muse`, workspace), réutilisée par le panneau de récupération après un échec ou un changement de dossier. Le résultat reste structuré par check et ne lit aucune credential ; la guidance existante conserve la correction manuelle.
+
 **Acceptation :** machine propre, Muse absent, auth absente, chemin avec espaces/Unicode, bridge incompatible. Le premier tour est atteignable avec instructions exactes. Dépend M0-08.
 
 ### M0-11 — Finition anglais/navigation

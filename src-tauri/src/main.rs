@@ -27,6 +27,7 @@ mod files;
 mod setup;
 mod mcp;
 mod skills;
+mod startup;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -1842,6 +1843,18 @@ async fn file_open(
         .map_err(|e| format!("could not open workspace path: {e}"))
 }
 
+/// Probe local prerequisites for the first-launch recovery screen. This is a
+/// read-only, bounded check: it never starts a sidecar or changes WSL/Muse.
+#[tauri::command]
+async fn probe_startup(
+    workspace_path: Option<String>,
+) -> Result<startup::StartupProbe, String> {
+    let workspace = workspace_path.map(PathBuf::from);
+    tokio::task::spawn_blocking(move || startup::probe(resolve_sidecar(), workspace.as_deref()))
+        .await
+        .map_err(|e| format!("startup probe task failed: {e}"))
+}
+
 /// Build the frontend `input_request` payload from a `userInput/requested`
 /// notification. Pure (unit-tested): questions forwarded verbatim (capped),
 /// ids threaded through for the answer round-trip.
@@ -3553,6 +3566,7 @@ fn main() {
             files_list,
             file_read,
             file_open,
+            probe_startup,
             list_models,
             set_model,
             compact_session,

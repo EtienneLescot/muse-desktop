@@ -243,6 +243,8 @@ export default function App() {
     ackScanNudge,
     error,
     backendMissing,
+    startupProbe,
+    probeStartup,
   } = useMuseSessions();
 
   // US-20: one `@mem/…` token the panel asked the composer to insert.
@@ -456,8 +458,12 @@ export default function App() {
       kind={sidecarKind}
       message={error}
       triedPaths={extractTriedPaths(error)}
-      onRetry={() => void startSession()}
+      onRetry={() => {
+        void probeStartup(workspace);
+        void startSession();
+      }}
       onPickWorkspace={setWorkspace}
+      startupProbe={startupProbe}
     />
   );
 
