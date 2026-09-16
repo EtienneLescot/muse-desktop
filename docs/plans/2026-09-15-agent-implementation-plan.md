@@ -253,6 +253,10 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **État au 16/09/2026 :** `session/fork` est câblé dans le superviseur et l’action d’en-tête crée une nouvelle conversation serveur dans le même workspace, avec continuité locale des entrées terminées. La sélection d’un `lastTurnId` MSP précis, les erreurs de frontière et la qualification live restent ouvertes.
 
+### M1-12 — Recherche et organisation
+
+**État au 16/09/2026 :** la recherche parcourt les métadonnées et les journaux locaux avec extrait contextualisé ; les conversations peuvent être épinglées et le choix est conservé au redémarrage. L’ordre manuel, les non-lus et la mesure de performance des très longues listes restent ouverts.
+
 ### M1-10 — Steering et file de messages
 
 **Code :** Composer, `phase.ts`, sessions/MSP. Dépend M0-03/04/08.
