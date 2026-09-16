@@ -1861,8 +1861,20 @@ export function useMuseSessions(): UseMuseSessions {
     };
     check();
     const timer = setInterval(check, 15000);
+    // A suspended renderer can miss several interval ticks. Re-check as soon
+    // as the window becomes usable again so the persisted missed-run policy
+    // is applied promptly instead of waiting for the next 15 s tick.
+    const wake = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    window.addEventListener("focus", wake);
+    window.addEventListener("pageshow", wake);
+    document.addEventListener("visibilitychange", wake);
     return () => {
       clearInterval(timer);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("pageshow", wake);
+      document.removeEventListener("visibilitychange", wake);
       releaseSchedulerLease(schedulerLeaseOwner.current);
     };
   }, []);
