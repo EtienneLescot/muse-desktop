@@ -423,7 +423,18 @@ fn validate_paths(paths: &[String]) -> Result<(), String> {
             return Err("repository path must not be empty".to_string());
         }
         let candidate = Path::new(path);
+        // `Path` only understands the host OS syntax. Git paths cross the
+        // Tauri boundary as strings, so reject Windows drive/UNC forms even
+        // when the supervisor itself is running on Linux (CI and WSL).
+        let windows_absolute = path.starts_with("\\\\")
+            || path.starts_with("//")
+            || (path.len() >= 2
+                && path.as_bytes()[0].is_ascii_alphabetic()
+                && path.as_bytes()[1] == b':');
+        let normalized = path.replace('\\', "/");
         if candidate.is_absolute()
+            || windows_absolute
+            || normalized.split('/').any(|segment| segment == "..")
             || candidate.components().any(|component| {
                 matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))
             })
