@@ -70,7 +70,7 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 - **M0-07c — export local livré** : Settings propose **Export diagnostics**. Le JSON reste borné aux compteurs de sessions/événements, états d'attente, backend et dernière erreur rédigée ; le workspace et le transcript ne sont jamais exportés.
 - **M0-07d — compteurs natifs livrés** : le bridge expose `collect_diagnostics`, qui renvoie un snapshot `muse-desktop.native-diagnostics.v1` avec état de workspace, hosts, sessions, sessions en cours, approbations en attente et taille du buffer d'événements. L'export Settings l'intègre quand l'application tourne dans Tauri et retombe sur les compteurs renderer en web preview.
 - **M0-07e — erreurs de tour structurées livrées** : `turn/completed` conserve l'enveloppe d'erreur MSP (`kind`, `message`, `retryable`, durée et raison) au lieu de la réduire à une chaîne. Le journal persiste ce détail et `StreamView` l'affiche dans une carte calme et repliable avec **Retry turn** lorsque le host juge l'envoi réessayable ; le bouton reprend le dernier prompt utilisateur avant l'échec. Les hôtes anciens retombent sur leur raison texte, avec masquage des secrets courants.
-- **Validation** : suite Rust à 76 tests sur le backend, suite Node à 495 tests avec secrets synthétiques, compteurs invalides, résumé multi-worktree, export JSON, erreurs terminales structurées et copie d'erreurs ; TypeScript/Vite verts.
+- **Validation** : suite Rust à 76 tests sur le backend, suite Node à 497 tests avec secrets synthétiques, compteurs invalides, résumé multi-worktree, erreurs de fin de run et copie d'erreurs ; TypeScript/Vite verts.
 
 ### Livraison M0-09 — persistance récupérable
 
@@ -119,7 +119,7 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 - **M0-14c — fixture livrée** : `scripts/msp-fixture.mjs` fournit les scénarios `success`, `interleaved`, `reject`, `timeout` et `drop`. `test/msp-fixture.test.ts` lance un vrai processus enfant, vérifie le framing `Content-Length`, les notifications `tools/list_changed`, les erreurs JSON-RPC, l'absence de réponse bornée et la fermeture stdout sans toucher à un workspace.
 - **M0-14d — rapports d'échec livrés** : les jobs frontend et Rust conservent, uniquement en cas d'échec, les 250/300 dernières lignes de leurs commandes dans un artefact GitHub à rétention de 7 jours. Les chemins de runner et les formes de secrets courantes sont masqués ; aucun workspace, credential ou transcript utilisateur n'est ajouté.
 - **M0-14e — limite restante** : le scénario natif A/B et la panne d'envoi avec l'interface Tauri restent à ajouter avant de déclarer M0-14 complet.
-- **Validation** : `npm test` (495 tests Node, dont cinq tests fixture), build frontend et 76 tests Rust verts. La fixture s'exécute aussi dans le job Node de la CI depuis un clone propre.
+- **Validation** : `npm test` (497 tests Node, dont cinq tests fixture), build frontend et 76 tests Rust verts. La fixture s'exécute aussi dans le job Node de la CI depuis un clone propre.
 
 ### Livraison M0-06 — posture d'autorisation globale
 
