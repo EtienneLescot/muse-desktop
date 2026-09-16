@@ -1,6 +1,6 @@
 /**
  * US-9 automations/scheduled + review queue: pure schedule logic, cron
- * recurrence, due → review enqueue (never auto-send), approve/discard,
+ * recurrence, due → captured review/run context, approve/discard,
  * target resolution, and persisted round-trips.
  *
  * Runs on the built-in node:test runner, no extra framework:
@@ -181,7 +181,7 @@ describe("US-9 cron", () => {
   });
 });
 
-describe("US-9 due → review queue (never auto-send)", () => {
+describe("US-9 due → captured review/run context", () => {
   it("a past one-shot is due once, then never again", () => {
     let list = sched([], onceInput(), 1000);
     assert.equal(isScheduleDue(list[0], 2000), true);
@@ -190,7 +190,7 @@ describe("US-9 due → review queue (never auto-send)", () => {
     assert.equal(r1.queue.length, 1);
     assert.equal(r1.queue[0].status, "pending");
     assert.equal(r1.queue[0].instructions, "Summarize yesterday's commits.");
-    // Pure enqueue: schedules advance, nothing is "sent" — the entry waits.
+    // Pure enqueue: the caller decides whether the entry waits or dispatches.
     assert.equal(isScheduleDue(r1.schedules[0], 2000), false);
     const r2 = enqueueDue(r1.schedules, r1.queue, 9999);
     assert.equal(r2.added.length, 0);

@@ -123,6 +123,7 @@ export default function App() {
     settingsFor,
     projectForSession,
     schedules,
+    scheduleRuns,
     reviewQueue,
     createSchedule,
     setScheduleEnabled,
@@ -705,6 +706,7 @@ export default function App() {
                 {" "}
                 <SchedulesPanel
                   schedules={schedules}
+                  runs={scheduleRuns}
                   sessions={sessions}
                   activeId={activeId}
                   workspace={workspace}
