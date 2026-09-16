@@ -157,6 +157,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** focus initial/retour, navigation des groupes, fermeture Échap, intitulés et annonces live non répétitives. Vérifier contraste et zoom ; annoncer fin/besoin d'action plutôt que chaque token. Les contrôles ajoutent aussi un chemin de contraste forcé Windows (`Highlight`, `ButtonText`, `LinkText`) sans changer le rendu normal.
 
+**État au 17/09/2026 :** les cartes d'approbation et de questions placent le focus à l'arrivée, proposent la navigation fléchée des choix, une boucle Tab confinée à la carte active, ainsi que Ctrl+Entrée pour répondre et Échap pour ignorer. Les tests purs de navigation et d'annonces restent verts ; la vérification avec lecteur d'écran réel, zoom 200 % et réduction des mouvements demeure à exécuter.
+
 **Acceptation :** parcours complet sans souris, lecteur d'écran réel, zoom 200 %, réduction des mouvements. Les tests automatisés complètent mais ne remplacent pas cette vérification.
 
 ### M0-13 — États de capacité honnêtes

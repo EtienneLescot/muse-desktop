@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { primaryModifier } from "../lib/a11y";
+import { choiceIndexForKey, primaryModifier, trapTabIndex } from "../lib/a11y";
 import {
   buildAnswers,
   type InputAnswer,
@@ -93,6 +93,47 @@ function InputCard({
     } else if (e.key === "Escape") {
       e.preventDefault();
       onSkip(request.session_id, request.input_id);
+      return;
+    }
+
+    const target = e.target as HTMLElement | null;
+    if (target === null) return;
+    const root = cardRef.current;
+    if (!root) return;
+
+    // Keep keyboard focus inside the active request until it is answered or
+    // skipped. This mirrors ApprovalPanel and avoids sending a decision to
+    // the page behind a long, multi-question card.
+    if (e.key === "Tab") {
+      const items = [
+        ...root.querySelectorAll<HTMLElement>(
+          "button:not(:disabled), input:not(:disabled), textarea:not(:disabled)",
+        ),
+      ];
+      const idx = items.indexOf(target);
+      if (idx !== -1) {
+        e.preventDefault();
+        const next = trapTabIndex(idx, items.length, e.shiftKey);
+        if (next !== null) items[next].focus();
+      }
+      return;
+    }
+
+    // Single-choice answers behave like the approval choices: arrows move
+    // without changing the answer, Enter/Space still activates the focused
+    // button through the browser's native button behavior.
+    if (target.tagName === "BUTTON") {
+      const group = target.closest(".approval-actions");
+      if (!group || !group.closest(".input-question")) return;
+      const items = [
+        ...group.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"),
+      ];
+      const idx = items.indexOf(target as HTMLButtonElement);
+      const next = choiceIndexForKey(e.key, idx, items.length);
+      if (next !== null) {
+        e.preventDefault();
+        items[next].focus();
+      }
     }
   }
 
@@ -132,7 +173,7 @@ function InputCard({
                       className={
                         picks[q.id]?.labels[0] === o.label ? "approve" : ""
                       }
-                      title={`${o.description} (Enter to pick)`.trim()}
+                      title={`${o.description} (Arrow keys move, Enter to pick)`.trim()}
                       aria-pressed={picks[q.id]?.labels[0] === o.label}
                       onClick={() => setLabels(q.id, [o.label])}
                     >
