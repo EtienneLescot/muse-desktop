@@ -46,6 +46,22 @@ describe("stream health", () => {
     assert.equal(classifyStreamHealth({ ...base, running: false }), "idle");
   });
 
+  it("exposes the short bridge state after an accepted decision", () => {
+    assert.equal(
+      classifyStreamHealth({ ...base, resumePendingAt: base.now }),
+      "resuming",
+    );
+    assert.equal(
+      classifyStreamHealth({
+        ...base,
+        resumePendingAt: base.now,
+        now: base.now + STREAM_STALE_AFTER_MS,
+      }),
+      "stalled",
+    );
+    assert.equal(streamHealthLabel("resuming"), "Muse is resuming");
+  });
+
   it("keeps an accepted stop request visible until the host confirms it", () => {
     assert.equal(classifyStreamHealth({ ...base, stopping: true }), "stopping");
     assert.equal(streamHealthLabel("stopping"), "Stopping Muse");

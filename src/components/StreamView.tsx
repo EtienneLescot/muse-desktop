@@ -28,6 +28,8 @@ interface Props {
   running?: boolean;
   stopping?: boolean;
   lastEventAt?: number | null;
+  /** A permission/input decision was accepted; awaiting the next host event. */
+  resumePendingAt?: number | null;
   pendingApprovals?: number;
   pendingInputs?: number;
   reconnecting?: boolean;
@@ -79,6 +81,7 @@ export function StreamView({
   running = false,
   stopping = false,
   lastEventAt = null,
+  resumePendingAt = null,
   pendingApprovals = 0,
   pendingInputs = 0,
   reconnecting = false,
@@ -171,6 +174,7 @@ export function StreamView({
     running,
     stopping,
     lastEventAt,
+    resumePendingAt,
     pendingApprovals,
     pendingInputs,
     now,
@@ -183,6 +187,8 @@ export function StreamView({
         return elapsed === null
           ? "Live updates are arriving."
           : `Last update ${elapsed} ago.`;
+      case "resuming":
+        return "Your decision was accepted; waiting for the host to continue the turn.";
       case "stopping":
         return "The stop request was accepted; waiting for the desktop host to confirm it.";
       case "waiting-approval":

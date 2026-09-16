@@ -572,6 +572,15 @@ body.dark .avatar {
   animation: stream-health-pulse 1.5s ease-in-out infinite;
 }
 
+.stream-health-resuming {
+  border-color: color-mix(in srgb, var(--blue) 42%, var(--line));
+  background: color-mix(in srgb, var(--surface) 92%, var(--blue) 8%);
+}
+
+.stream-health-resuming .stream-health-indicator {
+  animation: stream-health-pulse 1.2s ease-in-out infinite;
+}
+
 .stream-health-stopping {
   border-color: color-mix(in srgb, var(--blue) 42%, var(--line));
   background: color-mix(in srgb, var(--surface) 94%, var(--blue) 6%);

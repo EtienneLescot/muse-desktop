@@ -13,6 +13,7 @@ export const STREAM_STALE_AFTER_MS = 15_000;
 export type StreamHealth =
   | "idle"
   | "working"
+  | "resuming"
   | "stopping"
   | "waiting-approval"
   | "waiting-input"
@@ -26,6 +27,8 @@ export interface StreamHealthInput {
   lastEventAt: number | null;
   pendingApprovals: number;
   pendingInputs: number;
+  /** A decision was accepted; wait for the next host event before calling it working. */
+  resumePendingAt?: number | null;
   now: number;
 }
 
@@ -39,6 +42,10 @@ export function classifyStreamHealth(input: StreamHealthInput): StreamHealth {
   if (input.pendingApprovals > 0) return "waiting-approval";
   if (input.pendingInputs > 0) return "waiting-input";
   if (!input.running) return "idle";
+  if (input.resumePendingAt !== undefined && input.resumePendingAt !== null) {
+    const elapsed = Math.max(0, input.now - input.resumePendingAt);
+    return elapsed >= STREAM_STALE_AFTER_MS ? "stalled" : "resuming";
+  }
   if (input.lastEventAt === null) return "waiting-host";
   const elapsed = Math.max(0, input.now - input.lastEventAt);
   return elapsed >= STREAM_STALE_AFTER_MS ? "stalled" : "working";
@@ -49,6 +56,8 @@ export function streamHealthLabel(health: StreamHealth): string {
   switch (health) {
     case "working":
       return "Muse is working";
+    case "resuming":
+      return "Muse is resuming";
     case "stopping":
       return "Stopping Muse";
     case "waiting-approval":

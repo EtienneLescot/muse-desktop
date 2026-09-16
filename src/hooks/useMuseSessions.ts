@@ -615,6 +615,12 @@ export interface StreamActivity {
   lastEventKind: string;
 }
 
+/** A user decision was accepted and the host has not emitted its next turn event yet. */
+export interface ResumePending {
+  requestedAt: number;
+  source: "approval" | "input";
+}
+
 /** One buffered backend event with its sequence number (poll transport). */
 interface DrainedEvent extends MuseEvent {
   seq: number;
@@ -666,6 +672,9 @@ interface UseMuseSessions {
   /** M0-02: latest live event used to explain quiet/stalled turns. */
   streamActivityBySession: Record<string, StreamActivity>;
   activeStreamActivity: StreamActivity | null;
+  /** M0-02/M0-05: explicit bridge state after a permission or input decision. */
+  resumePendingBySession: Record<string, ResumePending>;
+  activeResumePending: ResumePending | null;
   /** M0-04: cancellation accepted by the host, awaiting terminal status. */
   stoppingBySession: Record<string, boolean>;
   /** M0-02: connection lifecycle, separate from turn execution state. */
@@ -1246,6 +1255,9 @@ export function useMuseSessions(): UseMuseSessions {
   // host activity.
   const [streamActivityBySession, setStreamActivityBySession] = useState<
     Record<string, StreamActivity>
+  >({});
+  const [resumePendingBySession, setResumePendingBySession] = useState<
+    Record<string, ResumePending>
   >({});
   // A cancel request is not the same thing as a confirmed stopped status.
   // Keep this renderer-only state separate from the persisted session row so
@@ -2150,6 +2162,22 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }
 
+  function markResumePending(sessionId: string, source: ResumePending["source"]): void {
+    setResumePendingBySession((cur) => ({
+      ...cur,
+      [sessionId]: { requestedAt: Date.now(), source },
+    }));
+  }
+
+  function clearResumePending(sessionId: string): void {
+    setResumePendingBySession((cur) => {
+      if (!(sessionId in cur)) return cur;
+      const next = { ...cur };
+      delete next[sessionId];
+      return next;
+    });
+  }
+
   /** M3-08: settle an admitted scheduled turn when the host actually stops. */
   function settleScheduleRunsForSession(
     sessionId: string,
@@ -2178,6 +2206,22 @@ export function useMuseSessions(): UseMuseSessions {
     // Keep this heartbeat independent from log timestamps: a host status
     // event can prove progress even when it has no user-facing log line.
     touchStreamActivity(sid, kind);
+    // A decision is an intentional gap in the host stream. Clear the bridge
+    // marker only when a real host progress/terminal signal arrives; the
+    // approval/input resolution itself is not enough to prove that the turn
+    // resumed and must remain visible to the user.
+    if (
+      kind === "output" ||
+      kind === "thinking" ||
+      kind === "subagent_event" ||
+      kind === "item_done" ||
+      isItemStartKind(kind) ||
+      isRunningKind(kind) ||
+      isStoppedKind(kind) ||
+      kind === "host_exited"
+    ) {
+      clearResumePending(sid);
+    }
     if (kind !== "host_exited") setConnectionState(sid, "connected");
     if (
       activeId !== sid &&
@@ -2308,6 +2352,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "input_request") {
       ensureSessionRow(sid, null);
+      clearResumePending(sid);
       const req = parseInputRequest(sid, payload);
       if (req === null) {
         pushLog(sid, [
@@ -2369,6 +2414,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "tool_request") {
       ensureSessionRow(sid, null);
+      clearResumePending(sid);
       const req = parseApproval(sid, payload);
       // Compound shell commands reuse one approval id for every stage. An
       // updated tool_request replaces its choices and requirement while
@@ -3951,6 +3997,7 @@ export function useMuseSessions(): UseMuseSessions {
         // US-10: reflexive placeholder synchronously, same as after send.
         touchStreamActivity(sessionId, "client/approval");
         ensurePlaceholder(sessionId);
+        markResumePending(sessionId, "approval");
         kickPoll();
         return true;
       } catch (e) {
@@ -4845,6 +4892,7 @@ export function useMuseSessions(): UseMuseSessions {
         // US-10: reflexive placeholder synchronously, same as after send.
         touchStreamActivity(sessionId, "client/input");
         ensurePlaceholder(sessionId);
+        markResumePending(sessionId, "input");
         kickPoll();
       } catch (e) {
         setError(`answer_input failed: ${String(e)}`);
@@ -5554,6 +5602,9 @@ export function useMuseSessions(): UseMuseSessions {
   const activeStreamActivity = activeId === null
     ? null
     : (streamActivityBySession[activeId] ?? null);
+  const activeResumePending = activeId === null
+    ? null
+    : (resumePendingBySession[activeId] ?? null);
   const activeConnectionState = activeId === null
     ? "disconnected"
     : (connectionBySession[activeId] ?? "disconnected");
@@ -5567,6 +5618,8 @@ export function useMuseSessions(): UseMuseSessions {
     activeApprovals,
     streamActivityBySession,
     activeStreamActivity,
+    resumePendingBySession,
+    activeResumePending,
     stoppingBySession,
     connectionBySession,
     activeConnectionState,
