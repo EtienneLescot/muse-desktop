@@ -8,6 +8,8 @@ use serde::Serialize;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -66,6 +68,18 @@ fn read_pipe<R: Read + Send + 'static>(mut reader: R) -> thread::JoinHandle<Vec<
 
 /// Run one explicit setup command in a managed worktree.
 pub fn run(root: &Path, path: &str, command: &str) -> Result<SetupResult, String> {
+    run_with_cancel(root, path, command, None)
+}
+
+/// Run setup with an optional cancellation flag owned by the supervisor.
+/// Cancellation is cooperative at the polling boundary and kills the child
+/// process before returning a terminal result.
+pub fn run_with_cancel(
+    root: &Path,
+    path: &str,
+    command: &str,
+    cancel: Option<Arc<AtomicBool>>,
+) -> Result<SetupResult, String> {
     let command = command.trim();
     if command.is_empty() {
         return Err("setup command must not be empty".to_string());
@@ -94,9 +108,15 @@ pub fn run(root: &Path, path: &str, command: &str) -> Result<SetupResult, String
     let stderr = child.stderr.take().map(read_pipe);
     let started = Instant::now();
     let mut timed_out = false;
+    let mut cancelled = false;
     let status = loop {
         if let Some(status) = child.try_wait().map_err(|e| format!("setup wait failed: {e}"))? {
             break status;
+        }
+        if cancel.as_ref().is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            cancelled = true;
+            let _ = child.kill();
+            break child.wait().map_err(|e| format!("setup cancellation wait failed: {e}"))?;
         }
         if started.elapsed() >= MAX_RUNTIME {
             timed_out = true;
@@ -120,7 +140,9 @@ pub fn run(root: &Path, path: &str, command: &str) -> Result<SetupResult, String
         }
     }
     Ok(SetupResult {
-        status: if timed_out {
+        status: if cancelled {
+            "cancelled".to_string()
+        } else if timed_out {
             "timedOut".to_string()
         } else if status.success() {
             "ready".to_string()
@@ -139,6 +161,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
 
@@ -169,6 +192,20 @@ mod tests {
         assert!(result.output.contains("ready"));
         let failure = if cfg!(windows) { "exit /b 3" } else { "exit 3" };
         assert_eq!(run(&root, ".muse/worktrees/one", failure).unwrap().status, "failed");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn honours_cancellation_before_process_completion() {
+        let root = fixture();
+        let flag = Arc::new(AtomicBool::new(true));
+        let command = if cfg!(windows) {
+            "ping 127.0.0.1 -n 4 > nul"
+        } else {
+            "sleep 4"
+        };
+        let result = run_with_cancel(&root, ".muse/worktrees/one", command, Some(flag)).unwrap();
+        assert_eq!(result.status, "cancelled");
         let _ = fs::remove_dir_all(root);
     }
 }

@@ -32,7 +32,7 @@ export interface WorktreeRecord {
 }
 
 export interface WorktreeSetupResult {
-  status: "ready" | "failed" | "timedOut";
+  status: "ready" | "failed" | "timedOut" | "cancelled";
   output: string;
   exitCode: number | null;
   durationMs: number;

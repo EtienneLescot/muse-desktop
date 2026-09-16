@@ -642,6 +642,8 @@ interface UseMuseSessions {
     record: WorktreeRecord,
     command: string,
   ) => Promise<WorktreeSetupResult | null>;
+  /** M2-04: request cancellation of the active setup process, if any. */
+  cancelWorktreeSetup: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
   startSession: () => Promise<string | null>;
   startSessionInWorkspace: (
     workspacePath: string,
@@ -1229,6 +1231,9 @@ export function useMuseSessions(): UseMuseSessions {
   >({});
   const [filesBySession, setFilesBySession] = useState<Record<string, FilesBrowserState>>({});
   const filesRequestSeq = useRef<Record<string, number>>({});
+  // M2-04: operation ids let the renderer cancel a specific native setup
+  // process without trying to infer it from the active view.
+  const setupOperationsRef = useRef<Map<string, string>>(new Map());
   // Mirror of "any session running", read by the poll loop to pick cadence.
   // Plain ref (not state): the loop lives outside render, StrictMode-safe.
   const runningRef = useRef(false);
@@ -2442,14 +2447,41 @@ export function useMuseSessions(): UseMuseSessions {
       }
       try {
         setError(null);
-        return await invoke<WorktreeSetupResult>("worktree_setup_run", {
-          sessionId,
-          path: record.path,
-          command: command.trim(),
-        });
+        const operationId = newId();
+        const operationKey = `${sessionId}:${record.path}`;
+        setupOperationsRef.current.set(operationKey, operationId);
+        try {
+          return await invoke<WorktreeSetupResult>("worktree_setup_run", {
+            sessionId,
+            path: record.path,
+            command: command.trim(),
+            operationId,
+          });
+        } finally {
+          if (setupOperationsRef.current.get(operationKey) === operationId) {
+            setupOperationsRef.current.delete(operationKey);
+          }
+        }
       } catch (e) {
         setError(`worktree setup failed: ${e instanceof Error ? e.message : String(e)}`);
         return null;
+      }
+    },
+    [],
+  );
+
+  const cancelWorktreeSetup = useCallback(
+    async (sessionId: string, record: WorktreeRecord): Promise<boolean> => {
+      const operationId = setupOperationsRef.current.get(`${sessionId}:${record.path}`);
+      if (operationId === undefined) return false;
+      try {
+        return await invoke<boolean>("worktree_setup_cancel", {
+          sessionId,
+          operationId,
+        });
+      } catch (e) {
+        setError(`worktree setup cancellation failed: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
       }
     },
     [],
@@ -4643,6 +4675,7 @@ export function useMuseSessions(): UseMuseSessions {
     removeWorktree,
     inspectWorktree,
     runWorktreeSetup,
+    cancelWorktreeSetup,
     startSession,
     startSessionInWorkspace,
     forkSession,

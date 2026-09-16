@@ -32,7 +32,8 @@ use hosts::Hosts;
 use base64::Engine as _;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -222,6 +223,10 @@ struct AppState {
     event_seq: Mutex<u64>,
     event_buffer: Mutex<std::collections::VecDeque<DrainedEvent>>,
     terminals: terminal::TerminalRegistry,
+    /// In-flight worktree setup cancellation flags, keyed by session and
+    /// renderer operation id. The command owns the child process lifetime;
+    /// the UI only requests cancellation through this registry.
+    setup_cancellations: Mutex<HashMap<(String, String), Arc<AtomicBool>>>,
 }
 
 const DIAGNOSTIC_MAX_LINES: usize = 20;
@@ -1222,11 +1227,44 @@ async fn worktree_setup_run(
     session_id: String,
     path: String,
     command: String,
+    operation_id: String,
 ) -> Result<setup::SetupResult, String> {
     let root = workspace_for_inspection(&state, &session_id)?;
-    tokio::task::spawn_blocking(move || setup::run(&root, &path, &command))
-        .await
-        .map_err(|e| format!("worktree setup task failed: {e}"))?
+    let key = (session_id, operation_id);
+    let cancel = Arc::new(AtomicBool::new(false));
+    state
+        .setup_cancellations
+        .lock()
+        .map_err(|_| "setup cancellation registry is unavailable".to_string())?
+        .insert(key.clone(), cancel.clone());
+    let joined = tokio::task::spawn_blocking(move || {
+        setup::run_with_cancel(&root, &path, &command, Some(cancel))
+    })
+    .await;
+    if let Ok(mut active) = state.setup_cancellations.lock() {
+        active.remove(&key);
+    }
+    joined.map_err(|e| format!("worktree setup task failed: {e}"))?
+}
+
+/// Request cancellation of one running setup command. The process is killed
+/// by the setup worker, so this call stays non-blocking for the renderer.
+#[tauri::command]
+fn worktree_setup_cancel(
+    state: State<'_, AppState>,
+    session_id: String,
+    operation_id: String,
+) -> Result<bool, String> {
+    let active = state
+        .setup_cancellations
+        .lock()
+        .map_err(|_| "setup cancellation registry is unavailable".to_string())?;
+    if let Some(flag) = active.get(&(session_id, operation_id)) {
+        flag.store(true, Ordering::Relaxed);
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Probe an explicitly configured local MCP server with initialize + tools/list.
@@ -2869,6 +2907,7 @@ fn main() {
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
             terminals: terminal::TerminalRegistry::default(),
+            setup_cancellations: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
@@ -2896,6 +2935,7 @@ fn main() {
             git_worktree_remove,
             git_worktree_inspect,
             worktree_setup_run,
+            worktree_setup_cancel,
             mcp_local_probe,
             mcp_local_call,
             skills_scan,
@@ -2927,6 +2967,11 @@ fn main() {
             if let RunEvent::Exit = event {
                 let state: State<AppState> = app.state();
                 state.terminals.close_all();
+                if let Ok(active) = state.setup_cancellations.lock() {
+                    for flag in active.values() {
+                        flag.store(true, Ordering::Relaxed);
+                    }
+                }
                 let clients = state.hosts.lock().map(|mut h| h.drain()).unwrap_or_default();
                 for client in clients { tauri::async_runtime::block_on(client.shutdown()); }
             }

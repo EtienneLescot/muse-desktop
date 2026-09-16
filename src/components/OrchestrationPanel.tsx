@@ -45,6 +45,7 @@ interface Props {
     record: WorktreeRecord,
     command: string,
   ) => Promise<WorktreeSetupResult | null>;
+  onCancelSetup: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
   sourceStatus: GitStatusSnapshot | null;
 }
 
@@ -62,6 +63,7 @@ export function OrchestrationPanel({
   onRemoveWorktree,
   onInspectWorktree,
   onRunSetup,
+  onCancelSetup,
   sourceStatus,
 }: Props) {
   const [baseline, setBaseline] = useState("");
@@ -138,6 +140,12 @@ export function OrchestrationPanel({
       setSetupByBranch((current) => ({ ...current, [record.branch]: result }));
     }
     setSetupRunning(null);
+  }
+
+  async function cancelSetup(record: WorktreeRecord): Promise<void> {
+    if (setupRunning !== record.branch) return;
+    setSetupError(null);
+    await onCancelSetup(sessionId, record);
   }
 
   function saveProfile(): void {
@@ -300,17 +308,30 @@ export function OrchestrationPanel({
                 >
                   Remove
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const record = recordFor(p);
-                    if (record) void runSetup(record);
-                  }}
-                  disabled={setupRunning !== null || setupCommand.trim().length === 0}
-                  title="Run the setup command in this worktree"
-                >
-                  {setupRunning === recordFor(p)?.branch ? "Running…" : "Run setup"}
-                </button>
+                {setupRunning === recordFor(p)?.branch ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const record = recordFor(p);
+                      if (record) void cancelSetup(record);
+                    }}
+                    title="Cancel the running setup command"
+                  >
+                    Cancel setup
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const record = recordFor(p);
+                      if (record) void runSetup(record);
+                    }}
+                    disabled={setupRunning !== null || setupCommand.trim().length === 0}
+                    title="Run the setup command in this worktree"
+                  >
+                    Run setup
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -328,7 +349,9 @@ export function OrchestrationPanel({
                         ? "ready"
                         : setupByBranch[p.branch].status === "timedOut"
                           ? "timed out"
-                          : "failed"} · {setupByBranch[p.branch].durationMs} ms
+                          : setupByBranch[p.branch].status === "cancelled"
+                            ? "cancelled"
+                            : "failed"} · {setupByBranch[p.branch].durationMs} ms
                       {setupByBranch[p.branch].exitCode === null
                         ? ""
                         : ` · exit ${setupByBranch[p.branch].exitCode}`}
