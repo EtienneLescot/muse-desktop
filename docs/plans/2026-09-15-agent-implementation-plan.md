@@ -385,9 +385,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** ConnectorPanel/connectors.ts, nouvel adaptateur runtime. Dépend M0-06/08/14.
 
-**État :** `mcp_local_probe` et `mcp_local_call` lancent une commande locale uniquement sur geste utilisateur, parlent le framing MCP stdio (`Content-Length` ou ligne JSON), exécutent `initialize` + `notifications/initialized`, puis `tools/list` ou `tools/call`. La réponse est bornée, le processus est tué après l'échange ou le timeout, et l'UI expose les outils/arguments/résultat. Un connecteur enregistré expose aussi un rafraîchissement manuel qui refait `tools/list` et conserve la dernière liste si le probe échoue.
+**État :** `mcp_local_probe` et `mcp_local_call` lancent une commande locale uniquement sur geste utilisateur, parlent le framing MCP stdio (`Content-Length` ou ligne JSON), exécutent `initialize` + `notifications/initialized`, puis `tools/list` ou `tools/call`. La réponse est bornée et l'UI expose les outils/arguments/résultat. Le runtime propose désormais `mcp_local_start`, `mcp_local_refresh`, `mcp_local_call_persistent` et `mcp_local_stop` : un processus reste vivant par connecteur jusqu'à Stop ou fermeture de l'app, tandis qu'une relance recrée explicitement le serveur.
 
-**Reste :** maintenir un serveur persistant par connecteur, propager `notifications/tools/list_changed`, brancher les tools découverts au catalogue observé par Muse et appliquer la politique d'autorisation du host à chaque appel.
+**Reste :** propager `notifications/tools/list_changed`, brancher les tools découverts au catalogue observé par Muse et appliquer la politique d'autorisation du host à chaque appel.
 
 **Acceptation :** serveur fixture expose puis exécute un outil, redémarre, change sa liste et échoue ; appel observé dans une session Muse.
 
@@ -405,7 +405,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **État :** un probe local réussi peut enregistrer la commande et les outils découverts dans le registre persistant. Une nouvelle liste remplace l'entrée existante sans réactiver une extension désactivée ; `listConnectorTools` retire immédiatement ses outils lorsque le statut passe à `disabled`. Les connecteurs locaux enregistrés peuvent être rafraîchis explicitement depuis le panneau ; un échec ou une liste vide ne remplace pas la dernière version utilisable.
 
-**Reste :** runtime persistant par connecteur, package/version/source, mise à jour/rollback, arrêt pendant appel et bridge vers les outils réellement visibles par le moteur Muse.
+**Reste :** package/version/source, mise à jour/rollback, arrêt pendant appel et bridge vers les outils réellement visibles par le moteur Muse ; les notifications `list_changed` et la politique d'autorisation par appel restent à intégrer.
 
 **Acceptation :** installation ratée, mise à jour incompatible, désactivation pendant appel et suppression ; registre et runtime cohérents.
 

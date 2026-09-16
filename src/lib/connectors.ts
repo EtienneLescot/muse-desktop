@@ -154,6 +154,11 @@ export const REMOTE_LIMIT_MESSAGE =
   "remove the existing remote connector before adding another. Remote MCP " +
   "also requires a public-internet HTTPS endpoint with allowlisted IPs.";
 
+/** Stable id for a user-named local MCP connector. */
+export function localConnectorIdForName(name: string): string {
+  return `local-mcp-${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
+
 /** Find a curated entry by id, or null. */
 export function findCurated(id: string): CuratedConnector | null {
   for (const c of CURATED_CONNECTORS) {

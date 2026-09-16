@@ -1,8 +1,9 @@
 //! Small, explicit local MCP stdio client.
 //!
-//! Each probe/call is a short-lived process: initialize, exchange one
-//! request, then terminate. This keeps credentials and subprocess state out
-//! of the React store while still exercising the real MCP handshake and
+//! Short-lived probe/call commands remain available for discovery, while the
+//! connector panel can explicitly start a persistent stdio process for
+//! refreshes and tool calls. Both paths keep credentials and subprocess state
+//! out of the React store while exercising the real MCP handshake and
 //! tools/list/tools/call methods. The command is always supplied by an
 //! explicit user gesture in the connector panel.
 
@@ -157,16 +158,50 @@ fn recv_response(
         .map_err(|_| "local MCP server timed out waiting for a response".to_string())?
 }
 
+/// Wait for one JSON-RPC response while ignoring protocol notifications that
+/// may be interleaved on a persistent stdio connection. MCP servers are
+/// allowed to emit notifications (including `tools/list_changed`) at any
+/// time, so matching only the next frame would associate the wrong payload
+/// with a request.
+fn recv_response_id(
+    rx: &mpsc::Receiver<Result<Value, String>>,
+    started: Instant,
+    id: u64,
+) -> Result<Value, String> {
+    loop {
+        let value = recv_response(rx, started)?;
+        if value.get("id").and_then(Value::as_u64) == Some(id) {
+            return Ok(value);
+        }
+        // A notification has no id. Ignore it here; the explicit refresh
+        // command will ask tools/list again and the process remains alive.
+        if value.get("id").is_none() {
+            continue;
+        }
+        // A response for another request cannot be consumed safely by this
+        // bounded single-flight client. Fail closed instead of guessing.
+        return Err("MCP response id did not match the pending request".to_string());
+    }
+}
+
 fn begin(command: &str, workspace: Option<&Path>) -> Result<(Child, ChildStdin, mpsc::Receiver<Result<Value, String>>, Instant), String> {
     let mut child = spawn(command, workspace)?;
-    let stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| "local MCP server stdin is unavailable".to_string())?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "local MCP server stdout is unavailable".to_string())?;
+    let stdin = match child.stdin.take() {
+        Some(stdin) => stdin,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("local MCP server stdin is unavailable".to_string());
+        }
+    };
+    let stdout = match child.stdout.take() {
+        Some(stdout) => stdout,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("local MCP server stdout is unavailable".to_string());
+        }
+    };
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
@@ -207,7 +242,7 @@ fn initialize(
         let _ = child.kill();
         return Err(error);
     }
-    let response = match recv_response(&rx, started) {
+    let response = match recv_response_id(&rx, started, 1) {
         Ok(value) => value,
         Err(error) => {
             let _ = child.kill();
@@ -218,9 +253,14 @@ fn initialize(
         let _ = child.kill();
         return Err(format!("MCP initialize failed: {}", clip(error.to_string())));
     }
-    let result = response
-        .get("result")
-        .ok_or_else(|| "MCP initialize response has no result".to_string())?;
+    let result = match response.get("result") {
+        Some(result) => result,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("MCP initialize response has no result".to_string());
+        }
+    };
     let protocol = result
         .get("protocolVersion")
         .and_then(Value::as_str)
@@ -245,6 +285,110 @@ fn initialize(
         return Err(error);
     }
     Ok((child, stdin, rx, started, format!("{protocol}\u{0}{server_name}\u{0}{server_version}")))
+}
+
+/// A bounded, single-flight MCP stdio process kept alive between explicit
+/// refresh/call commands. The reader thread owns stdout; all writes and
+/// responses remain serialized behind the registry mutex in `main.rs`.
+pub struct PersistentServer {
+    child: Child,
+    stdin: ChildStdin,
+    rx: mpsc::Receiver<Result<Value, String>>,
+    next_id: u64,
+    protocol_version: String,
+    server_name: String,
+    server_version: String,
+}
+
+impl Drop for PersistentServer {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+impl PersistentServer {
+    /// Start a process, complete the MCP handshake and perform an initial
+    /// tools/list. The returned process remains alive until removed from the
+    /// registry or application shutdown.
+    pub fn start(
+        command: &str,
+        workspace: Option<&Path>,
+    ) -> Result<(Self, ProbeResult), String> {
+        let (child, stdin, rx, _started, meta) = initialize(command, workspace)?;
+        let (protocol_version, server_name, server_version) = decode_init(&meta);
+        let mut server = Self {
+            child,
+            stdin,
+            rx,
+            next_id: 2,
+            protocol_version,
+            server_name,
+            server_version,
+        };
+        let started = Instant::now();
+        let result = server.request("tools/list", json!({}))?;
+        let probe = ProbeResult {
+            protocol_version: server.protocol_version.clone(),
+            server_name: server.server_name.clone(),
+            server_version: server.server_version.clone(),
+            tools: parse_tools(&result),
+            duration_ms: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        };
+        Ok((
+            server,
+            probe,
+        ))
+    }
+
+    fn request(&mut self, method: &str, params: Value) -> Result<Value, String> {
+        let id = self.next_id;
+        self.next_id = self.next_id.saturating_add(1).max(2);
+        let started = Instant::now();
+        send(
+            &mut self.stdin,
+            &json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }),
+        )?;
+        let response = recv_response_id(&self.rx, started, id)?;
+        if let Some(error) = response.get("error") {
+            return Err(format!("MCP {method} failed: {}", clip(error.to_string())));
+        }
+        Ok(response.get("result").cloned().unwrap_or(Value::Null))
+    }
+
+    /// Re-run tools/list on the same process.
+    pub fn refresh(&mut self) -> Result<ProbeResult, String> {
+        let started = Instant::now();
+        let result = self.request("tools/list", json!({}))?;
+        Ok(ProbeResult {
+            protocol_version: self.protocol_version.clone(),
+            server_name: self.server_name.clone(),
+            server_version: self.server_version.clone(),
+            tools: parse_tools(&result),
+            duration_ms: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        })
+    }
+
+    /// Call one tool without restarting the process.
+    pub fn call(&mut self, tool_name: &str, arguments: Value) -> Result<CallResult, String> {
+        let tool_name = tool_name.trim();
+        if tool_name.is_empty() || tool_name.chars().count() > MAX_TOOL_NAME_CHARS {
+            return Err("MCP tool name is empty or too long".to_string());
+        }
+        let arguments = if arguments.is_object() { arguments } else { json!({}) };
+        let started = Instant::now();
+        let result = self.request(
+            "tools/call",
+            json!({ "name": tool_name, "arguments": arguments }),
+        )?;
+        let is_error = result.get("isError").and_then(Value::as_bool).unwrap_or(false);
+        Ok(CallResult {
+            tool_name: tool_name.to_string(),
+            result: bound_value(result),
+            is_error,
+            duration_ms: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        })
+    }
 }
 
 fn decode_init(meta: &str) -> (String, String, String) {
@@ -380,5 +524,33 @@ mod tests {
         bytes.extend_from_slice(body);
         let value = read_framed(&mut BufReader::new(Cursor::new(bytes))).unwrap();
         assert_eq!(value["id"], 1);
+    }
+
+    #[test]
+    fn response_matching_skips_interleaved_notifications() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(Ok(json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/tools/list_changed",
+            "params": {}
+        })))
+        .unwrap();
+        tx.send(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "result": {"tools": []}
+        })))
+        .unwrap();
+        let value = recv_response_id(&rx, Instant::now(), 7).unwrap();
+        assert_eq!(value["id"], 7);
+    }
+
+    #[test]
+    fn response_matching_rejects_another_request_id() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(Ok(json!({ "jsonrpc": "2.0", "id": 8, "result": {} })))
+            .unwrap();
+        let error = recv_response_id(&rx, Instant::now(), 7).unwrap_err();
+        assert!(error.contains("did not match"));
     }
 }

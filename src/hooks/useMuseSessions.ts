@@ -303,6 +303,7 @@ import {
   installConnector,
   listConnectorTools,
   loadConnectors,
+  localConnectorIdForName,
   registerLocalConnector,
   refreshLocalConnector,
   requestRemoteConnector,
@@ -974,6 +975,21 @@ interface UseMuseSessions {
     id: string,
     workspacePath?: string | null,
   ) => Promise<LocalMcpProbeResult | null>;
+  /** M3-01: currently live persistent local MCP process ids. */
+  mcpRunningIds: string[];
+  /** M3-01: start a configured local MCP process explicitly. */
+  startLocalMcp: (
+    id: string,
+    workspacePath?: string | null,
+  ) => Promise<LocalMcpProbeResult | null>;
+  /** M3-01: stop a configured local MCP process explicitly. */
+  stopLocalMcp: (id: string) => Promise<boolean>;
+  /** M3-01: call a tool through the persistent process. */
+  callRegisteredLocalMcp: (
+    id: string,
+    toolName: string,
+    argumentsText: string,
+  ) => Promise<LocalMcpCallResult | null>;
   /** w-integrations US-26: last remote-guard refusal message, if any. */
   remoteNotice: string | null;
   /** w-integrations US-24: 1-click install from the curated directory. */
@@ -1218,6 +1234,10 @@ export function useMuseSessions(): UseMuseSessions {
   // w-integrations US-24/US-26: connector registry (survives restarts via
   // localStorage), written through on every change.
   const [connectors, setConnectors] = useState<ConnectorEntry[]>(() => loadConnectors());
+  // Persistent MCP processes are native runtime state, not part of the
+  // persisted connector registry. A relaunch starts them only on explicit
+  // Start/Refresh, never during hydration.
+  const [mcpRunningIds, setMcpRunningIds] = useState<string[]>([]);
   const [remoteNotice, setRemoteNotice] = useState<string | null>(null);
   // w-integrations US-25: skills, builtins merged over stored overrides.
   const [skills, setSkills] = useState<Skill[]>(() => mergeBuiltinSkills(loadSkills()));
@@ -2972,9 +2992,18 @@ export function useMuseSessions(): UseMuseSessions {
     setConnectors(r.registry);
   }, []);
 
-  const uninstallConnectorById = useCallback((id: string): void => {
+  const uninstallConnectorById = useCallback(async (id: string): Promise<void> => {
+    if (mcpRunningIds.includes(id)) {
+      try {
+        await invoke<boolean>("mcp_local_stop", { connectorId: id });
+        setMcpRunningIds((current) => current.filter((item) => item !== id));
+      } catch (e) {
+        setError(`cannot remove running MCP connector: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+    }
     setConnectors((cur) => uninstallConnector(cur, id).registry);
-  }, []);
+  }, [mcpRunningIds]);
 
   const setConnectorEnabledById = useCallback((id: string, enabled: boolean): void => {
     setConnectors((cur) => setConnectorEnabled(cur, id, enabled).registry);
@@ -3995,7 +4024,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   const registerLocalConnectorByProbe = useCallback(
     (name: string, command: string, tools: ConnectorTool[]): boolean => {
-      const id = `local-mcp-${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const id = localConnectorIdForName(name);
       const result = registerLocalConnector(connectorsRef.current, {
         id,
         name,
@@ -4159,6 +4188,54 @@ export function useMuseSessions(): UseMuseSessions {
     [activeId, authorizationMode, globalSettings, sendInput, sessions, setSessionModel, startSessionRow],
   );
 
+  const applyPersistentMcpProbe = useCallback(
+    (id: string, result: LocalMcpProbeResult): boolean => {
+      const updated = refreshLocalConnector(
+        connectorsRef.current,
+        id,
+        result.tools,
+        Date.now(),
+      );
+      if (updated === null) {
+        setError("local MCP probe returned no valid tools");
+        return false;
+      }
+      setConnectors(updated.registry);
+      return true;
+    },
+    [],
+  );
+
+  const startLocalMcp = useCallback(
+    async (
+      id: string,
+      workspacePath?: string | null,
+    ): Promise<LocalMcpProbeResult | null> => {
+      const entry = findConnector(connectorsRef.current, id);
+      if (entry === null || entry.kind !== "local" || !entry.command) {
+        setError("local MCP start requires a configured command");
+        return null;
+      }
+      try {
+        const result = await invoke<LocalMcpProbeResult>("mcp_local_start", {
+          connectorId: id,
+          command: entry.command,
+          workspace: workspacePath?.trim() || null,
+        });
+        setMcpRunningIds((current) =>
+          current.includes(id) ? current : [...current, id],
+        );
+        applyPersistentMcpProbe(id, result);
+        return result;
+      } catch (e) {
+        setMcpRunningIds((current) => current.filter((item) => item !== id));
+        setError(`local MCP start failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [applyPersistentMcpProbe],
+  );
+
   const refreshLocalMcp = useCallback(
     async (
       id: string,
@@ -4169,22 +4246,65 @@ export function useMuseSessions(): UseMuseSessions {
         setError("local MCP refresh requires a configured command");
         return null;
       }
-      const result = await probeLocalMcp(entry.command, workspacePath);
-      if (result === null) return null;
-      const updated = refreshLocalConnector(
-        connectorsRef.current,
-        id,
-        result.tools,
-        Date.now(),
-      );
-      if (updated === null) {
-        setError("local MCP refresh returned no valid tools");
+      try {
+        const result = await invoke<LocalMcpProbeResult>("mcp_local_refresh", {
+          connectorId: id,
+          command: entry.command,
+          workspace: workspacePath?.trim() || null,
+        });
+        setMcpRunningIds((current) =>
+          current.includes(id) ? current : [...current, id],
+        );
+        applyPersistentMcpProbe(id, result);
+        return result;
+      } catch (e) {
+        setMcpRunningIds((current) => current.filter((item) => item !== id));
+        setError(`local MCP refresh failed: ${e instanceof Error ? e.message : String(e)}`);
         return null;
       }
-      setConnectors(updated.registry);
-      return result;
     },
-    [probeLocalMcp],
+    [applyPersistentMcpProbe],
+  );
+
+  const stopLocalMcp = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const stopped = await invoke<boolean>("mcp_local_stop", { connectorId: id });
+      if (stopped) {
+        setMcpRunningIds((current) => current.filter((item) => item !== id));
+      }
+      return stopped;
+    } catch (e) {
+      setError(`local MCP stop failed: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
+  }, []);
+
+  const callRegisteredLocalMcp = useCallback(
+    async (
+      id: string,
+      toolName: string,
+      argumentsText: string,
+    ): Promise<LocalMcpCallResult | null> => {
+      let argumentsValue: unknown = {};
+      try {
+        argumentsValue = argumentsText.trim() ? JSON.parse(argumentsText) : {};
+      } catch {
+        setError("local MCP call failed: arguments must be valid JSON");
+        return null;
+      }
+      try {
+        return await invoke<LocalMcpCallResult>("mcp_local_call_persistent", {
+          connectorId: id,
+          toolName: toolName.trim(),
+          arguments: argumentsValue,
+        });
+      } catch (e) {
+        setMcpRunningIds((current) => current.filter((item) => item !== id));
+        setError(`local MCP persistent call failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
   );
   scheduledExecutorRef.current = async (item, run) => {
     await executeReviewItem(item, run);
@@ -5249,6 +5369,10 @@ export function useMuseSessions(): UseMuseSessions {
     callLocalMcp,
     registerLocalConnector: registerLocalConnectorByProbe,
     refreshLocalMcp,
+    mcpRunningIds,
+    startLocalMcp,
+    stopLocalMcp,
+    callRegisteredLocalMcp,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,

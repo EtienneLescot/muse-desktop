@@ -227,6 +227,10 @@ struct AppState {
     /// renderer operation id. The command owns the child process lifetime;
     /// the UI only requests cancellation through this registry.
     setup_cancellations: Mutex<HashMap<(String, String), Arc<AtomicBool>>>,
+    /// Persistent local MCP servers, keyed by the frontend connector id.
+    /// Each entry owns its child process and is removed explicitly or on app
+    /// exit; calls are serialized by this mutex to keep stdio single-flight.
+    mcp_servers: Arc<Mutex<HashMap<String, mcp::PersistentServer>>>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -1472,6 +1476,133 @@ async fn skills_scan(
     tokio::task::spawn_blocking(move || skills::scan(&root))
         .await
         .map_err(|e| format!("skills scan task failed: {e}"))?
+}
+
+/// Start (or replace) a persistent MCP stdio server for one configured
+/// connector. The command is still supplied by the persisted local registry;
+/// no server is started during app boot.
+#[tauri::command]
+async fn mcp_local_start(
+    state: State<'_, AppState>,
+    connector_id: String,
+    command: String,
+    workspace: Option<String>,
+) -> Result<mcp::ProbeResult, String> {
+    let connector_id = connector_id.trim().to_string();
+    if connector_id.is_empty() {
+        return Err("MCP connector id must not be empty".to_string());
+    }
+    let workspace = workspace.map(PathBuf::from);
+    let servers = Arc::clone(&state.mcp_servers);
+    tokio::task::spawn_blocking(move || {
+        let (server, result) = mcp::PersistentServer::start(&command, workspace.as_deref())?;
+        let mut registry = servers
+            .lock()
+            .map_err(|_| "MCP server registry is unavailable".to_string())?;
+        registry.insert(connector_id, server);
+        Ok(result)
+    })
+    .await
+    .map_err(|e| format!("MCP start task failed: {e}"))?
+}
+
+/// Refresh tools on a persistent MCP server. If the app has no live process
+/// for the id (for example after a relaunch), start it from the persisted
+/// command and perform the same initial tools/list exchange.
+#[tauri::command]
+async fn mcp_local_refresh(
+    state: State<'_, AppState>,
+    connector_id: String,
+    command: String,
+    workspace: Option<String>,
+) -> Result<mcp::ProbeResult, String> {
+    let connector_id = connector_id.trim().to_string();
+    if connector_id.is_empty() {
+        return Err("MCP connector id must not be empty".to_string());
+    }
+    let workspace = workspace.map(PathBuf::from);
+    let servers = Arc::clone(&state.mcp_servers);
+    tokio::task::spawn_blocking(move || {
+        let mut registry = servers
+            .lock()
+            .map_err(|_| "MCP server registry is unavailable".to_string())?;
+        if let Some(server) = registry.get_mut(&connector_id) {
+            let result = server.refresh();
+            if result.is_err() {
+                // A broken stdout/transport cannot be recovered by reusing
+                // the same child. Remove it so the next explicit refresh
+                // starts a clean process.
+                registry.remove(&connector_id);
+            }
+            return result;
+        }
+        let (server, result) = mcp::PersistentServer::start(&command, workspace.as_deref())?;
+        registry.insert(connector_id, server);
+        Ok(result)
+    })
+    .await
+    .map_err(|e| format!("MCP refresh task failed: {e}"))?
+}
+
+/// Call one tool on a running persistent MCP server. A missing id fails
+/// explicitly so the UI can offer Start/Refresh instead of silently spawning
+/// an unrelated short-lived process.
+#[tauri::command]
+async fn mcp_local_call_persistent(
+    state: State<'_, AppState>,
+    connector_id: String,
+    tool_name: String,
+    arguments: Value,
+) -> Result<mcp::CallResult, String> {
+    let connector_id = connector_id.trim().to_string();
+    if connector_id.is_empty() {
+        return Err("MCP connector id must not be empty".to_string());
+    }
+    let servers = Arc::clone(&state.mcp_servers);
+    tokio::task::spawn_blocking(move || {
+        let mut registry = servers
+            .lock()
+            .map_err(|_| "MCP server registry is unavailable".to_string())?;
+        let result = {
+            let server = registry
+                .get_mut(&connector_id)
+                .ok_or_else(|| "MCP connector is not running; start it first".to_string())?;
+            server.call(&tool_name, arguments)
+        };
+        if result.is_err() {
+            registry.remove(&connector_id);
+        }
+        result
+    })
+    .await
+    .map_err(|e| format!("MCP persistent call task failed: {e}"))?
+}
+
+/// Stop one persistent MCP server. The child is killed by `Drop` when its
+/// registry entry is removed.
+#[tauri::command]
+fn mcp_local_stop(state: State<'_, AppState>, connector_id: String) -> Result<bool, String> {
+    let connector_id = connector_id.trim();
+    if connector_id.is_empty() {
+        return Err("MCP connector id must not be empty".to_string());
+    }
+    let mut registry = state
+        .mcp_servers
+        .lock()
+        .map_err(|_| "MCP server registry is unavailable".to_string())?;
+    Ok(registry.remove(connector_id).is_some())
+}
+
+/// Return the ids of currently running persistent MCP servers. This is a
+/// diagnostic/status projection only; the frontend registry remains the SSOT
+/// for connector metadata and tools.
+#[tauri::command]
+fn mcp_local_running(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let registry = state
+        .mcp_servers
+        .lock()
+        .map_err(|_| "MCP server registry is unavailable".to_string())?;
+    Ok(registry.keys().cloned().collect())
 }
 
 /// Read a bounded set of relative resources for a discovered SKILL.md.
@@ -3179,6 +3310,7 @@ fn main() {
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
             terminals: terminal::TerminalRegistry::default(),
             setup_cancellations: Mutex::new(HashMap::new()),
+            mcp_servers: Arc::new(Mutex::new(HashMap::new())),
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
@@ -3215,6 +3347,11 @@ fn main() {
             worktree_setup_cancel,
             mcp_local_probe,
             mcp_local_call,
+            mcp_local_start,
+            mcp_local_refresh,
+            mcp_local_call_persistent,
+            mcp_local_stop,
+            mcp_local_running,
             skills_scan,
             skills_read_resources,
             terminal_open,
@@ -3252,6 +3389,9 @@ fn main() {
                 }
                 let clients = state.hosts.lock().map(|mut h| h.drain()).unwrap_or_default();
                 for client in clients { tauri::async_runtime::block_on(client.shutdown()); }
+                if let Ok(mut servers) = state.mcp_servers.lock() {
+                    servers.clear();
+                };
             }
         });
 }

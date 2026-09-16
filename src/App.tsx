@@ -178,6 +178,10 @@ export default function App() {
     callLocalMcp,
     registerLocalConnector,
     refreshLocalMcp,
+    mcpRunningIds,
+    startLocalMcp,
+    stopLocalMcp,
+    callRegisteredLocalMcp,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
@@ -813,6 +817,10 @@ export default function App() {
                   }
                   onRegisterLocal={registerLocalConnector}
                   onRefreshLocal={(id) => refreshLocalMcp(id, workspace)}
+                  mcpRunningIds={mcpRunningIds}
+                  onStartLocal={(id) => startLocalMcp(id, workspace)}
+                  onStopLocal={stopLocalMcp}
+                  onCallRegisteredLocal={callRegisteredLocalMcp}
                   remoteNotice={remoteNotice}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}

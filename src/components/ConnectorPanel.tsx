@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   CURATED_CONNECTORS,
+  localConnectorIdForName,
   type ConnectorEntry,
   type ConnectorTool,
   type LocalMcpCallResult,
@@ -30,6 +31,17 @@ interface Props {
   onRegisterLocal: (name: string, command: string, tools: ConnectorTool[]) => boolean;
   /** Re-probe and persist tools for an existing local MCP connector. */
   onRefreshLocal: (id: string) => Promise<LocalMcpProbeResult | null>;
+  /** Currently running persistent local MCP process ids. */
+  mcpRunningIds: string[];
+  /** Start/stop a configured local MCP process explicitly. */
+  onStartLocal: (id: string) => Promise<LocalMcpProbeResult | null>;
+  onStopLocal: (id: string) => Promise<boolean>;
+  /** Call a tool through a running persistent local MCP process. */
+  onCallRegisteredLocal: (
+    id: string,
+    toolName: string,
+    argumentsText: string,
+  ) => Promise<LocalMcpCallResult | null>;
   workspace: string | null;
 }
 
@@ -53,6 +65,10 @@ export function ConnectorPanel({
   onCallLocal,
   onRegisterLocal,
   onRefreshLocal,
+  mcpRunningIds,
+  onStartLocal,
+  onStopLocal,
+  onCallRegisteredLocal,
   workspace,
 }: Props) {
   const [remoteName, setRemoteName] = useState("");
@@ -65,7 +81,9 @@ export function ConnectorPanel({
   const [localBusy, setLocalBusy] = useState<"probe" | "call" | null>(null);
   const [localTool, setLocalTool] = useState("");
   const [localArgs, setLocalArgs] = useState("{}");
+  const [localConnectorId, setLocalConnectorId] = useState<string | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [refreshAction, setRefreshAction] = useState<"start" | "stop" | "refresh" | null>(null);
   const [refreshFeedback, setRefreshFeedback] = useState<{
     id: string;
     message: string;
@@ -99,6 +117,7 @@ export function ConnectorPanel({
             const result = await onProbeLocal(localCommand);
             setLocalProbe(result);
             setLocalTool(result?.tools[0]?.name ?? "");
+            setLocalConnectorId(null);
             setLocalSaved(false);
             setLocalBusy(null);
           }}
@@ -109,6 +128,7 @@ export function ConnectorPanel({
             onChange={(event) => {
               setLocalName(event.target.value);
               setLocalSaved(false);
+              setLocalConnectorId(null);
             }}
             placeholder="Server name"
             aria-label="Local MCP server name"
@@ -117,7 +137,11 @@ export function ConnectorPanel({
           <input
             type="text"
             value={localCommand}
-            onChange={(event) => setLocalCommand(event.target.value)}
+            onChange={(event) => {
+              setLocalCommand(event.target.value);
+              setLocalSaved(false);
+              setLocalConnectorId(null);
+            }}
             placeholder="node ./my-mcp-server.js"
             aria-label="Local MCP command"
             spellCheck={false}
@@ -140,7 +164,10 @@ export function ConnectorPanel({
                   disabled={!localName.trim() || localSaved}
                   onClick={() => {
                     const saved = onRegisterLocal(localName, localCommand, localProbe.tools);
-                    if (saved) setLocalSaved(true);
+                    if (saved) {
+                      setLocalSaved(true);
+                      setLocalConnectorId(localConnectorIdForName(localName));
+                    }
                   }}
                 >
                   {localSaved ? "Saved" : "Save connector"}
@@ -162,7 +189,10 @@ export function ConnectorPanel({
                   disabled={!localTool || localBusy !== null}
                   onClick={async () => {
                     setLocalBusy("call");
-                    const result = await onCallLocal(localCommand, localTool, localArgs);
+                    const result =
+                      localConnectorId !== null && mcpRunningIds.includes(localConnectorId)
+                        ? await onCallRegisteredLocal(localConnectorId, localTool, localArgs)
+                        : await onCallLocal(localCommand, localTool, localArgs);
                     setLocalCall(result);
                     setLocalBusy(null);
                   }}
@@ -233,38 +263,109 @@ export function ConnectorPanel({
                   />
                 </label>
                 {e.kind === "local" && e.command && (
-                  <button
-                    type="button"
-                    className="integration-action"
-                    disabled={refreshingId !== null}
-                    onClick={async () => {
-                      setRefreshingId(e.id);
-                      setRefreshFeedback(null);
-                      const result = await onRefreshLocal(e.id);
-                      if (result === null) {
-                        setRefreshFeedback({
-                          id: e.id,
-                          tone: "error",
-                          message: "Refresh failed. The previous tool list was kept.",
-                        });
-                      } else if (result.tools.length === 0) {
-                        setRefreshFeedback({
-                          id: e.id,
-                          tone: "error",
-                          message: "The server returned no tools. The previous list was kept.",
-                        });
-                      } else {
-                        setRefreshFeedback({
-                          id: e.id,
-                          tone: "success",
-                          message: `Tools refreshed · ${result.tools.length} discovered · ${result.durationMs} ms`,
-                        });
-                      }
-                      setRefreshingId(null);
-                    }}
-                  >
-                    {refreshingId === e.id ? "Refreshing…" : "Refresh tools"}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="integration-action"
+                      disabled={refreshingId !== null}
+                      onClick={async () => {
+                        setRefreshingId(e.id);
+                        setRefreshAction(mcpRunningIds.includes(e.id) ? "stop" : "start");
+                        setRefreshFeedback(null);
+                        if (mcpRunningIds.includes(e.id)) {
+                          const stopped = await onStopLocal(e.id);
+                          setRefreshFeedback({
+                            id: e.id,
+                            tone: stopped ? "success" : "error",
+                            message: stopped
+                              ? "Persistent server stopped."
+                              : "Stop failed; the server may still be running.",
+                          });
+                        } else {
+                          const result = await onStartLocal(e.id);
+                          if (result !== null && localConnectorId === e.id) {
+                            setLocalProbe(result);
+                            setLocalTool((current) =>
+                              result.tools.some((tool) => tool.name === current)
+                                ? current
+                                : result.tools[0]?.name ?? "",
+                            );
+                          }
+                          if (result === null) {
+                            setRefreshFeedback({
+                              id: e.id,
+                              tone: "error",
+                              message: "Start failed. Check the command and workspace.",
+                            });
+                          } else if (result.tools.length === 0) {
+                            setRefreshFeedback({
+                              id: e.id,
+                              tone: "error",
+                              message: "The server started but returned no tools.",
+                            });
+                          } else {
+                            setRefreshFeedback({
+                              id: e.id,
+                              tone: "success",
+                              message: `Persistent server running · ${result.tools.length} tools`,
+                            });
+                          }
+                        }
+                        setRefreshingId(null);
+                        setRefreshAction(null);
+                      }}
+                    >
+                      {refreshingId === e.id
+                        ? refreshAction === "stop"
+                          ? "Stopping…"
+                          : "Starting…"
+                        : mcpRunningIds.includes(e.id)
+                          ? "Stop server"
+                          : "Start server"}
+                    </button>
+                    <button
+                      type="button"
+                      className="integration-action"
+                      disabled={refreshingId !== null}
+                      onClick={async () => {
+                        setRefreshingId(e.id);
+                        setRefreshAction("refresh");
+                        setRefreshFeedback(null);
+                        const result = await onRefreshLocal(e.id);
+                        if (result !== null && localConnectorId === e.id) {
+                          setLocalProbe(result);
+                          setLocalTool((current) =>
+                            result.tools.some((tool) => tool.name === current)
+                              ? current
+                              : result.tools[0]?.name ?? "",
+                          );
+                        }
+                        if (result === null) {
+                          setRefreshFeedback({
+                            id: e.id,
+                            tone: "error",
+                            message: "Refresh failed. The previous tool list was kept.",
+                          });
+                        } else if (result.tools.length === 0) {
+                          setRefreshFeedback({
+                            id: e.id,
+                            tone: "error",
+                            message: "The server returned no tools. The previous list was kept.",
+                          });
+                        } else {
+                          setRefreshFeedback({
+                            id: e.id,
+                            tone: "success",
+                            message: `Tools refreshed · ${result.tools.length} discovered · ${result.durationMs} ms`,
+                          });
+                        }
+                        setRefreshingId(null);
+                        setRefreshAction(null);
+                      }}
+                    >
+                      {refreshingId === e.id ? "Refreshing…" : "Refresh tools"}
+                    </button>
+                  </>
                 )}
                 <button type="button" onClick={() => onUninstall(e.id)}>
                   Remove
