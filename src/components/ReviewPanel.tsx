@@ -93,6 +93,7 @@ export function ReviewPanel({
   const [scope, setScope] = useState<GitDiffScope>("unstaged");
   const [baseRef, setBaseRef] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [selectedLineKey, setSelectedLineKey] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
@@ -101,6 +102,7 @@ export function ReviewPanel({
   const [mutationBusy, setMutationBusy] = useState<"stage" | "unstage" | "discard" | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [confirmBulkDiscard, setConfirmBulkDiscard] = useState(false);
   const [hunkBusy, setHunkBusy] = useState<string | null>(null);
   const [confirmHunk, setConfirmHunk] = useState<string | null>(null);
   const [selectedHunkHeader, setSelectedHunkHeader] = useState<string | null>(null);
@@ -117,6 +119,7 @@ export function ReviewPanel({
 
   useEffect(() => {
     setSelectedPath(null);
+    setSelectedPaths([]);
     setSelectedLineKey(null);
     setCommentDraft("");
     setCommentError(null);
@@ -124,6 +127,7 @@ export function ReviewPanel({
     setMutationBusy(null);
     setMutationError(null);
     setConfirmDiscard(false);
+    setConfirmBulkDiscard(false);
     setHunkBusy(null);
     setConfirmHunk(null);
     setSelectedHunkHeader(null);
@@ -173,6 +177,13 @@ export function ReviewPanel({
       review.status?.files.find((file) => file.path === selectedPath) ?? null,
     [review.status, selectedPath],
   );
+  const selectedFileRows = useMemo(
+    () => review.status?.files.filter((file) => selectedPaths.includes(file.path)) ?? [],
+    [review.status, selectedPaths],
+  );
+  const bulkStageCount = selectedFileRows.filter((file) => file.unstaged || file.untracked).length;
+  const bulkUnstageCount = selectedFileRows.filter((file) => file.staged).length;
+  const bulkDiscardCount = selectedFileRows.filter((file) => file.unstaged && !file.untracked).length;
 
   useEffect(() => {
     const first = review.diff?.files[0]?.path ?? null;
@@ -195,6 +206,7 @@ export function ReviewPanel({
     setCommentSent(false);
     setMutationError(null);
     setConfirmDiscard(false);
+    setConfirmBulkDiscard(false);
     setHunkBusy(null);
     setConfirmHunk(null);
     setSelectedHunkHeader(null);
@@ -294,6 +306,53 @@ export function ReviewPanel({
       setCommentDraft("");
       setCommentSent(false);
       setConfirmDiscard(false);
+    } finally {
+      setMutationBusy(null);
+    }
+  }
+
+  async function runBulkMutation(action: "stage" | "unstage" | "discard"): Promise<void> {
+    if (!review.status || selectedPaths.length === 0) return;
+    const scope = action === "unstage" ? "staged" : "unstaged";
+    const paths = review.status.files
+      .filter((file) => selectedPaths.includes(file.path))
+      .filter((file) =>
+        action === "stage"
+          ? file.unstaged || file.untracked
+          : action === "unstage"
+            ? file.staged
+            : file.unstaged && !file.untracked,
+      )
+      .map((file) => file.path);
+    if (paths.length === 0) {
+      setMutationError(
+        action === "discard"
+          ? "Only tracked files with unstaged changes can be discarded here."
+          : "No selected files match this action.",
+      );
+      return;
+    }
+    const expected = expectationFor(scope);
+    if (!expected) {
+      setMutationError("Load the complete diff before applying a bulk action.");
+      return;
+    }
+    setMutationBusy(action);
+    setMutationError(null);
+    try {
+      const next =
+        action === "stage"
+          ? await onStageFiles(sessionId, paths, expected)
+          : await onRestoreFiles(sessionId, paths, scope, expected);
+      if (next === null) {
+        setMutationError("Action not applied. Refresh the repository and try again.");
+        return;
+      }
+      setSelectedPaths([]);
+      setSelectedLineKey(null);
+      setCommentDraft("");
+      setCommentSent(false);
+      setConfirmBulkDiscard(false);
     } finally {
       setMutationBusy(null);
     }
@@ -446,6 +505,20 @@ export function ReviewPanel({
             <ul className="review-files" aria-label="Changed files">
               {review.status.files.map((file) => (
                 <li key={`${file.path}:${file.originalPath ?? ""}`}>
+                  <label className="review-file-select">
+                    <input
+                      type="checkbox"
+                      checked={selectedPaths.includes(file.path)}
+                      onChange={() =>
+                        setSelectedPaths((current) =>
+                          current.includes(file.path)
+                            ? current.filter((path) => path !== file.path)
+                            : [...current, file.path],
+                        )
+                      }
+                      aria-label={`Select ${file.path}`}
+                    />
+                  </label>
                   <button
                     type="button"
                     className={selectedPath === file.path ? "selected" : undefined}
@@ -471,6 +544,7 @@ export function ReviewPanel({
                 onClick={() => {
                   setScope(value);
                   setSelectedPath(null);
+                  setSelectedPaths([]);
                   setSelectedLineKey(null);
                   setCommentSent(false);
                 }}
@@ -553,6 +627,70 @@ export function ReviewPanel({
                 <span className="muted review-action-note">Untracked files are never deleted here.</span>
               )}
               {mutationError && <span className="review-action-error" role="alert">{mutationError}</span>}
+            </div>
+          )}
+
+          {selectedFileRows.length > 0 && (
+            <div className="review-bulk-actions" aria-label="Bulk file actions">
+              <span className="muted">{selectedFileRows.length} selected</span>
+              <button
+                type="button"
+                className="review-action"
+                disabled={
+                  mutationBusy !== null ||
+                  bulkStageCount === 0 ||
+                  review.diff?.scope !== "unstaged"
+                }
+                onClick={() => void runBulkMutation("stage")}
+              >
+                {mutationBusy === "stage" ? "Staging…" : `Stage ${bulkStageCount}`}
+              </button>
+              <button
+                type="button"
+                className="review-action"
+                disabled={
+                  mutationBusy !== null ||
+                  bulkUnstageCount === 0 ||
+                  review.diff?.scope !== "staged"
+                }
+                onClick={() => void runBulkMutation("unstage")}
+              >
+                {mutationBusy === "unstage" ? "Unstaging…" : `Unstage ${bulkUnstageCount}`}
+              </button>
+              {review.diff?.scope === "unstaged" && bulkDiscardCount > 0 && !confirmBulkDiscard && (
+                <button
+                  type="button"
+                  className="review-action review-action-danger"
+                  disabled={mutationBusy !== null}
+                  onClick={() => setConfirmBulkDiscard(true)}
+                >
+                  Discard {bulkDiscardCount}…
+                </button>
+              )}
+              {review.diff?.scope === "unstaged" && bulkDiscardCount > 0 && confirmBulkDiscard && (
+                <>
+                  <span className="review-confirm-label">Discard selected tracked files?</span>
+                  <button
+                    type="button"
+                    className="review-action review-action-danger"
+                    disabled={mutationBusy !== null}
+                    onClick={() => void runBulkMutation("discard")}
+                  >
+                    {mutationBusy === "discard" ? "Discarding…" : "Confirm discard"}
+                  </button>
+                  <button
+                    type="button"
+                    className="review-action"
+                    disabled={mutationBusy !== null}
+                    onClick={() => setConfirmBulkDiscard(false)}
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+              {selectedFileRows.some((file) => file.untracked) && (
+                <span className="muted review-action-note">Untracked files remain untouched.</span>
+              )}
             </div>
           )}
 

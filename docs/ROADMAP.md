@@ -146,7 +146,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 |---|---|---|---|---|---|---|
 | M1-01 | Voir les fichiers réellement modifiés | Adapté | Présente | Câblée | Unitaire | Socle livré en lecture seule ; restent les scénarios E2E webview/live, le snapshot « dernier tour » et la vérification runtime des cas hors Git/modifications externes |
 | M1-02 | Commenter une ligne de diff et demander sa correction | Adapté | Présente | Câblée | Unitaire | Socle livré ; restent la qualification native avec un moteur live et la persistance/triage multi-commentaires |
-| M1-03 | Indexer ou annuler une modification | Adapté | Présente | Câblée | Intégration | Stage, unstage et discard fichier/hunk livrés avec garde HEAD/statut/diff ; sélection multiple et qualification native restent à faire |
+| M1-03 | Indexer ou annuler une modification | Adapté | Présente | Câblée | Intégration | Stage, unstage et discard fichier/hunk, plus sélection multiple de fichiers, livrés avec garde HEAD/statut/diff ; qualification native reste à faire |
 | M1-04 | Commit, push et création de PR depuis l'app | Adapté | Présente | Câblée | Intégration | Commit, push et PR GitHub CLI livrés avec destinations explicites ; restent qualification hooks/auth live, PR existante/rejet distant et revue native |
 | M1-05 | Ouvrir et utiliser un terminal du projet | Adapté | Présente | Câblée | Unitaire | Socle PTY persistant livré : shell lié au cwd de la conversation, entrée/sortie bornées, resize et fermeture contrôlée. Reste : validation native Windows/macOS/Linux, rendu ANSI riche et raccourcis interactifs |
 | M1-06 | Faire lire au moteur la sortie du terminal | Adapté | Présente | Locale | Unitaire | Handoff explicite **Add output to prompt** livré : sortie bornée, attribuée au terminal/cwd et insérée dans le prochain message. Reste : outil/contexte moteur natif après vérification de capacité MSP |
@@ -180,10 +180,11 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 
 - **Contrat backend :** `git_stage(sessionId, paths, expectedHead, expectedStatus, expectedPatch)` et `git_restore(sessionId, paths, scope, ...)` résolvent le workspace sessionné, valident les chemins relatifs et exécutent Git hors thread UI.
 - **Actions hunk :** `git_apply_hunk` extrait le hunk demandé depuis le diff observé et applique Stage, Unstage ou Discard partiel selon le scope ; les fichiers binaires, non suivis et les patches tronqués restent exclus.
+- **Sélection multiple :** les fichiers cochés peuvent être traités en une seule action Stage, Unstage ou Discard ; les non suivis restent visibles mais ne sont jamais supprimés.
 - **Garde de concurrence :** l’empreinte du statut inclut les sorties staged/unstaged et le patch présenté. HEAD, statut ou patch divergents refusent l’action avant toute écriture ; l’état courant est renvoyé après succès.
 - **UX :** la sélection d’un fichier expose Stage file, Unstage file et Discard changes avec confirmation dédiée. Le discard ne supprime jamais un fichier non suivi ; celui-ci est signalé comme nécessitant une suppression explicite dans le projet.
 - **Validation :** tests Rust d’intégration sur un dépôt temporaire pour stage → unstage → discard fichier/hunk, rejet d’une observation périmée et validation des chemins ; suite complète 72 tests Rust, 447 tests Node, TypeScript/Vite build réussi.
-- **Limites assumées :** la sélection multiple et la qualification native avec un vrai workspace restent à faire ; commit/push/PR sont couverts par M1-04.
+- **Limites assumées :** la qualification native avec un vrai workspace reste à faire ; commit/push/PR sont couverts par M1-04.
 
 ### Livraison M1-04 — commit, push et pull request explicites
 

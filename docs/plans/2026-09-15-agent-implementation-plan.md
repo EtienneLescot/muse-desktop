@@ -195,7 +195,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** actions fichier puis hunk, avec version attendue du diff. Refuser si état disque/index a changé ; confirmation proportionnée pour discard. Ne pas utiliser reset --hard comme raccourci.
 
-**État au 16/09/2026 :** stage, unstage et discard fichier sont livrés dans le service Git sessionné. `git_apply_hunk` extrait un hunk du patch observé et applique Stage, Unstage ou Discard partiel avec la même garde HEAD/statut/diff ; les fichiers binaires, non suivis et les patches tronqués sont refusés. Les actions exigent l’observation du panneau et renvoient l’état actualisé ; la sélection multiple et la qualification native restent à compléter.
+**État au 16/09/2026 :** stage, unstage et discard fichier sont livrés dans le service Git sessionné. `git_apply_hunk` extrait un hunk du patch observé et applique Stage, Unstage ou Discard partiel avec la même garde HEAD/statut/diff ; les fichiers binaires, non suivis et les patches tronqués sont refusés. Le panneau accepte aussi la sélection multiple de fichiers et applique une mutation groupée avec ces mêmes attentes ; les actions exigent l’observation du panneau et renvoient l’état actualisé. La qualification native reste à compléter.
 
 **Acceptation :** staging partiel, hunk périmé, fichier utilisateur modifié entre deux clics, binaire et échec Git. Les modifications non ciblées restent intactes.
 

@@ -2358,6 +2358,22 @@ body.dark .composer textarea::placeholder {
   border-top: 1px solid var(--line);
 }
 
+.review-files li {
+  display: flex;
+  align-items: stretch;
+}
+
+.review-file-select {
+  display: grid;
+  place-items: center;
+  padding: 0 0 0 8px;
+  cursor: pointer;
+}
+
+.review-file-select input {
+  accent-color: var(--blue);
+}
+
 .review-files button {
   display: flex;
   align-items: center;
@@ -2444,6 +2460,18 @@ body.dark .composer textarea::placeholder {
   flex-wrap: wrap;
   gap: 6px;
   padding: 7px 0 2px;
+  font-size: 0.72rem;
+}
+
+.review-bulk-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 94%, var(--pale));
   font-size: 0.72rem;
 }
 
