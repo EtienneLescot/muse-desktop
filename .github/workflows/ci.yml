@@ -52,6 +52,13 @@ jobs:
             patchelf
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Provide CI frontend placeholder
+        shell: bash
+        run: |
+          # The Rust supervisor tests do not exercise the webview, but the
+          # Tauri context macro still validates that frontendDist exists.
+          mkdir -p dist
+          printf '<!doctype html><title>CI</title>\n' > dist/index.html
       - name: Provide CI sidecar placeholder
         shell: bash
         run: |
