@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { TerminalInfo, TerminalState } from "../hooks/useMuseSessions";
+import { parseAnsi } from "../lib/ansi";
 
 interface Props {
   sessionId: string;
@@ -59,6 +60,11 @@ export function TerminalPanel({
     outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight });
   }, [terminal?.output]);
 
+  const outputChunks = useMemo(
+    () => parseAnsi(terminal?.output ?? ""),
+    [terminal?.output],
+  );
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!terminal || command.length === 0) return;
@@ -98,7 +104,9 @@ export function TerminalPanel({
         </div>
       </header>
       <pre ref={outputRef} className="terminal-output" aria-label="Terminal output">
-        {terminal.output || "Connected. Type a command below."}
+        {outputChunks.length === 0 ? "Connected. Type a command below." : outputChunks.map((chunk, index) => (
+          <span key={`${index}-${chunk.text.slice(0, 8)}`} style={chunk.style}>{chunk.text}</span>
+        ))}
         {terminal.done ? "\n\n[process exited]" : ""}
       </pre>
       <form className="terminal-input" onSubmit={submit}>
