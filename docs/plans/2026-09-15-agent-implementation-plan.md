@@ -423,6 +423,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** séparer Schedule et Run ; capturer projet/workspace/modèle/skills/politique, jamais « session active au moment du tick ». Occurrence crée un run durable puis exécute ; l'inbox contient le résultat, pas une demande de cliquer avant chaque run.
 
+**État au 16/09/2026 :** `Schedule` et `ReviewItem` capturent désormais workspace, projet, modèle et politique d'autorisation au moment de la création. L'approbation vérifie le workspace de la conversation cible et réapplique le modèle/politique capturés avant l'envoi ; un mismatch est refusé explicitement. Le service de scheduler/run durable qui supprime le clic de revue reste à implémenter.
+
 **Acceptation :** one-shot/récurrent, cible fixe malgré navigation, échec de démarrage et run terminé ; effet réel et historique.
 
 ### M3-07 — Reprise du scheduler

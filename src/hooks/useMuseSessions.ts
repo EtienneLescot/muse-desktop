@@ -3535,15 +3535,35 @@ export function useMuseSessions(): UseMuseSessions {
       // readable in the settled entry).
       const settled = approveReview(reviewQueueRef.current, id);
       if (settled !== null) setReviewQueue(settled.queue);
+      const targetSession = target === "new"
+        ? null
+        : sessions.find((session) => session.session_id === target) ?? null;
+      if (item.workspace && targetSession && targetSession.workspace !== item.workspace) {
+        setError("approve failed: the recorded workspace no longer matches the target conversation");
+        return;
+      }
+      const applyCapturedContext = async (sessionId: string): Promise<void> => {
+        if (item.authorizationMode && item.authorizationMode !== authorizationMode) {
+          await invoke("set_approval_mode", { sessionId, mode: item.authorizationMode });
+        }
+        if (item.model && item.model !== "default") {
+          await setSessionModel(sessionId, item.model);
+        }
+      };
       if (target === "new") {
-        const fresh = await startSessionRow();
+        const settings = item.model
+          ? { ...globalSettings, model: item.model }
+          : undefined;
+        const fresh = await startSessionRow(item.workspace, settings);
         if (fresh === null) return;
+        await applyCapturedContext(fresh);
         await sendInput(fresh, item.instructions);
       } else {
+        await applyCapturedContext(target);
         await sendInput(target, item.instructions);
       }
     },
-    [activeId, sessions, sendInput, startSessionRow],
+    [activeId, authorizationMode, globalSettings, sessions, sendInput, setSessionModel, startSessionRow],
   );
 
   const discardReviewCb = useCallback((id: string) => {

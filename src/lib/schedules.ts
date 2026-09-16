@@ -1,12 +1,10 @@
 /**
  * US-9 automations/scheduled + review queue: pure schedule logic.
  *
- * NOTE: no workflow/* MSP endpoint exists, so scheduling is a client-side
- * timer (see the `useMuseSessions` automation effect, which polls `enqueueDue`
- * on an interval) plus persisted state (localStorage keys below). A due
- * schedule NEVER auto-sends: it only enqueues a review-queue entry, and the
- * instructions reach the model only after the user presses Approve (which
- * sends them as normal turn input via `sendInput`).
+ * NOTE: no workflow/* MSP endpoint exists, so scheduling remains a bounded
+ * client-side timer. A due schedule creates a durable review/run context;
+ * execution still goes through the normal send/approval path until a native
+ * scheduler service is qualified.
  *
  * Dependency-free (zero imports) so it stays runnable under `node:test`
  * without React or Tauri.
@@ -32,12 +30,19 @@ export type ThreadReuse =
   | { kind: "new" }
   | { kind: "session"; sessionId: string };
 
+export type ScheduleAuthorizationMode = "ask" | "workspace" | "yolo";
+
 export interface Schedule {
   id: string;
   name: string;
   instructions: string;
   trigger: ScheduleTrigger;
   threadReuse: ThreadReuse;
+  /** Captured execution context; never inferred from the active view at tick. */
+  workspace?: string;
+  projectId?: string;
+  model?: string;
+  authorizationMode?: ScheduleAuthorizationMode;
   enabled: boolean;
   createdAt: number;
   /**
@@ -53,6 +58,10 @@ export interface ScheduleInput {
   instructions: string;
   trigger: ScheduleTrigger;
   threadReuse: ThreadReuse;
+  workspace?: string;
+  projectId?: string;
+  model?: string;
+  authorizationMode?: ScheduleAuthorizationMode;
 }
 
 export type ReviewStatus = "pending" | "approved" | "discarded";
@@ -63,6 +72,10 @@ export interface ReviewItem {
   scheduleName: string;
   instructions: string;
   threadReuse: ThreadReuse;
+  workspace?: string;
+  projectId?: string;
+  model?: string;
+  authorizationMode?: ScheduleAuthorizationMode;
   /** Enqueue time (epoch ms). */
   createdAt: number;
   status: ReviewStatus;
@@ -212,6 +225,10 @@ export function buildSchedule(input: ScheduleInput, nowTs: number): Schedule {
     instructions: input.instructions.trim(),
     trigger: input.trigger,
     threadReuse: input.threadReuse,
+    ...(input.workspace?.trim() ? { workspace: input.workspace.trim() } : {}),
+    ...(input.projectId?.trim() ? { projectId: input.projectId.trim() } : {}),
+    ...(input.model?.trim() ? { model: input.model.trim() } : {}),
+    ...(input.authorizationMode ? { authorizationMode: input.authorizationMode } : {}),
     enabled: true,
     createdAt: nowTs,
   };
@@ -268,6 +285,10 @@ function buildReviewItem(s: Schedule, nowTs: number): ReviewItem {
     scheduleName: s.name,
     instructions: s.instructions,
     threadReuse: s.threadReuse,
+    ...(s.workspace ? { workspace: s.workspace } : {}),
+    ...(s.projectId ? { projectId: s.projectId } : {}),
+    ...(s.model ? { model: s.model } : {}),
+    ...(s.authorizationMode ? { authorizationMode: s.authorizationMode } : {}),
     createdAt: nowTs,
     status: "pending",
   };
@@ -414,7 +435,11 @@ function isValidSchedule(s: unknown): s is Schedule {
     isValidReuse(o.threadReuse) &&
     typeof o.enabled === "boolean" &&
     typeof o.createdAt === "number" &&
-    (o.lastFiredAt === undefined || typeof o.lastFiredAt === "number")
+    (o.lastFiredAt === undefined || typeof o.lastFiredAt === "number") &&
+    (o.workspace === undefined || typeof o.workspace === "string") &&
+    (o.projectId === undefined || typeof o.projectId === "string") &&
+    (o.model === undefined || typeof o.model === "string") &&
+    (o.authorizationMode === undefined || o.authorizationMode === "ask" || o.authorizationMode === "workspace" || o.authorizationMode === "yolo")
   );
 }
 
@@ -429,7 +454,11 @@ function isValidReview(r: unknown): r is ReviewItem {
     typeof o.instructions === "string" &&
     isValidReuse(o.threadReuse) &&
     typeof o.createdAt === "number" &&
-    (o.status === "pending" || o.status === "approved" || o.status === "discarded")
+    (o.status === "pending" || o.status === "approved" || o.status === "discarded") &&
+    (o.workspace === undefined || typeof o.workspace === "string") &&
+    (o.projectId === undefined || typeof o.projectId === "string") &&
+    (o.model === undefined || typeof o.model === "string") &&
+    (o.authorizationMode === undefined || o.authorizationMode === "ask" || o.authorizationMode === "workspace" || o.authorizationMode === "yolo")
   );
 }
 

@@ -707,6 +707,10 @@ export default function App() {
                   schedules={schedules}
                   sessions={sessions}
                   activeId={activeId}
+                  workspace={workspace}
+                  projectId={activeProject?.id ?? null}
+                  model={activeProjectSettings.model}
+                  authorizationMode={authorizationMode}
                   onCreate={(input) => {
                     createSchedule(input);
                   }}

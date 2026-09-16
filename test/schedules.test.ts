@@ -114,6 +114,21 @@ describe("US-9 schedule CRUD", () => {
     assert.equal(next[0].createdAt, 1000);
   });
 
+  it("captures execution context at schedule creation and due time", () => {
+    const list = sched([], onceInput({
+      workspace: " C:/repo ",
+      projectId: " project-1 ",
+      model: "gpt-5.6",
+      authorizationMode: "yolo",
+    }), 1000);
+    assert.equal(list[0].workspace, "C:/repo");
+    assert.equal(list[0].projectId, "project-1");
+    const due = enqueueDue(list, [], 2000);
+    assert.equal(due.added[0].workspace, "C:/repo");
+    assert.equal(due.added[0].model, "gpt-5.6");
+    assert.equal(due.added[0].authorizationMode, "yolo");
+  });
+
   it("refuses invalid input without growing the list", () => {
     const bad = createSchedule([], onceInput({ name: "" }), 1000);
     assert.deepEqual(bad, []);
