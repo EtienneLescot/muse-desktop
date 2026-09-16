@@ -403,6 +403,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** définir scopes et précédence, parseur des métadonnées, chemins des ressources, déduplication et rechargement. Une ressource relative reste liée au dossier de la skill ; lecture bornée et erreurs visibles.
 
+**État au 16/09/2026 :** `skills_scan` lit les racines conventionnelles du workspace avec bornage de profondeur, taille et nombre de documents. Le parseur frontmatter, la validation des ressources relatives, la priorité projet > repo > équipe > builtin et le rafraîchissement explicite sont livrés ; le panneau affiche provenance et erreurs. Les resources ne sont pas encore chargées dans le contexte moteur, ce qui reste M3-05.
+
 **Acceptation :** skills homonymes, fichier malformé, ressource manquante, scope projet et modification sur disque ; provenance exacte.
 
 ### M3-05 — Invocation skill

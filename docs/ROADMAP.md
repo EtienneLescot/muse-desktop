@@ -335,6 +335,15 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 - **Limites :** l'enregistrement ne lance pas le serveur en arrière-plan et les outils restent un catalogue local tant que le host Muse ne fournit pas de bridge MCP. Mise à jour de package, rollback et permissions d'appel restent à traiter.
 - **Validation :** tests Node d'enregistrement, mise à jour et conservation du statut désactivé ; TypeScript et Vite verts.
 
+### Livraison M3-04 — découverte locale des skills
+
+- **Scanner borné :** `skills_scan` lit uniquement `SKILL.md` dans les racines conventionnelles `.agents/skills`, `.muse/skills`, `.claude/skills` et `skills` du workspace sélectionné. La lecture est limitée à 100 documents et 20 000 caractères par fichier ; les liens symboliques sortants, fichiers non UTF-8 et entrées hors racine sont ignorés ou signalés.
+- **Contrat de document :** le parseur frontmatter exige `name` et `description`, conserve le corps comme instructions et accepte une liste bornée de ressources relatives. Les ressources absolues ou traversant le dossier de la skill sont refusées avant invocation.
+- **Précédence et fraîcheur :** les doublons sont résolus projet > repo > équipe > builtin. Un scan reconstruit le registre depuis les overrides persistés et les fichiers présents ; une skill supprimée du disque ne reste donc pas dans l'état courant. Les découvertes portent leur chemin et ne sont pas persistées comme overrides.
+- **UX :** Extensions affiche **Scan workspace**, le nombre de skills découvertes, leur portée et leur chemin d'origine, avec les erreurs de parsing lisibles dans le panneau. Aucun scan automatique ni exécution implicite n'est déclenché.
+- **Limites :** les ressources sont validées comme références relatives mais ne sont pas encore lues/transmises au moteur pendant l'invocation ; le runtime de skill et son rechargement par notification restent M3-05.
+- **Validation :** 4 tests Node couvrent frontmatter, limites, erreurs visibles et précédence ; 2 tests Rust couvrent les racines connues et le bornage de lecture ; TypeScript, Vite et Cargo verts.
+
 ## M3 — Extensions et automatisations opérationnelles
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
@@ -342,7 +351,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; restent injection dans le host Muse, processus persistant et hot-reload |
 | M3-02 | Connecter un serveur MCP distant | À définir | Partielle | Locale | Unitaire | Transport/auth/secrets, restrictions et reconnexion ; aucun statut « connecté » sans échange réel |
 | M3-03 | Installer/désactiver une extension réellement utilisable | Adapté | Présente | Partielle | Intégration | Enregistrement post-probe et hot-list du registre livrés ; restent runtime persistant, package/update/rollback et injection dans le moteur |
-| M3-04 | Découvrir les skills du disque et du projet | À définir | Partielle | Locale | Unitaire | SKILL.md, ressources relatives, priorité de scopes et rechargement ; une skill installée est utilisable sans recopie manuelle |
+| M3-04 | Découvrir les skills du disque et du projet | Adapté | Présente | Partielle | Intégration | Scanner borné `SKILL.md`, ressources relatives, priorité projet/repo/équipe et rechargement explicite livrés ; reste lecture/transmission des ressources au moment de l'invocation |
 | M3-05 | Invoquer une skill avec son vrai contexte | Adapté | Présente | Partielle | Unitaire | Charger instructions/ressources au bon moment, afficher provenance ; résultat live reproductible et erreurs explicites |
 | M3-06 | Exécuter un travail planifié sans clic préalable | Adapté | Présente | Partielle | Unitaire | Remplacer file d'approbation avant exécution par scheduler réel ; cible fixe, politique effective et création de run durable |
 | M3-07 | Gérer sommeil, reprise, doublons et échecs de planning | À définir | Absente | Absente | À faire | Politique de rattrapage, fuseau/DST, idempotence et retries ; une occurrence ne produit pas deux runs |
