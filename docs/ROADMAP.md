@@ -116,7 +116,7 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 - **M0-14b — périmètre sûr** : la CI n'utilise aucun credential, ne lance pas de tour modèle et ne dépend pas d'un binaire Muse/WSL ; les tests Rust exercent le superviseur et les tests Node les contrats purs.
 - **M0-14c — fixture livrée** : `scripts/msp-fixture.mjs` fournit les scénarios `success`, `interleaved`, `reject`, `timeout` et `drop`. `test/msp-fixture.test.ts` lance un vrai processus enfant, vérifie le framing `Content-Length`, les notifications `tools/list_changed`, les erreurs JSON-RPC, l'absence de réponse bornée et la fermeture stdout sans toucher à un workspace.
 - **M0-14d — limite restante** : le scénario natif A/B, la panne d'envoi avec l'interface Tauri et la publication d'artefacts de diagnostic sans données utilisateur restent à ajouter avant de déclarer M0-14 complet.
-- **Validation** : `npm test` (467 tests Node, dont quatre tests fixture), build frontend et 76 tests Rust verts. La fixture s'exécute aussi dans le job Node de la CI depuis un clone propre.
+- **Validation** : `npm test` (479 tests Node, dont cinq tests fixture), build frontend et 76 tests Rust verts. La fixture s'exécute aussi dans le job Node de la CI depuis un clone propre.
 
 ### Livraison M0-06 — posture d'autorisation globale
 
