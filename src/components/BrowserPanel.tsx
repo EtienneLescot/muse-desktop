@@ -31,11 +31,17 @@ export function BrowserPanel({
   onSetPermission,
 }: Props) {
   const [url, setUrl] = useState("");
+  const [currentUrl, setCurrentUrl] = useState("");
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [frameKey, setFrameKey] = useState(0);
+  const [frameError, setFrameError] = useState<string | null>(null);
   const [selection, setSelection] = useState("");
   const [comment, setComment] = useState("");
   const [appName, setAppName] = useState("");
 
-  const normalized = normalizeBrowserUrl(url);
+  const normalized = normalizeBrowserUrl(currentUrl);
+  const addressNormalized = normalizeBrowserUrl(url);
   const renderable = normalized !== null;
   const pageNotes =
     normalized !== null
@@ -43,10 +49,42 @@ export function BrowserPanel({
       : [];
 
   const submitAnnotation = () => {
-    if (!renderable || comment.trim().length === 0) return;
-    onAddAnnotation(url, selection, comment);
+    if (!renderable || normalized === null || comment.trim().length === 0) return;
+    onAddAnnotation(normalized, selection, comment);
     setSelection("");
     setComment("");
+  };
+
+  const navigate = (nextInput: string, record = true) => {
+    const next = normalizeBrowserUrl(nextInput);
+    if (next === null) {
+      setFrameError("That URL can't be shown here (http/https only).");
+      return;
+    }
+    if (record) {
+      const base = historyIndex >= 0 ? history.slice(0, historyIndex + 1) : [];
+      const nextHistory = base[base.length - 1] === next ? base : [...base, next];
+      setHistory(nextHistory);
+      setHistoryIndex(nextHistory.length - 1);
+    }
+    setUrl(next);
+    setCurrentUrl(next);
+    setFrameError(null);
+    setFrameKey((key) => key + 1);
+  };
+
+  const goBack = () => {
+    if (historyIndex <= 0) return;
+    const nextIndex = historyIndex - 1;
+    setHistoryIndex(nextIndex);
+    navigate(history[nextIndex], false);
+  };
+
+  const goForward = () => {
+    if (historyIndex < 0 || historyIndex >= history.length - 1) return;
+    const nextIndex = historyIndex + 1;
+    setHistoryIndex(nextIndex);
+    navigate(history[nextIndex], false);
   };
 
   const toggleApp = (app: string, allowed: boolean) => {
@@ -66,7 +104,10 @@ export function BrowserPanel({
     <section className="browser-panel" aria-label="In-app browser">
       <details open>
         <summary className="browser-title">Browser</summary>
-        <div className="browser-url-row">
+        <form className="browser-url-row" onSubmit={(event) => {
+          event.preventDefault();
+          navigate(url);
+        }}>
           <input
             className="browser-url"
             type="url"
@@ -75,18 +116,29 @@ export function BrowserPanel({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
           />
+          <button type="submit" disabled={addressNormalized === null}>Go</button>
+        </form>
+        <div className="browser-nav-row" aria-label="Browser navigation">
+          <button type="button" onClick={goBack} disabled={historyIndex <= 0} aria-label="Back">←</button>
+          <button type="button" onClick={goForward} disabled={historyIndex < 0 || historyIndex >= history.length - 1} aria-label="Forward">→</button>
+          <button type="button" onClick={() => renderable && setFrameKey((key) => key + 1)} disabled={!renderable}>Reload</button>
+          {normalized && <span className="browser-current-url" title={normalized}>{normalized}</span>}
         </div>
-        {url.trim().length > 0 && !renderable && (
+        {url.trim().length > 0 && addressNormalized === null && (
           <div className="muted" role="note">
             That URL can&apos;t be shown here (http/https only).
           </div>
         )}
+        {frameError && <div className="browser-frame-error" role="alert">{frameError}</div>}
         {renderable && normalized !== null && (
           <iframe
+            key={frameKey}
             className="browser-frame"
             title={`Preview of ${normalized}`}
             src={normalized}
             sandbox="allow-scripts allow-same-origin"
+            onLoad={() => setFrameError(null)}
+            onError={() => setFrameError("This page could not be loaded in the embedded preview.")}
           />
         )}
         <div className="browser-annotate">

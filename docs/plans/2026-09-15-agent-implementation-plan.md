@@ -489,9 +489,13 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 **Code :** BrowserPanel et nouvelle surface native ; dépend M0-06/14. Comparer webview dédiée et moteur navigateur contrôlable, sessions/cookies, navigation, téléchargements et restrictions d'embed. **Acceptation :** vrais sites non iframe, erreurs réseau et isolation ; aucune URL dangereuse chargée via protocole non prévu.
 
+**État au 16/09/2026 :** première passe UI livrée dans `BrowserPanel` : URL normalisée, historique précédent/suivant, Reload, URL effectivement affichée et erreurs de chargement/protocole dans la surface. La sandbox iframe reste une prévisualisation bornée ; webview native, sessions/cookies et téléchargements restent à qualifier.
+
 ### M4-02 — Annotation visuelle
 
 **Code :** browserAnnotate.ts, capture et composer ; dépend M4-01/M1-08. Définir URL/frame/viewport/région/élément/version avec capture réelle ; conserver provenance et signaler contexte périmé. **Acceptation :** sélection scrollée, iframe, zoom et envoi de l'image/ancre correcte.
+
+**État au 16/09/2026 :** l'ancre textuelle utilise maintenant l'URL normalisée réellement affichée et les notes sont filtrées par cette URL. La sélection visuelle, la capture viewport et la transmission d'une image restent à concevoir.
 
 ### M4-03 — Pilotage navigateur
 

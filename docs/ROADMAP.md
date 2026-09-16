@@ -446,8 +446,8 @@ Ces écarts restent visibles pour une ambition de parité complète. Leur faisab
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
-| M4-01 | Naviguer dans un vrai navigateur intégré | À définir | Partielle | Locale | Unitaire | Remplacer l'iframe limitée par une surface adaptée ; navigation, sessions et erreurs maîtrisées |
-| M4-02 | Annoter visuellement une page et transmettre le contexte | À définir | Partielle | Locale | Unitaire | Sélection réelle, capture, URL et ancre ; demande reçue avec la bonne région, sans saisie manuelle du contexte |
+| M4-01 | Naviguer dans un vrai navigateur intégré | À définir | Partielle | Locale | Unitaire | Navigation URL normalisée, historique précédent/suivant, rechargement et erreurs d'iframe livrés ; remplacer l'iframe limitée par une surface native avec sessions maîtrisées |
+| M4-02 | Annoter visuellement une page et transmettre le contexte | À définir | Partielle | Locale | Unitaire | Ancre URL normalisée et sélection textuelle livrées ; capture réelle, région/iframe/zoom et contexte visuel restent à concevoir |
 | M4-03 | Faire piloter le navigateur par Muse | À définir | Absente | Absente | À faire | Observation/actions et permissions ; scénario web complet reproductible |
 | M4-04 | Faire piloter une application desktop | À définir | Absente | Absente | À faire | Runtime par OS et consentement effectif ; exécution interrompable et attribution claire des actions |
 | M4-05 | Produire/consulter des images et documents riches | À définir | Partielle | Partielle | À faire | Capacités moteur, fichiers réels et previews ; génération/export avec résultat utilisable |
@@ -457,6 +457,12 @@ Ces écarts restent visibles pour une ambition de parité complète. Leur faisab
 | M4-09 | Installer et mettre à jour sur les plateformes annoncées | Adapté | Partielle | Partielle | Intégration | Bundle Windows x64 NSIS reproductible livré avec sidecar et icônes ; restent signature/distribution, updates/rollback et qualification macOS/Linux |
 
 Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux](../src/lib/sharing.ts), [artefacts](../src/lib/artifacts.ts).
+
+### Livraison M4-01/M4-02 — navigation intégrée bornée
+
+- **Navigation :** BrowserPanel normalise l'adresse, conserve un historique local précédent/suivant, expose Reload et affiche l'URL réellement chargée. Les erreurs de protocole et de chargement restent dans la surface du navigateur.
+- **Annotations :** les commentaires sont ancrés à l'URL normalisée courante ; changer de page ne mélange plus les notes des autres pages.
+- **Limites :** l'iframe sandboxée ne fournit ni cookies/onglets d'un navigateur complet ni capture visuelle. Le remplacement par une webview dédiée et la sélection réelle restent le prochain lot M4.
 
 ### Livraison M4-09 — bundle Windows x64 (première passe)
 
