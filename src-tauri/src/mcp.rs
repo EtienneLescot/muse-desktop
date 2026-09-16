@@ -168,14 +168,28 @@ fn recv_response_id(
     started: Instant,
     id: u64,
 ) -> Result<Value, String> {
+    recv_response_id_with_notifications(rx, started, id).map(|(value, _)| value)
+}
+
+fn recv_response_id_with_notifications(
+    rx: &mpsc::Receiver<Result<Value, String>>,
+    started: Instant,
+    id: u64,
+) -> Result<(Value, bool), String> {
+    let mut tools_changed = false;
     loop {
         let value = recv_response(rx, started)?;
         if value.get("id").and_then(Value::as_u64) == Some(id) {
-            return Ok(value);
+            return Ok((value, tools_changed));
         }
         // A notification has no id. Ignore it here; the explicit refresh
         // command will ask tools/list again and the process remains alive.
-        if value.get("id").is_none() {
+        if value.get("id").map_or(true, Value::is_null) {
+            if value.get("method").and_then(Value::as_str)
+                == Some("notifications/tools/list_changed")
+            {
+                tools_changed = true;
+            }
             continue;
         }
         // A response for another request cannot be consumed safely by this
@@ -298,6 +312,7 @@ pub struct PersistentServer {
     protocol_version: String,
     server_name: String,
     server_version: String,
+    tools_changed: bool,
 }
 
 impl Drop for PersistentServer {
@@ -325,6 +340,7 @@ impl PersistentServer {
             protocol_version,
             server_name,
             server_version,
+            tools_changed: false,
         };
         let started = Instant::now();
         let result = server.request("tools/list", json!({}))?;
@@ -349,7 +365,8 @@ impl PersistentServer {
             &mut self.stdin,
             &json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }),
         )?;
-        let response = recv_response_id(&self.rx, started, id)?;
+        let (response, tools_changed) = recv_response_id_with_notifications(&self.rx, started, id)?;
+        self.tools_changed |= tools_changed;
         if let Some(error) = response.get("error") {
             return Err(format!("MCP {method} failed: {}", clip(error.to_string())));
         }
@@ -367,6 +384,40 @@ impl PersistentServer {
             tools: parse_tools(&result),
             duration_ms: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
         })
+    }
+
+    /// Drain notifications that arrived while no request was in flight.
+    /// JSON-RPC responses are rejected because this client is intentionally
+    /// single-flight and cannot safely associate an unsolicited response.
+    fn observe_pending_notifications(&mut self) -> Result<(), String> {
+        loop {
+            match self.rx.try_recv() {
+                Ok(Ok(value)) => {
+                    if value.get("id").map_or(true, Value::is_null) {
+                        if value.get("method").and_then(Value::as_str)
+                            == Some("notifications/tools/list_changed")
+                        {
+                            self.tools_changed = true;
+                        }
+                        continue;
+                    }
+                    return Err("MCP received an unsolicited response".to_string());
+                }
+                Ok(Err(error)) => return Err(error),
+                Err(mpsc::TryRecvError::Empty) => return Ok(()),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    return Err("local MCP server response channel closed".to_string())
+                }
+            }
+        }
+    }
+
+    /// Return and clear the list-changed marker for the frontend poller.
+    pub fn take_tools_changed(&mut self) -> Result<bool, String> {
+        self.observe_pending_notifications()?;
+        let changed = self.tools_changed;
+        self.tools_changed = false;
+        Ok(changed)
     }
 
     /// Call one tool without restarting the process.
@@ -543,6 +594,20 @@ mod tests {
         .unwrap();
         let value = recv_response_id(&rx, Instant::now(), 7).unwrap();
         assert_eq!(value["id"], 7);
+    }
+
+    #[test]
+    fn response_matching_marks_tools_list_changed_notification() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(Ok(json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/tools/list_changed"
+        })))
+        .unwrap();
+        tx.send(Ok(json!({ "jsonrpc": "2.0", "id": 9, "result": {} })))
+            .unwrap();
+        let (_, changed) = recv_response_id_with_notifications(&rx, Instant::now(), 9).unwrap();
+        assert!(changed);
     }
 
     #[test]

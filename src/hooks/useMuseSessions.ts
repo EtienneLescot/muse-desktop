@@ -1238,6 +1238,7 @@ export function useMuseSessions(): UseMuseSessions {
   // persisted connector registry. A relaunch starts them only on explicit
   // Start/Refresh, never during hydration.
   const [mcpRunningIds, setMcpRunningIds] = useState<string[]>([]);
+  const mcpPollBusyRef = useRef(false);
   const [remoteNotice, setRemoteNotice] = useState<string | null>(null);
   // w-integrations US-25: skills, builtins merged over stored overrides.
   const [skills, setSkills] = useState<Skill[]>(() => mergeBuiltinSkills(loadSkills()));
@@ -4205,6 +4206,45 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [],
   );
+
+  // MCP servers may announce a changed tool catalog while idle. Polling only
+  // asks the native registry to drain queued notifications; it performs no
+  // work unless `notifications/tools/list_changed` was observed. This keeps
+  // the connector registry as the SSOT while avoiding an always-on process
+  // or a second client-side tools cache.
+  useEffect(() => {
+    if (!isTauriRuntime() || mcpRunningIds.length === 0) return;
+    let disposed = false;
+    const poll = async () => {
+      if (disposed || mcpPollBusyRef.current) return;
+      mcpPollBusyRef.current = true;
+      try {
+        for (const id of mcpRunningIds) {
+          const entry = findConnector(connectorsRef.current, id);
+          if (entry === null || entry.kind !== "local") continue;
+          try {
+            const result = await invoke<LocalMcpProbeResult | null>("mcp_local_poll", {
+              connectorId: id,
+            });
+            if (!disposed && result !== null) applyPersistentMcpProbe(id, result);
+          } catch (e) {
+            if (!disposed) {
+              setMcpRunningIds((current) => current.filter((item) => item !== id));
+              setError(`local MCP notification refresh failed: ${e instanceof Error ? e.message : String(e)}`);
+            }
+          }
+        }
+      } finally {
+        mcpPollBusyRef.current = false;
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 5000);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [applyPersistentMcpProbe, mcpRunningIds]);
 
   const startLocalMcp = useCallback(
     async (

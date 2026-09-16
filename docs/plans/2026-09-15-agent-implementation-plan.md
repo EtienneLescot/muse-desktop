@@ -387,7 +387,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **État :** `mcp_local_probe` et `mcp_local_call` lancent une commande locale uniquement sur geste utilisateur, parlent le framing MCP stdio (`Content-Length` ou ligne JSON), exécutent `initialize` + `notifications/initialized`, puis `tools/list` ou `tools/call`. La réponse est bornée et l'UI expose les outils/arguments/résultat. Le runtime propose désormais `mcp_local_start`, `mcp_local_refresh`, `mcp_local_call_persistent` et `mcp_local_stop` : un processus reste vivant par connecteur jusqu'à Stop ou fermeture de l'app, tandis qu'une relance recrée explicitement le serveur.
 
-**Reste :** propager `notifications/tools/list_changed`, brancher les tools découverts au catalogue observé par Muse et appliquer la politique d'autorisation du host à chaque appel.
+**Reste :** brancher les tools découverts au catalogue observé par Muse et appliquer la politique d'autorisation du host à chaque appel.
 
 **Acceptation :** serveur fixture expose puis exécute un outil, redémarre, change sa liste et échoue ; appel observé dans une session Muse.
 
@@ -405,7 +405,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **État :** un probe local réussi peut enregistrer la commande et les outils découverts dans le registre persistant. Une nouvelle liste remplace l'entrée existante sans réactiver une extension désactivée ; `listConnectorTools` retire immédiatement ses outils lorsque le statut passe à `disabled`. Les connecteurs locaux enregistrés peuvent être rafraîchis explicitement depuis le panneau ; un échec ou une liste vide ne remplace pas la dernière version utilisable.
 
-**Reste :** package/version/source, mise à jour/rollback, arrêt pendant appel et bridge vers les outils réellement visibles par le moteur Muse ; les notifications `list_changed` et la politique d'autorisation par appel restent à intégrer.
+**Reste :** package/version/source, mise à jour/rollback, arrêt pendant appel et bridge vers les outils réellement visibles par le moteur Muse ; la politique d'autorisation par appel reste à intégrer.
 
 **Acceptation :** installation ratée, mise à jour incompatible, désactivation pendant appel et suppression ; registre et runtime cohérents.
 

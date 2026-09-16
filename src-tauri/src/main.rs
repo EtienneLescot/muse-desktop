@@ -1544,6 +1544,40 @@ async fn mcp_local_refresh(
     .map_err(|e| format!("MCP refresh task failed: {e}"))?
 }
 
+/// Observe notifications emitted by a running MCP server. A
+/// `tools/list_changed` notification triggers one bounded tools/list refresh;
+/// otherwise the command returns immediately without touching the process.
+#[tauri::command]
+async fn mcp_local_poll(
+    state: State<'_, AppState>,
+    connector_id: String,
+) -> Result<Option<mcp::ProbeResult>, String> {
+    let connector_id = connector_id.trim().to_string();
+    if connector_id.is_empty() {
+        return Err("MCP connector id must not be empty".to_string());
+    }
+    let servers = Arc::clone(&state.mcp_servers);
+    tokio::task::spawn_blocking(move || {
+        let mut registry = servers
+            .lock()
+            .map_err(|_| "MCP server registry is unavailable".to_string())?;
+        let server = match registry.get_mut(&connector_id) {
+            Some(server) => server,
+            None => return Ok(None),
+        };
+        if !server.take_tools_changed()? {
+            return Ok(None);
+        }
+        let result = server.refresh();
+        if result.is_err() {
+            registry.remove(&connector_id);
+        }
+        result.map(Some)
+    })
+    .await
+    .map_err(|e| format!("MCP poll task failed: {e}"))?
+}
+
 /// Call one tool on a running persistent MCP server. A missing id fails
 /// explicitly so the UI can offer Start/Refresh instead of silently spawning
 /// an unrelated short-lived process.
@@ -3349,6 +3383,7 @@ fn main() {
             mcp_local_call,
             mcp_local_start,
             mcp_local_refresh,
+            mcp_local_poll,
             mcp_local_call_persistent,
             mcp_local_stop,
             mcp_local_running,
