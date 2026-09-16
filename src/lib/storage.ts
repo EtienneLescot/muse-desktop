@@ -189,3 +189,87 @@ export function exportStorageSnapshot(prefix = "muse-desktop."): string {
     2,
   );
 }
+
+export interface StorageImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
+/**
+ * Restore a previously exported snapshot. The operation is explicit and
+ * bounded to the same namespace as the exporter. Existing keys are kept by
+ * default; callers can pass `overwrite=true` after an explicit confirmation.
+ */
+export function importStorageSnapshot(
+  serialized: string,
+  prefix = "muse-desktop.",
+  overwrite = false,
+): StorageImportResult {
+  const result: StorageImportResult = { imported: 0, skipped: 0, errors: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return { ...result, errors: ["Recovery snapshot is not valid JSON."] };
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return { ...result, errors: ["Recovery snapshot must be a JSON object."] };
+  }
+  const snapshot = parsed as Record<string, unknown>;
+  if (snapshot.format !== "muse-desktop-storage" || snapshot.version !== 1) {
+    return { ...result, errors: ["Unsupported recovery snapshot format or version."] };
+  }
+  const entries = snapshot.entries;
+  if (typeof entries !== "object" || entries === null || Array.isArray(entries)) {
+    return { ...result, errors: ["Recovery snapshot has no valid entries map."] };
+  }
+  const store = storage();
+  if (store === null) {
+    record(prefix, "unavailable", "local storage is unavailable");
+    return { ...result, errors: ["Local storage is unavailable."] };
+  }
+  for (const [key, value] of Object.entries(entries as Record<string, unknown>)) {
+    if (!key.startsWith(prefix) || key.length === prefix.length) {
+      result.skipped += 1;
+      result.errors.push(`Skipped non-namespaced key: ${key}`);
+      continue;
+    }
+    let encoded: string;
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      (value as Record<string, unknown>).parseError === true &&
+      typeof (value as Record<string, unknown>).raw === "string"
+    ) {
+      encoded = (value as Record<string, string>).raw;
+    } else {
+      try {
+        encoded = JSON.stringify(value);
+      } catch {
+        result.skipped += 1;
+        result.errors.push(`Skipped unserializable key: ${key}`);
+        continue;
+      }
+    }
+    if (!overwrite) {
+      try {
+        if (store.getItem(key) !== null) {
+          result.skipped += 1;
+          continue;
+        }
+      } catch (error) {
+        record(key, "unavailable", `local storage read failed: ${String(error)}`);
+        result.skipped += 1;
+        result.errors.push(`Could not inspect existing key: ${key}`);
+        continue;
+      }
+    }
+    if (writeStorageString(key, encoded)) result.imported += 1;
+    else {
+      result.skipped += 1;
+      result.errors.push(`Could not restore key: ${key}`);
+    }
+  }
+  return result;
+}

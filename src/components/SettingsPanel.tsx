@@ -14,7 +14,7 @@
  *   providers" (never a live list). Provider selection persists per
  *   project either way.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
 import type { ScopeVerdict } from "../lib/scope";
 import {
@@ -36,6 +36,7 @@ import {
 import {
   consumeStorageIssues,
   exportStorageSnapshot,
+  importStorageSnapshot,
   type StorageIssue,
 } from "../lib/storage";
 
@@ -90,6 +91,7 @@ export function SettingsPanel({
   const [probeResult, setProbeResult] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const importInput = useRef<HTMLInputElement>(null);
   const [storageIssues, setStorageIssues] = useState<StorageIssue[]>(() =>
     consumeStorageIssues(),
   );
@@ -150,6 +152,29 @@ export function SettingsPanel({
       );
     } catch (error) {
       setExportStatus(`Recovery export failed: ${String(error)}`);
+    }
+  }
+
+  async function importLocalData(file: File): Promise<void> {
+    try {
+      let imported = importStorageSnapshot(await file.text());
+      if (imported.skipped > 0 && window.confirm(
+        `${imported.skipped} existing or invalid entries were skipped. Replace existing Muse data with this snapshot?`,
+      )) {
+        imported = importStorageSnapshot(await file.text(), "muse-desktop.", true);
+      }
+      const issues = consumeStorageIssues();
+      if (issues.length > 0) setStorageIssues((previous) => [...previous, ...issues]);
+      setExportStatus(
+        imported.errors.length > 0
+          ? `Recovery restored ${imported.imported} entries with ${imported.errors.length} warnings.`
+          : `Recovery restored ${imported.imported} entries. Reloading Muse…`,
+      );
+      if (imported.imported > 0) window.setTimeout(() => window.location.reload(), 500);
+    } catch (error) {
+      setExportStatus(`Recovery import failed: ${String(error)}`);
+    } finally {
+      if (importInput.current) importInput.current.value = "";
     }
   }
 
@@ -319,6 +344,19 @@ export function SettingsPanel({
           <button type="button" onClick={exportLocalData}>
             Export recovery snapshot
           </button>
+          <button type="button" onClick={() => importInput.current?.click()}>
+            Import recovery snapshot
+          </button>
+          <input
+            ref={importInput}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              if (file) void importLocalData(file);
+            }}
+          />
         </div>
         {exportStatus !== null && (
           <p className="settings-note" role="status">{exportStatus}</p>

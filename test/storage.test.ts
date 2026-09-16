@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   consumeStorageIssues,
   exportStorageSnapshot,
+  importStorageSnapshot,
   readStorageJson,
   readStorageString,
   removeStorageKey,
@@ -103,6 +104,29 @@ describe("defensive storage facade", () => {
     assert.equal(readStorageString("muse-desktop.theme.v1"), "dark");
     assert.equal(writeStorageString("muse-desktop.theme.v1", "light"), true);
     assert.equal(values.get("muse-desktop.theme.v1"), "light");
+  });
+
+  it("restores a snapshot without overwriting live data unless confirmed", () => {
+    const { values } = fakeStorage({
+      "muse-desktop.live.v1": JSON.stringify({ current: true }),
+    });
+    const snapshot = JSON.stringify({
+      format: "muse-desktop-storage",
+      version: 1,
+      entries: {
+        "muse-desktop.live.v1": { current: false },
+        "muse-desktop.old.v1": { restored: true },
+        "other": "ignored",
+      },
+    });
+    const first = importStorageSnapshot(snapshot);
+    assert.equal(first.imported, 1);
+    assert.equal(first.skipped, 2);
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.live.v1") ?? "{}"), { current: true });
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.old.v1") ?? "{}"), { restored: true });
+    const second = importStorageSnapshot(snapshot, "muse-desktop.", true);
+    assert.equal(second.imported, 2);
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.live.v1") ?? "{}"), { current: false });
   });
 
   it("reports scalar read and write failures", () => {
