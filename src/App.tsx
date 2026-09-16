@@ -22,6 +22,7 @@ import { SkillPanel } from "./components/SkillPanel";
 import { SharePanel } from "./components/SharePanel";
 import { ChannelPanel } from "./components/ChannelPanel";
 import { ImportPanel } from "./components/ImportPanel";
+import { ReviewPanel } from "./components/ReviewPanel";
 import type { ShareBundle } from "./lib/sharing";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
@@ -151,6 +152,9 @@ export default function App() {
     restoreArtifact,
     commentArtifact,
     index,
+    gitReview,
+    refreshGitStatus,
+    loadGitDiff,
     browserAnnotations,
     addBrowserAnnotation,
     removeBrowserAnnotation,
@@ -175,7 +179,7 @@ export default function App() {
   >("task");
   const [collapsed, setCollapsed] = useState(false);
   const [workPanel, setWorkPanel] = useState<
-    "artifacts" | "browser" | "memory" | "tools" | null
+    "artifacts" | "browser" | "memory" | "tools" | "review" | null
   >(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -914,6 +918,7 @@ export default function App() {
                       {(
                         [
                           ["artifacts", "Content"],
+                          ["review", "Review"],
                           ["browser", "Browser"],
                           ["memory", "Memory"],
                           ["tools", "Activity"],
@@ -947,6 +952,14 @@ export default function App() {
                             onComment={commentArtifact}
                           />
                         </>
+                      )}
+                      {workPanel === "review" && (
+                        <ReviewPanel
+                          sessionId={active.session_id}
+                          review={gitReview(active.session_id)}
+                          onRefreshStatus={refreshGitStatus}
+                          onLoadDiff={loadGitDiff}
+                        />
                       )}
                       {workPanel === "browser" && (
                         <>

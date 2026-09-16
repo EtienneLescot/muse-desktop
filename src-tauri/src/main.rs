@@ -21,6 +21,7 @@
 mod msp;
 mod hosts;
 mod resume;
+mod git;
 use hosts::Hosts;
 
 use std::collections::HashMap;
@@ -994,6 +995,59 @@ fn set_workspace(state: State<'_, AppState>, path: String) -> Result<String, Str
         *w = Some(root.clone());
     }
     Ok(root.display().to_string())
+}
+
+fn workspace_for_inspection(state: &State<'_, AppState>, session_id: &str) -> Result<PathBuf, String> {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return Err("sessionId must not be empty".to_string());
+    }
+    if let Ok(root) = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(session_id)
+    {
+        return Ok(root);
+    }
+    state
+        .sessions
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(session_id)
+        .map(|meta| PathBuf::from(&meta.workspace))
+        .filter(|root| !root.as_os_str().is_empty())
+        .ok_or_else(|| "conversation workspace is unavailable".to_string())
+}
+
+/// Read the real Git state for the workspace owned by this conversation.
+/// Git runs off the UI thread and only receives an absolute, canonicalized
+/// path selected by the supervisor; no shell interpolation is involved.
+#[tauri::command]
+async fn git_status(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<git::GitStatusSnapshot, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || git::status(&root))
+        .await
+        .map_err(|e| format!("git status task failed: {e}"))?
+}
+
+/// Read a bounded unified diff for the session workspace. `scope` is one of
+/// `unstaged`, `staged` or `branch`; branch comparisons require an explicit
+/// base ref so the UI never guesses which branch the user meant.
+#[tauri::command]
+async fn git_diff(
+    state: State<'_, AppState>,
+    session_id: String,
+    scope: String,
+    base_ref: Option<String>,
+) -> Result<git::GitDiffSnapshot, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || git::diff(&root, &scope, base_ref))
+        .await
+        .map_err(|e| format!("git diff task failed: {e}"))?
 }
 
 /// Build the frontend `input_request` payload from a `userInput/requested`
@@ -2290,6 +2344,8 @@ fn main() {
             kill_session,
             set_workspace,
             check_scope,
+            git_status,
+            git_diff,
             list_models,
             set_model,
             compact_session,
