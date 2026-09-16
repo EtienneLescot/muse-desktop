@@ -527,7 +527,14 @@ export function OrchestrationPanel({
                     </summary>
                     <p>
                       {inspectionByBranch[p.branch].fileCount} changed file(s)
-                      {inspectionByBranch[p.branch].conflicted ? " · conflicts present" : ""} · observed {new Date(inspectionByBranch[p.branch].observedAt).toLocaleTimeString()}
+                      {inspectionByBranch[p.branch].conflicted ? " · conflicts present" : ""}
+                      {(inspectionByBranch[p.branch].activeSignals?.length ?? 0) > 0
+                        ? ` · ${inspectionByBranch[p.branch].activeSignals?.join(", ")}`
+                        : ""}
+                      {inspectionByBranch[p.branch].branchReferencedElsewhere
+                        ? " · branch checked out elsewhere"
+                        : ""}
+                      {` · observed ${new Date(inspectionByBranch[p.branch].observedAt).toLocaleTimeString()}`}
                     </p>
                   </details>
                 )}

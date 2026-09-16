@@ -62,6 +62,9 @@ export function retentionDecision(
   if (!inspection.clean || inspection.conflicted) {
     return { eligible: false, ageDays: null, reason: "Protected: uncommitted or conflicted changes detected." };
   }
+  if ((inspection.activeSignals?.length ?? 0) > 0 || inspection.branchReferencedElsewhere === true) {
+    return { eligible: false, ageDays: null, reason: "Protected: Git reports an active operation or another checkout using this branch." };
+  }
   const ageDays = Math.max(0, Math.floor((Math.max(now, record.createdAt) - record.createdAt) / 86_400_000));
   if (ageDays < policy.maxAgeDays) {
     return {

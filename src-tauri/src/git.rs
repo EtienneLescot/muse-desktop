@@ -96,6 +96,8 @@ pub struct GitWorktreeInspection {
     pub clean: bool,
     pub conflicted: bool,
     pub file_count: usize,
+    pub active_signals: Vec<String>,
+    pub branch_referenced_elsewhere: bool,
     pub observed_at: u64,
 }
 
@@ -889,10 +891,71 @@ fn resolve_managed_worktree(root: &Path, path: &str) -> Result<(PathBuf, PathBuf
     Ok((canonical, candidate))
 }
 
+/// Report conservative signals that a worktree may still be in use. Git's
+/// lock and in-progress markers are portable across the supported hosts; a
+/// missing signal never proves that no external process is running.
+fn worktree_activity(
+    repo_root: &Path,
+    candidate: &Path,
+    branch: Option<&str>,
+) -> (Vec<String>, bool) {
+    let mut signals = Vec::new();
+    let markers = [
+        ("index lock", "index.lock"),
+        ("merge in progress", "MERGE_HEAD"),
+        ("cherry-pick in progress", "CHERRY_PICK_HEAD"),
+        ("revert in progress", "REVERT_HEAD"),
+        ("rebase in progress", "rebase-merge"),
+        ("rebase in progress", "rebase-apply"),
+    ];
+    for (label, marker) in markers {
+        let Ok(raw) = git_command(candidate, &["rev-parse", "--git-path", marker]) else {
+            continue;
+        };
+        let raw = decode(&raw).trim().to_string();
+        if raw.is_empty() {
+            continue;
+        }
+        let marker_path = Path::new(&raw);
+        let marker_path = if marker_path.is_absolute() {
+            marker_path.to_path_buf()
+        } else {
+            candidate.join(marker_path)
+        };
+        if marker_path.exists() && !signals.iter().any(|value| value == label) {
+            signals.push(label.to_string());
+        }
+    }
+
+    let branch_referenced_elsewhere = branch.is_some_and(|branch| {
+        let target = format!("refs/heads/{branch}");
+        let Ok(bytes) = git_command(repo_root, &["worktree", "list", "--porcelain"]) else {
+            return false;
+        };
+        let mut current_path: Option<PathBuf> = None;
+        for line in decode(&bytes).lines() {
+            if let Some(raw) = line.strip_prefix("worktree ") {
+                current_path = Path::new(raw.trim()).canonicalize().ok();
+            } else if line == format!("branch {target}") {
+                if current_path.as_deref() != Some(candidate) {
+                    return true;
+                }
+            }
+        }
+        false
+    });
+    if branch_referenced_elsewhere {
+        signals.push("branch checked out elsewhere".to_string());
+    }
+    (signals, branch_referenced_elsewhere)
+}
+
 /// Inspect one managed worktree before a retention or handoff action.
 pub fn inspect_worktree(root: &Path, path: &str) -> Result<GitWorktreeInspection, String> {
     let (canonical, candidate) = resolve_managed_worktree(root, path)?;
     let snapshot = status(&candidate)?;
+    let (active_signals, branch_referenced_elsewhere) =
+        worktree_activity(&canonical, &candidate, snapshot.branch.as_deref());
     Ok(GitWorktreeInspection {
         repo_root: canonical.display().to_string(),
         path: candidate.display().to_string(),
@@ -901,6 +964,8 @@ pub fn inspect_worktree(root: &Path, path: &str) -> Result<GitWorktreeInspection
         clean: snapshot.files.is_empty(),
         conflicted: snapshot.files.iter().any(|file| file.conflicted),
         file_count: snapshot.files.len(),
+        active_signals,
+        branch_referenced_elsewhere,
         observed_at: now_ms(),
     })
 }
@@ -908,14 +973,27 @@ pub fn inspect_worktree(root: &Path, path: &str) -> Result<GitWorktreeInspection
 /// Remove a managed worktree only after its working tree is clean. Dirty
 /// checkouts are preserved so a mistaken cleanup cannot discard user work.
 pub fn remove_worktree(root: &Path, path: &str) -> Result<(), String> {
-    let (canonical, candidate) = resolve_managed_worktree(root, path)?;
-    let snapshot = status(&candidate)?;
-    if !snapshot.files.is_empty() {
+    let inspection = inspect_worktree(root, path)?;
+    if !inspection.clean {
         return Err(
             "worktree has uncommitted changes; inspect and commit or clean it before removal"
                 .to_string(),
         );
     }
+    if !inspection.active_signals.is_empty() {
+        return Err(format!(
+            "worktree appears active ({}); stop the operation and inspect again before removal",
+            inspection.active_signals.join(", ")
+        ));
+    }
+    if inspection.branch_referenced_elsewhere {
+        return Err(
+            "worktree branch is checked out elsewhere; refresh the inspection before removal"
+                .to_string(),
+        );
+    }
+    let canonical = Path::new(&inspection.repo_root);
+    let candidate = Path::new(&inspection.path);
     let relative = candidate
         .strip_prefix(&canonical)
         .map_err(|_| "worktree path is outside the repository".to_string())?
@@ -1233,6 +1311,32 @@ mod tests {
             .output()
             .unwrap();
         assert!(restored.status.success());
+        remove_worktree(&root, &created.path).unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn inspect_reports_git_activity_and_cleanup_preserves_a_locked_worktree() {
+        let root = fixture_repo();
+        let created = create_worktree(&root, "task/active", ".muse/worktrees/active", "HEAD")
+            .unwrap();
+        let raw_lock = decode(
+            &git_command(Path::new(&created.path), &["rev-parse", "--git-path", "index.lock"])
+                .unwrap(),
+        )
+        .trim()
+        .to_string();
+        let lock = if Path::new(&raw_lock).is_absolute() {
+            PathBuf::from(&raw_lock)
+        } else {
+            Path::new(&created.path).join(&raw_lock)
+        };
+        fs::write(&lock, b"locked").unwrap();
+        let inspected = inspect_worktree(&root, &created.path).unwrap();
+        assert!(inspected.clean);
+        assert!(inspected.active_signals.iter().any(|signal| signal == "index lock"));
+        assert!(remove_worktree(&root, &created.path).is_err());
+        fs::remove_file(lock).unwrap();
         remove_worktree(&root, &created.path).unwrap();
         let _ = fs::remove_dir_all(root);
     }

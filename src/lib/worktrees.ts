@@ -59,6 +59,10 @@ export interface WorktreeInspection {
   clean: boolean;
   conflicted: boolean;
   fileCount: number;
+  /** Conservative Git lock/in-progress markers; empty does not prove idle. */
+  activeSignals?: string[];
+  /** The inspected branch was also reported by another linked worktree. */
+  branchReferencedElsewhere?: boolean;
   observedAt: number;
 }
 
