@@ -4,6 +4,7 @@ import {
   type Schedule,
   type ScheduleInput,
   type ScheduleAuthorizationMode,
+  type ScheduleMissedPolicy,
   type ThreadReuse,
 } from "../lib/schedules";
 import type { ScheduleRun } from "../lib/scheduleRuns";
@@ -26,6 +27,7 @@ interface Props {
   onToggle: (id: string, enabled: boolean) => void;
   onDelete: (id: string) => void;
   onRunNow: (id: string) => void;
+  onCancelRun: (id: string) => void;
 }
 
 type TriggerKind = "once" | "cron";
@@ -72,6 +74,7 @@ export function SchedulesPanel({
   onToggle,
   onDelete,
   onRunNow,
+  onCancelRun,
 }: Props) {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -80,6 +83,7 @@ export function SchedulesPanel({
   const [cron, setCron] = useState("0 9 * * 1-5");
   const [reuseKind, setReuseKind] = useState<ReuseKind>("active");
   const [reuseSession, setReuseSession] = useState("");
+  const [missedPolicy, setMissedPolicy] = useState<ScheduleMissedPolicy>("latest");
   const [formError, setFormError] = useState<string | null>(null);
 
   function submit(): void {
@@ -98,6 +102,7 @@ export function SchedulesPanel({
       projectId: projectId ?? undefined,
       model,
       authorizationMode,
+      missedPolicy,
     };
     const err = validateScheduleInput(input);
     if (err !== null) {
@@ -133,7 +138,7 @@ export function SchedulesPanel({
           onChange={(e) => setName(e.target.value)}
         />
         <textarea
-          placeholder="Instructions to run after approval"
+          placeholder="Instructions for this automation"
           aria-label="Instructions"
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
@@ -166,6 +171,19 @@ export function SchedulesPanel({
             />
           )}
         </div>
+        {triggerKind === "cron" && (
+          <label className="sched-policy">
+            <span>When the app wakes late</span>
+            <select
+              aria-label="Missed run policy"
+              value={missedPolicy}
+              onChange={(e) => setMissedPolicy(e.target.value as ScheduleMissedPolicy)}
+            >
+              <option value="latest">Run the latest missed occurrence</option>
+              <option value="skip">Skip missed occurrences</option>
+            </select>
+          </label>
+        )}
         <div className="sched-row">
           <select
             aria-label="Target conversation"
@@ -247,8 +265,16 @@ export function SchedulesPanel({
                   <strong>{run.scheduleName}</strong>
                   <span className="run-status">{describeRunStatus(run.status)}</span>
                 </div>
-                <span className="muted">{new Date(run.createdAt).toLocaleString()} · {run.sessionId ? "conversation started" : "dispatching"}</span>
+                <span className="muted">
+                  {new Date(run.createdAt).toLocaleString()} · {run.sessionId ? "conversation started" : "dispatching"}
+                  {run.nextRetryAt ? ` · retry at ${new Date(run.nextRetryAt).toLocaleTimeString()}` : ""}
+                </span>
                 {run.error && <small className="error">{run.error}</small>}
+                {run.status === "queued" && run.nextRetryAt !== undefined && (
+                  <button type="button" onClick={() => onCancelRun(run.id)} title="Cancel this retry">
+                    Cancel retry
+                  </button>
+                )}
               </li>
             ))}
           </ul>

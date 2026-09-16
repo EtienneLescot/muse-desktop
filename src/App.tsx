@@ -129,6 +129,7 @@ export default function App() {
     setScheduleEnabled,
     deleteSchedule,
     runScheduleNow,
+    cancelScheduleRun,
     approveReview,
     discardReview,
     shareMode,
@@ -719,6 +720,7 @@ export default function App() {
                   onToggle={(id, enabled) => setScheduleEnabled(id, enabled)}
                   onDelete={(id) => deleteSchedule(id)}
                   onRunNow={(id) => runScheduleNow(id)}
+                  onCancelRun={(id) => cancelScheduleRun(id)}
                 />
               </>
             )}

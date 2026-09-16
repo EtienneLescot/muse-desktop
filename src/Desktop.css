@@ -1048,6 +1048,13 @@
 .destination-page .sched-row {
   gap: 12px;
 }
+.destination-page .sched-policy {
+  gap: 16px;
+  color: var(--muted);
+}
+.destination-page .sched-policy select {
+  max-width: 360px;
+}
 .destination-page .sched-list {
   margin-top: 28px;
   display: grid;

@@ -423,7 +423,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** séparer Schedule et Run ; capturer projet/workspace/modèle/skills/politique, jamais « session active au moment du tick ». Occurrence crée un run durable puis exécute ; l'inbox contient le résultat, pas une demande de cliquer avant chaque run.
 
-**État au 16/09/2026 :** `Schedule` et `ReviewItem` capturent désormais workspace, projet, modèle et politique d'autorisation au moment de la création. L'approbation vérifie le workspace de la conversation cible et réapplique le modèle/politique capturés avant l'envoi ; un mismatch est refusé explicitement. Les modes workspace et YOLO dispatchent maintenant sans clic et alimentent un journal local borné `ScheduleRun`, visible dans Automations ; `completed` signifie admission du tour (`send_input` acquitté), pas encore la fin du streaming. Le scheduler natif persistant, la reprise après sommeil et la sortie métier restent à implémenter.
+**État au 16/09/2026 :** `Schedule` et `ReviewItem` capturent désormais workspace, projet, modèle et politique d'autorisation au moment de la création. L'approbation vérifie le workspace de la conversation cible et réapplique le modèle/politique capturés avant l'envoi ; un mismatch est refusé explicitement. Les modes workspace et YOLO dispatchent maintenant sans clic et alimentent un journal local borné `ScheduleRun`, visible dans Automations ; `completed` signifie admission du tour (`send_input` acquitté), pas encore la fin du streaming. M3-07 ajoute le rattrapage `latest/skip`, une clé schedule+occurrence, des retries bornés (15/30/60 s, trois tentatives) et l'annulation des retries en attente. Le scheduler natif multi-instance, la reprise après crash/sommeil et la sortie métier restent à implémenter.
 
 **Acceptation :** one-shot/récurrent, cible fixe malgré navigation, échec de démarrage, dispatch automatique selon la politique et historique local ; le run reste explicitement borné à l'admission du tour tant que le host ne fournit pas d'événement de complétion exploitable.
 
@@ -432,6 +432,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **Code :** scheduler/store ; dépend M3-06.
 
 **Travail :** clé unique schedule + occurrence, transactions de claim, politique de rattrapage, fuseau/DST, retry borné avec backoff et annulation. Distinguer machine/app fermée et run interrompu ; ne jamais relancer aveuglément une opération externe au résultat ambigu.
+
+**État au 16/09/2026 :** les occurrences portent maintenant `occurrenceAt`/`occurrenceKey`, les cron manqués suivent `latest` ou `skip`, et le journal limite les échecs à trois tentatives avec backoff 15/30/60 secondes. Une retry en attente est annulable depuis Automations ; les timeouts ambigus ne sont jamais relancés automatiquement. Le claim reste local au renderer : une seule instance Muse doit être active pour garantir l'exclusion.
 
 **Acceptation :** sommeil/réveil, changement d'heure, double instance, crash entre claim et démarrage, suppression schedule ; pas de doublon d'occurrence.
 

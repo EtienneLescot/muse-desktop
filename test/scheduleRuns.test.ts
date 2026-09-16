@@ -3,9 +3,14 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   appendRun,
+  cancelRun,
   createScheduleRun,
+  isRetryableScheduleError,
   loadScheduleRuns,
   markRunStarted,
+  MAX_RUN_ATTEMPTS,
+  queueRunRetry,
+  retryDelayMs,
   MAX_SCHEDULE_RUNS,
   saveScheduleRuns,
   settleRun,
@@ -31,6 +36,7 @@ function run(now = 1000): ScheduleRun {
     model: "gpt-5.6",
     authorizationMode: "yolo",
     occurrenceAt: now,
+    occurrenceKey: `schedule-1:${now}`,
   }, now);
 }
 
@@ -58,15 +64,34 @@ describe("M3-06 schedule run ledger", () => {
     assert.deepEqual(markRunStarted(failed, "missing", 2500), failed);
   });
 
+  it("queues bounded exponential retries and cancels a pending retry", () => {
+    const initial = run();
+    const failed = settleRun(markRunStarted([initial], initial.id, 2000), initial.id, "failed", 2100, "host unavailable");
+    const retried = queueRunRetry(failed, initial.id, 2200, "host unavailable");
+    assert.equal(retried[0].status, "queued");
+    assert.equal(retried[0].attempt, 2);
+    assert.equal(retried[0].nextRetryAt, 2200 + retryDelayMs(1));
+    assert.equal(isRetryableScheduleError("host unavailable"), true);
+    assert.equal(isRetryableScheduleError("send_input timed out; outcome ambiguous"), false);
+    const cancelled = cancelRun(retried, initial.id, 3000);
+    assert.equal(cancelled[0].status, "cancelled");
+    assert.equal(cancelled[0].finishedAt, 3000);
+    let exhausted: ScheduleRun = { ...initial, status: "failed", attempt: MAX_RUN_ATTEMPTS };
+    exhausted = queueRunRetry([exhausted], exhausted.id, 4000)[0];
+    assert.equal(exhausted.status, "failed");
+    assert.equal(exhausted.nextRetryAt, undefined);
+  });
+
   it("keeps only the newest capped runs", () => {
     const first = run();
     const many = Array.from({ length: MAX_SCHEDULE_RUNS + 4 }, (_, index) =>
-      ({ ...first, id: `run-${index}`, createdAt: index }));
+      ({ ...first, id: `run-${index}`, createdAt: index, occurrenceAt: index, occurrenceKey: `schedule-1:${index}` }));
     const capped = appendRun([], many[0]);
     const result = many.slice(1).reduce(appendRun, capped);
     assert.equal(result.length, MAX_SCHEDULE_RUNS);
     assert.equal(result[0].id, "run-4");
     assert.equal(result.at(-1)?.id, `run-${MAX_SCHEDULE_RUNS + 3}`);
+    assert.equal(appendRun(result, { ...result[0] }), result);
   });
 
   it("round-trips valid runs and drops malformed local storage entries", () => {
