@@ -99,7 +99,8 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 
 - **M0-12a — focus** : le composer de première conversation reçoit le focus initial ; les dialogues de recherche, réglages et actions d'une conversation rendent le focus à leur déclencheur à la fermeture. Le formulaire de renommage et l'annulation de suppression ont un focus initial explicite.
 - **M0-12b — streaming** : les annonces restent limitées aux transitions d'état et aux demandes d'action ; les tokens du flux ne sont pas annoncés individuellement (`role=log` en `aria-live=off`).
-- **M0-12c — limite restante** : lecteur d'écran réel, zoom 200 %, contraste et parcours complet sans souris doivent encore être vérifiés sur Windows WebView2 et les autres plateformes annoncées.
+- **M0-12c — contraste forcé** : les contrôles conservent un contour de focus `Highlight`, des bordures `ButtonText` et des liens `LinkText` lorsque Windows active `forced-colors`, sans modifier la palette normale de Muse.
+- **M0-12d — limite restante** : lecteur d'écran réel, zoom 200 %, contraste et parcours complet sans souris doivent encore être vérifiés sur Windows WebView2 et les autres plateformes annoncées.
 - **Validation** : suite Node et build frontend verts ; preuve assistive native encore à produire.
 
 ### Livraison M0-13 — états de capacité honnêtes (première passe)

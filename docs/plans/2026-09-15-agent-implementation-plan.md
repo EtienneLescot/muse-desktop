@@ -153,7 +153,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** `a11y.ts`, dialogues, panneaux de questions, sidebar, composer et stream.
 
-**Travail :** focus initial/retour, navigation des groupes, fermeture Échap, intitulés et annonces live non répétitives. Vérifier contraste et zoom ; annoncer fin/besoin d'action plutôt que chaque token.
+**Travail :** focus initial/retour, navigation des groupes, fermeture Échap, intitulés et annonces live non répétitives. Vérifier contraste et zoom ; annoncer fin/besoin d'action plutôt que chaque token. Les contrôles ajoutent aussi un chemin de contraste forcé Windows (`Highlight`, `ButtonText`, `LinkText`) sans changer le rendu normal.
 
 **Acceptation :** parcours complet sans souris, lecteur d'écran réel, zoom 200 %, réduction des mouvements. Les tests automatisés complètent mais ne remplacent pas cette vérification.
 

@@ -2083,6 +2083,32 @@ body.dark .composer textarea::placeholder {
   }
 }
 
+/* US-32/M0-12: keep keyboard focus and control boundaries discoverable in
+ * Windows High Contrast / forced-colors mode. System colors intentionally
+ * replace the product palette only when the platform requests it. */
+@media (forced-colors: active) {
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  summary:focus-visible {
+    outline-color: Highlight;
+    outline-width: 2px;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    border-color: ButtonText;
+  }
+
+  a {
+    color: LinkText;
+  }
+}
+
 @media (max-width: 1100px) {
   .app {
     grid-template-columns: 215px 1fr;

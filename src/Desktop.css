@@ -1410,3 +1410,9 @@
     scroll-behavior: auto !important;
   }
 }
+@media (forced-colors: active) {
+  .desktop-app button:focus-visible,
+  .desktop-app summary:focus-visible {
+    outline-color: Highlight;
+  }
+}
