@@ -1579,7 +1579,7 @@ export function useMuseSessions(): UseMuseSessions {
     for (const item of notifications) {
       if (!item.unread || deliveredNotificationIds.current.has(item.id)) continue;
       deliveredNotificationIds.current.add(item.id);
-      if (!notificationPreferences.desktopMuted) deliverDesktopNotification(item);
+      if (!notificationPreferences.desktopMuted) void deliverDesktopNotification(item);
     }
   }, [notifications, notificationPreferences.desktopMuted]);
 

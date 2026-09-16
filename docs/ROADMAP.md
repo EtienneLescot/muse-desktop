@@ -388,7 +388,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | M3-06 | Exécuter un travail planifié sans clic préalable | Adapté | Présente | Partielle | Intégration | Chaque schedule/review capture workspace, projet, modèle et politique ; ask reste en revue, workspace/YOLO dispatchent automatiquement ; journal local borné des runs visible. Reste le scheduler natif hors cycle UI et la sortie métier complète |
 | M3-07 | Gérer sommeil, reprise, doublons et échecs de planning | Adapté | Présente | Partielle | Intégration | Politique skip/latest, curseur d'occurrence stable, bail inter-fenêtres, claim anti-doublon, retries bornés avec backoff et annulation d'une retry livrés côté client ; scheduler natif multi-instance, fuseau/DST explicite et reprise après crash restent ouverts |
 | M3-08 | Examiner les résultats des runs | Adapté | Présente | Partielle | Intégration | Historique borné, aperçu, statut, non-lu, lien vers la conversation, archivage, filtres et retry manuel livrés ; résumé riche et fin de run native restent ouverts |
-| M3-09 | Recevoir une notification utile | Adapté | Présente | Partielle | Intégration | Inbox locale dédupliquée pour fins/échecs, non-lus, ouverture de conversation, silence persistant et retour au premier plan au clic livrés ; reste le service natif OS/Tauri et les scénarios d'app fermée |
+| M3-09 | Recevoir une notification utile | Adapté | Présente | Partielle | Intégration | Inbox locale dédupliquée pour fins/échecs, non-lus, ouverture de conversation, silence persistant et retour au premier plan au clic livrés ; plugin OS/Tauri utilisé dans l'app native, restent le service persistant application fermée et le routage direct de l'action |
 
 Preuves : [connecteurs](../src/lib/connectors.ts), [skills](../src/lib/skills.ts), [planning](../src/lib/schedules.ts), [journal des runs](../src/lib/scheduleRuns.ts), [file actuelle](../src/components/ReviewQueuePanel.tsx).
 
@@ -398,12 +398,10 @@ Preuves : [connecteurs](../src/lib/connectors.ts), [skills](../src/lib/skills.ts
 
 - **Inbox persistante :** les runs `completed` et `failed`, ainsi que les demandes `approval` et `input`, créent une notification locale bornée, avec titre, aperçu/erreur, horodatage, cible de conversation et clé d'idempotence. Une même occurrence ou demande ne peut pas être ajoutée deux fois.
 - **UX :** Automations expose les six dernières notifications, un badge non-lu, **Open conversation** et **Mark read**. La permission desktop est activable à la demande ; si l'OS refuse ou ne fournit pas l'API, l'inbox reste la surface de secours.
-- **Silence au démarrage :** les notifications déjà présentes sont hydratées comme historique et ne déclenchent pas un toast à chaque relance. Les nouvelles notifications non lues sont envoyées au meilleur effort via l'API `Notification` du webview.
+- **Silence au démarrage :** les notifications déjà présentes sont hydratées comme historique et ne déclenchent pas un toast à chaque relance. Les nouvelles notifications non lues passent par `tauri-plugin-notification` dans l'app native et retombent sur l'API `Notification` du webview en preview.
 - **Préférence de silence :** Automations permet de couper ou réactiver les toasts desktop sans masquer l'inbox ; le choix est conservé sous `muse-desktop.notifications.preferences.v1`. Un clic sur un toast tente de restaurer la fenêtre Muse (`unminimize` + `setFocus`) puis l'inbox fournit l'ouverture de la conversation ciblée.
-- **Limite restante :** le service natif Tauri doit encore remplacer le fallback `Notification` du webview pour les scénarios où l'application est fermée, avec une action OS qui transporte directement le `sessionId`.
-- **Bridge desktop :** `tauri-plugin-notification` est enregistré avec la permission `notification:default`, ce qui permet au constructeur `Notification` du webview d'atteindre le service OS dans un build Tauri.
-- **Limites :** les préférences muettes, les actions de clic OS et les tests multi-instance restent à faire ; l'application doit rester ouverte pour recevoir les événements du host.
-- **Limites :** le service natif quand l'application est fermée, le routage OS direct et la qualification native du permission prompt restent à exécuter sur Windows/macOS/Linux.
+- **Bridge desktop :** `tauri-plugin-notification` est enregistré avec la permission `notification:default`; la demande de permission et l'envoi passent par son API dans un build Tauri, avec fallback web preview.
+- **Limites :** l'application doit rester ouverte pour recevoir les événements du host ; la persistance d'un scheduler/notification quand l'application est fermée, le routage OS direct et la qualification native du permission prompt restent à exécuter sur Windows/macOS/Linux.
 - **Validation :** suite Node, TypeScript et build Vite verts ; la qualification native du permission prompt reste à exécuter sur Windows/macOS/Linux.
 
 ## M4 — Parité étendue

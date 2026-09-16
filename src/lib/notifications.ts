@@ -1,5 +1,6 @@
 import type { ScheduleRun } from "./scheduleRuns";
 import { readStorageJson, writeStorageJson } from "./storage.ts";
+import { isTauriRuntime } from "./env.ts";
 
 export type MuseNotificationKind = "run-completed" | "run-failed" | "approval-needed" | "input-needed";
 
@@ -164,10 +165,29 @@ export function notificationPermission(): NotificationPermission {
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+  if (isTauriRuntime()) {
+    try {
+      const { requestPermission } = await import("@tauri-apps/plugin-notification");
+      return await requestPermission();
+    } catch {
+      // Fall back to the webview permission API when the plugin is unavailable.
+    }
+  }
   return window.Notification.requestPermission();
 }
 
-export function deliverDesktopNotification(notification: MuseNotification): boolean {
+export async function deliverDesktopNotification(notification: MuseNotification): Promise<boolean> {
+  if (isTauriRuntime()) {
+    try {
+      const { isPermissionGranted, sendNotification } = await import("@tauri-apps/plugin-notification");
+      if (await isPermissionGranted()) {
+        sendNotification({ title: notification.title, body: notification.body });
+        return true;
+      }
+    } catch {
+      // Keep the in-app inbox authoritative when native notifications fail.
+    }
+  }
   if (notificationPermission() !== "granted") return false;
   try {
     const toast = new window.Notification(notification.title, { body: notification.body });
