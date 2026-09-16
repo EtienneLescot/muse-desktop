@@ -99,3 +99,16 @@ export function engineErrorSummary(error: EngineErrorDetails): string {
     ? "Muse could not complete this turn; retrying may succeed."
     : "Muse could not complete this turn.";
 }
+
+/** Find the most recent user prompt that precedes a failed turn. */
+export function findRetryPrompt(
+  entries: readonly { id: string; role: string; text: string }[],
+  failureEntryId: string,
+): string | null {
+  const failureIndex = entries.findIndex((entry) => entry.id === failureEntryId);
+  const before = failureIndex >= 0 ? entries.slice(0, failureIndex) : entries;
+  return [...before]
+    .reverse()
+    .find((entry) => entry.role === "user" && entry.text.trim().length > 0)
+    ?.text ?? null;
+}

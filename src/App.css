@@ -780,6 +780,13 @@ body.dark .avatar {
   margin: 0;
 }
 
+.engine-error-retry {
+  margin: 0 12px 10px 28px;
+  min-height: 32px;
+  padding-inline: 10px;
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+
 .msg.subagent {
   background: var(--code-bg);
   border: 1px solid var(--line);

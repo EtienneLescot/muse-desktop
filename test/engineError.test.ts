@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { engineErrorSummary, parseTurnCompletion } from "../src/lib/engineError.ts";
+import { engineErrorSummary, findRetryPrompt, parseTurnCompletion } from "../src/lib/engineError.ts";
 
 describe("M0-07 structured engine failures", () => {
   it("preserves the stable failure category and retry posture", () => {
@@ -39,5 +39,17 @@ describe("M0-07 structured engine failures", () => {
       error: { kind: "unknown", message: "legacy host failure", retryable: false },
     });
     assert.equal(parseTurnCompletion("failed", ""), null);
+  });
+
+  it("finds only the prompt before the failed turn", () => {
+    const entries = [
+      { id: "u1", role: "user", text: "first" },
+      { id: "a1", role: "assistant", text: "partial" },
+      { id: "u2", role: "user", text: "second" },
+      { id: "f1", role: "system", text: "failed" },
+      { id: "u3", role: "user", text: "later" },
+    ];
+    assert.equal(findRetryPrompt(entries, "f1"), "second");
+    assert.equal(findRetryPrompt(entries, "missing"), "later");
   });
 });

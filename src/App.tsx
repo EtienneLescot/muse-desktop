@@ -109,6 +109,7 @@ export default function App() {
     unqueueTurn,
     pendingSends,
     retrySend,
+    retryFailedTurn,
     discardSend,
     approve,
     allowlist,
@@ -1026,6 +1027,7 @@ export default function App() {
                     reconnecting={reconnectingId === active.session_id}
                     onReconnect={() => void reconnectSession(active.session_id)}
                     onCancel={() => void cancelSession(active.session_id)}
+                    onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
                     controls={{
                       onInterrupt: (agentId) =>
                         void subagentInterrupt(active.session_id, agentId),

@@ -33,6 +33,8 @@ interface Props {
   reconnecting?: boolean;
   onReconnect?: () => void;
   onCancel?: () => void;
+  /** Retry the last user message when the host marks a turn retryable. */
+  onRetryFailedTurn?: (entry: LogEntry) => Promise<void>;
   controls?: SubagentControls;
 }
 
@@ -82,6 +84,7 @@ export function StreamView({
   reconnecting = false,
   onReconnect,
   onCancel,
+  onRetryFailedTurn,
   controls,
 }: Props) {
   const streamRef = useRef<HTMLDivElement>(null);
@@ -93,6 +96,7 @@ export function StreamView({
   const [followupText, setFollowupText] = useState("");
   const [shown, setShown] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [retryingFailure, setRetryingFailure] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   // Keep the quiet-stream message current without making the transcript
@@ -373,6 +377,24 @@ export function StreamView({
                     <div><dt>Duration</dt><dd>{Math.round(e.engineError.durationMs / 1000)}s</dd></div>
                   )}
                 </dl>
+                {e.engineError.retryable && onRetryFailedTurn && (
+                  <button
+                    type="button"
+                    className="engine-error-retry"
+                    disabled={retryingFailure === e.id}
+                    onClick={async () => {
+                      if (retryingFailure !== null) return;
+                      setRetryingFailure(e.id);
+                      try {
+                        await onRetryFailedTurn(e);
+                      } finally {
+                        setRetryingFailure(null);
+                      }
+                    }}
+                  >
+                    {retryingFailure === e.id ? "Retrying…" : "Retry turn"}
+                  </button>
+                )}
               </details>
             ) : e.role === "assistant" && !reflexive ? (
               <>

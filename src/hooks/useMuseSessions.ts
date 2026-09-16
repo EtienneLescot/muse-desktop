@@ -141,6 +141,7 @@ import {
 } from "../lib/compact";
 import {
   engineErrorSummary,
+  findRetryPrompt,
   parseTurnCompletion,
   type EngineErrorDetails,
 } from "../lib/engineError";
@@ -765,6 +766,8 @@ interface UseMuseSessions {
   pendingSends: OutboxEntry[];
   /** Re-send a failed entry: verifies the server first when ambiguous. */
   retrySend: (clientMessageId: string) => Promise<void>;
+  /** M0-07: retry a terminally failed turn from its last user message. */
+  retryFailedTurn: (sessionId: string, failureEntryId: string) => Promise<void>;
   /** Give up on a failed entry: drops it and its undelivered user entry. */
   discardSend: (clientMessageId: string) => void;
   approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<boolean>;
@@ -3686,6 +3689,24 @@ export function useMuseSessions(): UseMuseSessions {
     [sendInput],
   );
 
+  const retryFailedTurn = useCallback(
+    async (sessionId: string, failureEntryId: string): Promise<void> => {
+      const log = logsRef.current[sessionId] ?? loadLog(sessionId);
+      const prompt = findRetryPrompt(log, failureEntryId);
+      if (prompt === null) {
+        setError("retry failed: the original user message is no longer available");
+        return;
+      }
+      if (inFlightSends.current.has(sessionId)) {
+        setError("the previous send is still pending; wait for it to settle before retrying");
+        return;
+      }
+      const result = await sendInput(sessionId, prompt);
+      if (!result.ok) setError(result.error ?? "retry failed");
+    },
+    [sendInput],
+  );
+
   const discardSend = useCallback((clientMessageId: string): void => {
     const entry = findPendingEverywhere(clientMessageId);
     if (entry === null) return;
@@ -5569,6 +5590,7 @@ export function useMuseSessions(): UseMuseSessions {
     unqueueTurn,
     pendingSends,
     retrySend,
+    retryFailedTurn,
     discardSend,
     approve,
     allowlist,
