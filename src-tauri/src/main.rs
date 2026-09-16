@@ -23,6 +23,7 @@ mod hosts;
 mod resume;
 mod git;
 mod terminal;
+mod files;
 use hosts::Hosts;
 
 use std::collections::HashMap;
@@ -1202,6 +1203,37 @@ fn terminal_read(
 #[tauri::command]
 fn terminal_close(state: State<'_, AppState>, terminal_id: String) -> Result<(), String> {
     state.terminals.close(&terminal_id)
+}
+
+/// List the real directory entries for a conversation workspace. The path is
+/// relative to that session's canonical root; the Rust service rejects
+/// traversal and symlink escapes before touching the filesystem.
+#[tauri::command]
+async fn files_list(
+    state: State<'_, AppState>,
+    session_id: String,
+    relative_path: Option<String>,
+    limit: Option<usize>,
+) -> Result<files::FileListSnapshot, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || files::list(&root, relative_path, limit))
+        .await
+        .map_err(|e| format!("files list task failed: {e}"))?
+}
+
+/// Read a bounded UTF-8 preview of one real workspace file. Binary files are
+/// identified and returned without content so the UI never displays garbage.
+#[tauri::command]
+async fn file_read(
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+    max_chars: Option<usize>,
+) -> Result<files::FileReadResult, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || files::read(&root, &path, max_chars))
+        .await
+        .map_err(|e| format!("file read task failed: {e}"))?
 }
 
 /// Build the frontend `input_request` payload from a `userInput/requested`
@@ -2511,6 +2543,8 @@ fn main() {
             terminal_resize,
             terminal_read,
             terminal_close,
+            files_list,
+            file_read,
             list_models,
             set_model,
             compact_session,

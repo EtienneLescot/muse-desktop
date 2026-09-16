@@ -378,6 +378,50 @@ export interface TerminalState {
   done: boolean;
 }
 
+/** M1-07: real filesystem browser state, kept per conversation. */
+export interface WorkspaceFileEntry {
+  path: string;
+  name: string;
+  kind: "directory" | "file" | "symlink";
+  size: number | null;
+  modifiedAt: number | null;
+  accessible: boolean;
+}
+
+export interface FileReadResult {
+  path: string;
+  size: number;
+  modifiedAt: number | null;
+  binary: boolean;
+  content: string | null;
+  truncated: boolean;
+  observedAt: number;
+}
+
+export interface FilesBrowserState {
+  path: string;
+  entries: WorkspaceFileEntry[];
+  truncated: boolean;
+  selectedPath: string | null;
+  preview: FileReadResult | null;
+  loading: boolean;
+  error: string | null;
+  observedAt: number | null;
+}
+
+function emptyFilesBrowserState(): FilesBrowserState {
+  return {
+    path: "",
+    entries: [],
+    truncated: false,
+    selectedPath: null,
+    preview: null,
+    loading: false,
+    error: null,
+    observedAt: null,
+  };
+}
+
 type FileWithRelPath = File & { webkitRelativePath?: string };
 
 /**
@@ -607,6 +651,10 @@ interface UseMuseSessions {
   closeTerminal: (sessionId: string) => Promise<void>;
   /** Add a bounded, attributed terminal snapshot to the next prompt. */
   prepareTerminalContext: (sessionId: string) => boolean;
+  /** M1-07: session-scoped real filesystem listing and bounded preview. */
+  filesForSession: (sessionId: string) => FilesBrowserState;
+  listWorkspaceFiles: (sessionId: string, path?: string) => Promise<void>;
+  readWorkspaceFile: (sessionId: string, path: string) => Promise<void>;
   /** US-5: move a thread to the archived list (persisted flag). */
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -1053,6 +1101,8 @@ export function useMuseSessions(): UseMuseSessions {
   const [terminalsBySession, setTerminalsBySession] = useState<
     Record<string, TerminalState>
   >({});
+  const [filesBySession, setFilesBySession] = useState<Record<string, FilesBrowserState>>({});
+  const filesRequestSeq = useRef<Record<string, number>>({});
   // Mirror of "any session running", read by the poll loop to pick cadence.
   // Plain ref (not state): the loop lives outside render, StrictMode-safe.
   const runningRef = useRef(false);
@@ -3638,6 +3688,99 @@ export function useMuseSessions(): UseMuseSessions {
     [terminalsBySession],
   );
 
+  const filesForSession = useCallback(
+    (sessionId: string): FilesBrowserState => filesBySession[sessionId] ?? emptyFilesBrowserState(),
+    [filesBySession],
+  );
+
+  const listWorkspaceFiles = useCallback(
+    async (sessionId: string, path = "."): Promise<void> => {
+      const request = (filesRequestSeq.current[sessionId] ?? 0) + 1;
+      filesRequestSeq.current[sessionId] = request;
+      setFilesBySession((cur) => ({
+        ...cur,
+        [sessionId]: { ...(cur[sessionId] ?? emptyFilesBrowserState()), loading: true, error: null },
+      }));
+      try {
+        const result = await invoke<{
+          root: string;
+          path: string;
+          entries: WorkspaceFileEntry[];
+          truncated: boolean;
+          observedAt: number;
+        }>("files_list", { sessionId, relativePath: path, limit: 200 });
+        if (filesRequestSeq.current[sessionId] !== request) return;
+        setFilesBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? emptyFilesBrowserState()),
+            path: result.path,
+            entries: result.entries,
+            truncated: result.truncated,
+            selectedPath: null,
+            preview: null,
+            loading: false,
+            error: null,
+            observedAt: result.observedAt,
+          },
+        }));
+      } catch (e) {
+        if (filesRequestSeq.current[sessionId] !== request) return;
+        setFilesBySession((cur) => ({
+          ...cur,
+          [sessionId]: { ...(cur[sessionId] ?? emptyFilesBrowserState()), loading: false, error: String(e) },
+        }));
+      }
+    },
+    [],
+  );
+
+  const readWorkspaceFile = useCallback(
+    async (sessionId: string, path: string): Promise<void> => {
+      const request = (filesRequestSeq.current[sessionId] ?? 0) + 1;
+      filesRequestSeq.current[sessionId] = request;
+      setFilesBySession((cur) => ({
+        ...cur,
+        [sessionId]: {
+          ...(cur[sessionId] ?? emptyFilesBrowserState()),
+          loading: true,
+          selectedPath: path,
+          error: null,
+        },
+      }));
+      try {
+        const preview = await invoke<FileReadResult>("file_read", {
+          sessionId,
+          path,
+          maxChars: 120_000,
+        });
+        if (filesRequestSeq.current[sessionId] !== request) return;
+        setFilesBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? emptyFilesBrowserState()),
+            selectedPath: path,
+            preview,
+            loading: false,
+            error: null,
+          },
+        }));
+      } catch (e) {
+        if (filesRequestSeq.current[sessionId] !== request) return;
+        setFilesBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? emptyFilesBrowserState()),
+            selectedPath: path,
+            loading: false,
+            error: String(e),
+          },
+        }));
+      }
+    },
+    [],
+  );
+
   // US-23 search over the stored index (empty unless opted in). Search
   // keeps working while paused — pause only suspends indexing updates.
   const indexResults = searchIndex(indexStore, indexEnabled ? indexQuery : "");
@@ -3794,6 +3937,9 @@ export function useMuseSessions(): UseMuseSessions {
     resizeTerminal,
     closeTerminal,
     prepareTerminalContext,
+    filesForSession,
+    listWorkspaceFiles,
+    readWorkspaceFile,
     error,
     evtCount,
   };

@@ -465,6 +465,162 @@
 .terminal-empty strong {
   color: var(--text);
 }
+
+/* M1-07 real workspace browser. The preview is visibly marked as disk data
+   so it cannot be confused with a response artifact or generated snippet. */
+.files-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: calc(100% - 32px);
+}
+.files-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.files-toolbar strong {
+  display: block;
+  font-size: 13px;
+}
+.files-meta {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 3px;
+}
+.files-actions {
+  display: flex;
+  gap: 6px;
+}
+.files-actions button {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 6px 9px;
+  font-size: 10px;
+}
+.files-actions button:disabled {
+  opacity: .45;
+}
+.files-error,
+.files-note {
+  margin: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 10px;
+}
+.files-error {
+  border: 1px solid color-mix(in srgb, #d66a6a 48%, var(--line));
+  color: #e7a7a7;
+  background: color-mix(in srgb, #7c2525 24%, var(--bg));
+}
+.files-note {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--blue) 8%, var(--bg));
+}
+.files-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, .85fr) minmax(250px, 1.4fr);
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+.files-list,
+.file-preview {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+}
+.files-list {
+  padding: 6px;
+}
+.file-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 8px;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+}
+.file-row:hover:not(:disabled),
+.file-row-selected {
+  background: color-mix(in srgb, var(--blue) 12%, var(--bg));
+}
+.file-row:disabled {
+  opacity: .42;
+}
+.file-kind {
+  color: var(--muted);
+  text-align: center;
+}
+.file-kind-directory {
+  color: var(--blue);
+}
+.file-kind-symlink {
+  color: #d6a15c;
+}
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-size {
+  color: var(--muted);
+  font-size: 9px;
+}
+.files-loading {
+  padding: 10px 8px;
+  margin: 0;
+}
+.file-preview {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+}
+.file-preview-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 2px 2px 9px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.file-preview-head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.file-preview-code {
+  flex: 1;
+  min-height: 0;
+  margin: 10px 0 0;
+  overflow: auto;
+  color: #d6e7f5;
+  font: 10px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .work-panel .artifacts-tabs {
   padding: 12px 18px;
 }

@@ -24,6 +24,7 @@ import { ChannelPanel } from "./components/ChannelPanel";
 import { ImportPanel } from "./components/ImportPanel";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
+import { FilesPanel } from "./components/FilesPanel";
 import type { ShareBundle } from "./lib/sharing";
 import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 // US-32: polite live-region announcements for stream/approval/input changes.
@@ -169,6 +170,9 @@ export default function App() {
     resizeTerminal,
     closeTerminal,
     prepareTerminalContext,
+    filesForSession,
+    listWorkspaceFiles,
+    readWorkspaceFile,
     browserAnnotations,
     addBrowserAnnotation,
     removeBrowserAnnotation,
@@ -193,7 +197,7 @@ export default function App() {
   >("task");
   const [collapsed, setCollapsed] = useState(false);
   const [workPanel, setWorkPanel] = useState<
-    "artifacts" | "browser" | "memory" | "tools" | "review" | "terminal" | null
+    "artifacts" | "browser" | "memory" | "tools" | "review" | "terminal" | "files" | null
   >(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -934,6 +938,7 @@ export default function App() {
                           ["artifacts", "Content"],
                           ["review", "Review"],
                           ["terminal", "Terminal"],
+                          ["files", "Files"],
                           ["browser", "Browser"],
                           ["memory", "Memory"],
                           ["tools", "Activity"],
@@ -998,6 +1003,14 @@ export default function App() {
                           onResize={resizeTerminal}
                           onClose={closeTerminal}
                           onInsertContext={prepareTerminalContext}
+                        />
+                      )}
+                      {workPanel === "files" && (
+                        <FilesPanel
+                          sessionId={active.session_id}
+                          state={filesForSession(active.session_id)}
+                          onList={listWorkspaceFiles}
+                          onRead={readWorkspaceFile}
                         />
                       )}
                       {workPanel === "browser" && (

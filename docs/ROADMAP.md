@@ -146,7 +146,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-04 | Commit, push et création de PR depuis l'app | Adapté | Présente | Câblée | Intégration | Commit, push et PR GitHub CLI livrés avec destinations explicites ; restent qualification hooks/auth live, PR existante/rejet distant et revue native |
 | M1-05 | Ouvrir et utiliser un terminal du projet | Adapté | Présente | Câblée | Unitaire | Socle PTY persistant livré : shell lié au cwd de la conversation, entrée/sortie bornées, resize et fermeture contrôlée. Reste : validation native Windows/macOS/Linux, rendu ANSI riche et raccourcis interactifs |
 | M1-06 | Faire lire au moteur la sortie du terminal | Adapté | Présente | Locale | Unitaire | Handoff explicite **Add output to prompt** livré : sortie bornée, attribuée au terminal/cwd et insérée dans le prochain message. Reste : outil/contexte moteur natif après vérification de capacité MSP |
-| M1-07 | Consulter les vrais fichiers du projet | Maquette | Partielle | Locale | Unitaire | Remplacer la seule liste de fichiers cités par accès disque contrôlé et ouverture pertinente ; contenu actuel, pas extrait de réponse |
+| M1-07 | Consulter les vrais fichiers du projet | Adapté | Présente | Câblée | Intégration | Listing paresseux et lecture bornée du workspace livrés ; restent ouverture native, watcher/état obsolète et qualification E2E sur gros dépôts |
 | M1-08 | Ajouter fichiers et images à une demande | À définir | Partielle | Partielle | Unitaire | Les mentions actuelles enrichissent du texte ; concevoir pièces jointes, drag/drop et limites ; preuve que le moteur reçoit le contenu/type attendu |
 | M1-09 | Créer une branche de conversation fidèle | Maquette | Partielle | Locale | Unitaire | Utiliser session/fork si disponible ; choisir le point source ; conserver contexte et dossier ; ne pas confondre avec « nouvelle depuis résumé » |
 | M1-10 | Réorienter une exécution ou mettre un message en attente | À définir | Absente | Absente | À faire | Exploiter steer/queue selon capacités servies ; états visibles, annulation, ordre et absence de double envoi |
@@ -203,7 +203,16 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Handoff explicite :** le bouton **Add output to prompt** ajoute au brouillon un bloc `<terminal-output>` borné à 12 000 caractères, précédé du shell, cwd et `terminalId`. La sortie est traitée comme donnée de terminal identifiable ; aucune exécution ou envoi implicite n’est déclenché.
 - **SSOT :** le hook de sessions reste la source de vérité du terminal et du brouillon. Le panneau ne copie pas directement le DOM et ne peut pas insérer la sortie d’une autre conversation.
 - **Validation :** deux tests Node couvrent l’attribution, l’échappement des métadonnées et le bornage ; suite complète et build restent verts.
-- **Limite assumée :** Muse ne sert pas encore de capability d’outil terminal/context snapshot vérifiée. L’adaptateur MSP automatique reste bloqué jusqu’à la preuve de ce contrat ; l’insertion explicite fournit un parcours honnête entre-temps.
+- **Limite assumée :** Muse ne sert pas encore de capability d'outil terminal/context snapshot vérifiée. L’adaptateur MSP automatique reste bloqué jusqu’à la preuve de ce contrat ; l’insertion explicite fournit un parcours honnête entre-temps.
+
+### Livraison M1-07 — fichiers réels du workspace
+
+- **Contrat backend :** `files_list(sessionId, relativePath?, limit?)` et `file_read(sessionId, path, maxChars?)` résolvent le workspace de la conversation, refusent les chemins absolus/traversal et les symlinks qui sortent de la racine, puis exécutent les lectures hors thread UI.
+- **Bornage et fraîcheur :** le listing est limité à 500 entrées (200 par défaut) et la lecture à 512 Ko/120 000 caractères. Les fichiers binaires sont identifiés sans décodage forcé ; chaque réponse porte `observedAt`, et un rafraîchissement explicite remplace le snapshot précédent.
+- **UX :** l’onglet **Files** affiche le chemin courant, remonte d’un niveau, recharge le dossier et ouvre les répertoires à la demande. Un fichier texte est prévisualisé depuis le disque ; les fichiers binaires, symlinks inaccessibles et résultats tronqués sont signalés dans le panneau.
+- **SSOT :** l’état `filesBySession` appartient au hook de sessions ; les réponses asynchrones obsolètes sont ignorées par séquence de requête, afin qu’un changement d’onglet ou de conversation ne remplace pas un aperçu plus récent.
+- **Validation :** tests Rust du service sur un workspace temporaire (listing borné, texte, binaire, traversée et chemins absolus), puis suite Node/TypeScript/Vite. La qualification native Windows/macOS/Linux et le scénario E2E avec fichiers renommés/disparus restent à exécuter.
+- **Limites assumées :** cette tranche prévisualise le contenu actuel et ne prétend pas ouvrir une application externe ni surveiller le disque en continu. Les pièces jointes restent M1-08.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 
