@@ -19,6 +19,7 @@ const paths = {
   shield: "M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z",
   "arrow-right": "M5 12h14M13 6l6 6-6 6",
   branch: "M6 3v5a4 4 0 0 0 4 4h4a4 4 0 0 1 4 4v5M18 3v5a4 4 0 0 1-4 4h-1",
+  pin: "M8 3h8l-1 6 3 3v2h-5v7l-1 1-1-1v-7H6v-2l3-3-1-6Z",
 };
 export function Icon({ name }: { name: keyof typeof paths }) {
   return (

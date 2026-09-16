@@ -1434,6 +1434,16 @@ body.dark .composer textarea::placeholder {
   padding: 6px 8px;
 }
 
+.session-pin {
+  color: var(--blue);
+  margin-left: auto;
+}
+
+.session-pin svg {
+  width: 13px;
+  height: 13px;
+}
+
 .mention-list {
   margin: 0;
   padding: 4px;

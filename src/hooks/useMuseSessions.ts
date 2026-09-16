@@ -145,7 +145,7 @@ import {
   parseFanoutCommand,
 } from "../lib/fanout";
 // US-5 thread archiving flag helper (pure, unit-tested).
-import { withArchivedFlag } from "../lib/threads";
+import { withArchivedFlag, withPinnedFlag } from "../lib/threads";
 // US-3 + US-30 Projects: create/attach/instruction-prepend/settings
 // override live in ../lib/projects (dependency-free, unit-tested).
 import {
@@ -686,6 +686,7 @@ interface UseMuseSessions {
   /** US-5: move a thread to the archived list (persisted flag). */
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
+  togglePinned: (sessionId: string) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
   restoreSession: (sessionId: string) => void;
   /** US-3: project list (creation refused past 5, see projectError). */
@@ -3083,6 +3084,14 @@ export function useMuseSessions(): UseMuseSessions {
     setSessions((cur) => withArchivedFlag(cur, sessionId, false));
   }, []);
 
+  const togglePinned = useCallback((sessionId: string) => {
+    setSessions((cur) => {
+      const current = cur.find((session) => session.session_id === sessionId);
+      if (!current) return cur;
+      return withPinnedFlag(cur, sessionId, current.pinned !== true);
+    });
+  }, []);
+
   // US-3 + US-30 project actions. Creation past MAX_PROJECTS is refused
   // client-side with the explicit quota message in projectError.
   const createProject = useCallback(
@@ -4051,6 +4060,7 @@ export function useMuseSessions(): UseMuseSessions {
     killSession,
     renameSession,
     archiveSession,
+    togglePinned,
     restoreSession,
     projects,
     threadProjects,
