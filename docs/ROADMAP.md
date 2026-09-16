@@ -252,6 +252,13 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Validation :** tests de création, mise à jour, suppression et persistance d’une racine ; TypeScript, build Vite et 57 tests Rust sont verts.
 - **Limites :** les anciens projets restent sans racine tant que l’utilisateur ne la choisit pas, et la migration automatique de groupes ambigus est volontairement exclue. La sélection d’environnement/worktree et les règles héritées du moteur restent M2-02/M2-03.
 
+### Livraison M2-02 — paramètres projet effectifs
+
+- **Héritage :** la valeur globale sert de défaut et les overrides du projet restent calculés par `settingsFor`, avec la source visible dans le diff (`g:`) et le contexte de la conversation.
+- **Modèle :** lors de la création d’une session, Muse transmet le modèle global ou projet effectif via `session/setModel` après l’admission `session/start`. La valeur `default` laisse le choix natif du moteur intact.
+- **Limites explicites :** le contrat MSP vérifié n’expose pas encore de mutation sessionnelle pour sandbox, réseau ou auto-compact. L’UI les affiche comme préférences effectives sans prétendre les appliquer au moteur ; leur branchement attend une capacité prouvée et testée.
+- **Validation :** les tests de résolution/diff/persistance des overrides, TypeScript, build Vite et 57 tests Rust restent verts.
+
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 
 ## M2 — Projets et travail parallèle isolé
@@ -259,7 +266,7 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
 | M2-01 | Un projet représente des dossiers persistants | Adapté | Présente | Câblée | Intégration | Racine persistante, sélection de dossier et création de conversation dans cette racine livrées ; restent migration explicite des anciens groupes et environnement/worktree |
-| M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Unitaire | Résoudre héritage global/projet/session vers le moteur ; afficher origine et valeur effective ; prouver deux configurations isolées |
+| M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Intégration | Héritage global/projet visible et modèle effectif appliqué à la création d'une session ; sandbox/réseau/auto-compact restent en attente d'un contrat moteur vérifié |
 | M2-03 | Créer automatiquement un worktree pour une conversation | Maquette | Partielle | Manuelle | Unitaire | Remplacer snippet par backend ; branche de départ, chemin unique, rollback d'échec ; checkout initial inchangé |
 | M2-04 | Préparer l'environnement du worktree | À définir | Absente | Absente | À faire | Scripts/actions de setup avec progression et erreurs ; dépendances nécessaires disponibles avant le premier tour |
 | M2-05 | Passer de Local à Worktree et inversement | À définir | Absente | Absente | À faire | Transférer contexte et changements ; traiter conflits, fichiers ignorés et branche déjà utilisée ; aucune perte de travail |

@@ -200,7 +200,7 @@ Garde-fous perf sourcés (à transposer en tests V1) : client Codex Electron 26.
 | Commande front (`invoke`, camelCase) | Méthode MSP | Params | Fichier/fonction |
 |---|---|---|---|
 | `set_workspace{path}` | — (local) | vérifie `is_dir` + `canonicalize`, source de vérité Rust | `main.rs:548 set_workspace` |
-| `start_session{workspacePath?,authorizationMode?}` | `session/start` | `{commandId:UUIDv7, workspaceRoot, approvalMode?}` ; mapping produit `ask→onRequest`, `workspace→promptUnmatched`, `yolo→allowAll` | `main.rs:1064 start_session` |
+| `start_session{workspacePath?,authorizationMode?}` | `session/start` | `{commandId:UUIDv7, workspaceRoot, approvalMode?}` ; mapping produit `ask→onRequest`, `workspace→promptUnmatched`, `yolo→allowAll`. Un modèle global/projet concret est ensuite appliqué par `session/setModel`; `default` conserve le choix du moteur | `main.rs:1064 start_session` |
 | `fork_session{sessionId}` | `session/fork` | `{commandId:UUIDv7, sessionId, excludeItems:true}` ; copie tous les tours terminés, conserve l’engine/workspace et exige un nouvel identifiant | `main.rs:1474 fork_session` |
 | `set_approval_mode{sessionId,mode}` | `session/setApprovalMode` | `{commandId:UUIDv7, sessionId, mode}` ; applique le mode aux actions suivantes | `main.rs:1099 set_approval_mode` |
 | `restore_sessions{}` | `session/list` | `{}` ; `[]` si pas de host (boot frais) ; parse `sessionId\|id`, `workspaceRoot\|workspace`, `status=="running"` | `main.rs:709 restore_sessions` |

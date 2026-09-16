@@ -569,7 +569,10 @@ interface UseMuseSessions {
   /** w-settings: route a path through the scope-guard prompt path. */
   checkPathScope: (path: string) => Promise<ScopeVerdict>;
   startSession: () => Promise<string | null>;
-  startSessionInWorkspace: (workspacePath: string) => Promise<string | null>;
+  startSessionInWorkspace: (
+    workspacePath: string,
+    projectSettings?: ProjectSettings,
+  ) => Promise<string | null>;
   /** M1-09: create a server-side branch from completed conversation turns. */
   forkSession: (sessionId: string) => Promise<string | null>;
   reconnectSession: (id: string) => Promise<void>;
@@ -2093,7 +2096,11 @@ export function useMuseSessions(): UseMuseSessions {
 
   // Shared session creation (US-4 `newFromSummary` reuses it so the fresh
   // thread goes through the exact same backend + state path as `+ New`).
-  const startSessionRow = useCallback(async (workspaceOverride?: string): Promise<string | null> => {
+  const startSessionRow = useCallback(
+    async (
+      workspaceOverride?: string,
+      projectSettings?: ProjectSettings,
+    ): Promise<string | null> => {
     try {
       setError(null);
       // Live React state first: localStorage writes are best-effort and may
@@ -2119,12 +2126,21 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) => [...cur, record]);
       setLogs((cur) => (cur[meta.session_id] ? cur : { ...cur, [meta.session_id]: [] }));
       setActiveId(meta.session_id);
+      // The host only accepts model changes through session/setModel. Apply a
+      // concrete project/global model after admission; `default` deliberately
+      // leaves the engine's own default untouched.
+      const modelId = projectSettings?.model.trim();
+      if (modelId && modelId !== "default") {
+        await setSessionModel(meta.session_id, modelId);
+      }
       return meta.session_id;
     } catch (e) {
       setError(`start_session failed: ${String(e)}`);
       return null;
     }
-  }, [authorizationMode, workspace]);
+    },
+    [authorizationMode, setSessionModel, workspace],
+  );
 
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
   const reconnectSession = useCallback(async (id: string) => {
@@ -2155,11 +2171,12 @@ export function useMuseSessions(): UseMuseSessions {
   }, [authorizationMode, sessions, kickPoll, refreshModels]);
 
   const startSession = useCallback(async () => {
-    return await startSessionRow();
-  }, [startSessionRow]);
+    return await startSessionRow(undefined, globalSettings);
+  }, [globalSettings, startSessionRow]);
 
   const startSessionInWorkspace = useCallback(
-    async (workspacePath: string) => startSessionRow(workspacePath),
+    async (workspacePath: string, projectSettings?: ProjectSettings) =>
+      startSessionRow(workspacePath, projectSettings),
     [startSessionRow],
   );
 
