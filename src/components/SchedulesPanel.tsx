@@ -28,6 +28,8 @@ interface Props {
   onDelete: (id: string) => void;
   onRunNow: (id: string) => void;
   onCancelRun: (id: string) => void;
+  onOpenRun: (run: ScheduleRun) => void;
+  onMarkRunRead: (id: string) => void;
 }
 
 type TriggerKind = "once" | "cron";
@@ -75,6 +77,8 @@ export function SchedulesPanel({
   onDelete,
   onRunNow,
   onCancelRun,
+  onOpenRun,
+  onMarkRunRead,
 }: Props) {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -263,18 +267,32 @@ export function SchedulesPanel({
               <li key={run.id} className="sched-item schedule-run" data-status={run.status}>
                 <div className="sched-head">
                   <strong>{run.scheduleName}</strong>
+                  {run.unread && <span className="run-unread">New</span>}
                   <span className="run-status">{describeRunStatus(run.status)}</span>
                 </div>
                 <span className="muted">
                   {new Date(run.createdAt).toLocaleString()} · {run.sessionId ? "conversation started" : "dispatching"}
                   {run.nextRetryAt ? ` · retry at ${new Date(run.nextRetryAt).toLocaleTimeString()}` : ""}
                 </span>
+                {run.resultPreview && <span className="run-preview">{run.resultPreview}</span>}
                 {run.error && <small className="error">{run.error}</small>}
-                {run.status === "queued" && run.nextRetryAt !== undefined && (
-                  <button type="button" onClick={() => onCancelRun(run.id)} title="Cancel this retry">
-                    Cancel retry
-                  </button>
-                )}
+                <div className="sched-actions">
+                  {run.sessionId && (
+                    <button type="button" onClick={() => onOpenRun(run)} title="Open conversation">
+                      Open conversation
+                    </button>
+                  )}
+                  {run.unread && (
+                    <button type="button" onClick={() => onMarkRunRead(run.id)} title="Mark run as read">
+                      Mark read
+                    </button>
+                  )}
+                  {run.status === "queued" && run.nextRetryAt !== undefined && (
+                    <button type="button" onClick={() => onCancelRun(run.id)} title="Cancel this retry">
+                      Cancel retry
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

@@ -214,10 +214,12 @@ export type { ReviewItem, Schedule, ScheduleInput, ThreadReuse } from "../lib/sc
 import {
   appendRun,
   cancelRun,
+  completeRun,
   createScheduleRun,
   isRetryableScheduleError,
   loadScheduleRuns,
   markRunStarted,
+  markRunRead,
   queueRunRetry,
   saveScheduleRuns,
   settleRun,
@@ -788,6 +790,8 @@ interface UseMuseSessions {
   runScheduleNow: (id: string) => void;
   /** M3-07: cancel a queued retry without touching an in-flight host turn. */
   cancelScheduleRun: (id: string) => void;
+  /** M3-08: clear the independent inbox unread marker. */
+  markScheduleRunRead: (id: string) => void;
   /** US-9: approve a review entry → sent as normal turn input. */
   approveReview: (id: string) => Promise<void>;
   /** US-9: discard a pending review entry. */
@@ -1795,6 +1799,24 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }
 
+  /** M3-08: promote an admitted scheduled turn when the host actually stops. */
+  function completeScheduleRunsForSession(sessionId: string): void {
+    const log = logsRef.current[sessionId] ?? [];
+    const lastAssistant = [...log].reverse().find((entry) =>
+      entry.role === "assistant" && entry.text.trim().length > 0,
+    );
+    const preview = lastAssistant?.text.trim().replace(/\s+/g, " ").slice(0, 320);
+    setScheduleRuns((cur) => {
+      let next = cur;
+      for (const run of cur) {
+        if (run.sessionId === sessionId && run.status === "running") {
+          next = completeRun(next, run.id, Date.now(), preview);
+        }
+      }
+      return next;
+    });
+  }
+
   function handleEvent(evt: MuseEvent): void {
     const { session_id: sid, kind, payload } = evt;
     setEvtCount((c) => c + 1);
@@ -2121,6 +2143,7 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: false } : s)),
       );
+      completeScheduleRunsForSession(sid);
     }
     const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated" || kind === "approval_mode_changed";
     if (kind === "approval/resolved") {
@@ -3616,7 +3639,12 @@ export function useMuseSessions(): UseMuseSessions {
         await applyCapturedContext(sessionId);
         const result = await sendInput(sessionId, item.instructions);
         if (result.ok) {
-          if (run) setScheduleRuns((cur) => settleRun(cur, run.id, "completed", Date.now()));
+          // `send_input` only acknowledges admission. The run remains
+          // running until the host emits a stopped turn status, where the
+          // result preview and unread marker are captured.
+          if (run && isCompactCommand(item.instructions.trim())) {
+            setScheduleRuns((cur) => completeRun(cur, run.id, Date.now(), "Local compaction complete."));
+          }
         } else {
           const message = result.error ?? "scheduled dispatch failed";
           failRun(message, true);
@@ -3712,6 +3740,10 @@ export function useMuseSessions(): UseMuseSessions {
 
   const cancelScheduleRun = useCallback((id: string): void => {
     setScheduleRuns((cur) => cancelRun(cur, id));
+  }, []);
+
+  const markScheduleRunRead = useCallback((id: string): void => {
+    setScheduleRuns((cur) => markRunRead(cur, id));
   }, []);
   // w-collab US-27: explicit share / un-share + mode toggle. Manual mode
   // shares only here; auto additionally refreshes on turn end (see
@@ -4580,6 +4612,7 @@ export function useMuseSessions(): UseMuseSessions {
     deleteSchedule: deleteScheduleCb,
     runScheduleNow,
     cancelScheduleRun,
+    markScheduleRunRead,
     approveReview: approveReviewCb,
     discardReview: discardReviewCb,
     shareMode: shareState.mode,

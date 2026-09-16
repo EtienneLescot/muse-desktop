@@ -130,6 +130,7 @@ export default function App() {
     deleteSchedule,
     runScheduleNow,
     cancelScheduleRun,
+    markScheduleRunRead,
     approveReview,
     discardReview,
     shareMode,
@@ -721,6 +722,13 @@ export default function App() {
                   onDelete={(id) => deleteSchedule(id)}
                   onRunNow={(id) => runScheduleNow(id)}
                   onCancelRun={(id) => cancelScheduleRun(id)}
+                  onMarkRunRead={(id) => markScheduleRunRead(id)}
+                  onOpenRun={(run) => {
+                    if (run.sessionId) {
+                      openPage("task");
+                      setActive(run.sessionId);
+                    }
+                  }}
                 />
               </>
             )}
