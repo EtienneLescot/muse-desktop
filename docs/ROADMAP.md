@@ -148,7 +148,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-06 | Faire lire au moteur la sortie du terminal | Adapté | Présente | Locale | Unitaire | Handoff explicite **Add output to prompt** livré : sortie bornée, attribuée au terminal/cwd et insérée dans le prochain message. Reste : outil/contexte moteur natif après vérification de capacité MSP |
 | M1-07 | Consulter les vrais fichiers du projet | Adapté | Présente | Câblée | Intégration | Listing paresseux et lecture bornée du workspace livrés ; restent ouverture native, watcher/état obsolète et qualification E2E sur gros dépôts |
 | M1-08 | Ajouter fichiers et images à une demande | Adapté | Présente | Câblée | Intégration | Texte borné et images base64 sont envoyés comme parts MSP réelles ; restent validation live sur les modèles image, dimensions et reprise d’un fichier disparu |
-| M1-09 | Créer une branche de conversation fidèle | Maquette | Partielle | Locale | Unitaire | Utiliser session/fork si disponible ; choisir le point source ; conserver contexte et dossier ; ne pas confondre avec « nouvelle depuis résumé » |
+| M1-09 | Créer une branche de conversation fidèle | Adapté | Présente | Câblée | Intégration | Fork serveur depuis le dernier tour terminé livré ; restent le sélecteur d’une ancre MSP précise, qualification du point invalide et reprise live |
 | M1-10 | Réorienter une exécution ou mettre un message en attente | À définir | Absente | Absente | À faire | Exploiter steer/queue selon capacités servies ; états visibles, annulation, ordre et absence de double envoi |
 | M1-11 | Choisir un modèle disponible et suivre le contexte | Adapté | Présente | Câblée | Unitaire | Consolider tests live list/setModel/compact, erreurs et persistance ; fallback explicitement non live ; état confirmé par le moteur |
 | M1-12 | Retrouver et organiser les conversations | Adapté | Partielle | Locale | UI | Étendre recherche à l'historique, épinglage/ordre et états non lus ; préserver les résultats au redémarrage sans déplacer le focus |
@@ -222,6 +222,14 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Fiabilité :** `turn/start` valide côté Rust le type, le MIME, le base64, les dimensions et les bornes (8 parts, texte 120 000 caractères, image 5 Mo). L’outbox persiste les parts exactes afin qu’un retry ambigu ne perde ni image ni fichier.
 - **Validation :** 57 tests Rust (dont validation des parts), 390 tests Node (détection/assemblage et outbox), TypeScript et build Vite. La réception avec chaque modèle image et la qualification native restent à exécuter.
 - **Limites assumées :** les formats non textuels autres que les images sont refusés explicitement ; les pièces jointes ne sont pas conservées dans le brouillon après fermeture de l’app avant envoi, et aucun upload externe n’est introduit.
+
+### Livraison M1-09 — branche de conversation serveur
+
+- **Contrat moteur :** `session/fork` a été vérifié dans le schéma stable du binaire Windows. Le fork prend la session source et, par défaut, copie tous les tours terminés ; `excludeItems: true` évite de transférer un historique volumineux dans la réponse de commande.
+- **Backend :** `fork_session` conserve le workspace et le client MSP de la source, vérifie que le serveur renvoie un nouvel identifiant, puis enregistre ce `sessionId` dans le routage et les métadonnées Rust.
+- **UX :** une action **Fork conversation** est disponible dans l’en-tête de la conversation. Elle crée une conversation nommée `Branch of …`, sélectionne immédiatement la branche et recopie uniquement les entrées locales terminées ; les brouillons et items ouverts ne sont pas partagés.
+- **SSOT :** l’identité et la provenance durables restent celles du serveur ; le journal local sert uniquement à rendre la continuité visible avant le prochain événement MSP.
+- **Validation :** le contrat est câblé et compilé avec les suites Rust/Node/TypeScript/Vite de la branche. Restent un essai live avec une session active, les erreurs `forkBoundaryInvalid` et le choix d’une ancre `lastTurnId` précise.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 

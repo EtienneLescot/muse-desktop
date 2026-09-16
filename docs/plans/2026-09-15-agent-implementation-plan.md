@@ -251,6 +251,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** branche indépendante, source inchangée, point invalide, source active et échec ; ne jamais substituer un résumé au fork demandé.
 
+**État au 16/09/2026 :** `session/fork` est câblé dans le superviseur et l’action d’en-tête crée une nouvelle conversation serveur dans le même workspace, avec continuité locale des entrées terminées. La sélection d’un `lastTurnId` MSP précis, les erreurs de frontière et la qualification live restent ouvertes.
+
 ### M1-10 — Steering et file de messages
 
 **Code :** Composer, `phase.ts`, sessions/MSP. Dépend M0-03/04/08.

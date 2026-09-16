@@ -78,6 +78,7 @@ export default function App() {
     checkPathScope,
     setActive,
     startSession,
+    forkSession,
     reconnectSession,
     reconnectingId,
     connectedIds,
@@ -571,6 +572,17 @@ export default function App() {
             >
               <Icon name={theme === "dark" ? "sun" : "moon"} />
             </button>
+            {active && page === "task" && !settingsOpen && (
+              <button
+                className="icon"
+                onClick={() => void forkSession(active.session_id)}
+                disabled={backendMissing || !connectedIds.includes(active.session_id)}
+                aria-label="Fork conversation"
+                title="Fork conversation from the latest completed turn"
+              >
+                <Icon name="branch" />
+              </button>
+            )}
             {active && page === "task" && !settingsOpen && (
               <button
                 className="icon"
