@@ -196,6 +196,105 @@ export interface StorageImportResult {
   errors: string[];
 }
 
+export interface StorageMigrationResult {
+  migrated: number;
+  skipped: number;
+  errors: string[];
+}
+
+export const STORAGE_MIGRATION_KEY = "muse-desktop.storage-migrations.v1";
+
+/**
+ * Legacy aliases from the pre-namespaced prototype. Migration is deliberately
+ * copy-only: source keys remain available for rollback and existing v1 keys
+ * always win. The log prefixes cover both early spellings used by prototypes.
+ */
+const LEGACY_EXACT_KEYS: Record<string, string> = {
+  "muse.sessions": "muse-desktop.sessions.v1",
+  "muse.sessions.v1": "muse-desktop.sessions.v1",
+  "muse.workspace": "muse-desktop.workspace.v1",
+  "muse.workspace.v1": "muse-desktop.workspace.v1",
+  "muse.active": "muse-desktop.active.v1",
+  "muse.active.v1": "muse-desktop.active.v1",
+  "muse.settings": "muse-desktop.settings.v1",
+  "muse.settings.v1": "muse-desktop.settings.v1",
+};
+
+/** Copy readable legacy entries into the current namespace without overwrite. */
+export function migrateLegacyStorage(): StorageMigrationResult {
+  const result: StorageMigrationResult = { migrated: 0, skipped: 0, errors: [] };
+  const store = storage();
+  if (store === null) {
+    record(STORAGE_MIGRATION_KEY, "unavailable", "local storage is unavailable");
+    return { ...result, errors: ["Local storage is unavailable."] };
+  }
+  const candidates = new Map<string, string>(Object.entries(LEGACY_EXACT_KEYS));
+  let length = 0;
+  try {
+    length = Number.isFinite(store.length) ? store.length : 0;
+  } catch (error) {
+    record(STORAGE_MIGRATION_KEY, "unavailable", `local storage enumeration failed: ${String(error)}`);
+    return { ...result, errors: ["Could not enumerate local storage."] };
+  }
+  for (let index = 0; index < length; index += 1) {
+    let key: string | null = null;
+    try {
+      key = typeof store.key === "function" ? store.key(index) : null;
+    } catch {
+      key = null;
+    }
+    if (key === null) continue;
+    if (key.startsWith("muse.log.")) {
+      candidates.set(key, `muse-desktop.log.v1.${key.slice("muse.log.".length)}`);
+    } else if (key.startsWith("muse.logs.")) {
+      candidates.set(key, `muse-desktop.log.v1.${key.slice("muse.logs.".length)}`);
+    }
+  }
+  for (const [sourceKey, targetKey] of candidates) {
+    let raw: string | null;
+    try {
+      raw = store.getItem(sourceKey);
+    } catch (error) {
+      result.skipped += 1;
+      result.errors.push(`Could not read legacy key: ${sourceKey}`);
+      record(sourceKey, "unavailable", `legacy read failed: ${String(error)}`);
+      continue;
+    }
+    if (raw === null) continue;
+    try {
+      JSON.parse(raw);
+    } catch {
+      result.skipped += 1;
+      result.errors.push(`Skipped corrupt legacy key: ${sourceKey}`);
+      record(sourceKey, "corrupt", "legacy value is not valid JSON");
+      continue;
+    }
+    try {
+      if (store.getItem(targetKey) !== null) {
+        result.skipped += 1;
+        continue;
+      }
+    } catch {
+      result.skipped += 1;
+      result.errors.push(`Could not inspect target key: ${targetKey}`);
+      continue;
+    }
+    if (writeStorageString(targetKey, raw)) result.migrated += 1;
+    else {
+      result.skipped += 1;
+      result.errors.push(`Could not migrate key: ${sourceKey}`);
+    }
+  }
+  if (result.migrated > 0) {
+    writeStorageJson(STORAGE_MIGRATION_KEY, {
+      version: 1,
+      migratedAt: new Date().toISOString(),
+      migrated: result.migrated,
+    });
+  }
+  return result;
+}
+
 /**
  * Restore a previously exported snapshot. The operation is explicit and
  * bounded to the same namespace as the exporter. Existing keys are kept by

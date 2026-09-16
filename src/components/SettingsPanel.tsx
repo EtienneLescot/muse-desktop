@@ -37,6 +37,7 @@ import {
   consumeStorageIssues,
   exportStorageSnapshot,
   importStorageSnapshot,
+  migrateLegacyStorage,
   type StorageIssue,
 } from "../lib/storage";
 
@@ -176,6 +177,20 @@ export function SettingsPanel({
     } finally {
       if (importInput.current) importInput.current.value = "";
     }
+  }
+
+  function migrateLocalData(): void {
+    const result = migrateLegacyStorage();
+    const issues = consumeStorageIssues();
+    if (issues.length > 0) setStorageIssues((previous) => [...previous, ...issues]);
+    setExportStatus(
+      result.migrated > 0
+        ? `Migrated ${result.migrated} legacy entr${result.migrated === 1 ? "y" : "ies"}. Reloading Muse…`
+        : result.errors.length > 0
+          ? `Legacy migration skipped with ${result.errors.length} warnings.`
+          : "No legacy Muse data found to migrate.",
+    );
+    if (result.migrated > 0) window.setTimeout(() => window.location.reload(), 500);
   }
 
   return (
@@ -346,6 +361,9 @@ export function SettingsPanel({
           </button>
           <button type="button" onClick={() => importInput.current?.click()}>
             Import recovery snapshot
+          </button>
+          <button type="button" onClick={migrateLocalData}>
+            Migrate legacy data
           </button>
           <input
             ref={importInput}
