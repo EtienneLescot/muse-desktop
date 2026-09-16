@@ -15,6 +15,8 @@ const fixture = resolve(root, "scripts", "msp-fixture.mjs");
 
 type Frame = Record<string, unknown>;
 
+const frameBuffers = new WeakMap<ChildProcessWithoutNullStreams, Buffer>();
+
 function startFixture(scenario: string): ChildProcessWithoutNullStreams {
   return spawn(process.execPath, [fixture, scenario], {
     cwd: root,
@@ -29,7 +31,7 @@ function writeFrame(child: ChildProcessWithoutNullStreams, frame: Frame): void {
 }
 
 async function readFrame(child: ChildProcessWithoutNullStreams): Promise<Frame> {
-  let buffer = Buffer.alloc(0);
+  let buffer = frameBuffers.get(child) ?? Buffer.alloc(0);
   for (;;) {
     const headerEnd = buffer.indexOf(Buffer.from("\r\n\r\n"));
     if (headerEnd >= 0) {
@@ -39,11 +41,13 @@ async function readFrame(child: ChildProcessWithoutNullStreams): Promise<Frame> 
       const bodyStart = headerEnd + 4;
       if (buffer.length >= bodyStart + length) {
         const body = buffer.subarray(bodyStart, bodyStart + length);
+        frameBuffers.set(child, buffer.subarray(bodyStart + length));
         return JSON.parse(body.toString("utf8")) as Frame;
       }
     }
     const [chunk] = (await once(child.stdout, "data")) as [Buffer];
     buffer = Buffer.concat([buffer, chunk]);
+    frameBuffers.set(child, buffer);
   }
 }
 
@@ -121,6 +125,23 @@ test("MSP fixture returns a structured tool rejection", async () => {
     const response = await readFrame(child);
     assert.equal(response.id, 2);
     assert.equal((response.error as Frame).message, "fixture tool rejected");
+  } finally {
+    await close(child);
+  }
+});
+
+test("MSP fixture can hold a request open to model a timeout", async () => {
+  const child = startFixture("timeout");
+  try {
+    await initialize(child);
+    writeFrame(child, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
+    await assert.rejects(
+      Promise.race([
+        readFrame(child),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("fixture timeout")), 80)),
+      ]),
+      /fixture timeout/,
+    );
   } finally {
     await close(child);
   }

@@ -11,13 +11,14 @@
  *   success       initialize, tools/list and tools/call succeed
  *   interleaved   emit tools/list_changed before every response
  *   reject        reject tools/call with a stable JSON-RPC error
+ *   timeout       accept initialize, then never answer a request
  *   drop          close stdout after initialize (host crash simulation)
  */
 
 import process from "node:process";
 
 const scenario = process.argv[2] ?? "success";
-const validScenarios = new Set(["success", "interleaved", "reject", "drop"]);
+const validScenarios = new Set(["success", "interleaved", "reject", "timeout", "drop"]);
 if (!validScenarios.has(scenario)) {
   process.stderr.write(`unknown MSP fixture scenario: ${scenario}\n`);
   process.exitCode = 2;
@@ -77,6 +78,8 @@ function handle(frame) {
     process.stdout.end(() => process.exit(0));
     return;
   }
+
+  if (scenario === "timeout") return;
 
   notifyListChanged();
   if (frame.method === "tools/list") {

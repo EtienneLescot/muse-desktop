@@ -171,7 +171,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** serveur MSP fixture à scénarios contrôlés et transport injectable ; démarrer l'app isolée avec stockage/dossiers temporaires. Séparer unitaires, UI simulée, intégration superviseur et live optionnel. CI sans credentials : build, Node, Rust, scénarios fixtures. Publier rapports/captures en cas d'échec, sans données utilisateur.
 
-**État au 16/09/2026 :** `scripts/msp-fixture.mjs` est un serveur JSON-RPC déterministe lancé comme processus enfant par `test/msp-fixture.test.ts`. Les scénarios couvrent l'initialisation/catalogue/appel réussi, une notification `notifications/tools/list_changed` entrelacée, un refus d'outil et la fermeture stdout simulant une panne. Le test vérifie les octets réellement échangés avec le framing `Content-Length` et ne lit aucun fichier utilisateur ; il est inclus dans `npm test` et donc dans le job CI Node.
+**État au 16/09/2026 :** `scripts/msp-fixture.mjs` est un serveur JSON-RPC déterministe lancé comme processus enfant par `test/msp-fixture.test.ts`. Les scénarios couvrent l'initialisation/catalogue/appel réussi, une notification `notifications/tools/list_changed` entrelacée, un refus d'outil, une requête gardée ouverte pour simuler un timeout et la fermeture stdout simulant une panne. Le test vérifie les octets réellement échangés avec le framing `Content-Length` et ne lit aucun fichier utilisateur ; il est inclus dans `npm test` et donc dans le job CI Node.
 
 **Reste :** brancher la fixture au superviseur Tauri avec deux workspaces isolés, injecter une panne pendant `send_input` et conserver un rapport borné en cas d'échec. Ces tests restent séparés d'un tour modèle réel.
 
