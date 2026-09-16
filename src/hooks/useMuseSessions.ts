@@ -1809,6 +1809,7 @@ export function useMuseSessions(): UseMuseSessions {
             ...(item.model ? { model: item.model } : {}),
             ...(item.authorizationMode ? { authorizationMode: item.authorizationMode } : {}),
             ...(item.missedPolicy ? { missedPolicy: item.missedPolicy } : {}),
+            ...(item.timeZone ? { timeZone: item.timeZone } : {}),
             occurrenceAt: item.occurrenceAt ?? item.createdAt,
             ...(item.occurrenceKey ? { occurrenceKey: item.occurrenceKey } : {}),
           }, Date.now());
@@ -1832,6 +1833,7 @@ export function useMuseSessions(): UseMuseSessions {
           ...(run.model ? { model: run.model } : {}),
           ...(run.authorizationMode ? { authorizationMode: run.authorizationMode } : {}),
           ...(run.missedPolicy ? { missedPolicy: run.missedPolicy } : {}),
+          ...(run.timeZone ? { timeZone: run.timeZone } : {}),
           occurrenceAt: run.occurrenceAt,
           ...(run.occurrenceKey ? { occurrenceKey: run.occurrenceKey } : {}),
           createdAt: run.createdAt,
@@ -4549,6 +4551,7 @@ export function useMuseSessions(): UseMuseSessions {
       ...(item.model ? { model: item.model } : {}),
       ...(item.authorizationMode ? { authorizationMode: item.authorizationMode } : {}),
       ...(item.missedPolicy ? { missedPolicy: item.missedPolicy } : {}),
+      ...(item.timeZone ? { timeZone: item.timeZone } : {}),
       occurrenceAt: item.occurrenceAt ?? item.createdAt,
       ...(item.occurrenceKey ? { occurrenceKey: item.occurrenceKey } : {}),
     }, Date.now());

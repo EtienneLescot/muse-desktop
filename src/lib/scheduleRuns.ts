@@ -4,7 +4,7 @@
  * while this record tracks the actual scheduled execution. The helpers are
  * pure and storage is best-effort under a dedicated namespaced key.
  */
-import type { ScheduleAuthorizationMode, ThreadReuse } from "./schedules";
+import { isValidTimeZone, type ScheduleAuthorizationMode, type ThreadReuse } from "./schedules.ts";
 import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
@@ -23,6 +23,7 @@ export interface ScheduleRun {
   model?: string;
   authorizationMode?: ScheduleAuthorizationMode;
   missedPolicy?: "skip" | "latest";
+  timeZone?: string;
   occurrenceAt: number;
   /** Stable schedule + occurrence key; legacy rows may omit it. */
   occurrenceKey?: string;
@@ -207,6 +208,7 @@ function validRun(value: unknown): value is ScheduleRun {
     (row.model === undefined || typeof row.model === "string") &&
     (row.authorizationMode === undefined || row.authorizationMode === "ask" || row.authorizationMode === "workspace" || row.authorizationMode === "yolo") &&
     (row.missedPolicy === undefined || row.missedPolicy === "skip" || row.missedPolicy === "latest") &&
+    (row.timeZone === undefined || (typeof row.timeZone === "string" && isValidTimeZone(row.timeZone))) &&
     (row.occurrenceKey === undefined || typeof row.occurrenceKey === "string") &&
     (row.startedAt === undefined || typeof row.startedAt === "number") &&
     (row.finishedAt === undefined || typeof row.finishedAt === "number") &&

@@ -49,9 +49,9 @@ type RunFilter = "all" | "unread" | "queued" | "running" | "completed" | "failed
 
 function describeSchedule(s: Schedule): string {
   if (s.trigger.kind === "once") {
-    return `At ${new Date(s.trigger.at).toLocaleString()}`;
+    return `At ${new Date(s.trigger.at).toLocaleString()}${s.timeZone ? ` · ${s.timeZone}` : ""}`;
   }
-  return `cron ${s.trigger.cron}`;
+  return `cron ${s.trigger.cron}${s.timeZone ? ` · ${s.timeZone}` : ""}`;
 }
 
 function describeReuse(r: ThreadReuse, sessions: SessionRef[]): string {
@@ -134,6 +134,10 @@ export function SchedulesPanel({
   const [missedPolicy, setMissedPolicy] = useState<ScheduleMissedPolicy>("latest");
   const [formError, setFormError] = useState<string | null>(null);
   const [runFilter, setRunFilter] = useState<RunFilter>("all");
+  const localTimeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    [],
+  );
 
   const visibleRuns = useMemo(() => runs
     .filter((run) => {
@@ -163,6 +167,7 @@ export function SchedulesPanel({
       model,
       authorizationMode,
       missedPolicy,
+      timeZone: localTimeZone,
     };
     const err = validateScheduleInput(input);
     if (err !== null) {
@@ -242,6 +247,7 @@ export function SchedulesPanel({
               <option value="latest">Run the latest missed occurrence</option>
               <option value="skip">Skip missed occurrences</option>
             </select>
+            <small className="sched-timezone">Timezone: {localTimeZone} (captured at creation)</small>
           </label>
         )}
         <div className="sched-row">
@@ -356,6 +362,7 @@ export function SchedulesPanel({
                     <div><dt>Target</dt><dd>{describeRunTarget(run, sessions)}</dd></div>
                     <div><dt>Authorization</dt><dd>{run.authorizationMode === "yolo" ? "YOLO" : run.authorizationMode === "workspace" ? "Workspace" : "Ask"}</dd></div>
                     <div><dt>Model</dt><dd>{run.model ?? "Default"}</dd></div>
+                    {run.timeZone && <div><dt>Timezone</dt><dd>{run.timeZone}</dd></div>}
                     <div><dt>Attempt</dt><dd>{run.attempt ?? 1} / {MAX_RUN_ATTEMPTS}</dd></div>
                     {run.workspace && <div><dt>Workspace</dt><dd className="run-value-mono">{run.workspace}</dd></div>}
                     {run.projectId && <div><dt>Project</dt><dd className="run-value-mono">{run.projectId}</dd></div>}

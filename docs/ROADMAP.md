@@ -405,7 +405,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | M3-04 | Découvrir les skills du disque et du projet | Adapté | Présente | Partielle | Intégration | Scanner borné `SKILL.md`, ressources relatives, priorité projet/repo/équipe et rechargement explicite livrés ; bridge natif et notifications restent ouverts |
 | M3-05 | Invoquer une skill avec son vrai contexte | Adapté | Présente | Partielle | Intégration | Lecture fraîche des ressources relatives, provenance balisée, refus explicite si ressource disparue et retry sans double insertion livrés ; part `skill` native et progression restent à qualifier |
 | M3-06 | Exécuter un travail planifié sans clic préalable | Adapté | Présente | Partielle | Intégration | Chaque schedule/review capture workspace, projet, modèle et politique ; ask reste en revue, workspace/YOLO dispatchent automatiquement ; journal local borné des runs visible. Reste le scheduler natif hors cycle UI et la sortie métier complète |
-| M3-07 | Gérer sommeil, reprise, doublons et échecs de planning | Adapté | Présente | Partielle | Intégration | Politique skip/latest, curseur d'occurrence stable, bail inter-fenêtres, claim anti-doublon, retries bornés avec backoff et annulation d'une retry livrés côté client ; scheduler natif multi-instance, fuseau/DST explicite et reprise après crash restent ouverts |
+| M3-07 | Gérer sommeil, reprise, doublons et échecs de planning | Adapté | Présente | Partielle | Intégration | Politique skip/latest, curseur d'occurrence stable, bail inter-fenêtres, claim anti-doublon, retries bornés avec backoff/annulation et fuseau IANA capturé avec résolution DST livrés côté client ; scheduler natif multi-instance et reprise après crash restent ouverts |
 | M3-08 | Examiner les résultats des runs | Adapté | Présente | Partielle | Intégration | Historique borné, aperçu, statut, non-lu, lien vers la conversation, archivage, filtres, retry manuel et inspecteur de contexte livrés ; résumé métier riche et fin de run native restent ouverts |
 | M3-09 | Recevoir une notification utile | Adapté | Présente | Partielle | Intégration | Inbox locale dédupliquée pour fins/échecs, non-lus, ouverture de conversation, silence persistant et retour au premier plan au clic livrés ; plugin OS/Tauri utilisé dans l'app native, restent le service persistant application fermée et le routage direct de l'action |
 
@@ -421,6 +421,14 @@ Preuves : [connecteurs](../src/lib/connectors.ts), [skills](../src/lib/skills.ts
 - **Garde-fous** : l'endpoint doit être public et HTTPS, le plan conserve une seule entrée distante et les descriptions/outils sont bornés. Une reconnexion après relance exige une nouvelle saisie du token.
 - **Limites** : OAuth, stockage sécurisé natif, renouvellement automatique et test réseau macOS/Linux restent à concevoir ; le host Muse ne reçoit pas encore ces outils comme capacités natives.
 - **Validation** : quatre tests Node couvrent la continuité de session, bearer token, SSE, refus privé/HTTP et réponse mal corrélée ; TypeScript et build Vite restent verts.
+
+### Livraison M3-07 — fuseau explicite et DST
+
+- **Capture SSOT :** chaque automatisation mémorise le fuseau IANA détecté au moment de sa création. Le fuseau est propagé dans la review, le run et l'inspecteur ; les anciennes lignes sans fuseau restent compatibles.
+- **Calcul déterministe :** les cron récurrents sont évalués en heure murale dans le fuseau capturé. Les minutes inexistantes lors d'un passage à l'heure d'été sont ignorées ; lors d'un retour à l'heure d'hiver, la seconde occurrence est conservée si elle est encore strictement après le curseur.
+- **UX :** le formulaire affiche le fuseau capturé et chaque run l'expose dans Inspect run, afin de rendre le prochain déclenchement explicable.
+- **Limites :** la résolution reste côté client et ne remplace pas un scheduler natif quand l'application est fermée ; les règles métier de rattrapage après crash restent à qualifier.
+- **Validation :** tests Node couvrent fuseau valide/invalide, conversion quotidienne, trou DST et doublon DST ; TypeScript et build Vite restent requis.
 
 ### Livraison M3-08 — inspecteur de runs
 
