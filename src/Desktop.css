@@ -206,6 +206,9 @@
   padding: 16px 32px 24px;
   gap: 24px;
 }
+.desktop-app .stream > .msg {
+  contain-intrinsic-size: 0 128px;
+}
 .desktop-app .msg.user pre,
 .desktop-app .msg.assistant pre {
   font-family: var(--font-ui);
