@@ -30,7 +30,8 @@ export interface StoredSession {
   archived?: boolean;
 }
 
-export type LogRole = "user" | "assistant" | "subagent" | "system" | "tool";
+/** Reasoning is persisted separately so it can be disclosed in the stream. */
+export type LogRole = "user" | "assistant" | "thinking" | "subagent" | "system" | "tool";
 
 export interface LogEntry {
   id: string;
@@ -106,6 +107,7 @@ function isValidEntry(e: unknown): e is LogEntry {
     typeof r.ts === "number" &&
     (r.role === "user" ||
       r.role === "assistant" ||
+      r.role === "thinking" ||
       r.role === "subagent" ||
       r.role === "system" ||
       r.role === "tool") &&

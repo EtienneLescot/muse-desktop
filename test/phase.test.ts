@@ -13,6 +13,7 @@ import {
   isRunningKind,
   isStoppedKind,
   isSubagentItemKind,
+  isThinkingItemKind,
   normalizeKind,
   phaseForKind,
   upsertReflexivePlaceholder,
@@ -78,6 +79,11 @@ describe("isStoppedKind", () => {
       "exited",
       "host_exited",
       "error",
+      "failed",
+      "succeeded",
+      "done",
+      "aborted",
+      "timed_out",
       "turn_end",
       "idle",
       "turn/completed",
@@ -102,6 +108,8 @@ describe("phaseForKind", () => {
     assert.equal(phaseForKind("output"), "streaming");
     assert.equal(phaseForKind("subagent_event"), "streaming");
     assert.equal(phaseForKind("item_done"), "streaming");
+    assert.equal(phaseForKind("thinking"), "streaming");
+    assert.equal(phaseForKind("reasoning"), "streaming");
     assert.equal(phaseForKind("completed"), "stopped");
     assert.equal(phaseForKind("turn_end"), "stopped");
     assert.equal(phaseForKind("approval/resolved"), "other");
@@ -116,6 +124,21 @@ describe("isSubagentItemKind", () => {
     assert.equal(isSubagentItemKind("reminderChild"), true);
     assert.equal(isSubagentItemKind("agentMessage"), false);
     assert.equal(isSubagentItemKind("reasoning"), false);
+  });
+});
+
+describe("isThinkingItemKind", () => {
+  it("matches reasoning lane aliases case-insensitively", () => {
+    for (const k of [
+      "reasoning",
+      "thinking",
+      "analysis",
+      "reasoning_summary",
+      "REASONINGSUMMARY",
+    ]) {
+      assert.equal(isThinkingItemKind(k), true, k);
+    }
+    assert.equal(isThinkingItemKind("agentMessage"), false);
   });
 });
 
@@ -153,6 +176,19 @@ describe("upsertReflexivePlaceholder", () => {
     const second = upsertReflexivePlaceholder(first, { agentId: "a2", stamp });
     assert.equal(second.length, 2);
   });
+
+  it("promotes the send-time placeholder for a reasoning item", () => {
+    const send = upsertReflexivePlaceholder([], { stamp });
+    const next = upsertReflexivePlaceholder(send, {
+      itemId: "reason-1",
+      role: "thinking",
+      stamp,
+    });
+    assert.equal(next.length, 1);
+    assert.equal(next[0].role, "thinking");
+    assert.equal(next[0].itemId, "reason-1");
+    assert.equal(next[0].open, true);
+  });
 });
 
 describe("dropEmptyPlaceholders", () => {
@@ -162,6 +198,7 @@ describe("dropEmptyPlaceholders", () => {
       entry({ role: "assistant", text: "", open: true }),
       entry({ role: "assistant", text: "kept", open: true }),
       entry({ role: "assistant", text: "", open: false }),
+      entry({ role: "thinking", text: "", open: true }),
     ];
     const next = dropEmptyPlaceholders(log);
     assert.deepEqual(

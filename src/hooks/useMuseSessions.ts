@@ -110,6 +110,7 @@ import {
   isRunningKind,
   isStoppedKind,
   isSubagentItemKind,
+  isThinkingItemKind,
   upsertReflexivePlaceholder,
 } from "../lib/phase";
 // Sub-agent payload parsing/formatting (US-6 controls): pure, unit-tested.
@@ -218,6 +219,13 @@ import {
   type LiveModel,
   type SandboxSettings,
 } from "../lib/settings";
+import {
+  AUTHORIZATION_MODE_KEY,
+  DEFAULT_AUTHORIZATION_MODE,
+  automaticApprovalChoice,
+  parseAuthorizationMode,
+  type AuthorizationMode,
+} from "../lib/authorization";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
@@ -447,6 +455,9 @@ interface UseMuseSessions {
   /** w-settings: sandbox settings (persisted) + whole-object setter. */
   sandbox: SandboxSettings;
   setSandbox: (next: SandboxSettings) => void;
+  /** Global tool-authorization posture (persisted locally). */
+  authorizationMode: AuthorizationMode;
+  setAuthorizationMode: (mode: AuthorizationMode) => void;
   /** w-settings: provider id selected for the current project. */
   providerId: string;
   /** w-settings: persist the provider selection for the current project. */
@@ -482,7 +493,7 @@ interface UseMuseSessions {
   retrySend: (clientMessageId: string) => Promise<void>;
   /** Give up on a failed entry: drops it and its undelivered user entry. */
   discardSend: (clientMessageId: string) => void;
-  approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<void>;
+  approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<boolean>;
   /** US-15: persisted allowlist rules + effective decision per request. */
   allowlist: AllowRule[];
   allowDecisionFor: (approval: ApprovalRequest) => ResolvedApproval;
@@ -703,7 +714,36 @@ function lastOpenIndex(
   log: LogEntry[],
   role: LogRole,
   agentId?: string,
+  itemId?: string,
 ): number {
+  // When the supervisor tags a delta, prefer the exact item. If the host did
+  // not send item/started first, fall back only to an unbound placeholder;
+  // appending a new entry is safer than mixing concurrent items together.
+  if (itemId !== undefined) {
+    for (let i = log.length - 1; i >= 0; i--) {
+      const e = log[i];
+      if (
+        e.open &&
+        e.role === role &&
+        (agentId === undefined || e.agentId === agentId) &&
+        e.itemId === itemId
+      ) {
+        return i;
+      }
+    }
+    for (let i = log.length - 1; i >= 0; i--) {
+      const e = log[i];
+      if (
+        e.open &&
+        e.role === role &&
+        (agentId === undefined || e.agentId === agentId) &&
+        e.itemId === undefined
+      ) {
+        return i;
+      }
+    }
+    return -1;
+  }
   for (let i = log.length - 1; i >= 0; i--) {
     const e = log[i];
     if (e.open && e.role === role && (agentId === undefined || e.agentId === agentId)) return i;
@@ -722,21 +762,39 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
         (typeof obj.approvalId === "string" && obj.approvalId) ||
         (typeof obj.id === "string" && obj.id) ||
         trimmed;
+      // An `approval/updated` stage may intentionally omit the command
+      // preview. Preserve the previous preview when the hook upserts the
+      // same approval id instead of replacing it with the JSON envelope.
       const summary =
-        (typeof obj.summary === "string" && obj.summary) ||
-        (typeof obj.command === "string" && obj.command) ||
-        (typeof obj.description === "string" && obj.description) ||
-        trimmed;
+        typeof obj.summary === "string"
+          ? obj.summary
+          : (typeof obj.command === "string" && obj.command) ||
+            (typeof obj.description === "string" && obj.description) ||
+            trimmed;
       const toolName = typeof obj.toolName === "string" ? obj.toolName : "tool";
       const rawChoices = Array.isArray(obj.choices) ? obj.choices : [];
       const choices: ApprovalChoice[] = rawChoices
         .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
-        .map((c) => ({
-          choiceId: typeof c.choiceId === "string" ? c.choiceId : "",
-          label: typeof c.label === "string" ? c.label : "?",
-          decision: typeof c.decision === "string" ? c.decision : "",
-          scope: typeof c.scope === "string" ? c.scope : "",
-        }))
+        .map((c) => {
+          const decision =
+            typeof c.decision === "string"
+              ? c.decision
+              : typeof c.decision === "object" && c.decision !== null &&
+                  typeof (c.decision as Record<string, unknown>).kind === "string"
+                ? ((c.decision as Record<string, unknown>).kind as string)
+                : "";
+          return {
+            choiceId:
+              typeof c.choiceId === "string"
+                ? c.choiceId
+                : typeof c.choice_id === "string"
+                  ? c.choice_id
+                  : "",
+            label: typeof c.label === "string" ? c.label : "?",
+            decision,
+            scope: typeof c.scope === "string" ? c.scope : "",
+          };
+        })
         .filter((c) => c.choiceId.length > 0);
       return { session_id: sessionId, request_id: requestId, summary, toolName, choices };
     } catch {
@@ -768,6 +826,15 @@ export function useMuseSessions(): UseMuseSessions {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  // Global authorization posture. This is intentionally kept separate from
+  // sandbox settings: changing the posture must not mutate host capabilities.
+  const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
+    try {
+      return parseAuthorizationMode(localStorage.getItem(AUTHORIZATION_MODE_KEY));
+    } catch {
+      return DEFAULT_AUTHORIZATION_MODE;
+    }
+  });
   // US-15 allowlist: restored once (survives restarts via localStorage),
   // written through on every change.
   const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
@@ -1162,6 +1229,14 @@ export function useMuseSessions(): UseMuseSessions {
 
   useEffect(() => {
     try {
+      localStorage.setItem(AUTHORIZATION_MODE_KEY, authorizationMode);
+    } catch {
+      // best-effort
+    }
+  }, [authorizationMode]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(PROVIDER_MAP_KEY, JSON.stringify(providerMap));
     } catch {
       // best-effort
@@ -1355,12 +1430,18 @@ export function useMuseSessions(): UseMuseSessions {
    * into it, so the stream is never blank pre-first-token. No-op when a
    * live entry already exists.
    */
-  function ensurePlaceholder(sessionId: string, itemId?: string, agentId?: string): void {
+  function ensurePlaceholder(
+    sessionId: string,
+    itemId?: string,
+    agentId?: string,
+    role: "assistant" | "thinking" = "assistant",
+  ): void {
     const stamp = { id: newId(), ts: Date.now() };
     setLogs((cur) => {
       const next = upsertReflexivePlaceholder(cur[sessionId] ?? [], {
         itemId,
         agentId,
+        role,
         stamp,
       });
       if (next === (cur[sessionId] ?? [])) return cur;
@@ -1396,7 +1477,7 @@ export function useMuseSessions(): UseMuseSessions {
         const log = cur[sid] ?? [];
         // Coalesce into the last open assistant entry, not merely the last
         // entry: an interleaved subagent/tool block must not fragment the turn.
-        const i = lastOpenIndex(log, "assistant");
+        const i = lastOpenIndex(log, "assistant", undefined, itemId);
         let next: LogEntry[];
         if (i >= 0) {
           const merged = { ...log[i], text: log[i].text + text, itemId: itemId ?? log[i].itemId };
@@ -1405,6 +1486,45 @@ export function useMuseSessions(): UseMuseSessions {
           next = [
             ...log,
             { id: newId(), ts: Date.now(), role: "assistant" as LogRole, text, itemId, open: true },
+          ];
+        }
+        saveLog(sid, next);
+        return { ...cur, [sid]: next };
+      });
+      setSessions((cur) =>
+        cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
+      );
+      return;
+    }
+    if (kind === "thinking") {
+      ensureSessionRow(sid, null);
+      const { itemId, text } = parseChunk(payload);
+      // A few hosts can deliver the first delta before item/started. Promote
+      // the send-time placeholder first so the delta still lands in the
+      // dedicated lane and never leaves a phantom assistant "thinking" row.
+      ensurePlaceholder(sid, itemId, undefined, "thinking");
+      setLogs((cur) => {
+        const log = cur[sid] ?? [];
+        const i = lastOpenIndex(log, "thinking", undefined, itemId);
+        let next: LogEntry[];
+        if (i >= 0) {
+          const prev = log[i];
+          next = [
+            ...log.slice(0, i),
+            { ...prev, text: prev.text + text, itemId: itemId ?? prev.itemId },
+            ...log.slice(i + 1),
+          ];
+        } else {
+          next = [
+            ...log,
+            {
+              id: newId(),
+              ts: Date.now(),
+              role: "thinking" as LogRole,
+              text,
+              itemId,
+              open: true,
+            },
           ];
         }
         saveLog(sid, next);
@@ -1524,15 +1644,41 @@ export function useMuseSessions(): UseMuseSessions {
     if (kind === "tool_request") {
       ensureSessionRow(sid, null);
       const req = parseApproval(sid, payload);
-      setApprovals((cur) =>
-        cur.some((a) => a.session_id === sid && a.request_id === req.request_id)
-          ? cur
-          : [...cur, req],
-      );
-      pushLog(sid, [
-        { id: newId(), ts: Date.now(), role: "tool", text: `Approval requested: ${req.summary}` },
-      ]);
-      closeOpenBlocks(sid);
+      // Compound shell commands reuse one approval id for every stage. An
+      // updated tool_request replaces its choices and requirement while
+      // retaining the original command preview and tool label when the host
+      // omits them from the update notification.
+      setApprovals((cur) => {
+        const i = cur.findIndex(
+          (a) => a.session_id === sid && a.request_id === req.request_id,
+        );
+        if (i < 0) return [...cur, req];
+        const previous = cur[i];
+        const next = [...cur];
+        next[i] = {
+          ...req,
+          summary: req.summary || previous.summary,
+          toolName: req.toolName === "tool" ? previous.toolName : req.toolName,
+        };
+        return next;
+      });
+      let updated = false;
+      try {
+        const obj = JSON.parse(payload) as Record<string, unknown>;
+        updated = obj.updated === true;
+      } catch {
+        // Legacy hosts do not tag update notifications; retain the original
+        // log behavior for their payloads.
+      }
+      if (!updated) {
+        pushLog(sid, [
+          { id: newId(), ts: Date.now(), role: "tool", text: `Approval requested: ${req.summary}` },
+        ]);
+        // The first approval pauses the assistant lane. Later stage updates
+        // must leave the resumed placeholder open while the next choice is
+        // presented, otherwise the UI appears blank between clicks.
+        closeOpenBlocks(sid);
+      }
       return;
     }
     // US-4 server half: host occupancy triple. Latest wins, no log noise,
@@ -1564,13 +1710,18 @@ export function useMuseSessions(): UseMuseSessions {
       ensureSessionRow(sid, null);
       let itemId: string | undefined;
       let agentId: string | undefined;
+      let itemRole: "assistant" | "thinking" = "assistant";
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const rawId = obj.itemId ?? obj.id;
         if (typeof rawId === "string" && rawId.length > 0) itemId = rawId;
         const rawKind = obj.itemKind ?? obj.kind;
-        if (typeof rawKind === "string" && isSubagentItemKind(rawKind)) {
-          agentId = itemId ?? "agent";
+        if (typeof rawKind === "string") {
+          if (isSubagentItemKind(rawKind)) {
+            agentId = itemId ?? "agent";
+          } else if (isThinkingItemKind(rawKind)) {
+            itemRole = "thinking";
+          }
         }
       } catch {
         // unparseable payload: still show the reflexive phase
@@ -1578,7 +1729,7 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
       );
-      ensurePlaceholder(sid, itemId, agentId);
+      ensurePlaceholder(sid, itemId, agentId, itemRole);
       return;
     }
     // status (and any future kinds): record + reflect liveness.
@@ -1595,12 +1746,31 @@ export function useMuseSessions(): UseMuseSessions {
         cur.map((s) => (s.session_id === sid ? { ...s, running: false } : s)),
       );
     }
-    if (payload) {
+    const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated";
+    if (kind === "approval/resolved") {
+      // The host can settle an approval independently of the click promise
+      // (for example after a reconnect). Reconcile the durable card by id;
+      // never leave a stale request blocking the conversation.
+      try {
+        const obj = JSON.parse(payload) as Record<string, unknown>;
+        if (typeof obj.approvalId === "string") {
+          setApprovals((cur) =>
+            cur.filter(
+              (a) => !(a.session_id === sid && a.request_id === obj.approvalId),
+            ),
+          );
+        }
+      } catch {
+        // Legacy status payloads have no id; the click path still reconciles.
+      }
+    }
+    if (payload && !isApprovalStatus) {
       pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text: `[${kind}] ${payload}` }]);
     }
     // Closing a (re)start would kill the just-painted placeholder; only
-    // settle blocks for other statuses (turn end, approvals, …).
-    if (!isRunningKind(kind)) closeOpenBlocks(sid);
+    // settle blocks for turn-end statuses. Approval updates are protocol
+    // bookkeeping and must leave the resumed assistant block open.
+    if (!isRunningKind(kind) && !isApprovalStatus) closeOpenBlocks(sid);
     // w-collab US-27: a stopped status also ends the turn — refresh the
     // auto snapshot (no-op unless the share mode is auto). Idempotent
     // with the item_done trigger above: one live auto bundle per session.
@@ -1619,6 +1789,10 @@ export function useMuseSessions(): UseMuseSessions {
   // object, including the explicit network/elevated permission toggles).
   const setSandbox = useCallback((next: SandboxSettings) => {
     setSandboxState(parseSandboxSettings(next));
+  }, []);
+
+  const setAuthorizationMode = useCallback((mode: AuthorizationMode) => {
+    setAuthorizationModeState(parseAuthorizationMode(mode));
   }, []);
 
   // w-settings: provider selection is per project (project id = workspace).
@@ -2298,34 +2472,73 @@ export function useMuseSessions(): UseMuseSessions {
     async (sessionId: string, approvalId: string, choiceId: string) => {
       try {
         setError(null);
-        await invoke("approve", {
+        const terminal = await invoke<boolean>("approve", {
           sessionId,
           approvalId,
           choiceId,
         });
-        setApprovals((cur) =>
-          cur.filter(
-            (a) => !(a.session_id === sessionId && a.request_id === approvalId),
-          ),
-        );
-        pushLog(sessionId, [
-          {
-            id: newId(),
-            ts: Date.now(),
-            role: "system",
-            text: `Decision sent: ${choiceId} (${approvalId})`,
-          },
-        ]);
+        // A compound command returns terminal=false after one stage. Keep
+        // the card mounted until the host emits the next stage update (the
+        // backend also refreshes its requirement token at that point).
+        if (terminal !== false) {
+          setApprovals((cur) =>
+            cur.filter(
+              (a) => !(a.session_id === sessionId && a.request_id === approvalId),
+            ),
+          );
+        }
         // The turn resumes after a decision: drain now, don't wait a tick.
         // US-10: reflexive placeholder synchronously, same as after send.
         ensurePlaceholder(sessionId);
         kickPoll();
+        return true;
       } catch (e) {
         setError(`approve failed: ${String(e)}`);
+        return false;
       }
     },
     [kickPoll],
   );
+
+  // Balanced mode removes repetitive prompts for local workspace actions;
+  // YOLO removes prompts for every non-denied choice. Network/elevated scopes
+  // continue through the visible panel in balanced mode. Decisions still go
+  // through the same approve IPC path, preserving host stale-token guards.
+  const autoApprovalInFlight = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const key of autoApprovalInFlight.current) {
+      const [sessionId, requestId] = key.split("|");
+      if (!approvals.some((a) => a.session_id === sessionId && a.request_id === requestId)) {
+        autoApprovalInFlight.current.delete(key);
+      }
+    }
+    if (authorizationMode === "ask") return;
+    for (const approval of approvals) {
+      const resolved = resolveApproval(allowlist, {
+        toolName: approval.toolName,
+        summary: approval.summary,
+        scopes: approval.choices.map((choice) => choice.scope),
+      });
+      // An explicit persisted prompt/forbidden rule is more restrictive than
+      // the global posture and must remain user-controlled.
+      if (
+        resolved.rule?.decision === "prompt" ||
+        resolved.rule?.decision === "forbidden"
+      ) {
+        continue;
+      }
+      const choice = automaticApprovalChoice(authorizationMode, approval.choices);
+      if (choice === null) continue;
+      // Include the current choice set so an approval/updated stage can be
+      // auto-decided even though the host intentionally reuses approvalId.
+      const key = `${approval.session_id}|${approval.request_id}|${approval.choices
+        .map((choice) => choice.choiceId)
+        .join(",")}`;
+      if (autoApprovalInFlight.current.has(key)) continue;
+      autoApprovalInFlight.current.add(key);
+      void approve(approval.session_id, approval.request_id, choice.choiceId);
+    }
+  }, [approvals, authorizationMode, approve, allowlist]);
 
   // US-15: effective allowlist decision for one pending approval request
   // (badge in the panel; most-restrictive-wins, network default-deny).
@@ -2343,7 +2556,8 @@ export function useMuseSessions(): UseMuseSessions {
   // rule (command pattern + the chosen scope) for future requests.
   const rememberApproval = useCallback(
     async (approval: ApprovalRequest, choiceId: string) => {
-      await approve(approval.session_id, approval.request_id, choiceId);
+      const approved = await approve(approval.session_id, approval.request_id, choiceId);
+      if (!approved) return;
       const choice = approval.choices.find((c) => c.choiceId === choiceId);
       setAllowlist((cur) =>
         addAllowRule(cur, {
@@ -2903,6 +3117,8 @@ export function useMuseSessions(): UseMuseSessions {
     setActive,
     sandbox,
     setSandbox,
+    authorizationMode,
+    setAuthorizationMode,
     providerId,
     setProviderId,
     liveModels,

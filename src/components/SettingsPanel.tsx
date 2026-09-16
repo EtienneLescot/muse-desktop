@@ -27,6 +27,12 @@ import {
   type SandboxMode,
   type SandboxSettings,
 } from "../lib/settings";
+import {
+  AUTHORIZATION_MODES,
+  authorizationModeDescription,
+  authorizationModeLabel,
+  type AuthorizationMode,
+} from "../lib/authorization";
 
 interface Props {
   /** Absolute workspace root; null while none is picked. */
@@ -35,6 +41,8 @@ interface Props {
   onPickWorkspace: (path: string) => void;
   sandbox: SandboxSettings;
   onSandboxChange: (next: SandboxSettings) => void;
+  authorizationMode: AuthorizationMode;
+  onAuthorizationModeChange: (mode: AuthorizationMode) => void;
   /** Provider id selected for the current project. */
   providerId: string;
   onProviderChange: (id: string) => void;
@@ -61,6 +69,8 @@ export function SettingsPanel({
   onPickWorkspace,
   sandbox,
   onSandboxChange,
+  authorizationMode,
+  onAuthorizationModeChange,
   providerId,
   onProviderChange,
   liveModels,
@@ -159,6 +169,42 @@ export function SettingsPanel({
             {probeResult}
           </p>
         )}
+      </div>
+
+      <div className="settings-group">
+        <h3>Authorization</h3>
+        <p className="settings-note">
+          Choose how Muse handles tool actions across your conversations.
+        </p>
+        <div
+          className="authorization-mode-list"
+          role="radiogroup"
+          aria-label="Global authorization mode"
+        >
+          {AUTHORIZATION_MODES.map((mode) => (
+            <label
+              key={mode}
+              className={`authorization-mode ${
+                authorizationMode === mode ? "selected" : ""
+              } authorization-${mode}`}
+            >
+              <input
+                type="radio"
+                name="authorization-mode"
+                value={mode}
+                checked={authorizationMode === mode}
+                onChange={() => onAuthorizationModeChange(mode)}
+              />
+              <span className="authorization-mode-copy">
+                <strong>{authorizationModeLabel(mode)}</strong>
+                <span>{authorizationModeDescription(mode)}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <p className="settings-note authorization-status" role="status">
+          Current posture: <strong>{authorizationModeLabel(authorizationMode)}</strong>
+        </p>
       </div>
 
       <div className="settings-group">
