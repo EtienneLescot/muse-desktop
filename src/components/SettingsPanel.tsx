@@ -33,6 +33,7 @@ import {
   authorizationModeLabel,
   type AuthorizationMode,
 } from "../lib/authorization";
+import { userFacingError } from "../lib/errorCopy";
 import {
   consumeStorageIssues,
   exportStorageSnapshot,
@@ -155,7 +156,7 @@ export function SettingsPanel({
           : "Recovery snapshot downloaded.",
       );
     } catch (error) {
-      setExportStatus(`Recovery export failed: ${String(error)}`);
+      setExportStatus(userFacingError(`Recovery export failed: ${String(error)}`));
     }
   }
 
@@ -176,7 +177,7 @@ export function SettingsPanel({
       );
       if (imported.imported > 0) window.setTimeout(() => window.location.reload(), 500);
     } catch (error) {
-      setExportStatus(`Recovery import failed: ${String(error)}`);
+      setExportStatus(userFacingError(`Recovery import failed: ${String(error)}`));
     } finally {
       if (importInput.current) importInput.current.value = "";
     }

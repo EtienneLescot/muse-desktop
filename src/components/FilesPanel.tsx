@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { userFacingError } from "../lib/errorCopy";
 import type {
   FilesBrowserState,
   WorkspaceFileEntry,
@@ -79,7 +80,7 @@ export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
           </button>
         </div>
       </header>
-      {state.error && <p className="files-error" role="alert">{state.error}</p>}
+      {state.error && <p className="files-error" role="alert">{userFacingError(state.error)}</p>}
       {state.truncated && (
         <p className="files-note">Showing the first 200 entries. Open a subfolder to narrow the view.</p>
       )}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { choiceIndexForKey, primaryModifier, trapTabIndex } from "../lib/a11y";
+import { userFacingError } from "../lib/errorCopy";
 import {
   buildAnswers,
   type InputAnswer,
@@ -81,7 +82,7 @@ function InputCard({
       const answers = buildAnswers(request.questions, picks);
       onAnswer(request.session_id, request.input_id, answers);
     } catch (e) {
-      setLocalError(String(e instanceof Error ? e.message : e));
+      setLocalError(userFacingError(e));
     }
   }
 

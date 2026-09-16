@@ -29,6 +29,7 @@ import { FilesPanel } from "./components/FilesPanel";
 import type { ShareBundle } from "./lib/sharing";
 import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
+import { userFacingError } from "./lib/errorCopy";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -927,7 +928,7 @@ export default function App() {
             )}
             {sidecarKind !== null
               ? active !== null && sidecarPanel
-              : error && <div className="error-banner">{error}</div>}
+              : error && <div className="error-banner">{userFacingError(error)}</div>}
             {active === null ? (
               <EmptySessionScreen
                 workspace={workspace}
