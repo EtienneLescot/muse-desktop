@@ -36,6 +36,8 @@ function roleLabel(e: LogEntry): string {
       return "You";
     case "assistant":
       return "Muse";
+    case "thinking":
+      return "Muse · Thinking";
     case "subagent":
       return `Agent ${e.agentId ?? ""}`;
     case "tool":
@@ -120,6 +122,34 @@ export function StreamView({ entries, sessionId, controls }: Props) {
         // a plain muted label. The label is rendered, never stored: the
         // first delta coalesces into the empty text.
         const reflexive = e.open === true && e.text === "";
+        if (e.role === "thinking") {
+          return (
+            <details
+              key={e.id}
+              className={`msg thinking${e.open ? " is-live" : ""}`}
+              // Keep live reasoning visible while tokens arrive. Once the
+              // item closes, leaving `open` undefined hands disclosure back
+              // to the user instead of forcing it shut.
+              open={e.open === true ? true : undefined}
+            >
+              <summary>
+                <span className="role">{roleLabel(e)}</span>
+                <span className="msg-summary">
+                  {reflexive ? REFLEXIVE_LABEL : "Thinking"}
+                </span>
+                <span className="ts">{timeOf(e.ts)}</span>
+              </summary>
+              <div className="thinking-content">
+                {reflexive ? (
+                  <span className="muted">{REFLEXIVE_LABEL}</span>
+                ) : (
+                  <MessageContent text={e.text} />
+                )}
+                {e.open && <span className="caret" aria-hidden="true" />}
+              </div>
+            </details>
+          );
+        }
         return e.role === "subagent" ? (
           <details key={e.id} className="msg subagent">
             <summary>

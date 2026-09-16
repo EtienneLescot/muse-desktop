@@ -214,6 +214,20 @@
   margin-right: 8px;
   background: url("/muse-logo.png") 50% 62% / 135% auto no-repeat;
 }
+.desktop-app .msg.thinking .role:before {
+  content: "";
+  display: inline-block;
+  width: 20px;
+  height: 18px;
+  vertical-align: middle;
+  margin-right: 7px;
+  opacity: 0.68;
+  background: url("/muse-logo.png") 50% 62% / 135% auto no-repeat;
+}
+.desktop-app .msg.thinking .thinking-content {
+  font-size: 12px;
+  line-height: 1.65;
+}
 .desktop-app .msg .ts {
   font-size: 10px;
 }
@@ -667,6 +681,14 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+
+.welcome-draft-actions {
+  flex-wrap: wrap;
+}
+
+.welcome-draft-actions .authorization-mode-control {
+  margin-right: auto;
 }
 .welcome-draft small {
   font-size: 10px;

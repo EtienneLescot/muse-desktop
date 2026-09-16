@@ -17,6 +17,15 @@ export const REFLEXIVE_LABEL = "thinking…";
 /** Item kinds routed to the subagent lane (mirrors main.rs routing). */
 const SUBAGENT_ITEM_KINDS = new Set(["subagent", "workflow", "reminderchild"]);
 
+/** Item kinds that carry model reasoning in the collapsible thinking lane. */
+const THINKING_ITEM_KINDS = new Set([
+  "reasoning",
+  "thinking",
+  "analysis",
+  "reasoning_summary",
+  "reasoningsummary",
+]);
+
 /**
  * Lowercase + strip the `turn/`-style namespace: `turn/started` -> `started`,
  * `ITEM/STARTED` -> `started`. Bare kinds (`turn_start`) pass through.
@@ -55,6 +64,17 @@ export function isStoppedKind(kind: string): boolean {
     base === "exited" ||
     base === "host_exited" ||
     base === "error" ||
+    base === "failed" ||
+    base === "failure" ||
+    base === "success" ||
+    base === "succeeded" ||
+    base === "done" ||
+    base === "aborted" ||
+    base === "interrupted" ||
+    base === "timeout" ||
+    base === "timed_out" ||
+    base === "terminated" ||
+    base === "rejected" ||
     base === "turn_end" ||
     base === "idle"
   );
@@ -71,7 +91,12 @@ export function phaseForKind(kind: string): StreamPhase {
   if (isItemStartKind(kind) || isRunningKind(kind)) return "reflexive";
   if (isStoppedKind(kind)) return "stopped";
   const base = normalizeKind(kind);
-  if (base === "output" || base === "subagent_event" || base === "item_done") {
+  if (
+    base === "output" ||
+    isThinkingItemKind(kind) ||
+    base === "subagent_event" ||
+    base === "item_done"
+  ) {
     return "streaming";
   }
   return "other";
@@ -80,6 +105,11 @@ export function phaseForKind(kind: string): StreamPhase {
 /** True for MSP item kinds that belong in the subagent lane. */
 export function isSubagentItemKind(itemKind: string): boolean {
   return SUBAGENT_ITEM_KINDS.has(itemKind.toLowerCase());
+}
+
+/** True for reasoning item kinds emitted by the host. */
+export function isThinkingItemKind(itemKind: string): boolean {
+  return THINKING_ITEM_KINDS.has(normalizeKind(itemKind));
 }
 
 export interface PlaceholderStamp {
@@ -105,9 +135,14 @@ function lastIndex(
  */
 export function upsertReflexivePlaceholder(
   log: LogEntry[],
-  opts: { itemId?: string; agentId?: string; stamp: PlaceholderStamp },
+  opts: {
+    itemId?: string;
+    agentId?: string;
+    role?: "assistant" | "thinking";
+    stamp: PlaceholderStamp;
+  },
 ): LogEntry[] {
-  const { itemId, agentId, stamp } = opts;
+  const { itemId, agentId, role = "assistant", stamp } = opts;
   if (agentId !== undefined) {
     const i = lastIndex(
       log,
@@ -125,6 +160,35 @@ export function upsertReflexivePlaceholder(
         itemId,
         open: true,
       },
+    ];
+  }
+  if (role === "thinking") {
+    // The send path paints an assistant-shaped placeholder before item/started
+    // identifies the item. Promote it to avoid two stacked indicators.
+    const unbound = lastIndex(
+      log,
+      (e) =>
+        e.open === true &&
+        e.role === "assistant" &&
+        e.text === "" &&
+        e.itemId === undefined,
+    );
+    if (unbound >= 0) {
+      return log.map((e, j) =>
+        j === unbound ? { ...e, role: "thinking", itemId } : e,
+      );
+    }
+    const live = lastIndex(
+      log,
+      (e) =>
+        e.open === true &&
+        e.role === "thinking" &&
+        (itemId === undefined || e.itemId === itemId),
+    );
+    if (live >= 0) return log;
+    return [
+      ...log,
+      { id: stamp.id, ts: stamp.ts, role: "thinking", text: "", itemId, open: true },
     ];
   }
   const i = lastIndex(log, (e) => e.open === true && e.role === "assistant");
@@ -151,7 +215,7 @@ export function dropEmptyPlaceholders(log: LogEntry[]): LogEntry[] {
       !(
         e.open === true &&
         e.text === "" &&
-        (e.role === "assistant" || e.role === "subagent")
+        (e.role === "assistant" || e.role === "thinking" || e.role === "subagent")
       ),
   );
 }

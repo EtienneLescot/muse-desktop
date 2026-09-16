@@ -225,14 +225,107 @@ fn truncate(s: &str, n: usize) -> String {
     }
 }
 
-fn emit(app: &AppHandle, event: &str, session_id: &str, kind: &str, payload: String) {
+/// Reasoning items are streamed through the same `item/delta` notification as
+/// assistant messages. Keep the aliases in one place so the frontend can
+/// render a dedicated, collapsible thinking lane as hosts evolve.
+fn is_thinking_item_kind(kind: &str) -> bool {
+    let normalized = kind.to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        "reasoning" | "thinking" | "analysis" | "reasoning_summary" | "reasoningsummary"
+    )
+}
+
+/// The host reuses one approval id while walking a compound command. Every
+/// `approval/updated` notification advances the opaque requirement token and
+/// replaces the available choices for the next stage. Keep the normalization
+/// in one place so requested and updated payloads reach the same UI lane.
+fn approval_payload(p: &Value, approval_id: &str, updated: bool) -> Value {
+    let tool = p
+        .get("toolName")
+        .or_else(|| p.get("tool_name"))
+        .and_then(Value::as_str)
+        .or_else(|| {
+            p.get("subject")
+                .and_then(|s| s.get("kind"))
+                .and_then(Value::as_str)
+                .and_then(|kind| (kind == "shell").then_some("bash"))
+        })
+        .unwrap_or("tool");
+    let summary = p
+        .get("rawArgs")
+        .or_else(|| p.get("raw_args"))
+        .and_then(Value::as_str)
+        .or_else(|| {
+            p.get("subject")
+                .and_then(|s| s.get("command").or_else(|| s.get("rawCommand")))
+                .and_then(Value::as_str)
+        })
+        .or_else(|| {
+            p.get("approvalSubject")
+                .and_then(|s| s.get("raw_command"))
+                .and_then(Value::as_str)
+        })
+        .unwrap_or("");
+    let summary = if summary.is_empty() {
+        String::new()
+    } else {
+        format!("{}: {}", tool, truncate(summary, 200))
+    };
+    let choices: Vec<Value> = p
+        .get("availableChoices")
+        .or_else(|| p.get("available_choices"))
+        .and_then(Value::as_array)
+        .map(|cs| {
+            cs.iter()
+                .map(|c| {
+                    let decision = c
+                        .get("decision")
+                        .and_then(Value::as_str)
+                        .or_else(|| {
+                            c.get("decision")
+                                .and_then(|d| d.get("kind"))
+                                .and_then(Value::as_str)
+                        })
+                        .unwrap_or("");
+                    json!({
+                        "choiceId": c.get("choiceId").or_else(|| c.get("choice_id")),
+                        "label": c.get("label"),
+                        "decision": decision,
+                        "scope": c.get("scope"),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    json!({
+        "request_id": approval_id,
+        "approvalId": approval_id,
+        "toolName": tool,
+        "summary": summary,
+        "choices": choices,
+        "itemId": p.get("itemId"),
+        "currentRequirementId": p.get("currentRequirementId"),
+        "updated": updated,
+    })
+}
+
+fn approval_terminal(result: &Value) -> bool {
+    result
+        .get("terminal")
+        .and_then(Value::as_bool)
+        .or_else(|| {
+            result
+                .get("result")
+                .and_then(|r| r.get("terminal"))
+                .and_then(Value::as_bool)
+        })
+        .unwrap_or(true)
+}
+
+fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: String) {
     // Poll transport: buffer the event with a sequence number. The UI drains
     // via `poll_events`. (`event` is kept for log readability.)
-    // Temporary: wire_log retained for this diagnosis round.
-    wire_log(&format!(
-        "EMIT event={event} kind={kind} len={}",
-        payload.len()
-    ));
     let state: State<AppState> = app.state();
     let (Ok(mut seq), Ok(mut buf)) = (state.event_seq.lock(), state.event_buffer.lock()) else {
         return;
@@ -418,7 +511,6 @@ fn pump_stdout(
             match ev {
                 CommandEvent::Stdout(chunk) => {
                     for line in split_lines(&mut out_buf, &chunk) {
-                        wire_log(&line);
                         match serde_json::from_str::<Value>(&line) {
                             Ok(frame) => client.ingest(frame).await,
                             Err(_) => push_stderr(&stderr_tail, format!("unparsable frame: {line}")),
@@ -450,23 +542,6 @@ fn pump_stdout(
             }
         }
     });
-}
-
-/// Temporary wire tap (dev diagnosis): every raw host line, truncated.
-/// Remove before release; prompts may transit here, file stays local in /tmp.
-fn wire_log(line: &str) {
-    use std::io::Write;
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/muse-wire.log")
-    {
-        let mut l = line.to_string();
-        if l.len() > 2000 {
-            l.truncate(2000);
-        }
-        let _ = writeln!(f, "{l}");
-    }
 }
 
 fn push_stderr(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>, line: String) {
@@ -504,13 +579,6 @@ fn pump_notifications(
 
 fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p: &Value) {
     let sid = p.get("sessionId").and_then(Value::as_str).unwrap_or("");
-    wire_log(&format!(
-        "ROUTE method={method} sid={sid} keys={}",
-        match p.as_object() {
-            Some(o) => o.keys().cloned().collect::<Vec<_>>().join(","),
-            None => "<non-object>".to_string(),
-        }
-    ));
     match method {
         "item/started" => {
             if let (Some(item_id), Some(item)) = (
@@ -627,6 +695,11 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                         Value::Object(obj).to_string(),
                     );
                 }
+                kind if is_thinking_item_kind(kind) => {
+                    // Keep reasoning deltas separate from the answer lane so
+                    // the UI can expose them behind a disclosure control.
+                    emit(app, "thinking", sid, "thinking", item_ref);
+                }
                 _ => emit(app, "output", sid, "output", item_ref),
             }
         }
@@ -641,60 +714,56 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 .unwrap_or("");
             emit(app, "status", sid, "item_done", json!({"itemId": item_id}).to_string());
         }
-        "approval/requested" => {
+        "approval/requested" | "approval/updated" => {
             let approval_id = match p.get("approvalId").and_then(Value::as_str) {
                 Some(a) => a,
                 None => return,
             };
-            let requirement = p.get("currentRequirementId").cloned().unwrap_or(Value::Null);
+            let requirement = p
+                .get("currentRequirementId")
+                .or_else(|| p.get("current_requirement_id"))
+                .cloned();
             if let Ok(mut approvals) = state.approvals.lock() {
-                approvals.insert(
-                    (sid.to_string(), approval_id.to_string()),
-                    PendingApproval {
-                        session_id: sid.to_string(),
-                        requirement_id: requirement,
-                    },
-                );
-            }
-            let tool = p.get("toolName").and_then(Value::as_str).unwrap_or("tool");
-            let summary = format!(
-                "{}: {}",
-                tool,
-                truncate(p.get("rawArgs").and_then(Value::as_str).unwrap_or(""), 200)
-            );
-            let choices: Vec<Value> = p
-                .get("availableChoices")
-                .and_then(Value::as_array)
-                .map(|cs| {
-                    cs.iter()
-                        .map(|c| {
-                            json!({
-                                "choiceId": c.get("choiceId"),
-                                "label": c.get("label"),
-                                "decision": c.get("decision"),
-                                "scope": c.get("scope"),
-                            })
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            let payload = json!({
-                "request_id": approval_id,
-                "approvalId": approval_id,
-                "toolName": tool,
-                "summary": summary,
-                "choices": choices,
-                "itemId": p.get("itemId"),
-            })
-            .to_string();
-            emit(app, "tool_request", sid, "tool_request", payload);
-        }
-        "approval/updated" | "approval/resolved" => {
-            if method == "approval/resolved" {
-                if let Some(aid) = p.get("approvalId").and_then(Value::as_str) {
-                    if let Ok(mut approvals) = state.approvals.lock() {
-                        approvals.remove(&(sid.to_string(), aid.to_string()));
+                let key = (sid.to_string(), approval_id.to_string());
+                if method == "approval/updated" {
+                    if let Some(pending) = approvals.get_mut(&key) {
+                        // Metadata-only updates are legal; keep the last
+                        // usable token when no replacement is supplied.
+                        if let Some(next) = requirement.clone() {
+                            pending.requirement_id = next;
+                        }
+                    } else {
+                        approvals.insert(
+                            key,
+                            PendingApproval {
+                                session_id: sid.to_string(),
+                                requirement_id: requirement.clone().unwrap_or(Value::Null),
+                            },
+                        );
                     }
+                } else {
+                    approvals.insert(
+                        key,
+                        PendingApproval {
+                            session_id: sid.to_string(),
+                            requirement_id: requirement.unwrap_or(Value::Null),
+                        },
+                    );
+                }
+            }
+            emit(
+                app,
+                "tool_request",
+                sid,
+                "tool_request",
+                approval_payload(p, approval_id, method == "approval/updated").to_string(),
+            );
+        }
+        "approval/resolved" => {
+            let approval_id = p.get("approvalId").and_then(Value::as_str);
+            if let Some(aid) = approval_id {
+                if let Ok(mut approvals) = state.approvals.lock() {
+                    approvals.remove(&(sid.to_string(), aid.to_string()));
                 }
             }
             let decision = p
@@ -706,7 +775,18 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                         .and_then(Value::as_str)
                 })
                 .unwrap_or("resolved");
-            emit(app, "status", sid, method, decision.to_string());
+            emit(
+                app,
+                "status",
+                sid,
+                method,
+                json!({
+                    "approvalId": approval_id,
+                    "decision": decision,
+                    "terminal": true,
+                })
+                .to_string(),
+            );
         }
         "turn/started" => emit(app, "status", sid, "started", String::new()),
         "turn/completed" => {
@@ -1241,7 +1321,7 @@ async fn approve(
     session_id: String,
     approval_id: String,
     choice_id: String,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let requirement_id = {
         let approvals = state
             .approvals
@@ -1277,13 +1357,15 @@ async fn approve(
         .await?;
     // Multi-stage approvals stay pending (terminal=false) for further
     // decisions; a terminal decision retires the cached token so a repeated
-    // decide cannot replay it.
-    if res.get("terminal").and_then(Value::as_bool).unwrap_or(true) {
+    // decide cannot replay it. The bool is returned to the UI so it keeps a
+    // compound approval card mounted while the host advances its stages.
+    let terminal = approval_terminal(&res);
+    if terminal {
         if let Ok(mut approvals) = state.approvals.lock() {
             approvals.remove(&(session_id.clone(), approval_id.clone()));
         }
     }
-    Ok(())
+    Ok(terminal)
 }
 
 /// Answer a suspended input prompt. `answers` is a JSON array of
@@ -1632,6 +1714,42 @@ mod tests {
         assert!(!input_reached(&read, "hello there"));
         assert!(!input_reached(&read, ""));
         assert!(!input_reached(&Value::Null, "cmd-1"));
+    }
+
+    #[test]
+    fn reasoning_item_kind_aliases_use_the_thinking_lane() {
+        for kind in [
+            "reasoning",
+            "thinking",
+            "analysis",
+            "reasoning_summary",
+            "reasoningSummary",
+        ] {
+            assert!(is_thinking_item_kind(kind), "{kind}");
+        }
+        assert!(!is_thinking_item_kind("agentMessage"));
+    }
+
+    #[test]
+    fn compound_approval_updates_keep_the_new_requirement_and_choices() {
+        let updated = json!({
+            "approvalId": "approval-1",
+            "currentRequirementId": {"approvalId": "approval-1", "sourceIndex": 1},
+            "availableChoices": [
+                {"choiceId": "allow_once", "label": "Allow once", "decision": "approved", "scope": "once"},
+                {"choiceId": "abort", "label": "Reject", "decision": "abort", "scope": "once"}
+            ],
+            "subject": {"kind": "shell", "command": "echo hello"}
+        });
+        let payload = approval_payload(&updated, "approval-1", true);
+        assert_eq!(payload["updated"], true);
+        assert_eq!(payload["toolName"], "bash");
+        assert_eq!(payload["summary"], "bash: echo hello");
+        assert_eq!(payload["choices"][0]["choiceId"], "allow_once");
+        assert_eq!(payload["currentRequirementId"]["sourceIndex"], 1);
+        assert!(!approval_terminal(&json!({"terminal": false})));
+        assert!(!approval_terminal(&json!({"result": {"terminal": false}})));
+        assert!(approval_terminal(&json!({"status": "accepted"})));
     }
 
     fn sample_prompt() -> Value {

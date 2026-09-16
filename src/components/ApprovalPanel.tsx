@@ -9,6 +9,11 @@ import { choiceIndexForKey, trapTabIndex } from "../lib/a11y";
 
 interface Props {
   approvals: ApprovalRequest[];
+  /** Kept optional for callers from older layouts; the control now lives in the composer. */
+  authorizationMode?: import("../lib/authorization").AuthorizationMode;
+  onAuthorizationModeChange?: (
+    mode: import("../lib/authorization").AuthorizationMode,
+  ) => void;
   /** US-15 persisted rules (pattern + scope → allow/prompt/forbidden). */
   rules: AllowRule[];
   onDecision: (sessionId: string, approvalId: string, choiceId: string) => void;
@@ -101,15 +106,27 @@ export function ApprovalPanel({
     }
   }
 
-  if (approvals.length === 0 && rules.length === 0) return null;
+  // The authorization posture lives in the composer (and Settings). Keep the
+  // approval surface reserved for an action that actually needs attention;
+  // an empty posture banner was a duplicate control in every conversation.
+  if (approvals.length === 0) return null;
+
   return (
     <section
-      className="approvals"
+      className="approvals approvals-active"
       role="region"
-      aria-label="Pending approvals"
+      aria-label="Conversation authorization"
       ref={sectionRef}
       onKeyDown={onSectionKeyDown}
     >
+      <header className="approvals-head">
+        <div>
+          <span className="approval-kicker">Permission review</span>
+          <strong>
+            {approvals.length} action{approvals.length === 1 ? "" : "s"} waiting
+          </strong>
+        </div>
+      </header>
       {approvals.map((a) => {
         const resolved = decisionFor(a);
         const allowChoice = a.choices.find((c) => !c.decision.startsWith("denied"));
@@ -119,25 +136,31 @@ export function ApprovalPanel({
             key={`${a.session_id}:${a.request_id}`}
             className="approval"
             role="group"
-            aria-label={`Approval needed${a.toolName !== "tool" ? ` for ${a.toolName}` : ""}`}
+            data-decision={resolved.decision}
+            aria-label={`Action needs attention${a.toolName !== "tool" ? ` for ${a.toolName}` : ""}`}
           >
             <div className="approval-text">
-              <strong>
-                Approval needed{a.toolName !== "tool" ? `: ${a.toolName}` : ""}
-              </strong>{" "}
-              <span
-                className={`rule-badge rule-${resolved.decision}`}
-                title={
-                  resolved.rule !== null
-                    ? `Pattern ${resolved.rule.scope !== "" ? `${resolved.rule.pattern} · ${resolved.rule.scope}` : resolved.rule.pattern}`
-                    : resolved.networkDefaultDeny
-                      ? "Network scope without an allow rule: effectively denied"
-                      : "No matching allowlist rule"
-                }
-              >
-                {badgeText(resolved)}
-              </span>
-              <pre>{a.summary}</pre>
+              <div className="approval-title-row">
+                <strong>
+                  {a.toolName !== "tool" ? a.toolName : "Tool action"}
+                </strong>
+                <span
+                  className={`rule-badge rule-${resolved.decision}`}
+                  title={
+                    resolved.rule !== null
+                      ? `Pattern ${resolved.rule.scope !== "" ? `${resolved.rule.pattern} · ${resolved.rule.scope}` : resolved.rule.pattern}`
+                      : resolved.networkDefaultDeny
+                        ? "Network scope without an allow rule: effectively denied"
+                        : "No matching allowlist rule"
+                  }
+                >
+                  {badgeText(resolved)}
+                </span>
+              </div>
+              <details className="approval-details" open>
+                <summary>Review command</summary>
+                <pre>{a.summary}</pre>
+              </details>
               {scopes.length > 0 && (
                 <div className="muted approval-scope" title="Host scope">
                   scope: {scopes.join(" · ")}
@@ -170,7 +193,7 @@ export function ApprovalPanel({
                   title={`Approve and remember: pattern "${allowChoice.scope !== "" ? `${a.toolName} · ${allowChoice.scope}` : a.toolName}" as allow`}
                   onClick={() => onRemember(a, allowChoice.choiceId)}
                 >
-                  Toujours autoriser
+                  Allow in workspace
                 </button>
               )}
             </div>
@@ -178,10 +201,10 @@ export function ApprovalPanel({
         );
       })}
       {rules.length > 0 && (
-        <div className="allowlist">
-          <div className="muted allowlist-title">
-            Allowlist ({rules.length}) — pattern + scope persisted across restarts
-          </div>
+        <details className="allowlist">
+          <summary className="allowlist-title">
+            Saved authorization rules ({rules.length})
+          </summary>
           <ul className="allowlist-rows">
             {rules.map((r) => (
               <li key={r.id} className="allowlist-row">
@@ -210,7 +233,7 @@ export function ApprovalPanel({
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
     </section>
   );

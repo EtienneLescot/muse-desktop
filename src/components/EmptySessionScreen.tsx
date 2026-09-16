@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
+import type { AuthorizationMode } from "../lib/authorization";
+import { AuthorizationModeControl } from "./AuthorizationModeControl";
 
 interface Props {
   /** Default folder for the new thread; null until the user picks one. */
@@ -12,6 +14,9 @@ interface Props {
   backendMissing?: boolean;
   /** US-33: explicit sidecar failure rendered instead of the blank screen. */
   sidecarError?: ReactNode | null;
+  /** Global tool-authorization posture shown in the first-message composer. */
+  authorizationMode: AuthorizationMode;
+  onAuthorizationModeChange: (mode: AuthorizationMode) => void;
 }
 
 /**
@@ -26,6 +31,8 @@ export function EmptySessionScreen({
   onStart,
   backendMissing,
   sidecarError,
+  authorizationMode,
+  onAuthorizationModeChange,
 }: Props) {
   const [draft, setDraft] = useState(() => {
     try {
@@ -105,7 +112,12 @@ export function EmptySessionScreen({
             }
           }}
         />
-        <div>
+        <div className="welcome-draft-actions">
+          <AuthorizationModeControl
+            mode={authorizationMode}
+            onChange={onAuthorizationModeChange}
+            compact
+          />
           <small>
             {backendMissing
               ? "Available in the desktop app"

@@ -34,7 +34,7 @@ Priorité immédiate. Ne pas ajouter de nouvelles surfaces avant de sécuriser c
 | M0-03 | Ne perdre aucun texte lors d'un envoi rejeté | À définir | Présente | Câblée | Unitaire | Outbox durable par envoi (clientMessageId, sending/accepted/failed) : brouillon vidé seulement à l'acquittement, entrée réessayable après refus ou timeout ambigu, vérification serveur (`session/read`) avant toute retransmission. Reste : E2E natif (moteur coupé pendant l'envoi, fermeture/rechargement, double-clic, IME) |
 | M0-04 | Arrêter et reprendre avec des états fiables | Adapté | Présente | Câblée | Unitaire | Tester arrêt avant premier token, pendant outil et après fin ; distinguer demande d'arrêt et arrêt confirmé |
 | M0-05 | Répondre aux permissions/questions même après incident | Adapté | Présente | Câblée | Unitaire | Recharger les demandes en attente si le protocole le permet ; invalider les demandes périmées ; vérifier rejet, correction et absence de replay |
-| M0-06 | Afficher la politique de permissions réellement effective | À définir | Partielle | Partielle | Unitaire | Relier ou désactiver les préférences non appliquées ; distinguer préférence et posture du host ; un test réel confirme refus/autorisation |
+| M0-06 | Afficher la politique de permissions réellement effective | Adapté | Présente | Locale | Unitaire | Sélecteur global Ask / Approve on my behalf / YOLO, persistance et auto-décision au-dessus des choix MSP ; distinguer posture locale et plafond du host ; un test natif confirme refus/autorisation |
 | M0-07 | Protéger les diagnostics et éviter un crash sur Unicode | — | — | Partielle | À faire | Retirer le wire log brut par défaut ; si diagnostic activé, rédaction/rotation et troncature UTF-8 sûre ; aucune frame brute en usage normal |
 | M0-08 | Détecter une incompatibilité du moteur | À définir | Partielle | Partielle | Unitaire | Inventorier toutes les RPC utilisées, pas seulement les huit du registre actuel ; vérifier capacités/fingerprint ; erreur exploitable au démarrage |
 | M0-09 | Conserver les données sans échec silencieux | À définir | Partielle | Locale | Unitaire | Versionner/migrer le stockage, gérer quota et données corrompues, offrir récupération/export ; éprouver migration et saturation |
@@ -56,21 +56,29 @@ Preuves principales : [backend](../src-tauri/src/main.rs), [sessions](../src/hoo
 ### Livraison M0-03 — 15 septembre 2026
 
 - **Envoi sans perte — implémenté, tests unitaires passés** : chaque envoi logique porte un `clientMessageId` stable et un `commandId` UUIDv7 dérivé, persisté dans l'outbox par session (`muse-desktop.outbox.v1.*`, états sending/accepted/failed). Le brouillon du composer n'est vidé qu'à l'acquittement du superviseur ; un refus laisse le texte dans le champ, un échec crée une entrée réessayable (bannière Retry/Discard) routée par `sessionId`, jamais par la conversation affichée. Un timeout d'acquittement (15 s) ou un redémarrage en plein envoi marque l'entrée ambiguë : la reprise vérifie `commandId`/`turnId` dans la réponse structurée de `session/read` avant toute retransmission — un envoi logique ne peut pas devenir deux tours. Le retry réutilise l'expansion stockée (skill/fanout/projet) et l'entrée de log existante, sans jamais doubler le texte. Une requête Tauri encore pendante conserve aussi le verrou de session jusqu'à sa résolution.
-- **Tests** : `npm test` (360 passés, dont outbox : machine à états, récupération au boot, identité serveur, persistance, clé conservée dans le log) ; `npm run build` ; `cargo test --bin muse-desktop` (32 passés, dont la vérification structurée `input_reached`). Aucun tour modèle.
+- **Tests** : `npm test` (367 passés, dont outbox : machine à états, récupération au boot, identité serveur, persistance, clé conservée dans le log) ; `npm run build` ; `cargo test --bin muse-desktop` (34 passés, dont `input_reached` et les approbations composées). Aucun tour modèle.
 - **À valider** : E2E natif — moteur coupé pendant l'envoi, refus serveur, double-clic, fermeture/rechargement, changement de conversation, échec du premier prompt, IME et saisie pendant l'attente. Le parent M0-03 reste ouvert jusqu'à cette preuve.
 
-Validation de cette livraison : build frontend et 360 tests Node ; suite Rust (32 tests) incluant les scénarios de routage A/B, collision d'identité, session supprimée, fin d'un host, ancienne génération et fermeture du superviseur.
+Validation de cette livraison : build frontend et 367 tests Node ; suite Rust (34 tests) incluant les scénarios de routage A/B, approbations composées, collision d'identité, session supprimée, fin d'un host, ancienne génération et fermeture du superviseur.
 
 **Sortie M0 :** scénario natif créer → envoyer → stream → approuver → répondre → interrompre → réessayer, puis redémarrage et deux projets simultanés. Aucun réglage ne prétend modifier une capacité qu'il ne contrôle pas. Validation Windows d'abord ; support macOS/Linux qualifié séparément.
+
+### Livraison M0-06 — posture d'autorisation globale
+
+- **M0-06a — câblé, local** : les réglages proposent trois postures persistées par Muse : **Ask for approval** (question à chaque action), **Approve on my behalf** (actions locales du workspace approuvées automatiquement, réseau et privilèges élevés conservant une question) et **YOLO** (choix non refusés approuvés automatiquement dans un workspace de confiance).
+- **M0-06b — intégré** : l'approbation apparaît dans le flux de conversation sous forme de carte neutre et compacte. La commande est repliable, la portée et la règle effective restent visibles, et les règles enregistrées sont regroupées dans un panneau secondaire. Le rouge est réservé à un refus effectif.
+- **M0-06c — limite documentée** : le host Muse scelle actuellement son plafond d'approbation au démarrage et rejette `approvalMode` côté `session/start`. Les postures sont donc appliquées côté client via `approval/decide`, sans contourner les choix `denied` ni les protections anti-rejeu. La qualification native réseau/élévation reste à faire avant de déclarer la politique entièrement effective.
+- **Critères de sortie** : changement de posture sans redémarrage, conservation après relance, mode intermédiaire qui laisse une demande externe visible, YOLO qui suit le chemin d'approbation existant, et test natif de la décision refusée/stale.
 
 ### Livraison M0-02 — reconnexion explicite
 
 - **M0-02a — câblé** : action Reconnect pour une conversation non rattachée ; validation de son identité, de son historique durable et de son dossier avant session/resume. Pas de création silencieuse d'une nouvelle session. Envoi indisponible tant que la reconnexion n'est pas confirmée.
 - **M0-02b — validé partiellement** : un moteur réel crée la session, se ferme, puis un nouveau moteur relit/reprend le même identifiant et répond au catalogue. Aucun tour modèle envoyé. Test React/Chromium avec IPC simulé : échec visible, messages conservés, nouvel essai avec le bon dossier, action retirée après succès.
 - **M0-02c — reste à faire** : importer le suffixe d'historique manquant, valider les demandes en attente réellement réémises et poursuivre un tour de bout en bout dans la webview native. La reprise demande uniquement les métadonnées (`excludeItems`) et conserve l'historique local actuel ; elle ne prétend pas le resynchroniser complètement.
+- **M0-02d — corrigé côté client** : après une décision d'autorisation, la chaîne de polling est relancée immédiatement et les nouveaux items ne restent plus bloqués sur l'indicateur réflexif. Les approbations composées conservent la carte quand le host renvoie `terminal:false`, appliquent le nouveau `currentRequirementId` et remplacent les choix sur `approval/updated`. Les items de raisonnement sont séparés du texte de réponse et peuvent être dépliés ; il reste à valider ce flux avec un moteur live qui émet un item `reasoning`.
 - Limite Windows : conversion des chemins du bridge pour les montages WSL standards `/mnt/<lecteur>/`. Un montage personnalisé non résolvable échoue explicitement ; les chemins ne sont pas devinés.
 
-Preuves : [validation de reprise](../src-tauri/src/resume.rs), commande `resume_session` dans le backend et `reconnectSession` dans le hook. Suite Rust : 32 tests ; suite Node : 360 tests ; build frontend réussi.
+Preuves : [validation de reprise](../src-tauri/src/resume.rs), commande `resume_session` dans le backend et `reconnectSession` dans le hook. Suite Rust : 34 tests ; suite Node : 367 tests ; build frontend réussi.
 
 ## M1 — Terminer le workflow quotidien de développement
 
@@ -184,4 +192,4 @@ Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux]
 4. Pour déclarer un ticket terminé : effet réel, erreurs/reprise traitées, permissions effectives, validation native du scénario et documentation des limites.
 5. Les décisions de faisabilité/produit sont consignées avant de transformer une hypothèse en engagement. Aucun pourcentage global tant que le périmètre et sa pondération ne sont pas fixés.
 
-Validation du socle audité : build frontend, 346 tests Node, 25 tests Rust verts. Les preuves UI de la passe précédente sont détaillées dans [la passe conversations](plans/2026-09-14-conversation-polish.md). Elles ne couvrent pas l'ensemble des critères futurs ci-dessus.
+Validation du socle audité : build frontend, 367 tests Node, 34 tests Rust verts. Les preuves UI de la passe précédente sont détaillées dans [la passe conversations](plans/2026-09-14-conversation-polish.md). Elles ne couvrent pas l'ensemble des critères futurs ci-dessus.

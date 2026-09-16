@@ -27,6 +27,8 @@ import { COMPOSER_SHORTCUT_TITLES } from "../lib/a11y";
 // M0-03: sends return an explicit result — the draft is cleared only on
 // the supervisor's admission ack, never on a failed or ambiguous send.
 import type { SendResult } from "../lib/outbox";
+import type { AuthorizationMode } from "../lib/authorization";
+import { AuthorizationModeControl } from "./AuthorizationModeControl";
 
 interface Props {
   sessionId?: string;
@@ -50,6 +52,9 @@ interface Props {
   /** US-20: one `@mem/…` query to insert (from the memory panel). */
   memoryInsert?: string | null;
   onMemoryInsertConsumed?: () => void;
+  /** Global tool-authorization posture shown beside the send controls. */
+  authorizationMode: AuthorizationMode;
+  onAuthorizationModeChange: (mode: AuthorizationMode) => void;
 }
 
 interface RecentMention {
@@ -122,6 +127,8 @@ export function Composer({
   memories,
   memoryInsert,
   onMemoryInsertConsumed,
+  authorizationMode,
+  onAuthorizationModeChange,
 }: Props) {
   const [text, setText] = useState(() => {
     try {
@@ -622,7 +629,14 @@ export function Composer({
           )}
         </div>
         <div className="composer-actions">
-          <div className="composer-context">{modelControl}</div>
+          <div className="composer-context">
+            <AuthorizationModeControl
+              mode={authorizationMode}
+              onChange={onAuthorizationModeChange}
+              compact
+            />
+            <div className="composer-model">{modelControl}</div>
+          </div>
           {running && (
             <button onClick={onCancel} title={COMPOSER_SHORTCUT_TITLES.stop}>
               Stop

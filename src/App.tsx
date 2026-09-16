@@ -63,6 +63,8 @@ export default function App() {
     setWorkspace,
     sandbox,
     setSandbox,
+    authorizationMode,
+    setAuthorizationMode,
     providerId,
     setProviderId,
     liveModels,
@@ -551,6 +553,8 @@ export default function App() {
               onPickWorkspace={setWorkspace}
               sandbox={sandbox}
               onSandboxChange={setSandbox}
+              authorizationMode={authorizationMode}
+              onAuthorizationModeChange={setAuthorizationMode}
               providerId={providerId}
               onProviderChange={setProviderId}
               liveModels={liveModels}
@@ -745,6 +749,8 @@ export default function App() {
                 }}
                 backendMissing={backendMissing}
                 sidecarError={sidecarPanel}
+                authorizationMode={authorizationMode}
+                onAuthorizationModeChange={setAuthorizationMode}
               />
             ) : (
               <div className="session-view">
@@ -771,6 +777,8 @@ export default function App() {
                   )}
                   <ApprovalPanel
                     approvals={activeApprovals}
+                    authorizationMode={authorizationMode}
+                    onAuthorizationModeChange={setAuthorizationMode}
                     rules={allowlist}
                     onDecision={approve}
                     onRemember={(a, choiceId) =>
@@ -874,6 +882,8 @@ export default function App() {
                     memories={memories}
                     memoryInsert={memoryInsert}
                     onMemoryInsertConsumed={() => setMemoryInsert(null)}
+                    authorizationMode={authorizationMode}
+                    onAuthorizationModeChange={setAuthorizationMode}
                   />
                 </div>
                 {workPanel && (
