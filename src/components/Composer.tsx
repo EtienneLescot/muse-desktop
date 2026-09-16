@@ -759,7 +759,12 @@ export function Composer({
             aria-label="Send message"
             title={COMPOSER_SHORTCUT_TITLES.send}
             onClick={() => void send()}
-            disabled={disabled || text.trim().length === 0 || checking || sending}
+            disabled={
+              disabled ||
+              (text.trim().length === 0 && attachments.length === 0) ||
+              checking ||
+              sending
+            }
           >
             {checking || sending ? "…" : "↑"}
           </button>
