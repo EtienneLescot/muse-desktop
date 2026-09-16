@@ -219,10 +219,39 @@
   font-size: 11px;
   color: var(--muted);
 }
-.task-metadata span:last-child {
+.task-metadata span:last-child,
+.task-metadata span[title] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.connection-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 4px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.connection-state-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.connection-connected .connection-state-dot {
+  background: var(--green, #2ca579);
+}
+.connection-connecting .connection-state-dot {
+  background: var(--blue);
+  animation: stream-health-pulse 1.5s ease-in-out infinite;
+}
+.connection-error {
+  color: var(--warning, #d89024);
+}
+.connection-error .connection-state-dot {
+  background: var(--warning, #d89024);
 }
 .task-project-context {
   display: flex;

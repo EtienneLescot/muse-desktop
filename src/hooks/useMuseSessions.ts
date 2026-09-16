@@ -420,6 +420,13 @@ export interface MuseSession extends StoredSession {
   running: boolean;
 }
 
+/** M0-02: renderer-owned connection state for a session identity. */
+export type SessionConnectionState =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "error";
+
 /** US-23 local index surface (opt-in, default off). */
 export interface IndexApi {
   enabled: boolean;
@@ -639,6 +646,9 @@ interface UseMuseSessions {
   /** M0-02: latest live event used to explain quiet/stalled turns. */
   streamActivityBySession: Record<string, StreamActivity>;
   activeStreamActivity: StreamActivity | null;
+  /** M0-02: connection lifecycle, separate from turn execution state. */
+  connectionBySession: Record<string, SessionConnectionState>;
+  activeConnectionState: SessionConnectionState;
   /** M1-10: queued turns that can still be reclaimed before launch. */
   queuedTurns: QueuedTurn[];
   /** Default folder for new threads (persisted); each thread keeps its own. */
@@ -1305,6 +1315,9 @@ export function useMuseSessions(): UseMuseSessions {
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
   const [connectedIds, setConnectedIds] = useState<string[]>([]);
+  const [connectionBySession, setConnectionBySession] = useState<
+    Record<string, SessionConnectionState>
+  >({});
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
   // M1-01: review snapshots are owned by the hook so the panel never reads
   // stale or cross-session Git state. A refresh replaces the snapshot; the
@@ -1418,6 +1431,11 @@ export function useMuseSessions(): UseMuseSessions {
       // Tombstoned ids never come back, even from a stale persisted list.
       const live = stored.filter((s) => !tombstoned.current?.has(s.session_id));
       setSessions(live.map((s) => ({ ...s, running: false })));
+      setConnectionBySession(
+        Object.fromEntries(
+          live.map((s) => [s.session_id, "disconnected" as SessionConnectionState]),
+        ),
+      );
       setLogs(storedLogs);
       // US-4: restore stored summaries (a stored summary = compacted thread).
       const storedSummaries: Record<string, ThreadSummary> = {};
@@ -1474,6 +1492,15 @@ export function useMuseSessions(): UseMuseSessions {
                 createdAt: Date.now(),
                 running: meta.running,
               });
+            }
+          }
+          return next;
+        });
+        setConnectionBySession((cur) => {
+          const next = { ...cur };
+          for (const meta of restored) {
+            if (!tombstoned.current?.has(meta.session_id)) {
+              next[meta.session_id] = "connected";
             }
           }
           return next;
@@ -1948,6 +1975,15 @@ export function useMuseSessions(): UseMuseSessions {
     setSessions((cur) => withUnreadFlag(cur, sessionId, true));
   }
 
+  const setConnectionState = useCallback(
+    (sessionId: string, state: SessionConnectionState): void => {
+      setConnectionBySession((cur) =>
+        cur[sessionId] === state ? cur : { ...cur, [sessionId]: state },
+      );
+    },
+    [],
+  );
+
   const touchStreamActivity = useCallback(
     (sessionId: string, kind: string, at = Date.now()): void => {
       setStreamActivityBySession((cur) => {
@@ -2046,6 +2082,7 @@ export function useMuseSessions(): UseMuseSessions {
     // Keep this heartbeat independent from log timestamps: a host status
     // event can prove progress even when it has no user-facing log line.
     touchStreamActivity(sid, kind);
+    if (kind !== "host_exited") setConnectionState(sid, "connected");
     if (
       activeId !== sid &&
       (kind === "output" ||
@@ -2058,7 +2095,10 @@ export function useMuseSessions(): UseMuseSessions {
     ) {
       markUnread(sid);
     }
-    if (kind === "host_exited") setConnectedIds((cur) => cur.filter((id) => id !== sid));
+    if (kind === "host_exited") {
+      setConnectedIds((cur) => cur.filter((id) => id !== sid));
+      setConnectionState(sid, "disconnected");
+    }
     if (kind === "output") {
       ensureSessionRow(sid, null);
       const { itemId, text } = parseChunk(payload);
@@ -2696,6 +2736,7 @@ export function useMuseSessions(): UseMuseSessions {
         running: meta.running,
       };
       setConnectedIds((cur) => [...new Set([...cur, meta.session_id])]);
+      setConnectionState(meta.session_id, "connected");
       setSessions((cur) => [...cur, record]);
       setLogs((cur) => (cur[meta.session_id] ? cur : { ...cur, [meta.session_id]: [] }));
       setActiveId(meta.session_id);
@@ -2712,7 +2753,7 @@ export function useMuseSessions(): UseMuseSessions {
       return null;
     }
     },
-    [authorizationMode, setSessionModel, workspace],
+    [authorizationMode, setConnectionState, setSessionModel, workspace],
   );
 
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
@@ -2720,6 +2761,7 @@ export function useMuseSessions(): UseMuseSessions {
     const session = sessions.find((s) => s.session_id === id);
     if (!session || !isTauriRuntime()) return;
     setReconnectingId(id);
+    setConnectionState(id, "connecting");
     setError(null);
     try {
       const meta = await invoke<BackendSessionMeta>("resume_session", {
@@ -2785,15 +2827,17 @@ export function useMuseSessions(): UseMuseSessions {
         console.warn("pending request recovery unavailable", pendingError);
       }
       setConnectedIds((cur) => [...new Set([...cur, id])]);
+      setConnectionState(id, "connected");
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
       kickPoll();
       await refreshModels(id);
     } catch (e) {
+      setConnectionState(id, "error");
       setError(`Reconnect failed: ${String(e)}. Your saved messages are still available.`);
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, sessions, kickPoll, refreshModels]);
+  }, [authorizationMode, sessions, kickPoll, refreshModels, setConnectionState]);
 
   const startSession = useCallback(async () => {
     return await startSessionRow(undefined, globalSettings);
@@ -2837,6 +2881,7 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
+        setConnectionState(meta.session_id, "connected");
         setSessions((current) => [
           ...current.filter((session) => session.session_id !== meta.session_id),
           record,
@@ -2851,7 +2896,7 @@ export function useMuseSessions(): UseMuseSessions {
         return null;
       }
     },
-    [authorizationMode, setSessionModel],
+    [authorizationMode, setConnectionState, setSessionModel],
   );
 
   const [forkingId, setForkingId] = useState<string | null>(null);
@@ -2887,6 +2932,7 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
+        setConnectionState(meta.session_id, "connected");
         setSessions((current) => [
           ...current.filter((session) => session.session_id !== meta.session_id),
           record,
@@ -2902,7 +2948,7 @@ export function useMuseSessions(): UseMuseSessions {
         setForkingId(null);
       }
     },
-    [forkingId, sessions],
+    [forkingId, sessions, setConnectionState],
   );
 
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
@@ -3763,6 +3809,19 @@ export function useMuseSessions(): UseMuseSessions {
       if (tombstoned.current === null) tombstoned.current = new Set();
       tombstoned.current.add(sessionId);
       saveTombstones([...tombstoned.current]);
+      setConnectionBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
+      setStreamActivityBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
+      setConnectedIds((cur) => cur.filter((id) => id !== sessionId));
       setSessions((cur) => cur.filter((s) => s.session_id !== sessionId));
       setLogs((cur) => {
         const next = { ...cur };
@@ -5022,6 +5081,9 @@ export function useMuseSessions(): UseMuseSessions {
   const activeStreamActivity = activeId === null
     ? null
     : (streamActivityBySession[activeId] ?? null);
+  const activeConnectionState = activeId === null
+    ? "disconnected"
+    : (connectionBySession[activeId] ?? "disconnected");
 
   return {
     sessions,
@@ -5032,6 +5094,8 @@ export function useMuseSessions(): UseMuseSessions {
     activeApprovals,
     streamActivityBySession,
     activeStreamActivity,
+    connectionBySession,
+    activeConnectionState,
     queuedTurns: activeQueuedTurns,
     inputRequests,
     activeInputRequests,

@@ -69,6 +69,7 @@ export default function App() {
     approvals,
     activeApprovals,
     activeStreamActivity,
+    activeConnectionState,
     queuedTurns,
     inputRequests,
     activeInputRequests,
@@ -937,6 +938,16 @@ export default function App() {
                       {active.running ? "Working" : "Ready"}
                       <span>·</span>
                       <span title={active.workspace}>{active.workspace}</span>
+                      <span className={`connection-state connection-${activeConnectionState}`}>
+                        <span className="connection-state-dot" aria-hidden="true" />
+                        {activeConnectionState === "connected"
+                          ? "Connected"
+                          : activeConnectionState === "connecting"
+                            ? "Connecting"
+                            : activeConnectionState === "error"
+                              ? "Connection error"
+                              : "Disconnected"}
+                      </span>
                     </div>
                     {activeProject !== null && (
                       <div className="task-project-context" title="Effective project settings">
