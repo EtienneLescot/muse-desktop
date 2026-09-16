@@ -24,6 +24,7 @@ mod resume;
 mod git;
 mod terminal;
 mod files;
+mod artifact_export;
 mod setup;
 mod mcp;
 mod skills;
@@ -1843,6 +1844,17 @@ async fn file_open(
         .map_err(|e| format!("could not open workspace path: {e}"))
 }
 
+/// Write one explicitly selected artifact to a local UTF-8 file. The save
+/// destination comes from the platform dialog; the backend still validates it
+/// and bounds the payload before writing.
+#[tauri::command]
+async fn artifact_export(path: String, content: String) -> Result<(), String> {
+    let target = PathBuf::from(path.trim());
+    tokio::task::spawn_blocking(move || artifact_export::write_text(&target, &content))
+        .await
+        .map_err(|e| format!("artifact export task failed: {e}"))?
+}
+
 /// Probe local prerequisites for the first-launch recovery screen. This is a
 /// read-only, bounded check: it never starts a sidecar or changes WSL/Muse.
 #[tauri::command]
@@ -3566,6 +3578,7 @@ fn main() {
             files_list,
             file_read,
             file_open,
+            artifact_export,
             probe_startup,
             list_models,
             set_model,

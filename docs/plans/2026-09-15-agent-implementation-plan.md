@@ -519,6 +519,8 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 **Code :** artifacts.ts, previews et service fichiers ; dépend M1-07/08. Séparer génération image/document côté moteur, fichiers persistés et rendu sécurisé ; détecter formats supportés, version/source réelle et export. **Acceptation :** fichier ouvert hors app, preview défaillante avec fallback, version et provenance exactes ; ne pas assimiler bloc Markdown et fichier livré.
 
+**État au 17/09/2026 :** le panneau Content exporte maintenant une version précise d'un artefact. En desktop, `save` ouvre le sélecteur natif puis `artifact_export` écrit un fichier UTF-8 borné à 2 MiB ; le preview web conserve un téléchargement navigateur. La destination absolue, le dossier parent existant et l'absence de NUL sont vérifiés côté Rust. Reste à câbler les sorties image/document réelles du moteur, les previews binaires, l'ouverture/écrasement natifs et la qualification sur chaque plateforme.
+
 ### M4-06 — Partage hébergé
 
 **Code :** SharePanel/sharing.ts et nouveau service distant ; dépend décision d'hébergement/auth. Créer snapshot avec données explicitement incluses, permissions/token, durée et révocation ; secrets exclus. **Acceptation :** second client, lien révoqué, export incomplet et erreur de publication ; aucune URL annoncée avant création réelle.

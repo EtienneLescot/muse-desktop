@@ -474,7 +474,7 @@ Ces écarts restent visibles pour une ambition de parité complète. Leur faisab
 | M4-02 | Annoter visuellement une page et transmettre le contexte | À définir | Partielle | Locale | Unitaire | Ancre URL normalisée et sélection textuelle livrées ; capture réelle, région/iframe/zoom et contexte visuel restent à concevoir |
 | M4-03 | Faire piloter le navigateur par Muse | À définir | Absente | Absente | À faire | Observation/actions et permissions ; scénario web complet reproductible |
 | M4-04 | Faire piloter une application desktop | À définir | Absente | Absente | À faire | Runtime par OS et consentement effectif ; exécution interrompable et attribution claire des actions |
-| M4-05 | Produire/consulter des images et documents riches | À définir | Partielle | Partielle | À faire | Capacités moteur, fichiers réels et previews ; génération/export avec résultat utilisable |
+| M4-05 | Produire/consulter des images et documents riches | À définir | Partielle | Partielle | À faire | Artefacts Markdown versionnés, réutilisation et export texte local livrés ; capacités moteur image/document, fichiers réellement générés, previews riches et qualification native restent à faire |
 | M4-06 | Partager par URL et révoquer l'accès | À définir | Partielle | Locale | Unitaire | Hébergement, identité, permissions et révocation réelle ; second client lit puis perd l'accès |
 | M4-07 | Contrôler une exécution sur un autre host ou dans le cloud | À définir | Absente | Absente | À faire | Auth, routage, stockage et reprise distante ; statut exact après déconnexion |
 | M4-08 | Interagir par la voix | À définir | Absente | Absente | À faire | Choisir capture/transcription ou conversation temps réel ; définir permissions et preuve de bout en bout |
@@ -487,6 +487,14 @@ Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux]
 - **Navigation :** BrowserPanel normalise l'adresse, conserve un historique local précédent/suivant, expose Reload et affiche l'URL réellement chargée. Les erreurs de protocole et de chargement restent dans la surface du navigateur. **Open native** ouvre désormais une webview Tauri dédiée (`muse-browser`) dans le build desktop ; la commande native revalide le schéma, l'hôte, l'absence de credentials et la taille de l'URL, puis réutilise la fenêtre existante.
 - **Annotations :** les commentaires sont ancrés à l'URL normalisée courante ; changer de page ne mélange plus les notes des autres pages.
 - **Limites :** l'iframe sandboxée reste le repli du web preview et ne fournit ni cookies/onglets d'un navigateur complet ni capture visuelle. Les sessions/cookies, téléchargements, capture visuelle et qualification WebView2 restent à qualifier. Décision : `docs/plans/2026-09-17-native-browser-surface.md`.
+
+### Livraison M4-05 — export texte des artefacts (première passe)
+
+- **Résultat :** chaque version d'un artefact du panneau **Content** expose **Export**. En desktop, le sélecteur de sauvegarde natif propose un nom et une extension dérivés du type/langage ; le bridge écrit ensuite le contenu UTF-8 exact de la version choisie. En preview web, le téléchargement navigateur reste disponible.
+- **Garde-fous :** la destination doit être un chemin absolu sélectionné explicitement, le dossier parent doit exister et le contenu est limité à 2 MiB. Aucun dossier n'est créé et le fichier exporté n'est jamais exécuté par Muse.
+- **Provenance :** l'export porte la version sélectionnée (`vN`) et le message de succès reste dans le panneau ; la restauration **Reuse** conserve son chemin de pré-remplissage séparé.
+- **Limites :** les blocs Markdown ne deviennent pas automatiquement des fichiers générés par le moteur ; images, documents binaires, previews dédiées et qualification native de l'ouverture/écrasement restent les prochaines sous-tâches M4-05.
+- **Validation :** tests Rust d'écriture UTF-8 et de bornes, suite Node, TypeScript et build Vite verts.
 
 ### Livraison M4-09 — bundle Windows x64 (première passe)
 

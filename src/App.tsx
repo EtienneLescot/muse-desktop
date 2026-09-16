@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
 import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
 import { cycleThreadId, selectActiveThreads } from "./lib/threads";
@@ -30,6 +31,8 @@ import type { ShareBundle } from "./lib/sharing";
 import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
 import { userFacingError } from "./lib/errorCopy";
+import { isTauriRuntime } from "./lib/env";
+import type { Artifact, ArtifactVersion } from "./lib/artifacts";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -496,6 +499,41 @@ export default function App() {
     anchor.download = `muse-desktop-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function exportArtifact(
+    artifact: Artifact,
+    version: ArtifactVersion,
+  ): Promise<boolean> {
+    const slug = artifact.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "muse-artifact";
+    const extension = artifact.kind === "doc"
+      ? artifact.lang === "md" || artifact.lang === "markdown" ? "md" : "txt"
+      : artifact.lang.replace(/[^a-z0-9]+/gi, "").slice(0, 8) || "txt";
+    const filename = `${slug}-v${version.v}.${extension}`;
+    if (isTauriRuntime()) {
+      const target = await save({
+        title: "Export artifact",
+        defaultPath: filename,
+        filters: [{ name: artifact.kind === "doc" ? "Document" : "Source", extensions: [extension] }],
+      });
+      if (typeof target !== "string" || target.trim() === "") return false;
+      await invoke("artifact_export", { path: target, content: version.text });
+      return true;
+    }
+    const blob = new Blob([version.text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    return true;
   }
 
   return (
@@ -1181,6 +1219,7 @@ export default function App() {
                             artifacts={artifacts[active.session_id] ?? []}
                             onRestore={restoreArtifact}
                             onComment={commentArtifact}
+                            onExport={exportArtifact}
                           />
                         </>
                       )}

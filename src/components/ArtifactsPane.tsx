@@ -3,6 +3,7 @@ import {
   buildThreadRecap,
   type Artifact,
   type ArtifactLogEntry,
+  type ArtifactVersion,
 } from "../lib/artifacts";
 
 interface Props {
@@ -18,6 +19,8 @@ interface Props {
     v: number,
     comment: string,
   ) => void;
+  /** Export one exact version using a native save dialog or browser download. */
+  onExport: (artifact: Artifact, version: ArtifactVersion) => Promise<boolean>;
 }
 
 type Tab = "summary" | "artifacts";
@@ -37,10 +40,13 @@ export function ArtifactsPane({
   artifacts,
   onRestore,
   onComment,
+  onExport,
 }: Props) {
   const [tab, setTab] = useState<Tab>("summary");
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [exporting, setExporting] = useState<string | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   const recap = useMemo(
     () => buildThreadRecap(sessionId, log),
@@ -127,6 +133,11 @@ export function ArtifactsPane({
         </div>
       ) : (
         <div className="artifacts-body">
+          {exportMessage !== null && (
+            <p className="artifact-export-message" role="status">
+              {exportMessage}
+            </p>
+          )}
           {artifacts.length === 0 ? (
             <p className="muted">
               Code snippets and documents from Muse's responses
@@ -188,6 +199,30 @@ export function ArtifactsPane({
                       title="Insert this version into your draft"
                     >
                       Reuse v{ver.v}
+                    </button>
+                    <button
+                      type="button"
+                      className="artifact-export"
+                      disabled={exporting === draftKey}
+                      onClick={() => {
+                        void (async () => {
+                          setExportMessage(null);
+                          setExporting(draftKey);
+                          try {
+                            const saved = await onExport(a, ver);
+                            if (saved) setExportMessage(`Exported ${a.title}`);
+                          } catch (error) {
+                            setExportMessage(
+                              `Export failed: ${error instanceof Error ? error.message : String(error)}`,
+                            );
+                          } finally {
+                            setExporting(null);
+                          }
+                        })();
+                      }}
+                      title="Save this exact version to a file"
+                    >
+                      {exporting === draftKey ? "Exporting…" : "Export"}
                     </button>
                   </div>
                   <pre className="artifact-code">{ver.text}</pre>

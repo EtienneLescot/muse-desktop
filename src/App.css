@@ -4463,6 +4463,15 @@ body.dark .composer textarea::placeholder {
   cursor: not-allowed;
 }
 
+.artifact-export-message {
+  margin: 0 0 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .integration-refresh-feedback {
   flex-basis: 100%;
   padding-left: 2px;

@@ -874,6 +874,17 @@
   justify-content: flex-start;
   padding: 14px 10px;
 }
+
+.work-panel .artifact-export {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.work-panel .artifact-export:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .search-results button > span {
   display: grid;
   gap: 3px;
