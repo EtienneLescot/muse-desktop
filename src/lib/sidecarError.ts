@@ -12,6 +12,11 @@
 
 export type SidecarErrorKind = "missing" | "start-failed";
 
+export interface SidecarRecoveryStep {
+  title: string;
+  detail: string;
+}
+
 /** True when `message` is a sidecar startup failure of any kind. */
 export function isSidecarError(message: string | null | undefined): boolean {
   return classifySidecarError(message) !== null;
@@ -50,4 +55,76 @@ export function extractTriedPaths(message: string): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+/**
+ * Turn the bounded startup error into a short, platform-aware recovery path.
+ * The bridge remains responsible for probing WSL/Muse; this helper only
+ * explains the evidence already returned by that probe and never claims that
+ * a dependency was installed or authenticated.
+ */
+export function startupRecoverySteps(
+  kind: SidecarErrorKind,
+  message: string,
+): SidecarRecoveryStep[] {
+  const lower = message.toLowerCase();
+  const steps: SidecarRecoveryStep[] = [];
+  const add = (title: string, detail: string) => {
+    if (!steps.some((step) => step.title === title)) steps.push({ title, detail });
+  };
+
+  if (kind === "missing") {
+    add(
+      "Provide the matching sidecar",
+      "For a packaged build, reinstall the Windows bundle. For development, place the triple-suffixed binary in src-tauri/binaries/.",
+    );
+  }
+  if (
+    lower.includes("wsl") ||
+    lower.includes("cannot open this workspace") ||
+    lower.includes("distribution")
+  ) {
+    add(
+      "Check WSL",
+      "Open PowerShell and run `wsl --status`. Start a default distribution and make sure the selected folder is reachable from it.",
+    );
+  }
+  if (
+    lower.includes("install muse") ||
+    lower.includes(".local/bin/muse") ||
+    lower.includes("muse command")
+  ) {
+    add(
+      "Check Muse in WSL",
+      "Inside the default WSL distribution, verify `~/.local/bin/muse --version` and install the Muse CLI if it is missing.",
+    );
+  }
+  if (
+    lower.includes("auth") ||
+    lower.includes("login") ||
+    lower.includes("unauthenticated") ||
+    lower.includes("credential")
+  ) {
+    add(
+      "Sign in to Muse",
+      "Authenticate the Muse CLI inside WSL, then return here and retry. Credentials stay in WSL and are never bundled by the app.",
+    );
+  }
+  if (lower.includes("workspace") || lower.includes("path")) {
+    add(
+      "Choose an accessible folder",
+      "Pick a local project folder with a stable Windows path. The folder must be visible to the WSL distribution used by the bridge.",
+    );
+  }
+  if (steps.length === 0) {
+    add(
+      "Verify the installation",
+      "Check that the sidecar and its dependencies match this app build, then retry the connection.",
+    );
+  }
+  add(
+    "Retry the connection",
+    "After correcting the reported issue, choose Try again. The current conversation and its local history remain available.",
+  );
+  return steps;
 }

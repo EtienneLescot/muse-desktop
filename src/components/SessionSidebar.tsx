@@ -61,6 +61,7 @@ export function SessionSidebar({
   threadProjects,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const actionTrigger = useRef<HTMLButtonElement | null>(null);
   const [selected, setSelected] = useState<MuseSession | null>(null);
   const [rename, setRename] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -68,6 +69,8 @@ export function SessionSidebar({
     dialog.current?.close();
     setSelected(null);
     setConfirmDelete(false);
+    actionTrigger.current?.focus();
+    actionTrigger.current = null;
   }
   const active = useMemo(() => selectActiveThreads(sessions), [sessions]);
   const archived = useMemo(() => selectArchivedThreads(sessions), [sessions]);
@@ -141,9 +144,10 @@ export function SessionSidebar({
         </button>
         <button
           className="conversation-more icon"
-          aria-label={`Actions : ${s.title || "New conversation"}`}
+          aria-label={`Actions for ${s.title || "New conversation"}`}
           aria-haspopup="dialog"
-          onClick={() => {
+          onClick={(event) => {
+            actionTrigger.current = event.currentTarget;
             setSelected(s);
             setRename(s.title);
             setConfirmDelete(false);
@@ -286,7 +290,9 @@ export function SessionSidebar({
               Its local history will be deleted. This cannot be undone.
             </p>
             <div className="dialog-buttons">
-              <button onClick={() => setConfirmDelete(false)}>Cancel</button>
+              <button autoFocus onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
               <button
                 className="danger"
                 onClick={() => {
@@ -315,6 +321,7 @@ export function SessionSidebar({
                 <input
                   id="conversation-name"
                   maxLength={120}
+                  autoFocus
                   value={rename}
                   onChange={(event) => setRename(event.target.value)}
                 />

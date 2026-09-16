@@ -180,10 +180,14 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchIndex, setSearchIndex] = useState(0);
+  const searchTrigger = useRef<HTMLButtonElement>(null);
+  const searchWasOpen = useRef(false);
+  const settingsTrigger = useRef<HTMLButtonElement>(null);
+  const settingsWasOpen = useRef(false);
   const searchResults = sessions.filter((session) =>
     (session.title + " " + session.workspace)
-      .toLocaleLowerCase("fr")
-      .includes(search.toLocaleLowerCase("fr")),
+      .toLocaleLowerCase()
+      .includes(search.toLocaleLowerCase()),
   );
   useEffect(() => setSearchIndex(0), [search, searchOpen]);
   const searchDialog = useRef<HTMLDialogElement>(null);
@@ -194,9 +198,25 @@ export default function App() {
         ?.scrollIntoView({ block: "nearest" });
   }, [searchIndex, searchOpen]);
   useEffect(() => {
-    if (searchOpen) searchDialog.current?.showModal();
-    else searchDialog.current?.close();
+    if (searchOpen) {
+      searchWasOpen.current = true;
+      searchDialog.current?.showModal();
+    } else {
+      searchDialog.current?.close();
+      if (searchWasOpen.current) {
+        searchWasOpen.current = false;
+        searchTrigger.current?.focus();
+      }
+    }
   }, [searchOpen]);
+  useEffect(() => {
+    if (settingsOpen) {
+      settingsWasOpen.current = true;
+    } else if (settingsWasOpen.current) {
+      settingsWasOpen.current = false;
+      settingsTrigger.current?.focus();
+    }
+  }, [settingsOpen]);
   const openPage = (next: typeof page) => {
     setSettingsOpen(false);
     setPage(next);
@@ -399,6 +419,7 @@ export default function App() {
             <span>New conversation</span>
           </button>
           <button
+            ref={searchTrigger}
             onClick={() => setSearchOpen(true)}
             aria-label="Search"
             title="Search · Ctrl+K"
@@ -471,6 +492,7 @@ export default function App() {
         <div className="sidebar-footer">
           <button
             type="button"
+            ref={settingsTrigger}
             className="account"
             aria-label="Profile — Settings"
             onClick={() => setSettingsOpen(true)}

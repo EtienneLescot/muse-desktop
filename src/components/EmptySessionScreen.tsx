@@ -101,6 +101,7 @@ export function EmptySessionScreen({
       </div>
       <div className="welcome-draft">
         <textarea
+          autoFocus
           aria-label="Your first message"
           placeholder="Describe what you want to build…"
           value={draft}

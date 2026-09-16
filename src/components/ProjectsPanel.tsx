@@ -123,8 +123,7 @@ export function ProjectsPanel({
       )}
       {projects.length === 0 && (
         <p className="muted">
-          No projects yet. Regroupez vos conversations et leurs
-          instructions.
+          No projects yet. Group your conversations and their instructions.
         </p>
       )}
       <ul className="project-items">

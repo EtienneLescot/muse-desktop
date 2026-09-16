@@ -1,4 +1,5 @@
 import type { ShareBundle, ShareMode } from "../lib/sharing";
+import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
   sessionId: string;
@@ -43,6 +44,13 @@ export function SharePanel({
           </select>
         </label>
       </header>
+      <p className="muted capability-line">
+        <CapabilityBadge
+          status="local"
+          reason="Exports are generated and stored locally; no remote share link is created."
+        />
+        Local export only
+      </p>
       {mode === "disabled" ? (
         <p className="muted">
           Exports are disabled in this mode.

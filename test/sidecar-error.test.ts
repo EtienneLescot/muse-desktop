@@ -11,6 +11,7 @@ import {
   classifySidecarError,
   extractTriedPaths,
   isSidecarError,
+  startupRecoverySteps,
 } from "../src/lib/sidecarError.ts";
 
 const MISSING =
@@ -65,5 +66,45 @@ describe("tried-path extraction", () => {
   it("returns [] when the message carries no tried list", () => {
     assert.deepEqual(extractTriedPaths("sidecar binary not found"), []);
     assert.deepEqual(extractTriedPaths(""), []);
+  });
+});
+
+describe("startup recovery guidance", () => {
+  it("explains the WSL and Muse checks from bridge evidence", () => {
+    const steps = startupRecoverySteps(
+      "start-failed",
+      "Muse WSL adapter: Install Muse in WSL (~/.local/bin/muse) first; WSL cannot open this workspace",
+    );
+    const titles = steps.map((step) => step.title);
+    assert.deepEqual(titles, [
+      "Check WSL",
+      "Check Muse in WSL",
+      "Choose an accessible folder",
+      "Retry the connection",
+    ]);
+    assert.match(steps[1]?.detail ?? "", /--version/);
+  });
+
+  it("gives a concrete sidecar step for a missing binary", () => {
+    const steps = startupRecoverySteps("missing", MISSING);
+    assert.equal(steps[0]?.title, "Provide the matching sidecar");
+    assert.equal(steps.at(-1)?.title, "Retry the connection");
+  });
+
+  it("keeps authentication guidance explicit and local to WSL", () => {
+    const steps = startupRecoverySteps(
+      "start-failed",
+      "MSP handshake failed: Muse authentication credentials are missing",
+    );
+    const auth = steps.find((step) => step.title === "Sign in to Muse");
+    assert.ok(auth);
+    assert.match(auth.detail, /inside WSL/);
+    assert.match(auth.detail, /never bundled/);
+  });
+
+  it("does not expose an installation success claim for unknown errors", () => {
+    const steps = startupRecoverySteps("start-failed", "handshake failed");
+    assert.match(steps[0]?.detail ?? "", /Check that the sidecar/);
+    assert.doesNotMatch(steps[0]?.detail ?? "", /installed|authenticated/i);
   });
 });

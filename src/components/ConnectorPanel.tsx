@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CURATED_CONNECTORS, type ConnectorEntry } from "../lib/connectors";
+import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
   installed: ConnectorEntry[];
@@ -39,8 +40,11 @@ export function ConnectorPanel({
     <section className="integration-panel" aria-label="Connectors">
       <h3>Connectors</h3>
       <p className="muted">
-        Configuration catalog. MCP tool execution is not yet
-        connected.
+        <CapabilityBadge
+          status="local"
+          reason="The connector catalog and enablement state are local; MCP tool execution is not connected."
+        />{" "}
+        Configuration catalog. MCP tool execution is not connected.
       </p>
       <ul className="integration-list">
         {CURATED_CONNECTORS.map((c) => {

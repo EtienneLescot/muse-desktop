@@ -223,7 +223,9 @@ import {
   AUTHORIZATION_MODE_KEY,
   DEFAULT_AUTHORIZATION_MODE,
   automaticApprovalChoice,
+  authorizationModeLabel,
   parseAuthorizationMode,
+  productAuthorizationMode,
   type AuthorizationMode,
 } from "../lib/authorization";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
@@ -1703,6 +1705,26 @@ export function useMuseSessions(): UseMuseSessions {
       );
       return;
     }
+    if (kind === "approval_mode_changed") {
+      try {
+        const obj = JSON.parse(payload) as Record<string, unknown>;
+        const hostMode = typeof obj.mode === "string" ? obj.mode : "";
+        const mapped = productAuthorizationMode(hostMode);
+        if (mapped === null) {
+          setError(`The host reported an unsupported approval mode: ${hostMode || "unknown"}.`);
+          return;
+        }
+        setAuthorizationModeState(mapped);
+        try {
+          localStorage.setItem(AUTHORIZATION_MODE_KEY, mapped);
+        } catch {
+          // The live host state remains authoritative even when storage is unavailable.
+        }
+      } catch {
+        setError("The host reported an invalid approval mode update.");
+      }
+      return;
+    }
     // US-10: `item/started` paints before the first delta. Ensure a visible
     // open block even when no chunk has landed yet (no system-line noise,
     // and other open items keep streaming).
@@ -1746,7 +1768,7 @@ export function useMuseSessions(): UseMuseSessions {
         cur.map((s) => (s.session_id === sid ? { ...s, running: false } : s)),
       );
     }
-    const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated";
+    const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated" || kind === "approval_mode_changed";
     if (kind === "approval/resolved") {
       // The host can settle an approval independently of the click promise
       // (for example after a reconnect). Reconcile the durable card by id;
@@ -1792,8 +1814,31 @@ export function useMuseSessions(): UseMuseSessions {
   }, []);
 
   const setAuthorizationMode = useCallback((mode: AuthorizationMode) => {
-    setAuthorizationModeState(parseAuthorizationMode(mode));
-  }, []);
+    const next = parseAuthorizationMode(mode);
+    setAuthorizationModeState(next);
+    if (!isTauriRuntime()) return;
+    const targets = sessions.filter((session) =>
+      connectedIds.includes(session.session_id),
+    );
+    if (targets.length === 0) return;
+    // The host applies the new posture to subsequent actions. Pending
+    // approvals remain race-guarded by their current requirement token.
+    void Promise.allSettled(
+      targets.map((session) =>
+        invoke("set_approval_mode", {
+          sessionId: session.session_id,
+          mode: next,
+        }),
+      ),
+    ).then((results) => {
+      const failed = results.filter((result) => result.status === "rejected").length;
+      if (failed > 0) {
+        setError(
+          `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host.`,
+        );
+      }
+    });
+  }, [connectedIds, sessions]);
 
   // w-settings: provider selection is per project (project id = workspace).
   const setProviderId = useCallback((id: string) => {
@@ -1878,6 +1923,7 @@ export function useMuseSessions(): UseMuseSessions {
       }
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
+        authorizationMode,
       });
       const record: MuseSession = {
         session_id: meta.session_id,
@@ -1895,7 +1941,7 @@ export function useMuseSessions(): UseMuseSessions {
       setError(`start_session failed: ${String(e)}`);
       return null;
     }
-  }, [workspace]);
+  }, [authorizationMode, workspace]);
 
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
   const reconnectSession = useCallback(async (id: string) => {
@@ -1908,6 +1954,12 @@ export function useMuseSessions(): UseMuseSessions {
         sessionId: id, workspacePath: session.workspace,
       });
       if (tombstoned.current?.has(id)) return;
+      // Resume restores the host's persisted posture. Reconcile it with the
+      // current global selector before enabling the composer again.
+      await invoke("set_approval_mode", {
+        sessionId: id,
+        mode: authorizationMode,
+      });
       setConnectedIds((cur) => [...new Set([...cur, id])]);
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
       kickPoll();
@@ -1917,7 +1969,7 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [sessions, kickPoll, refreshModels]);
+  }, [authorizationMode, sessions, kickPoll, refreshModels]);
 
   const startSession = useCallback(async () => {
     return await startSessionRow();

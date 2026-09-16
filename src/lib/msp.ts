@@ -11,8 +11,10 @@
  * the host. Bump the pinned SDK version deliberately; re-run `tsc` and the
  * conformance test to re-validate.
  *
- * Follow-up (not done here): pin `EXPECTED_SCHEMA_FINGERPRINT` against the
- * bundled `muse` binary via the SDK's `checkServedFingerprint`.
+ * Rust validates the served identity, schema major and fingerprint shape
+ * during `initialize`. Exact fingerprint pinning remains a future
+ * compatibility-matrix concern because installations may ship additive
+ * schema revisions.
  */
 import type {
   MspMethod,
@@ -26,11 +28,20 @@ export const MSP_METHODS_SENT: MspMethod[] = [
   "session/read",
   "session/resume",
   "session/list",
+  "model/list",
+  "session/compact",
+  "session/setModel",
   "turn/start",
   "turn/interrupt",
+  "session/setApprovalMode",
   "approval/decide",
   "userInput/answer",
   "userInput/cancel",
+  "subagent/interrupt",
+  "subagent/stop",
+  "subagent/resume",
+  "subagent/followupTask",
+  "subagent/readResult",
 ];
 
 /**
@@ -53,6 +64,8 @@ export const MSP_NOTIFICATIONS_HANDLED: MspNotification[] = [
   "turn/unqueued",
   "userInput/requested",
   "userInput/settled",
+  "session/contextUsage",
+  "session/approvalModeChanged",
 ];
 
 /** Host error codes our UI interprets (kinds per the SDK error registry). */

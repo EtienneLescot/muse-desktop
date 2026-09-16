@@ -5,14 +5,13 @@
 //!   share its engine; different workspaces retain independent engines.
 //! - Commands and notifications require explicit session ownership; a global
 //!   workspace preference never selects the engine for an existing session.
-//! - Approval mode is intentionally NOT selected on the wire: the host seals
-//!   a startup ceiling and rejects selections (`approval_mode_ceiling`), so
-//!   `session/start` omits it and inherits the sealed default.
+//! - Approval mode is selected from the host's closed enum at session start
+//!   and can be changed for subsequent actions with `session/setApprovalMode`.
 //! - No agentic logic lives here: spawn, frame relay, kill. The sidecar owns
 //!   orchestration (sub-agents included).
 //!
 //! IPC surface (frontend calls via `invoke`, receives via `listen`):
-//!   commands: start_session, restore_sessions, send_input, approve,
+//!   commands: start_session, set_approval_mode, restore_sessions, send_input, approve,
 //!             cancel_session, kill_session,
 //!             subagent_interrupt, subagent_stop, subagent_resume,
 //!             subagent_followup, subagent_read_result, subagent_drilldown
@@ -217,12 +216,76 @@ struct AppState {
     event_buffer: Mutex<std::collections::VecDeque<DrainedEvent>>,
 }
 
+const DIAGNOSTIC_MAX_LINES: usize = 20;
+const DIAGNOSTIC_LINE_LIMIT: usize = 1000;
+const DIAGNOSTIC_TOTAL_LIMIT: usize = 8000;
+
+/// Truncate by a UTF-8 character boundary. The old byte slice could panic
+/// when a host error ended in the middle of a multibyte character.
 fn truncate(s: &str, n: usize) -> String {
     if s.len() <= n {
-        s.to_string()
-    } else {
-        format!("{}…", &s[..n])
+        return s.to_string();
     }
+    let mut end = n.min(s.len());
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &s[..end])
+}
+
+/// Keep host diagnostics useful without persisting command prompts, bearer
+/// tokens or common secret-shaped values. This is deliberately conservative:
+/// normal prose is retained, while values following an obvious secret key
+/// are replaced before the bounded stderr tail reaches the UI.
+fn redact_diagnostic(input: &str) -> String {
+    let mut out = input.replace("Bearer ", "Bearer [redacted]");
+    out = out.replace("bearer ", "bearer [redacted]");
+    out = out.replace("BEARER ", "BEARER [redacted]");
+    for key in [
+        "token", "access_token", "refresh_token", "api_key", "apikey", "secret", "password",
+    ] {
+        let mut search_from = 0usize;
+        loop {
+            let lower = out.to_ascii_lowercase();
+            let Some(relative) = lower[search_from..].find(key) else { break; };
+            let start = search_from + relative;
+            let after_key = start + key.len();
+            let bytes = out.as_bytes();
+            let mut value_start = after_key;
+            while value_start < bytes.len() && bytes[value_start].is_ascii_whitespace() {
+                value_start += 1;
+            }
+            if value_start >= bytes.len() || !matches!(bytes[value_start], b'=' | b':') {
+                search_from = after_key;
+                continue;
+            }
+            value_start += 1;
+            while value_start < bytes.len() && bytes[value_start].is_ascii_whitespace() {
+                value_start += 1;
+            }
+            let quoted = bytes.get(value_start).copied().is_some_and(|b| b == b'"' || b == b'\'');
+            if quoted {
+                value_start += 1;
+            }
+            let mut value_end = value_start;
+            while value_end < bytes.len() {
+                let b = bytes[value_end];
+                if (quoted && (b == b'"' || b == b'\''))
+                    || (!quoted && (b.is_ascii_whitespace() || matches!(b, b',' | b';' | b'}' | b']' | b')')))
+                {
+                    break;
+                }
+                value_end += 1;
+            }
+            if value_end > value_start {
+                out.replace_range(value_start..value_end, "[redacted]");
+                search_from = value_start + "[redacted]".len();
+            } else {
+                search_from = after_key;
+            }
+        }
+    }
+    truncate(&out, DIAGNOSTIC_LINE_LIMIT)
 }
 
 /// Reasoning items are streamed through the same `item/delta` notification as
@@ -323,6 +386,60 @@ fn approval_terminal(result: &Value) -> bool {
         .unwrap_or(true)
 }
 
+/// Map the product-facing posture to the host's closed MSP enum. Keeping this
+/// translation in Rust means every wire write is validated even if a stale or
+/// malformed renderer invokes the command directly.
+fn host_approval_mode(mode: &str) -> Option<&'static str> {
+    match mode {
+        "ask" => Some("onRequest"),
+        "workspace" => Some("promptUnmatched"),
+        "yolo" => Some("allowAll"),
+        _ => None,
+    }
+}
+
+/// Validate the minimum initialize contract before the host accepts any
+/// session. Unknown additive fields remain allowed, while a missing identity
+/// or unsupported schema version produces a startup error with remediation.
+fn validate_initialize_result(result: &Value) -> Result<(), String> {
+    let server = result
+        .get("serverInfo")
+        .ok_or_else(|| "incompatible Muse host: initialize response has no serverInfo".to_string())?;
+    let name = server
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "incompatible Muse host: serverInfo.name is missing".to_string())?;
+    if name != "muse" {
+        return Err(format!(
+            "incompatible Muse host: expected serverInfo.name `muse`, got `{name}`"
+        ));
+    }
+    let version = server
+        .get("version")
+        .and_then(Value::as_str)
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| "incompatible Muse host: serverInfo.version is missing".to_string())?;
+    let schema = result
+        .get("schema")
+        .ok_or_else(|| "incompatible Muse host: initialize response has no schema metadata".to_string())?;
+    let schema_version = schema
+        .get("version")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "incompatible Muse host: schema.version is missing".to_string())?;
+    if schema_version != 1 {
+        return Err(format!(
+            "incompatible Muse host {version}: unsupported MSP schema version {schema_version} (expected 1)"
+        ));
+    }
+    let fingerprint = schema
+        .get("fingerprint")
+        .and_then(Value::as_str)
+        .filter(|f| f.starts_with("sha256:") && f.len() > "sha256:".len())
+        .ok_or_else(|| "incompatible Muse host: schema.fingerprint is missing or invalid".to_string())?;
+    let _ = fingerprint;
+    Ok(())
+}
+
 fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: String) {
     // Poll transport: buffer the event with a sequence number. The UI drains
     // via `poll_events`. (`event` is kept for log readability.)
@@ -384,12 +501,13 @@ async fn ensure_host(
     // `initialized` notification completes it, and every later call fails
     // `Not initialized` without it.
     let handshake = async {
-        client
+        let initialized = client
             .request(
                 "initialize",
                 json!({"clientInfo": {"name": "muse_desktop", "version": "0.1.0"}}),
             )
             .await?;
+        validate_initialize_result(&initialized)?;
         client.notify("initialized", Value::Null).await
     };
     if let Err(e) = handshake.await {
@@ -405,10 +523,11 @@ async fn ensure_host(
 }
 
 fn tail_of(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>) -> String {
-    stderr_tail
+    let joined = stderr_tail
         .lock()
         .map(|t| t.join(" | "))
-        .unwrap_or_default()
+        .unwrap_or_default();
+    truncate(&joined, DIAGNOSTIC_TOTAL_LIMIT)
 }
 
 /// Absolute path of the `muse` sidecar binary.
@@ -546,8 +665,8 @@ fn pump_stdout(
 
 fn push_stderr(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>, line: String) {
     if let Ok(mut tail) = stderr_tail.lock() {
-        tail.push(line);
-        if tail.len() > 20 {
+        tail.push(redact_diagnostic(&line));
+        if tail.len() > DIAGNOSTIC_MAX_LINES {
             tail.remove(0);
         }
     }
@@ -828,6 +947,20 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 json!({"inputId": input_id, "outcome": outcome}).to_string(),
             );
         }
+        "session/approvalModeChanged" => {
+            // Keep the selector's product language aligned with the host's
+            // effective projection. `denyUnmatched` is intentionally not
+            // fabricated into a fourth UI posture; the renderer surfaces it.
+            if let Some(mode) = p.get("mode").and_then(Value::as_str) {
+                emit(
+                    app,
+                    "status",
+                    sid,
+                    "approval_mode_changed",
+                    json!({"mode": mode}).to_string(),
+                );
+            }
+        }
         // US-4 (server half): provider-reported context occupancy
         // (SS4.6.6 triple). The host only emits on change; forward
         // defensively — unknown pressure levels pass through untouched (the
@@ -1053,20 +1186,21 @@ async fn start_session(
     app: AppHandle,
     state: State<'_, AppState>,
     workspace_path: Option<String>,
+    authorization_mode: Option<String>,
 ) -> Result<SessionMeta, String> {
     let root = resolve_workspace(&state, workspace_path)?;
     let client = ensure_host(&app, &state, &root).await?;
-    // No `approvalMode` on the wire: the host seals a startup ceiling
-    // (observed: `promptUnmatched`) and rejects any selected mode as
-    // `approval_mode_ceiling` — omitted selects the sealed default.
+    let mut params = json!({
+        "commandId": new_command_id(),
+        "workspaceRoot": root.display().to_string(),
+    });
+    if let Some(mode) = authorization_mode.as_deref() {
+        let wire_mode = host_approval_mode(mode)
+            .ok_or_else(|| format!("unknown authorization mode: {mode}"))?;
+        params["approvalMode"] = json!(wire_mode);
+    }
     let res = client
-        .request(
-            "session/start",
-            json!({
-                "commandId": new_command_id(),
-                "workspaceRoot": root.display().to_string(),
-            }),
-        )
+        .request("session/start", params)
         .await?;
     let session = res.get("session").ok_or("session/start: no session in response")?;
     let session_id = session
@@ -1088,6 +1222,30 @@ async fn start_session(
         .map_err(|e| format!("state lock: {e}"))?
         .insert(session_id, meta.clone());
     Ok(meta)
+}
+
+/// Change the effective approval posture for one live session. The host
+/// applies this to subsequent actions; an already pending approval remains
+/// guarded by its current requirement token until the user resolves it.
+#[tauri::command]
+async fn set_approval_mode(
+    state: State<'_, AppState>,
+    session_id: String,
+    mode: String,
+) -> Result<Value, String> {
+    let wire_mode = host_approval_mode(&mode)
+        .ok_or_else(|| format!("unknown authorization mode: {mode}"))?;
+    let client = session_client(&state, &session_id)?;
+    client
+        .request(
+            "session/setApprovalMode",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": session_id,
+                "mode": wire_mode,
+            }),
+        )
+        .await
 }
 
 /// Explicitly attach a saved durable session; never create a replacement ID.
@@ -1699,6 +1857,75 @@ mod tests {
     use super::*;
 
     #[test]
+    fn truncate_respects_utf8_boundaries() {
+        let text = "éclair — Muse";
+        let clipped = truncate(text, 1);
+        assert_eq!(clipped, "…");
+        let clipped = truncate(text, 2);
+        assert_eq!(clipped, "é…");
+    }
+
+    #[test]
+    fn diagnostics_redact_secret_shaped_values_and_bound_length() {
+        let redacted = redact_diagnostic("token=super-secret password: 'pāsswørd' Bearer abc123");
+        assert!(!redacted.contains("super-secret"));
+        assert!(!redacted.contains("pāsswørd"));
+        assert!(!redacted.contains("Bearer abc123"));
+        assert!(redacted.contains("[redacted]"));
+        assert!(redact_diagnostic(&"界".repeat(5000)).len() <= DIAGNOSTIC_LINE_LIMIT + "…".len());
+    }
+
+    #[test]
+    fn stderr_tail_keeps_recent_bounded_sanitized_lines() {
+        let tail = std::sync::Arc::new(Mutex::new(Vec::new()));
+        for i in 0..(DIAGNOSTIC_MAX_LINES + 3) {
+            push_stderr(&tail, format!("line {i} token=secret-{i}"));
+        }
+        let entries = tail.lock().unwrap();
+        assert_eq!(entries.len(), DIAGNOSTIC_MAX_LINES);
+        assert!(entries[0].contains("line 3"));
+        assert!(entries.iter().all(|line| !line.contains("secret-")));
+    }
+
+    #[test]
+    fn product_authorization_modes_map_to_closed_host_values() {
+        assert_eq!(host_approval_mode("ask"), Some("onRequest"));
+        assert_eq!(host_approval_mode("workspace"), Some("promptUnmatched"));
+        assert_eq!(host_approval_mode("yolo"), Some("allowAll"));
+        assert_eq!(host_approval_mode("deny"), None);
+    }
+
+    #[test]
+    fn initialize_compatibility_accepts_the_official_contract() {
+        let result = json!({
+            "serverInfo": {"name": "muse", "version": "1.3.0"},
+            "schema": {"version": 1, "fingerprint": "sha256:abc123"},
+            "grantedCapabilities": []
+        });
+        assert!(validate_initialize_result(&result).is_ok());
+    }
+
+    #[test]
+    fn initialize_compatibility_rejects_missing_or_unsupported_metadata() {
+        let missing = json!({"serverInfo": {"name": "muse", "version": "1.3.0"}});
+        let unsupported = json!({
+            "serverInfo": {"name": "muse", "version": "2.0.0"},
+            "schema": {"version": 2, "fingerprint": "sha256:abc123"}
+        });
+        let wrong_name = json!({
+            "serverInfo": {"name": "other", "version": "1.3.0"},
+            "schema": {"version": 1, "fingerprint": "sha256:abc123"}
+        });
+        assert!(validate_initialize_result(&missing).is_err());
+        assert!(validate_initialize_result(&unsupported)
+            .unwrap_err()
+            .contains("unsupported MSP schema version"));
+        assert!(validate_initialize_result(&wrong_name)
+            .unwrap_err()
+            .contains("expected serverInfo.name"));
+    }
+
+    #[test]
     fn input_reached_matches_only_server_turn_identifiers() {
         let read = json!({
             "session": {"sessionId": "sess-1", "path": "durable.jsonl"},
@@ -2052,6 +2279,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
+            set_approval_mode,
             resume_session,
             restore_sessions,
             send_input,

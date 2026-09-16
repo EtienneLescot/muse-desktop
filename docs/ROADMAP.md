@@ -34,17 +34,17 @@ Priorité immédiate. Ne pas ajouter de nouvelles surfaces avant de sécuriser c
 | M0-03 | Ne perdre aucun texte lors d'un envoi rejeté | À définir | Présente | Câblée | Unitaire | Outbox durable par envoi (clientMessageId, sending/accepted/failed) : brouillon vidé seulement à l'acquittement, entrée réessayable après refus ou timeout ambigu, vérification serveur (`session/read`) avant toute retransmission. Reste : E2E natif (moteur coupé pendant l'envoi, fermeture/rechargement, double-clic, IME) |
 | M0-04 | Arrêter et reprendre avec des états fiables | Adapté | Présente | Câblée | Unitaire | Tester arrêt avant premier token, pendant outil et après fin ; distinguer demande d'arrêt et arrêt confirmé |
 | M0-05 | Répondre aux permissions/questions même après incident | Adapté | Présente | Câblée | Unitaire | Recharger les demandes en attente si le protocole le permet ; invalider les demandes périmées ; vérifier rejet, correction et absence de replay |
-| M0-06 | Afficher la politique de permissions réellement effective | Adapté | Présente | Locale | Unitaire | Sélecteur global Ask / Approve on my behalf / YOLO, persistance et auto-décision au-dessus des choix MSP ; distinguer posture locale et plafond du host ; un test natif confirme refus/autorisation |
-| M0-07 | Protéger les diagnostics et éviter un crash sur Unicode | — | — | Partielle | À faire | Retirer le wire log brut par défaut ; si diagnostic activé, rédaction/rotation et troncature UTF-8 sûre ; aucune frame brute en usage normal |
-| M0-08 | Détecter une incompatibilité du moteur | À définir | Partielle | Partielle | Unitaire | Inventorier toutes les RPC utilisées, pas seulement les huit du registre actuel ; vérifier capacités/fingerprint ; erreur exploitable au démarrage |
-| M0-09 | Conserver les données sans échec silencieux | À définir | Partielle | Locale | Unitaire | Versionner/migrer le stockage, gérer quota et données corrompues, offrir récupération/export ; éprouver migration et saturation |
-| M0-10 | Réussir le premier lancement Windows | À définir | Partielle | Partielle | À faire | Détecter WSL, Muse et authentification ; guider vers la correction ; valider installation sur machine propre, sans configuration développeur |
-| M0-11 | Finir l'anglais et les détails de navigation | Adapté | Présente | Locale | UI | Corriger textes résiduels, erreurs, titres générés et raccourcis propres aux OS ; passer la même checklist sur accueil, conversation et vues secondaires |
-| M0-12 | Utiliser l'existant au clavier et au lecteur d'écran | Adapté | Partielle | Locale | UI | Auditer tabulations, focus/restauration, dialogues, annonces de streaming, contrastes et réduction de mouvement ; validation assistive réelle |
-| M0-13 | Identifier clairement les capacités non connectées | À définir | Partielle | Locale | UI | Uniformiser « local », « manuel », « non connecté » ; retirer les actions trompeuses ; aucune action ne promet un effet serveur absent |
-| M0-14 | Disposer de contrôles reproductibles avant fusion | — | — | Absente | À faire | Ajouter CI build/Node/Rust et scénarios natifs ; conserver fixtures sans secrets et preuves par plateforme ; CI verte sur chaque PR |
+| M0-06 | Afficher la politique de permissions réellement effective | Adapté | Présente | Câblée | Unitaire | Sélecteur global Ask / Approve on my behalf / YOLO, mapping vers l'enum MSP, persistance et changement en session via `session/setApprovalMode` ; distinguer posture locale et plafond du host ; le contrat réel est vérifié sur le binaire 1.3.0 |
+| M0-07 | Protéger les diagnostics et éviter un crash sur Unicode | — | — | Partielle | Unitaire | Aucun wire log brut par défaut ; stderr borné à 20 lignes/8 000 caractères, secrets évidents masqués et troncature UTF-8 sûre ; export/diagnostic détaillé reste à concevoir |
+| M0-08 | Détecter une incompatibilité du moteur | Adapté | Présente | Câblée | Unitaire | Handshake validé sur `serverInfo`, version MSP majeure et fingerprint ; toutes les RPC émises sont listées dans `src/lib/msp.ts` ; erreur exploitable au démarrage, qualification des anciennes versions restant séparée |
+| M0-09 | Conserver les données sans échec silencieux | Adapté | Partielle | Locale | Unitaire | Façade de stockage défensive pour les clés `muse-desktop.*`, signalement corruption/indisponibilité/quota et export de récupération ; migration de schémas historiques et restauration guidée restent à qualifier |
+| M0-10 | Réussir le premier lancement Windows | Adapté | Présente | Partielle | Unitaire | Guidance contextuelle après échec (sidecar, WSL, Muse CLI, authentification, dossier) et bouton Réessayer ; détection native sur machine propre et matrice WSL/auth restent à valider |
+| M0-11 | Finir l'anglais et les détails de navigation | Adapté | Présente | Locale | UI | Libellés résiduels harmonisés sur accueil, conversation, projets, import et résumé ; recherche indépendante de la locale française ; reste : checklist complète des erreurs générées, titres et raccourcis par OS |
+| M0-12 | Utiliser l'existant au clavier et au lecteur d'écran | Adapté | Présente | Locale | UI | Focus initial et restauration après dialogues, navigation clavier et annonces de streaming en place ; validation assistive réelle, zoom 200 % et contraste restent à qualifier |
+| M0-13 | Identifier clairement les capacités non connectées | Adapté | Présente | Locale | UI | Vocabulaire commun Available / Local / Manual / Not connected avec raison ; badges ajoutés aux connecteurs, channels, exports et worktrees ; reste : couvrir les surfaces secondaires et vérifier chaque action réelle |
+| M0-14 | Disposer de contrôles reproductibles avant fusion | — | — | Partielle | Unitaire | CI build/Node/Rust ajoutée sans credentials ni binaire sidecar ; restent les fixtures MSP, scénarios natifs A/B et rapports de capture en cas d'échec |
 
-Preuves principales : [backend](../src-tauri/src/main.rs), [sessions](../src/hooks/useMuseSessions.ts), [Composer](../src/components/Composer.tsx), [paramètres](../src/components/SettingsPanel.tsx), [conformité MSP](../src/lib/msp.ts), [bridge Windows](../scripts/wsl-bridge/README.md).
+Preuves principales : [backend](../src-tauri/src/main.rs), [sessions](../src/hooks/useMuseSessions.ts), [Composer](../src/components/Composer.tsx), [paramètres](../src/components/SettingsPanel.tsx), [persistance défensive](../src/lib/storage.ts), [conformité MSP](../src/lib/msp.ts), [bridge Windows](../scripts/wsl-bridge/README.md).
 
 ### Livraison M0-01 — 15 septembre 2026
 
@@ -56,18 +56,72 @@ Preuves principales : [backend](../src-tauri/src/main.rs), [sessions](../src/hoo
 ### Livraison M0-03 — 15 septembre 2026
 
 - **Envoi sans perte — implémenté, tests unitaires passés** : chaque envoi logique porte un `clientMessageId` stable et un `commandId` UUIDv7 dérivé, persisté dans l'outbox par session (`muse-desktop.outbox.v1.*`, états sending/accepted/failed). Le brouillon du composer n'est vidé qu'à l'acquittement du superviseur ; un refus laisse le texte dans le champ, un échec crée une entrée réessayable (bannière Retry/Discard) routée par `sessionId`, jamais par la conversation affichée. Un timeout d'acquittement (15 s) ou un redémarrage en plein envoi marque l'entrée ambiguë : la reprise vérifie `commandId`/`turnId` dans la réponse structurée de `session/read` avant toute retransmission — un envoi logique ne peut pas devenir deux tours. Le retry réutilise l'expansion stockée (skill/fanout/projet) et l'entrée de log existante, sans jamais doubler le texte. Une requête Tauri encore pendante conserve aussi le verrou de session jusqu'à sa résolution.
-- **Tests** : `npm test` (367 passés, dont outbox : machine à états, récupération au boot, identité serveur, persistance, clé conservée dans le log) ; `npm run build` ; `cargo test --bin muse-desktop` (34 passés, dont `input_reached` et les approbations composées). Aucun tour modèle.
+- **Tests** : `npm test` (370 passés, dont outbox : machine à états, récupération au boot, identité serveur, persistance, clé conservée dans le log) ; `npm run build` ; `cargo test --bin muse-desktop` (40 passés, dont `input_reached`, les approbations composées, le mapping de posture et les diagnostics bornés). Aucun tour modèle.
 - **À valider** : E2E natif — moteur coupé pendant l'envoi, refus serveur, double-clic, fermeture/rechargement, changement de conversation, échec du premier prompt, IME et saisie pendant l'attente. Le parent M0-03 reste ouvert jusqu'à cette preuve.
 
-Validation de cette livraison : build frontend et 367 tests Node ; suite Rust (34 tests) incluant les scénarios de routage A/B, approbations composées, collision d'identité, session supprimée, fin d'un host, ancienne génération et fermeture du superviseur.
+Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (40 tests) incluant les scénarios de routage A/B, approbations composées, collision d'identité, session supprimée, fin d'un host, ancienne génération, diagnostics bornés et fermeture du superviseur.
 
 **Sortie M0 :** scénario natif créer → envoyer → stream → approuver → répondre → interrompre → réessayer, puis redémarrage et deux projets simultanés. Aucun réglage ne prétend modifier une capacité qu'il ne contrôle pas. Validation Windows d'abord ; support macOS/Linux qualifié séparément.
+
+### Livraison M0-07 — diagnostics sûrs
+
+- **M0-07a — câblé** : la capture brute de frames n'est pas activée en usage normal. La queue stderr est limitée à 20 lignes, chaque ligne à 1 000 caractères et le message final à 8 000 caractères.
+- **M0-07b — garde-fou** : les valeurs de formes `token=`, `password:`, `api_key=` et les bearer tokens sont remplacées avant affichage ; la troncature respecte les frontières UTF-8 et ne peut pas paniquer sur des erreurs Unicode.
+- **Validation** : suite Rust à 40 tests, avec secret synthétique, volume supérieur aux caps et caractères multioctets aux limites.
+
+### Livraison M0-09 — persistance récupérable
+
+- **M0-09a — façade câblée** : les lectures/écritures principales de `persist.ts` passent par une façade commune qui ne jette jamais une valeur précédente sur erreur et conserve un diagnostic borné pour stockage indisponible, JSON corrompu ou quota saturé.
+- **M0-09b — récupération explicite** : les réglages proposent un export local des clés `muse-desktop.*`, avec les entrées JSON valides et les valeurs endommagées conservées comme texte brut pour support. Aucun appel réseau ou moteur n'est déclenché.
+- **M0-09c — limite restante** : les autres modules historiques migrent encore progressivement vers la façade ; les migrations de versions antérieures et la restauration guidée restent à éprouver avant de changer le format des clés.
+- **Validation** : quatre tests Node couvrent corruption, stockage absent, quota, suppression sûre et export d'une entrée endommagée.
+
+### Livraison M0-10 — premier lancement Windows (guidance)
+
+- **M0-10a — interface câblée partiellement** : le panneau d'échec du sidecar transforme les indices déjà remontés par le bridge en étapes concrètes : binaire correspondant au target triple, disponibilité WSL, présence de `~/.local/bin/muse`, authentification et accessibilité du dossier. Il conserve les chemins sondés et propose toujours Réessayer / Choisir un dossier.
+- **M0-10b — limite restante** : la guidance ne lance aucune installation et ne déclare pas une dépendance saine sans preuve. La détection native sur machine propre, les distributions WSL non par défaut et le parcours d'authentification réel restent à valider.
+- **Validation** : tests Node de classification/guidance pour binaire absent, WSL/Muse manquants, auth et message inconnu ; build frontend vert.
+
+### Livraison M0-11 — finition anglais/navigation (première passe)
+
+- **M0-11a — harmonisé** : les derniers libellés français résiduels ont été remplacés dans le résumé de conversation, l'import de configuration, les projets et les actions de sidebar. La ponctuation des libellés visibles suit l'anglais (`Context:`, `Actions for…`).
+- **M0-11b — recherche stable** : le filtrage de conversations n'impose plus la locale française ; la casse suit la locale de l'environnement sans modifier les titres saisis par l'utilisateur.
+- **M0-11c — limite restante** : les messages générés par le moteur restent affichés tels quels ; la checklist complète des erreurs applicatives, raccourcis Ctrl/Cmd et captures par OS reste à passer.
+- **Validation** : test de non-régression du copy audit (`test/ui-copy.test.ts`) et build frontend vert.
+
+### Livraison M0-12 — accessibilité de navigation (première passe)
+
+- **M0-12a — focus** : le composer de première conversation reçoit le focus initial ; les dialogues de recherche, réglages et actions d'une conversation rendent le focus à leur déclencheur à la fermeture. Le formulaire de renommage et l'annulation de suppression ont un focus initial explicite.
+- **M0-12b — streaming** : les annonces restent limitées aux transitions d'état et aux demandes d'action ; les tokens du flux ne sont pas annoncés individuellement (`role=log` en `aria-live=off`).
+- **M0-12c — limite restante** : lecteur d'écran réel, zoom 200 %, contraste et parcours complet sans souris doivent encore être vérifiés sur Windows WebView2 et les autres plateformes annoncées.
+- **Validation** : suite Node et build frontend verts ; preuve assistive native encore à produire.
+
+### Livraison M0-13 — états de capacité honnêtes (première passe)
+
+- **M0-13a — vocabulaire commun** : `CapabilityBadge` et `capability.ts` distinguent `Available`, `Local`, `Manual` et `Not connected`, avec une raison consultable au survol. Les états restent informatifs et n'ajoutent pas de fausse confirmation.
+- **M0-13b — surfaces couvertes** : connecteurs (catalogue local), channels (transport absent), exports (local uniquement) et worktrees (préparation manuelle) affichent leur niveau réel.
+- **M0-13c — limite restante** : l'audit clic → effet réel des panneaux secondaires et du backend absent reste à exécuter ; aucune action d'installation ou de connexion n'est ajoutée par ce lot.
+- **Validation** : tests unitaires du vocabulaire et build frontend verts.
+
+### Livraison M0-14 — contrôles reproductibles (première passe)
+
+- **M0-14a — CI ajoutée** : `.github/workflows/ci.yml` exécute `npm ci`, `npm test`, `npm run build` et `cargo test --manifest-path src-tauri/Cargo.toml` sur chaque push et pull request. Les jobs sont séparés, bornés en durée et annulés lorsqu'un nouveau commit remplace le précédent.
+- **M0-14b — périmètre sûr** : la CI n'utilise aucun credential, ne lance pas de tour modèle et ne dépend pas d'un binaire Muse/WSL ; les tests Rust exercent le superviseur et les tests Node les contrats purs.
+- **M0-14c — limite restante** : fixture MSP contrôlée, scénario natif A/B, test de panne d'envoi et artefacts de diagnostic sans données utilisateur restent à ajouter avant de déclarer M0-14 complet.
+- **Validation** : commandes CI reproduites localement — 381 tests Node, build frontend et 40 tests Rust verts.
 
 ### Livraison M0-06 — posture d'autorisation globale
 
 - **M0-06a — câblé, local** : les réglages proposent trois postures persistées par Muse : **Ask for approval** (question à chaque action), **Approve on my behalf** (actions locales du workspace approuvées automatiquement, réseau et privilèges élevés conservant une question) et **YOLO** (choix non refusés approuvés automatiquement dans un workspace de confiance).
 - **M0-06b — intégré** : l'approbation apparaît dans le flux de conversation sous forme de carte neutre et compacte. La commande est repliable, la portée et la règle effective restent visibles, et les règles enregistrées sont regroupées dans un panneau secondaire. Le rouge est réservé à un refus effectif.
-- **M0-06c — limite documentée** : le host Muse scelle actuellement son plafond d'approbation au démarrage et rejette `approvalMode` côté `session/start`. Les postures sont donc appliquées côté client via `approval/decide`, sans contourner les choix `denied` ni les protections anti-rejeu. La qualification native réseau/élévation reste à faire avant de déclarer la politique entièrement effective.
+- **M0-06c — câblé au host** : le binaire 1.3.0 accepte `allowAll`, `promptUnmatched` et `onRequest` sur `session/start`, ainsi que `session/setApprovalMode` pour les actions suivantes. Muse mappe ses trois libellés vers ces valeurs, tout en conservant l'allowlist et le garde-fou local pour les scopes réseau/élevés.
+- **M0-06d — qualification restante** : valider sur une installation propre les comportements réseau/élévation et la réponse lorsque le host ne sert pas une posture demandée ; l'erreur doit rester visible sans bloquer l'historique local.
+
+### Livraison M0-08 — compatibilité du moteur
+
+- **M0-08a — câblé** : le handshake exige `serverInfo.name=muse`, une version serveur, `schema.version=1` et un fingerprint `sha256:*` avant d'envoyer `initialized`. Le registre compile-time recense aussi les RPC modèles, compaction, reprise et contrôles subagent réellement émises. Les champs inconnus restent acceptés pour préserver les extensions additives du protocole.
+- **M0-08b — erreur exploitable** : une réponse absente ou incompatible ferme le sidecar immédiatement et remonte une phrase actionnable au bandeau d'erreur, au lieu de laisser les conversations tourner dans un état indéterminé.
+- **M0-08c — preuve locale** : le binaire Windows/WSL Muse 1.3.0 a répondu avec le contrat attendu et les quatre postures d'approbation supportées ; la matrice d'anciennes versions reste à qualifier séparément.
 - **Critères de sortie** : changement de posture sans redémarrage, conservation après relance, mode intermédiaire qui laisse une demande externe visible, YOLO qui suit le chemin d'approbation existant, et test natif de la décision refusée/stale.
 
 ### Livraison M0-02 — reconnexion explicite
@@ -78,7 +132,7 @@ Validation de cette livraison : build frontend et 367 tests Node ; suite Rust (3
 - **M0-02d — corrigé côté client** : après une décision d'autorisation, la chaîne de polling est relancée immédiatement et les nouveaux items ne restent plus bloqués sur l'indicateur réflexif. Les approbations composées conservent la carte quand le host renvoie `terminal:false`, appliquent le nouveau `currentRequirementId` et remplacent les choix sur `approval/updated`. Les items de raisonnement sont séparés du texte de réponse et peuvent être dépliés ; il reste à valider ce flux avec un moteur live qui émet un item `reasoning`.
 - Limite Windows : conversion des chemins du bridge pour les montages WSL standards `/mnt/<lecteur>/`. Un montage personnalisé non résolvable échoue explicitement ; les chemins ne sont pas devinés.
 
-Preuves : [validation de reprise](../src-tauri/src/resume.rs), commande `resume_session` dans le backend et `reconnectSession` dans le hook. Suite Rust : 34 tests ; suite Node : 367 tests ; build frontend réussi.
+Preuves : [validation de reprise](../src-tauri/src/resume.rs), commande `resume_session` dans le backend et `reconnectSession` dans le hook. Suite Rust : 40 tests ; suite Node : 370 tests ; build frontend réussi.
 
 ## M1 — Terminer le workflow quotidien de développement
 
@@ -192,4 +246,4 @@ Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux]
 4. Pour déclarer un ticket terminé : effet réel, erreurs/reprise traitées, permissions effectives, validation native du scénario et documentation des limites.
 5. Les décisions de faisabilité/produit sont consignées avant de transformer une hypothèse en engagement. Aucun pourcentage global tant que le périmètre et sa pondération ne sont pas fixés.
 
-Validation du socle audité : build frontend, 367 tests Node, 34 tests Rust verts. Les preuves UI de la passe précédente sont détaillées dans [la passe conversations](plans/2026-09-14-conversation-polish.md). Elles ne couvrent pas l'ensemble des critères futurs ci-dessus.
+Validation du socle audité : build frontend, 381 tests Node, 40 tests Rust verts. Les preuves UI de la passe précédente sont détaillées dans [la passe conversations](plans/2026-09-14-conversation-polish.md). Elles ne couvrent pas l'ensemble des critères futurs ci-dessus.

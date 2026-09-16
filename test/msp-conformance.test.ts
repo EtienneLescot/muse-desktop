@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   MSP_ERROR_APPROVAL_REQUIREMENT_STALE,
   MSP_ERROR_USER_INPUT_ANSWER_INVALID,
@@ -12,7 +13,6 @@ const unique = (xs: readonly string[]): boolean =>
 
 describe("msp conformance surface", () => {
   it("sends a fixed set of SDK-known methods, no duplicates", () => {
-    assert.equal(MSP_METHODS_SENT.length, 10);
     assert.ok(unique(MSP_METHODS_SENT));
     for (const m of [
       "initialize",
@@ -20,11 +20,20 @@ describe("msp conformance surface", () => {
       "session/read",
       "session/resume",
       "session/list",
+      "model/list",
+      "session/compact",
+      "session/setModel",
+      "session/setApprovalMode",
       "turn/start",
       "turn/interrupt",
       "approval/decide",
       "userInput/answer",
       "userInput/cancel",
+      "subagent/interrupt",
+      "subagent/stop",
+      "subagent/resume",
+      "subagent/followupTask",
+      "subagent/readResult",
     ] as const) {
       assert.ok(
         (MSP_METHODS_SENT as readonly string[]).includes(m),
@@ -39,6 +48,13 @@ describe("msp conformance surface", () => {
     assert.ok(!names.some((m) => m.startsWith("workflow/")));
   });
 
+  it("keeps every registered method anchored in the Rust implementation", () => {
+    const main = readFileSync(new URL("../src-tauri/src/main.rs", import.meta.url), "utf8");
+    for (const method of MSP_METHODS_SENT) {
+      assert.ok(main.includes(`"${method}"`), `registry method is not implemented: ${method}`);
+    }
+  });
+
   it("handles a fixed set of SDK-known notifications, no duplicates", () => {
     assert.ok(MSP_NOTIFICATIONS_HANDLED.length > 0);
     assert.ok(unique(MSP_NOTIFICATIONS_HANDLED));
@@ -47,6 +63,8 @@ describe("msp conformance surface", () => {
       "approval/requested",
       "userInput/requested",
       "turn/completed",
+      "session/contextUsage",
+      "session/approvalModeChanged",
     ] as const) {
       assert.ok(
         (MSP_NOTIFICATIONS_HANDLED as readonly string[]).includes(n),

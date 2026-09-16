@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { SidecarErrorKind } from "../lib/sidecarError";
+import {
+  startupRecoverySteps,
+  type SidecarErrorKind,
+} from "../lib/sidecarError";
 
 interface Props {
   kind: SidecarErrorKind;
@@ -24,6 +27,7 @@ export function SidecarErrorPanel({
   onPickWorkspace,
 }: Props) {
   const [pickerError, setPickerError] = useState<string | null>(null);
+  const recoverySteps = startupRecoverySteps(kind, message);
 
   async function pickWorkspace() {
     try {
@@ -43,6 +47,17 @@ export function SidecarErrorPanel({
           : "Could not start the Muse sidecar"}
       </h2>
       <p className="sidecar-error-message">{message}</p>
+      <div className="sidecar-error-help">
+        <h3>Next steps</h3>
+        <ol>
+          {recoverySteps.map((step) => (
+            <li key={step.title}>
+              <strong>{step.title}</strong>
+              <span>{step.detail}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
       {kind === "missing" && (
         <div>
           <p>
