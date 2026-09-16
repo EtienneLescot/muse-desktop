@@ -38,6 +38,18 @@ export interface WorktreeSetupResult {
   durationMs: number;
 }
 
+export interface WorktreeReadiness {
+  status: "ready" | "blocked" | "needsSetup";
+  path: string;
+  projectFiles: string[];
+  tools: Array<{
+    name: string;
+    required: boolean;
+    available: boolean;
+  }>;
+  checkedAt: number;
+}
+
 export interface WorktreeInspection {
   repoRoot: string;
   path: string;

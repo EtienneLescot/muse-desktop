@@ -12,6 +12,7 @@ import {
   type WorktreeRecord,
   type WorktreeInspection,
   type WorktreeSetupResult,
+  type WorktreeReadiness,
 } from "../lib/worktrees";
 import { CapabilityBadge } from "./CapabilityBadge";
 import {
@@ -40,6 +41,10 @@ interface Props {
     sessionId: string,
     record: WorktreeRecord,
   ) => Promise<WorktreeInspection | null>;
+  onCheckReadiness: (
+    sessionId: string,
+    record: WorktreeRecord,
+  ) => Promise<WorktreeReadiness | null>;
   onRunSetup: (
     sessionId: string,
     record: WorktreeRecord,
@@ -62,6 +67,7 @@ export function OrchestrationPanel({
   worktrees,
   onRemoveWorktree,
   onInspectWorktree,
+  onCheckReadiness,
   onRunSetup,
   onCancelSetup,
   sourceStatus,
@@ -89,6 +95,8 @@ export function OrchestrationPanel({
     Record<string, WorktreeInspection>
   >({});
   const [inspecting, setInspecting] = useState<string | null>(null);
+  const [readinessByBranch, setReadinessByBranch] = useState<Record<string, WorktreeReadiness>>({});
+  const [checkingReadiness, setCheckingReadiness] = useState<string | null>(null);
 
   useEffect(() => {
     setSetupProfiles(loadSetupProfiles(workspace));
@@ -208,6 +216,16 @@ export function OrchestrationPanel({
     setInspecting(null);
   }
 
+  async function checkReadiness(record: WorktreeRecord): Promise<void> {
+    if (checkingReadiness !== null) return;
+    setCheckingReadiness(record.branch);
+    const result = await onCheckReadiness(sessionId, record);
+    if (result !== null) {
+      setReadinessByBranch((current) => ({ ...current, [record.branch]: result }));
+    }
+    setCheckingReadiness(null);
+  }
+
   return (
     <section className="orchestration" aria-label="Agent worktrees">
       <header className="orchestration-head">
@@ -301,6 +319,17 @@ export function OrchestrationPanel({
                   type="button"
                   onClick={() => {
                     const record = recordFor(p);
+                    if (record) void checkReadiness(record);
+                  }}
+                  disabled={checkingReadiness !== null}
+                  title="Check project manifests and local tools without running setup"
+                >
+                  {checkingReadiness === recordFor(p)?.branch ? "Checking…" : "Check readiness"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const record = recordFor(p);
                     if (!record || !window.confirm(`Remove worktree ${record.path}?`)) return;
                     void onRemoveWorktree(sessionId, record);
                   }}
@@ -389,6 +418,32 @@ export function OrchestrationPanel({
                       {inspectionByBranch[p.branch].fileCount} changed file(s)
                       {inspectionByBranch[p.branch].conflicted ? " · conflicts present" : ""} · observed {new Date(inspectionByBranch[p.branch].observedAt).toLocaleTimeString()}
                     </p>
+                  </details>
+                )}
+                {readinessByBranch[p.branch] && (
+                  <details className="orchestration-readiness" open>
+                    <summary>
+                      Readiness · {readinessByBranch[p.branch].status === "ready"
+                        ? "ready"
+                        : readinessByBranch[p.branch].status === "blocked"
+                          ? "missing tool"
+                          : "needs setup"}
+                    </summary>
+                    <p>
+                      {readinessByBranch[p.branch].projectFiles.length > 0
+                        ? `Detected: ${readinessByBranch[p.branch].projectFiles.join(", ")}.`
+                        : "No recognized project manifest was found."}
+                    </p>
+                    {readinessByBranch[p.branch].tools.length > 0 && (
+                      <ul>
+                        {readinessByBranch[p.branch].tools.map((tool) => (
+                          <li key={tool.name} data-status={tool.available ? "available" : "missing"}>
+                            <strong>{tool.name}</strong>
+                            <span>{tool.available ? "available on PATH" : "missing from PATH"}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </details>
                 )}
               </>

@@ -5,13 +5,14 @@
 //! kills a process that exceeds the timeout.
 
 use serde::Serialize;
+use std::env;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const MAX_COMMAND_CHARS: usize = 2_000;
 const MAX_OUTPUT_CHARS: usize = 200_000;
@@ -24,6 +25,24 @@ pub struct SetupResult {
     pub output: String,
     pub exit_code: Option<i32>,
     pub duration_ms: u64,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolReadiness {
+    pub name: String,
+    pub required: bool,
+    pub available: bool,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadinessResult {
+    pub status: String,
+    pub path: String,
+    pub project_files: Vec<String>,
+    pub tools: Vec<ToolReadiness>,
+    pub checked_at: u64,
 }
 
 fn clip(mut output: String) -> String {
@@ -56,6 +75,77 @@ fn managed_worktree(root: &Path, path: &str) -> Result<std::path::PathBuf, Strin
         return Err("setup path must be an existing directory under .muse/worktrees".to_string());
     }
     Ok(candidate)
+}
+
+fn executable_on_path(name: &str) -> bool {
+    let path = match env::var_os("PATH") {
+        Some(value) => value,
+        None => return false,
+    };
+    let mut candidates = vec![name.to_string()];
+    if cfg!(windows) && !name.contains('.') {
+        let extensions = env::var_os("PATHEXT")
+            .map(|value| value.to_string_lossy().split(';').map(str::to_owned).collect::<Vec<_>>())
+            .unwrap_or_else(|| vec![".COM".into(), ".EXE".into(), ".BAT".into(), ".CMD".into()]);
+        candidates.extend(extensions.into_iter().map(|extension| format!("{name}{extension}")));
+    }
+    env::split_paths(&path).any(|dir| {
+        candidates.iter().any(|candidate| {
+            let file = dir.join(candidate);
+            file.is_file()
+        })
+    })
+}
+
+/// Inspect a managed worktree without executing project code. The result is
+/// intentionally conservative: a missing manifest means setup is still
+/// needed, while a missing required executable blocks the ready state.
+pub fn readiness(root: &Path, path: &str) -> Result<ReadinessResult, String> {
+    let cwd = managed_worktree(root, path)?;
+    let manifests: [(&str, &str, &[&str]); 4] = [
+        ("package.json", "node", &["npm"]),
+        ("Cargo.toml", "cargo", &[]),
+        ("pyproject.toml", "python", &[]),
+        ("go.mod", "go", &[]),
+    ];
+    let mut project_files = Vec::new();
+    let mut required_tools = Vec::new();
+    for (file, primary, secondary) in manifests {
+        if cwd.join(file).is_file() {
+            project_files.push(file.to_string());
+            required_tools.push(primary.to_string());
+            required_tools.extend(secondary.iter().map(|name| (*name).to_string()));
+        }
+    }
+    required_tools.sort();
+    required_tools.dedup();
+    let tools = required_tools
+        .into_iter()
+        .map(|name| ToolReadiness {
+            available: executable_on_path(&name),
+            name,
+            required: true,
+        })
+        .collect::<Vec<_>>();
+    let status = if project_files.is_empty() {
+        "needsSetup"
+    } else if tools.iter().any(|tool| !tool.available) {
+        "blocked"
+    } else {
+        "ready"
+    };
+    let checked_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64;
+    Ok(ReadinessResult {
+        status: status.to_string(),
+        path: cwd.to_string_lossy().into_owned(),
+        project_files,
+        tools,
+        checked_at,
+    })
 }
 
 fn read_pipe<R: Read + Send + 'static>(mut reader: R) -> thread::JoinHandle<Vec<u8>> {
@@ -206,6 +296,18 @@ mod tests {
         };
         let result = run_with_cancel(&root, ".muse/worktrees/one", command, Some(flag)).unwrap();
         assert_eq!(result.status, "cancelled");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn readiness_reports_project_manifests_without_running_setup() {
+        let root = fixture();
+        fs::write(root.join(".muse/worktrees/one/package.json"), "{}\n").unwrap();
+        let result = readiness(&root, ".muse/worktrees/one").unwrap();
+        assert_eq!(result.project_files, vec!["package.json"]);
+        assert!(matches!(result.status.as_str(), "ready" | "blocked"));
+        assert!(result.tools.iter().any(|tool| tool.name == "node"));
+        assert!(result.tools.iter().any(|tool| tool.name == "npm"));
         let _ = fs::remove_dir_all(root);
     }
 }

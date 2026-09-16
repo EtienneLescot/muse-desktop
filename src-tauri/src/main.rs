@@ -1247,6 +1247,21 @@ async fn worktree_setup_run(
     joined.map_err(|e| format!("worktree setup task failed: {e}"))?
 }
 
+/// Inspect a managed worktree and its locally available project tools without
+/// executing project code. This gives the UI a conservative pre-flight state
+/// before a user chooses to run setup.
+#[tauri::command]
+async fn worktree_setup_readiness(
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+) -> Result<setup::ReadinessResult, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || setup::readiness(&root, &path))
+        .await
+        .map_err(|e| format!("worktree readiness task failed: {e}"))?
+}
+
 /// Request cancellation of one running setup command. The process is killed
 /// by the setup worker, so this call stays non-blocking for the renderer.
 #[tauri::command]
@@ -3041,6 +3056,7 @@ fn main() {
             git_worktree_remove,
             git_worktree_inspect,
             worktree_setup_run,
+            worktree_setup_readiness,
             worktree_setup_cancel,
             mcp_local_probe,
             mcp_local_call,

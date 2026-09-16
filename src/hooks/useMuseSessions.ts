@@ -174,6 +174,7 @@ import {
   type WorktreeRecord,
   type WorktreeInspection,
   type WorktreeSetupResult,
+  type WorktreeReadiness,
 } from "../lib/worktrees";
 export type {
   Project,
@@ -651,6 +652,11 @@ interface UseMuseSessions {
     sessionId: string,
     record: WorktreeRecord,
   ) => Promise<WorktreeInspection | null>;
+  /** M2-04: inspect local manifests and required executables without running code. */
+  checkWorktreeReadiness: (
+    sessionId: string,
+    record: WorktreeRecord,
+  ) => Promise<WorktreeReadiness | null>;
   /** M2-04: run one user-entered setup command in an existing managed worktree. */
   runWorktreeSetup: (
     sessionId: string,
@@ -2505,6 +2511,25 @@ export function useMuseSessions(): UseMuseSessions {
         }
       } catch (e) {
         setError(`worktree setup failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
+
+  const checkWorktreeReadiness = useCallback(
+    async (
+      sessionId: string,
+      record: WorktreeRecord,
+    ): Promise<WorktreeReadiness | null> => {
+      try {
+        setError(null);
+        return await invoke<WorktreeReadiness>("worktree_setup_readiness", {
+          sessionId,
+          path: record.path,
+        });
+      } catch (e) {
+        setError(`worktree readiness failed: ${e instanceof Error ? e.message : String(e)}`);
         return null;
       }
     },
@@ -4805,6 +4830,7 @@ export function useMuseSessions(): UseMuseSessions {
     worktrees,
     removeWorktree,
     inspectWorktree,
+    checkWorktreeReadiness,
     runWorktreeSetup,
     cancelWorktreeSetup,
     startSession,
