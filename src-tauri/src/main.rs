@@ -1819,9 +1819,44 @@ async fn list_pending_requests(
 ) -> Result<Value, String> {
     let session_id = require_non_empty(&session_id, "sessionId")?;
     let client = session_client(&state, &session_id)?;
-    client
+    let result = client
         .request("approval/listPending", json!({"sessionId": session_id}))
-        .await
+        .await?;
+    // Rebuild the supervisor's opaque requirement registry from the same
+    // point-in-time fold that feeds the renderer. Without this step a card
+    // recovered after reconnect would render but its approval click would be
+    // rejected locally as an unknown id.
+    if let Some(approvals) = result.get("approvals").and_then(Value::as_array) {
+        let mut registry = state
+            .approvals
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?;
+        registry.retain(|(sid, approval_id), _| {
+            sid != &session_id || approvals.iter().any(|item| {
+                item.get("approvalId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| id == approval_id)
+            })
+        });
+        for item in approvals {
+            let Some(approval_id) = item.get("approvalId").and_then(Value::as_str) else {
+                continue;
+            };
+            let requirement = item
+                .get("currentRequirementId")
+                .or_else(|| item.get("current_requirement_id"))
+                .cloned()
+                .unwrap_or(Value::Null);
+            registry.insert(
+                (session_id.clone(), approval_id.to_string()),
+                PendingApproval {
+                    session_id: session_id.clone(),
+                    requirement_id: requirement,
+                },
+            );
+        }
+    }
+    Ok(result)
 }
 
 /// Drain backend events after `since` (None = head cursor only, no replay).
