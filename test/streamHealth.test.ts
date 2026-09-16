@@ -46,6 +46,11 @@ describe("stream health", () => {
     assert.equal(classifyStreamHealth({ ...base, running: false }), "idle");
   });
 
+  it("keeps an accepted stop request visible until the host confirms it", () => {
+    assert.equal(classifyStreamHealth({ ...base, stopping: true }), "stopping");
+    assert.equal(streamHealthLabel("stopping"), "Stopping Muse");
+  });
+
   it("keeps labels and elapsed wording compact", () => {
     assert.equal(streamHealthLabel("stalled"), "No recent host update");
     assert.equal(formatElapsed(0), "0s");

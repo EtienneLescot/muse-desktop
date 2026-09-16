@@ -659,6 +659,8 @@ interface UseMuseSessions {
   /** M0-02: latest live event used to explain quiet/stalled turns. */
   streamActivityBySession: Record<string, StreamActivity>;
   activeStreamActivity: StreamActivity | null;
+  /** M0-04: cancellation accepted by the host, awaiting terminal status. */
+  stoppingBySession: Record<string, boolean>;
   /** M0-02: connection lifecycle, separate from turn execution state. */
   connectionBySession: Record<string, SessionConnectionState>;
   activeConnectionState: SessionConnectionState;
@@ -1236,6 +1238,11 @@ export function useMuseSessions(): UseMuseSessions {
   const [streamActivityBySession, setStreamActivityBySession] = useState<
     Record<string, StreamActivity>
   >({});
+  // A cancel request is not the same thing as a confirmed stopped status.
+  // Keep this renderer-only state separate from the persisted session row so
+  // a slow host cannot make a turn look finished or lose its open transcript.
+  const [stoppingBySession, setStoppingBySession] = useState<Record<string, boolean>>({});
+  const stoppingBySessionRef = useRef<Record<string, boolean>>({});
   const [queuedTurnsBySession, setQueuedTurnsBySession] = useState<Record<string, QueuedTurn[]>>({});
   // Global authorization posture. This is intentionally kept separate from
   // sandbox settings: changing the posture must not mutate host capabilities.
@@ -2112,6 +2119,16 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }
 
+  function clearStopping(sessionId: string): void {
+    delete stoppingBySessionRef.current[sessionId];
+    setStoppingBySession((cur) => {
+      if (!(sessionId in cur)) return cur;
+      const next = { ...cur };
+      delete next[sessionId];
+      return next;
+    });
+  }
+
   /** M3-08: promote an admitted scheduled turn when the host actually stops. */
   function completeScheduleRunsForSession(sessionId: string): void {
     const log = logsRef.current[sessionId] ?? [];
@@ -2156,6 +2173,7 @@ export function useMuseSessions(): UseMuseSessions {
     if (kind === "host_exited") {
       setConnectedIds((cur) => cur.filter((id) => id !== sid));
       setConnectionState(sid, "disconnected");
+      clearStopping(sid);
     }
     if (kind === "output") {
       ensureSessionRow(sid, null);
@@ -2471,6 +2489,7 @@ export function useMuseSessions(): UseMuseSessions {
       }
     }
     if (isRunningKind(kind)) {
+      clearStopping(sid);
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
       );
@@ -2478,6 +2497,7 @@ export function useMuseSessions(): UseMuseSessions {
       // placeholder instead of closing it (US-10).
       ensurePlaceholder(sid);
     } else if (isStoppedKind(kind)) {
+      clearStopping(sid);
       delete turnIdsRef.current[sid];
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: false } : s)),
@@ -2886,6 +2906,7 @@ export function useMuseSessions(): UseMuseSessions {
       }
       setConnectedIds((cur) => [...new Set([...cur, id])]);
       setConnectionState(id, "connected");
+      clearStopping(id);
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
       kickPoll();
       await refreshModels(id);
@@ -3978,20 +3999,21 @@ export function useMuseSessions(): UseMuseSessions {
   }, []);
 
   const cancelSession = useCallback(async (sessionId: string) => {
+    if (stoppingBySessionRef.current[sessionId]) return;
+    stoppingBySessionRef.current[sessionId] = true;
+    setStoppingBySession((cur) => ({ ...cur, [sessionId]: true }));
     try {
       setError(null);
       await invoke("cancel_session", { sessionId });
-      setSessions((cur) =>
-        cur.map((s) => (s.session_id === sessionId ? { ...s, running: false } : s)),
-      );
-      closeOpenBlocks(sessionId);
-      pushLog(sessionId, [
-        { id: newId(), ts: Date.now(), role: "system", text: "Session cancelled." },
-      ]);
+      // The host owns the terminal state. Poll immediately so a queued
+      // stopped event is reflected without waiting for the slow tick, while
+      // preserving the open transcript until that event is observed.
+      kickPoll();
     } catch (e) {
+      clearStopping(sessionId);
       setError(`cancel_session failed: ${String(e)}`);
     }
-  }, []);
+  }, [kickPoll]);
 
   const unqueueTurn = useCallback(async (sessionId: string, turnId: string): Promise<boolean> => {
     try {
@@ -4015,7 +4037,8 @@ export function useMuseSessions(): UseMuseSessions {
     async (sessionId: string) => {
       try {
         setError(null);
-        await invoke("kill_session", { sessionId });
+      await invoke("kill_session", { sessionId });
+      clearStopping(sessionId);
       } catch (e) {
         setError(`kill_session failed: ${String(e)}`);
         return;
@@ -5484,6 +5507,7 @@ export function useMuseSessions(): UseMuseSessions {
     activeApprovals,
     streamActivityBySession,
     activeStreamActivity,
+    stoppingBySession,
     connectionBySession,
     activeConnectionState,
     queuedTurns: activeQueuedTurns,

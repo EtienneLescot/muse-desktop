@@ -26,6 +26,7 @@ interface Props {
   entries: LogEntry[];
   sessionId: string | null;
   running?: boolean;
+  stopping?: boolean;
   lastEventAt?: number | null;
   pendingApprovals?: number;
   pendingInputs?: number;
@@ -74,6 +75,7 @@ export function StreamView({
   entries,
   sessionId,
   running = false,
+  stopping = false,
   lastEventAt = null,
   pendingApprovals = 0,
   pendingInputs = 0,
@@ -163,6 +165,7 @@ export function StreamView({
 
   const health = classifyStreamHealth({
     running,
+    stopping,
     lastEventAt,
     pendingApprovals,
     pendingInputs,
@@ -176,6 +179,8 @@ export function StreamView({
         return elapsed === null
           ? "Live updates are arriving."
           : `Last update ${elapsed} ago.`;
+      case "stopping":
+        return "The stop request was accepted; waiting for the desktop host to confirm it.";
       case "waiting-approval":
         return "Choose an authorization option above to continue this conversation.";
       case "waiting-input":

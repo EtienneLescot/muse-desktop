@@ -87,6 +87,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** arrêt avant premier token, pendant outil, après fin, réponse tardive et double-clic. L'arrêt de A n'affecte pas B ; l'état final correspond au moteur. Dépend M0-01/03.
 
+**État au 16/09/2026 :** demande de cancellation conservée dans un état renderer-only jusqu'à réception d'un statut `stopped` (ou déconnexion), avec badge `Stopping Muse`, bouton désactivé contre le double-clic et transcript non fermé prématurément. La qualification native des courses et réponses tardives reste à produire.
+
 ### M0-05 — Demandes en attente
 
 **Code :** `ApprovalPanel.tsx`, `InputPanel.tsx`, routage MSP, tables d'approbations.

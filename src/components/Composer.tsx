@@ -45,6 +45,8 @@ interface Props {
   modelControl?: ReactNode;
   disabled: boolean;
   running: boolean;
+  /** A stop request was accepted and the host has not confirmed it yet. */
+  stopping?: boolean;
   /** Absolute workspace root; null while none is picked. */
   workspace: string | null;
   /**
@@ -123,6 +125,7 @@ export function Composer({
   modelControl,
   disabled,
   running,
+  stopping = false,
   workspace,
   onSend,
   onSteer,
@@ -772,8 +775,13 @@ export function Composer({
             <div className="composer-model">{modelControl}</div>
           </div>
           {running && (
-            <button onClick={onCancel} title={COMPOSER_SHORTCUT_TITLES.stop}>
-              Stop
+            <button
+              onClick={onCancel}
+              disabled={stopping}
+              title={COMPOSER_SHORTCUT_TITLES.stop}
+              aria-busy={stopping}
+            >
+              {stopping ? "Stopping…" : "Stop"}
             </button>
           )}
           {running && onSteer !== undefined && (

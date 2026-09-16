@@ -13,6 +13,7 @@ export const STREAM_STALE_AFTER_MS = 15_000;
 export type StreamHealth =
   | "idle"
   | "working"
+  | "stopping"
   | "waiting-approval"
   | "waiting-input"
   | "waiting-host"
@@ -20,6 +21,8 @@ export type StreamHealth =
 
 export interface StreamHealthInput {
   running: boolean;
+  /** A user cancellation has been accepted; wait for host confirmation. */
+  stopping?: boolean;
   lastEventAt: number | null;
   pendingApprovals: number;
   pendingInputs: number;
@@ -32,6 +35,7 @@ export interface StreamHealthInput {
  * or input request never gets mislabeled as a stalled model.
  */
 export function classifyStreamHealth(input: StreamHealthInput): StreamHealth {
+  if (input.stopping) return "stopping";
   if (input.pendingApprovals > 0) return "waiting-approval";
   if (input.pendingInputs > 0) return "waiting-input";
   if (!input.running) return "idle";
@@ -45,6 +49,8 @@ export function streamHealthLabel(health: StreamHealth): string {
   switch (health) {
     case "working":
       return "Muse is working";
+    case "stopping":
+      return "Stopping Muse";
     case "waiting-approval":
       return "Waiting for your approval";
     case "waiting-input":

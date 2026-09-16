@@ -69,6 +69,7 @@ export default function App() {
     approvals,
     activeApprovals,
     activeStreamActivity,
+    stoppingBySession,
     activeConnectionState,
     queuedTurns,
     inputRequests,
@@ -1018,6 +1019,7 @@ export default function App() {
                     entries={activeLog}
                     sessionId={active.session_id}
                     running={active.running}
+                    stopping={stoppingBySession[active.session_id] === true}
                     lastEventAt={activeStreamActivity?.lastEventAt ?? null}
                     pendingApprovals={activeApprovals.length}
                     pendingInputs={activeInputRequests.length}
@@ -1113,6 +1115,7 @@ export default function App() {
                       </>
                     }
                     running={active.running}
+                    stopping={stoppingBySession[active.session_id] === true}
                     workspace={active.workspace}
                     onSend={(text, inputParts) => sendInput(active.session_id, text, undefined, inputParts)}
                     onSteer={(text, inputParts) => steerInput(active.session_id, text, inputParts)}
