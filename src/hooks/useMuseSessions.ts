@@ -389,6 +389,11 @@ import {
   type GitStatusSnapshot,
 } from "../lib/git";
 import { formatTerminalContext } from "../lib/terminalContext";
+import {
+  extractHistoryItems,
+  historyItemsToLogEntries,
+  mergeHistoryLog,
+} from "../lib/history";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -2557,6 +2562,28 @@ export function useMuseSessions(): UseMuseSessions {
         sessionId: id,
         mode: authorizationMode,
       });
+      // Cold reconnects can outlive the renderer's local log (for example
+      // after a storage reset or a crash during streaming). Reconcile the
+      // folded server history before enabling the composer again. The read is
+      // point-in-time and never re-emits pending requests; resume remains the
+      // sole path that re-attaches the live session and restarts polling.
+      try {
+        const history = await invoke<unknown>("read_session_history", {
+          sessionId: id,
+        });
+        const remote = historyItemsToLogEntries(extractHistoryItems(history));
+        if (remote.length > 0) {
+          const local = logsRef.current[id] ?? loadLog(id);
+          const merged = mergeHistoryLog(local, remote);
+          setLogs((cur) => ({ ...cur, [id]: merged }));
+          saveLog(id, merged);
+        }
+      } catch (historyError) {
+        // A resumed session remains usable when an older host does not
+        // implement inline history. Keep the local transcript and surface no
+        // second blocking error; reconnect already proved the durable id.
+        console.warn("session history hydration unavailable", historyError);
+      }
       setConnectedIds((cur) => [...new Set([...cur, id])]);
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
       kickPoll();

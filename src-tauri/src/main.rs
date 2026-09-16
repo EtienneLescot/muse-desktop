@@ -1781,6 +1781,34 @@ async fn resume_session(
     }
 }
 
+/// Read the folded durable item history for an attached conversation.
+/// `session/read` is intentionally separate from `resume_session`: it is a
+/// point-in-time read with no lease or request re-emission, so the UI can
+/// reconcile a cold local log without disturbing the live resume flow.
+#[tauri::command]
+async fn read_session_history(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Value, String> {
+    let client = session_client(&state, &session_id)?;
+    let root = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(&session_id)?;
+    let read = client
+        .request(
+            "session/read",
+            json!({"sessionId": session_id, "excludeItems": false}),
+        )
+        .await?;
+    let session = read
+        .get("session")
+        .ok_or("session/read returned no conversation")?;
+    resume::validate(session, &session_id, &root)?;
+    Ok(read.get("history").cloned().unwrap_or_else(|| json!({"items": []})))
+}
+
 /// Drain backend events after `since` (None = head cursor only, no replay).
 /// The UI polls this every ~300ms instead of `listen` push delivery.
 #[tauri::command]
@@ -2914,6 +2942,7 @@ fn main() {
             fork_session,
             set_approval_mode,
             resume_session,
+            read_session_history,
             restore_sessions,
             send_input,
             steer_input,

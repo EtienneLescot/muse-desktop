@@ -65,6 +65,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** définir `ConnectionState = disconnected | connecting | connected | error` par session et génération. Persister le dernier curseur serveur observé quand le protocole le garantit ; utiliser resume/history/view-page pour récupérer le suffixe manquant. Dédupliquer par identité serveur des items, pas par leur texte. Réconcilier demandes d'approbation et questions réémises ; conserver les brouillons. Ne pas réattacher un profil éphémère non récupérable. Adapter explicitement les chemins Windows/WSL sans supposer tous les montages identiques.
 
+**Tranche livrée :** `read_session_history` appelle `session/read` avec `excludeItems:false` après `session/resume`. `src/lib/history.ts` normalise les items inline ou snapshot dans les lanes du fil, remplace les blocs partiels par leur version durable via `itemId`, et garde les notes locales et les anciens échos utilisateur. Les réponses sans historique inline restent compatibles : la reconnexion réussit et le transcript local est conservé.
+
 **Acceptation :** fermer après un message, rouvrir et envoyer dans la même session ; reprise après panne avec suffixe sans doublon ; demande en attente visible une fois ; refus de lease/dossier incorrect préserve les messages. Dépend de M0-01/08/09. La reconnexion de métadonnées seule reste partielle.
 
 ### M0-03 — Envoi sans perte et retry
