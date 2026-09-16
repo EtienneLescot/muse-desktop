@@ -1519,15 +1519,17 @@ export function useMuseSessions(): UseMuseSessions {
           [...candidates].slice(0, 50).map(async (sessionId) => {
             try {
               const pending = await invoke<unknown>("list_pending_requests", { sessionId });
-              const parsed = parsePendingSnapshot(sessionId, pending);
-              setApprovals((cur) => [
-                ...cur.filter((item) => item.session_id !== sessionId),
-                ...parsed.approvals,
-              ]);
-              setInputRequests((cur) => [
-                ...cur.filter((item) => item.session_id !== sessionId),
-                ...parsed.inputs,
-              ]);
+              if (typeof pending === "object" && pending !== null) {
+                const parsed = parsePendingSnapshot(sessionId, pending);
+                setApprovals((cur) => [
+                  ...cur.filter((item) => item.session_id !== sessionId),
+                  ...parsed.approvals,
+                ]);
+                setInputRequests((cur) => [
+                  ...cur.filter((item) => item.session_id !== sessionId),
+                  ...parsed.inputs,
+                ]);
+              }
             } catch {
               // Older hosts may not implement the pull path; history below
               // still provides a useful recovery and the stale action remains.
