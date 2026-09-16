@@ -431,9 +431,16 @@ Ces écarts restent visibles pour une ambition de parité complète. Leur faisab
 | M4-06 | Partager par URL et révoquer l'accès | À définir | Partielle | Locale | Unitaire | Hébergement, identité, permissions et révocation réelle ; second client lit puis perd l'accès |
 | M4-07 | Contrôler une exécution sur un autre host ou dans le cloud | À définir | Absente | Absente | À faire | Auth, routage, stockage et reprise distante ; statut exact après déconnexion |
 | M4-08 | Interagir par la voix | À définir | Absente | Absente | À faire | Choisir capture/transcription ou conversation temps réel ; définir permissions et preuve de bout en bout |
-| M4-09 | Installer et mettre à jour sur les plateformes annoncées | À définir | Partielle | Partielle | À faire | Packaging reproductible, signature selon distribution, updates et rollback ; qualification séparée Windows/macOS/Linux |
+| M4-09 | Installer et mettre à jour sur les plateformes annoncées | Adapté | Partielle | Partielle | Intégration | Bundle Windows x64 NSIS reproductible livré avec sidecar et icônes ; restent signature/distribution, updates/rollback et qualification macOS/Linux |
 
 Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux](../src/lib/sharing.ts), [artefacts](../src/lib/artifacts.ts).
+
+### Livraison M4-09 — bundle Windows x64 (première passe)
+
+- **Build reproductible :** la cohérence Tauri/npm des plugins est vérifiée avant compilation ; `npm run tauri -- build --bundles nsis` génère un installateur NSIS x64 avec le frontend Vite, le sidecar `muse-x86_64-pc-windows-msvc.exe` et les icônes Muse déclarées dans `tauri.conf.json`.
+- **Artefact local :** `src-tauri/target/release/bundle/nsis/Muse-Desktop_0.1.0_x64-setup.exe` (généré le 16 septembre 2026). Le dossier `target/` reste un artefact de build et n'est pas versionné.
+- **Limites :** le sidecar est fourni par l'environnement de build et n'est pas publié dans le dépôt ; signature, publication, mise à jour différentielle, rollback et matrice macOS/Linux restent à qualifier avant une release publique.
+- **Validation :** build NSIS local terminé avec succès après alignement `@tauri-apps/plugin-notification`/`tauri-plugin-notification` en 2.4.x ; la signature et l'installation sur machine propre restent des preuves séparées.
 
 ## Périmètres à ne pas confondre avec la parité
 

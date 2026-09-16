@@ -21,6 +21,14 @@ The browser preview displays the interface. Working with the engine requires the
 npm run tauri -- dev
 ```
 
+To build the Windows x64 installer locally (the matching `muse` sidecar must be present in `src-tauri/binaries/`):
+
+```sh
+npm run tauri -- build --bundles nsis
+```
+
+The NSIS installer is written to `src-tauri/target/release/bundle/nsis/`. Release signing, publishing and update channels are not configured yet.
+
 ## Documentation
 
 - [Product and technical specification](docs/SPEC.md)
