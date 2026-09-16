@@ -86,6 +86,7 @@ export default function App() {
     removeWorktree,
     inspectWorktree,
     runWorktreeSetup,
+    cancelWorktreeSetup,
     setActive,
     startSession,
     startSessionInWorkspace,
@@ -1151,6 +1152,7 @@ export default function App() {
                             onRemoveWorktree={removeWorktree}
                             onInspectWorktree={inspectWorktree}
                             onRunSetup={runWorktreeSetup}
+                            onCancelSetup={cancelWorktreeSetup}
                             sourceStatus={gitReview(active.session_id).status}
                           />{" "}
                           <SharePanel
