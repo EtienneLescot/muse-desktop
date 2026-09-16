@@ -2620,6 +2620,36 @@ export function useMuseSessions(): UseMuseSessions {
         // second blocking error; reconnect already proved the durable id.
         console.warn("session history hydration unavailable", historyError);
       }
+      try {
+        const pending = await invoke<unknown>("list_pending_requests", {
+          sessionId: id,
+        });
+        if (typeof pending === "object" && pending !== null) {
+          const raw = pending as { approvals?: unknown; userInputs?: unknown };
+          const nextApprovals = Array.isArray(raw.approvals)
+            ? raw.approvals
+                .map((item) => parseApproval(id, JSON.stringify(item) ?? ""))
+                .filter((item) => item.request_id.length > 0)
+            : [];
+          const nextInputs = Array.isArray(raw.userInputs)
+            ? raw.userInputs
+                .map((item) => parseInputRequest(id, JSON.stringify(item) ?? ""))
+                .filter((item): item is InputRequest => item !== null)
+            : [];
+          setApprovals((cur) => [
+            ...cur.filter((item) => item.session_id !== id),
+            ...nextApprovals,
+          ]);
+          setInputRequests((cur) => [
+            ...cur.filter((item) => item.session_id !== id),
+            ...nextInputs,
+          ]);
+        }
+      } catch (pendingError) {
+        // Resume still re-emits late-joiner requests on supported hosts. The
+        // pull path is an additive recovery for hosts that expose the method.
+        console.warn("pending request recovery unavailable", pendingError);
+      }
       setConnectedIds((cur) => [...new Set([...cur, id])]);
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
       kickPoll();

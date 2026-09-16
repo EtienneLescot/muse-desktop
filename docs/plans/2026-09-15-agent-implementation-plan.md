@@ -91,6 +91,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** indexer par session + identifiant + génération, conserver le token opaque du serveur, retirer seulement sur règlement confirmé. Réconcilier snapshot et notifications de reprise ; les anciennes décisions ne doivent pas agir sur une nouvelle demande. Garder la réponse éditée si refus de validation.
 
+**Tranche livrée :** après `session/resume`, le hook appelle `list_pending_requests` (`approval/listPending`) et remplace uniquement les cartes de la session concernée. Les payloads approval et user input sont repassés par les parseurs existants ; les tokens opaques restent dans le registre Rust et les événements réémis par le host restent idempotents côté UI.
+
 **Acceptation :** même ID dans deux sessions, demande réémise, token périmé, erreur après clic, redémarrage et double réponse. Un choix n'est envoyé qu'à sa cible. Dépend M0-02/04/08.
 
 ### M0-06 — Permissions effectives

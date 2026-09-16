@@ -26,6 +26,7 @@ export const MSP_METHODS_SENT: MspMethod[] = [
   "initialize",
   "session/start",
   "session/read",
+  "approval/listPending",
   "session/resume",
   "session/list",
   "model/list",

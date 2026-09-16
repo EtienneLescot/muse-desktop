@@ -1809,6 +1809,21 @@ async fn read_session_history(
     Ok(read.get("history").cloned().unwrap_or_else(|| json!({"items": []})))
 }
 
+/// Pull the current approval/input set after reconnect. Unlike the resume
+/// response this command is safe to call repeatedly: it is a point-in-time
+/// fold read and carries the requirement token used by later decisions.
+#[tauri::command]
+async fn list_pending_requests(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let client = session_client(&state, &session_id)?;
+    client
+        .request("approval/listPending", json!({"sessionId": session_id}))
+        .await
+}
+
 /// Drain backend events after `since` (None = head cursor only, no replay).
 /// The UI polls this every ~300ms instead of `listen` push delivery.
 #[tauri::command]
@@ -2968,6 +2983,7 @@ fn main() {
             set_approval_mode,
             resume_session,
             read_session_history,
+            list_pending_requests,
             restore_sessions,
             send_input,
             unqueue_turn,
