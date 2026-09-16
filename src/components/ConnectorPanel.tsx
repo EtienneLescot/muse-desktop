@@ -8,6 +8,11 @@ import {
   type LocalMcpProbeResult,
 } from "../lib/connectors";
 import type { RemoteMcpCallResult, RemoteMcpProbeResult } from "../lib/remoteMcp.ts";
+import {
+  authorizationModeLabel,
+  connectorCallRequiresApproval,
+  type AuthorizationMode,
+} from "../lib/authorization";
 import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
@@ -62,8 +67,24 @@ interface Props {
   ) => Promise<RemoteMcpCallResult | null>;
   remoteConnectedIds: string[];
   onDisconnectRemote: (id: string) => void;
+  authorizationMode: AuthorizationMode;
   workspace: string | null;
 }
+
+type PendingConnectorCall =
+  | {
+      transport: "local";
+      command: string;
+      connectorId: string | null;
+      toolName: string;
+      argumentsText: string;
+    }
+  | {
+      transport: "remote";
+      connectorId: string;
+      toolName: string;
+      argumentsText: string;
+    };
 
 /**
  * US-24 connector directory + US-26 remote guard.
@@ -93,6 +114,7 @@ export function ConnectorPanel({
   onCallRemote,
   remoteConnectedIds,
   onDisconnectRemote,
+  authorizationMode,
   workspace,
 }: Props) {
   const [remoteName, setRemoteName] = useState("");
@@ -112,6 +134,7 @@ export function ConnectorPanel({
   const [localTool, setLocalTool] = useState("");
   const [localArgs, setLocalArgs] = useState("{}");
   const [localConnectorId, setLocalConnectorId] = useState<string | null>(null);
+  const [pendingCall, setPendingCall] = useState<PendingConnectorCall | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshAction, setRefreshAction] = useState<"start" | "stop" | "refresh" | null>(null);
   const [refreshFeedback, setRefreshFeedback] = useState<{
@@ -120,6 +143,72 @@ export function ConnectorPanel({
     tone: "success" | "error";
   } | null>(null);
   const installedIds = new Set(installed.map((e) => e.id));
+
+  async function executeLocalCall(
+    command: string,
+    connectorId: string | null,
+    toolName: string,
+    argumentsText: string,
+  ): Promise<void> {
+    setLocalBusy("call");
+    const result = connectorId !== null && mcpRunningIds.includes(connectorId)
+      ? await onCallRegisteredLocal(connectorId, toolName, argumentsText)
+      : await onCallLocal(command, toolName, argumentsText);
+    setLocalCall(result);
+    setLocalBusy(null);
+  }
+
+  async function executeRemoteCall(
+    id: string,
+    toolName: string,
+    argumentsText: string,
+  ): Promise<void> {
+    setRemoteBusy("call");
+    const result = await onCallRemote(id, toolName, argumentsText);
+    setRemoteCall(result);
+    setRemoteBusy(null);
+  }
+
+  async function approvePendingCall(): Promise<void> {
+    const call = pendingCall;
+    if (call === null) return;
+    setPendingCall(null);
+    if (call.transport === "local") {
+      await executeLocalCall(call.command, call.connectorId, call.toolName, call.argumentsText);
+    } else {
+      await executeRemoteCall(call.connectorId, call.toolName, call.argumentsText);
+    }
+  }
+
+  function requestLocalCall(): void {
+    const call = {
+      transport: "local" as const,
+      command: localCommand,
+      connectorId: localConnectorId,
+      toolName: localTool,
+      argumentsText: localArgs,
+    };
+    if (connectorCallRequiresApproval(authorizationMode, "local")) {
+      setPendingCall(call);
+      return;
+    }
+    void executeLocalCall(call.command, call.connectorId, call.toolName, call.argumentsText);
+  }
+
+  function requestRemoteCall(): void {
+    const id = `remote-${remoteName.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
+    const call = {
+      transport: "remote" as const,
+      connectorId: id,
+      toolName: remoteTool,
+      argumentsText: remoteArgs,
+    };
+    if (connectorCallRequiresApproval(authorizationMode, "remote")) {
+      setPendingCall(call);
+      return;
+    }
+    void executeRemoteCall(call.connectorId, call.toolName, call.argumentsText);
+  }
 
   return (
     <section className="integration-panel" aria-label="Connectors">
@@ -222,17 +311,13 @@ export function ConnectorPanel({
                 <button
                   type="button"
                   disabled={!localTool || localBusy !== null}
-                  onClick={async () => {
-                    setLocalBusy("call");
-                    const result =
-                      localConnectorId !== null && mcpRunningIds.includes(localConnectorId)
-                        ? await onCallRegisteredLocal(localConnectorId, localTool, localArgs)
-                        : await onCallLocal(localCommand, localTool, localArgs);
-                    setLocalCall(result);
-                    setLocalBusy(null);
-                  }}
+                  onClick={requestLocalCall}
                 >
-                  {localBusy === "call" ? "Calling…" : "Call tool"}
+                  {localBusy === "call"
+                    ? "Calling…"
+                    : connectorCallRequiresApproval(authorizationMode, "local")
+                      ? "Review and call"
+                      : "Call tool"}
                 </button>
                 {localCall && (
                   <pre className="local-mcp-output">{JSON.stringify(localCall.result, null, 2)}</pre>
@@ -515,15 +600,13 @@ export function ConnectorPanel({
               <button
                 type="button"
                 disabled={!remoteTool || remoteBusy !== null}
-                onClick={async () => {
-                  setRemoteBusy("call");
-                  const id = `remote-${remoteName.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
-                  const result = await onCallRemote(id, remoteTool, remoteArgs);
-                  setRemoteCall(result);
-                  setRemoteBusy(null);
-                }}
+                onClick={requestRemoteCall}
               >
-                {remoteBusy === "call" ? "Calling…" : "Call tool"}
+                {remoteBusy === "call"
+                  ? "Calling…"
+                  : connectorCallRequiresApproval(authorizationMode, "remote")
+                    ? "Review and call"
+                    : "Call tool"}
               </button>
               {remoteCall && (
                 <pre className="local-mcp-output">{JSON.stringify(remoteCall.result, null, 2)}</pre>
@@ -531,6 +614,27 @@ export function ConnectorPanel({
             </>
           )}
         </div>
+      )}
+      {pendingCall && (
+        <section className="connector-approval" aria-label="Connector call authorization" role="dialog">
+          <div>
+            <strong>Authorization required</strong>
+            <span className="muted">
+              {pendingCall.transport === "remote" ? "Remote MCP" : "Local MCP"} · {pendingCall.toolName}
+            </span>
+          </div>
+          <p className="muted">
+            This call is waiting for a one-time approval because the current posture is {authorizationModeLabel(authorizationMode)}.
+          </p>
+          <div className="sched-actions">
+            <button type="button" className="primary" onClick={() => void approvePendingCall()}>
+              Allow once
+            </button>
+            <button type="button" onClick={() => setPendingCall(null)}>
+              Cancel
+            </button>
+          </div>
+        </section>
       )}
       {installed.filter((entry) => entry.kind === "remote").map((entry) => (
         <div className="integration-remote-status" key={entry.id}>

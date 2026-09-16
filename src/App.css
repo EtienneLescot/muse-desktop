@@ -4314,6 +4314,30 @@ body.dark .composer textarea::placeholder {
   font-size: 0.72rem;
 }
 
+.connector-approval {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 45%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--blue) 8%);
+}
+
+.connector-approval > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.connector-approval > div:first-child span {
+  font-size: 0.75rem;
+}
+
+.connector-approval p {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .integration-notice {
   margin: 6px 0 0;
   font-size: 0.78rem;

@@ -830,6 +830,7 @@ export default function App() {
                   onProbeRemote={probeRemoteMcp}
                   onCallRemote={callRemoteMcp}
                   onDisconnectRemote={disconnectRemoteMcp}
+                  authorizationMode={authorizationMode}
                   remoteNotice={remoteNotice}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}
