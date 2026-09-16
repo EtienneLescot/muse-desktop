@@ -11,7 +11,7 @@
 //!   orchestration (sub-agents included).
 //!
 //! IPC surface (frontend calls via `invoke`, receives via `listen`):
-//!   commands: start_session, fork_session, set_approval_mode, restore_sessions, send_input, approve,
+//!   commands: start_session, fork_session, set_approval_mode, restore_sessions, send_input, steer_input, approve,
 //!             cancel_session, kill_session,
 //!             subagent_interrupt, subagent_stop, subagent_resume,
 //!             subagent_followup, subagent_read_result, subagent_drilldown
@@ -1793,6 +1793,40 @@ async fn send_input(
     Ok(result)
 }
 
+/// Inject guidance into the currently running turn without creating a new
+/// queued turn. The renderer supplies the turn id it observed in the latest
+/// admission/start acknowledgement; the host rejects stale targets.
+#[tauri::command]
+async fn steer_input(
+    state: State<'_, AppState>,
+    session_id: String,
+    command_id: String,
+    expected_turn_id: String,
+    text: String,
+    input_parts: Option<Value>,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let command_id = require_non_empty(&command_id, "commandId")?;
+    let expected_turn_id = require_non_empty(&expected_turn_id, "expectedTurnId")?;
+    if input_parts.is_none() && text.trim().is_empty() {
+        return Err("empty input".to_string());
+    }
+    let input = input_parts.unwrap_or_else(|| json!([{ "type": "text", "text": text }]));
+    validate_turn_input_parts(&input)?;
+    let client = session_client(&state, &session_id)?;
+    client
+        .request(
+            "turn/steer",
+            json!({
+                "commandId": command_id,
+                "sessionId": session_id,
+                "expectedTurnId": expected_turn_id,
+                "input": input,
+            }),
+        )
+        .await
+}
+
 const MAX_TURN_INPUT_PARTS: usize = 8;
 const MAX_TURN_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 
@@ -2706,6 +2740,7 @@ fn main() {
             resume_session,
             restore_sessions,
             send_input,
+            steer_input,
             approve,
             answer_input,
             cancel_input,

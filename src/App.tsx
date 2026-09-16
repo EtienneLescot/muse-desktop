@@ -83,6 +83,7 @@ export default function App() {
     reconnectingId,
     connectedIds,
     sendInput,
+    steerInput,
     pendingSends,
     retrySend,
     discardSend,
@@ -932,6 +933,7 @@ export default function App() {
                     running={active.running}
                     workspace={active.workspace}
                     onSend={(text, inputParts) => sendInput(active.session_id, text, undefined, inputParts)}
+                    onSteer={(text, inputParts) => steerInput(active.session_id, text, inputParts)}
                     onCancel={() => void cancelSession(active.session_id)}
                     prefill={prefill}
                     onPrefillConsumed={clearPrefill}

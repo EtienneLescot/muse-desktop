@@ -586,6 +586,12 @@ interface UseMuseSessions {
     retryKey?: string,
     inputParts?: TurnInputPart[],
   ) => Promise<SendResult>;
+  /** M1-10: inject guidance into the currently running turn. */
+  steerInput: (
+    sessionId: string,
+    text: string,
+    inputParts?: TurnInputPart[],
+  ) => Promise<SendResult>;
   /** Failed outgoing messages across sessions (retryable, durable). */
   pendingSends: OutboxEntry[];
   /** Re-send a failed entry: verifies the server first when ambiguous. */
@@ -1128,6 +1134,9 @@ export function useMuseSessions(): UseMuseSessions {
   // Mirror of "any session running", read by the poll loop to pick cadence.
   // Plain ref (not state): the loop lives outside render, StrictMode-safe.
   const runningRef = useRef(false);
+  // Latest server turn id per session, used to target turn/steer without a
+  // race against a newly started or completed turn.
+  const turnIdsRef = useRef<Record<string, string>>({});
   // Shared poll cursor: the periodic tick and the post-send kick both drain
   // from here, so a kick never replays what the tick already fed.
   const cursorRef = useRef(0);
@@ -1917,6 +1926,16 @@ export function useMuseSessions(): UseMuseSessions {
     }
     // status (and any future kinds): record + reflect liveness.
     ensureSessionRow(sid, null);
+    if (kind === "started") {
+      try {
+        const obj = JSON.parse(payload) as Record<string, unknown>;
+        if (typeof obj.turnId === "string" && obj.turnId.length > 0) {
+          turnIdsRef.current[sid] = obj.turnId;
+        }
+      } catch {
+        // Older supervisor builds may emit an empty started payload.
+      }
+    }
     if (isRunningKind(kind)) {
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
@@ -1925,6 +1944,7 @@ export function useMuseSessions(): UseMuseSessions {
       // placeholder instead of closing it (US-10).
       ensurePlaceholder(sid);
     } else if (isStoppedKind(kind)) {
+      delete turnIdsRef.current[sid];
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: false } : s)),
       );
@@ -2508,6 +2528,62 @@ export function useMuseSessions(): UseMuseSessions {
       }
     },
     [kickPoll, doCompact],
+  );
+
+  const steerInput = useCallback(
+    async (
+      sessionId: string,
+      text: string,
+      inputParts?: TurnInputPart[],
+    ): Promise<SendResult> => {
+      const hasInputParts = inputParts?.some(
+        (part) => part.type === "image" || (part.type === "text" && part.text.trim().length > 0),
+      ) ?? false;
+      if (text.trim().length === 0 && !hasInputParts) {
+        return sendFailed(null, "the guidance is empty");
+      }
+      if (inFlightSends.current.has(sessionId)) {
+        return sendFailed(null, "a send is already in progress for this conversation");
+      }
+      const expectedTurnId = turnIdsRef.current[sessionId];
+      if (!expectedTurnId) {
+        return sendFailed(null, "the current turn is not ready to receive guidance");
+      }
+      const clientMessageId = newId();
+      const commandId = commandIdFromClientMessageId(clientMessageId, Date.now());
+      if (commandId === undefined) {
+        return sendFailed(clientMessageId, "could not create a durable command id");
+      }
+      const outgoingParts = inputPartsWithText(text, inputParts);
+      try {
+        setError(null);
+        await withAckTimeout(
+          invoke("steer_input", {
+            sessionId,
+            commandId,
+            expectedTurnId,
+            text,
+            inputParts: outgoingParts,
+          }),
+        );
+        const log = logsRef.current[sessionId] ?? loadLog(sessionId);
+        if (!log.some((entry) => entry.clientMessageId === clientMessageId)) {
+          pushLog(sessionId, [
+            { id: newId(), ts: Date.now(), role: "user", text, clientMessageId },
+          ]);
+        }
+        pushLog(sessionId, [
+          { id: newId(), ts: Date.now(), role: "system", text: "Guidance accepted by the current turn." },
+        ]);
+        kickPoll();
+        return sendAccepted(clientMessageId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setError(`turn/steer failed: ${message}`);
+        return sendFailed(clientMessageId, `turn/steer failed: ${message}`);
+      }
+    },
+    [kickPoll],
   );
 
   const retrySend = useCallback(
@@ -3954,6 +4030,7 @@ export function useMuseSessions(): UseMuseSessions {
     reconnectingId,
     connectedIds,
     sendInput,
+    steerInput,
     pendingSends,
     retrySend,
     discardSend,
