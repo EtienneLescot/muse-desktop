@@ -3008,7 +3008,19 @@ export function useMuseSessions(): UseMuseSessions {
 
   const setConnectorEnabledById = useCallback((id: string, enabled: boolean): void => {
     setConnectors((cur) => setConnectorEnabled(cur, id, enabled).registry);
-  }, []);
+    if (!enabled && mcpRunningIds.includes(id)) {
+      // Disabling a connector must release its native child as well. The
+      // registry remains the SSOT for availability; a failed stop is exposed
+      // as an error so the user can retry explicitly.
+      void invoke<boolean>("mcp_local_stop", { connectorId: id })
+        .then((stopped) => {
+          if (stopped) setMcpRunningIds((current) => current.filter((item) => item !== id));
+        })
+        .catch((e) => {
+          setError(`local MCP disable failed to stop server: ${e instanceof Error ? e.message : String(e)}`);
+        });
+    }
+  }, [mcpRunningIds]);
 
   const addRemoteConnector = useCallback((name: string, url: string): boolean => {
     const id = `remote-${name.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
