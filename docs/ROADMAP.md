@@ -315,7 +315,8 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Inspection :** **Inspect** lit le statut Git réel du worktree géré et affiche branche, nombre de fichiers modifiés, conflits et date d'observation dans l'orchestration.
 - **Nettoyage :** la suppression passe par le même confinement `.muse/worktrees/`, refuse désormais tout checkout avec changements non commités et ne supprime que les worktrees propres après confirmation explicite.
 - **Rétention :** archiver une conversation reste indépendant de la suppression du checkout ; un record persistant peut rester visible pour inspection tant que le chemin existe. L'état Git est toujours relu avant une action destructive.
-- **Limites :** la détection de processus actifs, la politique de rétention configurable et la reprise d'un nettoyage interrompu restent à implémenter ; Git garde la décision finale si un checkout est verrouillé.
+- **Rétention :** une politique durable par dépôt permet de conserver indéfiniment un checkout ou de le marquer éligible après 7, 14, 30 ou 90 jours. L'éligibilité est calculée uniquement après une inspection Git propre ; aucune suppression implicite n'est déclenchée.
+- **Limites :** la détection de processus actifs, l'aperçu multi-cibles et la reprise d'un nettoyage interrompu restent à implémenter ; Git garde la décision finale si un checkout est verrouillé.
 - **Validation :** 63 tests Rust couvrent l'inspection d'un worktree sale et le refus de suppression, avec nettoyage possible après retour à un état propre ; les tests Node, TypeScript et Vite restent verts.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
@@ -329,7 +330,7 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 | M2-03 | Créer automatiquement un worktree pour une conversation | Adapté | Présente | Partielle | Intégration | Création Git réelle, persistance et suppression confirmée livrées ; restent retention avancée et session atomique dans le worktree |
 | M2-04 | Préparer l'environnement du worktree | Adapté | Présente | Partielle | Intégration | Commande explicite, profils persistants par workspace, annulation native ciblée, états et sortie bornée livrés ; readiness locale et allowlist d'environnement livrées ; restent création atomique et qualification native |
 | M2-05 | Passer de Local à Worktree et inversement | Adapté | Présente | Partielle | Intégration | Plan de handoff et préconditions livrés ; restent transfert atomique du host, déplacement de contexte, conflits fichiers ignorés et rollback |
-| M2-06 | Nettoyer les worktrees sans supprimer du travail | Adapté | Présente | Partielle | Intégration | Inspection Git et refus des worktrees sales livrés ; restent processus actifs, politique de rétention configurable et reprise après interruption |
+| M2-06 | Nettoyer les worktrees sans supprimer du travail | Adapté | Présente | Partielle | Intégration | Inspection Git, refus des worktrees sales et politique de rétention guidée livrés ; restent processus actifs, aperçu multi-cibles et reprise après interruption |
 | M2-07 | Piloter les sous-agents réels | Adapté | Présente | Câblée | Unitaire | Vérifier followup/stop/resume/result/drilldown sur agents vivants ; identité et états corrects jusqu'à terminaison |
 | M2-08 | Exécuter plusieurs writers sans collision | À définir | Partielle | Partielle | Unitaire | Associer writers aux espaces isolés, file réelle et limites explicites ; tests de modifications concurrentes et résultats séparés |
 

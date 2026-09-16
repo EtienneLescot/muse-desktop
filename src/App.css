@@ -3042,6 +3042,29 @@ body.dark .composer textarea::placeholder {
   color: var(--muted);
   font-size: 0.7rem;
 }
+
+.orchestration-retention {
+  display: grid;
+  grid-template-columns: auto minmax(170px, 1fr);
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 8px;
+}
+
+.orchestration-retention .muted {
+  grid-column: 2;
+}
+
+.orchestration-retention-status {
+  display: block;
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.orchestration-retention-status[data-eligible="true"] {
+  color: var(--green);
+}
 .orchestration-readiness {
   flex: 1 0 100%;
   margin: 2px 0 4px;

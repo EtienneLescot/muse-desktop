@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fanoutQueueNote } from "../lib/fanout";
 import { buildHandoffPlan, type HandoffPlan } from "../lib/handoff";
 import type { GitStatusSnapshot } from "../lib/git";
@@ -23,6 +23,13 @@ import {
   upsertSetupProfile,
   type SetupProfile,
 } from "../lib/setupProfiles";
+import {
+  loadWorktreeRetention,
+  normalizeRetentionDays,
+  retentionDecision,
+  saveWorktreeRetention,
+  type WorktreeRetentionPolicy,
+} from "../lib/worktreeRetention";
 
 interface Props {
   /** Agent ids seen as `subagent` entries in the active thread log. */
@@ -101,13 +108,23 @@ export function OrchestrationPanel({
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [readinessByBranch, setReadinessByBranch] = useState<Record<string, WorktreeReadiness>>({});
   const [checkingReadiness, setCheckingReadiness] = useState<string | null>(null);
+  const [retentionPolicy, setRetentionPolicy] = useState<WorktreeRetentionPolicy>(() =>
+    loadWorktreeRetention(workspace),
+  );
+  const retentionWorkspace = useRef(workspace);
 
   useEffect(() => {
     setSetupProfiles(loadSetupProfiles(workspace));
     setSelectedProfileId("");
     setProfileName("");
     setEnvAllowlistText("");
+    retentionWorkspace.current = workspace;
+    setRetentionPolicy(loadWorktreeRetention(workspace));
   }, [workspace]);
+
+  useEffect(() => {
+    if (retentionWorkspace.current === workspace) saveWorktreeRetention(workspace, retentionPolicy);
+  }, [retentionPolicy, workspace]);
 
   const plans = useMemo(() => planWorktrees(agents), [agents]);
   const snippet = useMemo(() => worktreeShellSnippet(plans), [plans]);
@@ -322,6 +339,22 @@ export function OrchestrationPanel({
         <span className="muted" id="worktree-setup-env-help">
           Only these extra names are passed. Safe defaults always include {DEFAULT_SETUP_ENV_NAMES.slice(0, 4).join(", ")}.
         </span>
+        <div className="orchestration-retention">
+          <label htmlFor="worktree-retention-days">Retention</label>
+          <select
+            id="worktree-retention-days"
+            aria-label="Worktree retention"
+            value={retentionPolicy.maxAgeDays ?? ""}
+            onChange={(event) => setRetentionPolicy({ maxAgeDays: normalizeRetentionDays(event.target.value) })}
+          >
+            <option value="">Keep until removed</option>
+            <option value="7">Suggest cleanup after 7 days</option>
+            <option value="14">Suggest cleanup after 14 days</option>
+            <option value="30">Suggest cleanup after 30 days</option>
+            <option value="90">Suggest cleanup after 90 days</option>
+          </select>
+          <span className="muted">Only clean, inspected worktrees become eligible; removal is always explicit.</span>
+        </div>
         {setupError !== null && <span className="orchestration-setup-error">{setupError}</span>}
       </div>
       <ul className="orchestration-list">
@@ -484,6 +517,16 @@ export function OrchestrationPanel({
                     )}
                   </details>
                 )}
+                {(() => {
+                  const record = recordFor(p);
+                  if (!record) return null;
+                  const decision = retentionDecision(record, inspectionByBranch[p.branch], retentionPolicy);
+                  return (
+                    <span className="orchestration-retention-status" data-eligible={decision.eligible}>
+                      {decision.reason}
+                    </span>
+                  );
+                })()}
               </>
             ) : (
               <button
