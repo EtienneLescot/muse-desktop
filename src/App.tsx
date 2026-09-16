@@ -168,6 +168,7 @@ export default function App() {
     writeTerminal,
     resizeTerminal,
     closeTerminal,
+    prepareTerminalContext,
     browserAnnotations,
     addBrowserAnnotation,
     removeBrowserAnnotation,
@@ -996,6 +997,7 @@ export default function App() {
                           onWrite={writeTerminal}
                           onResize={resizeTerminal}
                           onClose={closeTerminal}
+                          onInsertContext={prepareTerminalContext}
                         />
                       )}
                       {workPanel === "browser" && (

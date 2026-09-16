@@ -9,6 +9,7 @@ interface Props {
   onWrite: (terminalId: string, input: string) => Promise<void>;
   onResize: (terminalId: string, cols: number, rows: number) => Promise<void>;
   onClose: (sessionId: string) => Promise<void>;
+  onInsertContext: (sessionId: string) => boolean;
 }
 
 /**
@@ -25,6 +26,7 @@ export function TerminalPanel({
   onWrite,
   onResize,
   onClose,
+  onInsertContext,
 }: Props) {
   const [command, setCommand] = useState("");
   const [opening, setOpening] = useState(false);
@@ -90,6 +92,9 @@ export function TerminalPanel({
           <span className="terminal-size">{terminal.info.cols}×{terminal.info.rows}</span>
           <button type="button" onClick={() => adjust(10)} aria-label="Increase terminal width">+</button>
           <button type="button" className="terminal-close" onClick={() => void onClose(sessionId)}>Close</button>
+          <button type="button" className="terminal-context" onClick={() => onInsertContext(sessionId)}>
+            Add output to prompt
+          </button>
         </div>
       </header>
       <pre ref={outputRef} className="terminal-output" aria-label="Terminal output">

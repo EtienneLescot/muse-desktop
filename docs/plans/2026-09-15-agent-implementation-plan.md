@@ -221,6 +221,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** commande de build en échec, sortie disponible au bon agent ; terminal B inaccessible par confusion de cible ; capture non bloquante.
 
+**État au 16/09/2026 :** première tranche locale livrée dans la PR M1-06 : **Add output to prompt** ajoute un snapshot borné et attribué au terminal actif dans le brouillon. L’adaptateur vers un outil ou un contexte MSP automatique reste explicitement en attente de vérification de capability moteur.
+
 ### M1-07 — Fichiers réels
 
 **Code :** nouveau service fichiers, panneau Files, `ArtifactsPane`, scope. Dépend M0-06.

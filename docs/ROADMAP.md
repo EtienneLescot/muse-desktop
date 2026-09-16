@@ -145,7 +145,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-03 | Indexer ou annuler une modification | Adapté | Présente | Câblée | Intégration | Stage, unstage et discard fichier livrés avec garde HEAD/statut/diff ; actions hunk, sélection multiple et qualification native restent à faire |
 | M1-04 | Commit, push et création de PR depuis l'app | Adapté | Présente | Câblée | Intégration | Commit, push et PR GitHub CLI livrés avec destinations explicites ; restent qualification hooks/auth live, PR existante/rejet distant et revue native |
 | M1-05 | Ouvrir et utiliser un terminal du projet | Adapté | Présente | Câblée | Unitaire | Socle PTY persistant livré : shell lié au cwd de la conversation, entrée/sortie bornées, resize et fermeture contrôlée. Reste : validation native Windows/macOS/Linux, rendu ANSI riche et raccourcis interactifs |
-| M1-06 | Faire lire au moteur la sortie du terminal | À définir | Absente | Absente | À faire | Exposer un contexte borné et attribué au bon terminal ; le moteur peut diagnostiquer un build échoué sans copier-coller |
+| M1-06 | Faire lire au moteur la sortie du terminal | Adapté | Présente | Locale | Unitaire | Handoff explicite **Add output to prompt** livré : sortie bornée, attribuée au terminal/cwd et insérée dans le prochain message. Reste : outil/contexte moteur natif après vérification de capacité MSP |
 | M1-07 | Consulter les vrais fichiers du projet | Maquette | Partielle | Locale | Unitaire | Remplacer la seule liste de fichiers cités par accès disque contrôlé et ouverture pertinente ; contenu actuel, pas extrait de réponse |
 | M1-08 | Ajouter fichiers et images à une demande | À définir | Partielle | Partielle | Unitaire | Les mentions actuelles enrichissent du texte ; concevoir pièces jointes, drag/drop et limites ; preuve que le moteur reçoit le contenu/type attendu |
 | M1-09 | Créer une branche de conversation fidèle | Maquette | Partielle | Locale | Unitaire | Utiliser session/fork si disponible ; choisir le point source ; conserver contexte et dossier ; ne pas confondre avec « nouvelle depuis résumé » |
@@ -197,6 +197,13 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **UX :** l’onglet **Terminal** apparaît dans la barre de travail. Il présente le cwd/shell, une sortie monospace, une commande à envoyer, l’état de fin et un contrôle de largeur ; le panneau reprend automatiquement le terminal de la conversation à sa réouverture.
 - **Validation :** `cargo test --bin muse-desktop` (53 tests, dont bornage de taille et de sortie), `npm test`, `npx tsc --noEmit` et build Vite. La validation native interactive et le rendu ANSI/clipboard restent des critères séparés.
 - **Limites assumées :** cette tranche ne transmet pas encore la sortie au moteur comme contexte (M1-06), ne remplace pas encore le rendu brut par xterm, et ne prétend pas couvrir les shells non présents sur la machine.
+
+### Livraison M1-06 — sortie terminal vers le prompt
+
+- **Handoff explicite :** le bouton **Add output to prompt** ajoute au brouillon un bloc `<terminal-output>` borné à 12 000 caractères, précédé du shell, cwd et `terminalId`. La sortie est traitée comme donnée de terminal identifiable ; aucune exécution ou envoi implicite n’est déclenché.
+- **SSOT :** le hook de sessions reste la source de vérité du terminal et du brouillon. Le panneau ne copie pas directement le DOM et ne peut pas insérer la sortie d’une autre conversation.
+- **Validation :** deux tests Node couvrent l’attribution, l’échappement des métadonnées et le bornage ; suite complète et build restent verts.
+- **Limite assumée :** Muse ne sert pas encore de capability d’outil terminal/context snapshot vérifiée. L’adaptateur MSP automatique reste bloqué jusqu’à la preuve de ce contrat ; l’insertion explicite fournit un parcours honnête entre-temps.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 
