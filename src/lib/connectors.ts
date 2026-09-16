@@ -30,6 +30,23 @@ export interface ConnectorTool {
   description: string;
 }
 
+/** Result of a real local MCP initialize + tools/list exchange. */
+export interface LocalMcpProbeResult {
+  protocolVersion: string;
+  serverName: string;
+  serverVersion: string;
+  tools: ConnectorTool[];
+  durationMs: number;
+}
+
+/** Result of a real local MCP tools/call exchange. */
+export interface LocalMcpCallResult {
+  toolName: string;
+  result: unknown;
+  isError: boolean;
+  durationMs: number;
+}
+
 /** One curated directory entry: installable in 1 click, no JSON. */
 export interface CuratedConnector {
   id: string;

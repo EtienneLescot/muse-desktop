@@ -257,6 +257,8 @@ import {
   setConnectorEnabled,
   uninstallConnector,
   type ConnectorEntry,
+  type LocalMcpCallResult,
+  type LocalMcpProbeResult,
   type ConnectorTool,
 } from "../lib/connectors";
 // w-integrations (US-25): slash-invokable + auto-suggested skills with
@@ -811,6 +813,18 @@ interface UseMuseSessions {
   connectors: ConnectorEntry[];
   /** w-integrations US-24: hot-listed tools (re-read, no restart). */
   connectorTools: ConnectorTool[];
+  /** M3-01: initialize a real local MCP stdio server and list its tools. */
+  probeLocalMcp: (
+    command: string,
+    workspacePath?: string | null,
+  ) => Promise<LocalMcpProbeResult | null>;
+  /** M3-01: call one tool on a local MCP stdio server. */
+  callLocalMcp: (
+    command: string,
+    toolName: string,
+    argumentsText: string,
+    workspacePath?: string | null,
+  ) => Promise<LocalMcpCallResult | null>;
   /** w-integrations US-26: last remote-guard refusal message, if any. */
   remoteNotice: string | null;
   /** w-integrations US-24: 1-click install from the curated directory. */
@@ -3252,6 +3266,54 @@ export function useMuseSessions(): UseMuseSessions {
     setSessions((cur) => withArchivedFlag(cur, sessionId, false));
   }, []);
 
+  const probeLocalMcp = useCallback(
+    async (
+      command: string,
+      workspacePath?: string | null,
+    ): Promise<LocalMcpProbeResult | null> => {
+      try {
+        setRemoteNotice(null);
+        return await invoke<LocalMcpProbeResult>("mcp_local_probe", {
+          command: command.trim(),
+          workspace: workspacePath?.trim() || null,
+        });
+      } catch (e) {
+        setError(`local MCP probe failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
+
+  const callLocalMcp = useCallback(
+    async (
+      command: string,
+      toolName: string,
+      argumentsText: string,
+      workspacePath?: string | null,
+    ): Promise<LocalMcpCallResult | null> => {
+      let argumentsValue: unknown = {};
+      try {
+        argumentsValue = argumentsText.trim() ? JSON.parse(argumentsText) : {};
+      } catch {
+        setError("local MCP call failed: arguments must be valid JSON");
+        return null;
+      }
+      try {
+        return await invoke<LocalMcpCallResult>("mcp_local_call", {
+          command: command.trim(),
+          workspace: workspacePath?.trim() || null,
+          toolName: toolName.trim(),
+          arguments: argumentsValue,
+        });
+      } catch (e) {
+        setError(`local MCP call failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
+
   const togglePinned = useCallback((sessionId: string) => {
     setSessions((cur) => {
       const current = cur.find((session) => session.session_id === sessionId);
@@ -4284,6 +4346,8 @@ export function useMuseSessions(): UseMuseSessions {
     subagentDrilldown,
     connectors,
     connectorTools,
+    probeLocalMcp,
+    callLocalMcp,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,

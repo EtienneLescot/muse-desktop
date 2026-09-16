@@ -373,7 +373,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** ConnectorPanel/connectors.ts, nouvel adaptateur runtime. Dépend M0-06/08/14.
 
-**Travail :** décider si le moteur charge les serveurs ou si un bridge est requis. Définir start/stop, handshake, découverte et invocation ; scope projet, timeout et retour d'erreur. Les métadonnées du catalogue ne deviennent outils disponibles qu'après succès réel.
+**État :** `mcp_local_probe` et `mcp_local_call` lancent une commande locale uniquement sur geste utilisateur, parlent le framing MCP stdio (`Content-Length` ou ligne JSON), exécutent `initialize` + `notifications/initialized`, puis `tools/list` ou `tools/call`. La réponse est bornée, le processus est tué après l'échange ou le timeout, et l'UI expose les outils/arguments/résultat.
+
+**Reste :** maintenir un serveur persistant par connecteur, propager `notifications/tools/list_changed`, brancher les tools découverts au catalogue observé par Muse et appliquer la politique d'autorisation du host à chaque appel.
 
 **Acceptation :** serveur fixture expose puis exécute un outil, redémarre, change sa liste et échoue ; appel observé dans une session Muse.
 

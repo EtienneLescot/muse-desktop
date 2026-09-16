@@ -3531,6 +3531,79 @@ body.dark .composer textarea::placeholder {
   font-size: 0.8rem;
 }
 
+.local-mcp {
+  margin: 10px 0 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.local-mcp p {
+  margin: 4px 0;
+}
+
+.local-mcp .integration-form {
+  flex-direction: row;
+  align-items: center;
+}
+
+.local-mcp .integration-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.local-mcp label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.local-mcp select,
+.local-mcp textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 7px;
+  font: inherit;
+}
+
+.local-mcp textarea {
+  font-family: var(--font-code);
+  resize: vertical;
+}
+
+.local-mcp-result {
+  margin-top: 6px;
+}
+
+.local-mcp .integration-notice {
+  color: var(--success, #2aa876);
+  background: color-mix(in srgb, var(--surface) 92%, var(--success, #2aa876) 8%);
+  border-color: color-mix(in srgb, var(--line) 75%, var(--success, #2aa876) 25%);
+}
+
+.local-mcp-output {
+  max-height: 180px;
+  margin: 8px 0 0;
+  padding: 8px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--code-bg);
+  color: var(--text);
+  font-family: var(--font-code);
+  font-size: 0.72rem;
+}
+
 .integration-notice {
   margin: 6px 0 0;
   font-size: 0.78rem;
