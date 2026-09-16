@@ -82,7 +82,9 @@ export function StreamView({
   onCancel,
   controls,
 }: Props) {
+  const streamRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollTopsRef = useRef<Record<string, number>>({});
   const [awayFromBottom, setAwayFromBottom] = useState(false);
   const stickRef = useRef(true);
   const [followupFor, setFollowupFor] = useState<string | null>(null);
@@ -103,6 +105,16 @@ export function StreamView({
   useEffect(() => {
     stickRef.current = true;
     setAwayFromBottom(false);
+    const savedTop = scrollTopsRef.current[sessionId ?? ""];
+    const frame = window.requestAnimationFrame(() => {
+      const stream = streamRef.current;
+      if (!stream || savedTop === undefined) return;
+      stream.scrollTop = savedTop;
+      const atBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 80;
+      stickRef.current = atBottom;
+      setAwayFromBottom(!atBottom);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [sessionId]);
 
   useEffect(() => {
@@ -117,6 +129,7 @@ export function StreamView({
   function onScroll(e: React.UIEvent<HTMLDivElement>): void {
     const el = e.currentTarget;
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (sessionId !== null) scrollTopsRef.current[sessionId] = el.scrollTop;
     setAwayFromBottom(!stickRef.current);
   }
 
@@ -178,6 +191,7 @@ export function StreamView({
 
   return (
     <div
+      ref={streamRef}
       className="stream"
       onScroll={onScroll}
       role="log"
