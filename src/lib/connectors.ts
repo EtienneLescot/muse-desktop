@@ -392,14 +392,39 @@ export function isPublicHttpUrl(url: string): boolean {
   if (!/^https:\/\//i.test(trimmed)) return false;
   let host = "";
   try {
-    host = new URL(trimmed).hostname.toLowerCase();
+    const parsed = new URL(trimmed);
+    if (parsed.username || parsed.password) return false;
+    host = parsed.hostname.toLowerCase();
   } catch {
     return false;
   }
   if (host.length === 0) return false;
   if (host === "localhost") return false;
-  if (host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".lan")) {
+  if (
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    host.endsWith(".lan") ||
+    host.endsWith(".localhost") ||
+    host === "localhost"
+  ) {
     return false;
+  }
+  // URL.hostname keeps IPv6 brackets. Reject loopback, unspecified,
+  // link-local and unique-local ranges before any DNS lookup is attempted.
+  if (host.startsWith("[") && host.endsWith("]")) {
+    const ipv6 = host.slice(1, -1);
+    if (
+      ipv6 === "::1" ||
+      ipv6 === "::" ||
+      ipv6.startsWith("fc") ||
+      ipv6.startsWith("fd") ||
+      ipv6.startsWith("fe8") ||
+      ipv6.startsWith("fe9") ||
+      ipv6.startsWith("fea") ||
+      ipv6.startsWith("feb")
+    ) {
+      return false;
+    }
   }
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
     if (host.startsWith("10.")) return false;
@@ -407,6 +432,9 @@ export function isPublicHttpUrl(url: string): boolean {
     const second = Number(host.split(".")[1]);
     if (host.startsWith("172.") && second >= 16 && second <= 31) return false;
     if (host.startsWith("127.")) return false;
+    if (host.startsWith("169.254.")) return false;
+    if (host === "0.0.0.0") return false;
+    if (host.startsWith("100.") && Number(host.split(".")[1]) >= 64 && Number(host.split(".")[1]) <= 127) return false;
   }
   return true;
 }

@@ -309,6 +309,10 @@ describe("remote guard (US-26: single remote + public internet)", () => {
     assert.equal(isPublicHttpUrl("https://mcp.acme.com/rpc"), true);
     assert.equal(isPublicHttpUrl("http://mcp.acme.com/rpc"), false);
     assert.equal(isPublicHttpUrl("https://127.0.0.1/x"), false);
+    assert.equal(isPublicHttpUrl("https://[::1]/x"), false);
+    assert.equal(isPublicHttpUrl("https://[fd00::1]/x"), false);
+    assert.equal(isPublicHttpUrl("https://169.254.1.1/x"), false);
+    assert.equal(isPublicHttpUrl("https://user:pass@mcp.acme.com/x"), false);
     assert.equal(isPublicHttpUrl("not a url"), false);
   });
 
