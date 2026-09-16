@@ -3619,6 +3619,75 @@ body.dark .composer textarea::placeholder {
   white-space: nowrap;
 }
 
+.run-details {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+  font-size: 0.78rem;
+}
+
+.run-details > summary {
+  color: var(--blue);
+  cursor: pointer;
+  user-select: none;
+  width: fit-content;
+}
+
+.run-details > summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.run-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 8px 0;
+}
+
+.run-details-grid > div {
+  min-width: 0;
+}
+
+.run-details-grid dt,
+.run-detail-label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.run-details-grid dd {
+  margin: 1px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.run-value-mono {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.run-instructions,
+.run-output {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  background: var(--surface-subtle, var(--bg));
+}
+
+.run-instructions p,
+.run-output p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.run-output-error {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+
 .notification-enable {
   margin-top: 8px;
   color: var(--blue);

@@ -402,7 +402,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | M3-05 | Invoquer une skill avec son vrai contexte | Adapté | Présente | Partielle | Intégration | Lecture fraîche des ressources relatives, provenance balisée, refus explicite si ressource disparue et retry sans double insertion livrés ; part `skill` native et progression restent à qualifier |
 | M3-06 | Exécuter un travail planifié sans clic préalable | Adapté | Présente | Partielle | Intégration | Chaque schedule/review capture workspace, projet, modèle et politique ; ask reste en revue, workspace/YOLO dispatchent automatiquement ; journal local borné des runs visible. Reste le scheduler natif hors cycle UI et la sortie métier complète |
 | M3-07 | Gérer sommeil, reprise, doublons et échecs de planning | Adapté | Présente | Partielle | Intégration | Politique skip/latest, curseur d'occurrence stable, bail inter-fenêtres, claim anti-doublon, retries bornés avec backoff et annulation d'une retry livrés côté client ; scheduler natif multi-instance, fuseau/DST explicite et reprise après crash restent ouverts |
-| M3-08 | Examiner les résultats des runs | Adapté | Présente | Partielle | Intégration | Historique borné, aperçu, statut, non-lu, lien vers la conversation, archivage, filtres et retry manuel livrés ; résumé riche et fin de run native restent ouverts |
+| M3-08 | Examiner les résultats des runs | Adapté | Présente | Partielle | Intégration | Historique borné, aperçu, statut, non-lu, lien vers la conversation, archivage, filtres, retry manuel et inspecteur de contexte livrés ; résumé métier riche et fin de run native restent ouverts |
 | M3-09 | Recevoir une notification utile | Adapté | Présente | Partielle | Intégration | Inbox locale dédupliquée pour fins/échecs, non-lus, ouverture de conversation, silence persistant et retour au premier plan au clic livrés ; plugin OS/Tauri utilisé dans l'app native, restent le service persistant application fermée et le routage direct de l'action |
 
 Preuves : [connecteurs](../src/lib/connectors.ts), [skills](../src/lib/skills.ts), [planning](../src/lib/schedules.ts), [journal des runs](../src/lib/scheduleRuns.ts), [file actuelle](../src/components/ReviewQueuePanel.tsx).
@@ -417,6 +417,14 @@ Preuves : [connecteurs](../src/lib/connectors.ts), [skills](../src/lib/skills.ts
 - **Garde-fous** : l'endpoint doit être public et HTTPS, le plan conserve une seule entrée distante et les descriptions/outils sont bornés. Une reconnexion après relance exige une nouvelle saisie du token.
 - **Limites** : OAuth, stockage sécurisé natif, renouvellement automatique et test réseau macOS/Linux restent à concevoir ; le host Muse ne reçoit pas encore ces outils comme capacités natives.
 - **Validation** : quatre tests Node couvrent la continuité de session, bearer token, SSE, refus privé/HTTP et réponse mal corrélée ; TypeScript et build Vite restent verts.
+
+### Livraison M3-08 — inspecteur de runs
+
+- **Contexte conservé** : chaque ligne de l'inbox peut maintenant être dépliée pour retrouver la conversation cible, le mode d'autorisation capturé, le modèle, le workspace/projet, l'occurrence planifiée, la tentative courante et les horodatages de début/fin.
+- **Résultat lisible** : la durée est calculée à partir des timestamps observés ; l'aperçu de résultat et l'erreur restent séparés et affichés dans des blocs multilignes, sans transformer un run encore en cours en succès.
+- **UX** : l'inspecteur utilise le contrôle natif `details/summary`, reste navigable au clavier et conserve les actions d'ouverture, retry, lecture et archivage dans le même contexte.
+- **Limite** : le résumé reste borné au dernier aperçu assistant enregistré localement. Un résultat métier structuré et un signal de fin de run natif restent à qualifier avec le host.
+- **Validation** : TypeScript, build Vite et suite Node restent requis ; la preuve native de fin de run est distincte de cet inspecteur local.
 
 ### Livraison M3-09 — notifications de runs
 

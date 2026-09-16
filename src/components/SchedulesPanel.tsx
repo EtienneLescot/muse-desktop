@@ -7,7 +7,7 @@ import {
   type ScheduleMissedPolicy,
   type ThreadReuse,
 } from "../lib/schedules";
-import type { ScheduleRun } from "../lib/scheduleRuns";
+import { MAX_RUN_ATTEMPTS, type ScheduleRun } from "../lib/scheduleRuns";
 import type { MuseNotification, NotificationPermission } from "../lib/notifications";
 
 interface SessionRef {
@@ -67,11 +67,29 @@ function describeRunStatus(status: ScheduleRun["status"]): string {
   if (status === "completed") return "Completed";
   if (status === "running") return "Running";
   if (status === "failed") return "Failed";
+  if (status === "cancelled") return "Cancelled";
   return "Queued";
 }
 
 function describeNotificationTime(createdAt: number): string {
   return new Date(createdAt).toLocaleString();
+}
+
+function describeRunDuration(run: ScheduleRun): string | null {
+  if (run.startedAt === undefined) return null;
+  const end = run.finishedAt ?? Date.now();
+  const duration = Math.max(0, end - run.startedAt);
+  if (duration < 1000) return "under 1s";
+  if (duration < 60_000) return `${Math.round(duration / 1000)}s`;
+  return `${Math.floor(duration / 60_000)}m ${Math.round((duration % 60_000) / 1000)}s`;
+}
+
+function describeRunTarget(run: ScheduleRun, sessions: SessionRef[]): string {
+  const reuse = run.threadReuse;
+  if (reuse.kind === "active") return "Active conversation";
+  if (reuse.kind === "new") return "New conversation";
+  return sessions.find((session) => session.session_id === reuse.sessionId)?.title
+    ?? `Conversation ${reuse.sessionId.slice(0, 8)}`;
 }
 
 /**
@@ -332,6 +350,37 @@ export function SchedulesPanel({
                 </span>
                 {run.resultPreview && <span className="run-preview">{run.resultPreview}</span>}
                 {run.error && <small className="error">{run.error}</small>}
+                <details className="run-details">
+                  <summary>Inspect run</summary>
+                  <dl className="run-details-grid">
+                    <div><dt>Target</dt><dd>{describeRunTarget(run, sessions)}</dd></div>
+                    <div><dt>Authorization</dt><dd>{run.authorizationMode === "yolo" ? "YOLO" : run.authorizationMode === "workspace" ? "Workspace" : "Ask"}</dd></div>
+                    <div><dt>Model</dt><dd>{run.model ?? "Default"}</dd></div>
+                    <div><dt>Attempt</dt><dd>{run.attempt ?? 1} / {MAX_RUN_ATTEMPTS}</dd></div>
+                    {run.workspace && <div><dt>Workspace</dt><dd className="run-value-mono">{run.workspace}</dd></div>}
+                    {run.projectId && <div><dt>Project</dt><dd className="run-value-mono">{run.projectId}</dd></div>}
+                    <div><dt>Occurrence</dt><dd>{new Date(run.occurrenceAt).toLocaleString()}</dd></div>
+                    {run.startedAt && <div><dt>Started</dt><dd>{new Date(run.startedAt).toLocaleString()}</dd></div>}
+                    {run.finishedAt && <div><dt>Finished</dt><dd>{new Date(run.finishedAt).toLocaleString()}</dd></div>}
+                    {describeRunDuration(run) && <div><dt>Duration</dt><dd>{describeRunDuration(run)}</dd></div>}
+                  </dl>
+                  <div className="run-instructions">
+                    <span className="run-detail-label">Instructions</span>
+                    <p>{run.instructions}</p>
+                  </div>
+                  {run.resultPreview && (
+                    <div className="run-output">
+                      <span className="run-detail-label">Result preview</span>
+                      <p>{run.resultPreview}</p>
+                    </div>
+                  )}
+                  {run.error && (
+                    <div className="run-output run-output-error">
+                      <span className="run-detail-label">Failure</span>
+                      <p>{run.error}</p>
+                    </div>
+                  )}
+                </details>
                 <div className="sched-actions">
                   {run.sessionId && (
                     <button type="button" onClick={() => onOpenRun(run)} title="Open conversation">

@@ -465,7 +465,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** statuts queued/running/succeeded/failed/cancelled, timestamps, résumé, cible et lien conversation. Actions ouvrir/retry/archiver ; non-lu séparé de statut métier.
 
-**État au 16/09/2026 :** Automations affiche les huit derniers runs avec statut, horodatage, aperçu borné, erreur, indicateur non-lu, ouverture de la conversation et marquage lu. Un run passe à `completed` au premier statut d'arrêt du host et conserve l'aperçu de la dernière réponse assistant ; avant cet événement, il reste `running` même si `send_input` a été acquitté. La liste propose désormais les filtres Active/Unread/Queued/Running/Completed/Failed/Archived, l'archivage durable et la restauration, ainsi que Retry now pour une erreur ou une retry différée.
+**État au 16/09/2026 :** Automations affiche les huit derniers runs avec statut, horodatage, aperçu borné, erreur, indicateur non-lu, ouverture de la conversation et marquage lu. Un run passe à `completed` au premier statut d'arrêt du host et conserve l'aperçu de la dernière réponse assistant ; avant cet événement, il reste `running` même si `send_input` a été acquitté. La liste propose désormais les filtres Active/Unread/Queued/Running/Completed/Failed/Archived, l'archivage durable et la restauration, ainsi que Retry now pour une erreur ou une retry différée. Chaque run peut aussi être déplié pour inspecter cible, autorisation, modèle, workspace, occurrence, tentative, durée, instructions, résultat et erreur.
 
 **Limite restante :** le résumé métier riche et un signal de fin de run fourni directement par le host restent à qualifier.
 
