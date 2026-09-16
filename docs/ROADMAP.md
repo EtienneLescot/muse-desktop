@@ -288,10 +288,12 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 
 ### Livraison M2-04 — préparation explicite de l'environnement
 
+- **Profils :** un profil nommé peut enregistrer la commande dans `muse-desktop.worktree-setup-profiles.v1`, isolé par workspace. Le sélecteur ne fait que recopier la commande ; l'exécution reste une action explicite dans le worktree choisi.
+
 - **Commande utilisateur :** le panneau d'orchestration accepte une commande de setup saisie par l'utilisateur, puis l'exécute uniquement après clic sur **Run setup** dans le worktree Git déjà créé. Aucun script importé ou profil de projet n'est lancé automatiquement.
 - **États :** chaque exécution renvoie `ready`, `failed` ou `timedOut`, avec code de sortie, durée et sortie bornée affichable derrière une disclosure. Une relance est possible après un échec ou un timeout.
 - **Garde-fous :** la commande est limitée à 2 000 caractères ; le runner Rust refuse les dossiers inexistants ou hors de `.muse/worktrees`, neutralise stdin et tue les processus dépassant dix minutes ; la sortie est bornée à 200 000 caractères.
-- **Limites :** les profils de setup persistants, variables d'environnement autorisées, annulation live et création atomique session → worktree restent à concevoir pour M2-05/M2-06. Le setup est donc une action explicite et locale, sans promesse de readiness globale du projet.
+- **Limites :** les variables d'environnement autorisées, l'annulation live et la création atomique session → worktree restent à concevoir pour M2-05/M2-06. Le setup est donc une action explicite et locale, sans promesse de readiness globale du projet.
 - **Validation :** tests Rust des chemins, commandes réussies/échouées et bornes ; tests Node de validation de commande ; TypeScript, Vite et Cargo doivent rester verts avant livraison.
 
 ### Livraison M2-05 — plan de handoff Local ↔ Worktree
@@ -319,7 +321,7 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 | M2-01 | Un projet représente des dossiers persistants | Adapté | Présente | Câblée | Intégration | Racine persistante, sélection de dossier et création de conversation dans cette racine livrées ; restent migration explicite des anciens groupes et environnement/worktree |
 | M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Intégration | Héritage global/projet visible et modèle effectif appliqué à la création d'une session ; sandbox/réseau/auto-compact restent en attente d'un contrat moteur vérifié |
 | M2-03 | Créer automatiquement un worktree pour une conversation | Adapté | Présente | Partielle | Intégration | Création Git réelle, persistance et suppression confirmée livrées ; restent retention avancée et session atomique dans le worktree |
-| M2-04 | Préparer l'environnement du worktree | Adapté | Présente | Partielle | Intégration | Commande explicite, états et sortie bornée livrés ; restent profils persistants, variables autorisées, annulation live et readiness globale |
+| M2-04 | Préparer l'environnement du worktree | Adapté | Présente | Partielle | Intégration | Commande explicite, profils persistants par workspace, états et sortie bornée livrés ; restent variables autorisées, annulation live et readiness globale |
 | M2-05 | Passer de Local à Worktree et inversement | Adapté | Présente | Partielle | Intégration | Plan de handoff et préconditions livrés ; restent transfert atomique du host, déplacement de contexte, conflits fichiers ignorés et rollback |
 | M2-06 | Nettoyer les worktrees sans supprimer du travail | Adapté | Présente | Partielle | Intégration | Inspection Git et refus des worktrees sales livrés ; restent processus actifs, politique de rétention configurable et reprise après interruption |
 | M2-07 | Piloter les sous-agents réels | Adapté | Présente | Câblée | Unitaire | Vérifier followup/stop/resume/result/drilldown sur agents vivants ; identité et états corrects jusqu'à terminaison |

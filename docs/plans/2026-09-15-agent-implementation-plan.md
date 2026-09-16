@@ -325,9 +325,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** nouveau modèle LocalEnvironment, PTY/runner et worktrees. Dépend M2-03/M1-05.
 
-**État :** une commande saisie par l'utilisateur peut être lancée explicitement dans un worktree géré déjà créé. Le runner Rust valide le confinement, borne la commande et la sortie, neutralise stdin, expose les états `ready/failed/timedOut`, conserve la durée et le code de sortie, puis permet une relance depuis le panneau d'orchestration. Aucun setup importé n'est exécuté au démarrage.
+**État :** une commande saisie par l'utilisateur peut être lancée explicitement dans un worktree géré déjà créé. Le runner Rust valide le confinement, borne la commande et la sortie, neutralise stdin, expose les états `ready/failed/timedOut`, conserve la durée et le code de sortie, puis permet une relance depuis le panneau d'orchestration. Les profils nommés sont persistés par workspace et ne font que préremplir cette commande ; aucun setup importé n'est exécuté au démarrage.
 
-**Reste :** profils de setup persistants par projet, variables d'environnement autorisées, annulation live/PTY et signal de readiness partagé avec la création de session. Ces extensions doivent conserver la commande explicite et la SSOT du hook de sessions.
+**Reste :** variables d'environnement autorisées, annulation live/PTY et signal de readiness partagé avec la création de session. Ces extensions doivent conserver la commande explicite et la SSOT du hook de sessions.
 
 **Acceptation :** dépendances installées dans le bon worktree, setup échoué/cancelled et retry ; aucun premier tour annoncé prêt prématurément.
 

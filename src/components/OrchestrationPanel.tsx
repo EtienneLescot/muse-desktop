@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fanoutQueueNote } from "../lib/fanout";
 import { buildHandoffPlan, type HandoffPlan } from "../lib/handoff";
 import type { GitStatusSnapshot } from "../lib/git";
@@ -14,6 +14,12 @@ import {
   type WorktreeSetupResult,
 } from "../lib/worktrees";
 import { CapabilityBadge } from "./CapabilityBadge";
+import {
+  loadSetupProfiles,
+  removeSetupProfile,
+  upsertSetupProfile,
+  type SetupProfile,
+} from "../lib/setupProfiles";
 
 interface Props {
   /** Agent ids seen as `subagent` entries in the active thread log. */
@@ -66,6 +72,11 @@ export function OrchestrationPanel({
   const [setupCommand, setSetupCommand] = useState("");
   const [setupError, setSetupError] = useState<string | null>(null);
   const [setupRunning, setSetupRunning] = useState<string | null>(null);
+  const [setupProfiles, setSetupProfiles] = useState<SetupProfile[]>(() =>
+    loadSetupProfiles(workspace),
+  );
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [profileName, setProfileName] = useState("");
   const [setupByBranch, setSetupByBranch] = useState<
     Record<string, WorktreeSetupResult>
   >({});
@@ -76,6 +87,12 @@ export function OrchestrationPanel({
     Record<string, WorktreeInspection>
   >({});
   const [inspecting, setInspecting] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSetupProfiles(loadSetupProfiles(workspace));
+    setSelectedProfileId("");
+    setProfileName("");
+  }, [workspace]);
 
   const plans = useMemo(() => planWorktrees(agents), [agents]);
   const snippet = useMemo(() => worktreeShellSnippet(plans), [plans]);
@@ -123,6 +140,40 @@ export function OrchestrationPanel({
     setSetupRunning(null);
   }
 
+  function saveProfile(): void {
+    const result = upsertSetupProfile(workspace, setupProfiles, {
+      name: profileName,
+      command: setupCommand,
+    });
+    if (result.profile === null) {
+      setSetupError("Profile name and setup command are required.");
+      return;
+    }
+    setSetupProfiles(result.profiles);
+    setSelectedProfileId(result.profile.id);
+    setProfileName(result.profile.name);
+    setSetupError(null);
+  }
+
+  function chooseProfile(id: string): void {
+    setSelectedProfileId(id);
+    const profile = setupProfiles.find((item) => item.id === id);
+    if (profile === undefined) {
+      setProfileName("");
+      return;
+    }
+    setProfileName(profile.name);
+    setSetupCommand(profile.command);
+    setSetupError(null);
+  }
+
+  function deleteProfile(): void {
+    if (selectedProfileId === "") return;
+    setSetupProfiles((current) => removeSetupProfile(workspace, current, selectedProfileId));
+    setSelectedProfileId("");
+    setProfileName("");
+  }
+
   function prepareHandoff(record: WorktreeRecord): void {
     const sourceFiles = sourceStatus?.files ?? [];
     const plan = buildHandoffPlan({
@@ -163,6 +214,38 @@ export function OrchestrationPanel({
       </header>
       {queueNote !== null && <p className="muted">{queueNote}</p>}
       <div className="orchestration-setup">
+        <div className="orchestration-profiles">
+          <label htmlFor="worktree-setup-profile">Profile</label>
+          <select
+            id="worktree-setup-profile"
+            value={selectedProfileId}
+            onChange={(event) => chooseProfile(event.target.value)}
+            aria-label="Saved setup profile"
+          >
+            <option value="">No saved profile</option>
+            {setupProfiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>{profile.name}</option>
+            ))}
+          </select>
+          <input
+            value={profileName}
+            onChange={(event) => setProfileName(event.target.value)}
+            placeholder="Profile name"
+            aria-label="Setup profile name"
+          />
+          <button type="button" onClick={saveProfile} title="Save this setup command for the workspace">
+            Save profile
+          </button>
+          <button
+            type="button"
+            onClick={deleteProfile}
+            disabled={selectedProfileId === ""}
+            title="Delete the selected setup profile"
+          >
+            Delete
+          </button>
+          <span className="muted">Profiles are workspace-scoped and never run automatically.</span>
+        </div>
         <label htmlFor="worktree-setup-command">Setup command</label>
         <input
           id="worktree-setup-command"

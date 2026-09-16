@@ -2918,6 +2918,37 @@ body.dark .composer textarea::placeholder {
   font-weight: 700;
   white-space: nowrap;
 }
+.orchestration-profiles {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto auto;
+  gap: 6px 8px;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.orchestration-profiles label {
+  grid-column: auto;
+}
+.orchestration-profiles select,
+.orchestration-profiles input {
+  min-width: 0;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+.orchestration-profiles button {
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+.orchestration-profiles .muted {
+  grid-column: 2 / -1;
+  font-size: 0.7rem;
+}
 .orchestration-setup input {
   min-width: 0;
   width: 100%;
