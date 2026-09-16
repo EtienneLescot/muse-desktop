@@ -229,6 +229,13 @@ struct AppState {
     setup_cancellations: Mutex<HashMap<(String, String), Arc<AtomicBool>>>,
 }
 
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeSessionResult {
+    pub worktree: git::GitWorktreeResult,
+    pub session: SessionMeta,
+}
+
 /// Native side of the bounded diagnostics export. It contains operational
 /// counters only; workspace paths, prompts and transcript payloads stay out
 /// of this contract.
@@ -1342,6 +1349,48 @@ async fn worktree_setup_run(
     joined.map_err(|e| format!("worktree setup task failed: {e}"))?
 }
 
+/// Create a managed worktree and start its conversation as one guarded
+/// operation. If session admission fails, remove the newly-created checkout
+/// before returning the error so the UI never advertises a half-created lane.
+#[tauri::command]
+async fn git_worktree_create_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    branch: String,
+    relative_path: String,
+    base_ref: String,
+    authorization_mode: Option<String>,
+) -> Result<WorktreeSessionResult, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    let created = tokio::task::spawn_blocking({
+        let root = root.clone();
+        let branch = branch.clone();
+        let relative_path = relative_path.clone();
+        let base_ref = base_ref.clone();
+        move || git::create_worktree(&root, &branch, &relative_path, &base_ref)
+    })
+    .await
+    .map_err(|e| format!("git worktree create task failed: {e}"))??;
+    let child_root = PathBuf::from(&created.path);
+    match start_session_at_workspace(app, state, child_root, authorization_mode).await {
+        Ok(session) => Ok(WorktreeSessionResult {
+            worktree: created,
+            session,
+        }),
+        Err(error) => {
+            let cleanup_path = created.path.clone();
+            let cleanup = tokio::task::spawn_blocking(move || git::remove_worktree(&root, &cleanup_path)).await;
+            let detail = match cleanup {
+                Ok(Ok(())) => error,
+                Ok(Err(cleanup_error)) => format!("{error}; worktree cleanup failed: {cleanup_error}"),
+                Err(join_error) => format!("{error}; worktree cleanup task failed: {join_error}"),
+            };
+            Err(format!("could not open conversation in worktree: {detail}"))
+        }
+    }
+}
+
 /// Inspect a managed worktree and its locally available project tools without
 /// executing project code. This gives the UI a conservative pre-flight state
 /// before a user chooses to run setup.
@@ -1716,14 +1765,12 @@ fn resolve_workspace(
     Ok(root)
 }
 
-#[tauri::command]
-async fn start_session(
+async fn start_session_at_workspace(
     app: AppHandle,
     state: State<'_, AppState>,
-    workspace_path: Option<String>,
+    root: PathBuf,
     authorization_mode: Option<String>,
 ) -> Result<SessionMeta, String> {
-    let root = resolve_workspace(&state, workspace_path)?;
     let client = ensure_host(&app, &state, &root).await?;
     let mut params = json!({
         "commandId": new_command_id(),
@@ -1757,6 +1804,17 @@ async fn start_session(
         .map_err(|e| format!("state lock: {e}"))?
         .insert(session_id, meta.clone());
     Ok(meta)
+}
+
+#[tauri::command]
+async fn start_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    workspace_path: Option<String>,
+    authorization_mode: Option<String>,
+) -> Result<SessionMeta, String> {
+    let root = resolve_workspace(&state, workspace_path)?;
+    start_session_at_workspace(app, state, root, authorization_mode).await
 }
 
 /// Create a server-side conversation branch from all completed turns.
@@ -3149,6 +3207,7 @@ fn main() {
             git_push,
             git_create_pr,
             git_worktree_create,
+            git_worktree_create_session,
             git_worktree_remove,
             git_worktree_inspect,
             worktree_setup_run,

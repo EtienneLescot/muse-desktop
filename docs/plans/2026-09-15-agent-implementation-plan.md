@@ -323,9 +323,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** remplacer helper `worktrees.ts` par service Rust Git ; nouvelles actions de création. Dépend M2-01/M1-01/M0-01.
 
-**État :** le service Rust `git_worktree_create` crée un checkout réel sous `.muse/worktrees/` depuis une base et une branche explicites. Le panneau d’orchestration garde le plan manuel, ajoute une action par agent et reçoit le chemin canonique retourné ; les segments issus des identités sont nettoyés et dédoublonnés. Les records sont persistés sous `muse-desktop.worktrees.v1` et peuvent être supprimés après confirmation via `git_worktree_remove` avec garde de confinement.
+**État :** le service Rust `git_worktree_create` crée un checkout réel sous `.muse/worktrees/` depuis une base et une branche explicites. Le panneau d’orchestration garde le plan manuel, ajoute une action par agent et reçoit le chemin canonique retourné ; les segments issus des identités sont nettoyés et dédoublonnés. Les records sont persistés sous `muse-desktop.worktrees.v1` et peuvent être supprimés après confirmation via `git_worktree_remove` avec garde de confinement. L'action **Create & open** appelle maintenant une commande native unique qui crée le checkout puis démarre la conversation enracinée dedans ; si l'admission échoue, le backend tente le rollback du checkout avant de rendre l'erreur.
 
-**Reste :** ajouter la rétention avancée, l'état Git détaillé et une transaction création-worktree → session. Le host MSP actuel étant lié à un workspace à la fois, ne pas basculer automatiquement une conversation tant que ce cycle n’est pas conçu.
+**Reste :** qualifier sur chaque plateforme les pannes après admission et les erreurs Git externes. Le host MSP actuel étant lié à un workspace à la fois, ne pas basculer automatiquement une conversation existante tant que ce cycle n’est pas conçu.
 
 **Acceptation :** deux créations simultanées, branche absente, espace disque, échec partiel ; checkout de départ inchangé.
 
@@ -355,7 +355,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **État :** le panneau expose **Inspect** pour relire le statut Git d'un checkout géré (branche, changements, conflits, horodatage). **Inspect all** relit en parallèle les worktrees créés et affiche un résumé borné des cibles inspectées, propres, modifiées ou en conflit, tout en conservant le détail par branche. Une politique durable par dépôt propose de conserver indéfiniment le checkout ou de le marquer éligible après 7, 14, 30 ou 90 jours ; seuls les worktrees inspectés et propres deviennent éligibles. La suppression reste distincte de l'archivage d'une conversation, exige une confirmation et le service Rust refuse tout worktree sale avant `git worktree remove`.
 
-**Reste :** détection de processus actifs et de références restantes, ainsi que reprise d'un nettoyage interrompu. Ne jamais transformer un record archivé en suppression implicite.
+**Reste :** qualification des processus externes non représentés par les marqueurs Git et reprise d'un nettoyage interrompu. Ne jamais transformer un record archivé en suppression implicite.
 
 **Acceptation :** worktree propre nettoyé, sale conservé, cible hors racine refusée, interruption du nettoyage récupérable.
 

@@ -288,10 +288,10 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 
 - **Contrat backend :** `git_worktree_create(sessionId, branch, relativePath, baseRef)` résout le dépôt de la conversation, exige une branche et une base explicites, et n’accepte qu’un chemin relatif sous `.muse/worktrees/`.
 - **Git réel :** la création utilise `git worktree add -b … … …` hors thread UI. Les chemins existants, références de type option, traversées et échecs Git sont refusés avant toute promesse ; le résultat renvoie dépôt, chemin canonique, branche, base et horodatage.
-- **UX :** le panneau d'orchestration conserve le plan manuel et ajoute **Create worktree** par agent. Le bouton devient **Created** après le retour Git et reste visible après redémarrage ; **Open conversation** crée ensuite une conversation explicitement enracinée dans le worktree. Une suppression exige une confirmation explicite, tandis que le snippet reste disponible pour les environnements sans backend.
+- **UX :** le panneau d'orchestration conserve le plan manuel et propose **Create & open** par agent. Cette action crée le worktree et ouvre la conversation dans la même opération gardée ; en cas d'échec d'admission, le backend tente de retirer le checkout et n'affiche pas de lane partielle. **Create worktree** et **Open conversation** restent disponibles séparément pour les parcours avancés. Une suppression exige une confirmation explicite, tandis que le snippet reste disponible pour les environnements sans backend.
 - **Sécurité :** les identifiants d’agents sont transformés en segments de chemin sûrs et dédoublonnés avant affichage ou appel natif.
-- **Limites :** la transaction création Git + session et son rollback restent à implémenter ; le host MSP mono-workspace empêche de prétendre à une bascule automatique sans contrat supplémentaire.
-- **Validation :** 60 tests Rust couvrent checkout réel, refs et chemins ; la persistance locale est couverte par le test de bornage des records, et les suites Node, TypeScript et Vite restent vertes.
+- **Limites :** le rollback est borné à la création du checkout et à l'admission de la nouvelle session ; une panne après admission et les erreurs Git externes restent à qualifier sur chaque plateforme. Le host MSP mono-workspace empêche toujours de basculer automatiquement une conversation existante sans contrat supplémentaire.
+- **Validation :** 73 tests Rust couvrent checkout réel, refs, chemins et l'admission atomique du parcours ; la persistance locale est couverte par le test de bornage des records, et les 450 tests Node, TypeScript et Vite restent verts.
 
 ### Livraison M2-04 — préparation explicite de l'environnement
 
@@ -303,7 +303,7 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Garde-fous :** la commande est limitée à 2 000 caractères ; le runner Rust refuse les dossiers inexistants ou hors de `.muse/worktrees`, neutralise stdin et tue les processus dépassant dix minutes ; la sortie est bornée à 200 000 caractères.
 - **Readiness :** **Check readiness** inspecte le worktree sans exécuter de code, détecte les manifests `package.json`, `Cargo.toml`, `pyproject.toml` et `go.mod`, puis vérifie les exécutables requis sur `PATH`. L'état est `ready`, `missing tool` ou `needs setup` et reste associé à chaque branche.
 - **Environnement :** le runner efface l'environnement hérité et conserve uniquement les variables de plateforme nécessaires (`PATH`, `PATHEXT`, `SystemRoot`, `ComSpec`, dossiers temporaires, domicile, locale/terminal) plus les noms explicitement ajoutés dans le profil. Les valeurs ne sont jamais saisies ni persistées par Muse.
-- **Limites :** la création atomique session → worktree et la qualification native restent à concevoir. Le setup reste une action explicite et locale.
+- **Limites :** la qualification native de la création atomique et le setup restent à éprouver sur chaque plateforme. Le setup reste une action explicite et locale.
 - **Validation :** tests Rust des chemins, commandes réussies/échouées et bornes ; tests Node de validation de commande ; TypeScript, Vite et Cargo doivent rester verts avant livraison.
 
 ### Livraison M2-05 — plan de handoff Local ↔ Worktree
@@ -321,8 +321,8 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Rétention :** archiver une conversation reste indépendant de la suppression du checkout ; un record persistant peut rester visible pour inspection tant que le chemin existe. L'état Git est toujours relu avant une action destructive.
 - **Rétention :** une politique durable par dépôt permet de conserver indéfiniment un checkout ou de le marquer éligible après 7, 14, 30 ou 90 jours. L'éligibilité est calculée uniquement après une inspection Git propre ; aucune suppression implicite n'est déclenchée.
 - **Aperçu multi-cibles :** **Inspect all** relit en parallèle tous les worktrees créés et affiche un compte-rendu borné (inspectés, propres, avec changements, en conflit). Les résultats individuels restent dépliables pour conserver le détail par branche.
-- **Limites :** la détection de processus actifs et la reprise d'un nettoyage interrompu restent à implémenter ; Git garde la décision finale si un checkout est verrouillé.
-- **Validation :** 72 tests Rust couvrent l'inspection d'un worktree sale et le refus de suppression, avec nettoyage possible après retour à un état propre ; 450 tests Node couvrent le résumé multi-cibles, puis TypeScript et Vite restent verts.
+- **Limites :** l'inspection détecte les marqueurs Git d'opération et les branches référencées par un autre checkout, mais ne peut pas connaître tous les processus externes. La reprise d'un nettoyage interrompu reste à implémenter ; Git garde la décision finale si un checkout est verrouillé.
+- **Validation :** 73 tests Rust couvrent l'inspection d'un worktree sale, les marqueurs d'activité et le refus de suppression, avec nettoyage possible après retour à un état propre ; 450 tests Node couvrent le résumé multi-cibles, puis TypeScript et Vite restent verts.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 
@@ -332,10 +332,10 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 |---|---|---|---|---|---|---|
 | M2-01 | Un projet représente des dossiers persistants | Adapté | Présente | Câblée | Intégration | Racine persistante, sélection de dossier et création de conversation dans cette racine livrées ; restent migration explicite des anciens groupes et environnement/worktree |
 | M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Intégration | Héritage global/projet visible et modèle effectif appliqué à la création d'une session ; sandbox/réseau/auto-compact restent en attente d'un contrat moteur vérifié |
-| M2-03 | Créer automatiquement un worktree pour une conversation | Adapté | Présente | Partielle | Intégration | Création Git réelle, persistance, suppression confirmée et ouverture explicite d'une conversation dans le worktree livrées ; restent création/rollback atomiques et retention avancée |
-| M2-04 | Préparer l'environnement du worktree | Adapté | Présente | Partielle | Intégration | Commande explicite, profils persistants par workspace, annulation native ciblée, états et sortie bornée livrés ; readiness locale et allowlist d'environnement livrées ; restent création atomique et qualification native |
+| M2-03 | Créer automatiquement un worktree pour une conversation | Adapté | Présente | Câblée | Intégration | Création Git, persistance, suppression confirmée, ouverture explicite et action atomique **Create & open** avec rollback d'admission livrées ; restent qualification native et pannes après admission |
+| M2-04 | Préparer l'environnement du worktree | Adapté | Présente | Partielle | Intégration | Commande explicite, profils persistants par workspace, annulation native ciblée, états et sortie bornée livrés ; readiness locale et allowlist d'environnement livrées ; reste la qualification native |
 | M2-05 | Passer de Local à Worktree et inversement | Adapté | Présente | Partielle | Intégration | Plan de handoff et préconditions livrés ; restent transfert atomique du host, déplacement de contexte, conflits fichiers ignorés et rollback |
-| M2-06 | Nettoyer les worktrees sans supprimer du travail | Adapté | Présente | Partielle | Intégration | Inspection Git, refus des worktrees sales et politique de rétention guidée livrés ; restent processus actifs, aperçu multi-cibles et reprise après interruption |
+| M2-06 | Nettoyer les worktrees sans supprimer du travail | Adapté | Présente | Partielle | Intégration | Inspection Git, garde contre les marqueurs d'activité et branches référencées, refus des worktrees sales, aperçu multi-cibles et politique de rétention guidée livrés ; reste la reprise après interruption et la qualification des processus externes |
 | M2-07 | Piloter les sous-agents réels | Adapté | Présente | Câblée | Unitaire | Vérifier followup/stop/resume/result/drilldown sur agents vivants ; identité et états corrects jusqu'à terminaison |
 | M2-08 | Exécuter plusieurs writers sans collision | À définir | Partielle | Partielle | Unitaire | Associer writers aux espaces isolés, file réelle et limites explicites ; tests de modifications concurrentes et résultats séparés |
 

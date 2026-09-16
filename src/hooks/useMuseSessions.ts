@@ -654,6 +654,12 @@ interface UseMuseSessions {
     sessionId: string,
     plan: WorktreePlan,
   ) => Promise<WorktreeRecord | null>;
+  /** M2-03: atomically create a worktree and open its conversation. */
+  createWorktreeSession: (
+    sessionId: string,
+    plan: WorktreePlan,
+    projectSettings?: ProjectSettings,
+  ) => Promise<WorktreeRecord | null>;
   worktrees: WorktreeRecord[];
   /** Remove one managed worktree after explicit user confirmation in the UI. */
   removeWorktree: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
@@ -969,6 +975,11 @@ interface BackendSessionMeta {
   session_id: string;
   workspace: string;
   running: boolean;
+}
+
+interface BackendWorktreeSessionResult {
+  worktree: WorktreeRecord;
+  session: BackendSessionMeta;
 }
 
 /** Status-kind mapping lives in ../lib/phase (unit-tested, US-10). */
@@ -2737,6 +2748,55 @@ export function useMuseSessions(): UseMuseSessions {
     async (workspacePath: string, projectSettings?: ProjectSettings) =>
       startSessionRow(workspacePath, projectSettings),
     [startSessionRow],
+  );
+
+  const createWorktreeSession = useCallback(
+    async (
+      sessionId: string,
+      plan: WorktreePlan,
+      projectSettings?: ProjectSettings,
+    ): Promise<WorktreeRecord | null> => {
+      if (!isTauriRuntime()) {
+        setError("Worktree conversations require the Muse Desktop runtime.");
+        return null;
+      }
+      try {
+        setError(null);
+        const result = await invoke<BackendWorktreeSessionResult>("git_worktree_create_session", {
+          sessionId,
+          branch: plan.branch,
+          relativePath: plan.path,
+          baseRef: plan.base,
+          authorizationMode,
+        });
+        setWorktrees((current) => [
+          ...current.filter((record) => record.path !== result.worktree.path),
+          result.worktree,
+        ]);
+        const meta = result.session;
+        const record: MuseSession = {
+          session_id: meta.session_id,
+          workspace: meta.workspace,
+          title: `Session ${meta.session_id.slice(0, 8)}`,
+          createdAt: Date.now(),
+          running: meta.running,
+        };
+        setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
+        setSessions((current) => [
+          ...current.filter((session) => session.session_id !== meta.session_id),
+          record,
+        ]);
+        setLogs((current) => (current[meta.session_id] ? current : { ...current, [meta.session_id]: [] }));
+        setActiveId(meta.session_id);
+        const modelId = projectSettings?.model.trim();
+        if (modelId && modelId !== "default") await setSessionModel(meta.session_id, modelId);
+        return result.worktree;
+      } catch (e) {
+        setError(`worktree conversation failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [authorizationMode, setSessionModel],
   );
 
   const [forkingId, setForkingId] = useState<string | null>(null);
@@ -4927,6 +4987,7 @@ export function useMuseSessions(): UseMuseSessions {
     setSessionModel,
     checkPathScope,
     createWorktree,
+    createWorktreeSession,
     worktrees,
     removeWorktree,
     inspectWorktree,

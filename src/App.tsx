@@ -85,6 +85,7 @@ export default function App() {
     setSessionModel,
     checkPathScope,
     createWorktree,
+    createWorktreeSession,
     worktrees,
     removeWorktree,
     inspectWorktree,
@@ -1218,6 +1219,9 @@ export default function App() {
                             sessionId={active.session_id}
                             workspace={active.workspace}
                             onCreateWorktree={createWorktree}
+                            onCreateConversationWorktree={(plan) =>
+                              createWorktreeSession(active.session_id, plan, activeProjectSettings)
+                            }
                             worktrees={worktrees}
                             onRemoveWorktree={removeWorktree}
                             onOpenWorktree={async (record) =>

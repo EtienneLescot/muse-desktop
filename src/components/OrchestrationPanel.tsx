@@ -42,6 +42,10 @@ interface Props {
     sessionId: string,
     plan: WorktreePlan,
   ) => Promise<WorktreeRecord | null>;
+  /** Create the worktree and open its conversation in one guarded operation. */
+  onCreateConversationWorktree: (
+    plan: WorktreePlan,
+  ) => Promise<WorktreeRecord | null>;
   worktrees: WorktreeRecord[];
   onRemoveWorktree: (
     sessionId: string,
@@ -77,6 +81,7 @@ export function OrchestrationPanel({
   sessionId,
   workspace,
   onCreateWorktree,
+  onCreateConversationWorktree,
   worktrees,
   onRemoveWorktree,
   onOpenWorktree,
@@ -133,18 +138,17 @@ export function OrchestrationPanel({
 
   const plans = useMemo(() => planWorktrees(agents), [agents]);
   const snippet = useMemo(() => worktreeShellSnippet(plans), [plans]);
-  const createdRecords = plans
-    .map((plan) => recordFor(plan))
-    .filter((record): record is WorktreeRecord => record !== undefined);
-  const inspectionSummary = summarizeWorktreeInspections(createdRecords, inspectionByBranch);
-  const queueNote = fanoutQueueNote(plans.length);
   const recordFor = (plan: WorktreePlan): WorktreeRecord | undefined =>
     worktrees.find(
       (record) =>
         record.repoRoot.toLowerCase() === workspace.toLowerCase() &&
         record.branch === plan.branch,
     );
-
+  const createdRecords = plans
+    .map((plan) => recordFor(plan))
+    .filter((record): record is WorktreeRecord => record !== undefined);
+  const inspectionSummary = summarizeWorktreeInspections(createdRecords, inspectionByBranch);
+  const queueNote = fanoutQueueNote(plans.length);
   if (plans.length === 0) return null;
 
   function onCompare(): void {
@@ -163,6 +167,13 @@ export function OrchestrationPanel({
     if (creating !== null || recordFor(plan) !== undefined) return;
     setCreating(plan.agent);
     await onCreateWorktree(sessionId, plan);
+    setCreating(null);
+  }
+
+  async function createAndOpen(plan: WorktreePlan): Promise<void> {
+    if (creating !== null || recordFor(plan) !== undefined) return;
+    setCreating(plan.agent);
+    await onCreateConversationWorktree(plan);
     setCreating(null);
   }
 
@@ -598,14 +609,24 @@ export function OrchestrationPanel({
                 })()}
               </>
             ) : (
-              <button
-                type="button"
-                onClick={() => void create(p)}
-                disabled={creating !== null}
-                title="Create this Git worktree"
-              >
-                {creating === p.agent ? "Creating…" : "Create worktree"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => void createAndOpen(p)}
+                  disabled={creating !== null}
+                  title="Create this Git worktree and open its conversation"
+                >
+                  {creating === p.agent ? "Creating & opening…" : "Create & open"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void create(p)}
+                  disabled={creating !== null}
+                  title="Create this Git worktree"
+                >
+                  Create worktree
+                </button>
+              </>
             )}
           </li>
         ))}
