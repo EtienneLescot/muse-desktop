@@ -42,6 +42,20 @@ describe("planWorktrees", () => {
   it("honours a custom base ref", () => {
     assert.equal(planWorktrees(["a"], "origin/main")[0]?.base, "origin/main");
   });
+
+  it("keeps generated paths inside the worktree root for unsafe or colliding ids", () => {
+    const plans = planWorktrees(["../outside", "a/b", "a-b", ".."]);
+    assert.deepEqual(
+      plans.map((p) => p.path),
+      [
+        ".muse/worktrees/..-outside",
+        ".muse/worktrees/a-b",
+        ".muse/worktrees/a-b-2",
+        ".muse/worktrees/agent",
+      ],
+    );
+    assert.ok(plans.every((p) => p.path.startsWith(`${".muse/worktrees"}/`)));
+  });
 });
 
 describe("worktreeShellSnippet", () => {

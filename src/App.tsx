@@ -78,6 +78,7 @@ export default function App() {
     refreshModels,
     setSessionModel,
     checkPathScope,
+    createWorktree,
     setActive,
     startSession,
     startSessionInWorkspace,
@@ -1092,7 +1093,11 @@ export default function App() {
                               void serverCompact(active.session_id)
                             }
                           />{" "}
-                          <OrchestrationPanel agents={orchestrationAgents} />{" "}
+                          <OrchestrationPanel
+                            agents={orchestrationAgents}
+                            sessionId={active.session_id}
+                            onCreateWorktree={createWorktree}
+                          />{" "}
                           <SharePanel
                             sessionId={active.session_id}
                             mode={shareMode}

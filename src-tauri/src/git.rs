@@ -5,7 +5,7 @@
 //! in later roadmap slices, so a review can never imply that a file changed
 //! merely because a response mentioned it.
 
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -71,9 +71,19 @@ pub struct GitPushResult {
 #[derive(Debug, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitPrResult {
-    pub url: String,
+  pub url: String,
+  pub base: String,
+  pub head: String,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktreeResult {
+    pub repo_root: String,
+    pub path: String,
+    pub branch: String,
     pub base: String,
-    pub head: String,
+    pub created_at: u64,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -637,6 +647,76 @@ fn validate_ref(value: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn worktree_path(root: &Path, relative_path: &str) -> Result<PathBuf, String> {
+    let value = relative_path.trim();
+    if value.is_empty() {
+        return Err("worktree path must not be empty".to_string());
+    }
+    let relative = Path::new(value);
+    if relative.is_absolute() || relative.components().any(|component| {
+        matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))
+    }) {
+        return Err("worktree path must be relative and stay inside .muse/worktrees".to_string());
+    }
+    let mut components = relative.components();
+    if components.next() != Some(Component::Normal(".muse".as_ref()))
+        || components.next() != Some(Component::Normal("worktrees".as_ref()))
+        || components.next().is_none()
+    {
+        return Err("worktree path must start with .muse/worktrees/".to_string());
+    }
+    let candidate = root.join(relative);
+    if candidate.exists() {
+        return Err(format!("worktree path already exists: {}", candidate.display()));
+    }
+    if let Some(parent) = candidate.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("could not prepare worktree parent: {e}"))?;
+    }
+    Ok(candidate)
+}
+
+/// Create a managed worktree below `.muse/worktrees/` from an explicit base
+/// ref. The path and refs are validated before Git runs; no shell is involved.
+pub fn create_worktree(
+    root: &Path,
+    branch: &str,
+    relative_path: &str,
+    base_ref: &str,
+) -> Result<GitWorktreeResult, String> {
+    validate_ref(branch, "worktree branch")?;
+    validate_ref(base_ref, "worktree base")?;
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    let candidate = worktree_path(&canonical, relative_path)?;
+    // Keep the worktree argument relative to `current_dir`; Windows Git
+    // rejects the extended `//?/C:` spelling returned by canonicalize().
+    let candidate_display = relative_path.trim().to_string();
+    let args = [
+        "worktree",
+        "add",
+        "-b",
+        branch.trim(),
+        candidate_display.as_str(),
+        base_ref.trim(),
+    ];
+    if let Err(error) = git_command(&canonical, &args) {
+        let _ = std::fs::remove_dir(&candidate);
+        return Err(error);
+    }
+    let path = candidate
+        .canonicalize()
+        .map_err(|e| format!("worktree created but path cannot be resolved: {e}"))?;
+    Ok(GitWorktreeResult {
+        repo_root: canonical.display().to_string(),
+        path: path.display().to_string(),
+        branch: branch.trim().to_string(),
+        base: base_ref.trim().to_string(),
+        created_at: now_ms(),
+    })
+}
+
 /// Commit the current index after checking the status/diff observation used
 /// by the Review UI. Git hook failures and empty indexes remain user-visible.
 pub fn commit(
@@ -893,6 +973,30 @@ mod tests {
         assert!(validate_paths(&["C:\\\\secret.txt".to_string()]).is_err());
         assert!(validate_paths(&["../outside.txt".to_string()]).is_err());
         assert!(validate_paths(&["src/main.rs".to_string()]).is_ok());
+    }
+
+    #[test]
+    fn create_worktree_checks_path_and_returns_real_checkout() {
+        let root = fixture_repo();
+        let result = create_worktree(&root, "task/one", ".muse/worktrees/agent-one", "HEAD")
+            .unwrap();
+        assert_eq!(result.branch, "task/one");
+        assert_eq!(result.base, "HEAD");
+        assert!(Path::new(&result.path).join("main.txt").is_file());
+        assert!(result.path.starts_with(&result.repo_root));
+        assert!(create_worktree(&root, "task/two", "../outside", "HEAD").is_err());
+        assert!(create_worktree(&root, "task/two", ".muse/other/agent", "HEAD").is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn create_worktree_rejects_existing_path_and_unsafe_refs() {
+        let root = fixture_repo();
+        fs::create_dir_all(root.join(".muse/worktrees/existing")).unwrap();
+        assert!(create_worktree(&root, "-bad", ".muse/worktrees/one", "HEAD").is_err());
+        assert!(create_worktree(&root, "task/one", ".muse/worktrees/existing", "HEAD").is_err());
+        assert!(create_worktree(&root, "task/two", ".muse/worktrees/two", "--bad").is_err());
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

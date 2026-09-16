@@ -161,6 +161,7 @@ import {
   type ProjectSettings,
   type ThreadProjectMap,
 } from "../lib/projects";
+import type { WorktreePlan, WorktreeRecord } from "../lib/worktrees";
 export type {
   Project,
   ProjectSettings,
@@ -568,6 +569,11 @@ interface UseMuseSessions {
   setSessionModel: (sessionId: string, modelId: string) => Promise<void>;
   /** w-settings: route a path through the scope-guard prompt path. */
   checkPathScope: (path: string) => Promise<ScopeVerdict>;
+  /** M2-03: create a real Git worktree from a validated orchestration plan. */
+  createWorktree: (
+    sessionId: string,
+    plan: WorktreePlan,
+  ) => Promise<WorktreeRecord | null>;
   startSession: () => Promise<string | null>;
   startSessionInWorkspace: (
     workspacePath: string,
@@ -2091,6 +2097,24 @@ export function useMuseSessions(): UseMuseSessions {
     }
     return verdict;
   }, []);
+
+  const createWorktree = useCallback(
+    async (sessionId: string, plan: WorktreePlan): Promise<WorktreeRecord | null> => {
+      try {
+        setError(null);
+        return await invoke<WorktreeRecord>("git_worktree_create", {
+          sessionId,
+          branch: plan.branch,
+          relativePath: plan.path,
+          baseRef: plan.base,
+        });
+      } catch (e) {
+        setError(`worktree creation failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
 
   const setActive = useCallback((id: string | null) => setActiveId(id), []);
 
@@ -4056,6 +4080,7 @@ export function useMuseSessions(): UseMuseSessions {
     refreshModels,
     setSessionModel,
     checkPathScope,
+    createWorktree,
     startSession,
     startSessionInWorkspace,
     forkSession,
