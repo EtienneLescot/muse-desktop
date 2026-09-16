@@ -38,6 +38,14 @@ interface Props {
     scope: "staged" | "unstaged",
     expected: GitMutationExpectation,
   ) => Promise<GitStatusSnapshot | null>;
+  onApplyHunk: (
+    sessionId: string,
+    path: string,
+    scope: "staged" | "unstaged",
+    action: "stage" | "unstage" | "discard",
+    hunkHeader: string,
+    expected: GitMutationExpectation,
+  ) => Promise<GitStatusSnapshot | null>;
   onCommit: (
     sessionId: string,
     message: string,
@@ -66,8 +74,8 @@ const SCOPES: Array<[GitDiffScope, string]> = [
 ];
 
 /**
- * M1-01 read-only review surface. Every value comes from the session-scoped
- * Rust Git service; the panel never infers changes from assistant text.
+ * M1-01/M1-03 review surface. Every value comes from the session-scoped Rust
+ * Git service; the panel never infers changes from assistant text.
  */
 export function ReviewPanel({
   sessionId,
@@ -76,6 +84,7 @@ export function ReviewPanel({
   onLoadDiff,
   onStageFiles,
   onRestoreFiles,
+  onApplyHunk,
   onCommit,
   onPush,
   onCreatePr,
@@ -92,6 +101,9 @@ export function ReviewPanel({
   const [mutationBusy, setMutationBusy] = useState<"stage" | "unstage" | "discard" | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [hunkBusy, setHunkBusy] = useState<string | null>(null);
+  const [confirmHunk, setConfirmHunk] = useState<string | null>(null);
+  const [selectedHunkHeader, setSelectedHunkHeader] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
   const [pushRemote, setPushRemote] = useState("");
   const [pushBranch, setPushBranch] = useState("");
@@ -112,6 +124,9 @@ export function ReviewPanel({
     setMutationBusy(null);
     setMutationError(null);
     setConfirmDiscard(false);
+    setHunkBusy(null);
+    setConfirmHunk(null);
+    setSelectedHunkHeader(null);
     setCommitMessage("");
     setPushRemote("");
     setPushBranch("");
@@ -146,6 +161,13 @@ export function ReviewPanel({
     () => selectedRows.find((row) => row.key === selectedLineKey) ?? null,
     [selectedRows, selectedLineKey],
   );
+  const selectedHunk = useMemo(
+    () =>
+      selectedDiff?.hunks.find((hunk) => hunk.header === selectedHunkHeader) ??
+      selectedDiff?.hunks[0] ??
+      null,
+    [selectedDiff, selectedHunkHeader],
+  );
   const selectedStatus = useMemo(
     () =>
       review.status?.files.find((file) => file.path === selectedPath) ?? null,
@@ -173,6 +195,9 @@ export function ReviewPanel({
     setCommentSent(false);
     setMutationError(null);
     setConfirmDiscard(false);
+    setHunkBusy(null);
+    setConfirmHunk(null);
+    setSelectedHunkHeader(null);
   }, [selectedPath, review.diff?.observedAt]);
 
   async function loadDiff(): Promise<void> {
@@ -271,6 +296,46 @@ export function ReviewPanel({
       setConfirmDiscard(false);
     } finally {
       setMutationBusy(null);
+    }
+  }
+
+  async function runHunkMutation(
+    action: "stage" | "unstage" | "discard",
+    hunkHeader: string,
+  ): Promise<void> {
+    if (!selectedStatus || !review.status || !review.diff || review.diff.scope === "branch") return;
+    if (selectedStatus.untracked || selectedDiff?.binary) return;
+    const scope = review.diff.scope;
+    if ((action === "stage" || action === "discard") && scope !== "unstaged") return;
+    if (action === "unstage" && scope !== "staged") return;
+    const expected = expectationFor(scope);
+    if (!expected || expected.patch === null) {
+      setMutationError("Load the complete diff before applying a hunk.");
+      return;
+    }
+    const busyKey = `${action}:${hunkHeader}`;
+    setHunkBusy(busyKey);
+    setMutationError(null);
+    try {
+      const next = await onApplyHunk(
+        sessionId,
+        selectedStatus.path,
+        scope,
+        action,
+        hunkHeader,
+        expected,
+      );
+      if (next === null) {
+        setMutationError("Hunk action not applied. Refresh the repository and try again.");
+        return;
+      }
+      setSelectedLineKey(null);
+      setSelectedHunkHeader(null);
+      setCommentDraft("");
+      setCommentSent(false);
+      setConfirmHunk(null);
+    } finally {
+      setHunkBusy(null);
     }
   }
 
@@ -491,6 +556,101 @@ export function ReviewPanel({
             </div>
           )}
 
+          {selectedDiff !== null &&
+            review.diff !== null &&
+            review.diff.scope !== "branch" &&
+            !selectedDiff.binary &&
+            !selectedStatus?.untracked &&
+            selectedDiff.hunks.length > 0 && (
+              <section className="review-hunk-actions" aria-label="Hunk actions">
+                <div className="review-hunk-head">
+                  <div>
+                    <span className="eyebrow">PARTIAL CHANGE</span>
+                    <strong>{review.diff.scope === "staged" ? "Unstage" : "Stage or discard"} one hunk</strong>
+                  </div>
+                  <span className="muted">Fresh diff required</span>
+                </div>
+                <div className="review-hunk-list" role="list" aria-label="Diff hunks">
+                  {selectedDiff.hunks.map((hunk, index) => {
+                    const stats = selectedRows.filter((row) => row.hunk === hunk.header);
+                    const active = selectedHunk?.header === hunk.header;
+                    return (
+                      <button
+                        key={hunk.header}
+                        type="button"
+                        role="listitem"
+                        className={`review-hunk${active ? " selected" : ""}`}
+                        aria-pressed={active}
+                        onClick={() => {
+                          setSelectedHunkHeader(hunk.header);
+                          setConfirmHunk(null);
+                        }}
+                      >
+                        <span>Hunk {index + 1}</span>
+                        <span className="muted">+{stats.filter((row) => row.prefix === "+").length} −{stats.filter((row) => row.prefix === "-").length}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedHunk !== null && (
+                  <div className="review-hunk-toolbar">
+                    <span className="muted">{selectedHunk.header}</span>
+                    {review.diff.scope === "unstaged" && (
+                      <button
+                        type="button"
+                        className="review-action"
+                        disabled={hunkBusy !== null}
+                        onClick={() => void runHunkMutation("stage", selectedHunk.header)}
+                      >
+                        {hunkBusy === `stage:${selectedHunk.header}` ? "Staging…" : "Stage hunk"}
+                      </button>
+                    )}
+                    {review.diff.scope === "staged" && (
+                      <button
+                        type="button"
+                        className="review-action"
+                        disabled={hunkBusy !== null}
+                        onClick={() => void runHunkMutation("unstage", selectedHunk.header)}
+                      >
+                        {hunkBusy === `unstage:${selectedHunk.header}` ? "Unstaging…" : "Unstage hunk"}
+                      </button>
+                    )}
+                    {review.diff.scope === "unstaged" && confirmHunk !== selectedHunk.header && (
+                      <button
+                        type="button"
+                        className="review-action review-action-danger"
+                        disabled={hunkBusy !== null}
+                        onClick={() => setConfirmHunk(selectedHunk.header)}
+                      >
+                        Discard hunk…
+                      </button>
+                    )}
+                    {review.diff.scope === "unstaged" && confirmHunk === selectedHunk.header && (
+                      <>
+                        <span className="review-confirm-label">Discard this hunk?</span>
+                        <button
+                          type="button"
+                          className="review-action review-action-danger"
+                          disabled={hunkBusy !== null}
+                          onClick={() => void runHunkMutation("discard", selectedHunk.header)}
+                        >
+                          {hunkBusy === `discard:${selectedHunk.header}` ? "Discarding…" : "Confirm discard"}
+                        </button>
+                        <button
+                          type="button"
+                          className="review-action"
+                          disabled={hunkBusy !== null}
+                          onClick={() => setConfirmHunk(null)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+
           <section className="review-ship" aria-label="Ship changes">
             <div className="review-ship-head">
               <div>
@@ -584,6 +744,7 @@ export function ReviewPanel({
                       className={`review-code-line review-code-${row.prefix === "+" ? "add" : row.prefix === "-" ? "delete" : "context"}${selectedLineKey === row.key ? " selected" : ""}`}
                       onClick={() => {
                         setSelectedLineKey(row.key);
+                        setSelectedHunkHeader(row.hunk);
                         setCommentError(null);
                         setCommentSent(false);
                       }}

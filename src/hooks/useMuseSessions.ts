@@ -747,7 +747,7 @@ interface UseMuseSessions {
   commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string) => void;
   /** US-23 opt-in local index (panel state + folder-pick indexing). */
   index: IndexApi;
-  /** M1-01: read-only Git status/diff snapshots per conversation workspace. */
+  /** M1-01/M1-03: Git status/diff snapshots and guarded Review mutations. */
   gitReview: (sessionId: string) => GitReviewState;
   refreshGitStatus: (sessionId: string) => Promise<GitStatusSnapshot | null>;
   loadGitDiff: (
@@ -764,6 +764,14 @@ interface UseMuseSessions {
     sessionId: string,
     paths: string[],
     scope: "staged" | "unstaged",
+    expected: GitMutationExpectation,
+  ) => Promise<GitStatusSnapshot | null>;
+  applyGitHunk: (
+    sessionId: string,
+    path: string,
+    scope: "staged" | "unstaged",
+    action: "stage" | "unstage" | "discard",
+    hunkHeader: string,
     expected: GitMutationExpectation,
   ) => Promise<GitStatusSnapshot | null>;
   commitGit: (
@@ -4481,6 +4489,55 @@ export function useMuseSessions(): UseMuseSessions {
     [beginGitRequest],
   );
 
+  const applyGitHunk = useCallback(
+    async (
+      sessionId: string,
+      path: string,
+      scope: "staged" | "unstaged",
+      action: "stage" | "unstage" | "discard",
+      hunkHeader: string,
+      expected: GitMutationExpectation,
+    ): Promise<GitStatusSnapshot | null> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const status = await invoke<GitStatusSnapshot>("git_apply_hunk", {
+          sessionId,
+          path,
+          scope,
+          action,
+          hunkHeader,
+          expectedHead: expected.head,
+          expectedStatus: expected.statusFingerprint,
+          expectedPatch: expected.patch,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            status,
+            diff: null,
+            loading: false,
+            error: null,
+          },
+        }));
+        return status;
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+        return null;
+      }
+    },
+    [beginGitRequest],
+  );
+
   const commitGit = useCallback(
     async (
       sessionId: string,
@@ -4992,6 +5049,7 @@ export function useMuseSessions(): UseMuseSessions {
     loadGitDiff,
     stageGitFiles,
     restoreGitFiles,
+    applyGitHunk,
     commitGit,
     pushGit,
     createGitPr,

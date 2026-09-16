@@ -196,6 +196,7 @@ export default function App() {
     loadGitDiff,
     stageGitFiles,
     restoreGitFiles,
+    applyGitHunk,
     commitGit,
     pushGit,
     createGitPr,
@@ -1101,6 +1102,7 @@ export default function App() {
                           onLoadDiff={loadGitDiff}
                           onStageFiles={stageGitFiles}
                           onRestoreFiles={restoreGitFiles}
+                          onApplyHunk={applyGitHunk}
                           onCommit={commitGit}
                           onPush={pushGit}
                           onCreatePr={createGitPr}

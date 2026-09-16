@@ -2273,7 +2273,7 @@ body.dark .composer textarea::placeholder {
   min-height: 0;
 }
 
-/* ---- M1-01 read-only Git review pane. ---- */
+/* ---- M1-01/M1-03 Git review pane. ---- */
 .review-panel {
   width: 100%;
   min-height: 0;
@@ -2478,6 +2478,61 @@ body.dark .composer textarea::placeholder {
 
 .review-action-error {
   color: var(--danger);
+}
+
+.review-hunk-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 92%, var(--pale));
+}
+
+.review-hunk-head,
+.review-hunk-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.74rem;
+}
+
+.review-hunk-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-hunk-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.review-hunk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 0.72rem;
+  text-align: left;
+}
+
+.review-hunk:hover,
+.review-hunk.selected {
+  border-color: var(--blue);
+}
+
+.review-hunk.selected {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--blue) 30%, transparent);
 }
 
 .review-ship {

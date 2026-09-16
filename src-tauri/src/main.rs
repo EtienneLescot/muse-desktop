@@ -1118,6 +1118,37 @@ async fn git_restore(
     .map_err(|e| format!("git restore task failed: {e}"))?
 }
 
+/// Apply one selected hunk after checking the exact Review observation.
+/// Stage/unstage/discard are restricted to the matching diff scope.
+#[tauri::command]
+async fn git_apply_hunk(
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+    scope: String,
+    action: String,
+    hunk_header: String,
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+    expected_patch: Option<String>,
+) -> Result<git::GitStatusSnapshot, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || {
+        git::apply_hunk(
+            &root,
+            &path,
+            &scope,
+            &action,
+            &hunk_header,
+            expected_head,
+            expected_status,
+            expected_patch,
+        )
+    })
+    .await
+    .map_err(|e| format!("git hunk action failed: {e}"))?
+}
+
 /// Commit the staged index after checking the Review observation.
 #[tauri::command]
 async fn git_commit(
@@ -3050,6 +3081,7 @@ fn main() {
             git_diff,
             git_stage,
             git_restore,
+            git_apply_hunk,
             git_commit,
             git_push,
             git_create_pr,
