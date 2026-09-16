@@ -151,7 +151,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-09 | Créer une branche de conversation fidèle | Adapté | Présente | Câblée | Intégration | Fork serveur depuis le dernier tour terminé livré ; restent le sélecteur d’une ancre MSP précise, qualification du point invalide et reprise live |
 | M1-10 | Réorienter une exécution ou mettre un message en attente | Adapté | Partielle | Locale | Unitaire | Queue MSP par défaut et disposition `queued`/`steered` visibles ; restent le pilotage explicite, unqueue et ordre persistant |
 | M1-11 | Choisir un modèle disponible et suivre le contexte | Adapté | Présente | Câblée | Unitaire | Consolider tests live list/setModel/compact, erreurs et persistance ; fallback explicitement non live ; état confirmé par le moteur |
-| M1-12 | Retrouver et organiser les conversations | Adapté | Présente | Locale | UI | Recherche contenu + métadonnées et épinglage persistants livrés ; restent ordre manuel, états non lus et mesure de longues listes |
+| M1-12 | Retrouver et organiser les conversations | Adapté | Présente | Câblée | Unitaire | Recherche, épinglage, ordre manuel et indicateurs non lus persistants livrés ; la virtualisation des listes reste conditionnée aux mesures de performance |
 | M1-13 | Lire une longue conversation confortablement | Adapté | Présente | Partielle | UI | Vérifier rendu Markdown/code/liens et outils ; mesurer longue session, mémoire et scroll ; virtualiser si les mesures l'exigent |
 
 Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components/ArtifactsPane.tsx), [messages](../src/components/MessageContent.tsx), [mentions](../src/lib/mentions.ts), [shell applicatif](../src/App.tsx).
@@ -242,7 +242,15 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 
 - **Recherche :** la boîte `Search conversations` parcourt désormais titre, dossier et texte des journaux locaux, avec un extrait de la première correspondance et la navigation clavier conservée.
 - **Organisation :** une conversation peut être épinglée depuis son menu. Le drapeau est validé, persisté dans `muse-desktop.sessions.v1` et remonte avant les conversations en cours puis les plus récentes.
-- **Limites :** l’ordre manuel, les indicateurs non lus et la virtualisation des listes restent à mesurer avant de les ajouter.
+- **Limites :** la virtualisation des listes reste à mesurer avant de l’ajouter.
+
+### Livraison M1-12 — ordre et lecture non lus
+
+- **Ordre :** les actions **Move up** et **Move down** de la conversation réordonnent uniquement le même niveau épinglé/en cours, puis attribuent des rangs persistants. Les conversations en cours et épinglées gardent leur priorité produit.
+- **Lecture :** une sortie reçue dans une autre conversation marque celle-ci **new** ; l’ouverture de la conversation efface l’indicateur via `setActive`, sans toucher aux messages ni aux compteurs d’autorisation.
+- **SSOT :** `StoredSession` porte `unread` et `sortOrder`, le hook persiste les changements et la sidebar ne conserve aucun ordre local.
+- **Validation :** tri par rang, déplacement, marqueur non lu et restauration sont couverts par les tests Node ; TypeScript et build Vite restent verts.
+- **Limites :** la virtualisation d’une longue liste reste conditionnée à une mesure réelle de mémoire et de temps de rendu.
 
 ### Livraison M2-01 — racines de projet
 

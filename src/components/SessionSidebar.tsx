@@ -21,6 +21,7 @@ interface Props {
   onKill: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onTogglePin: (id: string) => void;
+  onMove: (id: string, direction: -1 | 1) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
   canStart: boolean;
@@ -56,6 +57,7 @@ export function SessionSidebar({
   onKill,
   onRename,
   onTogglePin,
+  onMove,
   onArchive,
   onRestore,
   canStart,
@@ -141,6 +143,11 @@ export function SessionSidebar({
           {s.pinned === true && (
             <span className="session-pin" title="Pinned conversation">
               <Icon name="pin" />
+            </span>
+          )}
+          {s.unread === true && (
+            <span className="session-unread" title="Unread response">
+              new
             </span>
           )}
           {pending > 0 && (
@@ -356,6 +363,26 @@ export function SessionSidebar({
               >
                 {selected.pinned === true ? "Unpin conversation" : "Pin conversation"}
               </button>
+            )}
+            {selected && !selected.archived && (
+              <div className="conversation-order-actions" aria-label="Conversation order">
+                <button
+                  onClick={() => {
+                    onMove(selected.session_id, -1);
+                    closeActions();
+                  }}
+                >
+                  Move up
+                </button>
+                <button
+                  onClick={() => {
+                    onMove(selected.session_id, 1);
+                    closeActions();
+                  }}
+                >
+                  Move down
+                </button>
+              </div>
             )}
             <button
               onClick={() => {

@@ -147,7 +147,12 @@ import {
   parseFanoutCommand,
 } from "../lib/fanout";
 // US-5 thread archiving flag helper (pure, unit-tested).
-import { withArchivedFlag, withPinnedFlag } from "../lib/threads";
+import {
+  moveThread as moveThreadRow,
+  withArchivedFlag,
+  withPinnedFlag,
+  withUnreadFlag,
+} from "../lib/threads";
 // US-3 + US-30 Projects: create/attach/instruction-prepend/settings
 // override live in ../lib/projects (dependency-free, unit-tested).
 import {
@@ -702,6 +707,7 @@ interface UseMuseSessions {
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
   togglePinned: (sessionId: string) => void;
+  moveConversation: (sessionId: string, direction: -1 | 1) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
   restoreSession: (sessionId: string) => void;
   /** US-3: project list (creation refused past 5, see projectError). */
@@ -1601,6 +1607,11 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }
 
+  function markUnread(sessionId: string): void {
+    if (activeId === sessionId) return;
+    setSessions((cur) => withUnreadFlag(cur, sessionId, true));
+  }
+
   function closeOpenBlocks(sessionId: string, itemId?: string): void {
     setLogs((cur) => {
       const log = cur[sessionId];
@@ -1662,6 +1673,18 @@ export function useMuseSessions(): UseMuseSessions {
     // Deleted stays deleted: late in-flight events for a killed session are
     // dropped instead of resurrecting its row.
     if (tombstoned.current?.has(sid)) return;
+    if (
+      activeId !== sid &&
+      (kind === "output" ||
+        kind === "thinking" ||
+        kind === "subagent_event" ||
+        kind === "tool_request" ||
+        kind === "input_request" ||
+        kind === "input_settled" ||
+        kind === "status")
+    ) {
+      markUnread(sid);
+    }
     if (kind === "host_exited") setConnectedIds((cur) => cur.filter((id) => id !== sid));
     if (kind === "output") {
       ensureSessionRow(sid, null);
@@ -2149,7 +2172,10 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
-  const setActive = useCallback((id: string | null) => setActiveId(id), []);
+  const setActive = useCallback((id: string | null) => {
+    if (id !== null) setSessions((cur) => withUnreadFlag(cur, id, false));
+    setActiveId(id);
+  }, []);
 
   // Shared session creation (US-4 `newFromSummary` reuses it so the fresh
   // thread goes through the exact same backend + state path as `+ New`).
@@ -3172,6 +3198,10 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }, []);
 
+  const moveConversation = useCallback((sessionId: string, direction: -1 | 1) => {
+    setSessions((cur) => moveThreadRow(cur, sessionId, direction));
+  }, []);
+
   // US-3 + US-30 project actions. Creation past MAX_PROJECTS is refused
   // client-side with the explicit quota message in projectError.
   const createProject = useCallback(
@@ -4145,6 +4175,7 @@ export function useMuseSessions(): UseMuseSessions {
     renameSession,
     archiveSession,
     togglePinned,
+    moveConversation,
     restoreSession,
     projects,
     threadProjects,

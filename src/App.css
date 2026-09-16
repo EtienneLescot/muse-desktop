@@ -1444,6 +1444,15 @@ body.dark .composer textarea::placeholder {
   height: 13px;
 }
 
+.session-unread {
+  margin-left: auto;
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .mention-list {
   margin: 0;
   padding: 4px;
