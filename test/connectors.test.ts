@@ -18,6 +18,7 @@ import {
   REMOTE_LIMIT_MESSAGE,
   requestRemoteConnector,
   registerLocalConnector,
+  refreshLocalConnector,
   setConnectorEnabled,
   uninstallConnector,
   VPN_FAILURE_MESSAGE,
@@ -108,6 +109,42 @@ describe("verified local MCP connector registration", () => {
     assert.ok(refreshed);
     assert.equal(refreshed.entry.status, "disabled");
     assert.equal(refreshed.entry.command, "demo --new");
+  });
+
+  it("refreshes one existing local entry without changing its identity or status", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "old" }],
+    }, 1000);
+    assert.ok(first);
+    const disabled = setConnectorEnabled(first.registry, "local-mcp-demo", false).registry;
+    const refreshed = refreshLocalConnector(
+      disabled,
+      "local-mcp-demo",
+      [{ name: "two", description: "new" }],
+      2000,
+    );
+    assert.ok(refreshed);
+    assert.equal(refreshed.entry.id, "local-mcp-demo");
+    assert.equal(refreshed.entry.status, "disabled");
+    assert.equal(refreshed.entry.command, "demo");
+    assert.equal(refreshed.entry.addedAt, first.entry.addedAt);
+    assert.equal(refreshed.entry.lastProbeAt, 2000);
+    assert.deepEqual(refreshed.entry.tools, [{ name: "two", description: "new" }]);
+  });
+
+  it("rejects refresh for unknown entries and empty tools", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "" }],
+    });
+    assert.ok(first);
+    assert.equal(refreshLocalConnector(first.registry, "missing", [{ name: "two", description: "" }]), null);
+    assert.equal(refreshLocalConnector(first.registry, "local-mcp-demo", []), null);
   });
 });
 

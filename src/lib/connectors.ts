@@ -239,6 +239,40 @@ export function registerLocalConnector(
   };
 }
 
+/**
+ * Replace the tools from a previously verified local MCP connector.
+ *
+ * Refresh is deliberately narrower than registration: it can only target an
+ * existing local entry with a persisted command, keeps its identity/status,
+ * and refuses an empty or malformed tools/list response.
+ */
+export function refreshLocalConnector(
+  registry: ConnectorEntry[],
+  id: string,
+  tools: ConnectorTool[],
+  now: number = Date.now(),
+): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
+  const existing = findConnector(registry, id);
+  if (existing === null || existing.kind !== "local" || !existing.command) {
+    return null;
+  }
+  if (!Array.isArray(tools) || tools.length === 0) return null;
+  const nextTools = tools.map((tool) => ({
+    name: tool.name.trim(),
+    description: tool.description.trim(),
+  }));
+  if (nextTools.some((tool) => tool.name.length === 0)) return null;
+  const entry: ConnectorEntry = {
+    ...existing,
+    tools: nextTools,
+    lastProbeAt: now,
+  };
+  return {
+    registry: registry.map((item) => (item.id === id ? entry : item)),
+    entry,
+  };
+}
+
 /** Remove an entry by id. Missing ids are a no-op (`removed: false`). */
 export function uninstallConnector(
   registry: ConnectorEntry[],

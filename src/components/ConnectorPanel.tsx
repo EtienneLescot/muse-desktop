@@ -28,6 +28,8 @@ interface Props {
     argumentsText: string,
   ) => Promise<LocalMcpCallResult | null>;
   onRegisterLocal: (name: string, command: string, tools: ConnectorTool[]) => boolean;
+  /** Re-probe and persist tools for an existing local MCP connector. */
+  onRefreshLocal: (id: string) => Promise<LocalMcpProbeResult | null>;
   workspace: string | null;
 }
 
@@ -50,6 +52,7 @@ export function ConnectorPanel({
   onProbeLocal,
   onCallLocal,
   onRegisterLocal,
+  onRefreshLocal,
   workspace,
 }: Props) {
   const [remoteName, setRemoteName] = useState("");
@@ -235,11 +238,9 @@ export function ConnectorPanel({
                     className="integration-action"
                     disabled={refreshingId !== null}
                     onClick={async () => {
-                      const command = e.command;
-                      if (!command) return;
                       setRefreshingId(e.id);
                       setRefreshFeedback(null);
-                      const result = await onProbeLocal(command);
+                      const result = await onRefreshLocal(e.id);
                       if (result === null) {
                         setRefreshFeedback({
                           id: e.id,
@@ -251,12 +252,6 @@ export function ConnectorPanel({
                           id: e.id,
                           tone: "error",
                           message: "The server returned no tools. The previous list was kept.",
-                        });
-                      } else if (!onRegisterLocal(e.name, command, result.tools)) {
-                        setRefreshFeedback({
-                          id: e.id,
-                          tone: "error",
-                          message: "Refresh could not be saved. The previous tool list was kept.",
                         });
                       } else {
                         setRefreshFeedback({

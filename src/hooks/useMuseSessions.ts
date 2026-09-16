@@ -299,10 +299,12 @@ import { readStorageJson, readStorageString, writeStorageJson, writeStorageStrin
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
 import {
+  findConnector,
   installConnector,
   listConnectorTools,
   loadConnectors,
   registerLocalConnector,
+  refreshLocalConnector,
   requestRemoteConnector,
   saveConnectors,
   setConnectorEnabled,
@@ -967,6 +969,11 @@ interface UseMuseSessions {
     command: string,
     tools: ConnectorTool[],
   ) => boolean;
+  /** M3-01/M3-03: re-probe and persist tools for an existing local server. */
+  refreshLocalMcp: (
+    id: string,
+    workspacePath?: string | null,
+  ) => Promise<LocalMcpProbeResult | null>;
   /** w-integrations US-26: last remote-guard refusal message, if any. */
   remoteNotice: string | null;
   /** w-integrations US-24: 1-click install from the curated directory. */
@@ -4151,6 +4158,34 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [activeId, authorizationMode, globalSettings, sendInput, sessions, setSessionModel, startSessionRow],
   );
+
+  const refreshLocalMcp = useCallback(
+    async (
+      id: string,
+      workspacePath?: string | null,
+    ): Promise<LocalMcpProbeResult | null> => {
+      const entry = findConnector(connectorsRef.current, id);
+      if (entry === null || entry.kind !== "local" || !entry.command) {
+        setError("local MCP refresh requires a configured command");
+        return null;
+      }
+      const result = await probeLocalMcp(entry.command, workspacePath);
+      if (result === null) return null;
+      const updated = refreshLocalConnector(
+        connectorsRef.current,
+        id,
+        result.tools,
+        Date.now(),
+      );
+      if (updated === null) {
+        setError("local MCP refresh returned no valid tools");
+        return null;
+      }
+      setConnectors(updated.registry);
+      return result;
+    },
+    [probeLocalMcp],
+  );
   scheduledExecutorRef.current = async (item, run) => {
     await executeReviewItem(item, run);
   };
@@ -5213,6 +5248,7 @@ export function useMuseSessions(): UseMuseSessions {
     probeLocalMcp,
     callLocalMcp,
     registerLocalConnector: registerLocalConnectorByProbe,
+    refreshLocalMcp,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
