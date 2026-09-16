@@ -240,6 +240,7 @@ import {
   restoreRun,
   retryRunNow,
   saveScheduleRuns,
+  settleRunsForSession,
   settleRun,
   type ScheduleRun,
 } from "../lib/scheduleRuns";
@@ -2137,21 +2138,21 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }
 
-  /** M3-08: promote an admitted scheduled turn when the host actually stops. */
-  function completeScheduleRunsForSession(sessionId: string): void {
+  /** M3-08: settle an admitted scheduled turn when the host actually stops. */
+  function settleScheduleRunsForSession(
+    sessionId: string,
+    outcome: Parameters<typeof settleRunsForSession>[2],
+  ): void {
     const log = logsRef.current[sessionId] ?? [];
     const lastAssistant = [...log].reverse().find((entry) =>
       entry.role === "assistant" && entry.text.trim().length > 0,
     );
     const preview = lastAssistant?.text.trim().replace(/\s+/g, " ").slice(0, 320);
     setScheduleRuns((cur) => {
-      let next = cur;
-      for (const run of cur) {
-        if (run.sessionId === sessionId && run.status === "running") {
-          next = completeRun(next, run.id, Date.now(), preview);
-        }
-      }
-      return next;
+      return settleRunsForSession(cur, sessionId, {
+        ...outcome,
+        ...(outcome.status === "completed" && preview ? { resultPreview: preview } : {}),
+      }, Date.now());
     });
   }
 
@@ -2496,6 +2497,9 @@ export function useMuseSessions(): UseMuseSessions {
         // Keep the queue card until the explicit command result settles.
       }
     }
+    const completion = kind !== "host_exited" && isStoppedKind(kind)
+      ? parseTurnCompletion(kind, payload)
+      : null;
     if (isRunningKind(kind)) {
       clearStopping(sid);
       setSessions((cur) =>
@@ -2510,7 +2514,12 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: false } : s)),
       );
-      completeScheduleRunsForSession(sid);
+      const failure = completion?.error;
+      settleScheduleRunsForSession(sid, failure
+        ? { status: "failed", error: failure.message, retryable: failure.retryable }
+        : kind === "host_exited"
+          ? { status: "failed", error: "host exited before the scheduled turn completed", retryable: false }
+          : { status: "completed" });
     }
     const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated" || kind === "approval_mode_changed";
     if (kind === "approval/resolved") {
@@ -2531,9 +2540,6 @@ export function useMuseSessions(): UseMuseSessions {
       }
     }
     if (!isApprovalStatus) {
-      const completion = kind !== "host_exited" && isStoppedKind(kind)
-        ? parseTurnCompletion(kind, payload)
-        : null;
       if (completion?.error !== null && completion?.error !== undefined) {
         const failure: EngineErrorDetails = completion.error;
         pushLog(sid, [{

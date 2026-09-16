@@ -89,7 +89,7 @@ export function settleRun(
     : run);
 }
 
-/** Mark a run complete when the host emits a turn-stopped event. */
+/** Mark a run complete when the host emits a successful turn-stopped event. */
 export function completeRun(
   runs: ScheduleRun[],
   idValue: string,
@@ -107,6 +107,41 @@ export function completeRun(
         ...(resultPreview ? { resultPreview } : {}),
       }
     : run);
+}
+
+export interface ScheduledTurnOutcome {
+  status: "completed" | "failed";
+  /** Bounded, redacted engine detail when the host rejected the turn. */
+  error?: string;
+  retryable?: boolean;
+  resultPreview?: string;
+}
+
+/**
+ * Settle every scheduled run currently attached to a session when its host
+ * emits a terminal turn event. A failed engine turn may enter the same bounded
+ * retry queue as an admission failure; ambiguous outcomes remain failed.
+ */
+export function settleRunsForSession(
+  runs: ScheduleRun[],
+  sessionId: string,
+  outcome: ScheduledTurnOutcome,
+  now: number,
+): ScheduleRun[] {
+  let next = runs;
+  for (const run of runs) {
+    if (run.sessionId !== sessionId || run.status !== "running") continue;
+    if (outcome.status === "completed") {
+      next = completeRun(next, run.id, now, outcome.resultPreview);
+      continue;
+    }
+    const reason = outcome.error?.trim() || "scheduled turn failed";
+    const failed = settleRun(next, run.id, "failed", now, reason);
+    next = outcome.retryable && isRetryableScheduleError(reason)
+      ? queueRunRetry(failed, run.id, now, reason)
+      : failed;
+  }
+  return next;
 }
 
 export function markRunRead(runs: ScheduleRun[], idValue: string): ScheduleRun[] {

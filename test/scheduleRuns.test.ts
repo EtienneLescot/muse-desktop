@@ -19,6 +19,7 @@ import {
   MAX_SCHEDULE_RUNS,
   saveScheduleRuns,
   settleRun,
+  settleRunsForSession,
   type ScheduleRun,
 } from "../src/lib/scheduleRuns.ts";
 import {
@@ -64,6 +65,33 @@ describe("M3-06 schedule run ledger", () => {
     assert.equal(settled[0].status, "completed");
     assert.equal(settled[0].finishedAt, 3000);
     assert.equal(settled[0].error, undefined);
+  });
+
+  it("does not mark a failed host turn as completed and queues retryable failures", () => {
+    const queued = run();
+    const started = markRunStarted([queued], queued.id, 2000, "session-1");
+    const retried = settleRunsForSession(started, "session-1", {
+      status: "failed",
+      error: "provider unavailable",
+      retryable: true,
+    }, 3000);
+    assert.equal(retried[0].status, "queued");
+    assert.equal(retried[0].attempt, 2);
+    assert.equal(retried[0].error, "provider unavailable");
+    assert.equal(retried[0].nextRetryAt, 18_000);
+  });
+
+  it("keeps an ambiguous terminal outcome failed without retrying", () => {
+    const queued = run();
+    const started = markRunStarted([queued], queued.id, 2000, "session-1");
+    const settled = settleRunsForSession(started, "session-1", {
+      status: "failed",
+      error: "outcome already delivered; cannot be verified",
+      retryable: true,
+    }, 3000);
+    assert.equal(settled[0].status, "failed");
+    assert.equal(settled[0].attempt, 1);
+    assert.equal(settled[0].nextRetryAt, undefined);
   });
 
   it("records a bounded failure without mutating unrelated runs", () => {
