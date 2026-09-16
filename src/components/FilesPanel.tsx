@@ -30,6 +30,11 @@ function entryLabel(entry: WorkspaceFileEntry): string {
   return entry.name;
 }
 
+function formatObservedAt(observedAt: number | null): string {
+  if (observedAt === null) return "Not loaded";
+  return `Updated ${new Date(observedAt).toLocaleTimeString()}`;
+}
+
 /** M1-07 real disk browser. Every row comes from the Rust Files service. */
 export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
   useEffect(() => {
@@ -37,6 +42,14 @@ export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
       void onList(sessionId, ".");
     }
   }, [onList, sessionId, state.entries.length, state.loading, state.observedAt]);
+
+  useEffect(() => {
+    if (state.observedAt === null || state.loading) return undefined;
+    const refresh = window.setInterval(() => {
+      void onList(sessionId, state.path || ".");
+    }, 30_000);
+    return () => window.clearInterval(refresh);
+  }, [onList, sessionId, state.loading, state.observedAt, state.path]);
 
   const currentPath = state.path || ".";
   const preview = state.preview;
@@ -48,6 +61,9 @@ export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
           <strong>Files</strong>
           <span className="files-meta" title={currentPath}>
             Disk · {currentPath}
+          </span>
+          <span className="files-meta-status" role="status" aria-live="polite">
+            {formatObservedAt(state.observedAt)}
           </span>
         </div>
         <div className="files-actions">
@@ -124,4 +140,3 @@ export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
     </section>
   );
 }
-
