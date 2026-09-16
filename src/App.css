@@ -2248,6 +2248,11 @@ body.dark .composer textarea::placeholder {
   flex-direction: column;
   gap: 4px;
 }
+.orchestration-inspection-summary {
+  margin: 6px 0 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
 
 /* ---- US-12 + US-21 artifacts pane: right-side column next to the thread. */
 /* Later equal-specificity rule: session-view becomes a row (center + pane). */

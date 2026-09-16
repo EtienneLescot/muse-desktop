@@ -8,6 +8,7 @@ import {
   MAX_SETUP_COMMAND_CHARS,
   parseSetupEnvAllowlist,
   planWorktrees,
+  summarizeWorktreeInspections,
   validateSetupCommand,
   worktreeShellSnippet,
   type WorktreePlan,
@@ -128,6 +129,10 @@ export function OrchestrationPanel({
 
   const plans = useMemo(() => planWorktrees(agents), [agents]);
   const snippet = useMemo(() => worktreeShellSnippet(plans), [plans]);
+  const createdRecords = plans
+    .map((plan) => recordFor(plan))
+    .filter((record): record is WorktreeRecord => record !== undefined);
+  const inspectionSummary = summarizeWorktreeInspections(createdRecords, inspectionByBranch);
   const queueNote = fanoutQueueNote(plans.length);
   const recordFor = (plan: WorktreePlan): WorktreeRecord | undefined =>
     worktrees.find(
@@ -253,6 +258,25 @@ export function OrchestrationPanel({
     setInspecting(null);
   }
 
+  async function inspectAll(): Promise<void> {
+    if (inspecting !== null || createdRecords.length === 0) return;
+    setInspecting("__all__");
+    const results = await Promise.all(
+      createdRecords.map(async (record) => ({
+        branch: record.branch,
+        inspection: await onInspectWorktree(sessionId, record),
+      })),
+    );
+    setInspectionByBranch((current) => {
+      const next = { ...current };
+      for (const result of results) {
+        if (result.inspection !== null) next[result.branch] = result.inspection;
+      }
+      return next;
+    });
+    setInspecting(null);
+  }
+
   async function checkReadiness(record: WorktreeRecord): Promise<void> {
     if (checkingReadiness !== null) return;
     setCheckingReadiness(record.branch);
@@ -274,7 +298,23 @@ export function OrchestrationPanel({
         <button type="button" onClick={onCopy} title="Copy setup snippet">
           {copied ? "Copied" : "Copy"}
         </button>
+        {createdRecords.length > 1 && (
+          <button
+            type="button"
+            onClick={() => void inspectAll()}
+            disabled={inspecting !== null}
+            title="Inspect every created worktree before reviewing retention"
+          >
+            {inspecting === "__all__" ? "Inspecting…" : "Inspect all"}
+          </button>
+        )}
       </header>
+      {createdRecords.length > 0 && (
+        <p className="orchestration-inspection-summary" aria-live="polite">
+          {inspectionSummary.inspected}/{inspectionSummary.total} inspected · {inspectionSummary.clean} clean · {inspectionSummary.changed} with changes
+          {inspectionSummary.conflicted > 0 ? ` · ${inspectionSummary.conflicted} conflicted` : ""}
+        </p>
+      )}
       {queueNote !== null && <p className="muted">{queueNote}</p>}
       <div className="orchestration-setup">
         <div className="orchestration-profiles">

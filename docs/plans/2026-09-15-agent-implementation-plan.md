@@ -353,9 +353,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** worktree store, archive, service Git. Dépend M2-03/05.
 
-**État :** le panneau expose **Inspect** pour relire le statut Git d'un checkout géré (branche, changements, conflits, horodatage). Une politique durable par dépôt propose de conserver indéfiniment le checkout ou de le marquer éligible après 7, 14, 30 ou 90 jours ; seuls les worktrees inspectés et propres deviennent éligibles. La suppression reste distincte de l'archivage d'une conversation, exige une confirmation et le service Rust refuse tout worktree sale avant `git worktree remove`.
+**État :** le panneau expose **Inspect** pour relire le statut Git d'un checkout géré (branche, changements, conflits, horodatage). **Inspect all** relit en parallèle les worktrees créés et affiche un résumé borné des cibles inspectées, propres, modifiées ou en conflit, tout en conservant le détail par branche. Une politique durable par dépôt propose de conserver indéfiniment le checkout ou de le marquer éligible après 7, 14, 30 ou 90 jours ; seuls les worktrees inspectés et propres deviennent éligibles. La suppression reste distincte de l'archivage d'une conversation, exige une confirmation et le service Rust refuse tout worktree sale avant `git worktree remove`.
 
-**Reste :** détection de processus actifs et de références restantes, aperçu multi-cibles et reprise d'un nettoyage interrompu. Ne jamais transformer un record archivé en suppression implicite.
+**Reste :** détection de processus actifs et de références restantes, ainsi que reprise d'un nettoyage interrompu. Ne jamais transformer un record archivé en suppression implicite.
 
 **Acceptation :** worktree propre nettoyé, sale conservé, cible hors racine refusée, interruption du nettoyage récupérable.
 

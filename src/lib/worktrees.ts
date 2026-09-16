@@ -62,6 +62,34 @@ export interface WorktreeInspection {
   observedAt: number;
 }
 
+/** Compact status roll-up used by the multi-worktree inspection preview. */
+export interface WorktreeInspectionSummary {
+  total: number;
+  inspected: number;
+  clean: number;
+  changed: number;
+  conflicted: number;
+}
+
+export function summarizeWorktreeInspections(
+  records: readonly WorktreeRecord[],
+  inspections: Readonly<Record<string, WorktreeInspection>>,
+): WorktreeInspectionSummary {
+  let clean = 0;
+  let changed = 0;
+  let conflicted = 0;
+  let inspected = 0;
+  for (const record of records) {
+    const inspection = inspections[record.branch];
+    if (inspection === undefined) continue;
+    inspected += 1;
+    if (inspection.conflicted) conflicted += 1;
+    if (inspection.clean) clean += 1;
+    else changed += 1;
+  }
+  return { total: records.length, inspected, clean, changed, conflicted };
+}
+
 export const MAX_SETUP_COMMAND_CHARS = 2_000;
 export const MAX_SETUP_ENV_NAMES = 40;
 export const DEFAULT_SETUP_ENV_NAMES = [

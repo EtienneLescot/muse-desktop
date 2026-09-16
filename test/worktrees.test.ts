@@ -12,6 +12,7 @@ import {
   MAX_SETUP_ENV_NAMES,
   MAX_SETUP_COMMAND_CHARS,
   planWorktrees,
+  summarizeWorktreeInspections,
   validateSetupCommand,
   WORKTREE_BASE,
   worktreeShellSnippet,
@@ -114,6 +115,22 @@ describe("compareHeadHashes", () => {
     const r = compareHeadHashes("", "def456");
     assert.equal(r.match, false);
     assert.match(r.report, /nothing checked/);
+  });
+});
+
+describe("multi-worktree inspection summary", () => {
+  it("counts inspected, clean, changed and conflicted records without probing", () => {
+    const records = [
+      { repoRoot: "C:/repo", path: "C:/repo/.muse/worktrees/a", branch: "task-a", base: "HEAD", createdAt: 1 },
+      { repoRoot: "C:/repo", path: "C:/repo/.muse/worktrees/b", branch: "task-b", base: "HEAD", createdAt: 1 },
+      { repoRoot: "C:/repo", path: "C:/repo/.muse/worktrees/c", branch: "task-c", base: "HEAD", createdAt: 1 },
+    ];
+    const summary = summarizeWorktreeInspections(records, {
+      "task-a": { repoRoot: "C:/repo", path: records[0].path, branch: "task-a", head: "a", clean: true, conflicted: false, fileCount: 0, observedAt: 2 },
+      "task-b": { repoRoot: "C:/repo", path: records[1].path, branch: "task-b", head: "b", clean: false, conflicted: false, fileCount: 2, observedAt: 2 },
+      "task-c": { repoRoot: "C:/repo", path: records[2].path, branch: "task-c", head: "c", clean: false, conflicted: true, fileCount: 1, observedAt: 2 },
+    });
+    assert.deepEqual(summary, { total: 3, inspected: 3, clean: 1, changed: 2, conflicted: 1 });
   });
 });
 
