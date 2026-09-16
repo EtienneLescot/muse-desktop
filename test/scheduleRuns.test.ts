@@ -21,12 +21,19 @@ import {
   settleRun,
   type ScheduleRun,
 } from "../src/lib/scheduleRuns.ts";
+import {
+  releaseSchedulerLease,
+  renewSchedulerLease,
+  SCHEDULER_LEASE_KEY,
+  tryAcquireSchedulerLease,
+} from "../src/lib/schedulerLease.ts";
 
 function fakeStorage(): void {
   const values = new Map<string, string>();
   (globalThis as Record<string, unknown>).localStorage = {
     getItem: (key: string): string | null => values.get(key) ?? null,
     setItem: (key: string, value: string): void => { values.set(key, value); },
+    removeItem: (key: string): void => { values.delete(key); },
   };
 }
 
@@ -137,5 +144,25 @@ describe("M3-06 schedule run ledger", () => {
     assert.equal(retried.finishedAt, undefined);
     const exhausted = retryRunNow([{ ...failed[0], attempt: MAX_RUN_ATTEMPTS }], initial.id, 2300)[0];
     assert.equal(exhausted.status, "failed");
+  });
+});
+
+describe("M3-07 scheduler lease", () => {
+  it("allows one live owner, renews it, and lets another owner recover after expiry", () => {
+    fakeStorage();
+    assert.equal(tryAcquireSchedulerLease("window-a", 1000), true);
+    assert.equal(tryAcquireSchedulerLease("window-b", 1001), false);
+    assert.equal(renewSchedulerLease("window-a", 2000), true);
+    assert.equal(tryAcquireSchedulerLease("window-b", 32_001), true);
+    assert.equal(renewSchedulerLease("window-a", 32_002), false);
+    releaseSchedulerLease("window-b");
+    assert.equal(localStorage.getItem(SCHEDULER_LEASE_KEY), null);
+  });
+
+  it("fails closed for blank owners and malformed stored leases", () => {
+    fakeStorage();
+    assert.equal(tryAcquireSchedulerLease("", 1000), false);
+    localStorage.setItem(SCHEDULER_LEASE_KEY, JSON.stringify({ ownerId: "a", expiresAt: "later" }));
+    assert.equal(tryAcquireSchedulerLease("b", 1000), true);
   });
 });

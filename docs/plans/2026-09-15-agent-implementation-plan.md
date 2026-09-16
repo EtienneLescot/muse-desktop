@@ -439,7 +439,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** clé unique schedule + occurrence, transactions de claim, politique de rattrapage, fuseau/DST, retry borné avec backoff et annulation. Distinguer machine/app fermée et run interrompu ; ne jamais relancer aveuglément une opération externe au résultat ambigu.
 
-**État au 16/09/2026 :** les occurrences portent maintenant `occurrenceAt`/`occurrenceKey`, les cron manqués suivent `latest` ou `skip`, et le journal limite les échecs à trois tentatives avec backoff 15/30/60 secondes. Une retry en attente est annulable depuis Automations ; les timeouts ambigus ne sont jamais relancés automatiquement. Le claim reste local au renderer : une seule instance Muse doit être active pour garantir l'exclusion.
+**État au 16/09/2026 :** les occurrences portent maintenant `occurrenceAt`/`occurrenceKey`, les cron manqués suivent `latest` ou `skip`, et le journal limite les échecs à trois tentatives avec backoff 15/30/60 secondes. Une retry en attente est annulable depuis Automations ; les timeouts ambigus ne sont jamais relancés automatiquement. Un bail partagé `muse-desktop.scheduler-lease.v1` est acquis, renouvelé et libéré par chaque renderer pour empêcher deux fenêtres de consommer le même tick ; son expiration permet la récupération après crash.
+
+**Limite restante :** le bail local réduit les doublons entre fenêtres du même profil mais ne remplace pas un scheduler natif multi-instance, et le fuseau/DST ainsi que la reprise d’un crash entre claim et démarrage restent à qualifier.
 
 **Acceptation :** sommeil/réveil, changement d'heure, double instance, crash entre claim et démarrage, suppression schedule ; pas de doublon d'occurrence.
 

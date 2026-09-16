@@ -380,7 +380,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | M3-04 | Découvrir les skills du disque et du projet | Adapté | Présente | Partielle | Intégration | Scanner borné `SKILL.md`, ressources relatives, priorité projet/repo/équipe et rechargement explicite livrés ; bridge natif et notifications restent ouverts |
 | M3-05 | Invoquer une skill avec son vrai contexte | Adapté | Présente | Partielle | Intégration | Lecture fraîche des ressources relatives, provenance balisée, refus explicite si ressource disparue et retry sans double insertion livrés ; part `skill` native et progression restent à qualifier |
 | M3-06 | Exécuter un travail planifié sans clic préalable | Adapté | Présente | Partielle | Intégration | Chaque schedule/review capture workspace, projet, modèle et politique ; ask reste en revue, workspace/YOLO dispatchent automatiquement ; journal local borné des runs visible. Reste le scheduler natif hors cycle UI et la sortie métier complète |
-| M3-07 | Gérer sommeil, reprise, doublons et échecs de planning | Adapté | Présente | Partielle | Intégration | Politique skip/latest, curseur d'occurrence stable, claim anti-doublon, retries bornés avec backoff et annulation d'une retry livrés côté client ; scheduler natif multi-instance, fuseau/DST explicite et reprise après crash restent ouverts |
+| M3-07 | Gérer sommeil, reprise, doublons et échecs de planning | Adapté | Présente | Partielle | Intégration | Politique skip/latest, curseur d'occurrence stable, bail inter-fenêtres, claim anti-doublon, retries bornés avec backoff et annulation d'une retry livrés côté client ; scheduler natif multi-instance, fuseau/DST explicite et reprise après crash restent ouverts |
 | M3-08 | Examiner les résultats des runs | Adapté | Présente | Partielle | Intégration | Historique borné, aperçu, statut, non-lu, lien vers la conversation, archivage, filtres et retry manuel livrés ; résumé riche et fin de run native restent ouverts |
 | M3-09 | Recevoir une notification utile | Adapté | Présente | Partielle | Intégration | Inbox locale dédupliquée pour fins/échecs, non-lus, ouverture de conversation, silence persistant et retour au premier plan au clic livrés ; reste le service natif OS/Tauri et les scénarios d'app fermée |
 
@@ -397,7 +397,8 @@ Preuves : [connecteurs](../src/lib/connectors.ts), [skills](../src/lib/skills.ts
 - **Limite restante :** le service natif Tauri doit encore remplacer le fallback `Notification` du webview pour les scénarios où l'application est fermée, avec une action OS qui transporte directement le `sessionId`.
 - **Bridge desktop :** `tauri-plugin-notification` est enregistré avec la permission `notification:default`, ce qui permet au constructeur `Notification` du webview d'atteindre le service OS dans un build Tauri.
 - **Limites :** les préférences muettes, les actions de clic OS et les tests multi-instance restent à faire ; l'application doit rester ouverte pour recevoir les événements du host.
-- **Validation :** suite Node 429 tests, TypeScript, build Vite et 68 tests Rust verts ; la qualification native du permission prompt reste à exécuter sur Windows/macOS/Linux.
+- **Limites :** le service natif quand l'application est fermée, le routage OS direct et la qualification native du permission prompt restent à exécuter sur Windows/macOS/Linux.
+- **Validation :** suite Node, TypeScript et build Vite verts ; la qualification native du permission prompt reste à exécuter sur Windows/macOS/Linux.
 
 ## M4 — Parité étendue
 

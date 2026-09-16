@@ -231,6 +231,11 @@ import {
 } from "../lib/scheduleRuns";
 export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
 import {
+  releaseSchedulerLease,
+  renewSchedulerLease,
+  tryAcquireSchedulerLease,
+} from "../lib/schedulerLease";
+import {
   appendNotification,
   buildApprovalNotification,
   buildInputNotification,
@@ -1633,9 +1638,13 @@ export function useMuseSessions(): UseMuseSessions {
   reviewQueueRef.current = reviewQueue;
   const scheduleRunsRef = useRef(scheduleRuns);
   scheduleRunsRef.current = scheduleRuns;
+  const schedulerLeaseOwner = useRef(`scheduler-${newId()}`);
   const scheduledExecutorRef = useRef<((item: ReviewItem, run: ScheduleRun) => Promise<void>) | null>(null);
   useEffect(() => {
     const check = () => {
+      const owner = schedulerLeaseOwner.current;
+      if (!tryAcquireSchedulerLease(owner, Date.now())) return;
+      renewSchedulerLease(owner, Date.now());
       const res = enqueueDue(schedulesRef.current, reviewQueueRef.current, Date.now());
       if (res.added.length === 0) {
         // `skip` can consume missed cron slots without creating a run. Keep
@@ -1700,7 +1709,10 @@ export function useMuseSessions(): UseMuseSessions {
     };
     check();
     const timer = setInterval(check, 15000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      releaseSchedulerLease(schedulerLeaseOwner.current);
+    };
   }, []);
   // w-settings write-through persistence (best-effort, like the rest here).
   useEffect(() => {
