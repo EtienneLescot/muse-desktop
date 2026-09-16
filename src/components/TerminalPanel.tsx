@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { TerminalInfo, TerminalState } from "../hooks/useMuseSessions";
 import { parseAnsi } from "../lib/ansi";
+import { terminalControlSequence } from "../lib/terminalShortcuts";
 
 interface Props {
   sessionId: string;
@@ -115,8 +116,16 @@ export function TerminalPanel({
           ref={inputRef}
           value={command}
           onChange={(event) => setCommand(event.target.value)}
+          onKeyDown={(event) => {
+            const sequence = terminalControlSequence(event.key, event);
+            if (!terminal || sequence === null) return;
+            event.preventDefault();
+            void onWrite(terminal.info.terminalId, sequence);
+            if (event.key === "Escape") setCommand("");
+          }}
           placeholder="Run a command…"
           aria-label="Terminal command"
+          title="Shortcuts: Ctrl+C interrupt · Ctrl+D EOF · Ctrl+L clear · Tab complete · Escape"
           autoComplete="off"
         />
         <button type="submit" disabled={!command}>Send</button>
