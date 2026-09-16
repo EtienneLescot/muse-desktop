@@ -116,8 +116,9 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 - **M0-14a — CI ajoutée** : `.github/workflows/ci.yml` exécute `npm ci`, `npm test`, `npm run build` et `cargo test --manifest-path src-tauri/Cargo.toml` sur chaque push et pull request. Les jobs sont séparés, bornés en durée et annulés lorsqu'un nouveau commit remplace le précédent.
 - **M0-14b — périmètre sûr** : la CI n'utilise aucun credential, ne lance pas de tour modèle et ne dépend pas d'un binaire Muse/WSL ; les tests Rust exercent le superviseur et les tests Node les contrats purs.
 - **M0-14c — fixture livrée** : `scripts/msp-fixture.mjs` fournit les scénarios `success`, `interleaved`, `reject`, `timeout` et `drop`. `test/msp-fixture.test.ts` lance un vrai processus enfant, vérifie le framing `Content-Length`, les notifications `tools/list_changed`, les erreurs JSON-RPC, l'absence de réponse bornée et la fermeture stdout sans toucher à un workspace.
-- **M0-14d — limite restante** : le scénario natif A/B, la panne d'envoi avec l'interface Tauri et la publication d'artefacts de diagnostic sans données utilisateur restent à ajouter avant de déclarer M0-14 complet.
-- **Validation** : `npm test` (479 tests Node, dont cinq tests fixture), build frontend et 76 tests Rust verts. La fixture s'exécute aussi dans le job Node de la CI depuis un clone propre.
+- **M0-14d — rapports d'échec livrés** : les jobs frontend et Rust conservent, uniquement en cas d'échec, les 250/300 dernières lignes de leurs commandes dans un artefact GitHub à rétention de 7 jours. Les chemins de runner et les formes de secrets courantes sont masqués ; aucun workspace, credential ou transcript utilisateur n'est ajouté.
+- **M0-14e — limite restante** : le scénario natif A/B et la panne d'envoi avec l'interface Tauri restent à ajouter avant de déclarer M0-14 complet.
+- **Validation** : `npm test` (492 tests Node, dont cinq tests fixture), build frontend et 76 tests Rust verts. La fixture s'exécute aussi dans le job Node de la CI depuis un clone propre.
 
 ### Livraison M0-06 — posture d'autorisation globale
 
