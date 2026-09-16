@@ -234,9 +234,11 @@ import {
   buildRunNotification,
   deliverDesktopNotification,
   loadNotifications,
+  loadNotificationPreferences,
   markNotificationRead as markNotificationReadRow,
   notificationPermission as readNotificationPermission,
   requestNotificationPermission,
+  saveNotificationPreferences,
   saveNotifications,
   unreadNotificationCount as countUnreadNotifications,
   type MuseNotification,
@@ -837,8 +839,10 @@ interface UseMuseSessions {
   /** M3-09: durable completion/failure notifications for scheduled runs. */
   notifications: MuseNotification[];
   notificationPermission: NotificationPermission;
+  notificationsMuted: boolean;
   unreadNotificationCount: number;
   enableNotifications: () => Promise<NotificationPermission>;
+  setNotificationsMuted: (muted: boolean) => void;
   markNotificationRead: (id: string) => void;
   /** US-9: approve a review entry → sent as normal turn input. */
   approveReview: (id: string) => Promise<void>;
@@ -1134,6 +1138,7 @@ export function useMuseSessions(): UseMuseSessions {
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
   const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() => loadScheduleRuns());
   const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
+  const [notificationPreferences, setNotificationPreferences] = useState(() => loadNotificationPreferences());
   const [notificationPermissionState, setNotificationPermissionState] = useState<NotificationPermission>(
     () => readNotificationPermission(),
   );
@@ -1511,6 +1516,10 @@ export function useMuseSessions(): UseMuseSessions {
     saveNotifications(notifications);
   }, [notifications]);
 
+  useEffect(() => {
+    saveNotificationPreferences(notificationPreferences);
+  }, [notificationPreferences]);
+
   // M3-09: terminal scheduled runs become durable inbox notifications. The
   // first render only hydrates the seen set so a restart does not replay every
   // historical completion as a desktop toast.
@@ -1550,9 +1559,9 @@ export function useMuseSessions(): UseMuseSessions {
     for (const item of notifications) {
       if (!item.unread || deliveredNotificationIds.current.has(item.id)) continue;
       deliveredNotificationIds.current.add(item.id);
-      deliverDesktopNotification(item);
+      if (!notificationPreferences.desktopMuted) deliverDesktopNotification(item);
     }
-  }, [notifications]);
+  }, [notifications, notificationPreferences.desktopMuted]);
 
   // Approval and answerable-input prompts are attention notifications. They
   // are in-memory host state, so an app restart does not replay stale prompts.
@@ -1597,6 +1606,10 @@ export function useMuseSessions(): UseMuseSessions {
     const next = await requestNotificationPermission();
     setNotificationPermissionState(next);
     return next;
+  }, []);
+
+  const setNotificationsMuted = useCallback((muted: boolean): void => {
+    setNotificationPreferences({ desktopMuted: muted });
   }, []);
 
   const markNotificationRead = useCallback((id: string): void => {
@@ -4885,8 +4898,10 @@ export function useMuseSessions(): UseMuseSessions {
     scheduleRuns,
     notifications,
     notificationPermission: notificationPermissionState,
+    notificationsMuted: notificationPreferences.desktopMuted,
     unreadNotificationCount: countUnreadNotifications(notifications),
     enableNotifications,
+    setNotificationsMuted,
     markNotificationRead,
     createSchedule: createScheduleCb,
     setScheduleEnabled: setScheduleEnabledCb,

@@ -7,8 +7,11 @@ import {
   buildInputNotification,
   buildRunNotification,
   loadNotifications,
+  loadNotificationPreferences,
   markNotificationRead,
+  NOTIFICATION_PREFERENCES_KEY,
   saveNotifications,
+  saveNotificationPreferences,
   unreadNotificationCount,
   type MuseNotification,
 } from "../src/lib/notifications.ts";
@@ -88,5 +91,14 @@ describe("M3-09 notification records", () => {
       { nope: true },
     ]));
     assert.deepEqual(loadNotifications(), [notification]);
+  });
+
+  it("persists the desktop mute preference defensively", () => {
+    fakeStorage();
+    assert.deepEqual(loadNotificationPreferences(), { desktopMuted: false });
+    saveNotificationPreferences({ desktopMuted: true });
+    assert.deepEqual(loadNotificationPreferences(), { desktopMuted: true });
+    localStorage.setItem(NOTIFICATION_PREFERENCES_KEY, JSON.stringify({ desktopMuted: "yes" }));
+    assert.deepEqual(loadNotificationPreferences(), { desktopMuted: false });
   });
 });

@@ -133,8 +133,10 @@ export default function App() {
     scheduleRuns,
     notifications,
     notificationPermission,
+    notificationsMuted,
     unreadNotificationCount,
     enableNotifications,
+    setNotificationsMuted,
     markNotificationRead,
     reviewQueue,
     createSchedule,
@@ -719,6 +721,7 @@ export default function App() {
                   runs={scheduleRuns}
                   notifications={notifications}
                   notificationPermission={notificationPermission}
+                  notificationsMuted={notificationsMuted}
                   unreadNotifications={unreadNotificationCount}
                   sessions={sessions}
                   activeId={activeId}
@@ -735,6 +738,7 @@ export default function App() {
                   onCancelRun={(id) => cancelScheduleRun(id)}
                   onMarkRunRead={(id) => markScheduleRunRead(id)}
                   onEnableNotifications={enableNotifications}
+                  onSetNotificationsMuted={setNotificationsMuted}
                   onMarkNotificationRead={markNotificationRead}
                   onOpenNotification={(notification) => {
                     if (notification.sessionId) {

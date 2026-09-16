@@ -20,6 +20,7 @@ interface Props {
   runs: ScheduleRun[];
   notifications: MuseNotification[];
   notificationPermission: NotificationPermission;
+  notificationsMuted: boolean;
   unreadNotifications: number;
   sessions: SessionRef[];
   activeId: string | null;
@@ -35,6 +36,7 @@ interface Props {
   onOpenRun: (run: ScheduleRun) => void;
   onMarkRunRead: (id: string) => void;
   onEnableNotifications: () => Promise<NotificationPermission>;
+  onSetNotificationsMuted: (muted: boolean) => void;
   onMarkNotificationRead: (id: string) => void;
   onOpenNotification: (notification: MuseNotification) => void;
 }
@@ -79,6 +81,7 @@ export function SchedulesPanel({
   runs,
   notifications,
   notificationPermission,
+  notificationsMuted,
   unreadNotifications,
   sessions,
   activeId,
@@ -94,6 +97,7 @@ export function SchedulesPanel({
   onOpenRun,
   onMarkRunRead,
   onEnableNotifications,
+  onSetNotificationsMuted,
   onMarkNotificationRead,
   onOpenNotification,
 }: Props) {
@@ -321,7 +325,17 @@ export function SchedulesPanel({
           {unreadNotifications > 0 && <span className="schedules-count">{unreadNotifications}</span>}
         </div>
         {notificationPermission === "granted" ? (
-          <p className="muted notification-permission">Desktop notifications enabled.</p>
+          <div className="notification-permission-row">
+            <p className="muted notification-permission">Desktop notifications enabled.</p>
+            <button
+              type="button"
+              className="notification-mute"
+              aria-pressed={notificationsMuted}
+              onClick={() => onSetNotificationsMuted(!notificationsMuted)}
+            >
+              {notificationsMuted ? "Unmute desktop alerts" : "Mute desktop alerts"}
+            </button>
+          </div>
         ) : notificationPermission === "unsupported" ? (
           <p className="muted notification-permission">Desktop notifications are unavailable here. In-app alerts remain available.</p>
         ) : (
