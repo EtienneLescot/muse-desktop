@@ -8,6 +8,7 @@ import {
   type ThreadReuse,
 } from "../lib/schedules";
 import type { ScheduleRun } from "../lib/scheduleRuns";
+import type { MuseNotification, NotificationPermission } from "../lib/notifications";
 
 interface SessionRef {
   session_id: string;
@@ -17,6 +18,9 @@ interface SessionRef {
 interface Props {
   schedules: Schedule[];
   runs: ScheduleRun[];
+  notifications: MuseNotification[];
+  notificationPermission: NotificationPermission;
+  unreadNotifications: number;
   sessions: SessionRef[];
   activeId: string | null;
   workspace: string | null;
@@ -30,6 +34,9 @@ interface Props {
   onCancelRun: (id: string) => void;
   onOpenRun: (run: ScheduleRun) => void;
   onMarkRunRead: (id: string) => void;
+  onEnableNotifications: () => Promise<NotificationPermission>;
+  onMarkNotificationRead: (id: string) => void;
+  onOpenNotification: (notification: MuseNotification) => void;
 }
 
 type TriggerKind = "once" | "cron";
@@ -58,6 +65,10 @@ function describeRunStatus(status: ScheduleRun["status"]): string {
   return "Queued";
 }
 
+function describeNotificationTime(createdAt: number): string {
+  return new Date(createdAt).toLocaleString();
+}
+
 /**
  * US-9 automations panel (sidebar): create/list/enable/disable/delete
  * schedules plus a run-now button. Ask mode creates a review entry; workspace
@@ -66,6 +77,9 @@ function describeRunStatus(status: ScheduleRun["status"]): string {
 export function SchedulesPanel({
   schedules,
   runs,
+  notifications,
+  notificationPermission,
+  unreadNotifications,
   sessions,
   activeId,
   workspace,
@@ -79,6 +93,9 @@ export function SchedulesPanel({
   onCancelRun,
   onOpenRun,
   onMarkRunRead,
+  onEnableNotifications,
+  onMarkNotificationRead,
+  onOpenNotification,
 }: Props) {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -298,6 +315,49 @@ export function SchedulesPanel({
           </ul>
         </div>
       )}
+      <div className="schedule-notifications" aria-label="Automation notifications">
+        <div className="schedule-notifications-head">
+          <h3>Notifications</h3>
+          {unreadNotifications > 0 && <span className="schedules-count">{unreadNotifications}</span>}
+        </div>
+        {notificationPermission === "granted" ? (
+          <p className="muted notification-permission">Desktop notifications enabled.</p>
+        ) : notificationPermission === "unsupported" ? (
+          <p className="muted notification-permission">Desktop notifications are unavailable here. In-app alerts remain available.</p>
+        ) : (
+          <button type="button" className="notification-enable" onClick={() => void onEnableNotifications()}>
+            {notificationPermission === "denied" ? "Enable notifications in system settings" : "Enable desktop notifications"}
+          </button>
+        )}
+        {notifications.length === 0 ? (
+          <p className="muted notification-empty">Completed and failed automations will appear here.</p>
+        ) : (
+          <ul className="notification-list">
+            {notifications.slice(-6).reverse().map((notification) => (
+              <li key={notification.id} className="notification-item" data-unread={notification.unread === true}>
+                <div className="notification-item-head">
+                  <strong className="notification-title">{notification.title}</strong>
+                  {notification.unread && <span className="run-unread">New</span>}
+                </div>
+                <span className="notification-body">{notification.body}</span>
+                <span className="muted notification-meta">{describeNotificationTime(notification.createdAt)}</span>
+                <div className="sched-actions">
+                  {notification.sessionId && (
+                    <button type="button" onClick={() => onOpenNotification(notification)} title="Open conversation">
+                      Open conversation
+                    </button>
+                  )}
+                  {notification.unread && (
+                    <button type="button" onClick={() => onMarkNotificationRead(notification.id)} title="Mark notification as read">
+                      Mark read
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

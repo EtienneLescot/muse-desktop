@@ -3186,6 +3186,87 @@ body.dark .composer textarea::placeholder {
   color: var(--danger);
 }
 
+.schedule-notifications {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.schedule-notifications-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.schedule-notifications-head h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.notification-permission,
+.notification-empty {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.notification-enable {
+  margin-top: 8px;
+  color: var(--blue);
+  border-color: var(--blue);
+}
+
+.notification-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.notification-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.notification-item[data-unread="true"] {
+  border-color: color-mix(in srgb, var(--blue) 55%, var(--line));
+}
+
+.notification-item-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.notification-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-body {
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-meta {
+  font-size: 0.72rem;
+}
+
 /* US-9 review queue: pending automation entries awaiting approve/discard. */
 .review-queue {
   border-top: 1px solid var(--line);
