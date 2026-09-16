@@ -2856,6 +2856,7 @@ body.dark .composer textarea::placeholder {
 }
 .orchestration-list li {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   min-width: 0;
@@ -2891,6 +2892,67 @@ body.dark .composer textarea::placeholder {
   background: var(--code-bg);
   padding: 1px 6px;
   border-radius: 6px;
+}
+.orchestration-setup {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 8px;
+  align-items: center;
+  margin: 10px 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 88%, var(--blue) 12%);
+}
+.orchestration-setup label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.orchestration-setup input {
+  min-width: 0;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-code);
+  font-size: 0.78rem;
+}
+.orchestration-setup .muted {
+  grid-column: 2;
+  font-size: 0.7rem;
+}
+.orchestration-setup-error {
+  grid-column: 2;
+  color: var(--danger);
+  font-size: 0.72rem;
+}
+.orchestration-setup-output {
+  flex: 1 0 100%;
+  margin: 2px 0 4px 0;
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+}
+.orchestration-setup-output summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+.orchestration-setup-output pre {
+  max-height: 140px;
+  margin: 5px 0 0;
+  padding: 7px 8px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--code-bg);
+  color: var(--muted);
+  font-family: var(--font-code);
+  font-size: 0.7rem;
 }
 .orchestration-snippet {
   background: var(--code-bg);

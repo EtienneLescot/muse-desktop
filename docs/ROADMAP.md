@@ -273,8 +273,16 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Git réel :** la création utilise `git worktree add -b … … …` hors thread UI. Les chemins existants, références de type option, traversées et échecs Git sont refusés avant toute promesse ; le résultat renvoie dépôt, chemin canonique, branche, base et horodatage.
 - **UX :** le panneau d’orchestration conserve le plan manuel et ajoute **Create worktree** par agent. Le bouton devient **Created** après le retour Git et reste visible après redémarrage ; une suppression exige une confirmation explicite, tandis que le snippet reste disponible pour les environnements sans backend.
 - **Sécurité :** les identifiants d’agents sont transformés en segments de chemin sûrs et dédoublonnés avant affichage ou appel natif.
-- **Limites :** la suppression/retention avancée et la création atomique d’une session dans le worktree restent M2-04/M2-05 ; le host MSP mono-workspace empêche de prétendre à une bascule automatique sans contrat supplémentaire.
+- **Limites :** la suppression/retention avancée et la création atomique d’une session dans le worktree restent M2-05/M2-06 ; le host MSP mono-workspace empêche de prétendre à une bascule automatique sans contrat supplémentaire.
 - **Validation :** 60 tests Rust couvrent checkout réel, refs et chemins ; la persistance locale est couverte par le test de bornage des records, et les suites Node, TypeScript et Vite restent vertes.
+
+### Livraison M2-04 — préparation explicite de l'environnement
+
+- **Commande utilisateur :** le panneau d'orchestration accepte une commande de setup saisie par l'utilisateur, puis l'exécute uniquement après clic sur **Run setup** dans le worktree Git déjà créé. Aucun script importé ou profil de projet n'est lancé automatiquement.
+- **États :** chaque exécution renvoie `ready`, `failed` ou `timedOut`, avec code de sortie, durée et sortie bornée affichable derrière une disclosure. Une relance est possible après un échec ou un timeout.
+- **Garde-fous :** la commande est limitée à 2 000 caractères ; le runner Rust refuse les dossiers inexistants ou hors de `.muse/worktrees`, neutralise stdin et tue les processus dépassant dix minutes ; la sortie est bornée à 200 000 caractères.
+- **Limites :** les profils de setup persistants, variables d'environnement autorisées, annulation live et création atomique session → worktree restent à concevoir pour M2-05/M2-06. Le setup est donc une action explicite et locale, sans promesse de readiness globale du projet.
+- **Validation :** tests Rust des chemins, commandes réussies/échouées et bornes ; tests Node de validation de commande ; TypeScript, Vite et Cargo doivent rester verts avant livraison.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 
@@ -285,7 +293,7 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 | M2-01 | Un projet représente des dossiers persistants | Adapté | Présente | Câblée | Intégration | Racine persistante, sélection de dossier et création de conversation dans cette racine livrées ; restent migration explicite des anciens groupes et environnement/worktree |
 | M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Intégration | Héritage global/projet visible et modèle effectif appliqué à la création d'une session ; sandbox/réseau/auto-compact restent en attente d'un contrat moteur vérifié |
 | M2-03 | Créer automatiquement un worktree pour une conversation | Adapté | Présente | Partielle | Intégration | Création Git réelle, persistance et suppression confirmée livrées ; restent retention avancée et session atomique dans le worktree |
-| M2-04 | Préparer l'environnement du worktree | À définir | Absente | Absente | À faire | Scripts/actions de setup avec progression et erreurs ; dépendances nécessaires disponibles avant le premier tour |
+| M2-04 | Préparer l'environnement du worktree | Adapté | Présente | Partielle | Intégration | Commande explicite, états et sortie bornée livrés ; restent profils persistants, variables autorisées, annulation live et readiness globale |
 | M2-05 | Passer de Local à Worktree et inversement | À définir | Absente | Absente | À faire | Transférer contexte et changements ; traiter conflits, fichiers ignorés et branche déjà utilisée ; aucune perte de travail |
 | M2-06 | Nettoyer les worktrees sans supprimer du travail | À définir | Absente | Absente | À faire | Lier archive et rétention, détecter dirty/running ; nettoyage uniquement sûr, confirmation explicite si nécessaire |
 | M2-07 | Piloter les sous-agents réels | Adapté | Présente | Câblée | Unitaire | Vérifier followup/stop/resume/result/drilldown sur agents vivants ; identité et états corrects jusqu'à terminaison |

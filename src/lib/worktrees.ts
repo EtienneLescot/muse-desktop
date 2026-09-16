@@ -1,9 +1,11 @@
 /**
  * US-8 worktree helper: pure per-agent git worktree planning, zero imports.
  *
- * Setup is MANUAL: the UI shows a shell snippet the user runs themselves
- * (the desktop app never executes git). The pre-flight HEAD-hash compare
- * is report-only — a moved HEAD never blocks, it just warns.
+ * Git checkout creation is handled by the guarded Rust service. The shell
+ * snippet remains available as a manual fallback, while setup command
+ * validation is kept here so the UI and native runner share the same limit.
+ * The pre-flight HEAD-hash compare is report-only — a moved HEAD never
+ * blocks, it just warns.
  */
 
 /** Root under which per-agent worktrees are created. */
@@ -27,6 +29,24 @@ export interface WorktreeRecord {
   branch: string;
   base: string;
   createdAt: number;
+}
+
+export interface WorktreeSetupResult {
+  status: "ready" | "failed" | "timedOut";
+  output: string;
+  exitCode: number | null;
+  durationMs: number;
+}
+
+export const MAX_SETUP_COMMAND_CHARS = 2_000;
+
+export function validateSetupCommand(command: string): string | null {
+  const value = command.trim();
+  if (value.length === 0) return "Setup command must not be empty.";
+  if (value.length > MAX_SETUP_COMMAND_CHARS) {
+    return `Setup command is limited to ${MAX_SETUP_COMMAND_CHARS} characters.`;
+  }
+  return null;
 }
 
 function safePathSegment(agent: string): string {

@@ -168,7 +168,12 @@ import {
   type ProjectSettings,
   type ThreadProjectMap,
 } from "../lib/projects";
-import type { WorktreePlan, WorktreeRecord } from "../lib/worktrees";
+import {
+  validateSetupCommand,
+  type WorktreePlan,
+  type WorktreeRecord,
+  type WorktreeSetupResult,
+} from "../lib/worktrees";
 export type {
   Project,
   ProjectSettings,
@@ -584,6 +589,12 @@ interface UseMuseSessions {
   worktrees: WorktreeRecord[];
   /** Remove one managed worktree after explicit user confirmation in the UI. */
   removeWorktree: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
+  /** M2-04: run one user-entered setup command in an existing managed worktree. */
+  runWorktreeSetup: (
+    sessionId: string,
+    record: WorktreeRecord,
+    command: string,
+  ) => Promise<WorktreeSetupResult | null>;
   startSession: () => Promise<string | null>;
   startSessionInWorkspace: (
     workspacePath: string,
@@ -2167,6 +2178,32 @@ export function useMuseSessions(): UseMuseSessions {
       } catch (e) {
         setError(`worktree removal failed: ${e instanceof Error ? e.message : String(e)}`);
         return false;
+      }
+    },
+    [],
+  );
+
+  const runWorktreeSetup = useCallback(
+    async (
+      sessionId: string,
+      record: WorktreeRecord,
+      command: string,
+    ): Promise<WorktreeSetupResult | null> => {
+      const validation = validateSetupCommand(command);
+      if (validation !== null) {
+        setError(validation);
+        return null;
+      }
+      try {
+        setError(null);
+        return await invoke<WorktreeSetupResult>("worktree_setup_run", {
+          sessionId,
+          path: record.path,
+          command: command.trim(),
+        });
+      } catch (e) {
+        setError(`worktree setup failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
       }
     },
     [],
@@ -4146,6 +4183,7 @@ export function useMuseSessions(): UseMuseSessions {
     createWorktree,
     worktrees,
     removeWorktree,
+    runWorktreeSetup,
     startSession,
     startSessionInWorkspace,
     forkSession,

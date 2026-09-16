@@ -81,6 +81,7 @@ export default function App() {
     createWorktree,
     worktrees,
     removeWorktree,
+    runWorktreeSetup,
     setActive,
     startSession,
     startSessionInWorkspace,
@@ -1104,6 +1105,7 @@ export default function App() {
                             onCreateWorktree={createWorktree}
                             worktrees={worktrees}
                             onRemoveWorktree={removeWorktree}
+                            onRunSetup={runWorktreeSetup}
                           />{" "}
                           <SharePanel
                             sessionId={active.session_id}
