@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { SUPPORTED_EXTENSIONS, type LineHit } from "../lib/indexer";
+import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
   enabled: boolean;
@@ -70,6 +71,13 @@ export function IndexPanel({
           {enabled ? "On" : "Off"}
         </label>
       </div>
+      <p className="muted capability-line">
+        <CapabilityBadge
+          status="local"
+          reason="The index is opt-in and reads selected workspace files locally."
+        />
+        Local workspace search
+      </p>
       <p className="muted index-note">
         Opt-in local search over the workspace. Formats:{" "}
         {SUPPORTED_EXTENSIONS.join(", ")}. Skips build dirs + .gitignore.

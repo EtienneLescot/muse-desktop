@@ -151,7 +151,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** panneaux Settings/Connector/Browser/Share/Orchestration, composants communs.
 
-**Travail :** définir présentation commune `available/local/manual/unavailable` avec raison et action suivante. Remplacer promesses « installé/connecté/restauré » lorsque seul un registre ou un préremplissage change. Ne pas ajouter un badge permanent à chaque élément fonctionnel.
+**Travail :** définir présentation commune `available/local/manual/unavailable` avec raison et action suivante. Le composant partagé est maintenant appliqué aux connecteurs, channels, exports, worktrees, index local et import CLI/IDE ; les badges restent limités aux surfaces dont la capacité peut être confondue avec une connexion réelle. Remplacer promesses « installé/connecté/restauré » lorsque seul un registre ou un préremplissage change. Ne pas ajouter un badge permanent à chaque élément fonctionnel.
 
 **Acceptation :** audit clic → effet réel sur chaque action ; aucune confirmation fictive. Tester backend absent et capacités refusées. Dépend de l'inventaire M0-08.
 
