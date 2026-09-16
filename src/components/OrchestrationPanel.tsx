@@ -36,6 +36,7 @@ import {
   saveWorktreeRetention,
   type WorktreeRetentionPolicy,
 } from "../lib/worktreeRetention";
+import type { WorktreeCleanupIntent } from "../lib/worktreeCleanup";
 
 interface Props {
   /** Agent ids seen as `subagent` entries in the active thread log. */
@@ -52,6 +53,7 @@ interface Props {
     plan: WorktreePlan,
   ) => Promise<WorktreeRecord | null>;
   worktrees: WorktreeRecord[];
+  cleanupIntents: WorktreeCleanupIntent[];
   onRemoveWorktree: (
     sessionId: string,
     record: WorktreeRecord,
@@ -88,6 +90,7 @@ export function OrchestrationPanel({
   onCreateWorktree,
   onCreateConversationWorktree,
   worktrees,
+  cleanupIntents,
   onRemoveWorktree,
   onOpenWorktree,
   onInspectWorktree,
@@ -102,6 +105,7 @@ export function OrchestrationPanel({
   const [copied, setCopied] = useState(false);
   const [creating, setCreating] = useState<string | null>(null);
   const [openingBranch, setOpeningBranch] = useState<string | null>(null);
+  const [removingBranch, setRemovingBranch] = useState<string | null>(null);
   const [writerTargets, setWriterTargets] = useState<Record<string, string>>({});
   const [setupCommand, setSetupCommand] = useState("");
   const [envAllowlistText, setEnvAllowlistText] = useState("");
@@ -321,6 +325,13 @@ export function OrchestrationPanel({
     setOpeningBranch(null);
   }
 
+  async function removeWorktree(record: WorktreeRecord): Promise<void> {
+    if (removingBranch !== null) return;
+    setRemovingBranch(record.branch);
+    await onRemoveWorktree(sessionId, record);
+    setRemovingBranch(null);
+  }
+
   async function checkReadiness(record: WorktreeRecord): Promise<void> {
     if (checkingReadiness !== null) return;
     setCheckingReadiness(record.branch);
@@ -538,12 +549,27 @@ export function OrchestrationPanel({
                   onClick={() => {
                     const record = recordFor(p);
                     if (!record || !window.confirm(`Remove worktree ${record.path}?`)) return;
-                    void onRemoveWorktree(sessionId, record);
+                    void removeWorktree(record);
                   }}
-                  title="Remove this worktree from Git"
+                  disabled={removingBranch !== null}
+                  title={cleanupIntents.some((intent) => intent.path === recordFor(p)?.path)
+                    ? "Retry the interrupted worktree cleanup"
+                    : "Remove this worktree from Git"}
                 >
-                  Remove
+                  {removingBranch === recordFor(p)?.branch
+                    ? "Cleaning…"
+                    : cleanupIntents.some((intent) => intent.path === recordFor(p)?.path)
+                      ? "Retry cleanup"
+                      : "Remove"}
                 </button>
+                {cleanupIntents
+                  .filter((intent) => intent.path === recordFor(p)?.path)
+                  .map((intent) => (
+                    <span className="orchestration-cleanup-status" key={`${intent.repoRoot}:${intent.path}`}>
+                      {intent.status === "pending" ? "Cleanup pending after restart" : `Cleanup failed · attempt ${intent.attempts}`}
+                      {intent.error ? ` · ${intent.error}` : ""}
+                    </span>
+                  ))}
                 {setupRunning === recordFor(p)?.branch ? (
                   <button
                     type="button"

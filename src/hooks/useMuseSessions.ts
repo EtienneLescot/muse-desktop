@@ -176,6 +176,14 @@ import {
   type WorktreeSetupResult,
   type WorktreeReadiness,
 } from "../lib/worktrees";
+import {
+  clearWorktreeCleanup,
+  loadWorktreeCleanupIntents,
+  markWorktreeCleanupFailed,
+  requestWorktreeCleanup,
+  saveWorktreeCleanupIntents,
+  type WorktreeCleanupIntent,
+} from "../lib/worktreeCleanup";
 export type {
   Project,
   ProjectSettings,
@@ -661,6 +669,8 @@ interface UseMuseSessions {
     projectSettings?: ProjectSettings,
   ) => Promise<WorktreeRecord | null>;
   worktrees: WorktreeRecord[];
+  /** Explicit cleanup attempts that need a retry after an interruption. */
+  cleanupIntents: WorktreeCleanupIntent[];
   /** Remove one managed worktree after explicit user confirmation in the UI. */
   removeWorktree: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
   /** M2-06: inspect one worktree before cleanup or handoff. */
@@ -1267,6 +1277,9 @@ export function useMuseSessions(): UseMuseSessions {
     () => loadGlobalSettings(DEFAULT_PROJECT_SETTINGS),
   );
   const [worktrees, setWorktrees] = useState<WorktreeRecord[]>(() => loadWorktrees());
+  const [cleanupIntents, setCleanupIntents] = useState<WorktreeCleanupIntent[]>(() =>
+    loadWorktreeCleanupIntents(),
+  );
   const [projectError, setProjectError] = useState<string | null>(null);
   // Fresh copies for the render-detached send path (same pattern as
   // logsRef): sendInput reads these so instructions never go stale.
@@ -1521,6 +1534,10 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveWorktrees(worktrees);
   }, [worktrees]);
+
+  useEffect(() => {
+    saveWorktreeCleanupIntents(cleanupIntents);
+  }, [cleanupIntents]);
 
   useEffect(() => {
     saveThreadProjects(threadProjects);
@@ -2498,6 +2515,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   const removeWorktree = useCallback(
     async (sessionId: string, record: WorktreeRecord): Promise<boolean> => {
+      setCleanupIntents((current) => requestWorktreeCleanup(current, record));
       try {
         setError(null);
         await invoke("git_worktree_remove", {
@@ -2505,9 +2523,12 @@ export function useMuseSessions(): UseMuseSessions {
           path: record.path,
         });
         setWorktrees((current) => current.filter((item) => item.path !== record.path));
+        setCleanupIntents((current) => clearWorktreeCleanup(current, record));
         return true;
       } catch (e) {
-        setError(`worktree removal failed: ${e instanceof Error ? e.message : String(e)}`);
+        const detail = e instanceof Error ? e.message : String(e);
+        setCleanupIntents((current) => markWorktreeCleanupFailed(current, record, detail));
+        setError(`worktree removal failed: ${detail}`);
         return false;
       }
     },
@@ -4989,6 +5010,7 @@ export function useMuseSessions(): UseMuseSessions {
     createWorktree,
     createWorktreeSession,
     worktrees,
+    cleanupIntents,
     removeWorktree,
     inspectWorktree,
     checkWorktreeReadiness,

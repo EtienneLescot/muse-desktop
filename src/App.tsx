@@ -87,6 +87,7 @@ export default function App() {
     createWorktree,
     createWorktreeSession,
     worktrees,
+    cleanupIntents,
     removeWorktree,
     inspectWorktree,
     checkWorktreeReadiness,
@@ -1223,6 +1224,7 @@ export default function App() {
                               createWorktreeSession(active.session_id, plan, activeProjectSettings)
                             }
                             worktrees={worktrees}
+                            cleanupIntents={cleanupIntents}
                             onRemoveWorktree={removeWorktree}
                             onOpenWorktree={async (record) =>
                               startSessionInWorkspace(record.path, activeProjectSettings)

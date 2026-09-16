@@ -3220,6 +3220,14 @@ body.dark .composer textarea::placeholder {
 .orchestration-retention-status[data-eligible="true"] {
   color: var(--green);
 }
+.orchestration-cleanup-status {
+  flex: 1 0 100%;
+  color: var(--warning, #c48721);
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .orchestration-readiness {
   flex: 1 0 100%;
   margin: 2px 0 4px;
