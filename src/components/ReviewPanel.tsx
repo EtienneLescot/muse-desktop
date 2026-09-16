@@ -4,17 +4,26 @@ import {
   statusCode,
   type GitDiffScope,
   type GitReviewState,
+  type GitStatusSnapshot,
 } from "../lib/git";
+import {
+  anchorMatchesDiff,
+  createReviewAnchor,
+  patchLinesForFile,
+  type ReviewAnchor,
+  type ReviewPatchLine,
+} from "../lib/reviewComments";
 
 interface Props {
   sessionId: string;
   review: GitReviewState;
-  onRefreshStatus: (sessionId: string) => Promise<void>;
+  onRefreshStatus: (sessionId: string) => Promise<GitStatusSnapshot | null>;
   onLoadDiff: (
     sessionId: string,
     scope: GitDiffScope,
     baseRef?: string,
-  ) => Promise<void>;
+  ) => Promise<GitReviewState["diff"]>;
+  onSendComment: (anchor: ReviewAnchor, body: string) => Promise<boolean>;
 }
 
 const SCOPES: Array<[GitDiffScope, string]> = [
@@ -32,13 +41,23 @@ export function ReviewPanel({
   review,
   onRefreshStatus,
   onLoadDiff,
+  onSendComment,
 }: Props) {
   const [scope, setScope] = useState<GitDiffScope>("unstaged");
   const [baseRef, setBaseRef] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedLineKey, setSelectedLineKey] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [commentSending, setCommentSending] = useState(false);
+  const [commentSent, setCommentSent] = useState(false);
 
   useEffect(() => {
     setSelectedPath(null);
+    setSelectedLineKey(null);
+    setCommentDraft("");
+    setCommentError(null);
+    setCommentSent(false);
     setScope("unstaged");
     setBaseRef("");
     void onRefreshStatus(sessionId);
@@ -52,6 +71,28 @@ export function ReviewPanel({
       review.diff?.files.find((file) => file.path === selectedPath) ?? null,
     [review.diff, selectedPath],
   );
+  const selectedRows = useMemo(
+    () =>
+      review.diff && selectedDiff
+        ? patchLinesForFile(review.diff.patch, selectedDiff)
+        : [],
+    [review.diff, selectedDiff],
+  );
+  const selectedLine = useMemo(
+    () => selectedRows.find((row) => row.key === selectedLineKey) ?? null,
+    [selectedRows, selectedLineKey],
+  );
+
+  useEffect(() => {
+    const first = review.diff?.files[0]?.path ?? null;
+    setSelectedPath((current) => current ?? first);
+  }, [review.diff]);
+
+  useEffect(() => {
+    setSelectedLineKey(null);
+    setCommentError(null);
+    setCommentSent(false);
+  }, [selectedPath, review.diff?.observedAt]);
 
   async function loadDiff(): Promise<void> {
     if (scope === "branch" && resolvedBase.length === 0) return;
@@ -60,6 +101,58 @@ export function ReviewPanel({
       scope,
       scope === "branch" ? resolvedBase : undefined,
     );
+  }
+
+  async function sendComment(): Promise<void> {
+    if (
+      !selectedLine ||
+      !selectedDiff ||
+      !review.status ||
+      !review.diff ||
+      commentDraft.trim().length === 0
+    ) {
+      return;
+    }
+    const anchor = createReviewAnchor(
+      review.status,
+      review.diff,
+      selectedDiff,
+      selectedLine,
+    );
+    setCommentSending(true);
+    setCommentError(null);
+    setCommentSent(false);
+    try {
+      const latestStatus = await onRefreshStatus(sessionId);
+      if (
+        latestStatus === null ||
+        !anchorMatchesDiff(anchor, latestStatus, review.diff)
+      ) {
+        setCommentError("This diff changed. Refresh and select the line again.");
+        return;
+      }
+      const latestDiff = await onLoadDiff(
+        sessionId,
+        anchor.scope,
+        anchor.scope === "branch" ? anchor.baseRef ?? undefined : undefined,
+      );
+      if (
+        latestDiff === null ||
+        !anchorMatchesDiff(anchor, latestStatus, latestDiff)
+      ) {
+        setCommentError("This diff changed. Refresh and select the line again.");
+        return;
+      }
+      const sent = await onSendComment(anchor, commentDraft);
+      if (!sent) {
+        setCommentError("The comment could not be sent. The draft is preserved.");
+        return;
+      }
+      setCommentDraft("");
+      setCommentSent(true);
+    } finally {
+      setCommentSending(false);
+    }
   }
 
   return (
@@ -137,6 +230,8 @@ export function ReviewPanel({
                 onClick={() => {
                   setScope(value);
                   setSelectedPath(null);
+                  setSelectedLineKey(null);
+                  setCommentSent(false);
                 }}
               >
                 {label}
@@ -180,7 +275,63 @@ export function ReviewPanel({
                   </span>
                 </div>
               )}
-              <pre className="review-patch">{review.diff.patch || "No changes in this scope."}</pre>
+              {selectedDiff !== null && selectedRows.length > 0 ? (
+                <div className="review-code" aria-label={`Patch for ${selectedDiff.path}`} role="list">
+                  {selectedRows.map((row: ReviewPatchLine) => (
+                    <button
+                      key={row.key}
+                      type="button"
+                      role="listitem"
+                      className={`review-code-line review-code-${row.prefix === "+" ? "add" : row.prefix === "-" ? "delete" : "context"}${selectedLineKey === row.key ? " selected" : ""}`}
+                      onClick={() => {
+                        setSelectedLineKey(row.key);
+                        setCommentError(null);
+                        setCommentSent(false);
+                      }}
+                      title={`Comment on ${row.side} line ${row.side === "old" ? row.oldLine : row.newLine}`}
+                    >
+                      <span className="review-line-number">{row.oldLine ?? ""}</span>
+                      <span className="review-line-number">{row.newLine ?? ""}</span>
+                      <code><span className="review-line-prefix">{row.prefix}</span>{row.text || " "}</code>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <pre className="review-patch">{review.diff.patch || "No changes in this scope."}</pre>
+              )}
+              {selectedLine !== null && selectedDiff !== null && (
+                <form
+                  className="review-comment-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void sendComment();
+                  }}
+                >
+                  <div className="review-comment-head">
+                    <strong>
+                      Comment on {selectedDiff.path}:{selectedLine.side === "old" ? selectedLine.oldLine : selectedLine.newLine}
+                    </strong>
+                    <span className="muted">{selectedLine.side} side</span>
+                  </div>
+                  <textarea
+                    value={commentDraft}
+                    onChange={(event) => {
+                      setCommentDraft(event.target.value);
+                      setCommentSent(false);
+                    }}
+                    placeholder="Explain what should change…"
+                    rows={3}
+                    aria-label="Review comment"
+                  />
+                  <div className="review-comment-actions">
+                    {commentError && <span className="review-comment-error" role="alert">{commentError}</span>}
+                    {commentSent && <span className="review-comment-sent">Sent to conversation</span>}
+                    <button type="submit" className="review-send-comment" disabled={commentSending || commentDraft.trim().length === 0}>
+                      {commentSending ? "Checking diff…" : "Send comment"}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
         </>

@@ -141,7 +141,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
 | M1-01 | Voir les fichiers réellement modifiés | Adapté | Présente | Câblée | Unitaire | Socle livré en lecture seule ; restent les scénarios E2E webview/live, le snapshot « dernier tour » et la vérification runtime des cas hors Git/modifications externes |
-| M1-02 | Commenter une ligne de diff et demander sa correction | À définir | Absente | Absente | À faire | Ancrer fichier, révision, côté et ligne ; transmettre au bon contexte ; gérer commentaire devenu obsolète |
+| M1-02 | Commenter une ligne de diff et demander sa correction | Adapté | Présente | Câblée | Unitaire | Socle livré ; restent la qualification native avec un moteur live et la persistance/triage multi-commentaires |
 | M1-03 | Indexer ou annuler une modification | À définir | Absente | Absente | À faire | Actions fichier puis hunk ; protections contre changement concurrent ; annulation explicite et aucune perte silencieuse |
 | M1-04 | Commit, push et création de PR depuis l'app | Maquette | Absente | Absente | À faire | Relier identité/remote/branche ; gérer auth, hooks, rejet et conflits ; vérifier le commit et la PR réellement créés |
 | M1-05 | Ouvrir et utiliser un terminal du projet | Maquette | Absente | Absente | À faire | PTY natif, entrée/sortie, resize et fermeture ; cwd lié à la conversation ; processus long conservé lors des changements de vue |
@@ -162,7 +162,15 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **État exposé :** branche, HEAD observé, upstream, avance/retard et liste des fichiers avec états index/worktree, conflits, non suivis et renommages. Les diffs sont disponibles pour `unstaged`, `staged` et `branch` avec base explicite ; les hunks, compteurs, marqueurs binaires et patch borné sont conservés.
 - **UI :** l’onglet **Review** est accessible depuis la barre de travail de chaque conversation. Il recharge le dépôt, sélectionne un scope, accepte une base de branche et affiche la liste des fichiers puis le patch réel, sans déduire les changements du texte de Muse.
 - **Validation :** suite Node 381 tests, suite Rust 44 tests, build frontend réussi. Les tests Rust couvrent notamment Unicode, chemins avec espaces, renommage, avance/retard, hunks, binaire, base absente et garde contre une référence de branche interprétée comme option.
-- **Limites assumées :** cette tranche ne modifie pas le dépôt. Les commentaires ancrés (M1-02), stage/revert (M1-03), commit/push/PR (M1-04), ainsi que la qualification native avec un vrai workspace, restent les étapes suivantes.
+- **Limites assumées :** cette tranche ne modifie pas le dépôt. Le stage/revert (M1-03), commit/push/PR (M1-04), ainsi que la qualification native avec un vrai workspace, restent les étapes suivantes.
+
+### Livraison M1-02 — commentaires ancrés sur un diff
+
+- **Ancre :** chaque ligne sélectionnable conserve le dépôt, la révision HEAD observée, le scope et la base, le chemin (et l’ancien chemin en cas de renommage), le côté old/new, le numéro de ligne et l’en-tête du hunk.
+- **UX :** l’utilisateur sélectionne une ligne dans le diff, rédige un commentaire puis l’envoie dans la conversation. Le texte transmis contient un bloc de contexte explicite afin que Muse puisse corriger la bonne ligne sans dépendre d’un copier-coller implicite.
+- **Garde de fraîcheur :** avant l’envoi, Muse relit le statut puis le diff exacts. Si HEAD, le fichier, le hunk, le côté ou la ligne ont bougé, le commentaire est refusé avec une invitation à resélectionner ; aucune ancre n’est déplacée silencieusement.
+- **Validation :** suite Node 384 tests, dont les coordonnées old/new, le format de contexte et le rejet d’une ancre périmée ; build TypeScript/Vite réussi.
+- **Limites assumées :** les commentaires sont envoyés comme contexte d’un tour et ne forment pas encore une boîte de triage persistante. La qualification native avec un vrai moteur et les actions de modification du dépôt restent M1-03/M1-04.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 

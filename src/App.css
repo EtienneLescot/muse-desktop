@@ -2318,6 +2318,130 @@ body.dark .composer textarea::placeholder {
   tab-size: 2;
 }
 
+.review-code {
+  flex: 1;
+  min-height: 140px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  color: var(--text);
+  font: 0.72rem/1.5 var(--font-code);
+}
+
+.review-code-line {
+  display: grid;
+  grid-template-columns: 42px 42px minmax(0, 1fr);
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 1px 8px 1px 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  line-height: inherit;
+}
+
+.review-code-line:hover,
+.review-code-line.selected {
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
+}
+
+.review-code-add {
+  background: color-mix(in srgb, #24a579 9%, transparent);
+}
+
+.review-code-delete {
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+
+.review-line-number {
+  padding-right: 8px;
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+}
+
+.review-code-line code {
+  min-width: 0;
+  overflow-x: visible;
+  white-space: pre;
+}
+
+.review-line-prefix {
+  display: inline-block;
+  width: 1.2em;
+  color: var(--muted);
+  user-select: none;
+}
+
+.review-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--blue) 45%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+}
+
+.review-comment-head,
+.review-comment-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  font-size: 0.76rem;
+}
+
+.review-comment-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 62px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px;
+  font: inherit;
+}
+
+.review-comment-form textarea:focus {
+  border-color: var(--blue);
+  outline: 2px solid color-mix(in srgb, var(--blue) 24%, transparent);
+  outline-offset: 1px;
+}
+
+.review-comment-actions {
+  justify-content: flex-end;
+}
+
+.review-comment-error {
+  margin-right: auto;
+  color: var(--danger);
+  font-size: 0.72rem;
+}
+
+.review-comment-sent {
+  margin-right: auto;
+  color: #24a579;
+  font-size: 0.72rem;
+}
+
+.review-send-comment {
+  border: 1px solid var(--blue);
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  padding: 6px 11px;
+  font-size: 0.75rem;
+}
+
+.review-send-comment:disabled {
+  opacity: 0.55;
+}
+
 .artifacts-tabs {
   display: flex;
   gap: var(--space-1);
