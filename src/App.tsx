@@ -27,6 +27,7 @@ import { TerminalPanel } from "./components/TerminalPanel";
 import { FilesPanel } from "./components/FilesPanel";
 import type { ShareBundle } from "./lib/sharing";
 import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
+import { diagnosticsJson } from "./lib/diagnostics";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -96,6 +97,7 @@ export default function App() {
     reconnectSession,
     reconnectingId,
     connectedIds,
+    evtCount,
     sendInput,
     steerInput,
     unqueueTurn,
@@ -440,6 +442,30 @@ export default function App() {
     />
   );
 
+  function exportDiagnostics(): void {
+    const payload = diagnosticsJson({
+      workspace,
+      sessionCount: sessions.length,
+      runningSessionCount: sessions.filter((session) => session.running).length,
+      connectedSessionCount: connectedIds.length,
+      pendingApprovalCount: activeApprovals.length,
+      pendingInputCount: activeInputRequests.length,
+      pendingSendCount: pendingSends.length,
+      scheduleCount: schedules.length,
+      scheduleRunCount: scheduleRuns.length,
+      eventCount: evtCount,
+      backendMissing,
+      error,
+    });
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `muse-desktop-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className={`app desktop-app ${collapsed ? "nav-collapsed" : ""}`}>
       <a className="skip-link" href="#composer">
@@ -654,6 +680,7 @@ export default function App() {
               onSelectModel={(modelId) => {
                 if (activeId !== null) void setSessionModel(activeId, modelId);
               }}
+              onExportDiagnostics={exportDiagnostics}
               checkPathScope={checkPathScope}
               onClose={() => setSettingsOpen(false)}
             />

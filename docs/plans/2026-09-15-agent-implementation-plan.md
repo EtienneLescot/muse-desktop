@@ -109,6 +109,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** supprimer la capture brute en usage normal. Si diagnostic activé : événements structurés, métadonnées minimales, masquage, rotation et rétention bornées ; export explicite avec aperçu. Utiliser une troncature respectant les frontières UTF-8.
 
+**État au 16/09/2026 :** Settings propose un export JSON local borné (`muse-desktop.diagnostics.v1`) contenant plateforme, backend, compteurs de sessions/événements et dernière erreur rédigée. Aucun chemin de workspace ni contenu de conversation n'est exporté ; les secrets courants sont masqués. La collecte native détaillée et la qualification des erreurs du moteur restent ouvertes.
+
 **Acceptation :** Unicode multioctet à la limite, erreur longue, secret synthétique, volume élevé. Aucun prompt ou secret brut écrit par défaut ; pas de panic. Livrable autonome, sans attendre les autres lots.
 
 ### M0-08 — Contrat du moteur

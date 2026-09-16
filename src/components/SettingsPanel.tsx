@@ -63,6 +63,8 @@ interface Props {
   onRefreshModels: () => void;
   /** Model-picker gesture on the active session (`session/setModel`). */
   onSelectModel: (modelId: string) => void;
+  /** Export bounded local diagnostics without transcript contents. */
+  onExportDiagnostics: () => void;
   /**
    * Existing scope-guard prompt path: out-of-scope attempts go here.
    * Surfaces the backend verdict (and the error-banner prompt) for the path.
@@ -85,6 +87,7 @@ export function SettingsPanel({
   activeSessionId,
   onRefreshModels,
   onSelectModel,
+  onExportDiagnostics,
   checkPathScope,
   onClose,
 }: Props) {
@@ -358,6 +361,9 @@ export function SettingsPanel({
         <div className="settings-row">
           <button type="button" onClick={exportLocalData}>
             Export recovery snapshot
+          </button>
+          <button type="button" onClick={onExportDiagnostics}>
+            Export diagnostics
           </button>
           <button type="button" onClick={() => importInput.current?.click()}>
             Import recovery snapshot
