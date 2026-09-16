@@ -19,6 +19,7 @@
  * pre-filled with the formatted summary text.
  */
 import type { LogEntry } from "./persist";
+import { readStorageJson, removeStorageKey, writeStorageJson } from "./storage.ts";
 
 /** Composer command intercepted at send time (never sent to the model). */
 export const COMPACT_COMMAND = "/compact";
@@ -242,21 +243,11 @@ export function formatSummaryText(s: ThreadSummary): string {
 const summaryKey = (sessionId: string) => `muse-desktop.summary.v1.${sessionId}`;
 
 function read<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return readStorageJson(key, fallback);
 }
 
 function write(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // best-effort like persist.ts: the live session keeps working in memory
-  }
+  writeStorageJson(key, value);
 }
 
 function isValidSummary(s: unknown): s is ThreadSummary {
@@ -284,9 +275,5 @@ export function saveSummary(summary: ThreadSummary): void {
 }
 
 export function dropSummary(sessionId: string): void {
-  try {
-    localStorage.removeItem(summaryKey(sessionId));
-  } catch {
-    // best-effort
-  }
+  removeStorageKey(summaryKey(sessionId));
 }

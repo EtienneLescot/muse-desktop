@@ -4,8 +4,10 @@ import {
   consumeStorageIssues,
   exportStorageSnapshot,
   readStorageJson,
+  readStorageString,
   removeStorageKey,
   writeStorageJson,
+  writeStorageString,
 } from "../src/lib/storage.ts";
 
 function fakeStorage(initial: Record<string, string> = {}) {
@@ -94,5 +96,25 @@ describe("defensive storage facade", () => {
     const { values } = fakeStorage({ "muse-desktop.tmp.v1": "1" });
     assert.equal(removeStorageKey("muse-desktop.tmp.v1"), true);
     assert.equal(values.has("muse-desktop.tmp.v1"), false);
+  });
+
+  it("round-trips scalar values without JSON coercion", () => {
+    const { values } = fakeStorage({ "muse-desktop.theme.v1": "dark" });
+    assert.equal(readStorageString("muse-desktop.theme.v1"), "dark");
+    assert.equal(writeStorageString("muse-desktop.theme.v1", "light"), true);
+    assert.equal(values.get("muse-desktop.theme.v1"), "light");
+  });
+
+  it("reports scalar read and write failures", () => {
+    delete (globalThis as Record<string, unknown>).localStorage;
+    assert.equal(readStorageString("muse-desktop.theme.v1", "light"), "light");
+    assert.equal(consumeStorageIssues()[0]?.kind, "unavailable");
+
+    (globalThis as Record<string, unknown>).localStorage = {
+      getItem: () => null,
+      setItem: () => { throw new Error("quota exceeded"); },
+    };
+    assert.equal(writeStorageString("muse-desktop.theme.v1", "dark"), false);
+    assert.equal(consumeStorageIssues()[0]?.kind, "quota");
   });
 });

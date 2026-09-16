@@ -269,7 +269,6 @@ import {
 } from "../lib/settings";
 import {
   AUTHORIZATION_MODE_KEY,
-  DEFAULT_AUTHORIZATION_MODE,
   automaticApprovalChoice,
   authorizationModeLabel,
   parseAuthorizationMode,
@@ -277,6 +276,7 @@ import {
   type AuthorizationMode,
 } from "../lib/authorization";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
+import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
 import {
@@ -1096,11 +1096,7 @@ export function useMuseSessions(): UseMuseSessions {
   // Global authorization posture. This is intentionally kept separate from
   // sandbox settings: changing the posture must not mutate host capabilities.
   const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
-    try {
-      return parseAuthorizationMode(localStorage.getItem(AUTHORIZATION_MODE_KEY));
-    } catch {
-      return DEFAULT_AUTHORIZATION_MODE;
-    }
+    return parseAuthorizationMode(readStorageString(AUTHORIZATION_MODE_KEY));
   });
   // US-15 allowlist: restored once (survives restarts via localStorage),
   // written through on every change.
@@ -1139,20 +1135,10 @@ export function useMuseSessions(): UseMuseSessions {
   // w-settings: sandbox settings + per-project provider map, restored once
   // (survive restarts via localStorage), written through on every change.
   const [sandbox, setSandboxState] = useState<SandboxSettings>(() => {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      return parseSandboxSettings(raw === null ? null : JSON.parse(raw));
-    } catch {
-      return parseSandboxSettings(null);
-    }
+    return parseSandboxSettings(readStorageJson<unknown>(SETTINGS_KEY, null));
   });
   const [providerMap, setProviderMap] = useState<Record<string, string>>(() => {
-    try {
-      const raw = localStorage.getItem(PROVIDER_MAP_KEY);
-      return parseProviderMap(raw === null ? null : JSON.parse(raw));
-    } catch {
-      return {};
-    }
+    return parseProviderMap(readStorageJson<unknown>(PROVIDER_MAP_KEY, null));
   });
   const [error, setError] = useState<string | null>(null);
   // US-4: local thread summaries (mirror of localStorage) + composer prefill
@@ -1187,19 +1173,13 @@ export function useMuseSessions(): UseMuseSessions {
   // stale auto snapshot instead of stacking new ones.
   const AUTO_MAP_KEY = "muse-desktop.sharing.auto.v1";
   const loadAutoMap = (): Record<string, string> => {
-    try {
-      const raw = localStorage.getItem(AUTO_MAP_KEY);
-      if (raw === null) return {};
-      const parsed: unknown = JSON.parse(raw);
-      if (typeof parsed !== "object" || parsed === null) return {};
-      const out: Record<string, string> = {};
-      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-        if (typeof v === "string" && v.length > 0) out[k] = v;
-      }
-      return out;
-    } catch {
-      return {};
+    const parsed = readStorageJson<unknown>(AUTO_MAP_KEY, null);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "string" && v.length > 0) out[k] = v;
     }
+    return out;
   };
   const autoBundleIds = useRef<Record<string, string> | null>(null);
   if (autoBundleIds.current === null) {
@@ -1674,27 +1654,15 @@ export function useMuseSessions(): UseMuseSessions {
   }, []);
   // w-settings write-through persistence (best-effort, like the rest here).
   useEffect(() => {
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(sandbox));
-    } catch {
-      // best-effort
-    }
+    writeStorageJson(SETTINGS_KEY, sandbox);
   }, [sandbox]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(AUTHORIZATION_MODE_KEY, authorizationMode);
-    } catch {
-      // best-effort
-    }
+    writeStorageString(AUTHORIZATION_MODE_KEY, authorizationMode);
   }, [authorizationMode]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(PROVIDER_MAP_KEY, JSON.stringify(providerMap));
-    } catch {
-      // best-effort
-    }
+    writeStorageJson(PROVIDER_MAP_KEY, providerMap);
   }, [providerMap]);
   // w-integrations write-through persistence.
   useEffect(() => {
@@ -2202,11 +2170,7 @@ export function useMuseSessions(): UseMuseSessions {
           return;
         }
         setAuthorizationModeState(mapped);
-        try {
-          localStorage.setItem(AUTHORIZATION_MODE_KEY, mapped);
-        } catch {
-          // The live host state remains authoritative even when storage is unavailable.
-        }
+        writeStorageString(AUTHORIZATION_MODE_KEY, mapped);
       } catch {
         setError("The host reported an invalid approval mode update.");
       }
@@ -3927,11 +3891,7 @@ export function useMuseSessions(): UseMuseSessions {
     if (created === null) return;
     if (autoBundleIds.current === null) autoBundleIds.current = {};
     autoBundleIds.current[sessionId] = created.bundle.bundleId;
-    try {
-      localStorage.setItem(AUTO_MAP_KEY, JSON.stringify(autoBundleIds.current));
-    } catch {
-      // best-effort like persist.ts
-    }
+    writeStorageJson(AUTO_MAP_KEY, autoBundleIds.current);
     setShareState(created.state);
   }
 

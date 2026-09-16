@@ -1,5 +1,5 @@
 /**
- * US-19 browser + computer-use (scoped): pure logic, zero imports.
+ * US-19 browser + computer-use (scoped): dependency-light pure logic.
  *
  * Runnable under the built-in node:test runner (no React/Tauri/dep imports).
  *
@@ -10,6 +10,8 @@
  * - Image generation is explicitly out of scope (honest message constant for
  *   the UI); no new backend transport is added.
  */
+
+import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 export interface BrowserAnnotation {
   id: string;
@@ -42,40 +44,12 @@ export const IMAGE_GENERATION_NOTE =
   "Image generation is not available in the in-app browser — " +
   "it views pages and anchors comments only.";
 
-function storage(): Storage | null {
-  try {
-    const ls = (globalThis as Record<string, unknown>).localStorage;
-    if (
-      typeof ls === "object" &&
-      ls !== null &&
-      typeof (ls as Storage).getItem === "function"
-    ) {
-      return ls as Storage;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 function read<T>(key: string, fallback: T): T {
-  try {
-    const ls = storage();
-    if (ls === null) return fallback;
-    const raw = ls.getItem(key);
-    if (raw === null) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return readStorageJson(key, fallback);
 }
 
 function write(key: string, value: unknown): void {
-  try {
-    storage()?.setItem(key, JSON.stringify(value));
-  } catch {
-    // Quota or privacy mode: persistence is best-effort.
-  }
+  writeStorageJson(key, value);
 }
 
 function makeId(): string {

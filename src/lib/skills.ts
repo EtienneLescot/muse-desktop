@@ -2,7 +2,7 @@
  * Skills: slash-invokable, auto-suggested, progressively disclosed
  * (US-25).
  *
- * Zero imports: safe to unit-test on the built-in node:test runner.
+ * Dependency-light and safe to unit-test on the built-in node:test runner.
  *
  * - A skill is invoked from the composer with `/skill-name optional args`.
  * - The composer also auto-suggests skills by keyword; every suggestion
@@ -18,6 +18,8 @@
  * best-effort). Under node:test there is no localStorage, so load/save
  * degrade gracefully.
  */
+
+import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 /** Where a skill comes from (builtin plus shareable project/repo/team scopes). */
 export type SkillSource = "builtin" | "repo" | "team" | "project";
@@ -267,44 +269,18 @@ export function setSkillEnabled(
   return { skills: next, changed };
 }
 
-function storage(): Storage | null {
-  try {
-    const g = globalThis as unknown as Record<string, unknown>;
-    const ls = g["localStorage"];
-    if (typeof ls !== "object" || ls === null) return null;
-    const get = (ls as Record<string, unknown>)["getItem"];
-    const set = (ls as Record<string, unknown>)["setItem"];
-    if (typeof get !== "function" || typeof set !== "function") return null;
-    return ls as unknown as Storage;
-  } catch {
-    return null;
-  }
-}
-
 /** Load persisted skill overrides; corrupt/missing data yields []. */
 export function loadSkills(): Skill[] {
-  try {
-    const ls = storage();
-    if (ls === null) return [];
-    const raw = ls.getItem(SKILLS_KEY);
-    if (raw === null) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return (parsed as unknown[]).filter(
-      (s): s is Skill => typeof s === "object" && s !== null,
-    ) as Skill[];
-  } catch {
-    return [];
-  }
+  const parsed = readStorageJson<unknown>(SKILLS_KEY, []);
+  if (!Array.isArray(parsed)) return [];
+  return (parsed as unknown[]).filter(
+    (s): s is Skill => typeof s === "object" && s !== null,
+  ) as Skill[];
 }
 
 /** Persist skill overrides (best-effort: quota/private mode never throws). */
 export function saveSkills(skills: Skill[]): void {
-  try {
-    // Disk discoveries are refreshed from their source and must not become
-    // stale persisted overrides when a SKILL.md is deleted or renamed.
-    storage()?.setItem(SKILLS_KEY, JSON.stringify(skills.filter((skill) => skill.discovered !== true)));
-  } catch {
-    // best-effort persistence only
-  }
+  // Disk discoveries are refreshed from their source and must not become
+  // stale persisted overrides when a SKILL.md is deleted or renamed.
+  writeStorageJson(SKILLS_KEY, skills.filter((skill) => skill.discovered !== true));
 }

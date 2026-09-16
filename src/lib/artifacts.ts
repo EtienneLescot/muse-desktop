@@ -1,7 +1,7 @@
 /**
  * US-12 + US-21: thread summary recap + versioned artifacts.
  *
- * Zero imports: runnable under node:test with no framework.
+ * Dependency-light and runnable under node:test with no framework.
  *
  * - `buildThreadRecap` derives an auto recap from a thread log (message
  *   counts per role, files mentioned, decision-like lines). Local and
@@ -18,6 +18,8 @@
  *
  * Persisted per thread under `muse-desktop.artifacts.v1.<sessionId>`.
  */
+
+import { readStorageJson, removeStorageKey, writeStorageJson } from "./storage.ts";
 
 /** Minimal log shape (structural: accepts persist.ts LogEntry). */
 export interface ArtifactLogEntry {
@@ -321,21 +323,11 @@ const artifactsKey = (sessionId: string) =>
   `muse-desktop.artifacts.v1.${sessionId}`;
 
 function read<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return readStorageJson(key, fallback);
 }
 
 function write(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // best-effort like persist.ts: the live session keeps working in memory
-  }
+  writeStorageJson(key, value);
 }
 
 function isValidVersion(v: unknown): v is ArtifactVersion {
@@ -380,9 +372,5 @@ export function saveArtifacts(sessionId: string, artifacts: Artifact[]): void {
 }
 
 export function dropArtifacts(sessionId: string): void {
-  try {
-    localStorage.removeItem(artifactsKey(sessionId));
-  } catch {
-    // best-effort
-  }
+  removeStorageKey(artifactsKey(sessionId));
 }

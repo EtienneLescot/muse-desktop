@@ -74,6 +74,21 @@ export function readStorageJson<T>(key: string, fallback: T): T {
   }
 }
 
+/** Read a namespaced scalar without JSON parsing (for theme/feature flags). */
+export function readStorageString(key: string, fallback: string | null = null): string | null {
+  const store = storage();
+  if (store === null) {
+    record(key, "unavailable", "local storage is unavailable");
+    return fallback;
+  }
+  try {
+    return store.getItem(key) ?? fallback;
+  } catch (error) {
+    record(key, "unavailable", `local storage read failed: ${String(error)}`);
+    return fallback;
+  }
+}
+
 /** Write JSON without replacing the previous value when storage rejects it. */
 export function writeStorageJson(key: string, value: unknown): boolean {
   const store = storage();
@@ -83,6 +98,22 @@ export function writeStorageJson(key: string, value: unknown): boolean {
   }
   try {
     store.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (error) {
+    record(key, "quota", `local storage write failed: ${String(error)}`);
+    return false;
+  }
+}
+
+/** Write a namespaced scalar without changing its representation. */
+export function writeStorageString(key: string, value: string): boolean {
+  const store = storage();
+  if (store === null) {
+    record(key, "unavailable", "local storage is unavailable");
+    return false;
+  }
+  try {
+    store.setItem(key, value);
     return true;
   } catch (error) {
     record(key, "quota", `local storage write failed: ${String(error)}`);

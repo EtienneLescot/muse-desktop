@@ -5,7 +5,7 @@
  *
  * Well-known local config paths read by the importer (documented here so
  * the UI can list them; the host reads the file bytes, this module only
- * parses + summarizes — dependency-free, no imports, `node:test`-safe):
+ * parses + summarizes — dependency-light and `node:test`-safe):
  *
  * Muse CLI:
  *   - ~/.muse/config.json          (CLI global config)
@@ -25,6 +25,8 @@
  * Persistence lives under `muse-desktop.import.v1` (imported resumable
  * sessions only); existing sessions/logs are never touched by an import.
  */
+
+import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 export const IMPORT_KEY = "muse-desktop.import.v1";
 
@@ -58,21 +60,11 @@ export interface ImportSummary {
 }
 
 function readKey(key: string): unknown {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return null;
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
+  return readStorageJson<unknown>(key, null);
 }
 
 function writeKey(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // best-effort like persist.ts
-  }
+  writeStorageJson(key, value);
 }
 
 function isValidResumable(s: unknown): s is ResumableSession {
