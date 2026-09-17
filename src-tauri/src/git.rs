@@ -88,6 +88,19 @@ pub struct GitWorktreeResult {
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitWorktreeInspection {
+    pub repo_root: String,
+    pub path: String,
+    pub branch: Option<String>,
+    pub head: Option<String>,
+    pub clean: bool,
+    pub conflicted: bool,
+    pub file_count: usize,
+    pub observed_at: u64,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct GitDiffHunk {
     pub header: String,
     pub old_start: u64,
@@ -721,7 +734,7 @@ pub fn create_worktree(
 /// below `.muse/worktrees/`. This operation is intentionally forceful only
 /// after the UI's explicit confirmation; paths outside the managed root are
 /// rejected before Git runs.
-pub fn remove_worktree(root: &Path, path: &str) -> Result<(), String> {
+fn resolve_managed_worktree(root: &Path, path: &str) -> Result<(PathBuf, PathBuf), String> {
     let canonical = root
         .canonicalize()
         .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
@@ -729,11 +742,47 @@ pub fn remove_worktree(root: &Path, path: &str) -> Result<(), String> {
     let managed_root = managed_root
         .canonicalize()
         .map_err(|e| format!("cannot resolve managed worktree root: {e}"))?;
-    let candidate = Path::new(path.trim())
+    let raw_candidate = Path::new(path.trim());
+    let candidate_path = if raw_candidate.is_absolute() {
+        raw_candidate.to_path_buf()
+    } else {
+        canonical.join(raw_candidate)
+    };
+    let candidate = candidate_path
         .canonicalize()
         .map_err(|e| format!("cannot resolve worktree path: {e}"))?;
-    if candidate == managed_root || !candidate.starts_with(&managed_root) {
+    if candidate == managed_root || !candidate.starts_with(&managed_root) || !candidate.is_dir() {
         return Err("worktree path is outside .muse/worktrees".to_string());
+    }
+    Ok((canonical, candidate))
+}
+
+/// Inspect one managed worktree before a retention or handoff action.
+pub fn inspect_worktree(root: &Path, path: &str) -> Result<GitWorktreeInspection, String> {
+    let (canonical, candidate) = resolve_managed_worktree(root, path)?;
+    let snapshot = status(&candidate)?;
+    Ok(GitWorktreeInspection {
+        repo_root: canonical.display().to_string(),
+        path: candidate.display().to_string(),
+        branch: snapshot.branch,
+        head: snapshot.head,
+        clean: snapshot.files.is_empty(),
+        conflicted: snapshot.files.iter().any(|file| file.conflicted),
+        file_count: snapshot.files.len(),
+        observed_at: now_ms(),
+    })
+}
+
+/// Remove a managed worktree only after its working tree is clean. Dirty
+/// checkouts are preserved so a mistaken cleanup cannot discard user work.
+pub fn remove_worktree(root: &Path, path: &str) -> Result<(), String> {
+    let (canonical, candidate) = resolve_managed_worktree(root, path)?;
+    let snapshot = status(&candidate)?;
+    if !snapshot.files.is_empty() {
+        return Err(
+            "worktree has uncommitted changes; inspect and commit or clean it before removal"
+                .to_string(),
+        );
     }
     let relative = candidate
         .strip_prefix(&canonical)
@@ -1034,6 +1083,25 @@ mod tests {
         remove_worktree(&root, &created.path).unwrap();
         assert!(!Path::new(&created.path).exists());
         assert!(remove_worktree(&root, root.to_string_lossy().as_ref()).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn inspect_reports_dirty_worktree_and_cleanup_preserves_it() {
+        let root = fixture_repo();
+        let created = create_worktree(&root, "task/inspect", ".muse/worktrees/inspect", "HEAD")
+            .unwrap();
+        fs::write(Path::new(&created.path).join("main.txt"), "changed\n").unwrap();
+        let inspected = inspect_worktree(&root, &created.path).unwrap();
+        assert!(!inspected.clean);
+        assert_eq!(inspected.file_count, 1);
+        assert!(remove_worktree(&root, &created.path).is_err());
+        let restored = Command::new("git")
+            .args(["-C", &created.path, "restore", "--", "main.txt"])
+            .output()
+            .unwrap();
+        assert!(restored.status.success());
+        remove_worktree(&root, &created.path).unwrap();
         let _ = fs::remove_dir_all(root);
     }
 

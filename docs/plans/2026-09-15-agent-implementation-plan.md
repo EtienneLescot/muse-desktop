@@ -345,7 +345,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** worktree store, archive, service Git. Dépend M2-03/05.
 
-**Travail :** distinguer archiver conversation et supprimer checkout ; détecter dirty, processus actif et références restantes. Politique de rétention configurable ; aperçu des cibles résolues avant suppression.
+**État :** le panneau expose **Inspect** pour relire le statut Git d'un checkout géré (branche, changements, conflits, horodatage). La suppression reste distincte de l'archivage d'une conversation, exige une confirmation et le service Rust refuse tout worktree sale avant `git worktree remove`.
+
+**Reste :** détection de processus actifs et de références restantes, politique de rétention configurable, aperçu multi-cibles et reprise d'un nettoyage interrompu. Ne jamais transformer un record archivé en suppression implicite.
 
 **Acceptation :** worktree propre nettoyé, sale conservé, cible hors racine refusée, interruption du nettoyage récupérable.
 

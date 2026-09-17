@@ -81,6 +81,7 @@ export default function App() {
     createWorktree,
     worktrees,
     removeWorktree,
+    inspectWorktree,
     runWorktreeSetup,
     setActive,
     startSession,
@@ -1105,6 +1106,7 @@ export default function App() {
                             onCreateWorktree={createWorktree}
                             worktrees={worktrees}
                             onRemoveWorktree={removeWorktree}
+                            onInspectWorktree={inspectWorktree}
                             onRunSetup={runWorktreeSetup}
                             sourceStatus={gitReview(active.session_id).status}
                           />{" "}

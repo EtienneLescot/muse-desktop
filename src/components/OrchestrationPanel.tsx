@@ -10,6 +10,7 @@ import {
   worktreeShellSnippet,
   type WorktreePlan,
   type WorktreeRecord,
+  type WorktreeInspection,
   type WorktreeSetupResult,
 } from "../lib/worktrees";
 import { CapabilityBadge } from "./CapabilityBadge";
@@ -29,6 +30,10 @@ interface Props {
     sessionId: string,
     record: WorktreeRecord,
   ) => Promise<boolean>;
+  onInspectWorktree: (
+    sessionId: string,
+    record: WorktreeRecord,
+  ) => Promise<WorktreeInspection | null>;
   onRunSetup: (
     sessionId: string,
     record: WorktreeRecord,
@@ -49,6 +54,7 @@ export function OrchestrationPanel({
   onCreateWorktree,
   worktrees,
   onRemoveWorktree,
+  onInspectWorktree,
   onRunSetup,
   sourceStatus,
 }: Props) {
@@ -66,6 +72,10 @@ export function OrchestrationPanel({
   const [handoffByBranch, setHandoffByBranch] = useState<
     Record<string, HandoffPlan>
   >({});
+  const [inspectionByBranch, setInspectionByBranch] = useState<
+    Record<string, WorktreeInspection>
+  >({});
+  const [inspecting, setInspecting] = useState<string | null>(null);
 
   const plans = useMemo(() => planWorktrees(agents), [agents]);
   const snippet = useMemo(() => worktreeShellSnippet(plans), [plans]);
@@ -129,6 +139,16 @@ export function OrchestrationPanel({
     setHandoffByBranch((current) => ({ ...current, [record.branch]: plan }));
   }
 
+  async function inspect(record: WorktreeRecord): Promise<void> {
+    if (inspecting !== null) return;
+    setInspecting(record.branch);
+    const result = await onInspectWorktree(sessionId, record);
+    if (result !== null) {
+      setInspectionByBranch((current) => ({ ...current, [record.branch]: result }));
+    }
+    setInspecting(null);
+  }
+
   return (
     <section className="orchestration" aria-label="Agent worktrees">
       <header className="orchestration-head">
@@ -175,6 +195,17 @@ export function OrchestrationPanel({
                 >
                   Created
                 </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const record = recordFor(p);
+                    if (record) void inspect(record);
+                  }}
+                  disabled={inspecting !== null}
+                  title="Inspect Git status before cleanup"
+                >
+                  {inspecting === recordFor(p)?.branch ? "Inspecting…" : "Inspect"}
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -238,6 +269,20 @@ export function OrchestrationPanel({
                     <ol>
                       {handoffByBranch[p.branch].steps.map((step) => <li key={step}>{step}</li>)}
                     </ol>
+                  </details>
+                )}
+                {inspectionByBranch[p.branch] && (
+                  <details className="orchestration-inspection">
+                    <summary>
+                      {inspectionByBranch[p.branch].clean ? "Clean worktree" : "Changes detected"}
+                      {inspectionByBranch[p.branch].branch
+                        ? ` · ${inspectionByBranch[p.branch].branch}`
+                        : ""}
+                    </summary>
+                    <p>
+                      {inspectionByBranch[p.branch].fileCount} changed file(s)
+                      {inspectionByBranch[p.branch].conflicted ? " · conflicts present" : ""} · observed {new Date(inspectionByBranch[p.branch].observedAt).toLocaleTimeString()}
+                    </p>
                   </details>
                 )}
               </>

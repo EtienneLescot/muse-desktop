@@ -172,6 +172,7 @@ import {
   validateSetupCommand,
   type WorktreePlan,
   type WorktreeRecord,
+  type WorktreeInspection,
   type WorktreeSetupResult,
 } from "../lib/worktrees";
 export type {
@@ -589,6 +590,11 @@ interface UseMuseSessions {
   worktrees: WorktreeRecord[];
   /** Remove one managed worktree after explicit user confirmation in the UI. */
   removeWorktree: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
+  /** M2-06: inspect one worktree before cleanup or handoff. */
+  inspectWorktree: (
+    sessionId: string,
+    record: WorktreeRecord,
+  ) => Promise<WorktreeInspection | null>;
   /** M2-04: run one user-entered setup command in an existing managed worktree. */
   runWorktreeSetup: (
     sessionId: string,
@@ -2178,6 +2184,25 @@ export function useMuseSessions(): UseMuseSessions {
       } catch (e) {
         setError(`worktree removal failed: ${e instanceof Error ? e.message : String(e)}`);
         return false;
+      }
+    },
+    [],
+  );
+
+  const inspectWorktree = useCallback(
+    async (
+      sessionId: string,
+      record: WorktreeRecord,
+    ): Promise<WorktreeInspection | null> => {
+      try {
+        setError(null);
+        return await invoke<WorktreeInspection>("git_worktree_inspect", {
+          sessionId,
+          path: record.path,
+        });
+      } catch (e) {
+        setError(`worktree inspection failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
       }
     },
     [],
@@ -4183,6 +4208,7 @@ export function useMuseSessions(): UseMuseSessions {
     createWorktree,
     worktrees,
     removeWorktree,
+    inspectWorktree,
     runWorktreeSetup,
     startSession,
     startSessionInWorkspace,
