@@ -72,7 +72,12 @@ export function StreamView({ entries, sessionId, controls }: Props) {
   }, [sessionId]);
 
   useEffect(() => {
-    if (stickRef.current) bottomRef.current?.scrollIntoView({ block: "end" });
+    // Streaming can update this list many times per second. Instant
+    // alignment avoids stacking smooth-scroll animations and keeps the
+    // latest token visible without starving input/paint work.
+    if (stickRef.current) {
+      bottomRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+    }
   }, [entries]);
 
   function onScroll(e: React.UIEvent<HTMLDivElement>): void {
@@ -110,7 +115,14 @@ export function StreamView({ entries, sessionId, controls }: Props) {
   if (sessionId === null) return null;
 
   return (
-    <div className="stream" onScroll={onScroll} role="log" aria-live="off">
+    <div
+      className="stream"
+      onScroll={onScroll}
+      role="log"
+      aria-live="off"
+      aria-label="Conversation messages"
+      data-entry-count={entries.length}
+    >
       {entries.length === 0 && (
         <p className="muted">
           Start a conversation. Your history is saved locally.
@@ -292,7 +304,7 @@ export function StreamView({ entries, sessionId, controls }: Props) {
           onClick={() => {
             stickRef.current = true;
             setAwayFromBottom(false);
-            bottomRef.current?.scrollIntoView({ block: "end" });
+            bottomRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
           }}
         >
           ↓ Latest messages

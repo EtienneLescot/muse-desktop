@@ -153,7 +153,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-10 | Réorienter une exécution ou mettre un message en attente | Adapté | Partielle | Locale | Unitaire | Queue MSP par défaut et disposition `queued`/`steered` visibles ; restent le pilotage explicite, unqueue et ordre persistant |
 | M1-11 | Choisir un modèle disponible et suivre le contexte | Adapté | Présente | Câblée | Unitaire | Consolider tests live list/setModel/compact, erreurs et persistance ; fallback explicitement non live ; état confirmé par le moteur |
 | M1-12 | Retrouver et organiser les conversations | Adapté | Présente | Câblée | Unitaire | Recherche, épinglage, ordre manuel et indicateurs non lus persistants livrés ; la virtualisation des listes reste conditionnée aux mesures de performance |
-| M1-13 | Lire une longue conversation confortablement | Adapté | Présente | Partielle | UI | Vérifier rendu Markdown/code/liens et outils ; mesurer longue session, mémoire et scroll ; virtualiser si les mesures l'exigent |
+| M1-13 | Lire une longue conversation confortablement | Adapté | Présente | Partielle | UI | Containment de rendu et scroll instantané livrés pour les longues listes ; reste à mesurer une session native de 2 000 entrées, mémoire/latence et décider d'une fenêtre virtuelle réelle si nécessaire |
 
 Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components/ArtifactsPane.tsx), [messages](../src/components/MessageContent.tsx), [mentions](../src/lib/mentions.ts), [shell applicatif](../src/App.tsx).
 
@@ -252,6 +252,14 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **SSOT :** `StoredSession` porte `unread` et `sortOrder`, le hook persiste les changements et la sidebar ne conserve aucun ordre local.
 - **Validation :** tri par rang, déplacement, marqueur non lu et restauration sont couverts par les tests Node ; TypeScript et build Vite restent verts.
 - **Limites :** la virtualisation d’une longue liste reste conditionnée à une mesure réelle de mémoire et de temps de rendu.
+
+### Livraison M1-13 — rendu de longues conversations
+
+- **Rendu :** chaque message conserve son nœud et ses attributs d’accessibilité, mais le navigateur peut ignorer la mise en page et la peinture des messages hors viewport grâce à `content-visibility: auto` et `contain-intrinsic-size`. Cette optimisation fonctionne aussi pour les blocs Thinking repliables, les outils et les sous-agents.
+- **Scroll :** les mises à jour de streaming utilisent un alignement instantané au dernier message ; les animations de scroll ne s’empilent plus à chaque delta et le bouton **Latest messages** reste explicite lorsque l’utilisateur lit plus haut.
+- **Observabilité :** le journal porte `data-entry-count` afin de mesurer en UI native la taille de session, et `aria-label="Conversation messages"` garde une cible stable pour les essais assistifs.
+- **Limites :** le DOM reste volontairement complet pour préserver recherche, sélection et reprise de scroll. Une fenêtre virtuelle avec mesure de hauteur ne sera ajoutée qu’après un scénario natif de 2 000 entrées et la collecte mémoire/latence prévue par M1-13.
+- **Validation :** TypeScript, build Vite et suite Node complets restent verts ; la mesure native et la qualification lecteur d’écran sont encore à produire.
 
 ### Livraison M2-01 — racines de projet
 

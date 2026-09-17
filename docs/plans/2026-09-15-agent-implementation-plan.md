@@ -285,7 +285,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** StreamView/MessageContent, blocs et CSS. Dépend M0-14.
 
-**Travail :** mesurer temps de rendu/mémoire/scroll sur fixture longue ; virtualiser seulement si nécessaire. Liens/code/outils accessibles, état « nouveaux messages » sans saut si l'utilisateur lit plus haut.
+**Travail :** mesurer temps de rendu/mémoire/scroll sur fixture longue. La première optimisation applique `content-visibility: auto`, une taille intrinsèque de secours et un scroll instantané pendant le streaming ; le DOM reste complet pour préserver recherche, sélection/copie et les blocs accessibles. Exposer un compteur d’entrées stable pour les mesures UI natives, puis virtualiser seulement si les budgets mesurés l’exigent. Liens/code/outils accessibles, état « nouveaux messages » sans saut si l'utilisateur lit plus haut.
 
 **Acceptation :** streaming entrelacé, sélection/copie, blocs volumineux, retour bas de page et thème ; fixer les budgets mesurés dans la PR.
 

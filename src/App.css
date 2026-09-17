@@ -538,7 +538,16 @@ body.dark .avatar {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  scroll-behavior: smooth;
+  /* Streaming updates should never queue animated scroll work. */
+  scroll-behavior: auto;
+}
+
+/* M1-13: let the browser skip layout/paint for messages outside the viewport
+   while retaining their DOM, semantics and native find/select behaviour. */
+.stream > .msg {
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: 0 112px;
 }
 
 .msg .role {
