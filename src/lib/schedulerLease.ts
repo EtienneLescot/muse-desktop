@@ -4,10 +4,11 @@
  * A lease is deliberately small and expiring: a crashed renderer cannot block
  * scheduling forever, and only the owner that currently holds the lease may
  * renew or release it. The localStorage read-back narrows the race between
- * two windows starting at the same time; native scheduling remains a later
- * host-level concern.
+ * two windows starting at the same time; a Tauri build also delegates the
+ * process-level claim to the native supervisor when available.
  */
 import { readStorageJson, removeStorageKey, writeStorageJson } from "./storage.ts";
+import { isTauriRuntime } from "./env.ts";
 
 export const SCHEDULER_LEASE_KEY = "muse-desktop.scheduler-lease.v1";
 export const DEFAULT_SCHEDULER_LEASE_TTL_MS = 30_000;
@@ -15,6 +16,64 @@ export const DEFAULT_SCHEDULER_LEASE_TTL_MS = 30_000;
 export interface SchedulerLease {
   ownerId: string;
   expiresAt: number;
+}
+
+export interface NativeSchedulerLeaseResult {
+  schema: string;
+  acquired: boolean;
+  ownerId?: string;
+  expiresAt?: number;
+  native: boolean;
+}
+
+/**
+ * Ask the native supervisor for a process-level lease. `null` means this
+ * runtime does not expose the command (web preview or an older build), so
+ * callers should retain the localStorage fallback. A `false` result is a
+ * real competing process and must not fall back to localStorage.
+ */
+export async function tryAcquireNativeSchedulerLease(
+  ownerId: string,
+  leaseTtlMs = DEFAULT_SCHEDULER_LEASE_TTL_MS,
+): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const result = await invoke<NativeSchedulerLeaseResult>("scheduler_claim", {
+      ownerId,
+      leaseTtlMs,
+    });
+    return result?.native === true ? result.acquired === true : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function renewNativeSchedulerLease(
+  ownerId: string,
+  leaseTtlMs = DEFAULT_SCHEDULER_LEASE_TTL_MS,
+): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const result = await invoke<NativeSchedulerLeaseResult>("scheduler_renew", {
+      ownerId,
+      leaseTtlMs,
+    });
+    return result?.native === true ? result.acquired === true : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function releaseNativeSchedulerLease(ownerId: string): Promise<void> {
+  if (!isTauriRuntime()) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("scheduler_release", { ownerId });
+  } catch {
+    // Teardown is best effort; dropping the native file handle is crash-safe.
+  }
 }
 
 function validLease(value: unknown): value is SchedulerLease {
