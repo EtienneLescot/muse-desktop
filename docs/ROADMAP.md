@@ -118,7 +118,7 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 
 ### Livraison M0-13 — états de capacité honnêtes (première passe)
 
-- **M0-13a — vocabulaire commun** : `CapabilityBadge` et `capability.ts` distinguent `Available`, `Local`, `Manual` et `Not connected`, avec une raison consultable au survol. Les états restent informatifs et n'ajoutent pas de fausse confirmation.
+- **M0-13a — vocabulaire commun** : `CapabilityBadge` et `capability.ts` distinguent `Available`, `Local`, `Manual` et `Not connected`, avec une raison consultable au survol et un libellé accessible complet exposant l'état et sa portée. Les états restent informatifs et n'ajoutent pas de fausse confirmation.
 - **M0-13b — surfaces couvertes** : connecteurs (catalogue local), channels (transport absent), exports (local uniquement), worktrees (préparation manuelle), index workspace (local) et import CLI/IDE (manuel) affichent leur niveau réel.
 - **M0-13c — limite restante** : l'audit clic → effet réel des panneaux secondaires et du backend absent reste à exécuter ; aucune action d'installation ou de connexion n'est ajoutée par ce lot.
 - **Validation** : tests unitaires du vocabulaire et build frontend verts.

@@ -171,6 +171,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** définir présentation commune `available/local/manual/unavailable` avec raison et action suivante. Le composant partagé est maintenant appliqué aux connecteurs, channels, exports, worktrees, index local et import CLI/IDE ; les badges restent limités aux surfaces dont la capacité peut être confondue avec une connexion réelle. Remplacer promesses « installé/connecté/restauré » lorsque seul un registre ou un préremplissage change. Ne pas ajouter un badge permanent à chaque élément fonctionnel.
 
+**État au 17/09/2026 :** le badge partagé expose aussi un nom accessible complet (`état : raison`) afin que la portée d'une capacité ne dépende pas du survol ou de la couleur. Le vocabulaire visuel et le libellé d'assistance restent issus du même helper pur.
+
 **Acceptation :** audit clic → effet réel sur chaque action ; aucune confirmation fictive. Tester backend absent et capacités refusées. Dépend de l'inventaire M0-08.
 
 ### M0-14 — Harnais et CI
