@@ -12,6 +12,7 @@ import {
 import {
   classifyStreamHealth,
   formatElapsed,
+  streamEventLabel,
   streamHealthLabel,
   type StreamHealth,
 } from "../lib/streamHealth";
@@ -40,6 +41,8 @@ interface Props {
   running?: boolean;
   stopping?: boolean;
   lastEventAt?: number | null;
+  /** Last transport event observed, used only for a compact progress hint. */
+  lastEventKind?: string | null;
   /** A permission/input decision was accepted; awaiting the next host event. */
   resumePendingAt?: number | null;
   pendingApprovals?: number;
@@ -95,6 +98,7 @@ export function StreamView({
   running = false,
   stopping = false,
   lastEventAt = null,
+  lastEventKind = null,
   resumePendingAt = null,
   pendingApprovals = 0,
   pendingInputs = 0,
@@ -340,15 +344,18 @@ export function StreamView({
     now,
   });
   const elapsed = lastEventAt === null ? null : formatElapsed(now - lastEventAt);
+  const eventLabel = streamEventLabel(lastEventKind);
 
   function healthDetail(status: StreamHealth): string {
     switch (status) {
       case "working":
-        return elapsed === null
-          ? "Live updates are arriving."
-          : `Last update ${elapsed} ago.`;
+        return `${elapsed === null ? "Live updates are arriving." : `Last update ${elapsed} ago.`}${
+          eventLabel ? ` · ${eventLabel}.` : ""
+        }`;
       case "resuming":
-        return "Your decision was accepted; waiting for the host to continue the turn.";
+        return `Your decision was accepted; waiting for the host to continue the turn.${
+          eventLabel ? ` Last event: ${eventLabel}.` : ""
+        }`;
       case "stopping":
         return "The stop request was accepted; waiting for the desktop host to confirm it.";
       case "waiting-approval":
@@ -358,7 +365,9 @@ export function StreamView({
       case "waiting-host":
         return "The turn is marked active, but no host event has reached this window yet.";
       case "stalled":
-        return `No host event for ${elapsed ?? "a while"}. Muse may still be working.`;
+        return `No host event for ${elapsed ?? "a while"}. Muse may still be working.${
+          eventLabel ? ` Last event: ${eventLabel}.` : ""
+        }`;
       case "idle":
         return "";
     }
@@ -485,6 +494,7 @@ export function StreamView({
         // first delta coalesces into the empty text.
         const reflexive = e.open === true && e.text === "";
         if (e.role === "thinking") {
+          const thinkingElapsed = e.open ? formatElapsed(Math.max(0, now - e.ts)) : null;
           return (
             <details
               key={e.id}
@@ -499,6 +509,7 @@ export function StreamView({
                 <span className="role">{roleLabel(e)}</span>
                 <span className="msg-summary">
                   {reflexive ? REFLEXIVE_LABEL : "Thinking"}
+                  {thinkingElapsed ? ` · ${thinkingElapsed}` : ""}
                 </span>
                 <span className="ts">{timeOf(e.ts)}</span>
               </summary>

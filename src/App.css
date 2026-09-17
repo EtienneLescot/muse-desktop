@@ -742,7 +742,7 @@ body.dark .avatar {
 .stream-health-copy span {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .stream-health-actions {

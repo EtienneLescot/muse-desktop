@@ -1078,6 +1078,7 @@ export default function App() {
                     running={active.running}
                     stopping={stoppingBySession[active.session_id] === true}
                     lastEventAt={activeStreamActivity?.lastEventAt ?? null}
+                    lastEventKind={activeStreamActivity?.lastEventKind ?? null}
                     resumePendingAt={activeResumePending?.requestedAt ?? null}
                     pendingApprovals={activeApprovals.length}
                     pendingInputs={activeInputRequests.length}

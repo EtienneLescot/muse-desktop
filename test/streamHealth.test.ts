@@ -4,6 +4,7 @@ import {
   STREAM_STALE_AFTER_MS,
   classifyStreamHealth,
   formatElapsed,
+  streamEventLabel,
   streamHealthLabel,
 } from "../src/lib/streamHealth.ts";
 
@@ -71,5 +72,12 @@ describe("stream health", () => {
     assert.equal(streamHealthLabel("stalled"), "No recent host update");
     assert.equal(formatElapsed(0), "0s");
     assert.equal(formatElapsed(61_000), "1m 1s");
+  });
+
+  it("maps transport events to safe progress hints", () => {
+    assert.equal(streamEventLabel("thinking"), "reasoning update");
+    assert.equal(streamEventLabel("approval/resolved"), "authorization resolved");
+    assert.equal(streamEventLabel("future/new_event"), "future new event");
+    assert.equal(streamEventLabel(""), null);
   });
 });
