@@ -323,10 +323,11 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 
 ### Livraison M2-02 — paramètres projet effectifs
 
-- **Héritage :** la valeur globale sert de défaut et les overrides du projet restent calculés par `settingsFor`, avec la source visible dans le diff (`g:`) et le contexte de la conversation.
+- **Héritage :** la valeur globale sert de défaut et les overrides du projet sont calculés par le helper SSOT `settingsForThread`, avec la source visible dans le diff (`g:`) et le contexte de la conversation.
 - **Modèle :** lors de la création d’une session, Muse transmet le modèle global ou projet effectif via `session/setModel` après l’admission `session/start`. La valeur `default` laisse le choix natif du moteur intact.
-- **Limites explicites :** le contrat MSP vérifié n’expose pas encore de mutation sessionnelle pour sandbox, réseau ou auto-compact. L’UI les affiche comme préférences effectives sans prétendre les appliquer au moteur ; leur branchement attend une capacité prouvée et testée.
-- **Validation :** les tests de résolution/diff/persistance des overrides, TypeScript, build Vite et 57 tests Rust restent verts.
+- **Auto-compact :** le seuil de compactage local respecte maintenant `autoCompact` après résolution globale/projet ; `/compact` reste toujours une action explicite. Le choix est appliqué par conversation sans modifier le host.
+- **Limites explicites :** le contrat MSP vérifié n’expose pas encore de mutation sessionnelle pour sandbox ou réseau. L’UI les affiche comme préférences effectives sans prétendre les appliquer au moteur ; leur branchement attend une capacité prouvée et testée.
+- **Validation :** les tests de résolution/diff/persistance et d’isolement par conversation, TypeScript, build Vite et la suite Rust restent verts.
 
 ### Livraison M2-03 — création de worktrees Git
 

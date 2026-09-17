@@ -18,6 +18,7 @@ import {
   PROJECT_LIMIT_MESSAGE,
   projectOfThread,
   resolveProjectSettings,
+  settingsForThread,
   sanitizeProjects,
   setProjectOverride,
   threadsInProject,
@@ -190,6 +191,23 @@ describe("US-30 settings override + diff", () => {
     );
     projects = setProjectOverride(projects, "p0", "networkDefault", undefined);
     assert.deepEqual(diffProjectSettings(DEFAULT_PROJECT_SETTINGS, projects[0].settings), []);
+  });
+
+  it("resolves one conversation from its attached project", () => {
+    let projects = fill(2);
+    projects = setProjectOverride(projects, "p1", "model", "gpt-5.6");
+    assert.equal(
+      settingsForThread(DEFAULT_PROJECT_SETTINGS, projects, { s1: "p1" }, "s1").model,
+      "gpt-5.6",
+    );
+    assert.deepEqual(
+      settingsForThread(DEFAULT_PROJECT_SETTINGS, projects, { s1: "p1" }, "unattached"),
+      DEFAULT_PROJECT_SETTINGS,
+    );
+    assert.deepEqual(
+      settingsForThread(DEFAULT_PROJECT_SETTINGS, projects, { s1: "missing" }, "s1"),
+      DEFAULT_PROJECT_SETTINGS,
+    );
   });
 });
 

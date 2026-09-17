@@ -179,6 +179,7 @@ import {
   resolveProjectSettings,
   setProjectOverride as setProjectOverrideRow,
   updateProject as updateProjectRow,
+  settingsForThread,
   type Project,
   type ProjectSettings,
   type ThreadProjectMap,
@@ -209,6 +210,7 @@ export {
   DEFAULT_PROJECT_SETTINGS,
   diffProjectSettings,
   resolveProjectSettings,
+  settingsForThread,
 } from "../lib/projects";
 // US-9 automations/scheduled + review queue: pure schedule logic (cron,
 // due → review enqueue, approve/discard, target resolution). No workflow/*
@@ -2231,11 +2233,16 @@ export function useMuseSessions(): UseMuseSessions {
   // loadSummary guard stops the loop on the re-render the note triggers.
   useEffect(() => {
     for (const [sid, log] of Object.entries(logs)) {
-      if (log.length >= COMPACT_AUTO_ENTRIES && loadSummary(sid) === null) {
+      const effective = settingsForThread(globalSettings, projects, threadProjects, sid);
+      if (
+        effective.autoCompact &&
+        log.length >= COMPACT_AUTO_ENTRIES &&
+        loadSummary(sid) === null
+      ) {
         doCompact(sid);
       }
     }
-  }, [logs, doCompact]);
+  }, [logs, doCompact, globalSettings, projects, threadProjects]);
 
   // US-4 server half: host occupancy per session (latest triple wins; the
   // host only emits on change). Never persisted — it is live host state.
