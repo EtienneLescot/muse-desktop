@@ -26,13 +26,16 @@
  *   node scripts/native-smoke.mjs --exercise-isolation
  */
 import { mkdtemp, rm } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const PROCESS_EXIT_TIMEOUT_MS = 2_000;
+const execFileAsync = promisify(execFile);
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_BINARY = join(
   REPO_ROOT,
@@ -148,7 +151,7 @@ function createHost(binary, workspace, label) {
   });
   child.once("exit", (code, signal) => {
     closed = true;
-    resolveExit();
+    resolveExit(true);
     const detail = stderr.trim() ? ` (${stderr.trim().replace(/\s+/g, " ")})` : "";
     closePending(new Error(`${label} exited before the response (code ${code ?? "?"}, signal ${signal ?? "?"})${detail}`));
   });
@@ -174,27 +177,61 @@ function createHost(binary, workspace, label) {
     if (!closed) {
       closed = true;
       closePending(new Error(`${label} closed`));
-      child.kill();
+      if (process.platform === "win32") {
+        // Kill the complete sidecar tree before the parent can exit and lose
+        // the PID that taskkill needs to reach WSL descendants.
+        await forceTerminate(child);
+      } else {
+        child.kill();
+      }
     }
-    await Promise.race([
+    const exitedInTime = await Promise.race([
       exited,
-      new Promise((resolve) => setTimeout(resolve, 2_000)),
+      new Promise((resolve) => setTimeout(() => resolve(false), PROCESS_EXIT_TIMEOUT_MS)),
     ]);
+    if (exitedInTime !== true) {
+      await forceTerminate(child);
+      await Promise.race([
+        exited,
+        new Promise((resolve) => setTimeout(resolve, PROCESS_EXIT_TIMEOUT_MS)),
+      ]);
+    }
   }
 
   return { request, notify, close };
 }
 
 async function removeTemporaryDirectory(path) {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
       await rm(path, { recursive: true, force: true });
       return;
     } catch (error) {
-      if (attempt === 7) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (attempt === 19) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 150));
     }
   }
+}
+
+/**
+ * Windows can leave a native sidecar (or one of its descendants) alive after
+ * ChildProcess.kill(). Use taskkill only as a bounded fallback so temporary
+ * workspaces are never removed while the process still owns a file handle.
+ */
+async function forceTerminate(child) {
+  if (child.pid === undefined) return;
+  if (process.platform === "win32") {
+    try {
+      await execFileAsync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+        windowsHide: true,
+        timeout: PROCESS_EXIT_TIMEOUT_MS,
+      });
+    } catch {
+      // The process may have exited between the initial kill and taskkill.
+    }
+    return;
+  }
+  if (!child.killed) child.kill("SIGKILL");
 }
 
 async function main() {
