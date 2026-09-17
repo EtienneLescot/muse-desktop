@@ -331,6 +331,25 @@ function runOccurrenceKey(run: ScheduleRun): string {
   return run.occurrenceKey ?? `${run.scheduleId}:${run.occurrenceAt}`;
 }
 
+function isTerminalRun(run: ScheduleRun): boolean {
+  return run.status === "completed" || run.status === "failed" || run.status === "cancelled";
+}
+
+function shouldPreferRun(candidate: ScheduleRun, existing: ScheduleRun): boolean {
+  const candidateAttempt = candidate.attempt ?? 1;
+  const existingAttempt = existing.attempt ?? 1;
+  if (candidateAttempt !== existingAttempt) return candidateAttempt > existingAttempt;
+  // A local recovery marker is a safety hold, not evidence that the host
+  // regressed. Preserve a terminal snapshot from the native mirror over that
+  // marker even when the recovery timestamp is newer.
+  const candidateTerminal = isTerminalRun(candidate) && candidate.recovery === undefined;
+  const existingTerminal = isTerminalRun(existing) && existing.recovery === undefined;
+  if (candidateTerminal !== existingTerminal) return candidateTerminal;
+  if (candidate.recovery !== undefined && existing.recovery === undefined) return false;
+  if (candidate.recovery === undefined && existing.recovery !== undefined) return true;
+  return runLifecycleTimestamp(candidate) >= runLifecycleTimestamp(existing);
+}
+
 /**
  * Merge the webview and native ledgers after a relaunch. Both stores can be
  * ahead of the other when a renderer disappears during a write, so rows are
@@ -344,7 +363,7 @@ export function mergeScheduleRuns(...ledgers: ScheduleRun[][]): ScheduleRun[] {
     for (const run of normalizeScheduleRuns(ledger)) {
       const key = runOccurrenceKey(run);
       const existing = merged.get(key);
-      if (!existing || runLifecycleTimestamp(run) >= runLifecycleTimestamp(existing)) {
+      if (!existing || shouldPreferRun(run, existing)) {
         merged.set(key, run);
       }
     }

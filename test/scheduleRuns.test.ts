@@ -221,6 +221,8 @@ describe("M3-06 schedule run ledger", () => {
     const merged = mergeScheduleRuns([queued, second], [completed]);
     assert.deepEqual(merged.map((item) => item.id), [queued.id, second.id]);
     assert.equal(merged[0].status, "completed");
+    const recovered = recoverScheduleRuns([queued], 9000)[0];
+    assert.equal(mergeScheduleRuns([recovered], [completed])[0].status, "completed");
     assert.equal(normalizeScheduleRuns({ nope: true }).length, 0);
   });
 
