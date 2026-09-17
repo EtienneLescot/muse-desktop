@@ -5010,21 +5010,40 @@ export function useMuseSessions(): UseMuseSessions {
         failRun(message, false);
         return false;
       }
+      if (item.projectId && targetSession && threadProjectsRef.current[target] !== item.projectId) {
+        const message = "the recorded project no longer matches the target conversation";
+        setError(`schedule run failed: ${message}`);
+        failRun(message, false);
+        return false;
+      }
+      const capturedProject = item.projectId
+        ? projectsRef.current.find((project) => project.id === item.projectId)
+        : undefined;
+      const capturedSettings = capturedProject
+        ? resolveProjectSettings(globalSettings, capturedProject.settings)
+        : globalSettings;
       const applyCapturedContext = async (sessionId: string): Promise<void> => {
         if (item.authorizationMode && item.authorizationMode !== authorizationMode) {
           await invoke("set_approval_mode", { sessionId, mode: item.authorizationMode });
         }
-        if (item.model && item.model !== "default") await setSessionModel(sessionId, item.model);
+        const model = item.model?.trim() || capturedSettings.model.trim();
+        if (model && model !== "default") await setSessionModel(sessionId, model);
       };
       let sessionId: string;
       if (target === "new") {
-        const settings = item.model ? { ...globalSettings, model: item.model } : undefined;
+        const settings = {
+          ...capturedSettings,
+          ...(item.model?.trim() ? { model: item.model.trim() } : {}),
+        };
         const fresh = await startSessionRow(item.workspace, settings);
         if (fresh === null) {
           failRun("could not start target conversation", false);
           return false;
         }
         sessionId = fresh;
+        if (item.projectId && capturedProject) {
+          setThreadProjects((current) => attachThreadRow(current, projects, sessionId, item.projectId!));
+        }
       } else {
         sessionId = target;
       }
@@ -5051,7 +5070,7 @@ export function useMuseSessions(): UseMuseSessions {
         return false;
       }
     },
-    [activeId, authorizationMode, globalSettings, sendInput, sessions, setSessionModel, startSessionRow],
+    [activeId, authorizationMode, globalSettings, projects, sendInput, sessions, setSessionModel, startSessionRow, threadProjects],
   );
 
   const prepareBrowserContext = useCallback(
