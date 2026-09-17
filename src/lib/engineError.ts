@@ -22,6 +22,7 @@ export interface TurnCompletionDetails {
   terminal: string;
   reason: string | null;
   error: EngineErrorDetails | null;
+  turnId?: string;
 }
 
 function nonEmpty(value: unknown): string | null {
@@ -67,12 +68,14 @@ export function parseTurnCompletion(
   }
   const terminal = nonEmpty(row.terminal) ?? kind;
   const reason = redactDiagnostic(nonEmpty(row.reason));
+  const turnId = nonEmpty(row.turnId) ?? undefined;
   const rawError = row.error;
   if (typeof rawError !== "object" || rawError === null || Array.isArray(rawError)) {
     const failureTerminal = /^(failed|failure|error|timeout|timed[_-]?out|rejected)$/i.test(terminal);
     return {
       terminal,
       reason,
+      ...(turnId === undefined ? {} : { turnId }),
       error: failureTerminal && reason !== null
         ? { kind: "unknown", message: reason, retryable: false }
         : null,
@@ -90,7 +93,7 @@ export function parseTurnCompletion(
         turnId: nonEmpty(row.turnId) ?? undefined,
         durationMs: finiteDuration(row.durationMs),
       };
-  return { terminal, reason, error };
+  return { terminal, reason, error, ...(turnId === undefined ? {} : { turnId }) };
 }
 
 /** Copy-safe user-facing summary for the transcript header. */

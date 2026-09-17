@@ -820,6 +820,33 @@ body.dark .avatar {
   color: var(--muted);
 }
 
+.msg-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 20px;
+}
+
+.msg-fork {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.72rem;
+  padding: 2px 0;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.msg:hover .msg-fork,
+.msg:focus-within .msg-fork {
+  opacity: 1;
+}
+
+.msg-fork:hover,
+.msg-fork:focus-visible {
+  text-decoration: underline;
+}
+
 .msg.user {
   background: var(--surface);
   border: 1px solid var(--line);

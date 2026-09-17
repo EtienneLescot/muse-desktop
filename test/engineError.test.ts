@@ -16,6 +16,7 @@ describe("M0-07 structured engine failures", () => {
     assert.deepEqual(result, {
       terminal: "failed",
       reason: null,
+      turnId: "turn-1",
       error: {
         kind: "modelError",
         message: "provider unavailable",

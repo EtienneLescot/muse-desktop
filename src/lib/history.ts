@@ -3,6 +3,7 @@ import type { LogEntry, LogRole } from "./persist.ts";
 /** A folded item returned by MSP `session/read`. Unknown additive fields are ignored. */
 export interface SessionHistoryItem {
   itemId?: unknown;
+  turnId?: unknown;
   kind?: unknown;
   status?: unknown;
   text?: unknown;
@@ -103,6 +104,7 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
     const item = raw as SessionHistoryItem;
     const kind = stringValue(item.kind);
     const itemId = stringValue(item.itemId);
+    const turnId = stringValue(item.turnId);
     if (kind === undefined || itemId === undefined) return;
     const role = roleForKind(kind);
     if (role === null) return;
@@ -114,6 +116,7 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
       role,
       text,
       itemId,
+      ...(turnId === undefined ? {} : { turnId }),
       open: item.status === "inProgress",
     };
     const child = stringValue(item.childSessionId);

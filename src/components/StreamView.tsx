@@ -45,6 +45,8 @@ interface Props {
   onCancel?: () => void;
   /** Retry the last user message when the host marks a turn retryable. */
   onRetryFailedTurn?: (entry: LogEntry) => Promise<void>;
+  /** Start a server-side branch from this completed turn. */
+  onForkFromEntry?: (turnId: string) => void;
   controls?: SubagentControls;
 }
 
@@ -96,6 +98,7 @@ export function StreamView({
   onReconnect,
   onCancel,
   onRetryFailedTurn,
+  onForkFromEntry,
   controls,
 }: Props) {
   const streamRef = useRef<HTMLDivElement>(null);
@@ -629,7 +632,19 @@ export function StreamView({
                 )}
               </pre>
             )}
-            <span className="ts">{timeOf(e.ts)}</span>
+            <div className="msg-footer">
+              <span className="ts">{timeOf(e.ts)}</span>
+              {onForkFromEntry && e.turnId && !e.open && (e.role === "user" || e.role === "assistant") && (
+                <button
+                  type="button"
+                  className="msg-fork"
+                  onClick={() => onForkFromEntry(e.turnId!)}
+                  title="Fork conversation from this completed turn"
+                >
+                  Fork from here
+                </button>
+              )}
+            </div>
           </div>
         );
       })}

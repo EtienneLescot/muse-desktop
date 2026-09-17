@@ -1081,6 +1081,7 @@ export default function App() {
                     onReconnect={() => void reconnectSession(active.session_id)}
                     onCancel={() => void cancelSession(active.session_id)}
                     onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
+                    onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
                     controls={{
                       onInterrupt: (agentId) =>
                         void subagentInterrupt(active.session_id, agentId),

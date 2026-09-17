@@ -277,7 +277,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** branche indépendante, source inchangée, point invalide, source active et échec ; ne jamais substituer un résumé au fork demandé.
 
-**État au 16/09/2026 :** `session/fork` est câblé dans le superviseur et l’action d’en-tête crée une nouvelle conversation serveur dans le même workspace, avec continuité locale des entrées terminées. La sélection d’un `lastTurnId` MSP précis, les erreurs de frontière et la qualification live restent ouvertes.
+**État au 17/09/2026 :** `session/fork` est câblé dans le superviseur et l’action d’en-tête crée une nouvelle conversation serveur dans le même workspace, avec continuité locale des entrées terminées. Les items conservent maintenant leur `turnId` et les messages terminés proposent **Fork from here**, transmis comme `cutPoint.lastTurnId`; le bouton d’en-tête reste le raccourci vers le dernier tour terminé. Les erreurs de frontière et la qualification live restent ouvertes.
 
 ### M1-12 — Recherche et organisation
 

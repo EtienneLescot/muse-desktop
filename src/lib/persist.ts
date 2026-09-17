@@ -55,6 +55,8 @@ export interface LogEntry {
   agentId?: string;
   /** MSP item id: coalescing and completion target concurrent items precisely. */
   itemId?: string;
+  /** MSP turn id owning this item; enables an exact conversation fork anchor. */
+  turnId?: string;
   /** True while further stream chunks may still be appended. */
   open?: boolean;
   /** Drill-down into the child's own transcript (`session/read`). */

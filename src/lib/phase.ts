@@ -137,12 +137,13 @@ export function upsertReflexivePlaceholder(
   log: LogEntry[],
   opts: {
     itemId?: string;
+    turnId?: string;
     agentId?: string;
     role?: "assistant" | "thinking";
     stamp: PlaceholderStamp;
   },
 ): LogEntry[] {
-  const { itemId, agentId, role = "assistant", stamp } = opts;
+  const { itemId, turnId, agentId, role = "assistant", stamp } = opts;
   if (agentId !== undefined) {
     const i = lastIndex(
       log,
@@ -158,6 +159,7 @@ export function upsertReflexivePlaceholder(
         text: "",
         agentId,
         itemId,
+        ...(turnId ? { turnId } : {}),
         open: true,
       },
     ];
@@ -175,7 +177,7 @@ export function upsertReflexivePlaceholder(
     );
     if (unbound >= 0) {
       return log.map((e, j) =>
-        j === unbound ? { ...e, role: "thinking", itemId } : e,
+        j === unbound ? { ...e, role: "thinking", itemId, ...(turnId ? { turnId } : {}) } : e,
       );
     }
     const live = lastIndex(
@@ -188,19 +190,19 @@ export function upsertReflexivePlaceholder(
     if (live >= 0) return log;
     return [
       ...log,
-      { id: stamp.id, ts: stamp.ts, role: "thinking", text: "", itemId, open: true },
+      { id: stamp.id, ts: stamp.ts, role: "thinking", text: "", itemId, ...(turnId ? { turnId } : {}), open: true },
     ];
   }
   const i = lastIndex(log, (e) => e.open === true && e.role === "assistant");
   if (i >= 0) {
     if (itemId !== undefined && log[i].itemId === undefined) {
-      return log.map((e, j) => (j === i ? { ...e, itemId } : e));
+      return log.map((e, j) => (j === i ? { ...e, itemId, ...(turnId ? { turnId } : {}) } : e));
     }
     return log;
   }
   return [
     ...log,
-    { id: stamp.id, ts: stamp.ts, role: "assistant", text: "", itemId, open: true },
+    { id: stamp.id, ts: stamp.ts, role: "assistant", text: "", itemId, ...(turnId ? { turnId } : {}), open: true },
   ];
 }
 

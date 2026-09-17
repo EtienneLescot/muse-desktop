@@ -870,7 +870,11 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                     "status",
                     sid,
                     "item_started",
-                    json!({"itemId": item_id, "itemKind": kind}).to_string(),
+                    json!({
+                        "itemId": item_id,
+                        "itemKind": kind,
+                        "turnId": item.get("turnId"),
+                    }).to_string(),
                 );
             }
         }
@@ -946,7 +950,17 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 .and_then(Value::as_str)
                 .or_else(|| p.get("itemId").and_then(Value::as_str))
                 .unwrap_or("");
-            emit(app, "status", sid, "item_done", json!({"itemId": item_id}).to_string());
+            let turn_id = p
+                .get("item")
+                .and_then(|i| i.get("turnId"))
+                .or_else(|| p.get("turnId"));
+            emit(
+                app,
+                "status",
+                sid,
+                "item_done",
+                json!({"itemId": item_id, "turnId": turn_id}).to_string(),
+            );
         }
         "approval/requested" | "approval/updated" => {
             let approval_id = match p.get("approvalId").and_then(Value::as_str) {
@@ -2172,10 +2186,27 @@ async fn start_session(
 /// deliberately request metadata only (`excludeItems`) so a large transcript
 /// is not duplicated through the Tauri command; the frontend can keep its
 /// bounded local transcript for immediate continuity.
+fn fork_request_params(
+    command_id: &str,
+    session_id: &str,
+    last_turn_id: Option<&str>,
+) -> Value {
+    let mut params = json!({
+        "commandId": command_id,
+        "sessionId": session_id,
+        "excludeItems": true,
+    });
+    if let Some(turn_id) = last_turn_id.filter(|id| !id.trim().is_empty()) {
+        params["cutPoint"] = json!({ "lastTurnId": turn_id });
+    }
+    params
+}
+
 #[tauri::command]
 async fn fork_session(
     state: State<'_, AppState>,
     session_id: String,
+    last_turn_id: Option<String>,
 ) -> Result<SessionMeta, String> {
     let source_id = require_non_empty(&session_id, "sessionId")?;
     let client = session_client(&state, &source_id)?;
@@ -2184,14 +2215,11 @@ async fn fork_session(
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
         .session_workspace(&source_id)?;
+    let command_id = new_command_id();
     let result = client
         .request(
             "session/fork",
-            json!({
-                "commandId": new_command_id(),
-                "sessionId": source_id,
-                "excludeItems": true,
-            }),
+            fork_request_params(command_id.as_str(), &source_id, last_turn_id.as_deref()),
         )
         .await?;
     let session = result
@@ -3092,6 +3120,21 @@ async fn kill_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fork_params_name_an_explicit_completed_turn() {
+        let params = fork_request_params("cmd-1", "session-1", Some("turn-7"));
+        assert_eq!(params["commandId"], "cmd-1");
+        assert_eq!(params["sessionId"], "session-1");
+        assert_eq!(params["excludeItems"], true);
+        assert_eq!(params["cutPoint"]["lastTurnId"], "turn-7");
+    }
+
+    #[test]
+    fn fork_params_omit_empty_cut_point_for_latest_turn() {
+        let params = fork_request_params("cmd-1", "session-1", Some("  "));
+        assert!(params.get("cutPoint").is_none());
+    }
 
     #[test]
     fn truncate_respects_utf8_boundaries() {

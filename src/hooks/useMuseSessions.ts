@@ -777,7 +777,8 @@ interface UseMuseSessions {
     projectSettings?: ProjectSettings,
   ) => Promise<string | null>;
   /** M1-09: create a server-side branch from completed conversation turns. */
-  forkSession: (sessionId: string) => Promise<string | null>;
+  /** Fork at the latest completed turn, or at an explicit MSP turn anchor. */
+  forkSession: (sessionId: string, lastTurnId?: string) => Promise<string | null>;
   reconnectSession: (id: string) => Promise<void>;
   reconnectingId: string | null;
   connectedIds: string[];
@@ -2250,7 +2251,7 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
-  function closeOpenBlocks(sessionId: string, itemId?: string): void {
+  function closeOpenBlocks(sessionId: string, itemId?: string, turnId?: string): void {
     setLogs((cur) => {
       const log = cur[sessionId];
       if (!log || !log.some((e) => e.open)) return cur;
@@ -2258,7 +2259,7 @@ export function useMuseSessions(): UseMuseSessions {
       // streaming into their own entries. Without one (turn end), close all.
       const next = log.map((e) =>
         e.open && (itemId === undefined || e.itemId === itemId)
-          ? { ...e, open: false }
+          ? { ...e, open: false, ...(turnId ? { turnId } : {}) }
           : e,
       );
       saveLog(sessionId, next);
@@ -2277,6 +2278,7 @@ export function useMuseSessions(): UseMuseSessions {
     itemId?: string,
     agentId?: string,
     role: "assistant" | "thinking" = "assistant",
+    turnId?: string,
   ): void {
     const stamp = { id: newId(), ts: Date.now() };
     setLogs((cur) => {
@@ -2284,6 +2286,7 @@ export function useMuseSessions(): UseMuseSessions {
         itemId,
         agentId,
         role,
+        turnId,
         stamp,
       });
       if (next === (cur[sessionId] ?? [])) return cur;
@@ -2595,13 +2598,15 @@ export function useMuseSessions(): UseMuseSessions {
       // Close exactly the completed item; other open blocks keep streaming.
       ensureSessionRow(sid, null);
       let itemId: string | undefined;
+      let turnId: string | undefined;
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         if (typeof obj.itemId === "string" && obj.itemId.length > 0) itemId = obj.itemId;
+        if (typeof obj.turnId === "string" && obj.turnId.length > 0) turnId = obj.turnId;
       } catch {
         // unparseable payload: close all, as before
       }
-      closeOpenBlocks(sid, itemId);
+      closeOpenBlocks(sid, itemId, turnId);
       // w-collab US-27: a turn end (item_done without item id) refreshes
       // the auto snapshot; per-item completions never do (no spam).
       if (itemId === undefined) refreshAutoShare(sid);
@@ -2692,12 +2697,14 @@ export function useMuseSessions(): UseMuseSessions {
     if (isItemStartKind(kind)) {
       ensureSessionRow(sid, null);
       let itemId: string | undefined;
+      let turnId: string | undefined;
       let agentId: string | undefined;
       let itemRole: "assistant" | "thinking" = "assistant";
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const rawId = obj.itemId ?? obj.id;
         if (typeof rawId === "string" && rawId.length > 0) itemId = rawId;
+        if (typeof obj.turnId === "string" && obj.turnId.length > 0) turnId = obj.turnId;
         const rawKind = obj.itemKind ?? obj.kind;
         if (typeof rawKind === "string") {
           if (isSubagentItemKind(rawKind)) {
@@ -2712,7 +2719,7 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
       );
-      ensurePlaceholder(sid, itemId, agentId, itemRole);
+      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId);
       return;
     }
     // status (and any future kinds): record + reflect liveness.
@@ -2762,6 +2769,11 @@ export function useMuseSessions(): UseMuseSessions {
       // placeholder instead of closing it (US-10).
       ensurePlaceholder(sid);
     } else if (isStoppedKind(kind)) {
+      if (completion?.turnId !== undefined) {
+        // Older hosts may omit item/completed. Preserve the exact turn anchor
+        // on any remaining open lane before closing it.
+        closeOpenBlocks(sid, undefined, completion.turnId);
+      }
       clearStopping(sid);
       delete turnIdsRef.current[sid];
       setSessions((cur) =>
@@ -3253,7 +3265,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   const [forkingId, setForkingId] = useState<string | null>(null);
   const forkSession = useCallback(
-    async (sourceId: string): Promise<string | null> => {
+    async (sourceId: string, lastTurnId?: string): Promise<string | null> => {
       if (!isTauriRuntime() || forkingId !== null) return null;
       const source = sessions.find((session) => session.session_id === sourceId);
       if (!source) {
@@ -3265,6 +3277,7 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         const meta = await invoke<BackendSessionMeta>("fork_session", {
           sessionId: sourceId,
+          lastTurnId: lastTurnId?.trim() || null,
         });
         if (tombstoned.current?.has(meta.session_id)) {
           setError("The fork was created but is no longer available.");
