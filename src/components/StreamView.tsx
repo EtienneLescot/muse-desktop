@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { LogEntry } from "../lib/persist";
 import { REFLEXIVE_LABEL } from "../lib/phase";
 import { subagentSummary } from "../lib/subagent";
@@ -15,6 +15,7 @@ import {
   streamHealthLabel,
   type StreamHealth,
 } from "../lib/streamHealth";
+import { searchTranscript, type TranscriptHit } from "../lib/transcriptSearch";
 import { MessageContent } from "./MessageContent";
 
 /** US-6 controls for one sub-agent block. Read-result and drill-down resolve
@@ -107,6 +108,10 @@ export function StreamView({
   const [shown, setShown] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [retryingFailure, setRetryingFailure] = useState<string | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findTarget, setFindTarget] = useState<number | null>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
   const [now, setNow] = useState(() => Date.now());
   const [windowStart, setWindowStart] = useState(() =>
     initialStreamWindowStart(entries.length),
@@ -124,6 +129,10 @@ export function StreamView({
     ? Math.min(Math.max(0, windowStart), maxWindowStart)
     : 0;
   const visibleEntries = streamWindowed ? entries.slice(safeWindowStart) : entries;
+  const findHits = useMemo(
+    () => searchTranscript(entries, findQuery),
+    [entries, findQuery],
+  );
 
   // Keep the quiet-stream message current without making the transcript
   // itself reflow. The interval only exists while the host reports a live
@@ -144,7 +153,26 @@ export function StreamView({
     jumpLatestRef.current = false;
     loadingOlderRef.current = false;
     setWindowStart(next);
+    setFindOpen(false);
+    setFindQuery("");
+    setFindTarget(null);
   }, [sessionId]);
+
+  useEffect(() => {
+    if (findOpen) findInputRef.current?.focus();
+  }, [findOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f") return;
+      const target = event.target as HTMLElement | null;
+      if (target !== null && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      event.preventDefault();
+      setFindOpen(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (windowSessionRef.current !== sessionId) return;
@@ -170,6 +198,21 @@ export function StreamView({
       stream.scrollTop = stream.scrollHeight;
     }
   }, [safeWindowStart, windowStart]);
+
+  useLayoutEffect(() => {
+    if (findTarget === null) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = streamRef.current?.querySelector<HTMLElement>(
+        `[data-entry-index="${findTarget}"]`,
+      );
+      if (target === null || target === undefined) return;
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      target.classList.add("stream-find-target");
+      window.setTimeout(() => target.classList.remove("stream-find-target"), 1200);
+      setFindTarget(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [findTarget, safeWindowStart, windowStart]);
 
   useEffect(() => {
     stickRef.current = true;
@@ -219,6 +262,16 @@ export function StreamView({
     stickRef.current = true;
     setAwayFromBottom(false);
     bottomRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+  }
+
+  function revealHit(hit: TranscriptHit): void {
+    const visible = hit.index >= safeWindowStart && hit.index < safeWindowStart + visibleEntries.length;
+    if (!visible && streamWindowed) {
+      const next = Math.min(Math.max(0, hit.index - 12), maxWindowStart);
+      if (sessionId !== null) windowStartsRef.current[sessionId] = next;
+      setWindowStart(next);
+    }
+    setFindTarget(hit.index);
   }
 
   function onScroll(e: React.UIEvent<HTMLDivElement>): void {
@@ -305,6 +358,59 @@ export function StreamView({
       aria-label="Conversation messages"
       data-entry-count={entries.length}
     >
+      <div className="stream-find" aria-label="Find in conversation">
+        {!findOpen ? (
+          <button type="button" onClick={() => setFindOpen(true)}>
+            Find in conversation <kbd>Ctrl/Cmd F</kbd>
+          </button>
+        ) : (
+          <>
+            <input
+              ref={findInputRef}
+              type="search"
+              value={findQuery}
+              onChange={(event) => setFindQuery(event.target.value)}
+              placeholder="Search messages…"
+              aria-label="Search messages"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setFindOpen(false);
+                  setFindQuery("");
+                }
+              }}
+            />
+            <span className="stream-find-count" role="status">
+              {findQuery.trim() === ""
+                ? "Type to search the full conversation"
+                : `${findHits.length}${findHits.length === 80 ? "+" : ""} match${findHits.length === 1 ? "" : "es"}`}
+            </span>
+            <button
+              type="button"
+              className="quiet"
+              onClick={() => {
+                setFindOpen(false);
+                setFindQuery("");
+              }}
+            >
+              Close
+            </button>
+          </>
+        )}
+        {findOpen && findHits.length > 0 && (
+          <div className="stream-find-hits" aria-label="Conversation matches">
+            {findHits.map((hit) => (
+              <button
+                type="button"
+                key={`${hit.entryId}-${hit.index}`}
+                onClick={() => revealHit(hit)}
+              >
+                <span>{hit.role}</span>
+                <strong>{hit.excerpt}</strong>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {streamWindowed && safeWindowStart > 0 && (
         <div className="stream-window-notice" role="status" aria-live="polite">
           <button type="button" onClick={loadOlderMessages}>
@@ -321,7 +427,8 @@ export function StreamView({
           Start a conversation. Your history is saved locally.
         </p>
       )}
-      {visibleEntries.map((e) => {
+      {visibleEntries.map((e, visibleIndex) => {
+        const entryIndex = safeWindowStart + visibleIndex;
         // US-10 reflexive phase: an open entry with no text yet (send just
         // happened, or `item/started` arrived before the first delta) shows
         // a plain muted label. The label is rendered, never stored: the
@@ -332,6 +439,7 @@ export function StreamView({
             <details
               key={e.id}
               className={`msg thinking${e.open ? " is-live" : ""}`}
+              data-entry-index={entryIndex}
               // Keep live reasoning visible while tokens arrive. Once the
               // item closes, leaving `open` undefined hands disclosure back
               // to the user instead of forcing it shut.
@@ -356,7 +464,7 @@ export function StreamView({
           );
         }
         return e.role === "subagent" ? (
-          <details key={e.id} className="msg subagent">
+          <details key={e.id} className="msg subagent" data-entry-index={entryIndex}>
             <summary>
               <span className="role">{roleLabel(e)}</span>
               <span className="msg-summary">
@@ -467,7 +575,7 @@ export function StreamView({
             )}
           </details>
         ) : (
-          <div key={e.id} className={`msg ${e.role}`}>
+          <div key={e.id} className={`msg ${e.role}`} data-entry-index={entryIndex}>
             <span className="role">{roleLabel(e)}</span>
             {e.engineError ? (
               <details className="engine-error" open>
