@@ -80,6 +80,7 @@ export default function App() {
     checkPathScope,
     setActive,
     startSession,
+    startSessionInWorkspace,
     forkSession,
     reconnectSession,
     reconnectingId,
@@ -662,12 +663,17 @@ export default function App() {
                   projectError={projectError}
                   activeSessionId={activeId}
                   globalSettings={globalSettings}
-                  onCreate={(name, instructions) =>
-                    createProject(name, instructions)
+                  onCreate={(name, instructions, projectWorkspace) =>
+                    createProject(name, instructions, projectWorkspace)
                   }
                   onDelete={deleteProject}
                   onUpdate={updateProject}
                   onAttach={attachThread}
+                  onStartConversation={async (project) => {
+                    if (!project.workspace) return;
+                    const id = await startSessionInWorkspace(project.workspace);
+                    if (id !== null) attachThread(id, project.id);
+                  }}
                   onSetGlobal={setGlobalSettings}
                   onSetOverride={setProjectOverride}
                   settingsFor={settingsFor}

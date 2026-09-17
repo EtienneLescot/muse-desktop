@@ -14,6 +14,8 @@ export interface Project {
   name: string;
   instructions: string;
   createdAt: number;
+  /** Optional canonical folder used when starting conversations in a project. */
+  workspace?: string;
   /** Per-project settings override (US-30); absent keys inherit global. */
   settings?: ProjectSettingsOverride;
 }
@@ -66,7 +68,8 @@ function isValidProject(p: unknown): p is Project {
     r.id.length > 0 &&
     typeof r.name === "string" &&
     typeof r.instructions === "string" &&
-    typeof r.createdAt === "number"
+    typeof r.createdAt === "number" &&
+    (r.workspace === undefined || typeof r.workspace === "string")
   );
 }
 
@@ -82,7 +85,7 @@ export function sanitizeProjects(raw: unknown): Project[] {
  */
 export function createProject(
   projects: Project[],
-  draft: { name: string; instructions?: string; id?: string },
+  draft: { name: string; instructions?: string; workspace?: string; id?: string },
 ): CreateResult {
   const name = draft.name.trim();
   if (name.length === 0) {
@@ -96,6 +99,7 @@ export function createProject(
     name,
     instructions: (draft.instructions ?? "").trim(),
     createdAt: Date.now(),
+    ...(draft.workspace?.trim() ? { workspace: draft.workspace.trim() } : {}),
   };
   return { projects: [...projects, project], project, error: null };
 }
@@ -118,7 +122,7 @@ export function deleteProject(
 export function updateProject(
   projects: Project[],
   id: string,
-  patch: { name?: string; instructions?: string },
+  patch: { name?: string; instructions?: string; workspace?: string },
 ): Project[] {
   return projects.map((p) => {
     if (p.id !== id) return p;
@@ -131,6 +135,9 @@ export function updateProject(
       name,
       instructions:
         patch.instructions !== undefined ? patch.instructions.trim() : p.instructions,
+      ...(patch.workspace !== undefined
+        ? (patch.workspace.trim() ? { workspace: patch.workspace.trim() } : { workspace: undefined })
+        : {}),
     };
   });
 }

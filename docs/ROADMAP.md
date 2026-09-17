@@ -244,13 +244,21 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Organisation :** une conversation peut être épinglée depuis son menu. Le drapeau est validé, persisté dans `muse-desktop.sessions.v1` et remonte avant les conversations en cours puis les plus récentes.
 - **Limites :** l’ordre manuel, les indicateurs non lus et la virtualisation des listes restent à mesurer avant de les ajouter.
 
+### Livraison M2-01 — racines de projet
+
+- **Modèle :** un projet peut maintenant conserver une racine de travail optionnelle. Les valeurs sont nettoyées à l’écriture, validées à la restauration et restent compatibles avec les groupes créés avant cette évolution.
+- **UX :** le panneau **Projects** permet de choisir, remplacer ou retirer un dossier. Chaque projet expose **New conversation here** quand une racine est définie ; l’action démarre réellement la session dans ce dossier puis rattache la conversation au projet.
+- **SSOT :** le hook de sessions reste l’unique point de création des sessions. Le chemin choisi est passé au même contrat `start_session` que le workspace global ; il n’existe pas de second état local pour la conversation.
+- **Validation :** tests de création, mise à jour, suppression et persistance d’une racine ; TypeScript, build Vite et 57 tests Rust sont verts.
+- **Limites :** les anciens projets restent sans racine tant que l’utilisateur ne la choisit pas, et la migration automatique de groupes ambigus est volontairement exclue. La sélection d’environnement/worktree et les règles héritées du moteur restent M2-02/M2-03.
+
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 
 ## M2 — Projets et travail parallèle isolé
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
-| M2-01 | Un projet représente des dossiers persistants | À définir | Partielle | Locale | Unitaire | Ajouter racines et environnement au projet ; migration des groupes existants ; création de conversation dans la bonne racine |
+| M2-01 | Un projet représente des dossiers persistants | Adapté | Présente | Câblée | Intégration | Racine persistante, sélection de dossier et création de conversation dans cette racine livrées ; restent migration explicite des anciens groupes et environnement/worktree |
 | M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Unitaire | Résoudre héritage global/projet/session vers le moteur ; afficher origine et valeur effective ; prouver deux configurations isolées |
 | M2-03 | Créer automatiquement un worktree pour une conversation | Maquette | Partielle | Manuelle | Unitaire | Remplacer snippet par backend ; branche de départ, chemin unique, rollback d'échec ; checkout initial inchangé |
 | M2-04 | Préparer l'environnement du worktree | À définir | Absente | Absente | À faire | Scripts/actions de setup avec progression et erreurs ; dépendances nécessaires disponibles avant le premier tour |
