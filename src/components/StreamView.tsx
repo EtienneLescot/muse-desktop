@@ -15,6 +15,7 @@ import {
   formatElapsed,
   streamEventLabel,
   streamHealthLabel,
+  type RetryScheduled,
   type StreamHealth,
 } from "../lib/streamHealth";
 import {
@@ -51,6 +52,8 @@ interface Props {
   lastEventKind?: string | null;
   /** A permission/input decision was accepted; awaiting the next host event. */
   resumePendingAt?: number | null;
+  /** Host-provided retry backoff shown while the next attempt is pending. */
+  retryScheduled?: RetryScheduled | null;
   pendingApprovals?: number;
   pendingInputs?: number;
   reconnecting?: boolean;
@@ -108,6 +111,7 @@ export function StreamView({
   lastEventAt = null,
   lastEventKind = null,
   resumePendingAt = null,
+  retryScheduled = null,
   pendingApprovals = 0,
   pendingInputs = 0,
   reconnecting = false,
@@ -359,6 +363,7 @@ export function StreamView({
     stopping,
     lastEventAt,
     resumePendingAt,
+    retryScheduled,
     pendingApprovals,
     pendingInputs,
     now,
@@ -372,6 +377,25 @@ export function StreamView({
         return `${elapsed === null ? "Live updates are arriving." : `Last update ${elapsed} ago.`}${
           eventLabel ? ` · ${eventLabel}.` : ""
         }`;
+      case "retrying": {
+        if (retryScheduled === null || retryScheduled === undefined) {
+          return "The host scheduled another attempt.";
+        }
+        const remaining = Math.max(
+          0,
+          retryScheduled.delayMs - Math.max(0, now - retryScheduled.scheduledAt),
+        );
+        const countdown = remaining > 0
+          ? `Next attempt in ${formatElapsed(remaining)}.`
+          : "The next attempt is due now.";
+        const attempt = retryScheduled.attempt !== null && retryScheduled.maxAttempts !== null
+          ? ` Attempt ${retryScheduled.attempt} of ${retryScheduled.maxAttempts}.`
+          : retryScheduled.attempt !== null
+            ? ` Attempt ${retryScheduled.attempt}.`
+            : "";
+        const reason = retryScheduled.reason === null ? "" : ` ${retryScheduled.reason}`;
+        return `${countdown}${attempt}${reason}`;
+      }
       case "resuming":
         return `Your decision was accepted; waiting for the host to continue the turn.${
           eventLabel ? ` Last event: ${eventLabel}.` : ""
