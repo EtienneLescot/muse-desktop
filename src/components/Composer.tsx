@@ -40,6 +40,13 @@ import {
 } from "../lib/attachments";
 import { loadAttachmentDraft, saveAttachmentDraft } from "../lib/attachmentDraft";
 import { readStorageJson, writeStorageJson } from "../lib/storage.ts";
+import {
+  appendVoiceTranscript,
+  getVoiceRecognitionFactory,
+  transcriptFromVoiceEvent,
+  voiceErrorMessage,
+  type VoiceRecognition,
+} from "../lib/voice";
 
 interface Props {
   sessionId?: string;
@@ -176,6 +183,9 @@ export function Composer({
       initialAttachmentDraft.attachments.some((attachment) => attachment.missing === true),
   );
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [voiceSupported] = useState(() => getVoiceRecognitionFactory() !== null);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
   const [recents, setRecents] = useState<RecentMention[]>(() =>
     workspace !== null ? loadRecents(workspace) : [],
   );
@@ -185,12 +195,18 @@ export function Composer({
   const attachmentsRef = useRef(attachments);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceAttachmentId = useRef<string | null>(null);
+  const voiceRecognitionRef = useRef<VoiceRecognition | null>(null);
+  const voiceBaseTextRef = useRef("");
   useEffect(() => {
     textRef.current = text;
   }, [text]);
   useEffect(() => {
     attachmentsRef.current = attachments;
   }, [attachments]);
+  useEffect(() => () => {
+    voiceRecognitionRef.current?.abort();
+    voiceRecognitionRef.current = null;
+  }, []);
   useEffect(() => {
     saveAttachmentDraft(draftKey, attachments);
   }, [attachments, draftKey]);
@@ -382,6 +398,52 @@ export function Composer({
     setText(next);
     setCaret(m.start);
     setBlocked(null);
+  }
+
+  function toggleVoice(): void {
+    if (voiceListening) {
+      voiceRecognitionRef.current?.stop();
+      setVoiceStatus("Finishing transcription…");
+      return;
+    }
+    const Factory = getVoiceRecognitionFactory();
+    if (Factory === null) {
+      setVoiceStatus("Voice input is unavailable in this browser build.");
+      return;
+    }
+    try {
+      const recognition = new Factory();
+      voiceBaseTextRef.current = textRef.current;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = typeof navigator !== "undefined" && navigator.language
+        ? navigator.language
+        : "en-US";
+      recognition.onresult = (event) => {
+        const transcript = transcriptFromVoiceEvent(event);
+        if (transcript.length === 0) return;
+        setText(appendVoiceTranscript(voiceBaseTextRef.current, transcript));
+        setBlocked(null);
+      };
+      recognition.onerror = (event) => {
+        setVoiceStatus(voiceErrorMessage(event));
+        setVoiceListening(false);
+        voiceRecognitionRef.current = null;
+      };
+      recognition.onend = () => {
+        setVoiceListening(false);
+        voiceRecognitionRef.current = null;
+        setVoiceStatus((current) => current === "Finishing transcription…" ? "Transcript ready to edit." : current);
+      };
+      voiceRecognitionRef.current = recognition;
+      setVoiceStatus("Listening… edit the transcript before sending.");
+      setVoiceListening(true);
+      recognition.start();
+    } catch {
+      voiceRecognitionRef.current = null;
+      setVoiceListening(false);
+      setVoiceStatus("Voice input could not start. You can type the message instead.");
+    }
   }
 
   async function send(): Promise<void> {
@@ -869,6 +931,17 @@ export function Composer({
               <span aria-hidden="true">＋</span>
               <span>Attach</span>
             </label>
+            <button
+              type="button"
+              className={voiceListening ? "composer-voice composer-voice-active" : "composer-voice"}
+              onClick={toggleVoice}
+              disabled={disabled || sending || checking}
+              aria-pressed={voiceListening}
+              aria-label={voiceListening ? "Stop voice input" : "Start voice input"}
+              title={voiceSupported ? "Transcribe speech into the draft; audio is not stored" : "Voice input unavailable in this browser build"}
+            >
+              {voiceListening ? "Stop voice" : "Voice"}
+            </button>
             <AuthorizationModeControl
               mode={authorizationMode}
               onChange={onAuthorizationModeChange}
@@ -876,6 +949,11 @@ export function Composer({
             />
             <div className="composer-model">{modelControl}</div>
           </div>
+          {voiceStatus !== null && (
+            <span className="composer-voice-status" role="status" aria-live="polite">
+              {voiceStatus}
+            </span>
+          )}
           {running && (
             <button
               onClick={onCancel}

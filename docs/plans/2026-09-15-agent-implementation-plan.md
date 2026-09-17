@@ -545,6 +545,8 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 **Code :** module audio et intégration composer à créer. ADR transcription seule vs dialogue temps réel, fournisseurs et consentement micro. Gestion annulation, latence, erreurs et absence de conservation audio implicite. **Acceptation :** micro absent/refusé, interruption, transcription éditable avant envoi et destination inchangée.
 
+**État au 17/09/2026 :** première tranche livrée dans `src/lib/voice.ts` et `Composer` : détection standard/WebKit, transcription continue éditable, arrêt explicite et messages bornés pour refus, absence de micro, silence ou API indisponible. Le texte rejoint le brouillon uniquement ; aucun flux audio n'est persisté ou envoyé au host. Reste : décision fournisseur/temps réel, permissions micro natives par OS et qualification d'une interruption pendant l'envoi.
+
 ### M4-09 — Distribution
 
 **Code :** Tauri config, bridge, scripts build et CI. Dépend M0-10/14. Matrice OS/architecture, moteur supporté, provenance/checksum des binaires, signature selon canal, mises à jour signées et récupération. **Acceptation :** installer sur machine propre, mettre à jour depuis version précédente et désinstaller sans effacer les projets ; preuves propres à chaque plateforme.

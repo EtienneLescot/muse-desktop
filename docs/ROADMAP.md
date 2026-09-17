@@ -491,7 +491,7 @@ Ces écarts restent visibles pour une ambition de parité complète. Leur faisab
 | M4-05 | Produire/consulter des images et documents riches | Adapté | Présente | Partielle | Unitaire | Artefacts Markdown versionnés, prévisualisation sûre, réutilisation et export texte local livrés ; capacités moteur image/document, fichiers réellement générés, previews binaires riches et qualification native restent à faire |
 | M4-06 | Partager par URL et révoquer l'accès | À définir | Partielle | Locale | Unitaire | Hébergement, identité, permissions et révocation réelle ; second client lit puis perd l'accès |
 | M4-07 | Contrôler une exécution sur un autre host ou dans le cloud | À définir | Absente | Absente | À faire | Auth, routage, stockage et reprise distante ; statut exact après déconnexion |
-| M4-08 | Interagir par la voix | À définir | Absente | Absente | À faire | Choisir capture/transcription ou conversation temps réel ; définir permissions et preuve de bout en bout |
+| M4-08 | Interagir par la voix | Adapté | Présente | Partielle | Unitaire | Dictée locale éditable dans le composer avec refus/indisponibilité explicites livrée ; conversation temps réel, fournisseur distant et qualification micro native restent à concevoir |
 | M4-09 | Installer et mettre à jour sur les plateformes annoncées | Adapté | Partielle | Partielle | Intégration | Bundle Windows x64 NSIS reproductible livré avec sidecar et icônes ; restent signature/distribution, updates/rollback et qualification macOS/Linux |
 
 Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux](../src/lib/sharing.ts), [artefacts](../src/lib/artifacts.ts).
@@ -514,6 +514,12 @@ Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux]
 - **Prévisualisation :** les artefacts documentaires Markdown disposent d'un bouton **Preview/Source** par version. Le rendu réutilise le composant de contenu existant, qui n'interprète ni HTML ni script ; la source reste disponible pour une lecture exacte et l'export conserve le texte original.
 - **État :** le choix Preview/Source reste local à la version affichée et ne modifie ni l'artefact persistant ni la provenance. Les images/PDF issus du workspace gardent leur preview bornée déjà livrée dans Files.
 - **Limites :** les sorties image/document produites directement par le moteur, les formats bureautiques, l'ouverture/écrasement natifs et la qualification multi-plateforme restent ouverts.
+
+### Livraison M4-08 — dictée locale éditable (première passe)
+
+- **Transcription :** le bouton **Voice** du composer utilise `SpeechRecognition`/`webkitSpeechRecognition` après un geste utilisateur. Les résultats intermédiaires et finaux restent dans le brouillon, que l'utilisateur peut corriger avant envoi.
+- **Garde-fous :** aucun audio n'est persisté ou envoyé au host ; l'arrêt est explicite, les erreurs micro sont traduites en messages calmes et l'absence d'API est signalée sans simuler une disponibilité.
+- **Limites :** le runtime dépend du support Speech API du navigateur/WebView, aucun dialogue temps réel ni fournisseur distant n'est ajouté, et la qualification des permissions micro Tauri par plateforme reste ouverte.
 
 ### Livraison M4-05 — export texte des artefacts (première passe)
 
