@@ -5,6 +5,7 @@ import {
   type ArtifactLogEntry,
   type ArtifactVersion,
 } from "../lib/artifacts";
+import { MessageContent } from "./MessageContent";
 
 interface Props {
   sessionId: string;
@@ -47,6 +48,7 @@ export function ArtifactsPane({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState<Record<string, boolean>>({});
 
   const recap = useMemo(
     () => buildThreadRecap(sessionId, log),
@@ -224,8 +226,30 @@ export function ArtifactsPane({
                     >
                       {exporting === draftKey ? "Exporting…" : "Export"}
                     </button>
+                    {a.kind === "doc" && (
+                      <button
+                        type="button"
+                        className="artifact-preview-toggle"
+                        aria-pressed={previewing[draftKey] === true}
+                        onClick={() =>
+                          setPreviewing((cur) => ({
+                            ...cur,
+                            [draftKey]: cur[draftKey] !== true,
+                          }))
+                        }
+                        title="Toggle a safe Markdown preview"
+                      >
+                        {previewing[draftKey] === true ? "Source" : "Preview"}
+                      </button>
+                    )}
                   </div>
-                  <pre className="artifact-code">{ver.text}</pre>
+                  {a.kind === "doc" && previewing[draftKey] === true ? (
+                    <div className="artifact-document-preview" aria-label={`Preview of ${a.title}`}>
+                      <MessageContent text={ver.text} />
+                    </div>
+                  ) : (
+                    <pre className="artifact-code">{ver.text}</pre>
+                  )}
                   <label className="artifact-comment-label">
                     Note v{ver.v}
                     <input

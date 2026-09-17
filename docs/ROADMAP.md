@@ -488,7 +488,7 @@ Ces écarts restent visibles pour une ambition de parité complète. Leur faisab
 | M4-02 | Annoter visuellement une page et transmettre le contexte | Adapté | Présente | Partielle | Unitaire | Ancre URL normalisée, sélection/commentaire, ancre DOM same-origin, capture visuelle explicite et recadrage d'une région sont livrés ; capture automatique iframe/zoom et qualification native restent à concevoir |
 | M4-03 | Faire piloter le navigateur par Muse | Adapté | Présente | Partielle | Unitaire | Observation bornée et actions explicites click/type sur iframe same-origin livrées ; adaptateur d'outils MSP, navigation multi-onglets, arrêt et qualification native restent à concevoir |
 | M4-04 | Faire piloter une application desktop | À définir | Absente | Absente | À faire | Runtime par OS et consentement effectif ; exécution interrompable et attribution claire des actions |
-| M4-05 | Produire/consulter des images et documents riches | À définir | Partielle | Partielle | À faire | Artefacts Markdown versionnés, réutilisation et export texte local livrés ; capacités moteur image/document, fichiers réellement générés, previews riches et qualification native restent à faire |
+| M4-05 | Produire/consulter des images et documents riches | Adapté | Présente | Partielle | Unitaire | Artefacts Markdown versionnés, prévisualisation sûre, réutilisation et export texte local livrés ; capacités moteur image/document, fichiers réellement générés, previews binaires riches et qualification native restent à faire |
 | M4-06 | Partager par URL et révoquer l'accès | À définir | Partielle | Locale | Unitaire | Hébergement, identité, permissions et révocation réelle ; second client lit puis perd l'accès |
 | M4-07 | Contrôler une exécution sur un autre host ou dans le cloud | À définir | Absente | Absente | À faire | Auth, routage, stockage et reprise distante ; statut exact après déconnexion |
 | M4-08 | Interagir par la voix | À définir | Absente | Absente | À faire | Choisir capture/transcription ou conversation temps réel ; définir permissions et preuve de bout en bout |
@@ -508,6 +508,12 @@ Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux]
 - **Observation :** **Observe page** lit explicitement le titre, le texte, les liens et les contrôles de l'iframe same-origin. La sortie est bornée, étiquetée comme contenu de page non fiable et peut être ajoutée au composer avec sa provenance.
 - **Actions :** après un clic utilisateur dans la page, **Click selected element** déclenche uniquement un événement sur l'élément ancré ; **Type into field** limite la saisie aux champs texte visibles non désactivés, avec événements `input`/`change`. Les actions sont locales à la frame courante, sans IPC ni exécution de script fourni par la page.
 - **Limites :** une frame cross-origin reste en lecture/annotation manuelle ; il n'y a pas encore d'adaptateur `browser.observe/click/type` vers le moteur MSP, de session d'onglet multiple, d'arrêt d'une action longue ou de qualification WebView2. Le panneau ne prétend donc pas fournir le pilotage autonome du navigateur.
+
+### Livraison M4-05 — preview documentaire sûre (première passe)
+
+- **Prévisualisation :** les artefacts documentaires Markdown disposent d'un bouton **Preview/Source** par version. Le rendu réutilise le composant de contenu existant, qui n'interprète ni HTML ni script ; la source reste disponible pour une lecture exacte et l'export conserve le texte original.
+- **État :** le choix Preview/Source reste local à la version affichée et ne modifie ni l'artefact persistant ni la provenance. Les images/PDF issus du workspace gardent leur preview bornée déjà livrée dans Files.
+- **Limites :** les sorties image/document produites directement par le moteur, les formats bureautiques, l'ouverture/écrasement natifs et la qualification multi-plateforme restent ouverts.
 
 ### Livraison M4-05 — export texte des artefacts (première passe)
 
