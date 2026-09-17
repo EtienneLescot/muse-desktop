@@ -376,7 +376,7 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
 | M2-01 | Un projet représente des dossiers persistants | Adapté | Présente | Câblée | Intégration | Racine persistante, sélection de dossier et création de conversation dans cette racine livrées ; restent migration explicite des anciens groupes et environnement/worktree |
-| M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Intégration | Héritage global/projet visible et modèle effectif appliqué à la création d'une session ; sandbox/réseau/auto-compact restent en attente d'un contrat moteur vérifié |
+| M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Intégration | Héritage global/projet visible, modèle effectif appliqué à la création d'une session et auto-compact appliqué via la SSOT de résolution ; sandbox/réseau restent en attente d'un contrat moteur vérifié |
 | M2-03 | Créer automatiquement un worktree pour une conversation | Adapté | Présente | Câblée | Intégration | Création Git, persistance, suppression confirmée, ouverture explicite et action atomique **Create & open** avec rollback d'admission livrées ; restent qualification native et pannes après admission |
 | M2-04 | Préparer l'environnement du worktree | Adapté | Présente | Partielle | Intégration | Commande explicite, profils persistants par workspace, annulation native ciblée, états et sortie bornée livrés ; readiness locale et allowlist d'environnement livrées ; reste la qualification native |
 | M2-05 | Passer de Local à Worktree et inversement | Adapté | Présente | Partielle | Intégration | Plan de handoff et préconditions livrés ; restent transfert atomique du host, déplacement de contexte, conflits fichiers ignorés et rollback |
@@ -503,7 +503,7 @@ Ces écarts restent visibles pour une ambition de parité complète. Leur faisab
 | M4-06 | Partager par URL et révoquer l'accès | À définir | Partielle | Locale | Unitaire | Hébergement, identité, permissions et révocation réelle ; second client lit puis perd l'accès |
 | M4-07 | Contrôler une exécution sur un autre host ou dans le cloud | À définir | Absente | Absente | À faire | Auth, routage, stockage et reprise distante ; statut exact après déconnexion |
 | M4-08 | Interagir par la voix | Adapté | Présente | Partielle | Unitaire | Dictée locale éditable dans le composer avec refus/indisponibilité explicites livrée ; conversation temps réel, fournisseur distant et qualification micro native restent à concevoir |
-| M4-09 | Installer et mettre à jour sur les plateformes annoncées | Adapté | Partielle | Partielle | Intégration | Bundle Windows x64 NSIS reproductible livré avec sidecar, icônes et manifeste d'intégrité SHA-256 ; restent signature/distribution, updates/rollback et qualification macOS/Linux |
+| M4-09 | Installer et mettre à jour sur les plateformes annoncées | Adapté | Partielle | Partielle | Intégration | Bundles Windows x64 NSIS et MSI reproductibles livrés avec sidecar, icônes et manifestes d'intégrité SHA-256 ; restent signature/distribution, updates/rollback et qualification macOS/Linux |
 
 Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux](../src/lib/sharing.ts), [artefacts](../src/lib/artifacts.ts).
 
