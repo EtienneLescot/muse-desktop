@@ -211,6 +211,9 @@ export default function App() {
     newFromSummary,
     prefill,
     clearPrefill,
+    prefillAttachment,
+    prefillAttachmentSessionId,
+    clearPrefillAttachment,
     artifacts,
     restoreArtifact,
     commentArtifact,
@@ -241,6 +244,7 @@ export default function App() {
     browserAnnotations,
     addBrowserAnnotation,
     prepareBrowserContext,
+    prepareBrowserCapture,
     removeBrowserAnnotation,
     browserPermissions,
     setBrowserAppPermission,
@@ -1186,6 +1190,12 @@ export default function App() {
                     onCancel={() => void cancelSession(active.session_id)}
                     prefill={prefill}
                     onPrefillConsumed={clearPrefill}
+                    prefillAttachment={
+                      prefillAttachmentSessionId === active.session_id
+                        ? prefillAttachment
+                        : null
+                    }
+                    onPrefillAttachmentConsumed={clearPrefillAttachment}
                     memories={memories}
                     memoryInsert={memoryInsert}
                     onMemoryInsertConsumed={() => setMemoryInsert(null)}
@@ -1292,6 +1302,9 @@ export default function App() {
                             onInsertContext={(context) => {
                               void prepareBrowserContext(active.session_id, context);
                             }}
+                            onInsertCapture={(capture) =>
+                              prepareBrowserCapture(active.session_id, capture)
+                            }
                             onRemoveAnnotation={removeBrowserAnnotation}
                             onSetPermission={setBrowserAppPermission}
                           />

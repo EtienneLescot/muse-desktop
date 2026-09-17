@@ -50,7 +50,7 @@ import {
   type SendResult,
 } from "../lib/outbox";
 export type { OutboxEntry, SendResult } from "../lib/outbox";
-import type { TurnInputPart } from "../lib/attachments";
+import type { ComposerAttachment, TurnInputPart } from "../lib/attachments";
 export type { TurnInputPart } from "../lib/attachments";
 // Input-prompt helpers live in ../lib/input (dependency-free, unit-tested).
 // Only parseInputRequest + the locally used types are imported; the rest is
@@ -81,6 +81,8 @@ export type { AllowDecision, AllowRule, ResolvedApproval } from "../lib/allowlis
 import {
   addBrowserAnnotation,
   createBrowserAnnotation,
+  browserCaptureAttachment,
+  formatBrowserCaptureContext,
   loadBrowserAnnotations,
   loadBrowserPermissions,
   removeBrowserAnnotation,
@@ -89,10 +91,12 @@ import {
   setBrowserAppPermission,
   type BrowserAnnotation,
   type BrowserAppPermission,
+  type BrowserCapture,
 } from "../lib/browserAnnotate";
 export type {
   BrowserAnnotation,
   BrowserAppPermission,
+  BrowserCapture,
 } from "../lib/browserAnnotate";
 export type { MemoryEntry } from "../lib/memory";
 export type {
@@ -834,6 +838,10 @@ interface UseMuseSessions {
   /** US-4: prefill text for the composer after `newFromSummary`. */
   prefill: string | null;
   clearPrefill: () => void;
+  /** M4-02: one captured browser image waiting for the active composer. */
+  prefillAttachment: ComposerAttachment | null;
+  prefillAttachmentSessionId: string | null;
+  clearPrefillAttachment: () => void;
   /** US-4: host occupancy per session (`session/contextUsage` triple). */
   usageBySession: Record<string, ContextUsage>;
   /** US-4: server context gesture (`session/compact`), user-clicked only. */
@@ -994,6 +1002,8 @@ interface UseMuseSessions {
   addBrowserAnnotation: (url: string, selection: string, comment: string) => void;
   /** M4-02: insert explicit page context into the active composer draft. */
   prepareBrowserContext: (sessionId: string, context: string) => boolean;
+  /** M4-02: insert a captured page image and its provenance into the composer. */
+  prepareBrowserCapture: (sessionId: string, capture: BrowserCapture) => boolean;
   /** US-19: remove an anchored comment by id. */
   removeBrowserAnnotation: (id: string) => void;
   /** US-19: computer-use per-app permissions (default denied). */
@@ -1423,6 +1433,10 @@ export function useMuseSessions(): UseMuseSessions {
   // after `newFromSummary`.
   const [summaries, setSummaries] = useState<Record<string, ThreadSummary>>({});
   const [prefill, setPrefill] = useState<string | null>(null);
+  const [prefillAttachmentState, setPrefillAttachmentState] = useState<{
+    sessionId: string;
+    attachment: ComposerAttachment;
+  } | null>(null);
   // US-12 + US-21: versioned artifacts per thread (mirror of localStorage).
   const [artifacts, setArtifacts] = useState<Record<string, Artifact[]>>({});
   // w-collab US-27: share mode + bundles (persisted under
@@ -4775,6 +4789,26 @@ export function useMuseSessions(): UseMuseSessions {
     [sessions],
   );
 
+  const prepareBrowserCapture = useCallback(
+    (sessionId: string, capture: BrowserCapture): boolean => {
+      const target = sessions.find((session) => session.session_id === sessionId);
+      const attachment = browserCaptureAttachment(capture);
+      const context = formatBrowserCaptureContext(capture);
+      if (target === undefined || attachment === null || context.length === 0) {
+        setError("browser capture unavailable: the image or page provenance is invalid");
+        return false;
+      }
+      setPrefill((current) => (current ? `${current}\n\n${context}` : context));
+      setPrefillAttachmentState({ sessionId, attachment });
+      return true;
+    },
+    [sessions],
+  );
+
+  const clearPrefillAttachment = useCallback(() => {
+    setPrefillAttachmentState(null);
+  }, []);
+
   const applyPersistentMcpProbe = useCallback(
     (id: string, result: LocalMcpProbeResult): boolean => {
       const updated = refreshLocalConnector(
@@ -6017,6 +6051,7 @@ export function useMuseSessions(): UseMuseSessions {
     browserAnnotations,
     addBrowserAnnotation: addBrowserAnnotationCb,
     prepareBrowserContext,
+    prepareBrowserCapture,
     removeBrowserAnnotation: removeBrowserAnnotationCb,
     browserPermissions,
     setBrowserAppPermission: setBrowserAppPermissionCb,
@@ -6113,6 +6148,9 @@ export function useMuseSessions(): UseMuseSessions {
     newFromSummary,
     prefill,
     clearPrefill,
+    prefillAttachment: prefillAttachmentState?.attachment ?? null,
+    prefillAttachmentSessionId: prefillAttachmentState?.sessionId ?? null,
+    clearPrefillAttachment,
     artifacts,
     restoreArtifact,
     commentArtifact,
