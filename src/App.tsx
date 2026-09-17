@@ -124,6 +124,11 @@ export default function App() {
     projectForSession,
     schedules,
     scheduleRuns,
+    notifications,
+    notificationPermission,
+    unreadNotificationCount,
+    enableNotifications,
+    markNotificationRead,
     reviewQueue,
     createSchedule,
     setScheduleEnabled,
@@ -709,6 +714,9 @@ export default function App() {
                 <SchedulesPanel
                   schedules={schedules}
                   runs={scheduleRuns}
+                  notifications={notifications}
+                  notificationPermission={notificationPermission}
+                  unreadNotifications={unreadNotificationCount}
                   sessions={sessions}
                   activeId={activeId}
                   workspace={workspace}
@@ -723,6 +731,14 @@ export default function App() {
                   onRunNow={(id) => runScheduleNow(id)}
                   onCancelRun={(id) => cancelScheduleRun(id)}
                   onMarkRunRead={(id) => markScheduleRunRead(id)}
+                  onEnableNotifications={enableNotifications}
+                  onMarkNotificationRead={markNotificationRead}
+                  onOpenNotification={(notification) => {
+                    if (notification.sessionId) {
+                      openPage("task");
+                      setActive(notification.sessionId);
+                    }
+                  }}
                   onOpenRun={(run) => {
                     if (run.sessionId) {
                       openPage("task");

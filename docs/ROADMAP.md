@@ -364,11 +364,20 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | M3-06 | Exécuter un travail planifié sans clic préalable | Adapté | Présente | Partielle | Intégration | Chaque schedule/review capture workspace, projet, modèle et politique ; ask reste en revue, workspace/YOLO dispatchent automatiquement ; journal local borné des runs visible. Reste le scheduler natif hors cycle UI et la sortie métier complète |
 | M3-07 | Gérer sommeil, reprise, doublons et échecs de planning | Adapté | Présente | Partielle | Intégration | Politique skip/latest, curseur d'occurrence stable, claim anti-doublon, retries bornés avec backoff et annulation d'une retry livrés côté client ; scheduler natif multi-instance, fuseau/DST explicite et reprise après crash restent ouverts |
 | M3-08 | Examiner les résultats des runs | Adapté | Présente | Partielle | Intégration | Historique borné, aperçu, statut, non-lu, lien vers la conversation et marquage lu livrés ; inbox filtrable/résumé riche et fin de run native restent ouverts |
-| M3-09 | Recevoir une notification utile | À définir | Absente | Absente | À faire | Notifications OS, préférences, non-lus et ouverture de la bonne conversation ; pas de répétition d'une notification déjà traitée |
+| M3-09 | Recevoir une notification utile | Adapté | Présente | Partielle | Intégration | Inbox locale dédupliquée pour fins/échecs, non-lus, ouverture de conversation et activation desktop livrés ; reste le service natif OS/Tauri et les scénarios d'app fermée |
 
 Preuves : [connecteurs](../src/lib/connectors.ts), [skills](../src/lib/skills.ts), [planning](../src/lib/schedules.ts), [journal des runs](../src/lib/scheduleRuns.ts), [file actuelle](../src/components/ReviewQueuePanel.tsx).
 
 **Dépendances :** M0-06/08 avant MCP ; M2-01 et M0-02/09 avant M3-06 ; M2-03 si run isolé ; M3-06/07 avant inbox. **Sortie M3 :** un run programmé utilise un vrai outil/skill, s'exécute selon la politique et produit un résultat consultable. Pour les runs locaux, app et ordinateur allumés restent une contrainte explicitée.
+
+### Livraison M3-09 — notifications de runs
+
+- **Inbox persistante :** les runs `completed` et `failed`, ainsi que les demandes `approval` et `input`, créent une notification locale bornée, avec titre, aperçu/erreur, horodatage, cible de conversation et clé d'idempotence. Une même occurrence ou demande ne peut pas être ajoutée deux fois.
+- **UX :** Automations expose les six dernières notifications, un badge non-lu, **Open conversation** et **Mark read**. La permission desktop est activable à la demande ; si l'OS refuse ou ne fournit pas l'API, l'inbox reste la surface de secours.
+- **Silence au démarrage :** les notifications déjà présentes sont hydratées comme historique et ne déclenchent pas un toast à chaque relance. Les nouvelles notifications non lues sont envoyées au meilleur effort via l'API `Notification` du webview.
+- **Bridge desktop :** `tauri-plugin-notification` est enregistré avec la permission `notification:default`, ce qui permet au constructeur `Notification` du webview d'atteindre le service OS dans un build Tauri.
+- **Limites :** les préférences muettes, les actions de clic OS et les tests multi-instance restent à faire ; l'application doit rester ouverte pour recevoir les événements du host.
+- **Validation :** suite Node 429 tests, TypeScript, build Vite et 68 tests Rust verts ; la qualification native du permission prompt reste à exécuter sur Windows/macOS/Linux.
 
 ## M4 — Parité étendue
 

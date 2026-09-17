@@ -2856,6 +2856,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState {
             resume_mutex: tokio::sync::Mutex::new(()),
             hosts: Mutex::new(Hosts::default()),

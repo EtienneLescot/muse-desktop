@@ -226,6 +226,22 @@ import {
   type ScheduleRun,
 } from "../lib/scheduleRuns";
 export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
+import {
+  appendNotification,
+  buildApprovalNotification,
+  buildInputNotification,
+  buildRunNotification,
+  deliverDesktopNotification,
+  loadNotifications,
+  markNotificationRead as markNotificationReadRow,
+  notificationPermission as readNotificationPermission,
+  requestNotificationPermission,
+  saveNotifications,
+  unreadNotificationCount as countUnreadNotifications,
+  type MuseNotification,
+  type NotificationPermission,
+} from "../lib/notifications";
+export type { MuseNotification, NotificationPermission } from "../lib/notifications";
 // US-12 + US-21 versioned artifacts + thread recap: extraction, versioning
 // and per-thread persistence live in ../lib/artifacts (dependency-free,
 // unit-tested); restore reuses the US-4 composer prefill below.
@@ -792,6 +808,12 @@ interface UseMuseSessions {
   cancelScheduleRun: (id: string) => void;
   /** M3-08: clear the independent inbox unread marker. */
   markScheduleRunRead: (id: string) => void;
+  /** M3-09: durable completion/failure notifications for scheduled runs. */
+  notifications: MuseNotification[];
+  notificationPermission: NotificationPermission;
+  unreadNotificationCount: number;
+  enableNotifications: () => Promise<NotificationPermission>;
+  markNotificationRead: (id: string) => void;
   /** US-9: approve a review entry → sent as normal turn input. */
   approveReview: (id: string) => Promise<void>;
   /** US-9: discard a pending review entry. */
@@ -1088,6 +1110,10 @@ export function useMuseSessions(): UseMuseSessions {
   const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
   const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() => loadScheduleRuns());
+  const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
+  const [notificationPermissionState, setNotificationPermissionState] = useState<NotificationPermission>(
+    () => readNotificationPermission(),
+  );
   // w-integrations US-24/US-26: connector registry (survives restarts via
   // localStorage), written through on every change.
   const [connectors, setConnectors] = useState<ConnectorEntry[]>(() => loadConnectors());
@@ -1470,6 +1496,102 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveScheduleRuns(scheduleRuns);
   }, [scheduleRuns]);
+
+  useEffect(() => {
+    saveNotifications(notifications);
+  }, [notifications]);
+
+  // M3-09: terminal scheduled runs become durable inbox notifications. The
+  // first render only hydrates the seen set so a restart does not replay every
+  // historical completion as a desktop toast.
+  const observedTerminalRuns = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const terminal = new Set(
+      scheduleRuns
+        .filter((run) => run.status === "completed" || run.status === "failed")
+        .map((run) => `${run.id}:${run.status}:${run.finishedAt ?? ""}`),
+    );
+    if (observedTerminalRuns.current === null) {
+      observedTerminalRuns.current = terminal;
+      return;
+    }
+    const fresh = scheduleRuns.filter((run) => {
+      if (run.status !== "completed" && run.status !== "failed") return false;
+      return !observedTerminalRuns.current?.has(`${run.id}:${run.status}:${run.finishedAt ?? ""}`);
+    });
+    observedTerminalRuns.current = terminal;
+    if (fresh.length === 0) return;
+    const built = fresh.map((run) => buildRunNotification(run)).filter(
+      (item): item is MuseNotification => item !== null,
+    );
+    if (built.length > 0) {
+      setNotifications((cur) => built.reduce(appendNotification, cur));
+    }
+  }, [scheduleRuns]);
+
+  // Desktop toasts are best-effort. The in-app notification list remains the
+  // source of truth when the browser API is denied or unavailable.
+  const deliveredNotificationIds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (deliveredNotificationIds.current === null) {
+      deliveredNotificationIds.current = new Set(notifications.map((item) => item.id));
+      return;
+    }
+    for (const item of notifications) {
+      if (!item.unread || deliveredNotificationIds.current.has(item.id)) continue;
+      deliveredNotificationIds.current.add(item.id);
+      deliverDesktopNotification(item);
+    }
+  }, [notifications]);
+
+  // Approval and answerable-input prompts are attention notifications. They
+  // are in-memory host state, so an app restart does not replay stale prompts.
+  const observedAttentionRequests = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const current = new Set([
+      ...approvals.map((item) => `approval:${item.session_id}:${item.request_id}`),
+      ...inputRequests.map((item) => `input:${item.session_id}:${item.input_id}`),
+    ]);
+    if (observedAttentionRequests.current === null) {
+      observedAttentionRequests.current = current;
+      return;
+    }
+    const previous = observedAttentionRequests.current;
+    const freshApprovals = approvals.filter((item) =>
+      !previous.has(`approval:${item.session_id}:${item.request_id}`),
+    );
+    const freshInputs = inputRequests.filter((item) =>
+      !previous.has(`input:${item.session_id}:${item.input_id}`),
+    );
+    observedAttentionRequests.current = current;
+    const built = [
+      ...freshApprovals.map((item) => buildApprovalNotification({
+        sessionId: item.session_id,
+        requestId: item.request_id,
+        toolName: item.toolName,
+        summary: item.summary,
+      })),
+      ...freshInputs.map((item) => buildInputNotification({
+        sessionId: item.session_id,
+        inputId: item.input_id,
+        toolName: item.tool_name,
+        questionCount: item.questions.length,
+      })),
+    ];
+    if (built.length > 0) {
+      setNotifications((cur) => built.reduce(appendNotification, cur));
+    }
+  }, [approvals, inputRequests]);
+
+  const enableNotifications = useCallback(async (): Promise<NotificationPermission> => {
+    const next = await requestNotificationPermission();
+    setNotificationPermissionState(next);
+    return next;
+  }, []);
+
+  const markNotificationRead = useCallback((id: string): void => {
+    setNotifications((cur) => markNotificationReadRow(cur, id));
+  }, []);
 
   // US-9 client-side scheduler: no workflow/* MSP endpoint exists, so a
   // bounded UI-side interval admits due schedules. Ask mode enters review;
@@ -4607,6 +4729,11 @@ export function useMuseSessions(): UseMuseSessions {
     schedules,
     reviewQueue: pendingReviews(reviewQueue),
     scheduleRuns,
+    notifications,
+    notificationPermission: notificationPermissionState,
+    unreadNotificationCount: countUnreadNotifications(notifications),
+    enableNotifications,
+    markNotificationRead,
     createSchedule: createScheduleCb,
     setScheduleEnabled: setScheduleEnabledCb,
     deleteSchedule: deleteScheduleCb,

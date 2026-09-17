@@ -93,6 +93,8 @@ Codex : Skills = instructions+ressources+scripts (agentskills.io), usage explici
 - **US-25 (S-V2) :** skills invocables slash + auto, partageables repo/team, divulgation progressive. **AC :** `/nom-skill` exécute ; auto-suggestion tracée.
 - **US-26 (C-V2+) :** MCP distant (1 seul en Free-like) avec garde Internet public/allowlist ; UI tierce rendue in-chat (MCP Apps). **AC :** échec VPN documenté + message explicite.
 
+- **M3-09 notifications de runs (partiel) :** `src/lib/notifications.ts` conserve une inbox locale bornée et dédupliquée pour les runs `completed`/`failed` et les demandes `approval`/`input`, avec aperçu, session cible, badge non-lu, ouverture et marquage lu dans Automations. La permission `Notification` du webview est demandée uniquement sur action ; en cas de refus ou d'absence d'API, l'inbox reste utilisable. Les toasts ne sont pas rejoués pour l'historique au démarrage. `tauri-plugin-notification` est enregistré avec `notification:default` pour le service desktop ; les préférences muettes et les actions OS restent non implémentées.
+
 ### 3.10 Collaboration / partage
 OpenCode : lien public `opncd.ai/s/<id>`, modes manual(/share défaut)/auto/disabled, un-share + rétention [ref-opencode]. Zed : Channels persistants (pairing, mentoring, refactor temps réel), projet partagé édité comme local, notes Markdown, follow [ref-zed]. Claude Projects : partage view/edit Team/Enterprise [ref-claude].
 - **US-27 (S-V2) :** je partage un thread via lien public + un-share. **AC :** lien révoqué → 404 ; mode auto/disabled respecté.
