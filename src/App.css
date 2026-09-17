@@ -3156,6 +3156,23 @@ body.dark .composer textarea::placeholder {
   color: var(--muted);
 }
 
+.run-unread {
+  color: var(--blue);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.run-preview {
+  display: block;
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .schedule-run[data-status="running"] .run-status,
 .schedule-run[data-status="queued"] .run-status {
   color: var(--blue);

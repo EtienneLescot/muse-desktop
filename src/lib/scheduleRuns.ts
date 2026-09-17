@@ -33,6 +33,10 @@ export interface ScheduleRun {
   attempt?: number;
   /** Retry is not eligible before this timestamp. */
   nextRetryAt?: number;
+  /** Result excerpt captured when the host turn finishes. */
+  resultPreview?: string;
+  /** Inbox unread marker, independent of the business status. */
+  unread?: boolean;
   status: ScheduleRunStatus;
   error?: string;
 }
@@ -74,10 +78,35 @@ export function settleRun(
         ...run,
         status,
         finishedAt: now,
+        ...(status === "completed" || status === "failed" ? { unread: true } : {}),
         ...(status === "completed" ? { error: undefined, nextRetryAt: undefined } : {}),
         ...(error ? { error } : {}),
       }
     : run);
+}
+
+/** Mark a run complete when the host emits a turn-stopped event. */
+export function completeRun(
+  runs: ScheduleRun[],
+  idValue: string,
+  now: number,
+  resultPreview?: string,
+): ScheduleRun[] {
+  return runs.map((run) => run.id === idValue
+    ? {
+        ...run,
+        status: "completed",
+        finishedAt: now,
+        unread: true,
+        error: undefined,
+        nextRetryAt: undefined,
+        ...(resultPreview ? { resultPreview } : {}),
+      }
+    : run);
+}
+
+export function markRunRead(runs: ScheduleRun[], idValue: string): ScheduleRun[] {
+  return runs.map((run) => run.id === idValue ? { ...run, unread: false } : run);
 }
 
 /** Exponential backoff, bounded so a local timer remains predictable. */
@@ -108,6 +137,7 @@ export function queueRunRetry(
       attempt: attempt + 1,
       nextRetryAt: now + retryDelayMs(attempt),
       finishedAt: undefined,
+      unread: false,
       ...(error ? { error } : {}),
     };
   });
@@ -153,6 +183,8 @@ function validRun(value: unknown): value is ScheduleRun {
     (row.sessionId === undefined || typeof row.sessionId === "string") &&
     (row.attempt === undefined || (typeof row.attempt === "number" && Number.isInteger(row.attempt) && row.attempt >= 1 && row.attempt <= MAX_RUN_ATTEMPTS)) &&
     (row.nextRetryAt === undefined || typeof row.nextRetryAt === "number") &&
+    (row.resultPreview === undefined || typeof row.resultPreview === "string") &&
+    (row.unread === undefined || typeof row.unread === "boolean") &&
     (row.error === undefined || typeof row.error === "string");
 }
 

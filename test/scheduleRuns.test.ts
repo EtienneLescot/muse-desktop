@@ -4,10 +4,12 @@ import assert from "node:assert/strict";
 import {
   appendRun,
   cancelRun,
+  completeRun,
   createScheduleRun,
   isRetryableScheduleError,
   loadScheduleRuns,
   markRunStarted,
+  markRunRead,
   MAX_RUN_ATTEMPTS,
   queueRunRetry,
   retryDelayMs,
@@ -62,6 +64,17 @@ describe("M3-06 schedule run ledger", () => {
     assert.equal(failed[0].error, "workspace mismatch");
     assert.equal(failed[1].status, "queued");
     assert.deepEqual(markRunStarted(failed, "missing", 2500), failed);
+  });
+
+  it("captures a result preview and keeps unread separate from status", () => {
+    const initial = run();
+    const running = markRunStarted([initial], initial.id, 2000, "session-1");
+    const completed = completeRun(running, initial.id, 3000, "  Finished the review.  ");
+    assert.equal(completed[0].status, "completed");
+    assert.equal(completed[0].resultPreview, "  Finished the review.  ");
+    assert.equal(completed[0].unread, true);
+    const read = markRunRead(completed, initial.id);
+    assert.equal(read[0].unread, false);
   });
 
   it("queues bounded exponential retries and cancels a pending retry", () => {
