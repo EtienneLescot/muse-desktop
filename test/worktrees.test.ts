@@ -8,7 +8,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   compareHeadHashes,
+  MAX_SETUP_COMMAND_CHARS,
   planWorktrees,
+  validateSetupCommand,
   WORKTREE_BASE,
   worktreeShellSnippet,
 } from "../src/lib/worktrees.ts";
@@ -104,6 +106,20 @@ describe("compareHeadHashes", () => {
     const r = compareHeadHashes("", "def456");
     assert.equal(r.match, false);
     assert.match(r.report, /nothing checked/);
+  });
+});
+
+describe("worktree setup command validation", () => {
+  it("requires a non-empty command and trims valid input", () => {
+    assert.match(validateSetupCommand("   ") ?? "", /must not be empty/);
+    assert.equal(validateSetupCommand("  npm install  "), null);
+  });
+
+  it("bounds command length", () => {
+    assert.match(
+      validateSetupCommand("x".repeat(MAX_SETUP_COMMAND_CHARS + 1)) ?? "",
+      /limited/,
+    );
   });
 });
 

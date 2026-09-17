@@ -24,6 +24,7 @@ mod resume;
 mod git;
 mod terminal;
 mod files;
+mod setup;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -1196,6 +1197,21 @@ async fn git_worktree_remove(
     tokio::task::spawn_blocking(move || git::remove_worktree(&root, &path))
         .await
         .map_err(|e| format!("worktree remove task failed: {e}"))?
+}
+
+/// Run an explicitly requested setup command in a managed worktree. The
+/// command is bounded and never started by project import or app startup.
+#[tauri::command]
+async fn worktree_setup_run(
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+    command: String,
+) -> Result<setup::SetupResult, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || setup::run(&root, &path, &command))
+        .await
+        .map_err(|e| format!("worktree setup task failed: {e}"))?
 }
 
 /// Open (or reuse) the persistent PTY owned by a conversation workspace.
@@ -2789,6 +2805,7 @@ fn main() {
             git_create_pr,
             git_worktree_create,
             git_worktree_remove,
+            worktree_setup_run,
             terminal_open,
             terminal_write,
             terminal_resize,

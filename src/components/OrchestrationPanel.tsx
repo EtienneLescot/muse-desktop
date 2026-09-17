@@ -2,10 +2,13 @@ import { useMemo, useState } from "react";
 import { fanoutQueueNote } from "../lib/fanout";
 import {
   compareHeadHashes,
+  MAX_SETUP_COMMAND_CHARS,
   planWorktrees,
+  validateSetupCommand,
   worktreeShellSnippet,
   type WorktreePlan,
   type WorktreeRecord,
+  type WorktreeSetupResult,
 } from "../lib/worktrees";
 import { CapabilityBadge } from "./CapabilityBadge";
 
@@ -24,6 +27,11 @@ interface Props {
     sessionId: string,
     record: WorktreeRecord,
   ) => Promise<boolean>;
+  onRunSetup: (
+    sessionId: string,
+    record: WorktreeRecord,
+    command: string,
+  ) => Promise<WorktreeSetupResult | null>;
 }
 
 /**
@@ -38,12 +46,19 @@ export function OrchestrationPanel({
   onCreateWorktree,
   worktrees,
   onRemoveWorktree,
+  onRunSetup,
 }: Props) {
   const [baseline, setBaseline] = useState("");
   const [current, setCurrent] = useState("");
   const [report, setReport] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [creating, setCreating] = useState<string | null>(null);
+  const [setupCommand, setSetupCommand] = useState("");
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [setupRunning, setSetupRunning] = useState<string | null>(null);
+  const [setupByBranch, setSetupByBranch] = useState<
+    Record<string, WorktreeSetupResult>
+  >({});
 
   const plans = useMemo(() => planWorktrees(agents), [agents]);
   const snippet = useMemo(() => worktreeShellSnippet(plans), [plans]);
@@ -76,6 +91,21 @@ export function OrchestrationPanel({
     setCreating(null);
   }
 
+  async function runSetup(record: WorktreeRecord): Promise<void> {
+    const validation = validateSetupCommand(setupCommand);
+    if (validation !== null) {
+      setSetupError(validation);
+      return;
+    }
+    setSetupError(null);
+    setSetupRunning(record.branch);
+    const result = await onRunSetup(sessionId, record, setupCommand);
+    if (result !== null) {
+      setSetupByBranch((current) => ({ ...current, [record.branch]: result }));
+    }
+    setSetupRunning(null);
+  }
+
   return (
     <section className="orchestration" aria-label="Agent worktrees">
       <header className="orchestration-head">
@@ -89,6 +119,24 @@ export function OrchestrationPanel({
         </button>
       </header>
       {queueNote !== null && <p className="muted">{queueNote}</p>}
+      <div className="orchestration-setup">
+        <label htmlFor="worktree-setup-command">Setup command</label>
+        <input
+          id="worktree-setup-command"
+          value={setupCommand}
+          onChange={(event) => {
+            setSetupCommand(event.target.value);
+            setSetupError(null);
+          }}
+          maxLength={MAX_SETUP_COMMAND_CHARS}
+          placeholder="e.g. npm install"
+          spellCheck={false}
+        />
+        <span className="muted">
+          Runs only after you click Run setup, inside the selected worktree.
+        </span>
+        {setupError !== null && <span className="orchestration-setup-error">{setupError}</span>}
+      </div>
       <ul className="orchestration-list">
         {plans.map((p) => (
           <li key={p.agent} title={`base ${p.base}`}>
@@ -115,6 +163,32 @@ export function OrchestrationPanel({
                 >
                   Remove
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const record = recordFor(p);
+                    if (record) void runSetup(record);
+                  }}
+                  disabled={setupRunning !== null || setupCommand.trim().length === 0}
+                  title="Run the setup command in this worktree"
+                >
+                  {setupRunning === recordFor(p)?.branch ? "Running…" : "Run setup"}
+                </button>
+                {setupByBranch[p.branch] && (
+                  <details className="orchestration-setup-output">
+                    <summary>
+                      Setup {setupByBranch[p.branch].status === "ready"
+                        ? "ready"
+                        : setupByBranch[p.branch].status === "timedOut"
+                          ? "timed out"
+                          : "failed"} · {setupByBranch[p.branch].durationMs} ms
+                      {setupByBranch[p.branch].exitCode === null
+                        ? ""
+                        : ` · exit ${setupByBranch[p.branch].exitCode}`}
+                    </summary>
+                    <pre>{setupByBranch[p.branch].output || "(no output)"}</pre>
+                  </details>
+                )}
               </>
             ) : (
               <button
