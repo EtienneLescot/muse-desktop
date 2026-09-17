@@ -305,6 +305,8 @@ import {
   AUTHORIZATION_MODE_KEY,
   automaticApprovalChoice,
   authorizationModeLabel,
+  hostApprovalMode,
+  hostModeMatches,
   parseAuthorizationMode,
   productAuthorizationMode,
   type AuthorizationMode,
@@ -1382,6 +1384,10 @@ export function useMuseSessions(): UseMuseSessions {
   const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
     return parseAuthorizationMode(readStorageString(AUTHORIZATION_MODE_KEY));
   });
+  /** Effective host posture by session. `null` means a requested change was
+   * refused or the host returned an incomplete projection; in that state the
+   * local selector must never auto-approve a tool. */
+  const [hostApprovalModeBySession, setHostApprovalModeBySession] = useState<Record<string, string | null>>({});
   // US-15 allowlist: restored once (survives restarts via localStorage),
   // written through on every change.
   const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
@@ -2479,6 +2485,12 @@ export function useMuseSessions(): UseMuseSessions {
     if (kind === "host_exited") {
       setConnectedIds((cur) => cur.filter((id) => id !== sid));
       setConnectionState(sid, "disconnected");
+      setHostApprovalModeBySession((cur) => {
+        if (!(sid in cur)) return cur;
+        const next = { ...cur };
+        delete next[sid];
+        return next;
+      });
       clearStopping(sid);
     }
     if (kind === "output") {
@@ -2754,6 +2766,7 @@ export function useMuseSessions(): UseMuseSessions {
           setError(`The host reported an unsupported approval mode: ${hostMode || "unknown"}.`);
           return;
         }
+        setHostApprovalModeBySession((cur) => ({ ...cur, [sid]: hostMode }));
         setAuthorizationModeState(mapped);
         writeStorageString(AUTHORIZATION_MODE_KEY, mapped);
       } catch {
@@ -2927,17 +2940,38 @@ export function useMuseSessions(): UseMuseSessions {
       connectedIds.includes(session.session_id),
     );
     if (targets.length === 0) return;
+    // Until each host confirms the same closed MSP mode, suspend automatic
+    // decisions for these sessions. A local preference is never authority
+    // enough to bypass a host ceiling (for example promptUnmatched).
+    setHostApprovalModeBySession((cur) => targets.reduce(
+      (next, session) => ({ ...next, [session.session_id]: null }),
+      { ...cur },
+    ));
     // The host applies the new posture to subsequent actions. Pending
     // approvals remain race-guarded by their current requirement token.
     void Promise.allSettled(
-      targets.map((session) =>
-        invoke("set_approval_mode", {
+      targets.map(async (session) => {
+        const result = await invoke<Record<string, unknown>>("set_approval_mode", {
           sessionId: session.session_id,
           mode: next,
-        }),
-      ),
+        });
+        const effective = (result.effectiveMode as Record<string, unknown> | undefined)?.mode;
+        if (result.status !== "accepted" || effective !== hostApprovalMode(next)) {
+          throw new Error("host did not confirm the requested approval posture");
+        }
+        return session.session_id;
+      }),
     ).then((results) => {
-      const failed = results.filter((result) => result.status === "rejected").length;
+      const succeeded = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+      const failed = results.length - succeeded.length;
+      setHostApprovalModeBySession((cur) => {
+        const nextState = { ...cur };
+        for (const sessionId of succeeded) nextState[sessionId] = hostApprovalMode(next);
+        for (const session of targets) {
+          if (!succeeded.includes(session.session_id)) nextState[session.session_id] = null;
+        }
+        return nextState;
+      });
       if (failed > 0) {
         setError(
           `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host.`,
@@ -4375,6 +4409,10 @@ export function useMuseSessions(): UseMuseSessions {
       }
       const choice = automaticApprovalChoice(authorizationMode, approval.choices);
       if (choice === null) continue;
+      const effectiveHostMode = hostApprovalModeBySession[approval.session_id];
+      if (!hostModeMatches(authorizationMode, effectiveHostMode)) {
+        continue;
+      }
       // Include the current choice set so an approval/updated stage can be
       // auto-decided even though the host intentionally reuses approvalId.
       const key = `${approval.session_id}|${approval.request_id}|${approval.choices
@@ -4384,7 +4422,7 @@ export function useMuseSessions(): UseMuseSessions {
       autoApprovalInFlight.current.add(key);
       void approve(approval.session_id, approval.request_id, choice.choiceId);
     }
-  }, [approvals, authorizationMode, approve, allowlist]);
+  }, [approvals, authorizationMode, approve, allowlist, hostApprovalModeBySession]);
 
   // US-15: effective allowlist decision for one pending approval request
   // (badge in the panel; most-restrictive-wins, network default-deny).

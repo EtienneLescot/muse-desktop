@@ -108,6 +108,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** lecture/écriture hors racine, symlink, réseau et commande refusée ; verdict moteur conforme au texte UI. Dépend M0-01/08 ; profils testés sans élargir les permissions réelles de l'utilisateur.
 
+**Pré-vol natif au 17/09/2026 :** `--exercise-approval` crée une session sans préférence imposée, relève la projection `approvalMode` du host puis tente `onRequest`, `promptUnmatched` et `allowAll`. Le sidecar 1.3.0 observé accepte la posture courante `promptUnmatched` et refuse les deux autres avec `commandRejected/approval_mode_ceiling`. Cette limite est désormais explicite dans le rapport ; l'UI ne doit pas convertir une préférence locale refusée en permission effective.
+
 ### M0-07 — Diagnostics
 
 **Code :** `wire_log`, `push_stderr`, `msp.rs`, erreurs affichées.

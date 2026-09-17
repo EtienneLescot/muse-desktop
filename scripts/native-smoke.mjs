@@ -11,12 +11,16 @@
  * checks that the structured JSON-RPC category is preserved without exposing
  * a raw wire payload. It is a diagnostic harness, not a substitute for the
  * full Tauri E2E scenario in M0-01c.
+ * The explicit `--exercise-approval` path records the host's startup posture
+ * and attempts each supported mode, accepting either an effective projection
+ * or the host's explicit ceiling rejection.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
  *   node scripts/native-smoke.mjs --binary C:\\path\\to\\muse.exe
  *   node scripts/native-smoke.mjs --exercise-control
  *   node scripts/native-smoke.mjs --exercise-errors
+ *   node scripts/native-smoke.mjs --exercise-approval
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -47,6 +51,10 @@ function exercisesControlPath() {
 
 function exercisesErrorPath() {
   return process.argv.includes("--exercise-errors");
+}
+
+function exercisesApprovalPath() {
+  return process.argv.includes("--exercise-approval");
 }
 
 function fail(message) {
@@ -115,6 +123,7 @@ function createHost(binary, workspace, label) {
           // frame is deliberately never included in diagnostics or output.
           error.code = Number.isInteger(frame.error.code) ? frame.error.code : -1;
           error.kind = typeof frame.error.data?.kind === "string" ? frame.error.data.kind : "unknown";
+          error.reason = typeof frame.error.data?.reason === "string" ? frame.error.data.reason : undefined;
           error.retryable = typeof frame.error.data?.retryable === "boolean" ? frame.error.data.retryable : undefined;
           request.reject(error);
         }
@@ -188,6 +197,7 @@ async function main() {
   const binary = binaryArgument();
   const exerciseControl = exercisesControlPath();
   const exerciseErrors = exercisesErrorPath();
+  const exerciseApproval = exercisesApprovalPath();
   const roots = await Promise.all([
     mkdtemp(join(tmpdir(), "muse-native-smoke-a-")),
     mkdtemp(join(tmpdir(), "muse-native-smoke-b-")),
@@ -199,6 +209,7 @@ async function main() {
     const sessions = [];
     const controls = [];
     const errors = [];
+    const approvalModes = [];
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
         clientInfo: { name: "muse_desktop_native_smoke", version: "0.1.0" },
@@ -216,6 +227,32 @@ async function main() {
       const sessionId = session?.sessionId ?? session?.id;
       if (typeof sessionId !== "string" || sessionId.length === 0) fail(`host-${index === 0 ? "A" : "B"} did not return a session id`);
       sessions.push(sessionId);
+      if (exerciseApproval) {
+        const startupMode = session?.approvalMode?.mode;
+        if (typeof startupMode !== "string" || startupMode.length === 0) {
+          fail(`host-${index === 0 ? "A" : "B"} did not return an effective approval mode`);
+        }
+        const attempts = [];
+        for (const mode of ["onRequest", "promptUnmatched", "allowAll"]) {
+          try {
+            const changed = await host.request("session/setApprovalMode", {
+              commandId: uuidv7(),
+              sessionId,
+              mode,
+            });
+            if (changed?.status !== "accepted" || changed?.effectiveMode?.mode !== mode) {
+              fail(`host-${index === 0 ? "A" : "B"} returned an incomplete approval mode result for ${mode}`);
+            }
+            attempts.push({ mode, status: "accepted", effectiveMode: changed.effectiveMode.mode });
+          } catch (error) {
+            if (error?.code !== -32030 || error?.kind !== "commandRejected" || error?.reason !== "approval_mode_ceiling") {
+              fail(`host-${index === 0 ? "A" : "B"} returned an unexpected approval mode error for ${mode}`);
+            }
+            attempts.push({ mode, status: "rejected", reason: error.reason });
+          }
+        }
+        approvalModes.push({ host: String.fromCharCode(65 + index), startupMode, attempts });
+      }
       const catalogue = await host.request("model/list");
       if (catalogue === null || typeof catalogue !== "object") fail(`host-${index === 0 ? "A" : "B"} returned no model catalogue`);
     }
@@ -284,6 +321,7 @@ async function main() {
       turnsSent: exerciseControl ? controls.length : 0,
       ...(exerciseControl ? { controls } : {}),
       ...(exerciseErrors ? { errorsChecked: errors.length, errors } : {}),
+      ...(exerciseApproval ? { approvalModes } : {}),
     })}\n`);
   } finally {
     await Promise.all(hosts.map((host) => host.close()));

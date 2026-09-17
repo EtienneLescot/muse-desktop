@@ -87,6 +87,20 @@ export function hostApprovalMode(mode: AuthorizationMode): MuseHostApprovalMode 
   }
 }
 
+/**
+ * A local posture can drive automatic decisions only after the host confirms
+ * the same closed mode. `undefined` keeps compatibility with older sessions
+ * that never reported a projection; `null` is an explicit failed/unknown
+ * update and therefore fails closed.
+ */
+export function hostModeMatches(
+  local: AuthorizationMode,
+  observed: MuseHostApprovalMode | string | null | undefined,
+): boolean {
+  if (observed === undefined) return true;
+  return observed !== null && observed === hostApprovalMode(local);
+}
+
 /** Translate a host projection back to the product selector language. */
 export function productAuthorizationMode(mode: string): AuthorizationMode | null {
   switch (mode) {
