@@ -1,7 +1,7 @@
 /**
  * Connectors / MCP registry (US-24 + US-26).
  *
- * Zero imports: safe to unit-test on the built-in node:test runner.
+ * Dependency-light and safe to unit-test on the built-in node:test runner.
  *
  * - US-24: a curated in-app directory of LOCAL connectors installs in
  *   1 click (no manual JSON). Installed connectors hot-list their tools
@@ -17,6 +17,8 @@
  * best-effort). Under node:test there is no localStorage, so load/save
  * degrade gracefully to memory defaults.
  */
+
+import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 /** Local (in-process/sidecar) vs remote (HTTP/SSE, bookkeeping only). */
 export type ConnectorKind = "local" | "remote";
@@ -360,20 +362,6 @@ export function requestRemoteConnector(
   return { ok: true, registry: [...registry, entry], entry };
 }
 
-function storage(): Storage | null {
-  try {
-    const g = globalThis as unknown as Record<string, unknown>;
-    const ls = g["localStorage"];
-    if (typeof ls !== "object" || ls === null) return null;
-    const get = (ls as Record<string, unknown>)["getItem"];
-    const set = (ls as Record<string, unknown>)["setItem"];
-    if (typeof get !== "function" || typeof set !== "function") return null;
-    return ls as unknown as Storage;
-  } catch {
-    return null;
-  }
-}
-
 function isValidEntry(e: unknown): e is ConnectorEntry {
   if (typeof e !== "object" || e === null) return false;
   const r = e as Record<string, unknown>;
@@ -388,14 +376,9 @@ function isValidEntry(e: unknown): e is ConnectorEntry {
 
 /** Load the persisted registry; corrupt/missing data yields []. */
 export function loadConnectors(): ConnectorEntry[] {
-  try {
-    const ls = storage();
-    if (ls === null) return [];
-    const raw = ls.getItem(CONNECTORS_KEY);
-    if (raw === null) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isValidEntry).map((e) => ({
+  const parsed = readStorageJson<unknown>(CONNECTORS_KEY, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(isValidEntry).map((e) => ({
       ...e,
       tools: e.tools.filter(
         (t): t is ConnectorTool =>
@@ -410,16 +393,9 @@ export function loadConnectors(): ConnectorEntry[] {
       command: typeof e.command === "string" ? e.command : undefined,
       lastProbeAt: typeof e.lastProbeAt === "number" ? e.lastProbeAt : undefined,
     }));
-  } catch {
-    return [];
-  }
 }
 
 /** Persist the registry (best-effort: quota/private mode never throws). */
 export function saveConnectors(registry: ConnectorEntry[]): void {
-  try {
-    storage()?.setItem(CONNECTORS_KEY, JSON.stringify(registry));
-  } catch {
-    // best-effort persistence only
-  }
+  writeStorageJson(CONNECTORS_KEY, registry);
 }

@@ -5,6 +5,7 @@
  * pure and storage is best-effort under a dedicated namespaced key.
  */
 import type { ScheduleAuthorizationMode, ThreadReuse } from "./schedules";
+import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
@@ -189,19 +190,10 @@ function validRun(value: unknown): value is ScheduleRun {
 }
 
 export function loadScheduleRuns(): ScheduleRun[] {
-  try {
-    const raw = localStorage.getItem(SCHEDULE_RUNS_KEY);
-    const parsed: unknown = raw === null ? [] : JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(validRun).slice(-MAX_SCHEDULE_RUNS) : [];
-  } catch {
-    return [];
-  }
+  const parsed = readStorageJson<unknown>(SCHEDULE_RUNS_KEY, []);
+  return Array.isArray(parsed) ? parsed.filter(validRun).slice(-MAX_SCHEDULE_RUNS) : [];
 }
 
 export function saveScheduleRuns(runs: ScheduleRun[]): void {
-  try {
-    localStorage.setItem(SCHEDULE_RUNS_KEY, JSON.stringify(runs.slice(-MAX_SCHEDULE_RUNS)));
-  } catch {
-    // Best effort, matching the other local registries.
-  }
+  writeStorageJson(SCHEDULE_RUNS_KEY, runs.slice(-MAX_SCHEDULE_RUNS));
 }

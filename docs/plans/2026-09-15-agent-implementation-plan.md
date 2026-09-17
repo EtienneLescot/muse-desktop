@@ -119,7 +119,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** `persist.ts` et tous les modules utilisant localStorage/sessionStorage.
 
-**Travail :** inventaire des clés et politiques de conservation. Introduire une façade de stockage versionnée ; décider par ADR si stockage natif requis. Migrer avec copie de secours, validation et reprise après interruption ; distinguer données durables et état UI. Traiter suppression/tombstones et quotas sans résurrection.
+**Travail :** inventaire des clés et politiques de conservation. La façade versionnée `lib/storage.ts` est maintenant le point d'entrée de tous les lecteurs/écrivains `localStorage` connus, y compris les valeurs scalaires. Elle valide les lectures JSON, conserve les anciennes valeurs en cas d'échec d'écriture, borne les diagnostics et exporte un snapshot de récupération. Les formats `v1` restent inchangés ; la prochaine passe doit ajouter une migration explicite avec copie de secours, validation et reprise après interruption, distinguer données durables et état UI, et traiter suppression/tombstones et quotas sans résurrection.
 
 **Acceptation :** schéma ancien, JSON corrompu, stockage indisponible/saturé, migration interrompue et réouverture. Aucun effacement silencieux ; export de secours accessible. Les migrations précèdent la modification de format M0-02/03 et M2.
 

@@ -37,6 +37,7 @@ import {
   type ComposerAttachment,
   type TurnInputPart,
 } from "../lib/attachments";
+import { readStorageJson, writeStorageJson } from "../lib/storage.ts";
 
 interface Props {
   sessionId?: string;
@@ -81,36 +82,24 @@ function formatAttachmentSize(size: number): string {
 }
 
 function loadRecents(workspace: string): RecentMention[] {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    if (!raw) return [];
-    const obj = JSON.parse(raw) as Record<string, unknown>;
-    const list = obj[workspace];
-    if (!Array.isArray(list)) return [];
-    return list
-      .filter(
-        (r): r is RecentMention =>
-          typeof r === "object" &&
-          r !== null &&
-          typeof (r as RecentMention).relPath === "string" &&
-          typeof (r as RecentMention).absPath === "string",
-      )
-      .slice(0, RECENT_CAP);
-  } catch {
-    return [];
-  }
+  const obj = readStorageJson<Record<string, unknown>>(RECENT_KEY, {});
+  const list = obj[workspace];
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(
+      (r): r is RecentMention =>
+        typeof r === "object" &&
+        r !== null &&
+        typeof (r as RecentMention).relPath === "string" &&
+        typeof (r as RecentMention).absPath === "string",
+    )
+    .slice(0, RECENT_CAP);
 }
 
 function saveRecents(workspace: string, recents: RecentMention[]): void {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    const obj =
-      raw !== null ? (JSON.parse(raw) as Record<string, unknown>) : {};
-    obj[workspace] = recents.slice(0, RECENT_CAP);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(obj));
-  } catch {
-    // best-effort (private mode, quota): completion still works in-memory
-  }
+  const obj = readStorageJson<Record<string, unknown>>(RECENT_KEY, {});
+  obj[workspace] = recents.slice(0, RECENT_CAP);
+  writeStorageJson(RECENT_KEY, obj);
 }
 
 /** True when an invoke failure means "no such Tauri command". */

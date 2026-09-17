@@ -1,4 +1,5 @@
 import type { ScheduleRun } from "./scheduleRuns";
+import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 export type MuseNotificationKind = "run-completed" | "run-failed" | "approval-needed" | "input-needed";
 
@@ -124,21 +125,12 @@ function validNotification(value: unknown): value is MuseNotification {
 }
 
 export function loadNotifications(): MuseNotification[] {
-  try {
-    const raw = localStorage.getItem(NOTIFICATIONS_KEY);
-    const parsed: unknown = raw === null ? [] : JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(validNotification).slice(-MAX_NOTIFICATIONS) : [];
-  } catch {
-    return [];
-  }
+  const parsed = readStorageJson<unknown>(NOTIFICATIONS_KEY, []);
+  return Array.isArray(parsed) ? parsed.filter(validNotification).slice(-MAX_NOTIFICATIONS) : [];
 }
 
 export function saveNotifications(notifications: MuseNotification[]): void {
-  try {
-    localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifications.slice(-MAX_NOTIFICATIONS)));
-  } catch {
-    // Best effort under quota/privacy mode, like the other local registries.
-  }
+  writeStorageJson(NOTIFICATIONS_KEY, notifications.slice(-MAX_NOTIFICATIONS));
 }
 
 export type NotificationPermission = "default" | "granted" | "denied" | "unsupported";

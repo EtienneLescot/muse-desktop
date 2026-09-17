@@ -6,9 +6,11 @@
  * ask mode waits for review while workspace and YOLO modes dispatch through
  * the normal turn path. A native background scheduler is still a follow-up.
  *
- * Dependency-free (zero imports) so it stays runnable under `node:test`
- * without React or Tauri.
+ * The scheduling rules remain dependency-light and are covered under
+ * `node:test`; persistence is routed through the shared defensive facade.
  */
+
+import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 /** One-shot trigger: fires once when `at` (epoch ms) is reached. */
 export interface OneShotTrigger {
@@ -448,21 +450,11 @@ export function resolveReviewTarget(
 /* ---------------- persistence (localStorage, best-effort) ---------------- */
 
 function readRaw(key: string): unknown {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return [];
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return [];
-  }
+  return readStorageJson<unknown>(key, []);
 }
 
 function writeRaw(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Quota or privacy mode: best-effort like persist.ts.
-  }
+  writeStorageJson(key, value);
 }
 
 function isValidTrigger(t: unknown): t is ScheduleTrigger {

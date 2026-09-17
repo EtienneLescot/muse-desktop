@@ -39,6 +39,7 @@ import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
 import { searchConversations } from "./lib/conversationSearch";
 import { WindowControls, dragWindow } from "./components/WindowControls";
+import { readStorageString, writeStorageString } from "./lib/storage.ts";
 import "./App.css";
 import "./Desktop.css";
 
@@ -46,7 +47,7 @@ function initialTheme(): Theme {
   let stored: string | null = null;
   let prefersDark = false;
   try {
-    stored = localStorage.getItem(THEME_KEY);
+    stored = readStorageString(THEME_KEY);
     prefersDark =
       window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
   } catch {
@@ -297,11 +298,7 @@ export default function App() {
 
   useEffect(() => {
     document.body.classList.toggle("dark", theme === "dark");
-    try {
-      localStorage.setItem(THEME_KEY, theme);
-    } catch {
-      // best-effort (private mode, quota): the class toggle above still applies
-    }
+    writeStorageString(THEME_KEY, theme);
   }, [theme]);
 
   const active = sessions.find((s) => s.session_id === activeId) ?? null;
