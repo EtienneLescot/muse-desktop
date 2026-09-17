@@ -19,6 +19,10 @@
  * The explicit `--exercise-user-shell` path negotiates the `userShell`
  * capability, admits a harmless command in each workspace and observes the
  * corresponding shell item without sending a model turn.
+ * The explicit `--exercise-reconnect` path reads each live session and its
+ * pending approval/input snapshot. This is the native reconciliation half of
+ * M0-02/M0-05; it deliberately does not claim a cold resume because the
+ * bundled sidecar currently reports ephemeral session durability.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
@@ -28,6 +32,7 @@
  *   node scripts/native-smoke.mjs --exercise-approval
  *   node scripts/native-smoke.mjs --exercise-isolation
  *   node scripts/native-smoke.mjs --exercise-user-shell
+ *   node scripts/native-smoke.mjs --exercise-reconnect
  *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -83,6 +88,10 @@ function exercisesIsolationPath() {
 
 function exercisesUserShellPath() {
   return process.argv.includes("--exercise-user-shell");
+}
+
+function exercisesReconnectPath() {
+  return process.argv.includes("--exercise-reconnect");
 }
 
 function fail(message) {
@@ -300,6 +309,7 @@ async function main() {
   const exerciseApproval = exercisesApprovalPath();
   const exerciseIsolation = exercisesIsolationPath();
   const exerciseUserShell = exercisesUserShellPath();
+  const exerciseReconnect = exercisesReconnectPath();
   const reportPath = reportArgument();
   const roots = await Promise.all([
     mkdtemp(join(tmpdir(), "muse-native-smoke-a-")),
@@ -315,6 +325,7 @@ async function main() {
     const errors = [];
     const approvalModes = [];
     const userShellChecks = [];
+    const reconnectChecks = [];
     let isolation = null;
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
@@ -372,6 +383,56 @@ async function main() {
       }
       const catalogue = await host.request("model/list");
       if (catalogue === null || typeof catalogue !== "object") fail(`host-${index === 0 ? "A" : "B"} returned no model catalogue`);
+      if (exerciseReconnect) {
+        // These are the same point-in-time reads used by the renderer after a
+        // reconnect. Keep the result intentionally small: the smoke proves
+        // identity and shape, while the transcript itself remains private.
+        let sessionRead = "matched";
+        let history = "omitted";
+        let approvals = 0;
+        let userInputs = 0;
+        try {
+          const read = await host.request("session/read", {
+            sessionId,
+            excludeItems: false,
+          });
+          const readSessionId = read?.session?.sessionId ?? read?.session?.id;
+          if (readSessionId !== sessionId) {
+            fail(`host-${index === 0 ? "A" : "B"} returned a mismatched session from session/read`);
+          }
+          if (read?.history !== undefined && (typeof read.history !== "object" || read.history === null)) {
+            fail(`host-${index === 0 ? "A" : "B"} returned an invalid history envelope`);
+          }
+          history = read?.history === undefined ? "omitted" : "available";
+        } catch (error) {
+          if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+          sessionRead = "unsupported";
+        }
+        try {
+          const pending = await host.request("approval/listPending", { sessionId });
+          if (pending === null || typeof pending !== "object") {
+            fail(`host-${index === 0 ? "A" : "B"} returned an invalid pending snapshot`);
+          }
+          if (pending.approvals !== undefined && !Array.isArray(pending.approvals)) {
+            fail(`host-${index === 0 ? "A" : "B"} returned invalid approvals`);
+          }
+          if (pending.userInputs !== undefined && !Array.isArray(pending.userInputs)) {
+            fail(`host-${index === 0 ? "A" : "B"} returned invalid userInputs`);
+          }
+          approvals = Array.isArray(pending.approvals) ? pending.approvals.length : 0;
+          userInputs = Array.isArray(pending.userInputs) ? pending.userInputs.length : 0;
+        } catch (error) {
+          if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+          sessionRead = sessionRead === "matched" ? "pending-unsupported" : "unsupported";
+        }
+        reconnectChecks.push({
+          host: String.fromCharCode(65 + index),
+          sessionRead,
+          history,
+          approvals,
+          userInputs,
+        });
+      }
       if (exerciseUserShell) {
         const commandId = uuidv7();
         const shellResult = await host.request("session/userShell", {
@@ -501,6 +562,7 @@ async function main() {
       ...(exerciseApproval ? { approvalModes } : {}),
       ...(exerciseIsolation ? { isolation } : {}),
       ...(exerciseUserShell ? { userShell: userShellChecks } : {}),
+      ...(exerciseReconnect ? { reconnect: reconnectChecks } : {}),
     };
     if (reportPath !== null) {
       await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
