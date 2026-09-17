@@ -37,6 +37,12 @@ function formatObservedAt(observedAt: number | null): string {
   return `Updated ${new Date(observedAt).toLocaleTimeString()}`;
 }
 
+function mediaLabel(mediaType: string): string {
+  if (mediaType === "application/pdf") return "PDF preview";
+  if (mediaType === "image/svg+xml") return "SVG preview";
+  return "Image preview";
+}
+
 /** M1-07 real disk browser. Every row comes from the Rust Files service. */
 export function FilesPanel({ sessionId, state, onList, onRead, onOpen }: Props) {
   useEffect(() => {
@@ -120,23 +126,60 @@ export function FilesPanel({ sessionId, state, onList, onRead, onOpen }: Props) 
         <article className="file-preview" aria-live="polite">
           {!preview ? (
             <p className="muted">Select a file to preview its current contents from disk.</p>
-          ) : preview.binary ? (
+          ) : preview.mediaType && preview.base64Data ? (
             <>
               <div className="file-preview-head">
                 <strong>{preview.path}</strong>
-                <span>Binary file · {formatSize(preview.size)}</span>
+                <span className="file-preview-actions">
+                  <span>{mediaLabel(preview.mediaType)} · {formatSize(preview.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => void onOpen(sessionId, preview.path)}
+                    title="Open this file with the system default application"
+                  >
+                    Open in app
+                  </button>
+                </span>
               </div>
-              {preview.mediaType && preview.base64Data ? (
+              {preview.mediaType === "application/pdf" ? (
+                <div className="file-document-preview">
+                  <object
+                    data={`data:${preview.mediaType};base64,${preview.base64Data}`}
+                    type={preview.mediaType}
+                    aria-label={`Preview of ${preview.path}`}
+                  >
+                    <p className="muted">This WebView cannot render the PDF. Use Open in app to view it.</p>
+                  </object>
+                  <span className="muted">PDF preview · {formatSize(preview.size)}</span>
+                </div>
+              ) : preview.mediaType.startsWith("image/") ? (
                 <div className="file-image-preview">
                   <img
                     src={`data:${preview.mediaType};base64,${preview.base64Data}`}
                     alt={`Preview of ${preview.path}`}
                   />
-                  <span className="muted">Image preview · {preview.mediaType}</span>
+                  <span className="muted">{mediaLabel(preview.mediaType)} · {preview.mediaType}</span>
                 </div>
               ) : (
-                <p className="muted">Binary content is not rendered in the text preview.</p>
+                <p className="muted">This file format has no inline preview. Use Open in app to view it.</p>
               )}
+            </>
+          ) : preview.binary ? (
+            <>
+              <div className="file-preview-head">
+                <strong>{preview.path}</strong>
+                <span className="file-preview-actions">
+                  <span>Binary file · {formatSize(preview.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => void onOpen(sessionId, preview.path)}
+                    title="Open this file with the system default application"
+                  >
+                    Open in app
+                  </button>
+                </span>
+              </div>
+              <p className="muted">Binary content is not rendered in the text preview.</p>
             </>
           ) : (
             <>

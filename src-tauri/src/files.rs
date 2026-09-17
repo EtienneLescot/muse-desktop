@@ -172,7 +172,7 @@ pub fn read(
         bytes.truncate(MAX_READ_BYTES as usize);
     }
     let binary = bytes.contains(&0) || std::str::from_utf8(&bytes).is_err();
-    let detected_media_type = image_media_type(&file_path);
+    let detected_media_type = preview_media_type(&file_path);
     let image_bytes = if detected_media_type.is_some() && size <= MAX_IMAGE_BYTES {
         let mut full = Vec::with_capacity(size as usize);
         File::open(&file_path)
@@ -213,7 +213,7 @@ pub fn read(
     })
 }
 
-fn image_media_type(path: &Path) -> Option<&'static str> {
+fn preview_media_type(path: &Path) -> Option<&'static str> {
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
     match extension.as_str() {
         "png" => Some("image/png"),
@@ -222,6 +222,7 @@ fn image_media_type(path: &Path) -> Option<&'static str> {
         "webp" => Some("image/webp"),
         "bmp" => Some("image/bmp"),
         "svg" => Some("image/svg+xml"),
+        "pdf" => Some("application/pdf"),
         _ => None,
     }
 }
@@ -353,6 +354,10 @@ mod tests {
         let image = read(&root, "pixel.png", None).unwrap();
         assert_eq!(image.media_type.as_deref(), Some("image/png"));
         assert!(image.base64_data.is_some());
+        fs::write(root.join("guide.pdf"), b"%PDF-1.7\nMuse preview\n").unwrap();
+        let pdf = read(&root, "guide.pdf", None).unwrap();
+        assert_eq!(pdf.media_type.as_deref(), Some("application/pdf"));
+        assert!(pdf.base64_data.is_some());
         let _ = fs::remove_dir_all(root);
     }
 

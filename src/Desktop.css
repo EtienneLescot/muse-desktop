@@ -755,6 +755,19 @@
   object-fit: contain;
   background: var(--bg);
 }
+.file-document-preview {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.file-document-preview object {
+  display: block;
+  width: 100%;
+  min-height: 360px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+}
 .work-panel .artifacts-tabs {
   padding: 12px 18px;
 }

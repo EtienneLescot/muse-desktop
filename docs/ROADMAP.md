@@ -491,10 +491,10 @@ Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux]
 
 ### Livraison M4-05 — export texte des artefacts (première passe)
 
-- **Résultat :** chaque version d'un artefact du panneau **Content** expose **Export**. En desktop, le sélecteur de sauvegarde natif propose un nom et une extension dérivés du type/langage ; le bridge écrit ensuite le contenu UTF-8 exact de la version choisie. En preview web, le téléchargement navigateur reste disponible. Files affiche aussi un aperçu des images binaires reconnues dans le workspace.
+- **Résultat :** chaque version d'un artefact du panneau **Content** expose **Export**. En desktop, le sélecteur de sauvegarde natif propose un nom et une extension dérivés du type/langage ; le bridge écrit ensuite le contenu UTF-8 exact de la version choisie. En preview web, le téléchargement navigateur reste disponible. Files affiche aussi un aperçu borné des images et PDF reconnus dans le workspace, avec un repli d'ouverture système.
 - **Garde-fous :** la destination doit être un chemin absolu sélectionné explicitement, le dossier parent doit exister et le contenu est limité à 2 MiB. Aucun dossier n'est créé et le fichier exporté n'est jamais exécuté par Muse.
 - **Provenance :** l'export porte la version sélectionnée (`vN`) et le message de succès reste dans le panneau ; la restauration **Reuse** conserve son chemin de pré-remplissage séparé.
-- **Limites :** les blocs Markdown ne deviennent pas automatiquement des fichiers générés par le moteur ; documents binaires, dimensions riches, previews PDF et qualification native de l'ouverture/écrasement restent les prochaines sous-tâches M4-05.
+- **Limites :** les blocs Markdown ne deviennent pas automatiquement des fichiers générés par le moteur ; documents bureautiques, dimensions riches et qualification native de l'ouverture/écrasement restent les prochaines sous-tâches M4-05.
 - **Validation :** tests Rust d'écriture UTF-8 et de bornes, suite Node, TypeScript et build Vite verts.
 
 ### Livraison M4-09 — bundle Windows x64 (première passe)
