@@ -24,6 +24,7 @@ import {
   writeStorageJson,
 } from "./storage.ts";
 import type { EngineErrorDetails } from "./engineError.ts";
+import { isSubagentStatus, type SubagentStatus } from "./subagent.ts";
 
 export interface StoredSession {
   session_id: string;
@@ -71,6 +72,8 @@ export interface LogEntry {
   objective?: string;
   subagentRole?: string;
   depth?: number;
+  /** Host-confirmed lifecycle state for a sub-agent block. */
+  subagentStatus?: SubagentStatus;
   /**
    * M0-03 idempotency key on user entries: stable across retries of the
    * same logical send, so a retry reuses this entry instead of appending
@@ -138,6 +141,8 @@ function isValidEntry(e: unknown): e is LogEntry {
       ((error as Record<string, unknown>).durationMs === undefined ||
         (typeof (error as Record<string, unknown>).durationMs === "number" &&
           Number.isFinite((error as Record<string, unknown>).durationMs))));
+  const validSubagentStatus =
+    r.subagentStatus === undefined || isSubagentStatus(r.subagentStatus);
   return (
     typeof r.id === "string" &&
     typeof r.ts === "number" &&
@@ -148,6 +153,7 @@ function isValidEntry(e: unknown): e is LogEntry {
       r.role === "system" ||
       r.role === "tool") &&
     typeof r.text === "string" &&
+    validSubagentStatus &&
     validEngineError
   );
 }

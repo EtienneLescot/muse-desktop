@@ -9,7 +9,9 @@ import assert from "node:assert/strict";
 import {
   formatDrilldown,
   formatSubagentResult,
+  isTerminalSubagentStatus,
   parseSubagentPayload,
+  subagentStatusLabel,
   subagentSummary,
 } from "../src/lib/subagent.ts";
 
@@ -59,6 +61,28 @@ describe("parseSubagentPayload", () => {
       JSON.stringify({ agent_id: "a", text: "t", child_session_id: "c-1" }),
     );
     assert.equal(p.childSessionId, "c-1");
+  });
+
+  it("normalizes host lifecycle aliases and does not dump status-only payloads", () => {
+    const running = parseSubagentPayload(
+      JSON.stringify({ agent_id: "a", status: "in-progress" }),
+    );
+    assert.equal(running.status, "running");
+    assert.equal(running.text, "");
+
+    const completed = parseSubagentPayload(
+      JSON.stringify({ agent_id: "a", state: "done" }),
+    );
+    assert.equal(completed.status, "completed");
+    assert.equal(completed.text, "");
+    assert.equal(isTerminalSubagentStatus(completed.status), true);
+  });
+
+  it("keeps unknown host statuses visible without treating them as terminal", () => {
+    const p = parseSubagentPayload(JSON.stringify({ agent_id: "a", phase: "waiting_for_host" }));
+    assert.equal(p.status, "unknown");
+    assert.equal(isTerminalSubagentStatus(p.status), false);
+    assert.equal(subagentStatusLabel(p.status), "Awaiting host status");
   });
 });
 

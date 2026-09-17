@@ -23,6 +23,10 @@ import {
   type TranscriptHit,
 } from "../lib/transcriptSearch";
 import { streamEntryA11y, streamWindowAnnouncement } from "../lib/streamA11y";
+import {
+  isTerminalSubagentStatus,
+  subagentStatusLabel,
+} from "../lib/subagent";
 import { MessageContent } from "./MessageContent";
 
 /** US-6 controls for one sub-agent block. Read-result and drill-down resolve
@@ -551,8 +555,18 @@ export function StreamView({
             </details>
           );
         }
+        const subagentStatus = e.subagentStatus ?? (e.open === true ? "running" : "completed");
+        const subagentTerminal = isTerminalSubagentStatus(subagentStatus);
+        const subagentResumable =
+          subagentStatus === "interrupted" ||
+          subagentStatus === "stopped" ||
+          subagentStatus === "paused";
         return e.role === "subagent" ? (
-          <details key={e.id} className="msg subagent" data-entry-index={entryIndex}>
+          <details
+            key={e.id}
+            className={`msg subagent subagent-${subagentStatus}`}
+            data-entry-index={entryIndex}
+          >
             <summary>
               <span className="role">{roleLabel(e)}</span>
               <span className="msg-summary">
@@ -564,6 +578,9 @@ export function StreamView({
                       depth: e.depth,
                       text: e.text,
                     })}
+              </span>
+              <span className="subagent-status" data-status={subagentStatus}>
+                {subagentStatusLabel(subagentStatus)}
               </span>
               <span className="ts">{timeOf(e.ts)}</span>
             </summary>
@@ -584,7 +601,7 @@ export function StreamView({
               <div className="subagent-controls">
                 <button
                   type="button"
-                  disabled={busy === e.id}
+                  disabled={busy === e.id || subagentTerminal}
                   onClick={() => controls.onInterrupt(agentOf(e))}
                   title="subagent/interrupt"
                 >
@@ -592,7 +609,7 @@ export function StreamView({
                 </button>
                 <button
                   type="button"
-                  disabled={busy === e.id}
+                  disabled={busy === e.id || subagentTerminal}
                   onClick={() => controls.onStop(agentOf(e))}
                   title="subagent/stop"
                 >
@@ -600,7 +617,7 @@ export function StreamView({
                 </button>
                 <button
                   type="button"
-                  disabled={busy === e.id}
+                  disabled={busy === e.id || !subagentResumable}
                   onClick={() => controls.onResume(agentOf(e))}
                   title="subagent/resume"
                 >
