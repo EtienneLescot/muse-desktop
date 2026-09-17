@@ -21,6 +21,7 @@ const ISSUE_MESSAGE_LIMIT = 300;
 /** Keep recovery exports bounded even when a broken webview stores a huge value. */
 export const RECOVERY_RAW_LIMIT = 120_000;
 let issues: StorageIssue[] = [];
+const issueListeners = new Set<() => void>();
 
 function boundRecoveryRaw(raw: string): { raw: string; truncated: boolean } {
   const chars = Array.from(raw);
@@ -71,6 +72,19 @@ function record(key: string, kind: StorageIssueKind, message: string): void {
     ...issues.filter((issue) => !(issue.key === key && issue.kind === kind)),
     { key, kind, message: message.slice(0, ISSUE_MESSAGE_LIMIT), at: Date.now() },
   ].slice(-MAX_ISSUES);
+  for (const listener of issueListeners) {
+    try {
+      listener();
+    } catch {
+      // A diagnostic subscriber must never break the storage operation.
+    }
+  }
+}
+
+/** Subscribe to newly recorded issues; returns an idempotent unsubscribe. */
+export function subscribeStorageIssues(listener: () => void): () => void {
+  issueListeners.add(listener);
+  return () => issueListeners.delete(listener);
 }
 
 /** Drain and clear issues recorded since the previous call. */
@@ -125,11 +139,25 @@ export function writeStorageJson(key: string, value: unknown): boolean {
     record(key, "unavailable", "local storage is unavailable");
     return false;
   }
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) {
+    record(key, "corrupt", "value is not JSON-serializable");
+    return false;
+  }
   try {
-    store.setItem(key, JSON.stringify(value));
+    store.setItem(key, serialized);
     return true;
   } catch (error) {
-    record(key, "quota", `local storage write failed: ${String(error)}`);
+    const name =
+      typeof DOMException !== "undefined" && error instanceof DOMException ? error.name : "";
+    const message = String(error).toLowerCase();
+    const kind: StorageIssueKind =
+      name === "QuotaExceededError" ||
+      name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+      message.includes("quota")
+        ? "quota"
+        : "unavailable";
+    record(key, kind, `local storage write failed: ${String(error)}`);
     return false;
   }
 }

@@ -2933,8 +2933,9 @@ export function useMuseSessions(): UseMuseSessions {
           return;
         }
         setHostApprovalModeBySession((cur) => ({ ...cur, [sid]: hostMode }));
-        setAuthorizationModeState(mapped);
-        writeStorageString(AUTHORIZATION_MODE_KEY, mapped);
+        // The notification is scoped to this session. Keep it as the host
+        // projection used by approval gating; never overwrite the global
+        // selector or its persisted value from a delayed sibling event.
       } catch {
         setError("The host reported an invalid approval mode update.");
       }

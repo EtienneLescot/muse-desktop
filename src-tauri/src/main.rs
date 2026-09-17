@@ -318,9 +318,25 @@ fn truncate(s: &str, n: usize) -> String {
 /// normal prose is retained, while values following an obvious secret key
 /// are replaced before the bounded stderr tail reaches the UI.
 fn redact_diagnostic(input: &str) -> String {
-    let mut out = input.replace("Bearer ", "Bearer [redacted]");
-    out = out.replace("bearer ", "bearer [redacted]");
-    out = out.replace("BEARER ", "BEARER [redacted]");
+    let mut out = input.to_string();
+    for prefix in ["Bearer ", "bearer ", "BEARER "] {
+        let mut search_from = 0usize;
+        while search_from < out.len() {
+            let Some(relative) = out[search_from..].find(prefix) else { break; };
+            let start = search_from + relative;
+            let value_start = start + prefix.len();
+            let bytes = out.as_bytes();
+            let mut value_end = value_start;
+            while value_end < bytes.len()
+                && !bytes[value_end].is_ascii_whitespace()
+                && !matches!(bytes[value_end], b',' | b';' | b'}' | b']' | b')' | b'"' | b'\'')
+            {
+                value_end += 1;
+            }
+            out.replace_range(value_start..value_end, "[redacted]");
+            search_from = value_start + "[redacted]".len();
+        }
+    }
     for key in [
         "token", "access_token", "refresh_token", "api_key", "apikey", "secret", "password",
     ] {
@@ -4825,6 +4841,7 @@ mod tests {
         assert!(!redacted.contains("super-secret"));
         assert!(!redacted.contains("pāsswørd"));
         assert!(!redacted.contains("Bearer abc123"));
+        assert!(!redacted.contains("abc123"));
         assert!(redacted.contains("[redacted]"));
         assert!(redact_diagnostic(&"界".repeat(5000)).len() <= DIAGNOSTIC_LINE_LIMIT + "…".len());
     }

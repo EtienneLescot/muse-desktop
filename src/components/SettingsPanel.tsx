@@ -14,7 +14,7 @@
  *   providers" (never a live list). Provider selection persists per
  *   project either way.
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
 import type { ScopeVerdict } from "../lib/scope";
 import {
@@ -40,6 +40,7 @@ import {
   inspectStorageSnapshot,
   importStorageSnapshot,
   migrateLegacyStorage,
+  subscribeStorageIssues,
   type StorageIssue,
   type StorageSnapshotPreview,
 } from "../lib/storage";
@@ -102,11 +103,45 @@ export function SettingsPanel({
   const [storageIssues, setStorageIssues] = useState<StorageIssue[]>(() =>
     consumeStorageIssues(),
   );
+
+  useEffect(() => {
+    const unsubscribe = subscribeStorageIssues(() => {
+      const next = consumeStorageIssues();
+      if (next.length === 0) return;
+      setStorageIssues((previous) => {
+        const merged = [...previous, ...next];
+        return merged.filter(
+          (issue, index) =>
+            merged.findIndex(
+              (candidate) => candidate.key === issue.key && candidate.kind === issue.kind,
+            ) === index,
+        );
+      });
+    });
+    return unsubscribe;
+  }, []);
   const [recoveryPreview, setRecoveryPreview] = useState<{
     serialized: string;
     snapshot: StorageSnapshotPreview;
   } | null>(null);
   const [selectedRecoveryKeys, setSelectedRecoveryKeys] = useState<string[]>([]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeStorageIssues(() => {
+      const next = consumeStorageIssues();
+      if (next.length === 0) return;
+      setStorageIssues((previous) => {
+        const merged = [...previous, ...next];
+        return merged.filter(
+          (issue, index) =>
+            merged.findIndex(
+              (candidate) => candidate.key === issue.key && candidate.kind === issue.kind,
+            ) === index,
+        );
+      });
+    });
+    return unsubscribe;
+  }, []);
 
   const effective = effectiveSandboxMode(sandbox);
 
