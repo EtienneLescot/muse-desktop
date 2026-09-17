@@ -130,6 +130,7 @@ import {
 import {
   formatDrilldown,
   formatSubagentResult,
+  isTerminalSubagentStatus,
   parseSubagentPayload,
 } from "../lib/subagent";
 // US-4 compaction: local extractive summaries + server context gesture.
@@ -2843,6 +2844,7 @@ export function useMuseSessions(): UseMuseSessions {
     if (kind === "subagent_event") {
       ensureSessionRow(sid, null);
       const parsed = parseSubagentPayload(payload);
+      const terminalStatus = isTerminalSubagentStatus(parsed.status);
       setLogs((cur) => {
         const log = cur[sid] ?? [];
         const i = lastOpenIndex(log, "subagent", parsed.agentId);
@@ -2860,6 +2862,8 @@ export function useMuseSessions(): UseMuseSessions {
               objective: parsed.objective ?? prev.objective,
               subagentRole: parsed.role ?? prev.subagentRole,
               depth: parsed.depth ?? prev.depth,
+              subagentStatus: parsed.status ?? prev.subagentStatus,
+              ...(terminalStatus ? { open: false } : {}),
             },
             ...log.slice(i + 1),
           ];
@@ -2872,11 +2876,12 @@ export function useMuseSessions(): UseMuseSessions {
               role: "subagent" as LogRole,
               text: parsed.text,
               agentId: parsed.agentId,
-              open: true,
               childSessionId: parsed.childSessionId,
               objective: parsed.objective,
               subagentRole: parsed.role,
               depth: parsed.depth,
+              subagentStatus: parsed.status,
+              open: !terminalStatus,
             },
           ];
         }

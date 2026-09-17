@@ -13,6 +13,85 @@ export interface ParsedSubagent {
   objective?: string;
   role?: string;
   depth?: number;
+  status?: SubagentStatus;
+}
+
+/** Host-confirmed lifecycle states that can be rendered safely in the UI. */
+export type SubagentStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "interrupted"
+  | "stopped"
+  | "paused"
+  | "failed"
+  | "unknown";
+
+const STATUS_ALIASES: Record<string, SubagentStatus> = {
+  unknown: "unknown",
+  queued: "queued",
+  pending: "queued",
+  running: "running",
+  working: "running",
+  inprogress: "running",
+  started: "running",
+  completed: "completed",
+  complete: "completed",
+  done: "completed",
+  finished: "completed",
+  succeeded: "completed",
+  success: "completed",
+  interrupted: "interrupted",
+  interrupt: "interrupted",
+  cancelled: "interrupted",
+  canceled: "interrupted",
+  stopped: "stopped",
+  stop: "stopped",
+  paused: "paused",
+  pause: "paused",
+  failed: "failed",
+  error: "failed",
+};
+
+const SUBAGENT_STATUSES = new Set<SubagentStatus>([
+  "queued",
+  "running",
+  "completed",
+  "interrupted",
+  "stopped",
+  "paused",
+  "failed",
+  "unknown",
+]);
+
+function optionalStatus(value: unknown): SubagentStatus | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase().replace(/[\s_-]+/g, "");
+  return STATUS_ALIASES[normalized] ?? "unknown";
+}
+
+export function isTerminalSubagentStatus(
+  status: SubagentStatus | undefined,
+): boolean {
+  return status === "completed" || status === "interrupted" ||
+    status === "stopped" || status === "failed";
+}
+
+export function isSubagentStatus(value: unknown): value is SubagentStatus {
+  return typeof value === "string" && SUBAGENT_STATUSES.has(value as SubagentStatus);
+}
+
+export function subagentStatusLabel(status: SubagentStatus | undefined): string {
+  switch (status) {
+    case "queued": return "Queued";
+    case "running": return "Running";
+    case "completed": return "Completed";
+    case "interrupted": return "Interrupted";
+    case "stopped": return "Stopped";
+    case "paused": return "Paused";
+    case "failed": return "Failed";
+    default: return "Awaiting host status";
+  }
 }
 
 function nonEmptyString(v: unknown): string | undefined {
@@ -41,7 +120,9 @@ export function parseSubagentPayload(payload: string): ParsedSubagent {
         nonEmptyString(obj.text) ??
         nonEmptyString(obj.chunk) ??
         nonEmptyString(obj.output) ??
-        payload;
+        (optionalStatus(obj.status ?? obj.state ?? obj.phase ?? obj.event) === undefined
+          ? payload
+          : "");
       const out: ParsedSubagent = { agentId, text };
       const child =
         nonEmptyString(obj.childSessionId) ||
@@ -54,6 +135,8 @@ export function parseSubagentPayload(payload: string): ParsedSubagent {
       if (role !== undefined) out.role = role;
       const depth = optionalDepth(obj.depth);
       if (depth !== undefined) out.depth = depth;
+      const status = optionalStatus(obj.status ?? obj.state ?? obj.phase ?? obj.event);
+      if (status !== undefined) out.status = status;
       return out;
     } catch {
       // fall through to plain text
