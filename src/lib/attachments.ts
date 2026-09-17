@@ -33,6 +33,8 @@ export interface ComposerAttachment {
   base64Data?: string;
   width?: number;
   height?: number;
+  /** True when a restored draft has metadata but no reusable payload. */
+  missing?: boolean;
 }
 
 export interface AttachmentFailure {
@@ -186,6 +188,9 @@ export function buildTurnInputParts(
 ): TurnInputPart[] {
   const parts: TurnInputPart[] = text.trim().length > 0 ? [{ type: "text", text }] : [];
   for (const attachment of attachments) {
+    // Never send a metadata-only row as an empty pretend attachment. The
+    // composer blocks the action until the user reselects the source file.
+    if (attachment.missing === true) continue;
     if (attachment.kind === "text" && attachment.content !== undefined) {
       parts.push({
         type: "text",

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import type { AuthorizationMode } from "../lib/authorization";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
@@ -12,6 +12,7 @@ import {
   type ComposerAttachment,
   type TurnInputPart,
 } from "../lib/attachments";
+import { loadAttachmentDraft, saveAttachmentDraft } from "../lib/attachmentDraft";
 
 interface Props {
   /** Default folder for the new thread; null until the user picks one. */
@@ -57,8 +58,20 @@ export function EmptySessionScreen({
     }
   }, [draft]);
   const [starting, setStarting] = useState(false);
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [initialAttachmentDraft] = useState(() => loadAttachmentDraft("welcome"));
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>(
+    initialAttachmentDraft.attachments,
+  );
+  const [attachmentRecovery] = useState(
+    initialAttachmentDraft.truncated ||
+      initialAttachmentDraft.attachments.some((attachment) => attachment.missing === true),
+  );
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const replaceAttachmentId = useRef<string | null>(null);
+  useEffect(() => {
+    saveAttachmentDraft("welcome", attachments);
+  }, [attachments]);
   const canStart = workspace !== null && !backendMissing && !starting;
 
   async function addFiles(files: FileList | File[]): Promise<void> {
@@ -86,6 +99,11 @@ export function EmptySessionScreen({
 
   async function start() {
     if (!canStart) return;
+    const missing = attachments.filter((attachment) => attachment.missing === true);
+    if (missing.length > 0) {
+      setAttachmentError(`Reselect ${missing.map((attachment) => attachment.name).join(", ")} before starting.`);
+      return;
+    }
     setStarting(true);
     try {
       const sent = await onStart(draft, buildTurnInputParts(draft, attachments));
@@ -95,6 +113,19 @@ export function EmptySessionScreen({
       }
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function replaceAttachment(id: string, files: FileList | File[]): Promise<void> {
+    const file = Array.from(files)[0];
+    replaceAttachmentId.current = null;
+    if (file === undefined || starting) return;
+    try {
+      const replacement = await readAttachment(file);
+      setAttachments((current) => current.map((attachment) => attachment.id === id ? replacement : attachment));
+      setAttachmentError(null);
+    } catch (error) {
+      setAttachmentError(`${file.name}: ${userFacingError(error, "This attachment could not be read.")}`);
     }
   }
   if (sidecarError) {
@@ -148,6 +179,21 @@ export function EmptySessionScreen({
               <li className="attachment-chip" key={attachment.id}>
                 <span className="attachment-kind" aria-hidden="true">{attachment.kind === "image" ? "▧" : "▤"}</span>
                 <span className="attachment-name" title={attachment.name}>{attachment.name}</span>
+                {attachment.missing === true && (
+                  <>
+                    <span className="attachment-missing">Reselect to restore</span>
+                    <button
+                      type="button"
+                      className="attachment-reselect"
+                      onClick={() => {
+                        replaceAttachmentId.current = attachment.id;
+                        fileInputRef.current?.click();
+                      }}
+                    >
+                      Reselect
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   className="attachment-remove"
@@ -161,6 +207,11 @@ export function EmptySessionScreen({
           </ul>
         )}
         {attachmentError !== null && <div className="attachment-error" role="alert">{attachmentError}</div>}
+        {attachmentRecovery && attachments.some((attachment) => attachment.missing === true) && attachmentError === null && (
+          <div className="attachment-recovery" role="status">
+            Some attachments were restored as metadata. Reselect them before starting.
+          </div>
+        )}
         <textarea
           autoFocus
           aria-label="Your first message"
@@ -183,12 +234,16 @@ export function EmptySessionScreen({
         <div className="welcome-draft-actions">
           <label className="composer-attach" title="Attach text files or images">
             <input
+              ref={fileInputRef}
               type="file"
               accept="image/*,text/*,.md,.mdx,.ts,.tsx,.js,.jsx,.json,.css,.html,.rs,.py,.go,.java,.sh,.yaml,.yml,.toml"
               multiple
               disabled={backendMissing || starting || attachments.length >= MAX_ATTACHMENTS}
               onChange={(event) => {
-                void addFiles(event.currentTarget.files ?? []);
+                const files = event.currentTarget.files ?? [];
+                const replacementId = replaceAttachmentId.current;
+                if (replacementId !== null) void replaceAttachment(replacementId, files);
+                else void addFiles(files);
                 event.currentTarget.value = "";
               }}
             />

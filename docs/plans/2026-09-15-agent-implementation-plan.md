@@ -261,13 +261,13 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** Composer, `mentions.ts`, service fichiers, adaptation TurnInputPart. Dépend M1-07 et de la vérification des capacités moteur M0-08.
 
-**État au 17/09/2026 :** les images attachées détectent leurs dimensions via l'API `Image` quand elle est disponible, les affichent dans le chip du composer avec une miniature locale, puis les transmettent comme champs optionnels du part MSP. Le fallback sans DOM conserve le payload précédent ; la qualification live sur modèles image et la reprise d'un fichier disparu restent ouvertes.
+**État au 17/09/2026 :** les images attachées détectent leurs dimensions via l'API `Image` quand elle est disponible, les affichent dans le chip du composer avec une miniature locale, puis les transmettent comme champs optionnels du part MSP. Le fallback sans DOM conserve le payload précédent. Les brouillons d'attachements sont restaurés dans la session de la webview : les payloads bornés restent réutilisables, tandis que les grosses pièces gardent leurs métadonnées et exposent **Reselect** avant l'envoi. La qualification live sur modèles image reste ouverte.
 
 **Travail :** définir référence structurée type/MIME/taille/nom/source, drag/drop/coller image, suppression avant envoi, limites et erreurs. Employer le format accepté par Muse ; si non supporté, afficher l'indisponibilité, pas un faux nom de fichier dans le prompt.
 
 **Acceptation :** image réellement reçue, fichier texte, limite dépassée, fichier supprimé, annulation et retry sans pièce jointe orpheline.
 
-**État au 16/09/2026 :** contrat stable vérifié depuis le binaire embarqué (`TurnInputPart` = `text|image|skill`). Le composeur envoie les fichiers texte et images via des parts structurées, avec ingestion sélecteur/glisser-déposer/coller, bornes et suppression avant envoi ; l’outbox conserve le payload exact pour les retries. Les essais live par modèle image, la persistance du brouillon avant envoi et la qualification native restent ouverts.
+**État au 16/09/2026 :** contrat stable vérifié depuis le binaire embarqué (`TurnInputPart` = `text|image|skill`). Le composeur envoie les fichiers texte et images via des parts structurées, avec ingestion sélecteur/glisser-déposer/coller, bornes et suppression avant envoi ; l’outbox conserve le payload exact pour les retries. La persistance de session des brouillons est livrée avec une borne et une re-sélection explicite des gros payloads. Les essais live par modèle image et la qualification native restent ouvertes.
 
 ### M1-09 — Fork serveur
 

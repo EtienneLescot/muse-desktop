@@ -38,6 +38,7 @@ import {
   type ComposerAttachment,
   type TurnInputPart,
 } from "../lib/attachments";
+import { loadAttachmentDraft, saveAttachmentDraft } from "../lib/attachmentDraft";
 import { readStorageJson, writeStorageJson } from "../lib/storage.ts";
 
 interface Props {
@@ -161,7 +162,14 @@ export function Composer({
   // instead of firing a second identical turn.
   const [sending, setSending] = useState(false);
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [initialAttachmentDraft] = useState(() => loadAttachmentDraft(draftKey));
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>(
+    initialAttachmentDraft.attachments,
+  );
+  const [attachmentRecovery] = useState(
+    initialAttachmentDraft.truncated ||
+      initialAttachmentDraft.attachments.some((attachment) => attachment.missing === true),
+  );
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [recents, setRecents] = useState<RecentMention[]>(() =>
     workspace !== null ? loadRecents(workspace) : [],
@@ -170,12 +178,17 @@ export function Composer({
   // A user can continue typing while the supervisor acknowledges a turn.
   const textRef = useRef(text);
   const attachmentsRef = useRef(attachments);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const replaceAttachmentId = useRef<string | null>(null);
   useEffect(() => {
     textRef.current = text;
   }, [text]);
   useEffect(() => {
     attachmentsRef.current = attachments;
   }, [attachments]);
+  useEffect(() => {
+    saveAttachmentDraft(draftKey, attachments);
+  }, [attachments, draftKey]);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const area = areaRef.current;
@@ -353,6 +366,13 @@ export function Composer({
 
   async function send(): Promise<void> {
     if ((text.trim().length === 0 && attachmentsRef.current.length === 0) || disabled || checking || sending) return;
+    const missing = attachmentsRef.current.filter((attachment) => attachment.missing === true);
+    if (missing.length > 0) {
+      setAttachmentError(
+        `Reselect ${missing.map((attachment) => attachment.name).join(", ")} before sending.`,
+      );
+      return;
+    }
     const draftAtSend = text;
     const attachmentsAtSend = attachmentsRef.current;
     const attachmentsAtSendKey = attachmentKey(attachmentsAtSend);
@@ -470,6 +490,23 @@ export function Composer({
     if (failures.length > 0) setAttachmentError(failures.join(" · "));
   }
 
+  async function replaceAttachment(id: string, files: FileList | File[]): Promise<void> {
+    const file = Array.from(files)[0];
+    replaceAttachmentId.current = null;
+    if (file === undefined || disabled) return;
+    try {
+      const replacement = await readAttachment(file);
+      setAttachments((current) =>
+        current.map((attachment) => (attachment.id === id ? replacement : attachment)),
+      );
+      setAttachmentError(null);
+    } catch (error) {
+      setAttachmentError(
+        `${file.name}: ${userFacingError(error, "This attachment could not be read.")}`,
+      );
+    }
+  }
+
   async function steer(): Promise<void> {
     if (
       onSteer === undefined ||
@@ -478,6 +515,13 @@ export function Composer({
       checking ||
       sending
     ) return;
+    const missing = attachmentsRef.current.filter((attachment) => attachment.missing === true);
+    if (missing.length > 0) {
+      setAttachmentError(
+        `Reselect ${missing.map((attachment) => attachment.name).join(", ")} before guiding Muse.`,
+      );
+      return;
+    }
     const draftAtSend = text;
     const attachmentsAtSend = attachmentsRef.current;
     const attachmentsAtSendKey = attachmentKey(attachmentsAtSend);
@@ -715,6 +759,21 @@ export function Composer({
                       ? ` · ${attachment.width}×${attachment.height}`
                       : ""}
                   </span>
+                  {attachment.missing === true && (
+                    <>
+                      <span className="attachment-missing">Reselect to restore</span>
+                      <button
+                        type="button"
+                        className="attachment-reselect"
+                        onClick={() => {
+                          replaceAttachmentId.current = attachment.id;
+                          fileInputRef.current?.click();
+                        }}
+                      >
+                        Reselect
+                      </button>
+                    </>
+                  )}
                   <button
                     type="button"
                     className="attachment-remove"
@@ -729,6 +788,11 @@ export function Composer({
           )}
           {attachmentError !== null && (
             <div className="attachment-error" role="alert">{attachmentError}</div>
+          )}
+          {attachmentRecovery && attachments.some((attachment) => attachment.missing === true) && attachmentError === null && (
+            <div className="attachment-recovery" role="status">
+              Some attachments were restored as metadata. Reselect them before sending.
+            </div>
           )}
           <textarea
             ref={areaRef}
@@ -769,12 +833,16 @@ export function Composer({
           <div className="composer-context">
             <label className="composer-attach" title="Attach text files or images">
               <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/*,text/*,.md,.mdx,.ts,.tsx,.js,.jsx,.json,.css,.html,.rs,.py,.go,.java,.sh,.yaml,.yml,.toml"
                 multiple
                 disabled={disabled || attachments.length >= MAX_ATTACHMENTS}
                 onChange={(event) => {
-                  void addFiles(event.currentTarget.files ?? []);
+                  const files = event.currentTarget.files ?? [];
+                  const replacementId = replaceAttachmentId.current;
+                  if (replacementId !== null) void replaceAttachment(replacementId, files);
+                  else void addFiles(files);
                   event.currentTarget.value = "";
                 }}
               />

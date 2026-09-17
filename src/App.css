@@ -1684,6 +1684,26 @@ body.dark .composer textarea::placeholder {
   padding: 6px 8px;
 }
 
+.attachment-recovery {
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 2px;
+}
+
+.attachment-missing {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.attachment-reselect {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
 .session-pin {
   color: var(--blue);
   margin-left: auto;
