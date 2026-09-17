@@ -305,7 +305,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** projets/settings/skills/connectors, configuration host. Dépend M2-01/M0-06.
 
-**Travail :** résolution déterministe global → projet → session, provenance des valeurs, diff d'override et politique effective. Les règles moteur plus restrictives priment ; erreurs de config empêchent une application silencieuse.
+**État :** héritage global → projet visible via `settingsFor`, avec diff d’override et contexte de la conversation. Le modèle effectif est appliqué au nouveau session après `session/start` via `session/setModel`; la valeur `default` conserve le choix du moteur.
+
+**Reste :** le schéma MSP vérifié n’expose pas de mutation sessionnelle pour sandbox, réseau ou auto-compact. Conserver ces préférences locales et afficher leur origine sans les annoncer comme appliquées au moteur jusqu’à preuve du contrat ; ajouter ensuite une application sessionnelle et des tests d’isolement pour deux projets.
 
 **Acceptation :** deux projets aux réglages différents, suppression override, redémarrage et host déjà actif ; afficher ce qui est effectivement appliqué.
 

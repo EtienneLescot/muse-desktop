@@ -189,6 +189,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.task-project-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.task-project-context span + span::before {
+  content: "·";
+  margin-right: 14px;
+  color: var(--line-strong, var(--line));
+}
 .desktop-app .stream {
   padding: 16px 32px 24px;
   gap: 24px;

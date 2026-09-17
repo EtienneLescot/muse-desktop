@@ -115,6 +115,7 @@ export default function App() {
     setGlobalSettings,
     setProjectOverride,
     settingsFor,
+    projectForSession,
     schedules,
     reviewQueue,
     createSchedule,
@@ -286,6 +287,10 @@ export default function App() {
   }, [theme]);
 
   const active = sessions.find((s) => s.session_id === activeId) ?? null;
+  const activeProject =
+    active === null ? null : projectForSession(active.session_id);
+  const activeProjectSettings =
+    activeProject === null ? globalSettings : settingsFor(activeProject.id);
   // M0-03: retryable sends of the viewed conversation only — a retry never
   // routes by this view, it goes to the entry's own sessionId.
   const activePendingSends =
@@ -671,7 +676,10 @@ export default function App() {
                   onAttach={attachThread}
                   onStartConversation={async (project) => {
                     if (!project.workspace) return;
-                    const id = await startSessionInWorkspace(project.workspace);
+                    const id = await startSessionInWorkspace(
+                      project.workspace,
+                      settingsFor(project.id),
+                    );
                     if (id !== null) attachThread(id, project.id);
                   }}
                   onSetGlobal={setGlobalSettings}
@@ -829,6 +837,14 @@ export default function App() {
                       <span>·</span>
                       <span title={active.workspace}>{active.workspace}</span>
                     </div>
+                    {activeProject !== null && (
+                      <div className="task-project-context" title="Effective project settings">
+                        <span>Project: {activeProject.name}</span>
+                        <span>Model: {activeProjectSettings.model}</span>
+                        <span>Sandbox: {activeProjectSettings.sandbox}</span>
+                        <span>Network: {activeProjectSettings.networkDefault}</span>
+                      </div>
+                    )}
                   </header>
                   {active.archived && (
                     <div className="preview-notice">
