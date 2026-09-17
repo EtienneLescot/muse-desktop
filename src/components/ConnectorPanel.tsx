@@ -40,6 +40,8 @@ interface Props {
     tools: ConnectorTool[],
     serverVersion?: string,
   ) => boolean;
+  /** Install a local MCP Bundle and verify its server before registering it. */
+  onInstallPackage: (file: File) => Promise<boolean>;
   /** Re-probe and persist tools for an existing local MCP connector. */
   onRefreshLocal: (id: string) => Promise<LocalMcpProbeResult | null>;
   /** Restore the previous verified local tool catalog. */
@@ -107,6 +109,7 @@ export function ConnectorPanel({
   onProbeLocal,
   onCallLocal,
   onRegisterLocal,
+  onInstallPackage,
   onRefreshLocal,
   onRollbackLocal,
   mcpRunningIds,
@@ -137,6 +140,7 @@ export function ConnectorPanel({
   const [localTool, setLocalTool] = useState("");
   const [localArgs, setLocalArgs] = useState("{}");
   const [localConnectorId, setLocalConnectorId] = useState<string | null>(null);
+  const [packageBusy, setPackageBusy] = useState(false);
   const [pendingCall, setPendingCall] = useState<PendingConnectorCall | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshAction, setRefreshAction] = useState<"start" | "stop" | "refresh" | null>(null);
@@ -342,6 +346,33 @@ export function ConnectorPanel({
           </div>
         )}
       </section>
+      <section className="local-mcp package-mcp" aria-label="MCP Bundle package">
+        <h4>Install an MCP Bundle</h4>
+        <p className="muted">
+          Choose a <code>.mcpb</code> package. Muse validates its manifest, installs an immutable
+          revision, and probes the server before adding it to the registry.
+        </p>
+        <label className="package-picker">
+          <span>{packageBusy ? "Installing package…" : "Choose .mcpb package"}</span>
+          <input
+            type="file"
+            accept=".mcpb,.zip,application/zip"
+            disabled={packageBusy}
+            onChange={async (event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              if (!file || packageBusy) return;
+              setPackageBusy(true);
+              try {
+                await onInstallPackage(file);
+              } finally {
+                setPackageBusy(false);
+              }
+            }}
+          />
+        </label>
+        <small className="muted">Package code runs only after an explicit start or session opt-in.</small>
+      </section>
       <ul className="integration-list">
         {CURATED_CONNECTORS.map((c) => {
           const done = installedIds.has(c.id);
@@ -388,6 +419,11 @@ export function ConnectorPanel({
                   </small>
                   {e.kind === "local" && e.serverVersion && (
                     <small className="muted">Server v{e.serverVersion}</small>
+                  )}
+                  {e.package && (
+                    <small className="muted">
+                      MCP Bundle v{e.package.version} · {e.package.sourceName}
+                    </small>
                   )}
                 </span>
                 <label
@@ -517,7 +553,7 @@ export function ConnectorPanel({
                     >
                       {refreshingId === e.id ? "Refreshing…" : "Refresh tools"}
                     </button>
-                    {e.previousTools && e.previousTools.length > 0 && (
+                    {(e.previousTools && e.previousTools.length > 0) || e.previousPackage ? (
                       <button
                         type="button"
                         className="integration-action"
@@ -528,14 +564,16 @@ export function ConnectorPanel({
                             id: e.id,
                             tone: rolledBack ? "success" : "error",
                             message: rolledBack
-                              ? "Previous tool catalog restored."
+                              ? e.previousPackage
+                                ? "Previous MCP Bundle revision restored."
+                                : "Previous tool catalog restored."
                               : "Rollback unavailable; the current catalog was kept.",
                           });
                         }}
                       >
                         Roll back
                       </button>
-                    )}
+                    ) : null}
                   </>
                 )}
                 <button type="button" onClick={() => onUninstall(e.id)}>

@@ -194,6 +194,7 @@ export default function App() {
     probeLocalMcp,
     callLocalMcp,
     registerLocalConnector,
+    installMcpPackage,
     refreshLocalMcp,
     rollbackLocalMcp,
     mcpRunningIds,
@@ -931,6 +932,7 @@ export default function App() {
                     callLocalMcp(command, toolName, argumentsText, workspace)
                   }
                   onRegisterLocal={registerLocalConnector}
+                  onInstallPackage={installMcpPackage}
                   onRefreshLocal={(id) => refreshLocalMcp(id, workspace)}
                   onRollbackLocal={rollbackLocalMcp}
                   mcpRunningIds={mcpRunningIds}

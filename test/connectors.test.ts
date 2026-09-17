@@ -196,6 +196,50 @@ describe("verified local MCP connector registration", () => {
     assert.equal(rollbackLocalConnector(first.registry, "local-mcp-demo"), null);
   });
 
+  it("keeps package source metadata and restores the previous revision", () => {
+    const first = registerLocalConnector([], {
+      id: "mcpb-demo",
+      name: "Demo",
+      command: "node \\\"C:\\\\Muse\\\\1.0.0\\\\server.js\\\"",
+      tools: [{ name: "one", description: "old" }],
+      source: "package",
+      package: {
+        format: "mcpb",
+        version: "1.0.0",
+        sourceName: "demo-1.0.0.mcpb",
+        installRoot: "C:\\Muse\\1.0.0",
+        entryPoint: "server.js",
+        runtime: "node",
+        installedAt: 1000,
+      },
+    }, 1000);
+    assert.ok(first);
+    const updated = registerLocalConnector(first.registry, {
+      id: "mcpb-demo",
+      name: "Demo",
+      command: "node \\\"C:\\\\Muse\\\\2.0.0\\\\server.js\\\"",
+      tools: [{ name: "two", description: "new" }],
+      source: "package",
+      package: {
+        format: "mcpb",
+        version: "2.0.0",
+        sourceName: "demo-2.0.0.mcpb",
+        installRoot: "C:\\Muse\\2.0.0",
+        entryPoint: "server.js",
+        runtime: "node",
+        installedAt: 2000,
+      },
+    }, 2000);
+    assert.ok(updated);
+    assert.equal(updated.entry.package?.version, "2.0.0");
+    assert.equal(updated.entry.previousPackage?.version, "1.0.0");
+    const rolledBack = rollbackLocalConnector(updated.registry, "mcpb-demo");
+    assert.ok(rolledBack);
+    assert.equal(rolledBack.entry.package?.version, "1.0.0");
+    assert.match(rolledBack.entry.command ?? "", /1\.0\.0/);
+    assert.deepEqual(rolledBack.entry.tools, [{ name: "one", description: "old" }]);
+  });
+
   it("rejects refresh for unknown entries and empty tools", () => {
     const first = registerLocalConnector([], {
       id: "local-mcp-demo",

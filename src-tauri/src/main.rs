@@ -28,6 +28,7 @@ mod artifact_export;
 mod browser_download;
 mod setup;
 mod mcp;
+mod mcp_package;
 mod skills;
 mod startup;
 mod workspace_watch;
@@ -1989,6 +1990,28 @@ async fn mcp_local_probe(
     tokio::task::spawn_blocking(move || mcp::probe(&command, workspace.as_deref()))
         .await
         .map_err(|e| format!("MCP probe task failed: {e}"))?
+}
+
+/// Atomically install one validated MCP bundle revision under app data.
+#[tauri::command]
+fn mcp_package_install(
+    app: AppHandle,
+    package_id: String,
+    version: String,
+    files: Vec<mcp_package::PackageFileInput>,
+) -> Result<mcp_package::PackageInstallResult, String> {
+    mcp_package::install(&app, &package_id, &version, files)
+}
+
+/// Remove a package revision that failed its MCP probe or was explicitly
+/// removed from the connector registry.
+#[tauri::command]
+fn mcp_package_remove(
+    app: AppHandle,
+    package_id: String,
+    version: String,
+) -> Result<bool, String> {
+    mcp_package::remove(&app, &package_id, &version)
 }
 
 /// Call one tool on an explicitly configured local MCP server.
@@ -5598,6 +5621,8 @@ fn main() {
             worktree_setup_cancel,
             mcp_local_probe,
             mcp_local_call,
+            mcp_package_install,
+            mcp_package_remove,
             mcp_local_start,
             mcp_local_refresh,
             mcp_local_poll,

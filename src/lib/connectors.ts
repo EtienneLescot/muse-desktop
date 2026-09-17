@@ -24,6 +24,19 @@ import { readStorageJson, writeStorageJson } from "./storage.ts";
 /** Local (in-process/sidecar) vs remote (streamable HTTP/SSE). */
 export type ConnectorKind = "local" | "remote";
 
+/** How a connector entered the registry. Kept separate from transport kind. */
+export type ConnectorSource = "curated" | "manual" | "package" | "remote";
+
+export interface ConnectorPackageInfo {
+  format: "mcpb";
+  version: string;
+  sourceName: string;
+  installRoot: string;
+  entryPoint: string;
+  runtime: "node" | "python";
+  installedAt: number;
+}
+
 /** Lifecycle state of a registry entry. */
 export type ConnectorStatus = "installed" | "disabled" | "error";
 
@@ -64,6 +77,8 @@ export interface ConnectorEntry {
   name: string;
   description: string;
   kind: ConnectorKind;
+  /** Provenance is informational and drives the package/source UI. */
+  source?: ConnectorSource;
   tools: ConnectorTool[];
   status: ConnectorStatus;
   /** Remote-only: the configured endpoint URL. */
@@ -81,6 +96,10 @@ export interface ConnectorEntry {
   /** Local-only: one-step rollback snapshot from the previous tools/list. */
   previousTools?: ConnectorTool[];
   previousServerVersion?: string;
+  /** Package/source snapshot used by the one-step distribution rollback. */
+  package?: ConnectorPackageInfo;
+  previousCommand?: string;
+  previousPackage?: ConnectorPackageInfo;
   /** Remote-only: human-readable guard failure, if the entry is blocked. */
   guardMessage?: string;
   addedAt: number;
@@ -208,6 +227,7 @@ export function installConnector(
     name: curated.name,
     description: curated.description,
     kind: "local",
+    source: "curated",
     tools: curated.tools.map((t) => ({ ...t })),
     status: "installed",
     addedAt: now,
@@ -224,6 +244,8 @@ export function registerLocalConnector(
     command: string;
     tools: ConnectorTool[];
     serverVersion?: string;
+    source?: ConnectorSource;
+    package?: ConnectorPackageInfo;
   },
   now: number = Date.now(),
 ): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
@@ -237,6 +259,7 @@ export function registerLocalConnector(
     name,
     description: "Verified local MCP server.",
     kind: "local",
+    source: spec.source ?? existing?.source ?? "manual",
     tools: spec.tools.map((tool) => ({
       name: tool.name.trim(),
       description: tool.description.trim(),
@@ -252,6 +275,11 @@ export function registerLocalConnector(
       ? { previousServerVersion: existing.serverVersion }
       : {}),
     ...(existing?.useInMuse ? { useInMuse: true } : {}),
+    ...(spec.package ? { package: { ...spec.package } } : existing?.package ? { package: { ...existing.package } } : {}),
+    ...(existing?.command && existing.command !== command ? { previousCommand: existing.command } : existing?.previousCommand ? { previousCommand: existing.previousCommand } : {}),
+    ...(existing?.package && spec.package && existing.package.installRoot !== spec.package.installRoot
+      ? { previousPackage: { ...existing.package } }
+      : existing?.previousPackage ? { previousPackage: { ...existing.previousPackage } } : {}),
     addedAt: existing?.addedAt ?? now,
   };
   if (entry.tools.some((tool) => tool.name.length === 0)) return null;
@@ -313,20 +341,26 @@ export function rollbackLocalConnector(
     existing === null ||
     existing.kind !== "local" ||
     !existing.command ||
-    !existing.previousTools ||
-    existing.previousTools.length === 0
+    ((!existing.previousTools || existing.previousTools.length === 0) &&
+      (!existing.previousCommand || !existing.previousPackage))
   ) {
     return null;
   }
   const entry: ConnectorEntry = {
     ...existing,
-    tools: existing.previousTools.map((tool) => ({ ...tool })),
+    ...(existing.previousTools && existing.previousTools.length > 0
+      ? { tools: existing.previousTools.map((tool) => ({ ...tool })) }
+      : {}),
     ...(existing.previousServerVersion
       ? { serverVersion: existing.previousServerVersion }
       : {}),
+    ...(existing.previousCommand ? { command: existing.previousCommand } : {}),
+    ...(existing.previousPackage ? { package: { ...existing.previousPackage } } : {}),
   };
   delete entry.previousTools;
   delete entry.previousServerVersion;
+  delete entry.previousCommand;
+  delete entry.previousPackage;
   return {
     registry: registry.map((item) => (item.id === id ? entry : item)),
     entry,
@@ -489,6 +523,7 @@ export function requestRemoteConnector(
     name: spec.name,
     description: `Remote MCP endpoint ${spec.url} (single-remote plan).`,
     kind: "remote",
+    source: "remote",
     tools: [],
     status: "error",
     url: spec.url,
@@ -527,6 +562,7 @@ export function registerRemoteConnector(
     name,
     description: `Verified remote MCP endpoint ${url}.`,
     kind: "remote",
+    source: "remote",
     tools,
     status: existing?.status === "disabled" ? "disabled" : "installed",
     url,
@@ -556,6 +592,18 @@ function isValidEntry(e: unknown): e is ConnectorEntry {
   );
 }
 
+function validPackageInfo(value: unknown): value is ConnectorPackageInfo {
+  if (typeof value !== "object" || value === null) return false;
+  const p = value as Record<string, unknown>;
+  return p.format === "mcpb" &&
+    typeof p.version === "string" && p.version.length > 0 &&
+    typeof p.sourceName === "string" && p.sourceName.length > 0 &&
+    typeof p.installRoot === "string" && p.installRoot.length > 0 &&
+    typeof p.entryPoint === "string" && p.entryPoint.length > 0 &&
+    (p.runtime === "node" || p.runtime === "python") &&
+    typeof p.installedAt === "number" && Number.isFinite(p.installedAt);
+}
+
 /** Load the persisted registry; corrupt/missing data yields []. */
 export function loadConnectors(): ConnectorEntry[] {
   const parsed = readStorageJson<unknown>(CONNECTORS_KEY, []);
@@ -572,6 +620,10 @@ export function loadConnectors(): ConnectorEntry[] {
         e.status === "installed" || e.status === "disabled" || e.status === "error"
           ? e.status
           : "installed",
+      source:
+        e.source === "curated" || e.source === "manual" || e.source === "package" || e.source === "remote"
+          ? e.source
+          : e.kind === "remote" ? "remote" : undefined,
       command: typeof e.command === "string" ? e.command : undefined,
       useInMuse: e.useInMuse === true,
       lastProbeAt: typeof e.lastProbeAt === "number" ? e.lastProbeAt : undefined,
@@ -587,6 +639,9 @@ export function loadConnectors(): ConnectorEntry[] {
         : undefined,
       previousServerVersion:
         typeof e.previousServerVersion === "string" ? e.previousServerVersion : undefined,
+      package: validPackageInfo(e.package) ? { ...e.package } : undefined,
+      previousCommand: typeof e.previousCommand === "string" ? e.previousCommand : undefined,
+      previousPackage: validPackageInfo(e.previousPackage) ? { ...e.previousPackage } : undefined,
     }));
 }
 
