@@ -912,7 +912,17 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 .to_string(),
             );
         }
-        "turn/started" => emit(app, "status", sid, "started", String::new()),
+        "turn/started" => emit(
+            app,
+            "status",
+            sid,
+            "started",
+            json!({
+                "turnId": p.get("turnId"),
+                "commandId": p.get("commandId"),
+            })
+            .to_string(),
+        ),
         "turn/completed" => {
             let terminal = p.get("terminal").and_then(Value::as_str).unwrap_or("completed");
             let detail = p

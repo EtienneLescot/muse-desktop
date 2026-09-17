@@ -2445,7 +2445,29 @@ export function useMuseSessions(): UseMuseSessions {
             inFlightSends.current.delete(sessionId);
           };
           void request.then(release, release);
-          await withAckTimeout(request);
+          const ack = await withAckTimeout(request);
+          if (typeof ack === "object" && ack !== null) {
+            const admission = ack as { disposition?: unknown; turnId?: unknown };
+            if (admission.disposition === "queued") {
+              pushLog(sessionId, [
+                {
+                  id: newId(),
+                  ts: Date.now(),
+                  role: "system",
+                  text: "Turn queued — it will start after the current turn finishes.",
+                },
+              ]);
+            } else if (admission.disposition === "steered") {
+              pushLog(sessionId, [
+                {
+                  id: newId(),
+                  ts: Date.now(),
+                  role: "system",
+                  text: "Guidance added to the current turn.",
+                },
+              ]);
+            }
+          }
           acked = true;
         } catch (e) {
           failure = e instanceof Error ? e.message : String(e);
