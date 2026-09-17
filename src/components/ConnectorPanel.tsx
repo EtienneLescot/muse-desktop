@@ -71,6 +71,7 @@ interface Props {
   ) => Promise<RemoteMcpCallResult | null>;
   remoteConnectedIds: string[];
   onDisconnectRemote: (id: string) => void;
+  onForgetRemoteCredential: (id: string) => Promise<void>;
   authorizationMode: AuthorizationMode;
   workspace: string | null;
 }
@@ -120,6 +121,7 @@ export function ConnectorPanel({
   onCallRemote,
   remoteConnectedIds,
   onDisconnectRemote,
+  onForgetRemoteCredential,
   authorizationMode,
   workspace,
 }: Props) {
@@ -710,23 +712,41 @@ export function ConnectorPanel({
             {entry.serverVersion ? ` · server v${entry.serverVersion}` : ""}
           </span>
           {remoteConnectedIds.includes(entry.id) && (
-            <button type="button" className="integration-action" onClick={() => {
-              onDisconnectRemote(entry.id);
-              setRemoteProbe(null);
-              setRemoteCall(null);
-            }}>
-              Disconnect
-            </button>
+            <>
+              <button type="button" className="integration-action" onClick={() => {
+                onDisconnectRemote(entry.id);
+                setRemoteProbe(null);
+                setRemoteCall(null);
+              }}>
+                Disconnect
+              </button>
+              <button
+                type="button"
+                className="integration-action"
+                onClick={() => void onForgetRemoteCredential(entry.id)}
+              >
+                Forget token
+              </button>
+            </>
           )}
           {!remoteConnectedIds.includes(entry.id) && (
-            <button
-              type="button"
-              className="integration-action"
-              disabled={remoteBusy !== null || !entry.url}
-              onClick={() => void reconnectRemote(entry)}
-            >
-              {remoteBusy === "probe" ? "Reconnecting…" : "Reconnect"}
-            </button>
+            <>
+              <button
+                type="button"
+                className="integration-action"
+                disabled={remoteBusy !== null || !entry.url}
+                onClick={() => void reconnectRemote(entry)}
+              >
+                {remoteBusy === "probe" ? "Reconnecting…" : "Reconnect"}
+              </button>
+              <button
+                type="button"
+                className="integration-action"
+                onClick={() => void onForgetRemoteCredential(entry.id)}
+              >
+                Forget token
+              </button>
+            </>
           )}
         </div>
       ))}

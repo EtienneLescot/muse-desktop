@@ -205,6 +205,7 @@ export default function App() {
     probeRemoteMcp,
     callRemoteMcp,
     disconnectRemoteMcp,
+    forgetRemoteMcpCredential,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
@@ -943,6 +944,7 @@ export default function App() {
                   onProbeRemote={probeRemoteMcp}
                   onCallRemote={callRemoteMcp}
                   onDisconnectRemote={disconnectRemoteMcp}
+                  onForgetRemoteCredential={forgetRemoteMcpCredential}
                   authorizationMode={authorizationMode}
                   remoteNotice={remoteNotice}
                   onInstall={(dirId) => installConnectorById(dirId)}
