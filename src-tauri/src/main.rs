@@ -1490,6 +1490,37 @@ where
                 );
             }
         }
+        "session/branchChanged" => {
+            // Branch observations are durable host facts. Forward only the
+            // bounded fields used by the renderer; cursors and other
+            // protocol metadata remain transport-only.
+            if !sid.is_empty() {
+                let branch = p
+                    .get("branch")
+                    .and_then(Value::as_str)
+                    .map(|value| truncate(value, 200));
+                let vcs = p
+                    .get("vcs")
+                    .and_then(Value::as_str)
+                    .map(|value| truncate(value, 40));
+                let workspace_root = p
+                    .get("workspaceRoot")
+                    .or_else(|| p.get("workspace_root"))
+                    .and_then(Value::as_str)
+                    .map(|value| truncate(value, 1_000));
+                emit_fn(
+                    "status",
+                    sid,
+                    "branch_changed",
+                    json!({
+                        "branch": branch,
+                        "vcs": vcs,
+                        "workspaceRoot": workspace_root,
+                    })
+                    .to_string(),
+                );
+            }
+        }
         // US-4 (server half): provider-reported context occupancy
         // (SS4.6.6 triple). The host only emits on change; forward
         // defensively — unknown pressure levels pass through untouched (the
@@ -3868,6 +3899,35 @@ mod tests {
         assert_eq!(deltas[0].1, "session-a");
         assert_eq!(deltas[1].0, "output");
         assert_eq!(deltas[1].1, "session-b");
+    }
+
+    #[test]
+    fn branch_observations_are_forwarded_as_bounded_status_facts() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "session/branchChanged",
+            &json!({
+                "sessionId": "session-a",
+                "branch": "feature/muse",
+                "vcs": "git",
+                "workspaceRoot": "C:/repo",
+                "viewCursor": "opaque",
+            }),
+            &mut emit,
+        );
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, "status");
+        assert_eq!(events[0].1, "session-a");
+        assert_eq!(events[0].2, "branch_changed");
+        let payload: Value = serde_json::from_str(&events[0].3).unwrap();
+        assert_eq!(payload["branch"], "feature/muse");
+        assert_eq!(payload["vcs"], "git");
+        assert_eq!(payload["workspaceRoot"], "C:/repo");
     }
 
     #[test]

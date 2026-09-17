@@ -455,6 +455,7 @@ import {
   historyItemsToLogEntries,
   mergeHistoryLog,
 } from "../lib/history";
+import { parseBranchObservation } from "../lib/branch";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -2507,6 +2508,30 @@ export function useMuseSessions(): UseMuseSessions {
           ...(cur[sid] ?? emptyFilesBrowserState()),
           error: `workspace watcher failed: ${payload}`,
         },
+      }));
+      return;
+    }
+    // The host owns branch identity. Keep only its bounded observation on the
+    // conversation row; never derive it from the selected workspace or from
+    // a renderer-side Git refresh. A detached HEAD is represented by the
+    // absence of the optional local branch field.
+    if (kind === "branch_changed") {
+      let parsed: ReturnType<typeof parseBranchObservation> = null;
+      try {
+        parsed = parseBranchObservation(JSON.parse(payload));
+      } catch {
+        parsed = null;
+      }
+      if (parsed === null) return;
+      const observation = parsed;
+      touchStreamActivity(sid, kind);
+      setConnectionState(sid, "connected");
+      setSessions((cur) => cur.map((session) => {
+        if (session.session_id !== sid) return session;
+        const next = { ...session };
+        if (observation.branch === null) delete next.branch;
+        else next.branch = observation.branch;
+        return next;
       }));
       return;
     }

@@ -30,6 +30,8 @@ export interface StoredSession {
   workspace: string;
   title: string;
   createdAt: number;
+  /** Latest branch observation supplied by the session host, when known. */
+  branch?: string;
   /** Host-reported persistence posture; absent in older local rows. */
   session_durability?: string;
   /**
@@ -107,6 +109,7 @@ function isValidSession(s: unknown): s is StoredSession {
     typeof r.workspace === "string" &&
     typeof r.title === "string" &&
     typeof r.createdAt === "number" &&
+    (r.branch === undefined || (typeof r.branch === "string" && r.branch.trim().length > 0)) &&
     (r.session_durability === undefined ||
       (typeof r.session_durability === "string" && r.session_durability.trim().length > 0)) &&
     (r.archived === undefined || typeof r.archived === "boolean") &&

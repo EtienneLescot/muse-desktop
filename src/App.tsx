@@ -1065,6 +1065,12 @@ export default function App() {
                       {active.running ? "Working" : "Ready"}
                       <span>·</span>
                       <span title={active.workspace}>{active.workspace}</span>
+                      {active.branch !== undefined && (
+                        <>
+                          <span>·</span>
+                          <span title="Host-reported Git branch">{active.branch}</span>
+                        </>
+                      )}
                       <span className={`connection-state connection-${activeConnectionState}`}>
                         <span className="connection-state-dot" aria-hidden="true" />
                         {activeConnectionState === "connected"
