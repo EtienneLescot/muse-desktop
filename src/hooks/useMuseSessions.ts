@@ -816,6 +816,7 @@ interface UseMuseSessions {
   startSessionInWorkspace: (
     workspacePath: string,
     projectSettings?: ProjectSettings,
+    projectId?: string,
   ) => Promise<string | null>;
   /** M1-09: create a server-side branch from completed conversation turns. */
   /** Fork at the latest completed turn, or at an explicit MSP turn anchor. */
@@ -3774,8 +3775,26 @@ export function useMuseSessions(): UseMuseSessions {
   }, [globalSettings, startSessionRow]);
 
   const startSessionInWorkspace = useCallback(
-    async (workspacePath: string, projectSettings?: ProjectSettings) =>
-      startSessionRow(workspacePath, projectSettings),
+    async (
+      workspacePath: string,
+      projectSettings?: ProjectSettings,
+      projectId?: string,
+    ) => {
+      const sessionId = await startSessionRow(workspacePath, projectSettings);
+      if (sessionId === null || projectId === undefined) return sessionId;
+      // Attach before the caller can send the first turn. The ref is updated
+      // synchronously so the send path uses the same project instructions and
+      // settings that admitted this session, even before React re-renders.
+      const next = attachThreadRow(
+        threadProjectsRef.current,
+        projectsRef.current,
+        sessionId,
+        projectId,
+      );
+      threadProjectsRef.current = next;
+      setThreadProjects(next);
+      return sessionId;
+    },
     [startSessionRow],
   );
 
