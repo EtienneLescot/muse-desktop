@@ -49,6 +49,8 @@ interface Props {
   pendingInputs?: number;
   reconnecting?: boolean;
   onReconnect?: () => void;
+  reconciling?: boolean;
+  onReconcile?: () => void;
   onCancel?: () => void;
   /** Retry the last user message when the host marks a turn retryable. */
   onRetryFailedTurn?: (entry: LogEntry) => Promise<void>;
@@ -104,6 +106,8 @@ export function StreamView({
   pendingInputs = 0,
   reconnecting = false,
   onReconnect,
+  reconciling = false,
+  onReconcile,
   onCancel,
   onRetryFailedTurn,
   onForkFromEntry,
@@ -719,6 +723,11 @@ export function StreamView({
           </span>
           {(health === "stalled" || health === "waiting-host") && (
             <span className="stream-health-actions">
+              {onReconcile && (
+                <button type="button" onClick={onReconcile} disabled={reconciling}>
+                  {reconciling ? "Syncing…" : "Sync now"}
+                </button>
+              )}
               {onReconnect && (
                 <button type="button" onClick={onReconnect} disabled={reconnecting}>
                   {reconnecting ? "Reconnecting…" : "Reconnect"}
