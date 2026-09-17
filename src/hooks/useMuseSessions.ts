@@ -987,6 +987,8 @@ interface UseMuseSessions {
   browserAnnotations: BrowserAnnotation[];
   /** US-19: anchor a comment to a URL + selection (no-op when invalid). */
   addBrowserAnnotation: (url: string, selection: string, comment: string) => void;
+  /** M4-02: insert explicit page context into the active composer draft. */
+  prepareBrowserContext: (sessionId: string, context: string) => boolean;
   /** US-19: remove an anchored comment by id. */
   removeBrowserAnnotation: (id: string) => void;
   /** US-19: computer-use per-app permissions (default denied). */
@@ -4692,6 +4694,20 @@ export function useMuseSessions(): UseMuseSessions {
     [activeId, authorizationMode, globalSettings, sendInput, sessions, setSessionModel, startSessionRow],
   );
 
+  const prepareBrowserContext = useCallback(
+    (sessionId: string, context: string): boolean => {
+      const target = sessions.find((session) => session.session_id === sessionId);
+      const text = context.trim();
+      if (target === undefined || text.length === 0) {
+        setError("browser context unavailable: open a conversation before inserting it");
+        return false;
+      }
+      setPrefill((current) => (current ? `${current}\n\n${text}` : text));
+      return true;
+    },
+    [sessions],
+  );
+
   const applyPersistentMcpProbe = useCallback(
     (id: string, result: LocalMcpProbeResult): boolean => {
       const updated = refreshLocalConnector(
@@ -5911,6 +5927,7 @@ export function useMuseSessions(): UseMuseSessions {
     setAllowRuleDecision: setAllowRuleDecisionCb,
     browserAnnotations,
     addBrowserAnnotation: addBrowserAnnotationCb,
+    prepareBrowserContext,
     removeBrowserAnnotation: removeBrowserAnnotationCb,
     browserPermissions,
     setBrowserAppPermission: setBrowserAppPermissionCb,

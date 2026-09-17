@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   IMAGE_GENERATION_NOTE,
+  formatBrowserContext,
   normalizeBrowserUrl,
   type BrowserAnnotation,
   type BrowserAppPermission,
@@ -14,6 +15,8 @@ interface Props {
   onAddAnnotation: (url: string, selection: string, comment: string) => void;
   onRemoveAnnotation: (id: string) => void;
   onSetPermission: (app: string, allowed: boolean) => void;
+  /** Insert a bounded, provenance-labelled page context into the composer. */
+  onInsertContext: (context: string) => void;
 }
 
 /** Apps offered a computer-use toggle (explicit opt-in, default denied). */
@@ -31,6 +34,7 @@ export function BrowserPanel({
   onAddAnnotation,
   onRemoveAnnotation,
   onSetPermission,
+  onInsertContext,
 }: Props) {
   const [url, setUrl] = useState("");
   const [currentUrl, setCurrentUrl] = useState("");
@@ -56,6 +60,12 @@ export function BrowserPanel({
     onAddAnnotation(normalized, selection, comment);
     setSelection("");
     setComment("");
+  };
+
+  const insertCurrentContext = () => {
+    if (!renderable || normalized === null) return;
+    const context = formatBrowserContext(normalized, selection, comment);
+    if (context.length > 0) onInsertContext(context);
   };
 
   const navigate = (nextInput: string, record = true) => {
@@ -202,6 +212,14 @@ export function BrowserPanel({
           >
             Add comment
           </button>
+          <button
+            type="button"
+            disabled={!renderable}
+            onClick={insertCurrentContext}
+            title="Add the current page URL, selection and comment to the composer"
+          >
+            Add page context
+          </button>
         </div>
         {pageNotes.length > 0 && (
           <ul className="browser-notes">
@@ -218,6 +236,13 @@ export function BrowserPanel({
                   onClick={() => onRemoveAnnotation(a.id)}
                 >
                   Remove
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onInsertContext(formatBrowserContext(a.url, a.selection, a.comment))}
+                  title="Add this annotation to the composer"
+                >
+                  Add to prompt
                 </button>
               </li>
             ))}

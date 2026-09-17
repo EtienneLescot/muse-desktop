@@ -239,6 +239,7 @@ export default function App() {
     openWorkspacePath,
     browserAnnotations,
     addBrowserAnnotation,
+    prepareBrowserContext,
     removeBrowserAnnotation,
     browserPermissions,
     setBrowserAppPermission,
@@ -1285,6 +1286,9 @@ export default function App() {
                             annotations={browserAnnotations}
                             permissions={browserPermissions}
                             onAddAnnotation={addBrowserAnnotation}
+                            onInsertContext={(context) => {
+                              void prepareBrowserContext(active.session_id, context);
+                            }}
                             onRemoveAnnotation={removeBrowserAnnotation}
                             onSetPermission={setBrowserAppPermission}
                           />

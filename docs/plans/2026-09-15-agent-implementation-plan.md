@@ -509,7 +509,7 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 **Code :** browserAnnotate.ts, capture et composer ; dépend M4-01/M1-08. Définir URL/frame/viewport/région/élément/version avec capture réelle ; conserver provenance et signaler contexte périmé. **Acceptation :** sélection scrollée, iframe, zoom et envoi de l'image/ancre correcte.
 
-**État au 16/09/2026 :** l'ancre textuelle utilise maintenant l'URL normalisée réellement affichée et les notes sont filtrées par cette URL. La sélection visuelle, la capture viewport et la transmission d'une image restent à concevoir.
+**État au 17/09/2026 :** l'ancre textuelle utilise l'URL normalisée réellement affichée et les notes sont filtrées par cette URL. **Add page context** et **Add to prompt** insèrent dans le composer actif un bloc borné avec provenance, URL, sélection et commentaire ; le hook de sessions centralise le pré-remplissage et refuse les contextes invalides. La sélection visuelle, la capture viewport/région, iframe/zoom et la transmission d'une image restent à concevoir.
 
 ### M4-03 — Pilotage navigateur
 
