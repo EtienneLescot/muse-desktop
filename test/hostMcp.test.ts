@@ -39,4 +39,29 @@ describe("host MCP session configuration", () => {
       mode: "optional",
     }]);
   });
+
+  it("attaches a connected remote only with its in-memory bearer", () => {
+    const remote = local({
+      id: "remote-test",
+      kind: "remote",
+      command: undefined,
+      url: "https://mcp.example.test/sse",
+      useInMuse: true,
+    });
+    assert.deepEqual(buildHostMcpServers([remote], {
+      "remote-test": {
+        url: "https://mcp.example.test/sse",
+        token: "secret-token",
+        sessionId: "session-1",
+        protocolVersion: "2025-06-18",
+        nextRequestId: 3,
+      },
+    }), [{
+      transport: "streamableHttp",
+      url: "https://mcp.example.test/sse",
+      headers: { Authorization: "Bearer secret-token" },
+      mode: "optional",
+    }]);
+    assert.deepEqual(buildHostMcpServers([remote]), []);
+  });
 });

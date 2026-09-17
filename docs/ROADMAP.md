@@ -412,7 +412,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 - **Garde-fous :** commande ≤2 000 caractères, nom d'outil ≤200 caractères, sortie ≤200 000 caractères et maximum 500 outils ; stdin et stderr du serveur ne sont pas exposés à la conversation.
 - **Rafraîchissement explicite et réactif :** chaque connecteur MCP local enregistré avec une commande expose **Refresh tools**. Le probe refait `tools/list` sur le processus persistant (ou le démarre après une relance), remplace la liste persistée si elle est valide et conserve l'ancienne liste en cas d'échec ou de réponse vide ; le statut désactivé reste inchangé. Un polling natif léger observe les notifications `tools/list_changed` et relance automatiquement ce même chemin SSOT.
 - **Autorisation :** les appels déclenchés depuis Extensions suivent désormais la posture globale : Ask for approval demande une confirmation ponctuelle, Workspace autorise le local mais garde le distant derrière une confirmation réseau, et YOLO permet l'appel direct. Cette garde UI reste distincte de l'autorité MSP.
-- **Limites :** les outils découverts ne sont pas encore injectés dans le catalogue MSP de Muse. Cette tranche prouve le transport local, l'appel contrôlé, la durée de vie explicite, la récupération manuelle et le hot-reload borné, pas la parité MCP complète.
+- **Limites :** les outils découverts ne sont pas copiés directement dans le catalogue MSP de Muse : l'injection opt-in laisse au host le soin d'initialiser ses propres capacités. Cette tranche prouve le transport local, l'appel contrôlé, la durée de vie explicite, la récupération manuelle et le hot-reload borné, pas la parité MCP complète.
 - **Validation :** tests Rust de framing, corrélation des réponses persistantes et parsing des outils, tests Node existants, TypeScript, Vite et Cargo verts.
 
 ### Livraison M3-01 — injection opt-in dans les conversations Muse
@@ -423,13 +423,20 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 - **Limites :** l'injection distante, le stockage sécurisé des identifiants, la qualification des résultats natifs et la gestion d'un changement de configuration pendant une session restent ouverts ; les connecteurs locaux restent inspectables et appelables depuis Extensions.
 - **Validation :** tests Node dédiés au tokenizer et au filtrage opt-in, tests Rust dédiés au contrat `mcpServers`, TypeScript, Vite et Cargo verts.
 
+### Livraison M3-02 — injection distante opt-in
+
+- **Session en mémoire :** un connecteur distant peut être marqué **Use in Muse** après une connexion réussie. La configuration `streamableHttp` est reconstruite uniquement si sa session courante existe ; le bearer reste en mémoire et n'est jamais ajouté au registre persistant.
+- **Démarrage facultatif :** `session/start`, `session/resume` et les sessions de worktree reçoivent l'URL et un header Authorization bornés. Le mode `optional` conserve l'ouverture de la conversation si le endpoint distant n'est pas joignable.
+- **Limites :** après relance de l'app, le token doit être saisi à nouveau avant toute injection ; OAuth, secret-store natif, renouvellement côté host et reconfiguration d'une session déjà connectée restent ouverts.
+- **Validation :** tests Node couvrent l'injection d'un distant connecté et l'exclusion d'un distant sans session ; TypeScript, Vite et Cargo restent verts.
+
 ### Livraison M3-03 — cycle de vie d'un connecteur MCP local
 
 - **Enregistrement vérifié :** après un probe `tools/list` réussi, l'utilisateur peut enregistrer le nom, la commande et les outils réellement découverts dans le registre local persistant.
 - **Rafraîchissement manuel et hot-reload :** les entrées locales issues d'une commande affichent **Start server**, **Stop server** et **Refresh tools**. Une réussite met à jour les outils et `lastProbeAt` via le même chemin SSOT ; une erreur ou une liste vide laisse la dernière version utilisable et explique l'échec dans la ligne du connecteur. Une notification `tools/list_changed` déclenche automatiquement cette mise à jour quand le serveur est démarré.
 - **Révision et rollback :** une mise à jour de catalogue conserve la version serveur et une seule copie du catalogue précédent. **Roll back** restaure explicitement cette copie sans réactiver un connecteur désactivé ; une seconde mise à jour remplace la copie précédente par la nouvelle révision.
 - **Cohérence :** une mise à jour remplace les outils et la commande du même identifiant sans réactiver silencieusement un connecteur désactivé ; la liste hot-reloadée respecte toujours le statut `installed/disabled`.
-- **Limites :** le serveur n'est lancé qu'après une action explicite et s'arrête à la fermeture de l'app ou via **Stop server** ; les outils restent un catalogue local tant que le host Muse ne fournit pas de bridge MCP. Mise à jour de package/source, injection moteur et autorité de permission côté host restent à traiter.
+- **Limites :** le serveur n'est lancé qu'après une action explicite et s'arrête à la fermeture de l'app ou via **Stop server** ; les outils restent un catalogue local pour les appels depuis Extensions, tandis que l'injection du serveur opt-in est gérée au démarrage de la conversation. Mise à jour de package/source et autorité de permission côté host restent à traiter.
 - **Validation :** tests Node d'enregistrement, rafraîchissement SSOT et conservation du statut désactivé ; TypeScript et Vite verts.
 
 ### Livraison M3-04 — découverte locale des skills
@@ -456,7 +463,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
 | M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; processus persistant par connecteur, Start/Stop, rafraîchissement manuel, hot-reload `list_changed` et injection opt-in `config.mcpServers` sur start/resume/worktree livrés ; restent injection distante, secrets natifs et reconfiguration d'une session déjà connectée |
-| M3-02 | Connecter un serveur MCP distant | Adapté | Présente | Partielle | Unitaire | Transport streamable HTTP/SSE, bearer token en mémoire, session, reconnexion explicite et renouvellement automatique d'une session expirée livrés ; restent OAuth/secret-store natif et qualification réseau multiplateforme |
+| M3-02 | Connecter un serveur MCP distant | Adapté | Présente | Partielle | Intégration | Transport streamable HTTP/SSE, bearer token en mémoire, session, reconnexion explicite, renouvellement automatique d'une session expirée et injection opt-in `streamableHttp` sur start/resume/worktree livrés ; restent OAuth/secret-store natif, qualification réseau multiplateforme et reconfiguration d'une session déjà connectée |
 | M3-03 | Installer/désactiver une extension réellement utilisable | Adapté | Présente | Partielle | Intégration | Enregistrement post-probe, runtime persistant explicite, hot-list, hot-reload et rollback d'une révision du registre livrés ; restent package/update/source et injection dans le moteur |
 | M3-04 | Découvrir les skills du disque et du projet | Adapté | Présente | Partielle | Intégration | Scanner borné `SKILL.md`, ressources relatives, priorité projet/repo/équipe et rechargement explicite livrés ; le catalogue hôte est désormais séparé et rafraîchi par session |
 | M3-05 | Invoquer une skill avec son vrai contexte | Adapté | Présente | Partielle | Intégration | Lecture fraîche des ressources relatives, provenance balisée, refus explicite si ressource disparue, retry sans double insertion et part `skill` native livrés ; restent la progression détaillée d'une invocation et les ressources natives éventuelles selon le host |

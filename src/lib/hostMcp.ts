@@ -9,6 +9,7 @@
  */
 
 import type { ConnectorEntry } from "./connectors";
+import type { RemoteMcpSession } from "./remoteMcp";
 
 export interface HostMcpStdioServer {
   transport: "stdio";
@@ -16,6 +17,15 @@ export interface HostMcpStdioServer {
   args?: string[];
   mode: "optional";
 }
+
+export interface HostMcpStreamableHttpServer {
+  transport: "streamableHttp";
+  url: string;
+  headers?: Record<string, string>;
+  mode: "optional";
+}
+
+export type HostMcpServer = HostMcpStdioServer | HostMcpStreamableHttpServer;
 
 const MAX_TOKENS = 64;
 const MAX_TOKEN_CHARS = 1_000;
@@ -66,22 +76,42 @@ export function tokenizeMcpCommand(command: string): string[] | null {
 }
 
 /** Convert explicitly enabled local connectors into host startup config. */
-export function buildHostMcpServers(entries: ConnectorEntry[]): HostMcpStdioServer[] {
-  const result: HostMcpStdioServer[] = [];
+export function buildHostMcpServers(
+  entries: ConnectorEntry[],
+  remoteSessions: Record<string, RemoteMcpSession> = {},
+): HostMcpServer[] {
+  const result: HostMcpServer[] = [];
   const seen = new Set<string>();
   for (const entry of entries) {
-    if (entry.kind !== "local" || entry.status !== "installed" || entry.useInMuse !== true) continue;
-    const tokens = entry.command ? tokenizeMcpCommand(entry.command) : null;
-    if (tokens === null) continue;
-    const key = tokens.join("\u0000");
+    if (entry.status !== "installed" || entry.useInMuse !== true) continue;
+    if (entry.kind === "local") {
+      const tokens = entry.command ? tokenizeMcpCommand(entry.command) : null;
+      if (tokens === null) continue;
+      const key = `stdio:${tokens.join("\u0000")}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({
+        transport: "stdio",
+        command: tokens[0],
+        ...(tokens.length > 1 ? { args: tokens.slice(1) } : {}),
+        // An unavailable optional connector must not make a new conversation
+        // unusable. The user can inspect its probe status in Extensions.
+        mode: "optional",
+      });
+      continue;
+    }
+    const session = remoteSessions[entry.id];
+    if (!session || !entry.url || session.url !== entry.url) continue;
+    const url = session.url.trim();
+    if (!url || url.length > 2_000) continue;
+    const key = `http:${url}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    const token = session.token.trim();
     result.push({
-      transport: "stdio",
-      command: tokens[0],
-      ...(tokens.length > 1 ? { args: tokens.slice(1) } : {}),
-      // An unavailable optional connector must not make a new conversation
-      // unusable. The user can inspect its probe status in Extensions.
+      transport: "streamableHttp",
+      url,
+      ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
       mode: "optional",
     });
   }

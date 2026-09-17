@@ -70,7 +70,7 @@ export interface ConnectorEntry {
   url?: string;
   /** Local-only: explicit command used to probe/call this server. */
   command?: string;
-  /** Explicit opt-in: pass this local server to new Muse sessions. */
+  /** Explicit opt-in: pass this verified connector to new Muse sessions. */
   useInMuse?: boolean;
   /** Local-only: last successful tools/list timestamp. */
   lastProbeAt?: number;
@@ -251,6 +251,7 @@ export function registerLocalConnector(
     ...(existing?.serverVersion
       ? { previousServerVersion: existing.serverVersion }
       : {}),
+    ...(existing?.useInMuse ? { useInMuse: true } : {}),
     addedAt: existing?.addedAt ?? now,
   };
   if (entry.tools.some((tool) => tool.name.length === 0)) return null;
@@ -368,7 +369,8 @@ export function setConnectorUseInMuse(
   enabled: boolean,
 ): ConnectorEntry[] {
   return registry.map((entry) =>
-    entry.id === id && entry.kind === "local" && entry.command
+    entry.id === id &&
+    ((entry.kind === "local" && entry.command) || (entry.kind === "remote" && entry.url))
       ? { ...entry, useInMuse: enabled }
       : entry,
   );
@@ -531,6 +533,7 @@ export function registerRemoteConnector(
     lastProbeAt: now,
     ...(spec.protocolVersion?.trim() ? { protocolVersion: spec.protocolVersion.trim() } : {}),
     ...(spec.serverVersion?.trim() ? { serverVersion: spec.serverVersion.trim() } : {}),
+    ...(existing?.useInMuse ? { useInMuse: true } : {}),
     addedAt: existing?.addedAt ?? now,
   };
   return {
