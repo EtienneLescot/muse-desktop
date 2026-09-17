@@ -51,6 +51,7 @@ interface Props {
    * composer clear the draft; ok=false keeps it (retryable outbox entry).
    */
   onSend: (text: string, inputParts?: TurnInputPart[]) => Promise<SendResult>;
+  onSteer?: (text: string, inputParts?: TurnInputPart[]) => Promise<SendResult>;
   onCancel: () => void;
   /** US-4: summary text to load into the box after « New From Summary ». */
   prefill?: string | null;
@@ -135,6 +136,7 @@ export function Composer({
   running,
   workspace,
   onSend,
+  onSteer,
   onCancel,
   prefill,
   onPrefillConsumed,
@@ -475,6 +477,37 @@ export function Composer({
     if (failures.length > 0) setAttachmentError(failures.join(" · "));
   }
 
+  async function steer(): Promise<void> {
+    if (
+      onSteer === undefined ||
+      (text.trim().length === 0 && attachmentsRef.current.length === 0) ||
+      disabled ||
+      checking ||
+      sending
+    ) return;
+    const draftAtSend = text;
+    const attachmentsAtSend = attachmentsRef.current;
+    const attachmentsAtSendKey = attachmentKey(attachmentsAtSend);
+    setSending(true);
+    try {
+      const res = await onSteer(
+        draftAtSend,
+        buildTurnInputParts(draftAtSend, attachmentsAtSend),
+      );
+      if (res.ok && textRef.current === draftAtSend) {
+        setText("");
+        setCaret(0);
+        if (attachmentKey(attachmentsRef.current) === attachmentsAtSendKey) {
+          setAttachments([]);
+        }
+      } else if (!res.ok) {
+        setBlocked(res.error ?? "The guidance was not sent.");
+      }
+    } finally {
+      setSending(false);
+    }
+  }
+
   function removeAttachment(id: string): void {
     setAttachments((current) => current.filter((attachment) => attachment.id !== id));
     setAttachmentError(null);
@@ -752,6 +785,20 @@ export function Composer({
           {running && (
             <button onClick={onCancel} title={COMPOSER_SHORTCUT_TITLES.stop}>
               Stop
+            </button>
+          )}
+          {running && onSteer !== undefined && (
+            <button
+              onClick={() => void steer()}
+              disabled={
+                disabled ||
+                (text.trim().length === 0 && attachments.length === 0) ||
+                checking ||
+                sending
+              }
+              title="Guide the current turn without starting a new one"
+            >
+              Guide
             </button>
           )}
           <button
