@@ -5766,15 +5766,19 @@ export function useMuseSessions(): UseMuseSessions {
         if (filesRequestSeq.current[sessionId] !== request) return;
         setFilesBySession((cur) => ({
           ...cur,
-          [sessionId]: {
-            ...(cur[sessionId] ?? emptyFilesBrowserState()),
-            selectedPath: path,
-            preview,
-            loading: false,
-            error: null,
-            stale: false,
-            changedPaths: [],
-          },
+          [sessionId]: (() => {
+            const previous = cur[sessionId] ?? emptyFilesBrowserState();
+            const changedPaths = previous.changedPaths.filter((changedPath) => changedPath !== path);
+            return {
+              ...previous,
+              selectedPath: path,
+              preview,
+              loading: false,
+              error: null,
+              stale: changedPaths.length > 0,
+              changedPaths,
+            };
+          })(),
         }));
       } catch (e) {
         if (filesRequestSeq.current[sessionId] !== request) return;
