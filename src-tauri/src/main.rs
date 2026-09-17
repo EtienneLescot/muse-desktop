@@ -11,7 +11,7 @@
 //!   orchestration (sub-agents included).
 //!
 //! IPC surface (frontend calls via `invoke`, receives via `listen`):
-//!   commands: start_session, set_approval_mode, restore_sessions, send_input, approve,
+//!   commands: start_session, fork_session, set_approval_mode, restore_sessions, send_input, approve,
 //!             cancel_session, kill_session,
 //!             subagent_interrupt, subagent_stop, subagent_resume,
 //!             subagent_followup, subagent_read_result, subagent_drilldown
@@ -1465,6 +1465,69 @@ async fn start_session(
     Ok(meta)
 }
 
+/// Create a server-side conversation branch from all completed turns.
+///
+/// The MSP host owns the durable history and assigns the new session id. We
+/// deliberately request metadata only (`excludeItems`) so a large transcript
+/// is not duplicated through the Tauri command; the frontend can keep its
+/// bounded local transcript for immediate continuity.
+#[tauri::command]
+async fn fork_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<SessionMeta, String> {
+    let source_id = require_non_empty(&session_id, "sessionId")?;
+    let client = session_client(&state, &source_id)?;
+    let root = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(&source_id)?;
+    let result = client
+        .request(
+            "session/fork",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": source_id,
+                "excludeItems": true,
+            }),
+        )
+        .await?;
+    let session = result
+        .get("session")
+        .ok_or("session/fork: no session in response")?;
+    let fork_id = session
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .or_else(|| session.get("id").and_then(Value::as_str))
+        .filter(|id| !id.trim().is_empty())
+        .ok_or("session/fork: response has no session id")?
+        .to_string();
+    if fork_id == source_id {
+        return Err("session/fork returned the source session id".to_string());
+    }
+    state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .bind(&fork_id, &root, &client)?;
+    let running = session
+        .get("status")
+        .and_then(Value::as_str)
+        .is_some_and(|status| status == "running");
+    let meta = SessionMeta {
+        session_id: fork_id.clone(),
+        workspace: root.display().to_string(),
+        running,
+    };
+    state
+        .sessions
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .insert(fork_id, meta.clone());
+    Ok(meta)
+}
+
 /// Change the effective approval posture for one live session. The host
 /// applies this to subsequent actions; an already pending approval remains
 /// guarded by its current requirement token until the user resolves it.
@@ -2628,6 +2691,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
+            fork_session,
             set_approval_mode,
             resume_session,
             restore_sessions,

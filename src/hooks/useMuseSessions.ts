@@ -569,6 +569,8 @@ interface UseMuseSessions {
   /** w-settings: route a path through the scope-guard prompt path. */
   checkPathScope: (path: string) => Promise<ScopeVerdict>;
   startSession: () => Promise<string | null>;
+  /** M1-09: create a server-side branch from completed conversation turns. */
+  forkSession: (sessionId: string) => Promise<string | null>;
   reconnectSession: (id: string) => Promise<void>;
   reconnectingId: string | null;
   connectedIds: string[];
@@ -2133,6 +2135,57 @@ export function useMuseSessions(): UseMuseSessions {
   const startSession = useCallback(async () => {
     return await startSessionRow();
   }, [startSessionRow]);
+
+  const [forkingId, setForkingId] = useState<string | null>(null);
+  const forkSession = useCallback(
+    async (sourceId: string): Promise<string | null> => {
+      if (!isTauriRuntime() || forkingId !== null) return null;
+      const source = sessions.find((session) => session.session_id === sourceId);
+      if (!source) {
+        setError("The source conversation is no longer available.");
+        return null;
+      }
+      setForkingId(sourceId);
+      setError(null);
+      try {
+        const meta = await invoke<BackendSessionMeta>("fork_session", {
+          sessionId: sourceId,
+        });
+        if (tombstoned.current?.has(meta.session_id)) {
+          setError("The fork was created but is no longer available.");
+          return null;
+        }
+        // The server owns the durable branch. Copy only completed local
+        // entries for immediate continuity; live/open items belong to the
+        // source turn and must not be replayed into the fork transcript.
+        const inherited = (logsRef.current[sourceId] ?? loadLog(sourceId)).filter(
+          (entry) => entry.open !== true,
+        );
+        const record: MuseSession = {
+          session_id: meta.session_id,
+          workspace: meta.workspace,
+          title: `Branch of ${source.title || source.session_id.slice(0, 8)}`,
+          createdAt: Date.now(),
+          running: meta.running,
+        };
+        setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
+        setSessions((current) => [
+          ...current.filter((session) => session.session_id !== meta.session_id),
+          record,
+        ]);
+        setLogs((current) => ({ ...current, [meta.session_id]: inherited }));
+        if (inherited.length > 0) appendLog(meta.session_id, inherited);
+        setActiveId(meta.session_id);
+        return meta.session_id;
+      } catch (error) {
+        setError(`Fork failed: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      } finally {
+        setForkingId(null);
+      }
+    },
+    [forkingId, sessions],
+  );
 
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
   // Hot-listed tools: re-read from the registry on every render, so a
@@ -3874,6 +3927,7 @@ export function useMuseSessions(): UseMuseSessions {
     setSessionModel,
     checkPathScope,
     startSession,
+    forkSession,
     reconnectSession,
     reconnectingId,
     connectedIds,
