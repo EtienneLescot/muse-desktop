@@ -549,6 +549,12 @@
 .terminal-input button:disabled {
   opacity: .45;
 }
+.terminal-input .terminal-muse {
+  border: 1px solid color-mix(in srgb, var(--blue) 55%, var(--line));
+  background: color-mix(in srgb, var(--blue) 18%, var(--bg));
+  color: var(--blue);
+  white-space: nowrap;
+}
 .terminal-empty {
   display: grid;
   gap: 6px;

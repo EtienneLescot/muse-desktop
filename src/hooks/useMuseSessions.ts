@@ -806,6 +806,8 @@ interface UseMuseSessions {
   reconcileSession: (id: string) => Promise<void>;
   reconcilingId: string | null;
   connectedIds: string[];
+  /** M1-06: capability negotiated with each workspace host. */
+  userShellAvailableForSession: (sessionId: string) => boolean;
   /**
    * M0-03: send one turn and get an explicit result. `retryKey` re-sends
    * an existing outbox entry (same clientMessageId, byte-identical
@@ -923,6 +925,8 @@ interface UseMuseSessions {
   openTerminal: (sessionId: string, cols?: number, rows?: number) => Promise<TerminalInfo | null>;
   readTerminal: (terminalId: string) => Promise<void>;
   writeTerminal: (terminalId: string, input: string) => Promise<void>;
+  /** M1-06: run one explicit command through MSP's user-shell lane. */
+  runUserShell: (sessionId: string, command: string) => Promise<boolean>;
   resizeTerminal: (terminalId: string, cols: number, rows: number) => Promise<void>;
   closeTerminal: (sessionId: string) => Promise<void>;
   /** Add a bounded, attributed terminal snapshot to the next prompt. */
@@ -1148,6 +1152,7 @@ interface BackendSessionMeta {
   session_durability?: string;
   /** Host projection, when this sidecar exposes one. */
   approval_mode?: string;
+  granted_capabilities?: string[];
 }
 
 interface BackendWorktreeSessionResult {
@@ -1539,6 +1544,11 @@ export function useMuseSessions(): UseMuseSessions {
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
   const [connectedIds, setConnectedIds] = useState<string[]>([]);
+  // M1-06: initialize grants are host facts. Keep them separate from the
+  // authorization posture and from persisted session metadata.
+  const [grantedCapabilitiesBySession, setGrantedCapabilitiesBySession] = useState<
+    Record<string, string[] | undefined>
+  >({});
   const [connectionBySession, setConnectionBySession] = useState<
     Record<string, SessionConnectionState>
   >({});
@@ -1766,6 +1776,13 @@ export function useMuseSessions(): UseMuseSessions {
         const restored = await invoke<BackendSessionMeta[]>("restore_sessions");
         if (cancelled) return;
         setConnectedIds(restored.map((s) => s.session_id));
+        setGrantedCapabilitiesBySession((cur) => {
+          const next = { ...cur };
+          for (const meta of restored) {
+            next[meta.session_id] = meta.granted_capabilities;
+          }
+          return next;
+        });
         setSessions((cur) => {
           const next = [...cur];
           for (const meta of restored) {
@@ -2359,8 +2376,9 @@ export function useMuseSessions(): UseMuseSessions {
     sessionId: string,
     itemId?: string,
     agentId?: string,
-    role: "assistant" | "thinking" = "assistant",
+    role: "assistant" | "thinking" | "tool" = "assistant",
     turnId?: string,
+    initialText = "",
   ): void {
     const stamp = { id: newId(), ts: Date.now() };
     setLogs((cur) => {
@@ -2369,6 +2387,7 @@ export function useMuseSessions(): UseMuseSessions {
         agentId,
         role,
         turnId,
+        initialText,
         stamp,
       });
       if (next === (cur[sessionId] ?? [])) return cur;
@@ -2517,6 +2536,12 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "host_exited") {
       setConnectedIds((cur) => cur.filter((id) => id !== sid));
+      setGrantedCapabilitiesBySession((cur) => {
+        if (!(sid in cur)) return cur;
+        const next = { ...cur };
+        delete next[sid];
+        return next;
+      });
       setConnectionState(sid, "disconnected");
       setHostApprovalModeBySession((cur) => {
         if (!(sid in cur)) return cur;
@@ -2589,6 +2614,32 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
       );
+      return;
+    }
+    if (kind === "shell_output") {
+      ensureSessionRow(sid, null);
+      const { itemId, text } = parseChunk(payload);
+      setLogs((cur) => {
+        const log = cur[sid] ?? [];
+        const i = lastOpenIndex(log, "tool", undefined, itemId);
+        let next: LogEntry[];
+        if (i >= 0) {
+          const previous = log[i];
+          const separator = previous.text.length > 0 && text.length > 0 ? "\n" : "";
+          next = [
+            ...log.slice(0, i),
+            { ...previous, text: `${previous.text}${separator}${text}`, itemId: itemId ?? previous.itemId },
+            ...log.slice(i + 1),
+          ];
+        } else {
+          next = [
+            ...log,
+            { id: newId(), ts: Date.now(), role: "tool", text, itemId, open: true },
+          ];
+        }
+        saveLog(sid, next);
+        return { ...cur, [sid]: next };
+      });
       return;
     }
     if (kind === "subagent_event") {
@@ -2815,7 +2866,8 @@ export function useMuseSessions(): UseMuseSessions {
       let itemId: string | undefined;
       let turnId: string | undefined;
       let agentId: string | undefined;
-      let itemRole: "assistant" | "thinking" = "assistant";
+      let itemRole: "assistant" | "thinking" | "tool" = "assistant";
+      let initialText = "";
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const rawId = obj.itemId ?? obj.id;
@@ -2827,15 +2879,23 @@ export function useMuseSessions(): UseMuseSessions {
             agentId = itemId ?? "agent";
           } else if (isThinkingItemKind(rawKind)) {
             itemRole = "thinking";
+          } else if (rawKind.toLowerCase().replace(/[\s_-]+/g, "") === "usershell") {
+            itemRole = "tool";
+            const commandText = obj.commandText;
+            if (typeof commandText === "string" && commandText.trim().length > 0) {
+              initialText = `$ ${commandText.trim()}`;
+            }
           }
         }
       } catch {
         // unparseable payload: still show the reflexive phase
       }
-      setSessions((cur) =>
-        cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
-      );
-      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId);
+      if (itemRole !== "tool") {
+        setSessions((cur) =>
+          cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
+        );
+      }
+      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId, initialText);
       return;
     }
     // status (and any future kinds): record + reflect liveness.
@@ -3255,6 +3315,10 @@ export function useMuseSessions(): UseMuseSessions {
         running: meta.running,
         ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
       };
+      setGrantedCapabilitiesBySession((cur) => ({
+        ...cur,
+        [meta.session_id]: meta.granted_capabilities,
+      }));
       setConnectedIds((cur) => [...new Set([...cur, meta.session_id])]);
       setConnectionState(meta.session_id, "connected");
       if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
@@ -3359,6 +3423,10 @@ export function useMuseSessions(): UseMuseSessions {
         sessionId: id, workspacePath: session.workspace,
       });
       if (tombstoned.current?.has(id)) return;
+      setGrantedCapabilitiesBySession((cur) => ({
+        ...cur,
+        [id]: meta.granted_capabilities,
+      }));
       // Resume restores the host's persisted posture. Reconcile it with the
       // current global selector before enabling the composer again. A host
       // ceiling must not make the saved conversation unusable: preserve the
@@ -3485,6 +3553,10 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
           ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
         };
+        setGrantedCapabilitiesBySession((cur) => ({
+          ...cur,
+          [meta.session_id]: meta.granted_capabilities,
+        }));
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
         if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
           setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
@@ -5989,6 +6061,45 @@ export function useMuseSessions(): UseMuseSessions {
     [terminalsBySession],
   );
 
+  const userShellAvailableForSession = useCallback(
+    (sessionId: string): boolean =>
+      grantedCapabilitiesBySession[sessionId]?.some((capability) => capability === "userShell") === true,
+    [grantedCapabilitiesBySession],
+  );
+
+  /** M1-06: explicit `!`-style host shell action from the terminal panel. */
+  const runUserShell = useCallback(
+    async (sessionId: string, command: string): Promise<boolean> => {
+      const commandText = command.trim();
+      if (!commandText) return false;
+      if (!userShellAvailableForSession(sessionId)) {
+        setError("The Muse host did not grant the userShell capability for this conversation.");
+        return false;
+      }
+      // `session/userShell` uses the same UUIDv7 idempotency contract as a
+      // normal turn. Derive it from a fresh client id so retries and host
+      // deduplication keep the protocol-level ordering guarantees.
+      const commandId = commandIdFromClientMessageId(newId(), Date.now());
+      if (!commandId) {
+        setError("user_shell failed: could not allocate a valid command id");
+        return false;
+      }
+      try {
+        await invoke("user_shell", { sessionId, commandId, commandText });
+        // The host's item/started event supplies the authoritative item id;
+        // this local seed makes the command visible immediately after the
+        // admission ack and is rebound to that id when the event arrives.
+        ensurePlaceholder(sessionId, undefined, undefined, "tool", undefined, `$ ${commandText}`);
+        touchStreamActivity(sessionId, "client/userShell");
+        return true;
+      } catch (e) {
+        setError(`user_shell failed: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
+      }
+    },
+    [touchStreamActivity, userShellAvailableForSession],
+  );
+
   const filesForSession = useCallback(
     (sessionId: string): FilesBrowserState => filesBySession[sessionId] ?? emptyFilesBrowserState(),
     [filesBySession],
@@ -6241,6 +6352,7 @@ export function useMuseSessions(): UseMuseSessions {
     reconcileSession,
     reconcilingId,
     connectedIds,
+    userShellAvailableForSession,
     sendInput,
     steerInput,
     unqueueTurn,
@@ -6375,6 +6487,7 @@ export function useMuseSessions(): UseMuseSessions {
     openTerminal,
     readTerminal,
     writeTerminal,
+    runUserShell,
     resizeTerminal,
     closeTerminal,
     prepareTerminalContext,

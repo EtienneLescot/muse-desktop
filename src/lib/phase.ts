@@ -140,11 +140,13 @@ export function upsertReflexivePlaceholder(
     itemId?: string;
     turnId?: string;
     agentId?: string;
-    role?: "assistant" | "thinking";
+    role?: "assistant" | "thinking" | "tool";
+    /** Optional visible seed (for example `$ command` in a user-shell item). */
+    initialText?: string;
     stamp: PlaceholderStamp;
   },
 ): LogEntry[] {
-  const { itemId, turnId, agentId, role = "assistant", stamp } = opts;
+  const { itemId, turnId, agentId, role = "assistant", initialText = "", stamp } = opts;
   if (agentId !== undefined) {
     const i = lastIndex(
       log,
@@ -194,6 +196,37 @@ export function upsertReflexivePlaceholder(
       { id: stamp.id, ts: stamp.ts, role: "thinking", text: "", itemId, ...(turnId ? { turnId } : {}), open: true },
     ];
   }
+  if (role === "tool") {
+    // A user-shell request can paint its local command before the host emits
+    // item/started. Bind that open entry to the authoritative item id when it
+    // arrives instead of creating a duplicate tool bubble.
+    const unbound = lastIndex(
+      log,
+      (e) => e.open === true && e.role === "tool" && e.itemId === undefined,
+    );
+    if (unbound >= 0 && itemId !== undefined) {
+      return log.map((e, j) =>
+        j === unbound ? { ...e, itemId, ...(turnId ? { turnId } : {}) } : e,
+      );
+    }
+    const live = lastIndex(
+      log,
+      (e) => e.open === true && e.role === "tool" && (itemId === undefined || e.itemId === itemId),
+    );
+    if (live >= 0) return log;
+    return [
+      ...log,
+      {
+        id: stamp.id,
+        ts: stamp.ts,
+        role: "tool",
+        text: initialText,
+        itemId,
+        ...(turnId ? { turnId } : {}),
+        open: true,
+      },
+    ];
+  }
   const i = lastIndex(log, (e) => e.open === true && e.role === "assistant");
   if (i >= 0) {
     if (itemId !== undefined && log[i].itemId === undefined) {
@@ -203,7 +236,7 @@ export function upsertReflexivePlaceholder(
   }
   return [
     ...log,
-    { id: stamp.id, ts: stamp.ts, role: "assistant", text: "", itemId, ...(turnId ? { turnId } : {}), open: true },
+    { id: stamp.id, ts: stamp.ts, role: "assistant", text: initialText, itemId, ...(turnId ? { turnId } : {}), open: true },
   ];
 }
 
@@ -218,7 +251,7 @@ export function dropEmptyPlaceholders(log: LogEntry[]): LogEntry[] {
       !(
         e.open === true &&
         e.text === "" &&
-        (e.role === "assistant" || e.role === "thinking" || e.role === "subagent")
+        (e.role === "assistant" || e.role === "thinking" || e.role === "subagent" || e.role === "tool")
       ),
   );
 }

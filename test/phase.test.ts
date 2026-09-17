@@ -192,6 +192,24 @@ describe("upsertReflexivePlaceholder", () => {
     assert.equal(next[0].itemId, "reason-1");
     assert.equal(next[0].open, true);
   });
+
+  it("seeds and binds a user-shell tool entry to its host item", () => {
+    const seeded = upsertReflexivePlaceholder([], {
+      role: "tool",
+      initialText: "$ git status",
+      stamp,
+    });
+    assert.equal(seeded[0].role, "tool");
+    assert.equal(seeded[0].text, "$ git status");
+    const bound = upsertReflexivePlaceholder(seeded, {
+      role: "tool",
+      itemId: "shell-1",
+      stamp,
+    });
+    assert.equal(bound.length, 1);
+    assert.equal(bound[0].itemId, "shell-1");
+    assert.equal(bound[0].text, "$ git status");
+  });
 });
 
 describe("dropEmptyPlaceholders", () => {
@@ -202,6 +220,7 @@ describe("dropEmptyPlaceholders", () => {
       entry({ role: "assistant", text: "kept", open: true }),
       entry({ role: "assistant", text: "", open: false }),
       entry({ role: "thinking", text: "", open: true }),
+      entry({ role: "tool", text: "", open: true }),
     ];
     const next = dropEmptyPlaceholders(log);
     assert.deepEqual(

@@ -263,7 +263,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Acceptation :** commande de build en échec, sortie disponible au bon agent ; terminal B inaccessible par confusion de cible ; capture non bloquante.
 
-**État au 16/09/2026 :** première tranche locale livrée dans la PR M1-06 : **Add output to prompt** ajoute un snapshot borné et attribué au terminal actif dans le brouillon. L’adaptateur vers un outil ou un contexte MSP automatique reste explicitement en attente de vérification de capability moteur.
+**État au 17/09/2026 :** **Add output to prompt** reste le fallback manuel borné et attribué. Le handshake demande maintenant explicitement la capability `userShell`; lorsqu'elle est accordée, **Run in Muse** envoie `session/userShell` avec un `commandId` UUIDv7 et le host restitue la commande et sa sortie dans une entrée tool du transcript. Un host sans grant garde l'action désactivée et l'insertion manuelle disponible. Reste la qualification native sur les trois OS, les sorties longues et l'interruption d'une commande.
 
 ### M1-07 — Fichiers réels
 

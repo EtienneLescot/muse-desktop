@@ -32,6 +32,7 @@ export const MSP_METHODS_SENT: MspMethod[] = [
   "model/list",
   "session/compact",
   "session/setModel",
+  "session/userShell",
   "session/fork",
   "turn/start",
   "turn/unqueue",
