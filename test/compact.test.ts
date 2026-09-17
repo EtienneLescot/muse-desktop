@@ -19,6 +19,7 @@ import {
   needsAutoCompaction,
   needsCompaction,
   parseContextUsage,
+  parseTokenUsage,
   saveSummary,
   suggestsServerCompaction,
 } from "../src/lib/compact.ts";
@@ -201,5 +202,22 @@ describe("server context usage (US-4 server half)", () => {
       formatUsage({ pressure: "normal", usedTokens: null, windowTokens: null }),
       "? / ? tokens · normal",
     );
+  });
+
+  it("keeps host token counters instead of deriving them locally", () => {
+    assert.deepEqual(parseTokenUsage({
+      turnId: "turn-3",
+      promptTokens: 120,
+      totalTokens: 180,
+      usage: { outputTokens: 60 },
+      cumulative: { promptTokens: 900, outputTokens: 400, totalTokens: 1300 },
+    }), {
+      promptTokens: 120,
+      outputTokens: 60,
+      totalTokens: 180,
+      turnId: "turn-3",
+    });
+    assert.equal(parseTokenUsage({ cumulative: { totalTokens: 12 } })?.totalTokens, 12);
+    assert.equal(parseTokenUsage({}), null);
   });
 });

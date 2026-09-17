@@ -6,6 +6,7 @@ import {
   automaticApprovalChoice,
   authorizationModeDescription,
   authorizationModeLabel,
+  connectorCallRequiresApproval,
   hostApprovalMode,
   parseAuthorizationMode,
   productAuthorizationMode,
@@ -52,5 +53,14 @@ describe("global authorization posture", () => {
     assert.equal(productAuthorizationMode("promptUnmatched"), "workspace");
     assert.equal(productAuthorizationMode("allowAll"), "yolo");
     assert.equal(productAuthorizationMode("denyUnmatched"), null);
+  });
+
+  it("keeps connector calls aligned with the global posture", () => {
+    assert.equal(connectorCallRequiresApproval("ask", "local"), true);
+    assert.equal(connectorCallRequiresApproval("ask", "remote"), true);
+    assert.equal(connectorCallRequiresApproval("workspace", "local"), false);
+    assert.equal(connectorCallRequiresApproval("workspace", "remote"), true);
+    assert.equal(connectorCallRequiresApproval("yolo", "local"), false);
+    assert.equal(connectorCallRequiresApproval("yolo", "remote"), false);
   });
 });

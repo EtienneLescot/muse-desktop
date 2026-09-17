@@ -5,6 +5,7 @@ import {
   type SkillSuggestion,
 } from "../lib/skills";
 import type { SkillScanSummary } from "../lib/skillDiscovery";
+import { userFacingError } from "../lib/errorCopy";
 
 interface Props {
   skills: Skill[];
@@ -29,6 +30,7 @@ export function SkillPanel({ skills, workspace, onScan, onToggle, onInvoke, onTr
   const [suggestions, setSuggestions] = useState<SkillSuggestion[]>([]);
   const [scanBusy, setScanBusy] = useState(false);
   const [scan, setScan] = useState<SkillScanSummary | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   return (
     <section className="integration-panel" aria-label="Skills">
@@ -43,7 +45,11 @@ export function SkillPanel({ skills, workspace, onScan, onToggle, onInvoke, onTr
           disabled={!workspace || scanBusy}
           onClick={() => {
             setScanBusy(true);
-            void onScan().then(setScan).finally(() => setScanBusy(false));
+            setScanError(null);
+            void onScan()
+              .then(setScan)
+              .catch((error) => setScanError(userFacingError(`skills scan failed: ${String(error)}`)))
+              .finally(() => setScanBusy(false));
           }}
         >
           {scanBusy ? "Scanning…" : "Scan workspace"}
@@ -59,6 +65,7 @@ export function SkillPanel({ skills, workspace, onScan, onToggle, onInvoke, onTr
           )}
         </div>
       )}
+      {scanError !== null && <p className="error" role="alert">{scanError}</p>}
       <ul className="integration-list">
         {skills.map((s) => {
           const view = getSkillDetail(s, false);

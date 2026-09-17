@@ -21,6 +21,18 @@ The browser preview displays the interface. Working with the engine requires the
 npm run tauri -- dev
 ```
 
+To build the Windows x64 installer locally (the matching `muse` sidecar must be present in `src-tauri/binaries/`):
+
+```sh
+npm run tauri -- build --bundles nsis
+```
+
+The NSIS installer is written to `src-tauri/target/release/bundle/nsis/`. Release signing, publishing and update channels are not configured yet.
+
+On Windows, `powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1` performs the same build after checking that the x64 sidecar is present. Pass `-Bundle msi` or `-Bundle all` when another bundle format is needed.
+
+Remote MCP endpoints can be tested from **Extensions** with a public HTTPS URL. Muse performs a real `initialize`/`tools/list` exchange (JSON or SSE) before saving the catalogue; bearer tokens remain in memory, are reused only for an explicit **Reconnect** while the app is open, and must be entered again after a relaunch. OAuth and native secret-store integration are still planned.
+
 ## Documentation
 
 - [Product and technical specification](docs/SPEC.md)

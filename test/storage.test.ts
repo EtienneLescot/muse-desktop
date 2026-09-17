@@ -3,11 +3,15 @@ import assert from "node:assert/strict";
 import {
   consumeStorageIssues,
   exportStorageSnapshot,
+  inspectStorageSnapshot,
+  importStorageSnapshot,
+  migrateLegacyStorage,
   readStorageJson,
   readStorageString,
   removeStorageKey,
   writeStorageJson,
   writeStorageString,
+  RECOVERY_RAW_LIMIT,
 } from "../src/lib/storage.ts";
 
 function fakeStorage(initial: Record<string, string> = {}) {
@@ -92,6 +96,23 @@ describe("defensive storage facade", () => {
     assert.equal(values.get("unrelated"), "should not export");
   });
 
+  it("bounds oversized damaged values while marking them recoverable", () => {
+    const oversized = "💥".repeat(RECOVERY_RAW_LIMIT + 25);
+    fakeStorage({ "muse-desktop.corrupt.v1": oversized });
+    const snapshot = JSON.parse(exportStorageSnapshot()) as {
+      entries: Record<string, unknown>;
+    };
+    const entry = snapshot.entries["muse-desktop.corrupt.v1"] as {
+      raw: string;
+      parseError: boolean;
+      truncated?: boolean;
+    };
+    assert.equal(entry.parseError, true);
+    assert.equal(entry.truncated, true);
+    assert.equal(Array.from(entry.raw).length, RECOVERY_RAW_LIMIT);
+    assert.equal(entry.raw.endsWith("💥"), true);
+  });
+
   it("removes a key through the same safe facade", () => {
     const { values } = fakeStorage({ "muse-desktop.tmp.v1": "1" });
     assert.equal(removeStorageKey("muse-desktop.tmp.v1"), true);
@@ -103,6 +124,81 @@ describe("defensive storage facade", () => {
     assert.equal(readStorageString("muse-desktop.theme.v1"), "dark");
     assert.equal(writeStorageString("muse-desktop.theme.v1", "light"), true);
     assert.equal(values.get("muse-desktop.theme.v1"), "light");
+  });
+
+  it("restores a snapshot without overwriting live data unless confirmed", () => {
+    const { values } = fakeStorage({
+      "muse-desktop.live.v1": JSON.stringify({ current: true }),
+    });
+    const snapshot = JSON.stringify({
+      format: "muse-desktop-storage",
+      version: 1,
+      entries: {
+        "muse-desktop.live.v1": { current: false },
+        "muse-desktop.old.v1": { restored: true },
+        "other": "ignored",
+      },
+    });
+    const first = importStorageSnapshot(snapshot);
+    assert.equal(first.imported, 1);
+    assert.equal(first.skipped, 2);
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.live.v1") ?? "{}"), { current: true });
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.old.v1") ?? "{}"), { restored: true });
+    const second = importStorageSnapshot(snapshot, "muse-desktop.", true);
+    assert.equal(second.imported, 2);
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.live.v1") ?? "{}"), { current: false });
+  });
+
+  it("previews existing keys and restores only explicitly selected entries", () => {
+    const { values } = fakeStorage({
+      "muse-desktop.live.v1": JSON.stringify({ current: true }),
+    });
+    const snapshot = JSON.stringify({
+      format: "muse-desktop-storage",
+      version: 1,
+      entries: {
+        "muse-desktop.live.v1": { current: false },
+        "muse-desktop.new.v1": { restored: true },
+        "muse-desktop.corrupt.v1": { raw: "{broken", parseError: true },
+        unrelated: "ignored",
+      },
+    });
+    const preview = inspectStorageSnapshot(snapshot);
+    assert.deepEqual(preview.entries, [
+      { key: "muse-desktop.live.v1", existing: true, parseError: false },
+      { key: "muse-desktop.new.v1", existing: false, parseError: false },
+      { key: "muse-desktop.corrupt.v1", existing: false, parseError: true },
+    ]);
+    assert.match(preview.errors.join(" "), /non-namespaced/);
+
+    const result = importStorageSnapshot(
+      snapshot,
+      "muse-desktop.",
+      true,
+      ["muse-desktop.new.v1"],
+    );
+    assert.equal(result.imported, 1);
+    assert.equal(values.get("muse-desktop.live.v1"), JSON.stringify({ current: true }));
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.new.v1") ?? "{}"), { restored: true });
+    assert.equal(values.has("muse-desktop.corrupt.v1"), false);
+    assert.equal(result.skipped, 3);
+  });
+
+  it("copies known legacy keys without overwriting current data", () => {
+    const { values } = fakeStorage({
+      "muse.sessions.v1": JSON.stringify([{ session_id: "legacy" }]),
+      "muse.log.legacy": JSON.stringify([{ id: "e1" }]),
+      "muse-desktop.sessions.v1": JSON.stringify([{ session_id: "current" }]),
+      "muse.workspace.v1": JSON.stringify("C:/legacy"),
+      "muse.settings": "{broken",
+    });
+    const result = migrateLegacyStorage();
+    assert.equal(result.migrated, 2);
+    assert.equal(result.skipped, 2);
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.sessions.v1") ?? "{}"), [{ session_id: "current" }]);
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.log.v1.legacy") ?? "{}"), [{ id: "e1" }]);
+    assert.equal(values.get("muse-desktop.workspace.v1"), JSON.stringify("C:/legacy"));
+    assert.match(result.errors.join(" "), /corrupt/);
   });
 
   it("reports scalar read and write failures", () => {

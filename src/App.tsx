@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
 import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
 import { cycleThreadId, selectActiveThreads } from "./lib/threads";
@@ -27,6 +29,10 @@ import { TerminalPanel } from "./components/TerminalPanel";
 import { FilesPanel } from "./components/FilesPanel";
 import type { ShareBundle } from "./lib/sharing";
 import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
+import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
+import { userFacingError } from "./lib/errorCopy";
+import { isTauriRuntime } from "./lib/env";
+import type { Artifact, ArtifactVersion } from "./lib/artifacts";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -66,6 +72,12 @@ export default function App() {
     activeLog,
     approvals,
     activeApprovals,
+    activeStreamActivity,
+    activeResumePending,
+    stoppingBySession,
+    activeConnectionState,
+    queuedTurns,
+    dismissQueuedTurn,
     inputRequests,
     activeInputRequests,
     workspace,
@@ -82,10 +94,14 @@ export default function App() {
     setSessionModel,
     checkPathScope,
     createWorktree,
+    createWorktreeSession,
     worktrees,
+    cleanupIntents,
     removeWorktree,
     inspectWorktree,
+    checkWorktreeReadiness,
     runWorktreeSetup,
+    cancelWorktreeSetup,
     setActive,
     startSession,
     startSessionInWorkspace,
@@ -93,10 +109,13 @@ export default function App() {
     reconnectSession,
     reconnectingId,
     connectedIds,
+    evtCount,
     sendInput,
     steerInput,
+    unqueueTurn,
     pendingSends,
     retrySend,
+    retryFailedTurn,
     discardSend,
     approve,
     allowlist,
@@ -129,8 +148,10 @@ export default function App() {
     scheduleRuns,
     notifications,
     notificationPermission,
+    notificationsMuted,
     unreadNotificationCount,
     enableNotifications,
+    setNotificationsMuted,
     markNotificationRead,
     reviewQueue,
     createSchedule,
@@ -139,6 +160,8 @@ export default function App() {
     runScheduleNow,
     cancelScheduleRun,
     markScheduleRunRead,
+    setScheduleRunArchived,
+    retryScheduleRunNow,
     approveReview,
     discardReview,
     shareMode,
@@ -162,11 +185,20 @@ export default function App() {
     probeLocalMcp,
     callLocalMcp,
     registerLocalConnector,
+    refreshLocalMcp,
+    rollbackLocalMcp,
+    mcpRunningIds,
+    startLocalMcp,
+    stopLocalMcp,
+    callRegisteredLocalMcp,
+    remoteConnectedIds,
+    probeRemoteMcp,
+    callRemoteMcp,
+    disconnectRemoteMcp,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
     setConnectorEnabledById,
-    addRemoteConnector,
     skills,
     setSkillEnabledByName,
     traceSkillSuggestions,
@@ -188,6 +220,7 @@ export default function App() {
     loadGitDiff,
     stageGitFiles,
     restoreGitFiles,
+    applyGitHunk,
     commitGit,
     pushGit,
     createGitPr,
@@ -199,10 +232,15 @@ export default function App() {
     closeTerminal,
     prepareTerminalContext,
     filesForSession,
+    prepareWorkspaceFileContext,
     listWorkspaceFiles,
     readWorkspaceFile,
+    watchWorkspaceFiles,
+    unwatchWorkspaceFiles,
+    openWorkspacePath,
     browserAnnotations,
     addBrowserAnnotation,
+    prepareBrowserContext,
     removeBrowserAnnotation,
     browserPermissions,
     setBrowserAppPermission,
@@ -213,6 +251,8 @@ export default function App() {
     ackScanNudge,
     error,
     backendMissing,
+    startupProbe,
+    probeStartup,
   } = useMuseSessions();
 
   // US-20: one `@mem/…` token the panel asked the composer to insert.
@@ -426,10 +466,80 @@ export default function App() {
       kind={sidecarKind}
       message={error}
       triedPaths={extractTriedPaths(error)}
-      onRetry={() => void startSession()}
+      onRetry={() => {
+        void probeStartup(workspace);
+        void startSession();
+      }}
       onPickWorkspace={setWorkspace}
+      startupProbe={startupProbe}
     />
   );
+
+  async function exportDiagnostics(): Promise<void> {
+    let native: NativeDiagnosticsSnapshot | null = null;
+    try {
+      native = await invoke<NativeDiagnosticsSnapshot>("collect_diagnostics");
+    } catch {
+      // Web preview and older native builds use the renderer counters below.
+    }
+    const payload = diagnosticsJson({
+      workspace,
+      sessionCount: sessions.length,
+      runningSessionCount: sessions.filter((session) => session.running).length,
+      connectedSessionCount: connectedIds.length,
+      pendingApprovalCount: activeApprovals.length,
+      pendingInputCount: activeInputRequests.length,
+      pendingSendCount: pendingSends.length,
+      scheduleCount: schedules.length,
+      scheduleRunCount: scheduleRuns.length,
+      eventCount: evtCount,
+      backendMissing,
+      error,
+      native,
+    });
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `muse-desktop-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportArtifact(
+    artifact: Artifact,
+    version: ArtifactVersion,
+  ): Promise<boolean> {
+    const slug = artifact.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "muse-artifact";
+    const extension = artifact.kind === "doc"
+      ? artifact.lang === "md" || artifact.lang === "markdown" ? "md" : "txt"
+      : artifact.lang.replace(/[^a-z0-9]+/gi, "").slice(0, 8) || "txt";
+    const filename = `${slug}-v${version.v}.${extension}`;
+    if (isTauriRuntime()) {
+      const target = await save({
+        title: "Export artifact",
+        defaultPath: filename,
+        filters: [{ name: artifact.kind === "doc" ? "Document" : "Source", extensions: [extension] }],
+      });
+      if (typeof target !== "string" || target.trim() === "") return false;
+      await invoke("artifact_export", { path: target, content: version.text });
+      return true;
+    }
+    const blob = new Blob([version.text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    return true;
+  }
 
   return (
     <div className={`app desktop-app ${collapsed ? "nav-collapsed" : ""}`}>
@@ -645,6 +755,7 @@ export default function App() {
               onSelectModel={(modelId) => {
                 if (activeId !== null) void setSessionModel(activeId, modelId);
               }}
+              onExportDiagnostics={exportDiagnostics}
               checkPathScope={checkPathScope}
               onClose={() => setSettingsOpen(false)}
             />
@@ -715,6 +826,7 @@ export default function App() {
                   runs={scheduleRuns}
                   notifications={notifications}
                   notificationPermission={notificationPermission}
+                  notificationsMuted={notificationsMuted}
                   unreadNotifications={unreadNotificationCount}
                   sessions={sessions}
                   activeId={activeId}
@@ -730,7 +842,10 @@ export default function App() {
                   onRunNow={(id) => runScheduleNow(id)}
                   onCancelRun={(id) => cancelScheduleRun(id)}
                   onMarkRunRead={(id) => markScheduleRunRead(id)}
+                  onSetRunArchived={(id, archived) => setScheduleRunArchived(id, archived)}
+                  onRetryRunNow={(id) => retryScheduleRunNow(id)}
                   onEnableNotifications={enableNotifications}
+                  onSetNotificationsMuted={setNotificationsMuted}
                   onMarkNotificationRead={markNotificationRead}
                   onOpenNotification={(notification) => {
                     if (notification.sessionId) {
@@ -759,13 +874,23 @@ export default function App() {
                     callLocalMcp(command, toolName, argumentsText, workspace)
                   }
                   onRegisterLocal={registerLocalConnector}
+                  onRefreshLocal={(id) => refreshLocalMcp(id, workspace)}
+                  onRollbackLocal={rollbackLocalMcp}
+                  mcpRunningIds={mcpRunningIds}
+                  onStartLocal={(id) => startLocalMcp(id, workspace)}
+                  onStopLocal={stopLocalMcp}
+                  onCallRegisteredLocal={callRegisteredLocalMcp}
+                  remoteConnectedIds={remoteConnectedIds}
+                  onProbeRemote={probeRemoteMcp}
+                  onCallRemote={callRemoteMcp}
+                  onDisconnectRemote={disconnectRemoteMcp}
+                  authorizationMode={authorizationMode}
                   remoteNotice={remoteNotice}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}
                   onToggle={(id, enabled) =>
                     setConnectorEnabledById(id, enabled)
                   }
-                  onAddRemote={(name, url) => addRemoteConnector(name, url)}
                 />{" "}
                 <SkillPanel
                   skills={skills}
@@ -854,7 +979,7 @@ export default function App() {
             )}
             {sidecarKind !== null
               ? active !== null && sidecarPanel
-              : error && <div className="error-banner">{error}</div>}
+              : error && <div className="error-banner">{userFacingError(error)}</div>}
             {active === null ? (
               <EmptySessionScreen
                 workspace={workspace}
@@ -886,6 +1011,16 @@ export default function App() {
                       {active.running ? "Working" : "Ready"}
                       <span>·</span>
                       <span title={active.workspace}>{active.workspace}</span>
+                      <span className={`connection-state connection-${activeConnectionState}`}>
+                        <span className="connection-state-dot" aria-hidden="true" />
+                        {activeConnectionState === "connected"
+                          ? "Connected"
+                          : activeConnectionState === "connecting"
+                            ? "Connecting"
+                            : activeConnectionState === "error"
+                              ? "Connection error"
+                              : "Disconnected"}
+                      </span>
                     </div>
                     {activeProject !== null && (
                       <div className="task-project-context" title="Effective project settings">
@@ -936,6 +1071,17 @@ export default function App() {
                   <StreamView
                     entries={activeLog}
                     sessionId={active.session_id}
+                    running={active.running}
+                    stopping={stoppingBySession[active.session_id] === true}
+                    lastEventAt={activeStreamActivity?.lastEventAt ?? null}
+                    resumePendingAt={activeResumePending?.requestedAt ?? null}
+                    pendingApprovals={activeApprovals.length}
+                    pendingInputs={activeInputRequests.length}
+                    reconnecting={reconnectingId === active.session_id}
+                    onReconnect={() => void reconnectSession(active.session_id)}
+                    onCancel={() => void cancelSession(active.session_id)}
+                    onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
+                    onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
                     controls={{
                       onInterrupt: (agentId) =>
                         void subagentInterrupt(active.session_id, agentId),
@@ -955,6 +1101,36 @@ export default function App() {
                     }}
                   />
 
+                  {queuedTurns.length > 0 && (
+                    <section className="queued-turns" aria-label="Queued messages">
+                      <div className="queued-turns-head">
+                        <strong>Queued messages</strong>
+                        <span className="muted">They will run in order</span>
+                      </div>
+                      {queuedTurns.map((turn) => (
+                        <div className={`queued-turn${turn.recovered ? " queued-turn-recovered" : ""}`} key={turn.turn_id}>
+                          <span className="queued-turn-text" title={turn.text}>
+                            {turn.text.length > 120 ? `${turn.text.slice(0, 120)}…` : turn.text}
+                          </span>
+                          {turn.recovered && (
+                            <span className="queued-turn-note">
+                              Saved before restart — verify the host queue
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (turn.recovered) dismissQueuedTurn(active.session_id, turn.turn_id);
+                              else void unqueueTurn(active.session_id, turn.turn_id);
+                            }}
+                            title={turn.recovered ? "Dismiss this local queue reminder" : "Remove this message from the host queue"}
+                          >
+                            {turn.recovered ? "Dismiss" : "Remove from queue"}
+                          </button>
+                        </div>
+                      ))}
+                    </section>
+                  )}
                   {activePendingSends.map((entry) => (
                     <div
                       className="pending-send"
@@ -1003,6 +1179,7 @@ export default function App() {
                       </>
                     }
                     running={active.running}
+                    stopping={stoppingBySession[active.session_id] === true}
                     workspace={active.workspace}
                     onSend={(text, inputParts) => sendInput(active.session_id, text, undefined, inputParts)}
                     onSteer={(text, inputParts) => steerInput(active.session_id, text, inputParts)}
@@ -1056,6 +1233,7 @@ export default function App() {
                             artifacts={artifacts[active.session_id] ?? []}
                             onRestore={restoreArtifact}
                             onComment={commentArtifact}
+                            onExport={exportArtifact}
                           />
                         </>
                       )}
@@ -1067,6 +1245,7 @@ export default function App() {
                           onLoadDiff={loadGitDiff}
                           onStageFiles={stageGitFiles}
                           onRestoreFiles={restoreGitFiles}
+                          onApplyHunk={applyGitHunk}
                           onCommit={commitGit}
                           onPush={pushGit}
                           onCreatePr={createGitPr}
@@ -1097,6 +1276,10 @@ export default function App() {
                           state={filesForSession(active.session_id)}
                           onList={listWorkspaceFiles}
                           onRead={readWorkspaceFile}
+                          onWatch={watchWorkspaceFiles}
+                          onUnwatch={unwatchWorkspaceFiles}
+                          onOpen={openWorkspacePath}
+                          onInsertContext={prepareWorkspaceFileContext}
                         />
                       )}
                       {workPanel === "browser" && (
@@ -1106,6 +1289,9 @@ export default function App() {
                             annotations={browserAnnotations}
                             permissions={browserPermissions}
                             onAddAnnotation={addBrowserAnnotation}
+                            onInsertContext={(context) => {
+                              void prepareBrowserContext(active.session_id, context);
+                            }}
                             onRemoveAnnotation={removeBrowserAnnotation}
                             onSetPermission={setBrowserAppPermission}
                           />
@@ -1147,10 +1333,19 @@ export default function App() {
                             sessionId={active.session_id}
                             workspace={active.workspace}
                             onCreateWorktree={createWorktree}
+                            onCreateConversationWorktree={(plan) =>
+                              createWorktreeSession(active.session_id, plan, activeProjectSettings)
+                            }
                             worktrees={worktrees}
+                            cleanupIntents={cleanupIntents}
                             onRemoveWorktree={removeWorktree}
+                            onOpenWorktree={async (record) =>
+                              startSessionInWorkspace(record.path, activeProjectSettings)
+                            }
                             onInspectWorktree={inspectWorktree}
+                            onCheckReadiness={checkWorktreeReadiness}
                             onRunSetup={runWorktreeSetup}
+                            onCancelSetup={cancelWorktreeSetup}
                             sourceStatus={gitReview(active.session_id).status}
                           />{" "}
                           <SharePanel

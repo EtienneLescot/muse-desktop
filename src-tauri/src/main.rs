@@ -24,19 +24,23 @@ mod resume;
 mod git;
 mod terminal;
 mod files;
+mod artifact_export;
 mod setup;
 mod mcp;
 mod skills;
+mod startup;
+mod workspace_watch;
 use hosts::Hosts;
 
 use base64::Engine as _;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager, RunEvent, State};
+use tauri::{AppHandle, Manager, RunEvent, State, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::mpsc;
@@ -60,10 +64,14 @@ pub struct DrainedEvent {
     pub payload: String,
 }
 
-/// Poll result: current head cursor plus events after `since`.
+/// Poll result: current head cursor plus events after `since`. `truncated`
+/// makes event loss explicit when the renderer fell behind the bounded ring;
+/// the caller can then re-read durable history and pending requests.
 #[derive(Debug, Serialize, Clone)]
 pub struct PollResult {
     pub head: u64,
+    pub oldest: Option<u64>,
+    pub truncated: bool,
     pub events: Vec<DrainedEvent>,
 }
 
@@ -222,6 +230,39 @@ struct AppState {
     event_seq: Mutex<u64>,
     event_buffer: Mutex<std::collections::VecDeque<DrainedEvent>>,
     terminals: terminal::TerminalRegistry,
+    /// In-flight worktree setup cancellation flags, keyed by session and
+    /// renderer operation id. The command owns the child process lifetime;
+    /// the UI only requests cancellation through this registry.
+    setup_cancellations: Mutex<HashMap<(String, String), Arc<AtomicBool>>>,
+    /// Persistent local MCP servers, keyed by the frontend connector id.
+    /// Each entry owns its child process and is removed explicitly or on app
+    /// exit; calls are serialized by this mutex to keep stdio single-flight.
+    mcp_servers: Arc<Mutex<HashMap<String, mcp::PersistentServer>>>,
+    /// One native watcher per Files panel/session. Dropping a registration
+    /// stops callbacks immediately; the renderer still owns refresh policy.
+    workspace_watchers: Mutex<HashMap<String, workspace_watch::WorkspaceWatcher>>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeSessionResult {
+    pub worktree: git::GitWorktreeResult,
+    pub session: SessionMeta,
+}
+
+/// Native side of the bounded diagnostics export. It contains operational
+/// counters only; workspace paths, prompts and transcript payloads stay out
+/// of this contract.
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeDiagnosticsSnapshot {
+    pub schema: String,
+    pub workspace_configured: bool,
+    pub host_count: usize,
+    pub session_count: usize,
+    pub running_session_count: usize,
+    pub pending_approval_count: usize,
+    pub event_buffer_count: usize,
 }
 
 const DIAGNOSTIC_MAX_LINES: usize = 20;
@@ -294,6 +335,72 @@ fn redact_diagnostic(input: &str) -> String {
         }
     }
     truncate(&out, DIAGNOSTIC_LINE_LIMIT)
+}
+
+const NATIVE_BROWSER_LABEL: &str = "muse-browser";
+const MAX_BROWSER_URL_CHARS: usize = 4096;
+
+/// Normalize and validate a URL before it is handed to a native webview.
+/// The renderer performs the same normalization for its preview, but this
+/// boundary must also protect direct or stale IPC callers.
+fn validate_native_browser_url(raw: &str) -> Result<Url, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("browser URL must not be empty".to_string());
+    }
+    if trimmed.chars().count() > MAX_BROWSER_URL_CHARS {
+        return Err(format!(
+            "browser URL is limited to {MAX_BROWSER_URL_CHARS} characters"
+        ));
+    }
+    let candidate = if trimmed.contains("://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{trimmed}")
+    };
+    let url = candidate
+        .parse::<Url>()
+        .map_err(|_| "browser URL is not valid".to_string())?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("only http and https URLs can open in the native browser".to_string());
+    }
+    if url.host_str().is_none() {
+        return Err("browser URL must include a host".to_string());
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("browser URLs with embedded credentials are not allowed".to_string());
+    }
+    Ok(url)
+}
+
+/// Open a verified URL in one dedicated native webview window. Reusing the
+/// label keeps the browser surface single-instance and predictable.
+#[tauri::command]
+async fn open_native_browser(app: AppHandle, url: String) -> Result<String, String> {
+    let parsed = validate_native_browser_url(&url)?;
+    if let Some(window) = app.get_webview_window(NATIVE_BROWSER_LABEL) {
+        window
+            .navigate(parsed)
+            .map_err(|e| format!("could not navigate native browser: {e}"))?;
+        window
+            .show()
+            .map_err(|e| format!("could not show native browser: {e}"))?;
+        window
+            .set_focus()
+            .map_err(|e| format!("could not focus native browser: {e}"))?;
+        return Ok("reused".to_string());
+    }
+    WebviewWindowBuilder::new(
+        &app,
+        NATIVE_BROWSER_LABEL,
+        WebviewUrl::External(parsed),
+    )
+    .title("Muse Browser")
+    .inner_size(1180.0, 800.0)
+    .min_inner_size(720.0, 480.0)
+    .build()
+    .map_err(|e| format!("could not open native browser: {e}"))?;
+    Ok("opened".to_string())
 }
 
 /// Reasoning items are streamed through the same `item/delta` notification as
@@ -763,7 +870,11 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                     "status",
                     sid,
                     "item_started",
-                    json!({"itemId": item_id, "itemKind": kind}).to_string(),
+                    json!({
+                        "itemId": item_id,
+                        "itemKind": kind,
+                        "turnId": item.get("turnId"),
+                    }).to_string(),
                 );
             }
         }
@@ -839,7 +950,17 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 .and_then(Value::as_str)
                 .or_else(|| p.get("itemId").and_then(Value::as_str))
                 .unwrap_or("");
-            emit(app, "status", sid, "item_done", json!({"itemId": item_id}).to_string());
+            let turn_id = p
+                .get("item")
+                .and_then(|i| i.get("turnId"))
+                .or_else(|| p.get("turnId"));
+            emit(
+                app,
+                "status",
+                sid,
+                "item_done",
+                json!({"itemId": item_id, "turnId": turn_id}).to_string(),
+            );
         }
         "approval/requested" | "approval/updated" => {
             let approval_id = match p.get("approvalId").and_then(Value::as_str) {
@@ -928,22 +1049,28 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
         ),
         "turn/completed" => {
             let terminal = p.get("terminal").and_then(Value::as_str).unwrap_or("completed");
-            let detail = p
-                .get("reason")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .or_else(|| {
-                    p.get("error")
-                        .and_then(|e| e.get("message"))
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                })
-                .unwrap_or_default();
             mark_running(state, sid, false);
-            emit(app, "status", sid, terminal, detail);
+            // A failed turn is a terminal view event, so preserve the stable
+            // error object instead of flattening it into a message string.
+            // Older hosts may omit fields; nulls keep the envelope additive
+            // and let the renderer fall back to the legacy reason.
+            emit(
+                app,
+                "status",
+                sid,
+                terminal,
+                json!({
+                    "terminal": terminal,
+                    "turnId": p.get("turnId"),
+                    "reason": p.get("reason"),
+                    "error": p.get("error"),
+                    "durationMs": p.get("durationMs"),
+                })
+                .to_string(),
+            );
         }
         "turn/retracted" | "turn/unqueued" | "turn/retryScheduled" => {
-            emit(app, "status", sid, method, String::new())
+            emit(app, "status", sid, method, p.to_string())
         }
         "userInput/requested" => {
             // The turn suspends until answered: surface as an answerable
@@ -991,6 +1118,13 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                     "windowTokens": p.get("windowTokens").and_then(Value::as_u64),
                 });
                 emit(app, "context_usage", sid, "context_usage", usage.to_string());
+            }
+        }
+        // US-31/M1-11: preserve the host's token counters verbatim. The
+        // renderer displays these projections but never recomputes totals.
+        "session/tokenUsage" => {
+            if !sid.is_empty() {
+                emit(app, "token_usage", sid, "token_usage", p.to_string());
             }
         }
         _ => {}
@@ -1113,6 +1247,85 @@ async fn git_restore(
     .map_err(|e| format!("git restore task failed: {e}"))?
 }
 
+/// Return native supervisor counters for the explicit local diagnostics
+/// export. Every field is a bounded count and every lock failure is visible to
+/// the caller instead of producing a partial, misleading snapshot.
+#[tauri::command]
+fn collect_diagnostics(state: State<'_, AppState>) -> Result<NativeDiagnosticsSnapshot, String> {
+    let workspace_configured = state
+        .workspace
+        .lock()
+        .map_err(|e| format!("workspace diagnostics lock: {e}"))?
+        .is_some();
+    let (host_count, host_session_count) = {
+        let hosts = state
+            .hosts
+            .lock()
+            .map_err(|e| format!("host diagnostics lock: {e}"))?;
+        (hosts.client_count(), hosts.session_count())
+    };
+    let (session_count, running_session_count) = {
+        let sessions = state
+            .sessions
+            .lock()
+            .map_err(|e| format!("session diagnostics lock: {e}"))?;
+        (
+            sessions.len(),
+            sessions.values().filter(|meta| meta.running).count(),
+        )
+    };
+    let pending_approval_count = state
+        .approvals
+        .lock()
+        .map_err(|e| format!("approval diagnostics lock: {e}"))?
+        .len();
+    let event_buffer_count = state
+        .event_buffer
+        .lock()
+        .map_err(|e| format!("event diagnostics lock: {e}"))?
+        .len();
+    Ok(NativeDiagnosticsSnapshot {
+        schema: "muse-desktop.native-diagnostics.v1".to_string(),
+        workspace_configured,
+        host_count,
+        session_count: session_count.max(host_session_count),
+        running_session_count,
+        pending_approval_count,
+        event_buffer_count,
+    })
+}
+
+/// Apply one selected hunk after checking the exact Review observation.
+/// Stage/unstage/discard are restricted to the matching diff scope.
+#[tauri::command]
+async fn git_apply_hunk(
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+    scope: String,
+    action: String,
+    hunk_header: String,
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+    expected_patch: Option<String>,
+) -> Result<git::GitStatusSnapshot, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || {
+        git::apply_hunk(
+            &root,
+            &path,
+            &scope,
+            &action,
+            &hunk_header,
+            expected_head,
+            expected_status,
+            expected_patch,
+        )
+    })
+    .await
+    .map_err(|e| format!("git hunk action failed: {e}"))?
+}
+
 /// Commit the staged index after checking the Review observation.
 #[tauri::command]
 async fn git_commit(
@@ -1222,11 +1435,102 @@ async fn worktree_setup_run(
     session_id: String,
     path: String,
     command: String,
+    operation_id: String,
+    env_allowlist: Vec<String>,
 ) -> Result<setup::SetupResult, String> {
     let root = workspace_for_inspection(&state, &session_id)?;
-    tokio::task::spawn_blocking(move || setup::run(&root, &path, &command))
+    let key = (session_id, operation_id);
+    let cancel = Arc::new(AtomicBool::new(false));
+    state
+        .setup_cancellations
+        .lock()
+        .map_err(|_| "setup cancellation registry is unavailable".to_string())?
+        .insert(key.clone(), cancel.clone());
+    let joined = tokio::task::spawn_blocking(move || {
+        setup::run_with_cancel_and_env(&root, &path, &command, &env_allowlist, Some(cancel))
+    })
+    .await;
+    if let Ok(mut active) = state.setup_cancellations.lock() {
+        active.remove(&key);
+    }
+    joined.map_err(|e| format!("worktree setup task failed: {e}"))?
+}
+
+/// Create a managed worktree and start its conversation as one guarded
+/// operation. If session admission fails, remove the newly-created checkout
+/// before returning the error so the UI never advertises a half-created lane.
+#[tauri::command]
+async fn git_worktree_create_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    branch: String,
+    relative_path: String,
+    base_ref: String,
+    authorization_mode: Option<String>,
+) -> Result<WorktreeSessionResult, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    let created = tokio::task::spawn_blocking({
+        let root = root.clone();
+        let branch = branch.clone();
+        let relative_path = relative_path.clone();
+        let base_ref = base_ref.clone();
+        move || git::create_worktree(&root, &branch, &relative_path, &base_ref)
+    })
+    .await
+    .map_err(|e| format!("git worktree create task failed: {e}"))??;
+    let child_root = PathBuf::from(&created.path);
+    match start_session_at_workspace(app, state, child_root, authorization_mode).await {
+        Ok(session) => Ok(WorktreeSessionResult {
+            worktree: created,
+            session,
+        }),
+        Err(error) => {
+            let cleanup_path = created.path.clone();
+            let cleanup = tokio::task::spawn_blocking(move || git::remove_worktree(&root, &cleanup_path)).await;
+            let detail = match cleanup {
+                Ok(Ok(())) => error,
+                Ok(Err(cleanup_error)) => format!("{error}; worktree cleanup failed: {cleanup_error}"),
+                Err(join_error) => format!("{error}; worktree cleanup task failed: {join_error}"),
+            };
+            Err(format!("could not open conversation in worktree: {detail}"))
+        }
+    }
+}
+
+/// Inspect a managed worktree and its locally available project tools without
+/// executing project code. This gives the UI a conservative pre-flight state
+/// before a user chooses to run setup.
+#[tauri::command]
+async fn worktree_setup_readiness(
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+) -> Result<setup::ReadinessResult, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || setup::readiness(&root, &path))
         .await
-        .map_err(|e| format!("worktree setup task failed: {e}"))?
+        .map_err(|e| format!("worktree readiness task failed: {e}"))?
+}
+
+/// Request cancellation of one running setup command. The process is killed
+/// by the setup worker, so this call stays non-blocking for the renderer.
+#[tauri::command]
+fn worktree_setup_cancel(
+    state: State<'_, AppState>,
+    session_id: String,
+    operation_id: String,
+) -> Result<bool, String> {
+    let active = state
+        .setup_cancellations
+        .lock()
+        .map_err(|_| "setup cancellation registry is unavailable".to_string())?;
+    if let Some(flag) = active.get(&(session_id, operation_id)) {
+        flag.store(true, Ordering::Relaxed);
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Probe an explicitly configured local MCP server with initialize + tools/list.
@@ -1275,6 +1579,167 @@ async fn skills_scan(
     tokio::task::spawn_blocking(move || skills::scan(&root))
         .await
         .map_err(|e| format!("skills scan task failed: {e}"))?
+}
+
+/// Start (or replace) a persistent MCP stdio server for one configured
+/// connector. The command is still supplied by the persisted local registry;
+/// no server is started during app boot.
+#[tauri::command]
+async fn mcp_local_start(
+    state: State<'_, AppState>,
+    connector_id: String,
+    command: String,
+    workspace: Option<String>,
+) -> Result<mcp::ProbeResult, String> {
+    let connector_id = connector_id.trim().to_string();
+    if connector_id.is_empty() {
+        return Err("MCP connector id must not be empty".to_string());
+    }
+    let workspace = workspace.map(PathBuf::from);
+    let servers = Arc::clone(&state.mcp_servers);
+    tokio::task::spawn_blocking(move || {
+        let (server, result) = mcp::PersistentServer::start(&command, workspace.as_deref())?;
+        let mut registry = servers
+            .lock()
+            .map_err(|_| "MCP server registry is unavailable".to_string())?;
+        registry.insert(connector_id, server);
+        Ok(result)
+    })
+    .await
+    .map_err(|e| format!("MCP start task failed: {e}"))?
+}
+
+/// Refresh tools on a persistent MCP server. If the app has no live process
+/// for the id (for example after a relaunch), start it from the persisted
+/// command and perform the same initial tools/list exchange.
+#[tauri::command]
+async fn mcp_local_refresh(
+    state: State<'_, AppState>,
+    connector_id: String,
+    command: String,
+    workspace: Option<String>,
+) -> Result<mcp::ProbeResult, String> {
+    let connector_id = connector_id.trim().to_string();
+    if connector_id.is_empty() {
+        return Err("MCP connector id must not be empty".to_string());
+    }
+    let workspace = workspace.map(PathBuf::from);
+    let servers = Arc::clone(&state.mcp_servers);
+    tokio::task::spawn_blocking(move || {
+        let mut registry = servers
+            .lock()
+            .map_err(|_| "MCP server registry is unavailable".to_string())?;
+        if let Some(server) = registry.get_mut(&connector_id) {
+            let result = server.refresh();
+            if result.is_err() {
+                // A broken stdout/transport cannot be recovered by reusing
+                // the same child. Remove it so the next explicit refresh
+                // starts a clean process.
+                registry.remove(&connector_id);
+            }
+            return result;
+        }
+        let (server, result) = mcp::PersistentServer::start(&command, workspace.as_deref())?;
+        registry.insert(connector_id, server);
+        Ok(result)
+    })
+    .await
+    .map_err(|e| format!("MCP refresh task failed: {e}"))?
+}
+
+/// Observe notifications emitted by a running MCP server. A
+/// `tools/list_changed` notification triggers one bounded tools/list refresh;
+/// otherwise the command returns immediately without touching the process.
+#[tauri::command]
+async fn mcp_local_poll(
+    state: State<'_, AppState>,
+    connector_id: String,
+) -> Result<Option<mcp::ProbeResult>, String> {
+    let connector_id = connector_id.trim().to_string();
+    if connector_id.is_empty() {
+        return Err("MCP connector id must not be empty".to_string());
+    }
+    let servers = Arc::clone(&state.mcp_servers);
+    tokio::task::spawn_blocking(move || {
+        let mut registry = servers
+            .lock()
+            .map_err(|_| "MCP server registry is unavailable".to_string())?;
+        let server = match registry.get_mut(&connector_id) {
+            Some(server) => server,
+            None => return Ok(None),
+        };
+        if !server.take_tools_changed()? {
+            return Ok(None);
+        }
+        let result = server.refresh();
+        if result.is_err() {
+            registry.remove(&connector_id);
+        }
+        result.map(Some)
+    })
+    .await
+    .map_err(|e| format!("MCP poll task failed: {e}"))?
+}
+
+/// Call one tool on a running persistent MCP server. A missing id fails
+/// explicitly so the UI can offer Start/Refresh instead of silently spawning
+/// an unrelated short-lived process.
+#[tauri::command]
+async fn mcp_local_call_persistent(
+    state: State<'_, AppState>,
+    connector_id: String,
+    tool_name: String,
+    arguments: Value,
+) -> Result<mcp::CallResult, String> {
+    let connector_id = connector_id.trim().to_string();
+    if connector_id.is_empty() {
+        return Err("MCP connector id must not be empty".to_string());
+    }
+    let servers = Arc::clone(&state.mcp_servers);
+    tokio::task::spawn_blocking(move || {
+        let mut registry = servers
+            .lock()
+            .map_err(|_| "MCP server registry is unavailable".to_string())?;
+        let result = {
+            let server = registry
+                .get_mut(&connector_id)
+                .ok_or_else(|| "MCP connector is not running; start it first".to_string())?;
+            server.call(&tool_name, arguments)
+        };
+        if result.is_err() {
+            registry.remove(&connector_id);
+        }
+        result
+    })
+    .await
+    .map_err(|e| format!("MCP persistent call task failed: {e}"))?
+}
+
+/// Stop one persistent MCP server. The child is killed by `Drop` when its
+/// registry entry is removed.
+#[tauri::command]
+fn mcp_local_stop(state: State<'_, AppState>, connector_id: String) -> Result<bool, String> {
+    let connector_id = connector_id.trim();
+    if connector_id.is_empty() {
+        return Err("MCP connector id must not be empty".to_string());
+    }
+    let mut registry = state
+        .mcp_servers
+        .lock()
+        .map_err(|_| "MCP server registry is unavailable".to_string())?;
+    Ok(registry.remove(connector_id).is_some())
+}
+
+/// Return the ids of currently running persistent MCP servers. This is a
+/// diagnostic/status projection only; the frontend registry remains the SSOT
+/// for connector metadata and tools.
+#[tauri::command]
+fn mcp_local_running(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let registry = state
+        .mcp_servers
+        .lock()
+        .map_err(|_| "MCP server registry is unavailable".to_string())?;
+    Ok(registry.keys().cloned().collect())
 }
 
 /// Read a bounded set of relative resources for a discovered SKILL.md.
@@ -1381,6 +1846,108 @@ async fn file_read(
     tokio::task::spawn_blocking(move || files::read(&root, &path, max_chars))
         .await
         .map_err(|e| format!("file read task failed: {e}"))?
+}
+
+/// Start an event-only watcher for the active conversation workspace. The
+/// callback sends relative paths through the same bounded poll buffer as host
+/// events; it never reads file contents or executes a process.
+#[tauri::command]
+fn files_watch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let root = workspace_for_inspection(&state, &session_id)?;
+    let mut watchers = state
+        .workspace_watchers
+        .lock()
+        .map_err(|e| format!("workspace watcher state lock: {e}"))?;
+    if watchers.contains_key(&session_id) {
+        return Ok(());
+    }
+    let callback_session = session_id.clone();
+    let callback_app = app.clone();
+    let watcher = workspace_watch::WorkspaceWatcher::start(&root, move |result| match result {
+        Ok(change) => {
+            let payload = serde_json::to_string(&change)
+                .unwrap_or_else(|_| r#"{"kind":"changed","paths":[]}"#.to_string());
+            emit(
+                &callback_app,
+                "workspace",
+                &callback_session,
+                "workspace_changed",
+                payload,
+            );
+        }
+        Err(error) => {
+            emit(
+                &callback_app,
+                "workspace",
+                &callback_session,
+                "workspace_watch_error",
+                error,
+            );
+        }
+    })?;
+    watchers.insert(session_id, watcher);
+    Ok(())
+}
+
+/// Stop a watcher explicitly when the Files panel is unmounted.
+#[tauri::command]
+fn files_unwatch(state: State<'_, AppState>, session_id: String) -> Result<(), String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    state
+        .workspace_watchers
+        .lock()
+        .map_err(|e| format!("workspace watcher state lock: {e}"))?
+        .remove(&session_id);
+    Ok(())
+}
+
+/// Open a verified workspace entry with the user's default system handler.
+/// The UI only sends a relative path from the active conversation; resolving
+/// and canonicalizing it here prevents a stale or hostile renderer from
+/// opening a path outside that conversation's workspace.
+#[tauri::command]
+#[allow(deprecated)]
+async fn file_open(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+) -> Result<(), String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    let target = tokio::task::spawn_blocking(move || files::resolve_for_open(&root, &path))
+        .await
+        .map_err(|e| format!("file open validation task failed: {e}"))??;
+    app.shell()
+        .open(target.to_string_lossy().into_owned(), None)
+        .map_err(|e| format!("could not open workspace path: {e}"))
+}
+
+/// Write one explicitly selected artifact to a local UTF-8 file. The save
+/// destination comes from the platform dialog; the backend still validates it
+/// and bounds the payload before writing.
+#[tauri::command]
+async fn artifact_export(path: String, content: String) -> Result<(), String> {
+    let target = PathBuf::from(path.trim());
+    tokio::task::spawn_blocking(move || artifact_export::write_text(&target, &content))
+        .await
+        .map_err(|e| format!("artifact export task failed: {e}"))?
+}
+
+/// Probe local prerequisites for the first-launch recovery screen. This is a
+/// read-only, bounded check: it never starts a sidecar or changes WSL/Muse.
+#[tauri::command]
+async fn probe_startup(
+    workspace_path: Option<String>,
+) -> Result<startup::StartupProbe, String> {
+    let workspace = workspace_path.map(PathBuf::from);
+    tokio::task::spawn_blocking(move || startup::probe(resolve_sidecar(), workspace.as_deref()))
+        .await
+        .map_err(|e| format!("startup probe task failed: {e}"))
 }
 
 /// Build the frontend `input_request` payload from a `userInput/requested`
@@ -1568,14 +2135,12 @@ fn resolve_workspace(
     Ok(root)
 }
 
-#[tauri::command]
-async fn start_session(
+async fn start_session_at_workspace(
     app: AppHandle,
     state: State<'_, AppState>,
-    workspace_path: Option<String>,
+    root: PathBuf,
     authorization_mode: Option<String>,
 ) -> Result<SessionMeta, String> {
-    let root = resolve_workspace(&state, workspace_path)?;
     let client = ensure_host(&app, &state, &root).await?;
     let mut params = json!({
         "commandId": new_command_id(),
@@ -1611,16 +2176,44 @@ async fn start_session(
     Ok(meta)
 }
 
+#[tauri::command]
+async fn start_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    workspace_path: Option<String>,
+    authorization_mode: Option<String>,
+) -> Result<SessionMeta, String> {
+    let root = resolve_workspace(&state, workspace_path)?;
+    start_session_at_workspace(app, state, root, authorization_mode).await
+}
+
 /// Create a server-side conversation branch from all completed turns.
 ///
 /// The MSP host owns the durable history and assigns the new session id. We
 /// deliberately request metadata only (`excludeItems`) so a large transcript
 /// is not duplicated through the Tauri command; the frontend can keep its
 /// bounded local transcript for immediate continuity.
+fn fork_request_params(
+    command_id: &str,
+    session_id: &str,
+    last_turn_id: Option<&str>,
+) -> Value {
+    let mut params = json!({
+        "commandId": command_id,
+        "sessionId": session_id,
+        "excludeItems": true,
+    });
+    if let Some(turn_id) = last_turn_id.filter(|id| !id.trim().is_empty()) {
+        params["cutPoint"] = json!({ "lastTurnId": turn_id });
+    }
+    params
+}
+
 #[tauri::command]
 async fn fork_session(
     state: State<'_, AppState>,
     session_id: String,
+    last_turn_id: Option<String>,
 ) -> Result<SessionMeta, String> {
     let source_id = require_non_empty(&session_id, "sessionId")?;
     let client = session_client(&state, &source_id)?;
@@ -1629,14 +2222,11 @@ async fn fork_session(
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
         .session_workspace(&source_id)?;
+    let command_id = new_command_id();
     let result = client
         .request(
             "session/fork",
-            json!({
-                "commandId": new_command_id(),
-                "sessionId": source_id,
-                "excludeItems": true,
-            }),
+            fork_request_params(command_id.as_str(), &source_id, last_turn_id.as_deref()),
         )
         .await?;
     let session = result
@@ -1743,8 +2333,114 @@ async fn resume_session(
     }
 }
 
+/// Read the folded durable item history for an attached conversation.
+/// `session/read` is intentionally separate from `resume_session`: it is a
+/// point-in-time read with no lease or request re-emission, so the UI can
+/// reconcile a cold local log without disturbing the live resume flow.
+#[tauri::command]
+async fn read_session_history(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Value, String> {
+    let client = session_client(&state, &session_id)?;
+    let root = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(&session_id)?;
+    let read = client
+        .request(
+            "session/read",
+            json!({"sessionId": session_id, "excludeItems": false}),
+        )
+        .await?;
+    let session = read
+        .get("session")
+        .ok_or("session/read returned no conversation")?;
+    resume::validate(session, &session_id, &root)?;
+    Ok(read.get("history").cloned().unwrap_or_else(|| json!({"items": []})))
+}
+
+/// Read the host's folded queue when its history response includes a snapshot.
+/// A null result means this host served inline metadata without queue state;
+/// the renderer must retain its local reminders in that case.
+#[tauri::command]
+async fn read_queue_snapshot(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let client = session_client(&state, &session_id)?;
+    let read = client
+        .request(
+            "session/read",
+            json!({"sessionId": session_id, "excludeItems": false}),
+        )
+        .await?;
+    Ok(read
+        .get("history")
+        .and_then(|history| history.get("snapshot"))
+        .and_then(|snapshot| snapshot.get("queuedTurns"))
+        .cloned()
+        .unwrap_or(Value::Null))
+}
+
+/// Pull the current approval/input set after reconnect. Unlike the resume
+/// response this command is safe to call repeatedly: it is a point-in-time
+/// fold read and carries the requirement token used by later decisions.
+#[tauri::command]
+async fn list_pending_requests(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let client = session_client(&state, &session_id)?;
+    let result = client
+        .request("approval/listPending", json!({"sessionId": session_id}))
+        .await?;
+    // Rebuild the supervisor's opaque requirement registry from the same
+    // point-in-time fold that feeds the renderer. Without this step a card
+    // recovered after reconnect would render but its approval click would be
+    // rejected locally as an unknown id.
+    if let Some(approvals) = result.get("approvals").and_then(Value::as_array) {
+        let mut registry = state
+            .approvals
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?;
+        registry.retain(|(sid, approval_id), _| {
+            sid != &session_id || approvals.iter().any(|item| {
+                item.get("approvalId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| id == approval_id)
+            })
+        });
+        for item in approvals {
+            let Some(approval_id) = item.get("approvalId").and_then(Value::as_str) else {
+                continue;
+            };
+            let requirement = item
+                .get("currentRequirementId")
+                .or_else(|| item.get("current_requirement_id"))
+                .cloned()
+                .unwrap_or(Value::Null);
+            registry.insert(
+                (session_id.clone(), approval_id.to_string()),
+                PendingApproval {
+                    session_id: session_id.clone(),
+                    requirement_id: requirement,
+                },
+            );
+        }
+    }
+    Ok(result)
+}
+
 /// Drain backend events after `since` (None = head cursor only, no replay).
 /// The UI polls this every ~300ms instead of `listen` push delivery.
+fn event_buffer_gap(since: u64, oldest: Option<u64>) -> bool {
+    oldest.is_some_and(|first| since.saturating_add(1) < first)
+}
+
 #[tauri::command]
 fn poll_events(state: State<'_, AppState>, since: Option<u64>) -> Result<PollResult, String> {
     let head = state
@@ -1757,8 +2453,12 @@ fn poll_events(state: State<'_, AppState>, since: Option<u64>) -> Result<PollRes
         .event_buffer
         .lock()
         .map_err(|e| format!("state lock: {e}"))?;
+    let oldest = buf.front().map(|event| event.seq);
+    let truncated = event_buffer_gap(since, oldest);
     Ok(PollResult {
         head,
+        oldest,
+        truncated,
         events: buf.iter().filter(|e| e.seq > since).cloned().collect(),
     })
 }
@@ -1927,6 +2627,31 @@ async fn send_input(
         .await?;
     mark_running(&state, &session_id, true);
     Ok(result)
+}
+
+/// Reclaim one queued turn before the host launches it. This is deliberately
+/// separate from `cancel_session`: an interrupt targets the running turn,
+/// while an unqueue only wins the queued-turn race and never upgrades to a
+/// cancellation after launch.
+#[tauri::command]
+async fn unqueue_turn(
+    state: State<'_, AppState>,
+    session_id: String,
+    turn_id: String,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let turn_id = require_non_empty(&turn_id, "turnId")?;
+    let client = session_client(&state, &session_id)?;
+    client
+        .request(
+            "turn/unqueue",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": session_id,
+                "turnId": turn_id,
+            }),
+        )
+        .await
 }
 
 /// Inject guidance into the currently running turn without creating a new
@@ -2417,12 +3142,30 @@ async fn kill_session(
     if let Ok(mut metas) = state.subagent_meta.lock() {
         metas.retain(|(sid, _), _| *sid != session_id);
     }
+    if let Ok(mut watchers) = state.workspace_watchers.lock() {
+        watchers.remove(&session_id);
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fork_params_name_an_explicit_completed_turn() {
+        let params = fork_request_params("cmd-1", "session-1", Some("turn-7"));
+        assert_eq!(params["commandId"], "cmd-1");
+        assert_eq!(params["sessionId"], "session-1");
+        assert_eq!(params["excludeItems"], true);
+        assert_eq!(params["cutPoint"]["lastTurnId"], "turn-7");
+    }
+
+    #[test]
+    fn fork_params_omit_empty_cut_point_for_latest_turn() {
+        let params = fork_request_params("cmd-1", "session-1", Some("  "));
+        assert!(params.get("cutPoint").is_none());
+    }
 
     #[test]
     fn truncate_respects_utf8_boundaries() {
@@ -2461,6 +3204,14 @@ mod tests {
         assert_eq!(host_approval_mode("workspace"), Some("promptUnmatched"));
         assert_eq!(host_approval_mode("yolo"), Some("allowAll"));
         assert_eq!(host_approval_mode("deny"), None);
+    }
+
+    #[test]
+    fn event_buffer_gap_is_reported_only_when_frames_were_dropped() {
+        assert!(!event_buffer_gap(9, Some(10)));
+        assert!(!event_buffer_gap(10, Some(10)));
+        assert!(event_buffer_gap(9, Some(11)));
+        assert!(!event_buffer_gap(99, None));
     }
 
     #[test]
@@ -2726,6 +3477,49 @@ mod tests {
     }
 
     #[test]
+    fn native_browser_url_accepts_http_https_and_bare_hosts() {
+        assert_eq!(
+            validate_native_browser_url("https://example.com/docs")
+                .unwrap()
+                .scheme(),
+            "https"
+        );
+        assert_eq!(
+            validate_native_browser_url("example.com/docs")
+                .unwrap()
+                .as_str(),
+            "https://example.com/docs"
+        );
+        assert_eq!(
+            validate_native_browser_url("http://localhost:4173/")
+                .unwrap()
+                .host_str(),
+            Some("localhost")
+        );
+    }
+
+    #[test]
+    fn native_browser_url_rejects_non_web_schemes_credentials_and_invalid_hosts() {
+        for value in [
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "data:text/plain,hello",
+            "https://user:password@example.com/",
+            "https://",
+            "   ",
+        ] {
+            assert!(validate_native_browser_url(value).is_err(), "accepted {value}");
+        }
+    }
+
+    #[test]
+    fn native_browser_url_is_bounded() {
+        let value = format!("https://example.com/{}", "a".repeat(MAX_BROWSER_URL_CHARS));
+        let error = validate_native_browser_url(&value).unwrap_err();
+        assert!(error.contains("limited"));
+    }
+
+    #[test]
     fn input_payload_drops_bad_modes_but_keeps_good() {
         let mut p = sample_prompt();
         p["questions"][0]["selection"]["mode"] = json!("ranked");
@@ -2869,14 +3663,21 @@ fn main() {
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
             terminals: terminal::TerminalRegistry::default(),
+            setup_cancellations: Mutex::new(HashMap::new()),
+            mcp_servers: Arc::new(Mutex::new(HashMap::new())),
+            workspace_watchers: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
             fork_session,
             set_approval_mode,
             resume_session,
+            read_session_history,
+            read_queue_snapshot,
+            list_pending_requests,
             restore_sessions,
             send_input,
+            unqueue_turn,
             steer_input,
             approve,
             answer_input,
@@ -2889,15 +3690,25 @@ fn main() {
             git_diff,
             git_stage,
             git_restore,
+            git_apply_hunk,
             git_commit,
             git_push,
             git_create_pr,
             git_worktree_create,
+            git_worktree_create_session,
             git_worktree_remove,
             git_worktree_inspect,
             worktree_setup_run,
+            worktree_setup_readiness,
+            worktree_setup_cancel,
             mcp_local_probe,
             mcp_local_call,
+            mcp_local_start,
+            mcp_local_refresh,
+            mcp_local_poll,
+            mcp_local_call_persistent,
+            mcp_local_stop,
+            mcp_local_running,
             skills_scan,
             skills_read_resources,
             terminal_open,
@@ -2907,6 +3718,11 @@ fn main() {
             terminal_close,
             files_list,
             file_read,
+            files_watch,
+            files_unwatch,
+            file_open,
+            artifact_export,
+            probe_startup,
             list_models,
             set_model,
             compact_session,
@@ -2918,6 +3734,8 @@ fn main() {
             subagent_read_result,
             subagent_drilldown,
             check_input_reached,
+            collect_diagnostics,
+            open_native_browser,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build muse-desktop app")
@@ -2927,8 +3745,19 @@ fn main() {
             if let RunEvent::Exit = event {
                 let state: State<AppState> = app.state();
                 state.terminals.close_all();
+                if let Ok(active) = state.setup_cancellations.lock() {
+                    for flag in active.values() {
+                        flag.store(true, Ordering::Relaxed);
+                    }
+                }
                 let clients = state.hosts.lock().map(|mut h| h.drain()).unwrap_or_default();
                 for client in clients { tauri::async_runtime::block_on(client.shutdown()); }
+                if let Ok(mut servers) = state.mcp_servers.lock() {
+                    servers.clear();
+                };
+                if let Ok(mut watchers) = state.workspace_watchers.lock() {
+                    watchers.clear();
+                };
             }
         });
 }

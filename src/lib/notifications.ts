@@ -1,5 +1,6 @@
 import type { ScheduleRun } from "./scheduleRuns";
 import { readStorageJson, writeStorageJson } from "./storage.ts";
+import { isTauriRuntime } from "./env.ts";
 
 export type MuseNotificationKind = "run-completed" | "run-failed" | "approval-needed" | "input-needed";
 
@@ -16,6 +17,7 @@ export interface MuseNotification {
 }
 
 export const NOTIFICATIONS_KEY = "muse-desktop.notifications.v1";
+export const NOTIFICATION_PREFERENCES_KEY = "muse-desktop.notifications.preferences.v1";
 export const MAX_NOTIFICATIONS = 200;
 
 function makeId(): string {
@@ -135,6 +137,27 @@ export function saveNotifications(notifications: MuseNotification[]): void {
 
 export type NotificationPermission = "default" | "granted" | "denied" | "unsupported";
 
+export interface NotificationPreferences {
+  /** Keep the in-app inbox active while suppressing OS toasts. */
+  desktopMuted: boolean;
+}
+
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = { desktopMuted: false };
+
+function validNotificationPreferences(value: unknown): value is NotificationPreferences {
+  return typeof value === "object" && value !== null &&
+    typeof (value as Record<string, unknown>).desktopMuted === "boolean";
+}
+
+export function loadNotificationPreferences(): NotificationPreferences {
+  const parsed = readStorageJson<unknown>(NOTIFICATION_PREFERENCES_KEY, DEFAULT_NOTIFICATION_PREFERENCES);
+  return validNotificationPreferences(parsed) ? parsed : { ...DEFAULT_NOTIFICATION_PREFERENCES };
+}
+
+export function saveNotificationPreferences(preferences: NotificationPreferences): void {
+  writeStorageJson(NOTIFICATION_PREFERENCES_KEY, { desktopMuted: preferences.desktopMuted === true });
+}
+
 export function notificationPermission(): NotificationPermission {
   if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
   return window.Notification.permission;
@@ -142,13 +165,45 @@ export function notificationPermission(): NotificationPermission {
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+  if (isTauriRuntime()) {
+    try {
+      const { requestPermission } = await import("@tauri-apps/plugin-notification");
+      return await requestPermission();
+    } catch {
+      // Fall back to the webview permission API when the plugin is unavailable.
+    }
+  }
   return window.Notification.requestPermission();
 }
 
-export function deliverDesktopNotification(notification: MuseNotification): boolean {
+export async function deliverDesktopNotification(notification: MuseNotification): Promise<boolean> {
+  if (isTauriRuntime()) {
+    try {
+      const { isPermissionGranted, sendNotification } = await import("@tauri-apps/plugin-notification");
+      if (await isPermissionGranted()) {
+        sendNotification({ title: notification.title, body: notification.body });
+        return true;
+      }
+    } catch {
+      // Keep the in-app inbox authoritative when native notifications fail.
+    }
+  }
   if (notificationPermission() !== "granted") return false;
   try {
-    new window.Notification(notification.title, { body: notification.body });
+    const toast = new window.Notification(notification.title, { body: notification.body });
+    // The webview notification API has no routing contract. A click still
+    // returns the user to the running Muse window; the in-app inbox then
+    // provides the session-specific "Open conversation" action.
+    toast.onclick = () => {
+      void import("@tauri-apps/api/window")
+        .then(({ getCurrentWindow }) => {
+          const appWindow = getCurrentWindow();
+          return Promise.allSettled([appWindow.unminimize(), appWindow.setFocus()]);
+        })
+        .catch(() => {
+          window.focus?.();
+        });
+    };
     return true;
   } catch {
     return false;

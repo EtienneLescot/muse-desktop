@@ -17,6 +17,7 @@ import {
   type ReviewAnchor,
   type ReviewPatchLine,
 } from "../lib/reviewComments";
+import { userFacingError } from "../lib/errorCopy";
 
 interface Props {
   sessionId: string;
@@ -36,6 +37,14 @@ interface Props {
     sessionId: string,
     paths: string[],
     scope: "staged" | "unstaged",
+    expected: GitMutationExpectation,
+  ) => Promise<GitStatusSnapshot | null>;
+  onApplyHunk: (
+    sessionId: string,
+    path: string,
+    scope: "staged" | "unstaged",
+    action: "stage" | "unstage" | "discard",
+    hunkHeader: string,
     expected: GitMutationExpectation,
   ) => Promise<GitStatusSnapshot | null>;
   onCommit: (
@@ -66,8 +75,8 @@ const SCOPES: Array<[GitDiffScope, string]> = [
 ];
 
 /**
- * M1-01 read-only review surface. Every value comes from the session-scoped
- * Rust Git service; the panel never infers changes from assistant text.
+ * M1-01/M1-03 review surface. Every value comes from the session-scoped Rust
+ * Git service; the panel never infers changes from assistant text.
  */
 export function ReviewPanel({
   sessionId,
@@ -76,6 +85,7 @@ export function ReviewPanel({
   onLoadDiff,
   onStageFiles,
   onRestoreFiles,
+  onApplyHunk,
   onCommit,
   onPush,
   onCreatePr,
@@ -84,6 +94,7 @@ export function ReviewPanel({
   const [scope, setScope] = useState<GitDiffScope>("unstaged");
   const [baseRef, setBaseRef] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [selectedLineKey, setSelectedLineKey] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
@@ -92,6 +103,10 @@ export function ReviewPanel({
   const [mutationBusy, setMutationBusy] = useState<"stage" | "unstage" | "discard" | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [confirmBulkDiscard, setConfirmBulkDiscard] = useState(false);
+  const [hunkBusy, setHunkBusy] = useState<string | null>(null);
+  const [confirmHunk, setConfirmHunk] = useState<string | null>(null);
+  const [selectedHunkHeader, setSelectedHunkHeader] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
   const [pushRemote, setPushRemote] = useState("");
   const [pushBranch, setPushBranch] = useState("");
@@ -105,6 +120,7 @@ export function ReviewPanel({
 
   useEffect(() => {
     setSelectedPath(null);
+    setSelectedPaths([]);
     setSelectedLineKey(null);
     setCommentDraft("");
     setCommentError(null);
@@ -112,6 +128,10 @@ export function ReviewPanel({
     setMutationBusy(null);
     setMutationError(null);
     setConfirmDiscard(false);
+    setConfirmBulkDiscard(false);
+    setHunkBusy(null);
+    setConfirmHunk(null);
+    setSelectedHunkHeader(null);
     setCommitMessage("");
     setPushRemote("");
     setPushBranch("");
@@ -146,11 +166,25 @@ export function ReviewPanel({
     () => selectedRows.find((row) => row.key === selectedLineKey) ?? null,
     [selectedRows, selectedLineKey],
   );
+  const selectedHunk = useMemo(
+    () =>
+      selectedDiff?.hunks.find((hunk) => hunk.header === selectedHunkHeader) ??
+      selectedDiff?.hunks[0] ??
+      null,
+    [selectedDiff, selectedHunkHeader],
+  );
   const selectedStatus = useMemo(
     () =>
       review.status?.files.find((file) => file.path === selectedPath) ?? null,
     [review.status, selectedPath],
   );
+  const selectedFileRows = useMemo(
+    () => review.status?.files.filter((file) => selectedPaths.includes(file.path)) ?? [],
+    [review.status, selectedPaths],
+  );
+  const bulkStageCount = selectedFileRows.filter((file) => file.unstaged || file.untracked).length;
+  const bulkUnstageCount = selectedFileRows.filter((file) => file.staged).length;
+  const bulkDiscardCount = selectedFileRows.filter((file) => file.unstaged && !file.untracked).length;
 
   useEffect(() => {
     const first = review.diff?.files[0]?.path ?? null;
@@ -173,6 +207,10 @@ export function ReviewPanel({
     setCommentSent(false);
     setMutationError(null);
     setConfirmDiscard(false);
+    setConfirmBulkDiscard(false);
+    setHunkBusy(null);
+    setConfirmHunk(null);
+    setSelectedHunkHeader(null);
   }, [selectedPath, review.diff?.observedAt]);
 
   async function loadDiff(): Promise<void> {
@@ -274,6 +312,93 @@ export function ReviewPanel({
     }
   }
 
+  async function runBulkMutation(action: "stage" | "unstage" | "discard"): Promise<void> {
+    if (!review.status || selectedPaths.length === 0) return;
+    const scope = action === "unstage" ? "staged" : "unstaged";
+    const paths = review.status.files
+      .filter((file) => selectedPaths.includes(file.path))
+      .filter((file) =>
+        action === "stage"
+          ? file.unstaged || file.untracked
+          : action === "unstage"
+            ? file.staged
+            : file.unstaged && !file.untracked,
+      )
+      .map((file) => file.path);
+    if (paths.length === 0) {
+      setMutationError(
+        action === "discard"
+          ? "Only tracked files with unstaged changes can be discarded here."
+          : "No selected files match this action.",
+      );
+      return;
+    }
+    const expected = expectationFor(scope);
+    if (!expected) {
+      setMutationError("Load the complete diff before applying a bulk action.");
+      return;
+    }
+    setMutationBusy(action);
+    setMutationError(null);
+    try {
+      const next =
+        action === "stage"
+          ? await onStageFiles(sessionId, paths, expected)
+          : await onRestoreFiles(sessionId, paths, scope, expected);
+      if (next === null) {
+        setMutationError("Action not applied. Refresh the repository and try again.");
+        return;
+      }
+      setSelectedPaths([]);
+      setSelectedLineKey(null);
+      setCommentDraft("");
+      setCommentSent(false);
+      setConfirmBulkDiscard(false);
+    } finally {
+      setMutationBusy(null);
+    }
+  }
+
+  async function runHunkMutation(
+    action: "stage" | "unstage" | "discard",
+    hunkHeader: string,
+  ): Promise<void> {
+    if (!selectedStatus || !review.status || !review.diff || review.diff.scope === "branch") return;
+    if (selectedStatus.untracked || selectedDiff?.binary) return;
+    const scope = review.diff.scope;
+    if ((action === "stage" || action === "discard") && scope !== "unstaged") return;
+    if (action === "unstage" && scope !== "staged") return;
+    const expected = expectationFor(scope);
+    if (!expected || expected.patch === null) {
+      setMutationError("Load the complete diff before applying a hunk.");
+      return;
+    }
+    const busyKey = `${action}:${hunkHeader}`;
+    setHunkBusy(busyKey);
+    setMutationError(null);
+    try {
+      const next = await onApplyHunk(
+        sessionId,
+        selectedStatus.path,
+        scope,
+        action,
+        hunkHeader,
+        expected,
+      );
+      if (next === null) {
+        setMutationError("Hunk action not applied. Refresh the repository and try again.");
+        return;
+      }
+      setSelectedLineKey(null);
+      setSelectedHunkHeader(null);
+      setCommentDraft("");
+      setCommentSent(false);
+      setConfirmHunk(null);
+    } finally {
+      setHunkBusy(null);
+    }
+  }
+
   async function commitStaged(): Promise<void> {
     const expected = expectationFor("staged");
     if (!expected || commitMessage.trim().length === 0) return;
@@ -350,7 +475,7 @@ export function ReviewPanel({
 
       {review.error !== null && (
         <div className="review-error" role="alert">
-          Git review unavailable: {review.error}
+          Git review unavailable: {userFacingError(review.error)}
         </div>
       )}
 
@@ -381,6 +506,20 @@ export function ReviewPanel({
             <ul className="review-files" aria-label="Changed files">
               {review.status.files.map((file) => (
                 <li key={`${file.path}:${file.originalPath ?? ""}`}>
+                  <label className="review-file-select">
+                    <input
+                      type="checkbox"
+                      checked={selectedPaths.includes(file.path)}
+                      onChange={() =>
+                        setSelectedPaths((current) =>
+                          current.includes(file.path)
+                            ? current.filter((path) => path !== file.path)
+                            : [...current, file.path],
+                        )
+                      }
+                      aria-label={`Select ${file.path}`}
+                    />
+                  </label>
                   <button
                     type="button"
                     className={selectedPath === file.path ? "selected" : undefined}
@@ -406,6 +545,7 @@ export function ReviewPanel({
                 onClick={() => {
                   setScope(value);
                   setSelectedPath(null);
+                  setSelectedPaths([]);
                   setSelectedLineKey(null);
                   setCommentSent(false);
                 }}
@@ -490,6 +630,165 @@ export function ReviewPanel({
               {mutationError && <span className="review-action-error" role="alert">{mutationError}</span>}
             </div>
           )}
+
+          {selectedFileRows.length > 0 && (
+            <div className="review-bulk-actions" aria-label="Bulk file actions">
+              <span className="muted">{selectedFileRows.length} selected</span>
+              <button
+                type="button"
+                className="review-action"
+                disabled={
+                  mutationBusy !== null ||
+                  bulkStageCount === 0 ||
+                  review.diff?.scope !== "unstaged"
+                }
+                onClick={() => void runBulkMutation("stage")}
+              >
+                {mutationBusy === "stage" ? "Staging…" : `Stage ${bulkStageCount}`}
+              </button>
+              <button
+                type="button"
+                className="review-action"
+                disabled={
+                  mutationBusy !== null ||
+                  bulkUnstageCount === 0 ||
+                  review.diff?.scope !== "staged"
+                }
+                onClick={() => void runBulkMutation("unstage")}
+              >
+                {mutationBusy === "unstage" ? "Unstaging…" : `Unstage ${bulkUnstageCount}`}
+              </button>
+              {review.diff?.scope === "unstaged" && bulkDiscardCount > 0 && !confirmBulkDiscard && (
+                <button
+                  type="button"
+                  className="review-action review-action-danger"
+                  disabled={mutationBusy !== null}
+                  onClick={() => setConfirmBulkDiscard(true)}
+                >
+                  Discard {bulkDiscardCount}…
+                </button>
+              )}
+              {review.diff?.scope === "unstaged" && bulkDiscardCount > 0 && confirmBulkDiscard && (
+                <>
+                  <span className="review-confirm-label">Discard selected tracked files?</span>
+                  <button
+                    type="button"
+                    className="review-action review-action-danger"
+                    disabled={mutationBusy !== null}
+                    onClick={() => void runBulkMutation("discard")}
+                  >
+                    {mutationBusy === "discard" ? "Discarding…" : "Confirm discard"}
+                  </button>
+                  <button
+                    type="button"
+                    className="review-action"
+                    disabled={mutationBusy !== null}
+                    onClick={() => setConfirmBulkDiscard(false)}
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+              {selectedFileRows.some((file) => file.untracked) && (
+                <span className="muted review-action-note">Untracked files remain untouched.</span>
+              )}
+            </div>
+          )}
+
+          {selectedDiff !== null &&
+            review.diff !== null &&
+            review.diff.scope !== "branch" &&
+            !selectedDiff.binary &&
+            !selectedStatus?.untracked &&
+            selectedDiff.hunks.length > 0 && (
+              <section className="review-hunk-actions" aria-label="Hunk actions">
+                <div className="review-hunk-head">
+                  <div>
+                    <span className="eyebrow">PARTIAL CHANGE</span>
+                    <strong>{review.diff.scope === "staged" ? "Unstage" : "Stage or discard"} one hunk</strong>
+                  </div>
+                  <span className="muted">Fresh diff required</span>
+                </div>
+                <div className="review-hunk-list" role="list" aria-label="Diff hunks">
+                  {selectedDiff.hunks.map((hunk, index) => {
+                    const stats = selectedRows.filter((row) => row.hunk === hunk.header);
+                    const active = selectedHunk?.header === hunk.header;
+                    return (
+                      <button
+                        key={hunk.header}
+                        type="button"
+                        role="listitem"
+                        className={`review-hunk${active ? " selected" : ""}`}
+                        aria-pressed={active}
+                        onClick={() => {
+                          setSelectedHunkHeader(hunk.header);
+                          setConfirmHunk(null);
+                        }}
+                      >
+                        <span>Hunk {index + 1}</span>
+                        <span className="muted">+{stats.filter((row) => row.prefix === "+").length} −{stats.filter((row) => row.prefix === "-").length}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedHunk !== null && (
+                  <div className="review-hunk-toolbar">
+                    <span className="muted">{selectedHunk.header}</span>
+                    {review.diff.scope === "unstaged" && (
+                      <button
+                        type="button"
+                        className="review-action"
+                        disabled={hunkBusy !== null}
+                        onClick={() => void runHunkMutation("stage", selectedHunk.header)}
+                      >
+                        {hunkBusy === `stage:${selectedHunk.header}` ? "Staging…" : "Stage hunk"}
+                      </button>
+                    )}
+                    {review.diff.scope === "staged" && (
+                      <button
+                        type="button"
+                        className="review-action"
+                        disabled={hunkBusy !== null}
+                        onClick={() => void runHunkMutation("unstage", selectedHunk.header)}
+                      >
+                        {hunkBusy === `unstage:${selectedHunk.header}` ? "Unstaging…" : "Unstage hunk"}
+                      </button>
+                    )}
+                    {review.diff.scope === "unstaged" && confirmHunk !== selectedHunk.header && (
+                      <button
+                        type="button"
+                        className="review-action review-action-danger"
+                        disabled={hunkBusy !== null}
+                        onClick={() => setConfirmHunk(selectedHunk.header)}
+                      >
+                        Discard hunk…
+                      </button>
+                    )}
+                    {review.diff.scope === "unstaged" && confirmHunk === selectedHunk.header && (
+                      <>
+                        <span className="review-confirm-label">Discard this hunk?</span>
+                        <button
+                          type="button"
+                          className="review-action review-action-danger"
+                          disabled={hunkBusy !== null}
+                          onClick={() => void runHunkMutation("discard", selectedHunk.header)}
+                        >
+                          {hunkBusy === `discard:${selectedHunk.header}` ? "Discarding…" : "Confirm discard"}
+                        </button>
+                        <button
+                          type="button"
+                          className="review-action"
+                          disabled={hunkBusy !== null}
+                          onClick={() => setConfirmHunk(null)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
 
           <section className="review-ship" aria-label="Ship changes">
             <div className="review-ship-head">
@@ -584,6 +883,7 @@ export function ReviewPanel({
                       className={`review-code-line review-code-${row.prefix === "+" ? "add" : row.prefix === "-" ? "delete" : "context"}${selectedLineKey === row.key ? " selected" : ""}`}
                       onClick={() => {
                         setSelectedLineKey(row.key);
+                        setSelectedHunkHeader(row.hunk);
                         setCommentError(null);
                         setCommentSent(false);
                       }}

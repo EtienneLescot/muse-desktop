@@ -10,6 +10,8 @@
 
 export type AuthorizationMode = "ask" | "workspace" | "yolo";
 
+export type ConnectorTransport = "local" | "remote";
+
 /** Closed values accepted by the MSP `session/*ApprovalMode` methods. */
 export type MuseHostApprovalMode =
   | "onRequest"
@@ -59,6 +61,18 @@ export function authorizationModeDescription(mode: AuthorizationMode): string {
     default:
       return "Always ask before a tool changes files or uses external services.";
   }
+}
+
+/**
+ * Connector calls are explicit user actions, but they still follow the same
+ * global posture as host tools. A remote call is always an external/network
+ * action, so the balanced workspace posture keeps it behind a one-time review.
+ */
+export function connectorCallRequiresApproval(
+  mode: AuthorizationMode,
+  transport: ConnectorTransport,
+): boolean {
+  return mode === "ask" || (mode === "workspace" && transport === "remote");
 }
 
 /** Translate product language to the host's stable, closed enum. */

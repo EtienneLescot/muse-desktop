@@ -8,13 +8,22 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   compareHeadHashes,
+  parseSetupEnvAllowlist,
+  MAX_SETUP_ENV_NAMES,
   MAX_SETUP_COMMAND_CHARS,
   planWorktrees,
+  summarizeWorktreeInspections,
   validateSetupCommand,
   WORKTREE_BASE,
   worktreeShellSnippet,
 } from "../src/lib/worktrees.ts";
 import { loadWorktrees, saveWorktrees } from "../src/lib/persist.ts";
+import {
+  loadWorktreeRetention,
+  normalizeRetentionDays,
+  retentionDecision,
+  saveWorktreeRetention,
+} from "../src/lib/worktreeRetention.ts";
 
 function fakeStorage(): void {
   const values = new Map<string, string>();
@@ -109,6 +118,22 @@ describe("compareHeadHashes", () => {
   });
 });
 
+describe("multi-worktree inspection summary", () => {
+  it("counts inspected, clean, changed and conflicted records without probing", () => {
+    const records = [
+      { repoRoot: "C:/repo", path: "C:/repo/.muse/worktrees/a", branch: "task-a", base: "HEAD", createdAt: 1 },
+      { repoRoot: "C:/repo", path: "C:/repo/.muse/worktrees/b", branch: "task-b", base: "HEAD", createdAt: 1 },
+      { repoRoot: "C:/repo", path: "C:/repo/.muse/worktrees/c", branch: "task-c", base: "HEAD", createdAt: 1 },
+    ];
+    const summary = summarizeWorktreeInspections(records, {
+      "task-a": { repoRoot: "C:/repo", path: records[0].path, branch: "task-a", head: "a", clean: true, conflicted: false, fileCount: 0, observedAt: 2 },
+      "task-b": { repoRoot: "C:/repo", path: records[1].path, branch: "task-b", head: "b", clean: false, conflicted: false, fileCount: 2, observedAt: 2 },
+      "task-c": { repoRoot: "C:/repo", path: records[2].path, branch: "task-c", head: "c", clean: false, conflicted: true, fileCount: 1, observedAt: 2 },
+    });
+    assert.deepEqual(summary, { total: 3, inspected: 3, clean: 1, changed: 2, conflicted: 1 });
+  });
+});
+
 describe("worktree setup command validation", () => {
   it("requires a non-empty command and trims valid input", () => {
     assert.match(validateSetupCommand("   ") ?? "", /must not be empty/);
@@ -118,6 +143,15 @@ describe("worktree setup command validation", () => {
   it("bounds command length", () => {
     assert.match(
       validateSetupCommand("x".repeat(MAX_SETUP_COMMAND_CHARS + 1)) ?? "",
+      /limited/,
+    );
+  });
+
+  it("parses a bounded, de-duplicated environment allowlist", () => {
+    assert.deepEqual(parseSetupEnvAllowlist("NODE_ENV, PATH node_env").names, ["NODE_ENV", "PATH"]);
+    assert.match(parseSetupEnvAllowlist("BAD-NAME").error ?? "", /Invalid/);
+    assert.match(
+      parseSetupEnvAllowlist(Array.from({ length: MAX_SETUP_ENV_NAMES + 1 }, (_, i) => `VAR_${i}`).join(",")).error ?? "",
       /limited/,
     );
   });
@@ -138,5 +172,24 @@ describe("worktree persistence", () => {
     assert.equal(loaded.length, 100);
     assert.equal(loaded[0]?.branch, "task-5");
     assert.equal(loaded.at(-1)?.branch, "task-104");
+  });
+});
+
+describe("M2-06 retention policy", () => {
+  it("persists a repository policy and evaluates only clean inspected records", () => {
+    fakeStorage();
+    const record = { repoRoot: "C:/repo", path: "C:/repo/.muse/worktrees/a", branch: "task-a", base: "HEAD", createdAt: 0 };
+    saveWorktreeRetention(record.repoRoot, { maxAgeDays: 7 });
+    assert.deepEqual(loadWorktreeRetention(record.repoRoot), { maxAgeDays: 7 });
+    const missing = retentionDecision(record, undefined, { maxAgeDays: 7 }, 8 * 86_400_000);
+    assert.equal(missing.eligible, false);
+    const dirty = retentionDecision(record, { repoRoot: record.repoRoot, path: record.path, branch: record.branch, head: "abc", clean: false, conflicted: false, fileCount: 1, observedAt: 1 }, { maxAgeDays: 7 }, 8 * 86_400_000);
+    assert.match(dirty.reason, /Protected/);
+    const active = retentionDecision(record, { repoRoot: record.repoRoot, path: record.path, branch: record.branch, head: "abc", clean: true, conflicted: false, fileCount: 0, activeSignals: ["index lock"], observedAt: 1 }, { maxAgeDays: 7 }, 8 * 86_400_000);
+    assert.match(active.reason, /active operation/);
+    const eligible = retentionDecision(record, { repoRoot: record.repoRoot, path: record.path, branch: record.branch, head: "abc", clean: true, conflicted: false, fileCount: 0, observedAt: 1 }, { maxAgeDays: 7 }, 8 * 86_400_000);
+    assert.equal(eligible.eligible, true);
+    assert.equal(normalizeRetentionDays("0"), null);
+    assert.equal(normalizeRetentionDays("30"), 30);
   });
 });

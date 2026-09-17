@@ -13,6 +13,7 @@ import {
   buildSchedule,
   createSchedule,
   cronNextRun,
+  cronNextRunInTimeZone,
   deleteSchedule,
   discardReview,
   dueSchedules,
@@ -20,6 +21,7 @@ import {
   enqueueDue,
   enqueueRunNow,
   isScheduleDue,
+  isValidTimeZone,
   loadReviewQueue,
   loadSchedules,
   parseCron,
@@ -116,12 +118,19 @@ describe("US-9 schedule CRUD", () => {
     assert.equal(next[0].createdAt, 1000);
   });
 
+  it("accepts IANA timezones and rejects unknown identifiers", () => {
+    assert.equal(isValidTimeZone("Europe/Paris"), true);
+    assert.equal(validateScheduleInput(onceInput({ timeZone: "UTC" })), null);
+    assert.match(validateScheduleInput(onceInput({ timeZone: "Mars/Base" })) ?? "", /timezone/);
+  });
+
   it("captures execution context at schedule creation and due time", () => {
     const list = sched([], onceInput({
       workspace: " C:/repo ",
       projectId: " project-1 ",
       model: "gpt-5.6",
       authorizationMode: "yolo",
+      timeZone: "Europe/Paris",
     }), 1000);
     assert.equal(list[0].workspace, "C:/repo");
     assert.equal(list[0].projectId, "project-1");
@@ -129,6 +138,7 @@ describe("US-9 schedule CRUD", () => {
     assert.equal(due.added[0].workspace, "C:/repo");
     assert.equal(due.added[0].model, "gpt-5.6");
     assert.equal(due.added[0].authorizationMode, "yolo");
+    assert.equal(due.added[0].timeZone, "Europe/Paris");
   });
 
   it("refuses invalid input without growing the list", () => {
@@ -180,6 +190,19 @@ describe("US-9 cron", () => {
 
   it("returns null for invalid expressions", () => {
     assert.equal(cronNextRun("bogus", 1000), null);
+  });
+
+  it("resolves recurring wall-clock time in an explicit timezone", () => {
+    const from = Date.UTC(2026, 0, 5, 8, 0, 0);
+    const next = cronNextRunInTimeZone("0 9 * * *", from, "America/New_York");
+    assert.equal(next, Date.UTC(2026, 0, 5, 14, 0, 0));
+  });
+
+  it("skips a DST gap and preserves the second fall-back occurrence", () => {
+    const spring = cronNextRunInTimeZone("30 2 * * *", Date.UTC(2026, 2, 8, 6), "America/New_York");
+    assert.equal(spring, Date.UTC(2026, 2, 9, 6, 30));
+    const fall = cronNextRunInTimeZone("30 1 * * *", Date.UTC(2026, 10, 1, 6), "America/New_York");
+    assert.equal(fall, Date.UTC(2026, 10, 1, 6, 30));
   });
 });
 

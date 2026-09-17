@@ -1,10 +1,19 @@
-import { describe, it } from "node:test";
+import test, { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  capabilityAccessibleLabel,
   capabilityDescription,
   capabilityLabel,
   type CapabilityStatus,
 } from "../src/lib/capability.ts";
+
+test("capability badges expose their state and reason to assistive tech", () => {
+  assert.equal(
+    capabilityAccessibleLabel("manual", "Run the prepared command when ready."),
+    "Manual: Run the prepared command when ready.",
+  );
+  assert.match(capabilityAccessibleLabel("unavailable"), /^Not connected:/);
+});
 
 describe("capability status vocabulary", () => {
   it("keeps the four product states distinct", () => {

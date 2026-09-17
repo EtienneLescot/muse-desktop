@@ -1,12 +1,12 @@
-//! Read-only Git inspection for the conversation Review panel.
+//! Git inspection and guarded mutations for the conversation Review panel.
 //!
-//! This module deliberately exposes status and diff snapshots only. Mutating
-//! operations (stage, revert, commit and push) build on the observed revision
-//! in later roadmap slices, so a review can never imply that a file changed
-//! merely because a response mentioned it.
+//! Every mutation builds on an observed revision and bounded diff snapshot, so
+//! a review can never imply that a file changed merely because a response
+//! mentioned it.
 
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -96,6 +96,8 @@ pub struct GitWorktreeInspection {
     pub clean: bool,
     pub conflicted: bool,
     pub file_count: usize,
+    pub active_signals: Vec<String>,
+    pub branch_referenced_elsewhere: bool,
     pub observed_at: u64,
 }
 
@@ -207,6 +209,39 @@ fn git_command(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
         .env("LANG", "C")
         .output()
         .map_err(|e| format!("could not start git: {e}"))?;
+    if !output.status.success() {
+        let detail = decode(&output.stderr).trim().to_string();
+        return Err(if detail.is_empty() {
+            format!("git {} failed with {}", args.join(" "), output.status)
+        } else {
+            detail
+        });
+    }
+    Ok(output.stdout)
+}
+
+fn git_command_with_input(root: &Path, args: &[&str], input: &str) -> Result<Vec<u8>, String> {
+    if !root.is_dir() {
+        return Err(format!("workspace is not a directory: {}", root.display()));
+    }
+    let mut child = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("could not start git: {e}"))?;
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin
+            .write_all(input.as_bytes())
+            .map_err(|e| format!("could not provide git patch: {e}"))?;
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("could not finish git: {e}"))?;
     if !output.status.success() {
         let detail = decode(&output.stderr).trim().to_string();
         return Err(if detail.is_empty() {
@@ -649,6 +684,105 @@ pub fn restore(
     status(&canonical)
 }
 
+fn extract_hunk_patch(patch: &str, path: &str, hunk_header: &str) -> Result<String, String> {
+    let lines: Vec<&str> = patch.lines().collect();
+    let mut section_start = None;
+    let mut section_end = lines.len();
+    for (index, line) in lines.iter().enumerate() {
+        if !line.starts_with("diff --git ") {
+            continue;
+        }
+        if let Some(start) = section_start {
+            section_end = index;
+            if diff_path_pair(lines[start]).0 == path {
+                section_start = Some(start);
+                break;
+            }
+        }
+        section_start = Some(index);
+    }
+    let start = section_start.ok_or_else(|| format!("file is not present in the observed diff: {path}"))?;
+    if section_end == lines.len() && diff_path_pair(lines[start]).0 != path {
+        return Err(format!("file is not present in the observed diff: {path}"));
+    }
+    if diff_path_pair(lines[start]).0 != path {
+        return Err(format!("file is not present in the observed diff: {path}"));
+    }
+    let hunk_start = (start + 1..section_end)
+        .find(|index| lines[*index] == hunk_header)
+        .ok_or_else(|| "selected hunk is not present in the observed diff".to_string())?;
+    let hunk_end = (hunk_start + 1..section_end)
+        .find(|index| lines[*index].starts_with("@@ "))
+        .unwrap_or(section_end);
+    let first_hunk = (start + 1..hunk_start)
+        .find(|index| lines[*index].starts_with("@@ "))
+        .unwrap_or(hunk_start);
+    if lines[start + 1..hunk_start]
+        .iter()
+        .any(|line| line.starts_with("Binary files ") || *line == "GIT binary patch")
+    {
+        return Err("binary files do not support hunk actions".to_string());
+    }
+    let mut selected_lines = lines[start..first_hunk].to_vec();
+    selected_lines.extend_from_slice(&lines[hunk_start..hunk_end]);
+    let mut selected = selected_lines.join("\n");
+    selected.push('\n');
+    Ok(selected)
+}
+
+/// Apply exactly one observed unified diff hunk. The full diff snapshot is
+/// checked first; the selected hunk is then extracted server-side so the UI
+/// cannot submit an arbitrary patch or path.
+pub fn apply_hunk(
+    root: &Path,
+    path: &str,
+    scope: &str,
+    action: &str,
+    hunk_header: &str,
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+    expected_patch: Option<String>,
+) -> Result<GitStatusSnapshot, String> {
+    validate_paths(&[path.to_string()])?;
+    if scope != "staged" && scope != "unstaged" {
+        return Err(format!("unknown hunk scope: {scope}"));
+    }
+    if action != "stage" && action != "unstage" && action != "discard" {
+        return Err(format!("unknown hunk action: {action}"));
+    }
+    if (action == "stage" || action == "discard") && scope != "unstaged" {
+        return Err("stage and discard hunk actions require an unstaged diff".to_string());
+    }
+    if action == "unstage" && scope != "staged" {
+        return Err("unstage hunk actions require a staged diff".to_string());
+    }
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    verify_mutation_observation(
+        &canonical,
+        scope,
+        expected_head.as_deref(),
+        expected_status.as_deref(),
+        expected_patch.as_deref(),
+    )?;
+    let observed = diff(&canonical, scope, None)?;
+    if observed.patch_truncated {
+        return Err("the observed diff is truncated; load a smaller diff before applying a hunk".to_string());
+    }
+    let selected = extract_hunk_patch(&observed.patch, path, hunk_header)?;
+    let mut args = vec!["apply", "--whitespace=nowarn"];
+    if action == "stage" || action == "unstage" {
+        args.push("--cached");
+    }
+    if action == "unstage" || action == "discard" {
+        args.push("--reverse");
+    }
+    args.push("-");
+    git_command_with_input(&canonical, &args, &selected)?;
+    status(&canonical)
+}
+
 fn validate_ref(value: &str, label: &str) -> Result<(), String> {
     let value = value.trim();
     if value.is_empty() {
@@ -757,10 +891,71 @@ fn resolve_managed_worktree(root: &Path, path: &str) -> Result<(PathBuf, PathBuf
     Ok((canonical, candidate))
 }
 
+/// Report conservative signals that a worktree may still be in use. Git's
+/// lock and in-progress markers are portable across the supported hosts; a
+/// missing signal never proves that no external process is running.
+fn worktree_activity(
+    repo_root: &Path,
+    candidate: &Path,
+    branch: Option<&str>,
+) -> (Vec<String>, bool) {
+    let mut signals = Vec::new();
+    let markers = [
+        ("index lock", "index.lock"),
+        ("merge in progress", "MERGE_HEAD"),
+        ("cherry-pick in progress", "CHERRY_PICK_HEAD"),
+        ("revert in progress", "REVERT_HEAD"),
+        ("rebase in progress", "rebase-merge"),
+        ("rebase in progress", "rebase-apply"),
+    ];
+    for (label, marker) in markers {
+        let Ok(raw) = git_command(candidate, &["rev-parse", "--git-path", marker]) else {
+            continue;
+        };
+        let raw = decode(&raw).trim().to_string();
+        if raw.is_empty() {
+            continue;
+        }
+        let marker_path = Path::new(&raw);
+        let marker_path = if marker_path.is_absolute() {
+            marker_path.to_path_buf()
+        } else {
+            candidate.join(marker_path)
+        };
+        if marker_path.exists() && !signals.iter().any(|value| value == label) {
+            signals.push(label.to_string());
+        }
+    }
+
+    let branch_referenced_elsewhere = branch.is_some_and(|branch| {
+        let target = format!("refs/heads/{branch}");
+        let Ok(bytes) = git_command(repo_root, &["worktree", "list", "--porcelain"]) else {
+            return false;
+        };
+        let mut current_path: Option<PathBuf> = None;
+        for line in decode(&bytes).lines() {
+            if let Some(raw) = line.strip_prefix("worktree ") {
+                current_path = Path::new(raw.trim()).canonicalize().ok();
+            } else if line == format!("branch {target}") {
+                if current_path.as_deref() != Some(candidate) {
+                    return true;
+                }
+            }
+        }
+        false
+    });
+    if branch_referenced_elsewhere {
+        signals.push("branch checked out elsewhere".to_string());
+    }
+    (signals, branch_referenced_elsewhere)
+}
+
 /// Inspect one managed worktree before a retention or handoff action.
 pub fn inspect_worktree(root: &Path, path: &str) -> Result<GitWorktreeInspection, String> {
     let (canonical, candidate) = resolve_managed_worktree(root, path)?;
     let snapshot = status(&candidate)?;
+    let (active_signals, branch_referenced_elsewhere) =
+        worktree_activity(&canonical, &candidate, snapshot.branch.as_deref());
     Ok(GitWorktreeInspection {
         repo_root: canonical.display().to_string(),
         path: candidate.display().to_string(),
@@ -769,6 +964,8 @@ pub fn inspect_worktree(root: &Path, path: &str) -> Result<GitWorktreeInspection
         clean: snapshot.files.is_empty(),
         conflicted: snapshot.files.iter().any(|file| file.conflicted),
         file_count: snapshot.files.len(),
+        active_signals,
+        branch_referenced_elsewhere,
         observed_at: now_ms(),
     })
 }
@@ -776,14 +973,27 @@ pub fn inspect_worktree(root: &Path, path: &str) -> Result<GitWorktreeInspection
 /// Remove a managed worktree only after its working tree is clean. Dirty
 /// checkouts are preserved so a mistaken cleanup cannot discard user work.
 pub fn remove_worktree(root: &Path, path: &str) -> Result<(), String> {
-    let (canonical, candidate) = resolve_managed_worktree(root, path)?;
-    let snapshot = status(&candidate)?;
-    if !snapshot.files.is_empty() {
+    let inspection = inspect_worktree(root, path)?;
+    if !inspection.clean {
         return Err(
             "worktree has uncommitted changes; inspect and commit or clean it before removal"
                 .to_string(),
         );
     }
+    if !inspection.active_signals.is_empty() {
+        return Err(format!(
+            "worktree appears active ({}); stop the operation and inspect again before removal",
+            inspection.active_signals.join(", ")
+        ));
+    }
+    if inspection.branch_referenced_elsewhere {
+        return Err(
+            "worktree branch is checked out elsewhere; refresh the inspection before removal"
+                .to_string(),
+        );
+    }
+    let canonical = Path::new(&inspection.repo_root);
+    let candidate = Path::new(&inspection.path);
     let relative = candidate
         .strip_prefix(&canonical)
         .map_err(|_| "worktree path is outside the repository".to_string())?
@@ -1106,6 +1316,32 @@ mod tests {
     }
 
     #[test]
+    fn inspect_reports_git_activity_and_cleanup_preserves_a_locked_worktree() {
+        let root = fixture_repo();
+        let created = create_worktree(&root, "task/active", ".muse/worktrees/active", "HEAD")
+            .unwrap();
+        let raw_lock = decode(
+            &git_command(Path::new(&created.path), &["rev-parse", "--git-path", "index.lock"])
+                .unwrap(),
+        )
+        .trim()
+        .to_string();
+        let lock = if Path::new(&raw_lock).is_absolute() {
+            PathBuf::from(&raw_lock)
+        } else {
+            Path::new(&created.path).join(&raw_lock)
+        };
+        fs::write(&lock, b"locked").unwrap();
+        let inspected = inspect_worktree(&root, &created.path).unwrap();
+        assert!(inspected.clean);
+        assert!(inspected.active_signals.iter().any(|signal| signal == "index lock"));
+        assert!(remove_worktree(&root, &created.path).is_err());
+        fs::remove_file(lock).unwrap();
+        remove_worktree(&root, &created.path).unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn stage_and_restore_require_the_observed_snapshot() {
         let root = fixture_repo();
         fs::write(root.join("main.txt"), "one\ntwo\n").unwrap();
@@ -1143,6 +1379,82 @@ mod tests {
         )
         .unwrap();
         assert!(clean.files.is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn apply_hunk_stages_unstages_and_discards_only_the_selected_hunk() {
+        let root = fixture_repo();
+        let original = (1..=30).map(|line| format!("line-{line}\n")).collect::<String>();
+        fs::write(root.join("main.txt"), &original).unwrap();
+        let commit_base = Command::new("git")
+            .args(["add", "--", "main.txt"])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(commit_base.status.success());
+        let commit_base = Command::new("git")
+            .args(["commit", "--quiet", "-m", "expanded base"])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(commit_base.status.success());
+        let mut changed = original.clone();
+        changed = changed.replace("line-2\n", "changed-2\n");
+        changed = changed.replace("line-25\n", "changed-25\n");
+        fs::write(root.join("main.txt"), changed).unwrap();
+        let before = status(&root).unwrap();
+        let patch = diff(&root, "unstaged", None).unwrap();
+        assert_eq!(patch.files[0].hunks.len(), 2);
+        let second = patch.files[0].hunks[1].header.clone();
+        let staged = apply_hunk(
+            &root,
+            "main.txt",
+            "unstaged",
+            "stage",
+            &second,
+            before.head.clone(),
+            Some(before.fingerprint.clone()),
+            Some(patch.patch.clone()),
+        )
+        .unwrap();
+        assert!(staged.files[0].staged && staged.files[0].unstaged);
+        let staged_patch = decode(&git_command(&root, &["diff", "--cached"]).unwrap());
+        let unstaged_patch = decode(&git_command(&root, &["diff"]).unwrap());
+        assert!(staged_patch.contains("line-25"));
+        assert!(unstaged_patch.contains("line-2"));
+
+        let staged_diff = diff(&root, "staged", None).unwrap();
+        let unstage = apply_hunk(
+            &root,
+            "main.txt",
+            "staged",
+            "unstage",
+            &staged_diff.files[0].hunks[0].header,
+            staged.head.clone(),
+            Some(staged.fingerprint.clone()),
+            Some(staged_diff.patch.clone()),
+        )
+        .unwrap();
+        assert!(unstage.files[0].unstaged);
+        assert!(!unstage.files[0].staged);
+
+        let remaining = diff(&root, "unstaged", None).unwrap();
+        let discard = apply_hunk(
+            &root,
+            "main.txt",
+            "unstaged",
+            "discard",
+            &remaining.files[0].hunks[0].header,
+            unstage.head,
+            Some(unstage.fingerprint),
+            Some(remaining.patch),
+        )
+        .unwrap();
+        assert!(discard.files[0].unstaged);
+        let final_patch = diff(&root, "unstaged", None).unwrap();
+        assert!(!final_patch.patch.contains("+changed-2\n"));
+        assert!(final_patch.patch.contains("+changed-25\n"));
         let _ = fs::remove_dir_all(root);
     }
 

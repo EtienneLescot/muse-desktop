@@ -18,7 +18,18 @@ export interface StorageIssue {
 
 const MAX_ISSUES = 50;
 const ISSUE_MESSAGE_LIMIT = 300;
+/** Keep recovery exports bounded even when a broken webview stores a huge value. */
+export const RECOVERY_RAW_LIMIT = 120_000;
 let issues: StorageIssue[] = [];
+
+function boundRecoveryRaw(raw: string): { raw: string; truncated: boolean } {
+  const chars = Array.from(raw);
+  if (chars.length <= RECOVERY_RAW_LIMIT) return { raw, truncated: false };
+  return {
+    raw: chars.slice(0, RECOVERY_RAW_LIMIT).join(""),
+    truncated: true,
+  };
+}
 
 function storage(): Storage | null {
   try {
@@ -174,7 +185,12 @@ export function exportStorageSnapshot(prefix = "muse-desktop."): string {
       try {
         entries[key] = JSON.parse(raw);
       } catch {
-        entries[key] = { raw, parseError: true };
+        const bounded = boundRecoveryRaw(raw);
+        entries[key] = {
+          raw: bounded.raw,
+          parseError: true,
+          ...(bounded.truncated ? { truncated: true } : {}),
+        };
       }
     }
   }
@@ -188,4 +204,258 @@ export function exportStorageSnapshot(prefix = "muse-desktop."): string {
     null,
     2,
   );
+}
+
+export interface StorageImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
+export interface StorageSnapshotEntry {
+  key: string;
+  existing: boolean;
+  parseError: boolean;
+}
+
+export interface StorageSnapshotPreview {
+  entries: StorageSnapshotEntry[];
+  errors: string[];
+}
+
+export interface StorageMigrationResult {
+  migrated: number;
+  skipped: number;
+  errors: string[];
+}
+
+export const STORAGE_MIGRATION_KEY = "muse-desktop.storage-migrations.v1";
+
+/**
+ * Validate a recovery snapshot and inspect which namespaced keys already
+ * exist. Values stay in the serialized snapshot; the preview only exposes
+ * key names and whether restoring would replace an existing entry.
+ */
+export function inspectStorageSnapshot(
+  serialized: string,
+  prefix = "muse-desktop.",
+): StorageSnapshotPreview {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return { entries: [], errors: ["Recovery snapshot is not valid JSON."] };
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return { entries: [], errors: ["Recovery snapshot must be a JSON object."] };
+  }
+  const snapshot = parsed as Record<string, unknown>;
+  if (snapshot.format !== "muse-desktop-storage" || snapshot.version !== 1) {
+    return { entries: [], errors: ["Unsupported recovery snapshot format or version."] };
+  }
+  const values = snapshot.entries;
+  if (typeof values !== "object" || values === null || Array.isArray(values)) {
+    return { entries: [], errors: ["Recovery snapshot has no valid entries map."] };
+  }
+  const entries: StorageSnapshotEntry[] = [];
+  const errors: string[] = [];
+  const store = storage();
+  if (store === null) {
+    record(prefix, "unavailable", "local storage is unavailable");
+    return { entries: [], errors: ["Local storage is unavailable."] };
+  }
+  for (const [key, value] of Object.entries(values as Record<string, unknown>)) {
+    if (!key.startsWith(prefix) || key.length === prefix.length) {
+      errors.push(`Skipped non-namespaced key: ${key}`);
+      continue;
+    }
+    let existing = false;
+    try {
+      existing = store.getItem(key) !== null;
+    } catch (error) {
+      record(key, "unavailable", `local storage read failed: ${String(error)}`);
+      errors.push(`Could not inspect existing key: ${key}`);
+      continue;
+    }
+    const parseError = typeof value === "object" && value !== null &&
+      (value as Record<string, unknown>).parseError === true &&
+      typeof (value as Record<string, unknown>).raw === "string";
+    entries.push({ key, existing, parseError });
+  }
+  return { entries, errors };
+}
+
+/**
+ * Legacy aliases from the pre-namespaced prototype. Migration is deliberately
+ * copy-only: source keys remain available for rollback and existing v1 keys
+ * always win. The log prefixes cover both early spellings used by prototypes.
+ */
+const LEGACY_EXACT_KEYS: Record<string, string> = {
+  "muse.sessions": "muse-desktop.sessions.v1",
+  "muse.sessions.v1": "muse-desktop.sessions.v1",
+  "muse.workspace": "muse-desktop.workspace.v1",
+  "muse.workspace.v1": "muse-desktop.workspace.v1",
+  "muse.active": "muse-desktop.active.v1",
+  "muse.active.v1": "muse-desktop.active.v1",
+  "muse.settings": "muse-desktop.settings.v1",
+  "muse.settings.v1": "muse-desktop.settings.v1",
+};
+
+/** Copy readable legacy entries into the current namespace without overwrite. */
+export function migrateLegacyStorage(): StorageMigrationResult {
+  const result: StorageMigrationResult = { migrated: 0, skipped: 0, errors: [] };
+  const store = storage();
+  if (store === null) {
+    record(STORAGE_MIGRATION_KEY, "unavailable", "local storage is unavailable");
+    return { ...result, errors: ["Local storage is unavailable."] };
+  }
+  const candidates = new Map<string, string>(Object.entries(LEGACY_EXACT_KEYS));
+  let length = 0;
+  try {
+    length = Number.isFinite(store.length) ? store.length : 0;
+  } catch (error) {
+    record(STORAGE_MIGRATION_KEY, "unavailable", `local storage enumeration failed: ${String(error)}`);
+    return { ...result, errors: ["Could not enumerate local storage."] };
+  }
+  for (let index = 0; index < length; index += 1) {
+    let key: string | null = null;
+    try {
+      key = typeof store.key === "function" ? store.key(index) : null;
+    } catch {
+      key = null;
+    }
+    if (key === null) continue;
+    if (key.startsWith("muse.log.")) {
+      candidates.set(key, `muse-desktop.log.v1.${key.slice("muse.log.".length)}`);
+    } else if (key.startsWith("muse.logs.")) {
+      candidates.set(key, `muse-desktop.log.v1.${key.slice("muse.logs.".length)}`);
+    }
+  }
+  for (const [sourceKey, targetKey] of candidates) {
+    let raw: string | null;
+    try {
+      raw = store.getItem(sourceKey);
+    } catch (error) {
+      result.skipped += 1;
+      result.errors.push(`Could not read legacy key: ${sourceKey}`);
+      record(sourceKey, "unavailable", `legacy read failed: ${String(error)}`);
+      continue;
+    }
+    if (raw === null) continue;
+    try {
+      JSON.parse(raw);
+    } catch {
+      result.skipped += 1;
+      result.errors.push(`Skipped corrupt legacy key: ${sourceKey}`);
+      record(sourceKey, "corrupt", "legacy value is not valid JSON");
+      continue;
+    }
+    try {
+      if (store.getItem(targetKey) !== null) {
+        result.skipped += 1;
+        continue;
+      }
+    } catch {
+      result.skipped += 1;
+      result.errors.push(`Could not inspect target key: ${targetKey}`);
+      continue;
+    }
+    if (writeStorageString(targetKey, raw)) result.migrated += 1;
+    else {
+      result.skipped += 1;
+      result.errors.push(`Could not migrate key: ${sourceKey}`);
+    }
+  }
+  if (result.migrated > 0) {
+    writeStorageJson(STORAGE_MIGRATION_KEY, {
+      version: 1,
+      migratedAt: new Date().toISOString(),
+      migrated: result.migrated,
+    });
+  }
+  return result;
+}
+
+/**
+ * Restore a previously exported snapshot. The operation is explicit and
+ * bounded to the same namespace as the exporter. Existing keys are kept by
+ * default; callers can pass `overwrite=true` after an explicit confirmation.
+ */
+export function importStorageSnapshot(
+  serialized: string,
+  prefix = "muse-desktop.",
+  overwrite = false,
+  selectedKeys?: readonly string[],
+): StorageImportResult {
+  const result: StorageImportResult = { imported: 0, skipped: 0, errors: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return { ...result, errors: ["Recovery snapshot is not valid JSON."] };
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return { ...result, errors: ["Recovery snapshot must be a JSON object."] };
+  }
+  const snapshot = parsed as Record<string, unknown>;
+  if (snapshot.format !== "muse-desktop-storage" || snapshot.version !== 1) {
+    return { ...result, errors: ["Unsupported recovery snapshot format or version."] };
+  }
+  const entries = snapshot.entries;
+  if (typeof entries !== "object" || entries === null || Array.isArray(entries)) {
+    return { ...result, errors: ["Recovery snapshot has no valid entries map."] };
+  }
+  const store = storage();
+  if (store === null) {
+    record(prefix, "unavailable", "local storage is unavailable");
+    return { ...result, errors: ["Local storage is unavailable."] };
+  }
+  const selected = selectedKeys === undefined ? null : new Set(selectedKeys);
+  for (const [key, value] of Object.entries(entries as Record<string, unknown>)) {
+    if (!key.startsWith(prefix) || key.length === prefix.length) {
+      result.skipped += 1;
+      result.errors.push(`Skipped non-namespaced key: ${key}`);
+      continue;
+    }
+    if (selected !== null && !selected.has(key)) {
+      result.skipped += 1;
+      continue;
+    }
+    let encoded: string;
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      (value as Record<string, unknown>).parseError === true &&
+      typeof (value as Record<string, unknown>).raw === "string"
+    ) {
+      encoded = (value as Record<string, string>).raw;
+    } else {
+      try {
+        encoded = JSON.stringify(value);
+      } catch {
+        result.skipped += 1;
+        result.errors.push(`Skipped unserializable key: ${key}`);
+        continue;
+      }
+    }
+    if (!overwrite) {
+      try {
+        if (store.getItem(key) !== null) {
+          result.skipped += 1;
+          continue;
+        }
+      } catch (error) {
+        record(key, "unavailable", `local storage read failed: ${String(error)}`);
+        result.skipped += 1;
+        result.errors.push(`Could not inspect existing key: ${key}`);
+        continue;
+      }
+    }
+    if (writeStorageString(key, encoded)) result.imported += 1;
+    else {
+      result.skipped += 1;
+      result.errors.push(`Could not restore key: ${key}`);
+    }
+  }
+  return result;
 }

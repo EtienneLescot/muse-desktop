@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   validateScheduleInput,
   type Schedule,
@@ -7,8 +7,9 @@ import {
   type ScheduleMissedPolicy,
   type ThreadReuse,
 } from "../lib/schedules";
-import type { ScheduleRun } from "../lib/scheduleRuns";
+import { MAX_RUN_ATTEMPTS, type ScheduleRun } from "../lib/scheduleRuns";
 import type { MuseNotification, NotificationPermission } from "../lib/notifications";
+import { userFacingError } from "../lib/errorCopy";
 
 interface SessionRef {
   session_id: string;
@@ -20,6 +21,7 @@ interface Props {
   runs: ScheduleRun[];
   notifications: MuseNotification[];
   notificationPermission: NotificationPermission;
+  notificationsMuted: boolean;
   unreadNotifications: number;
   sessions: SessionRef[];
   activeId: string | null;
@@ -34,19 +36,23 @@ interface Props {
   onCancelRun: (id: string) => void;
   onOpenRun: (run: ScheduleRun) => void;
   onMarkRunRead: (id: string) => void;
+  onSetRunArchived: (id: string, archived: boolean) => void;
+  onRetryRunNow: (id: string) => void;
   onEnableNotifications: () => Promise<NotificationPermission>;
+  onSetNotificationsMuted: (muted: boolean) => void;
   onMarkNotificationRead: (id: string) => void;
   onOpenNotification: (notification: MuseNotification) => void;
 }
 
 type TriggerKind = "once" | "cron";
 type ReuseKind = "active" | "new" | "session";
+type RunFilter = "all" | "unread" | "queued" | "running" | "completed" | "failed" | "archived";
 
 function describeSchedule(s: Schedule): string {
   if (s.trigger.kind === "once") {
-    return `At ${new Date(s.trigger.at).toLocaleString()}`;
+    return `At ${new Date(s.trigger.at).toLocaleString()}${s.timeZone ? ` · ${s.timeZone}` : ""}`;
   }
-  return `cron ${s.trigger.cron}`;
+  return `cron ${s.trigger.cron}${s.timeZone ? ` · ${s.timeZone}` : ""}`;
 }
 
 function describeReuse(r: ThreadReuse, sessions: SessionRef[]): string {
@@ -59,14 +65,32 @@ function describeReuse(r: ThreadReuse, sessions: SessionRef[]): string {
 }
 
 function describeRunStatus(status: ScheduleRun["status"]): string {
-  if (status === "completed") return "Dispatched";
+  if (status === "completed") return "Completed";
   if (status === "running") return "Running";
   if (status === "failed") return "Failed";
+  if (status === "cancelled") return "Cancelled";
   return "Queued";
 }
 
 function describeNotificationTime(createdAt: number): string {
   return new Date(createdAt).toLocaleString();
+}
+
+function describeRunDuration(run: ScheduleRun): string | null {
+  if (run.startedAt === undefined) return null;
+  const end = run.finishedAt ?? Date.now();
+  const duration = Math.max(0, end - run.startedAt);
+  if (duration < 1000) return "under 1s";
+  if (duration < 60_000) return `${Math.round(duration / 1000)}s`;
+  return `${Math.floor(duration / 60_000)}m ${Math.round((duration % 60_000) / 1000)}s`;
+}
+
+function describeRunTarget(run: ScheduleRun, sessions: SessionRef[]): string {
+  const reuse = run.threadReuse;
+  if (reuse.kind === "active") return "Active conversation";
+  if (reuse.kind === "new") return "New conversation";
+  return sessions.find((session) => session.session_id === reuse.sessionId)?.title
+    ?? `Conversation ${reuse.sessionId.slice(0, 8)}`;
 }
 
 /**
@@ -79,6 +103,7 @@ export function SchedulesPanel({
   runs,
   notifications,
   notificationPermission,
+  notificationsMuted,
   unreadNotifications,
   sessions,
   activeId,
@@ -93,7 +118,10 @@ export function SchedulesPanel({
   onCancelRun,
   onOpenRun,
   onMarkRunRead,
+  onSetRunArchived,
+  onRetryRunNow,
   onEnableNotifications,
+  onSetNotificationsMuted,
   onMarkNotificationRead,
   onOpenNotification,
 }: Props) {
@@ -106,6 +134,22 @@ export function SchedulesPanel({
   const [reuseSession, setReuseSession] = useState("");
   const [missedPolicy, setMissedPolicy] = useState<ScheduleMissedPolicy>("latest");
   const [formError, setFormError] = useState<string | null>(null);
+  const [runFilter, setRunFilter] = useState<RunFilter>("all");
+  const localTimeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    [],
+  );
+
+  const visibleRuns = useMemo(() => runs
+    .filter((run) => {
+      if (runFilter === "archived") return run.archived === true;
+      if (run.archived === true) return false;
+      if (runFilter === "all") return true;
+      if (runFilter === "unread") return run.unread === true;
+      return run.status === runFilter;
+    })
+    .slice(-8)
+    .reverse(), [runFilter, runs]);
 
   function submit(): void {
     const input: ScheduleInput = {
@@ -124,6 +168,7 @@ export function SchedulesPanel({
       model,
       authorizationMode,
       missedPolicy,
+      timeZone: localTimeZone,
     };
     const err = validateScheduleInput(input);
     if (err !== null) {
@@ -203,6 +248,7 @@ export function SchedulesPanel({
               <option value="latest">Run the latest missed occurrence</option>
               <option value="skip">Skip missed occurrences</option>
             </select>
+            <small className="sched-timezone">Timezone: {localTimeZone} (captured at creation)</small>
           </label>
         )}
         <div className="sched-row">
@@ -278,9 +324,27 @@ export function SchedulesPanel({
       )}
       {runs.length > 0 && (
         <div className="schedule-runs" aria-label="Recent automation runs">
-          <h3>Recent runs</h3>
-          <ul className="sched-list">
-            {runs.slice(-8).reverse().map((run) => (
+          <div className="schedule-notifications-head">
+            <h3>Recent runs</h3>
+            <select
+              className="run-filter"
+              aria-label="Filter automation runs"
+              value={runFilter}
+              onChange={(e) => setRunFilter(e.target.value as RunFilter)}
+            >
+              <option value="all">Active</option>
+              <option value="unread">Unread</option>
+              <option value="queued">Queued</option>
+              <option value="running">Running</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          {visibleRuns.length === 0 ? (
+            <p className="muted notification-empty">No runs match this filter.</p>
+          ) : <ul className="sched-list">
+            {visibleRuns.map((run) => (
               <li key={run.id} className="sched-item schedule-run" data-status={run.status}>
                 <div className="sched-head">
                   <strong>{run.scheduleName}</strong>
@@ -292,7 +356,39 @@ export function SchedulesPanel({
                   {run.nextRetryAt ? ` · retry at ${new Date(run.nextRetryAt).toLocaleTimeString()}` : ""}
                 </span>
                 {run.resultPreview && <span className="run-preview">{run.resultPreview}</span>}
-                {run.error && <small className="error">{run.error}</small>}
+                {run.error && <small className="error">{userFacingError(run.error)}</small>}
+                <details className="run-details">
+                  <summary>Inspect run</summary>
+                  <dl className="run-details-grid">
+                    <div><dt>Target</dt><dd>{describeRunTarget(run, sessions)}</dd></div>
+                    <div><dt>Authorization</dt><dd>{run.authorizationMode === "yolo" ? "YOLO" : run.authorizationMode === "workspace" ? "Workspace" : "Ask"}</dd></div>
+                    <div><dt>Model</dt><dd>{run.model ?? "Default"}</dd></div>
+                    {run.timeZone && <div><dt>Timezone</dt><dd>{run.timeZone}</dd></div>}
+                    <div><dt>Attempt</dt><dd>{run.attempt ?? 1} / {MAX_RUN_ATTEMPTS}</dd></div>
+                    {run.workspace && <div><dt>Workspace</dt><dd className="run-value-mono">{run.workspace}</dd></div>}
+                    {run.projectId && <div><dt>Project</dt><dd className="run-value-mono">{run.projectId}</dd></div>}
+                    <div><dt>Occurrence</dt><dd>{new Date(run.occurrenceAt).toLocaleString()}</dd></div>
+                    {run.startedAt && <div><dt>Started</dt><dd>{new Date(run.startedAt).toLocaleString()}</dd></div>}
+                    {run.finishedAt && <div><dt>Finished</dt><dd>{new Date(run.finishedAt).toLocaleString()}</dd></div>}
+                    {describeRunDuration(run) && <div><dt>Duration</dt><dd>{describeRunDuration(run)}</dd></div>}
+                  </dl>
+                  <div className="run-instructions">
+                    <span className="run-detail-label">Instructions</span>
+                    <p>{run.instructions}</p>
+                  </div>
+                  {run.resultPreview && (
+                    <div className="run-output">
+                      <span className="run-detail-label">Result preview</span>
+                      <p>{run.resultPreview}</p>
+                    </div>
+                  )}
+                  {run.error && (
+                    <div className="run-output run-output-error">
+                      <span className="run-detail-label">Failure</span>
+                      <p>{userFacingError(run.error)}</p>
+                    </div>
+                  )}
+                </details>
                 <div className="sched-actions">
                   {run.sessionId && (
                     <button type="button" onClick={() => onOpenRun(run)} title="Open conversation">
@@ -305,14 +401,33 @@ export function SchedulesPanel({
                     </button>
                   )}
                   {run.status === "queued" && run.nextRetryAt !== undefined && (
-                    <button type="button" onClick={() => onCancelRun(run.id)} title="Cancel this retry">
-                      Cancel retry
+                    <>
+                      <button type="button" onClick={() => onRetryRunNow(run.id)} title="Retry this run now">
+                        Retry now
+                      </button>
+                      <button type="button" onClick={() => onCancelRun(run.id)} title="Cancel this retry">
+                        Cancel retry
+                      </button>
+                    </>
+                  )}
+                  {run.status === "failed" && (run.attempt ?? 1) < 3 && (
+                    <button type="button" onClick={() => onRetryRunNow(run.id)} title="Retry this run now">
+                      Retry now
+                    </button>
+                  )}
+                  {run.archived === true ? (
+                    <button type="button" onClick={() => onSetRunArchived(run.id, false)} title="Restore this run">
+                      Restore
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => onSetRunArchived(run.id, true)} title="Archive this run">
+                      Archive
                     </button>
                   )}
                 </div>
               </li>
             ))}
-          </ul>
+          </ul>}
         </div>
       )}
       <div className="schedule-notifications" aria-label="Automation notifications">
@@ -321,7 +436,17 @@ export function SchedulesPanel({
           {unreadNotifications > 0 && <span className="schedules-count">{unreadNotifications}</span>}
         </div>
         {notificationPermission === "granted" ? (
-          <p className="muted notification-permission">Desktop notifications enabled.</p>
+          <div className="notification-permission-row">
+            <p className="muted notification-permission">Desktop notifications enabled.</p>
+            <button
+              type="button"
+              className="notification-mute"
+              aria-pressed={notificationsMuted}
+              onClick={() => onSetNotificationsMuted(!notificationsMuted)}
+            >
+              {notificationsMuted ? "Unmute desktop alerts" : "Mute desktop alerts"}
+            </button>
+          </div>
         ) : notificationPermission === "unsupported" ? (
           <p className="muted notification-permission">Desktop notifications are unavailable here. In-app alerts remain available.</p>
         ) : (

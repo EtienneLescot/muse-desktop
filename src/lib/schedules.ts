@@ -49,6 +49,8 @@ export interface Schedule {
   model?: string;
   authorizationMode?: ScheduleAuthorizationMode;
   missedPolicy?: ScheduleMissedPolicy;
+  /** IANA timezone used to interpret recurring cron wall-clock times. */
+  timeZone?: string;
   enabled: boolean;
   createdAt: number;
   /**
@@ -68,6 +70,8 @@ export interface ScheduleInput {
   model?: string;
   authorizationMode?: ScheduleAuthorizationMode;
   missedPolicy?: ScheduleMissedPolicy;
+  /** IANA timezone used to interpret recurring cron wall-clock times. */
+  timeZone?: string;
 }
 
 export type ReviewStatus = "pending" | "approved" | "discarded";
@@ -83,6 +87,7 @@ export interface ReviewItem {
   model?: string;
   authorizationMode?: ScheduleAuthorizationMode;
   missedPolicy?: ScheduleMissedPolicy;
+  timeZone?: string;
   /** Actual scheduled occurrence represented by this review item. */
   occurrenceAt?: number;
   /** Stable schedule + occurrence key used for idempotency. */
@@ -124,7 +129,21 @@ export function validateScheduleInput(input: ScheduleInput): string | null {
   if (input.missedPolicy !== undefined && input.missedPolicy !== "skip" && input.missedPolicy !== "latest") {
     return "unknown missed-run policy";
   }
+  if (input.timeZone !== undefined && !isValidTimeZone(input.timeZone)) {
+    return `invalid timezone: ${input.timeZone}`;
+  }
   return null;
+}
+
+/** Return whether a string is a supported IANA timezone identifier. */
+export function isValidTimeZone(timeZone: string): boolean {
+  if (timeZone.trim().length === 0) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /* ---------------- cron ---------------- */
@@ -229,6 +248,103 @@ export function cronNextRun(cron: string, fromTs: number): number | null {
   return null;
 }
 
+type ZonedParts = { year: number; month: number; day: number; hour: number; minute: number };
+
+function formatterForTimeZone(timeZone: string): Intl.DateTimeFormat | null {
+  if (!isValidTimeZone(timeZone)) return null;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    calendar: "gregory",
+    numberingSystem: "latn",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+}
+
+function formatZonedParts(formatter: Intl.DateTimeFormat, ts: number): ZonedParts | null {
+  const values: Partial<ZonedParts> = {};
+  for (const part of formatter.formatToParts(new Date(ts))) {
+    if (part.type === "year" || part.type === "month" || part.type === "day" || part.type === "hour" || part.type === "minute") {
+      values[part.type] = Number(part.value);
+    }
+  }
+  if (![values.year, values.month, values.day, values.hour, values.minute].every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  return values as ZonedParts;
+}
+
+function wallClockMatches(fields: CronFields, wallTs: number): boolean {
+  const d = new Date(wallTs);
+  const min = fields.minute.includes(d.getUTCMinutes());
+  const hr = fields.hour.includes(d.getUTCHours());
+  const mon = fields.month.includes(d.getUTCMonth() + 1);
+  const domAll = fields.dom.length === 31;
+  const dowAll = fields.dow.length === 7;
+  const dom = fields.dom.includes(d.getUTCDate());
+  const day = domAll && dowAll
+    ? true
+    : domAll
+      ? fields.dow.includes(d.getUTCDay())
+      : dowAll
+        ? dom
+        : dom || fields.dow.includes(d.getUTCDay());
+  return min && hr && mon && day;
+}
+
+/** Resolve a local wall-clock minute to every matching UTC instant. */
+function wallClockCandidates(formatter: Intl.DateTimeFormat, wallTs: number): number[] {
+  const wall = new Date(wallTs);
+  let guess = wallTs;
+  for (let i = 0; i < 4; i += 1) {
+    const parts = formatZonedParts(formatter, guess);
+    if (!parts) return [];
+    const representedAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+    guess -= representedAsUtc - wallTs;
+  }
+  const candidates = new Set<number>();
+  for (const offsetProbe of [guess - 3_600_000, guess, guess + 3_600_000]) {
+    const parts = formatZonedParts(formatter, offsetProbe);
+    if (!parts) continue;
+    const representedAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+    const candidate = offsetProbe - (representedAsUtc - wallTs);
+    const exact = formatZonedParts(formatter, candidate);
+    if (exact && exact.year === wall.getUTCFullYear() && exact.month === wall.getUTCMonth() + 1 &&
+      exact.day === wall.getUTCDate() && exact.hour === wall.getUTCHours() && exact.minute === wall.getUTCMinutes()) {
+      candidates.add(candidate);
+    }
+  }
+  return [...candidates].sort((a, b) => a - b);
+}
+
+/**
+ * Next cron occurrence strictly after `fromTs` using local wall-clock time
+ * in an IANA timezone. DST gaps are skipped and fall-back duplicates resolve
+ * to the first instant after the anchor.
+ */
+export function cronNextRunInTimeZone(cron: string, fromTs: number, timeZone: string): number | null {
+  const fields = parseCron(cron);
+  const formatter = formatterForTimeZone(timeZone);
+  if (fields === null || formatter === null || !Number.isFinite(fromTs)) return null;
+  const fromParts = formatZonedParts(formatter, fromTs);
+  if (fromParts === null) return null;
+  let wallTs = Date.UTC(fromParts.year, fromParts.month - 1, fromParts.day, fromParts.hour, fromParts.minute);
+  wallTs = Math.floor(wallTs / 60000) * 60000 + 60000;
+  const limit = wallTs + 2 * 366 * 24 * 60 * 60000;
+  while (wallTs <= limit) {
+    if (wallClockMatches(fields, wallTs)) {
+      const next = wallClockCandidates(formatter, wallTs).find((candidate) => candidate > fromTs);
+      if (next !== undefined) return next;
+    }
+    wallTs += 60000;
+  }
+  return null;
+}
+
 /* ---------------- schedules: CRUD ---------------- */
 
 /** Build a new (enabled) schedule; caller must validate first. */
@@ -244,6 +360,7 @@ export function buildSchedule(input: ScheduleInput, nowTs: number): Schedule {
     ...(input.model?.trim() ? { model: input.model.trim() } : {}),
     ...(input.authorizationMode ? { authorizationMode: input.authorizationMode } : {}),
     ...(input.missedPolicy ? { missedPolicy: input.missedPolicy } : {}),
+    ...(input.timeZone?.trim() ? { timeZone: input.timeZone.trim() } : {}),
     enabled: true,
     createdAt: nowTs,
   };
@@ -284,7 +401,7 @@ export function isScheduleDue(s: Schedule, nowTs: number): boolean {
     return t.at <= nowTs && s.lastFiredAt === undefined;
   }
   const anchor = s.lastFiredAt ?? s.createdAt;
-  const next = cronNextRun(t.cron, anchor);
+  const next = s.timeZone ? cronNextRunInTimeZone(t.cron, anchor, s.timeZone) : cronNextRun(t.cron, anchor);
   return next !== null && next <= nowTs;
 }
 
@@ -309,6 +426,7 @@ function buildReviewItem(s: Schedule, nowTs: number, occurrenceAt: number): Revi
     ...(s.model ? { model: s.model } : {}),
     ...(s.authorizationMode ? { authorizationMode: s.authorizationMode } : {}),
     ...(s.missedPolicy ? { missedPolicy: s.missedPolicy } : {}),
+    ...(s.timeZone ? { timeZone: s.timeZone } : {}),
     occurrenceAt,
     occurrenceKey: scheduleOccurrenceKey(s.id, occurrenceAt),
     createdAt: nowTs,
@@ -327,7 +445,9 @@ export function dueOccurrenceTimes(s: Schedule, nowTs: number): number[] {
   const out: number[] = [];
   let anchor = s.lastFiredAt ?? s.createdAt;
   while (out.length < MAX_CATCH_UP_OCCURRENCES) {
-    const next = cronNextRun(s.trigger.cron, anchor);
+    const next = s.timeZone
+      ? cronNextRunInTimeZone(s.trigger.cron, anchor, s.timeZone)
+      : cronNextRun(s.trigger.cron, anchor);
     if (next === null || next > nowTs) break;
     out.push(next);
     anchor = next;
@@ -489,7 +609,8 @@ function isValidSchedule(s: unknown): s is Schedule {
     (o.projectId === undefined || typeof o.projectId === "string") &&
     (o.model === undefined || typeof o.model === "string") &&
     (o.authorizationMode === undefined || o.authorizationMode === "ask" || o.authorizationMode === "workspace" || o.authorizationMode === "yolo") &&
-    (o.missedPolicy === undefined || o.missedPolicy === "skip" || o.missedPolicy === "latest")
+    (o.missedPolicy === undefined || o.missedPolicy === "skip" || o.missedPolicy === "latest") &&
+    (o.timeZone === undefined || (typeof o.timeZone === "string" && isValidTimeZone(o.timeZone)))
   );
 }
 
@@ -510,6 +631,7 @@ function isValidReview(r: unknown): r is ReviewItem {
     (o.model === undefined || typeof o.model === "string") &&
     (o.authorizationMode === undefined || o.authorizationMode === "ask" || o.authorizationMode === "workspace" || o.authorizationMode === "yolo") &&
     (o.missedPolicy === undefined || o.missedPolicy === "skip" || o.missedPolicy === "latest") &&
+    (o.timeZone === undefined || (typeof o.timeZone === "string" && isValidTimeZone(o.timeZone))) &&
     (o.occurrenceAt === undefined || typeof o.occurrenceAt === "number") &&
     (o.occurrenceKey === undefined || typeof o.occurrenceKey === "string")
   );

@@ -17,6 +17,7 @@ import {
   BROWSER_ANNOTATIONS_KEY,
   BROWSER_PERMS_KEY,
   createBrowserAnnotation,
+  formatBrowserContext,
   IMAGE_GENERATION_NOTE,
   isBrowserActionAllowed,
   isRenderableBrowserUrl,
@@ -97,6 +98,14 @@ describe("anchored comments", () => {
     assert.deepEqual(annotationsForUrl(list, "example.com/a").map((x) => x.id), [a.id]);
     assert.deepEqual(annotationsForUrl(list, "https://other.test/").map((x) => x.id), [b.id]);
     assert.deepEqual(annotationsForUrl(list, "javascript:x"), []);
+  });
+
+  it("formats bounded page context with provenance", () => {
+    assert.equal(
+      formatBrowserContext("example.com/docs", "quoted line", "review this"),
+      "[Browser context]\nURL: https://example.com/docs\nSelection: quoted line\nComment: review this",
+    );
+    assert.equal(formatBrowserContext("javascript:alert(1)", "s", "c"), "");
   });
 });
 

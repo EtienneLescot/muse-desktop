@@ -49,6 +49,15 @@ export interface ContextUsage {
   pressure: string;
   usedTokens: number | null;
   windowTokens: number | null;
+  /** Latest provider counters, when the host emits session/tokenUsage. */
+  tokenUsage?: TokenUsage;
+}
+
+export interface TokenUsage {
+  promptTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  turnId?: string;
 }
 
 /** Parse a `context_usage` poll payload; null when it is not an object. */
@@ -244,6 +253,28 @@ const summaryKey = (sessionId: string) => `muse-desktop.summary.v1.${sessionId}`
 
 function read<T>(key: string, fallback: T): T {
   return readStorageJson(key, fallback);
+}
+
+/** Parse the host's session/tokenUsage projection without re-deriving totals. */
+export function parseTokenUsage(raw: unknown): TokenUsage | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const o = raw as Record<string, unknown>;
+  const cumulative = typeof o.cumulative === "object" && o.cumulative !== null
+    ? o.cumulative as Record<string, unknown>
+    : null;
+  const usage = typeof o.usage === "object" && o.usage !== null
+    ? o.usage as Record<string, unknown>
+    : null;
+  const num = (...values: unknown[]): number | null => {
+    const value = values.find((candidate) => typeof candidate === "number" && Number.isFinite(candidate));
+    return typeof value === "number" ? value : null;
+  };
+  const promptTokens = num(o.promptTokens, cumulative?.promptTokens);
+  const outputTokens = num(usage?.outputTokens, cumulative?.outputTokens);
+  const totalTokens = num(o.totalTokens, cumulative?.totalTokens);
+  if (promptTokens === null && outputTokens === null && totalTokens === null) return null;
+  const turnId = typeof o.turnId === "string" && o.turnId.trim().length > 0 ? o.turnId : undefined;
+  return { promptTokens, outputTokens, totalTokens, ...(turnId ? { turnId } : {}) };
 }
 
 function write(key: string, value: unknown): void {

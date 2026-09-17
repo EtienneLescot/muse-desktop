@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/env";
+import { loadQueuedTurns, reconcileQueuedTurns, saveQueuedTurns } from "../lib/queuedTurns";
 import {
   appendLog,
   dropLog,
@@ -135,10 +136,17 @@ import {
   isCompactCommand,
   loadSummary,
   parseContextUsage,
+  parseTokenUsage,
   saveSummary,
   type ContextUsage,
   type ThreadSummary,
 } from "../lib/compact";
+import {
+  engineErrorSummary,
+  findRetryPrompt,
+  parseTurnCompletion,
+  type EngineErrorDetails,
+} from "../lib/engineError";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
 // endpoint exists); children surface as `subagent` entries as usual.
 import {
@@ -174,7 +182,16 @@ import {
   type WorktreeRecord,
   type WorktreeInspection,
   type WorktreeSetupResult,
+  type WorktreeReadiness,
 } from "../lib/worktrees";
+import {
+  clearWorktreeCleanup,
+  loadWorktreeCleanupIntents,
+  markWorktreeCleanupFailed,
+  requestWorktreeCleanup,
+  saveWorktreeCleanupIntents,
+  type WorktreeCleanupIntent,
+} from "../lib/worktreeCleanup";
 export type {
   Project,
   ProjectSettings,
@@ -212,6 +229,7 @@ import {
 } from "../lib/schedules";
 export type { ReviewItem, Schedule, ScheduleInput, ThreadReuse } from "../lib/schedules";
 import {
+  archiveRun,
   appendRun,
   cancelRun,
   completeRun,
@@ -221,11 +239,19 @@ import {
   markRunStarted,
   markRunRead,
   queueRunRetry,
+  restoreRun,
+  retryRunNow,
   saveScheduleRuns,
+  settleRunsForSession,
   settleRun,
   type ScheduleRun,
 } from "../lib/scheduleRuns";
 export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
+import {
+  releaseSchedulerLease,
+  renewSchedulerLease,
+  tryAcquireSchedulerLease,
+} from "../lib/schedulerLease";
 import {
   appendNotification,
   buildApprovalNotification,
@@ -233,9 +259,11 @@ import {
   buildRunNotification,
   deliverDesktopNotification,
   loadNotifications,
+  loadNotificationPreferences,
   markNotificationRead as markNotificationReadRow,
   notificationPermission as readNotificationPermission,
   requestNotificationPermission,
+  saveNotificationPreferences,
   saveNotifications,
   unreadNotificationCount as countUnreadNotifications,
   type MuseNotification,
@@ -280,11 +308,16 @@ import { readStorageJson, readStorageString, writeStorageJson, writeStorageStrin
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
 import {
+  findConnector,
   installConnector,
   listConnectorTools,
   loadConnectors,
+  localConnectorIdForName,
   registerLocalConnector,
+  rollbackLocalConnector,
+  refreshLocalConnector,
   requestRemoteConnector,
+  registerRemoteConnector,
   saveConnectors,
   setConnectorEnabled,
   uninstallConnector,
@@ -293,6 +326,14 @@ import {
   type LocalMcpProbeResult,
   type ConnectorTool,
 } from "../lib/connectors";
+import {
+  callRemoteMcp as callRemoteMcpTransport,
+  isRemoteMcpAuthenticationError,
+  probeRemoteMcp as probeRemoteMcpTransport,
+  type RemoteMcpCallResult,
+  type RemoteMcpProbeResult,
+  type RemoteMcpSession,
+} from "../lib/remoteMcp.ts";
 // w-integrations (US-25): slash-invokable + auto-suggested skills with
 // progressive disclosure (pure, unit-tested).
 import {
@@ -389,11 +430,39 @@ import {
   type GitStatusSnapshot,
 } from "../lib/git";
 import { formatTerminalContext } from "../lib/terminalContext";
+import { formatWorkspaceFileContext } from "../lib/fileContext";
+import {
+  extractHistoryItems,
+  historyItemsToLogEntries,
+  mergeHistoryLog,
+} from "../lib/history";
 
 
 /** One session: persisted metadata + live running flag. */
 export interface MuseSession extends StoredSession {
   running: boolean;
+}
+
+/** M0-02: renderer-owned connection state for a session identity. */
+export type SessionConnectionState =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "error";
+
+/** M0-10: one bounded native first-launch prerequisite check. */
+export interface StartupCheck {
+  status: "ready" | "missing" | "blocked" | "unknown";
+  detail: string;
+}
+
+export interface StartupProbe {
+  platform: string;
+  sidecar: StartupCheck;
+  wsl: StartupCheck | null;
+  museCli: StartupCheck | null;
+  workspace: StartupCheck | null;
+  checkedAt: number;
 }
 
 /** US-23 local index surface (opt-in, default off). */
@@ -452,6 +521,8 @@ export interface FileReadResult {
   modifiedAt: number | null;
   binary: boolean;
   content: string | null;
+  mediaType?: string | null;
+  base64Data?: string | null;
   truncated: boolean;
   observedAt: number;
 }
@@ -465,6 +536,8 @@ export interface FilesBrowserState {
   loading: boolean;
   error: string | null;
   observedAt: number | null;
+  stale: boolean;
+  changedPaths: string[];
 }
 
 function emptyFilesBrowserState(): FilesBrowserState {
@@ -477,6 +550,8 @@ function emptyFilesBrowserState(): FilesBrowserState {
     loading: false,
     error: null,
     observedAt: null,
+    stale: false,
+    changedPaths: [],
   };
 }
 
@@ -558,6 +633,18 @@ export interface MuseEvent {
   payload: string;
 }
 
+/** Latest host event observed for one session (live only, never persisted). */
+export interface StreamActivity {
+  lastEventAt: number;
+  lastEventKind: string;
+}
+
+/** A user decision was accepted and the host has not emitted its next turn event yet. */
+export interface ResumePending {
+  requestedAt: number;
+  source: "approval" | "input";
+}
+
 /** One buffered backend event with its sequence number (poll transport). */
 interface DrainedEvent extends MuseEvent {
   seq: number;
@@ -565,6 +652,8 @@ interface DrainedEvent extends MuseEvent {
 
 interface PollResult {
   head: number;
+  oldest?: number | null;
+  truncated?: boolean;
   events: DrainedEvent[];
 }
 
@@ -591,6 +680,16 @@ export interface ApprovalRequest {
   choices: ApprovalChoice[];
 }
 
+/** A turn admitted to the host queue and still reclaimable. */
+export interface QueuedTurn {
+  session_id: string;
+  turn_id: string;
+  text: string;
+  createdAt: number;
+  /** Present only after hydration; the host queue was not snapshotted. */
+  recovered?: boolean;
+}
+
 interface UseMuseSessions {
   sessions: MuseSession[];
   activeId: string | null;
@@ -598,6 +697,21 @@ interface UseMuseSessions {
   activeLog: LogEntry[];
   approvals: ApprovalRequest[];
   activeApprovals: ApprovalRequest[];
+  /** M0-02: latest live event used to explain quiet/stalled turns. */
+  streamActivityBySession: Record<string, StreamActivity>;
+  activeStreamActivity: StreamActivity | null;
+  /** M0-02/M0-05: explicit bridge state after a permission or input decision. */
+  resumePendingBySession: Record<string, ResumePending>;
+  activeResumePending: ResumePending | null;
+  /** M0-04: cancellation accepted by the host, awaiting terminal status. */
+  stoppingBySession: Record<string, boolean>;
+  /** M0-02: connection lifecycle, separate from turn execution state. */
+  connectionBySession: Record<string, SessionConnectionState>;
+  activeConnectionState: SessionConnectionState;
+  /** M1-10: queued turns that can still be reclaimed before launch. */
+  queuedTurns: QueuedTurn[];
+  /** Remove a restored queue reminder locally without claiming host state. */
+  dismissQueuedTurn: (sessionId: string, turnId: string) => void;
   /** Default folder for new threads (persisted); each thread keeps its own. */
   workspace: string | null;
   /** Change the default folder for new threads (not a global lock). */
@@ -628,7 +742,15 @@ interface UseMuseSessions {
     sessionId: string,
     plan: WorktreePlan,
   ) => Promise<WorktreeRecord | null>;
+  /** M2-03: atomically create a worktree and open its conversation. */
+  createWorktreeSession: (
+    sessionId: string,
+    plan: WorktreePlan,
+    projectSettings?: ProjectSettings,
+  ) => Promise<WorktreeRecord | null>;
   worktrees: WorktreeRecord[];
+  /** Explicit cleanup attempts that need a retry after an interruption. */
+  cleanupIntents: WorktreeCleanupIntent[];
   /** Remove one managed worktree after explicit user confirmation in the UI. */
   removeWorktree: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
   /** M2-06: inspect one worktree before cleanup or handoff. */
@@ -636,19 +758,28 @@ interface UseMuseSessions {
     sessionId: string,
     record: WorktreeRecord,
   ) => Promise<WorktreeInspection | null>;
+  /** M2-04: inspect local manifests and required executables without running code. */
+  checkWorktreeReadiness: (
+    sessionId: string,
+    record: WorktreeRecord,
+  ) => Promise<WorktreeReadiness | null>;
   /** M2-04: run one user-entered setup command in an existing managed worktree. */
   runWorktreeSetup: (
     sessionId: string,
     record: WorktreeRecord,
     command: string,
+    envAllowlist: string[],
   ) => Promise<WorktreeSetupResult | null>;
+  /** M2-04: request cancellation of the active setup process, if any. */
+  cancelWorktreeSetup: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
   startSession: () => Promise<string | null>;
   startSessionInWorkspace: (
     workspacePath: string,
     projectSettings?: ProjectSettings,
   ) => Promise<string | null>;
   /** M1-09: create a server-side branch from completed conversation turns. */
-  forkSession: (sessionId: string) => Promise<string | null>;
+  /** Fork at the latest completed turn, or at an explicit MSP turn anchor. */
+  forkSession: (sessionId: string, lastTurnId?: string) => Promise<string | null>;
   reconnectSession: (id: string) => Promise<void>;
   reconnectingId: string | null;
   connectedIds: string[];
@@ -670,10 +801,14 @@ interface UseMuseSessions {
     text: string,
     inputParts?: TurnInputPart[],
   ) => Promise<SendResult>;
+  /** Reclaim one queued turn; never interrupts a running turn. */
+  unqueueTurn: (sessionId: string, turnId: string) => Promise<boolean>;
   /** Failed outgoing messages across sessions (retryable, durable). */
   pendingSends: OutboxEntry[];
   /** Re-send a failed entry: verifies the server first when ambiguous. */
   retrySend: (clientMessageId: string) => Promise<void>;
+  /** M0-07: retry a terminally failed turn from its last user message. */
+  retryFailedTurn: (sessionId: string, failureEntryId: string) => Promise<void>;
   /** Give up on a failed entry: drops it and its undelivered user entry. */
   discardSend: (clientMessageId: string) => void;
   approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<boolean>;
@@ -711,7 +846,7 @@ interface UseMuseSessions {
   commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string) => void;
   /** US-23 opt-in local index (panel state + folder-pick indexing). */
   index: IndexApi;
-  /** M1-01: read-only Git status/diff snapshots per conversation workspace. */
+  /** M1-01/M1-03: Git status/diff snapshots and guarded Review mutations. */
   gitReview: (sessionId: string) => GitReviewState;
   refreshGitStatus: (sessionId: string) => Promise<GitStatusSnapshot | null>;
   loadGitDiff: (
@@ -728,6 +863,14 @@ interface UseMuseSessions {
     sessionId: string,
     paths: string[],
     scope: "staged" | "unstaged",
+    expected: GitMutationExpectation,
+  ) => Promise<GitStatusSnapshot | null>;
+  applyGitHunk: (
+    sessionId: string,
+    path: string,
+    scope: "staged" | "unstaged",
+    action: "stage" | "unstage" | "discard",
+    hunkHeader: string,
     expected: GitMutationExpectation,
   ) => Promise<GitStatusSnapshot | null>;
   commitGit: (
@@ -759,8 +902,14 @@ interface UseMuseSessions {
   prepareTerminalContext: (sessionId: string) => boolean;
   /** M1-07: session-scoped real filesystem listing and bounded preview. */
   filesForSession: (sessionId: string) => FilesBrowserState;
+  /** M1-07: insert the current text-file preview into the composer draft. */
+  prepareWorkspaceFileContext: (sessionId: string) => boolean;
   listWorkspaceFiles: (sessionId: string, path?: string) => Promise<void>;
   readWorkspaceFile: (sessionId: string, path: string) => Promise<void>;
+  watchWorkspaceFiles: (sessionId: string) => Promise<void>;
+  unwatchWorkspaceFiles: (sessionId: string) => Promise<void>;
+  /** M1-07: open a verified workspace entry in the system handler. */
+  openWorkspacePath: (sessionId: string, path: string) => Promise<void>;
   /** US-5: move a thread to the archived list (persisted flag). */
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -808,11 +957,17 @@ interface UseMuseSessions {
   cancelScheduleRun: (id: string) => void;
   /** M3-08: clear the independent inbox unread marker. */
   markScheduleRunRead: (id: string) => void;
+  /** M3-08: archive or restore a run in the inbox. */
+  setScheduleRunArchived: (id: string, archived: boolean) => void;
+  /** M3-08: promote a failed/delayed retry to the local scheduler now. */
+  retryScheduleRunNow: (id: string) => void;
   /** M3-09: durable completion/failure notifications for scheduled runs. */
   notifications: MuseNotification[];
   notificationPermission: NotificationPermission;
+  notificationsMuted: boolean;
   unreadNotificationCount: number;
   enableNotifications: () => Promise<NotificationPermission>;
+  setNotificationsMuted: (muted: boolean) => void;
   markNotificationRead: (id: string) => void;
   /** US-9: approve a review entry → sent as normal turn input. */
   approveReview: (id: string) => Promise<void>;
@@ -837,6 +992,8 @@ interface UseMuseSessions {
   browserAnnotations: BrowserAnnotation[];
   /** US-19: anchor a comment to a URL + selection (no-op when invalid). */
   addBrowserAnnotation: (url: string, selection: string, comment: string) => void;
+  /** M4-02: insert explicit page context into the active composer draft. */
+  prepareBrowserContext: (sessionId: string, context: string) => boolean;
   /** US-19: remove an anchored comment by id. */
   removeBrowserAnnotation: (id: string) => void;
   /** US-19: computer-use per-app permissions (default denied). */
@@ -881,7 +1038,46 @@ interface UseMuseSessions {
     name: string,
     command: string,
     tools: ConnectorTool[],
+    serverVersion?: string,
   ) => boolean;
+  /** M3-01/M3-03: re-probe and persist tools for an existing local server. */
+  refreshLocalMcp: (
+    id: string,
+    workspacePath?: string | null,
+  ) => Promise<LocalMcpProbeResult | null>;
+  /** M3-03: restore the previous verified local tool catalog. */
+  rollbackLocalMcp: (id: string) => boolean;
+  /** M3-01: currently live persistent local MCP process ids. */
+  mcpRunningIds: string[];
+  /** M3-01: start a configured local MCP process explicitly. */
+  startLocalMcp: (
+    id: string,
+    workspacePath?: string | null,
+  ) => Promise<LocalMcpProbeResult | null>;
+  /** M3-01: stop a configured local MCP process explicitly. */
+  stopLocalMcp: (id: string) => Promise<boolean>;
+  /** M3-01: call a tool through the persistent process. */
+  callRegisteredLocalMcp: (
+    id: string,
+    toolName: string,
+    argumentsText: string,
+  ) => Promise<LocalMcpCallResult | null>;
+  /** M3-02: IDs with an authenticated remote MCP session in memory. */
+  remoteConnectedIds: string[];
+  /** M3-02: perform a real remote initialize + tools/list exchange. */
+  probeRemoteMcp: (
+    name: string,
+    url: string,
+    token?: string,
+  ) => Promise<RemoteMcpProbeResult | null>;
+  /** M3-02: call a tool through the in-memory remote session. */
+  callRemoteMcp: (
+    id: string,
+    toolName: string,
+    argumentsText: string,
+  ) => Promise<RemoteMcpCallResult | null>;
+  /** M3-02: drop the in-memory token/session and mark the entry disconnected. */
+  disconnectRemoteMcp: (id: string) => void;
   /** w-integrations US-26: last remote-guard refusal message, if any. */
   remoteNotice: string | null;
   /** w-integrations US-24: 1-click install from the curated directory. */
@@ -890,11 +1086,6 @@ interface UseMuseSessions {
   uninstallConnectorById: (id: string) => void;
   /** w-integrations US-24: enable/disable an installed connector. */
   setConnectorEnabledById: (id: string, enabled: boolean) => void;
-  /**
-   * w-integrations US-26: request a remote entry. False when the
-   * single-remote or public-internet guard refused (see remoteNotice).
-   */
-  addRemoteConnector: (name: string, url: string) => boolean;
   /** w-integrations US-25: skills (builtins merged over stored). */
   skills: Skill[];
   /** w-integrations US-25: enable/disable a skill by slash name. */
@@ -913,12 +1104,21 @@ interface UseMuseSessions {
   evtCount: number;
   /** True when the Tauri backend is unreachable (plain-browser preview). */
   backendMissing: boolean;
+  /** M0-10: latest native prerequisite probe (null in web preview). */
+  startupProbe: StartupProbe | null;
+  /** M0-10: rerun the bounded first-launch prerequisite probe. */
+  probeStartup: (workspacePath?: string | null) => Promise<StartupProbe | null>;
 }
 
 interface BackendSessionMeta {
   session_id: string;
   workspace: string;
   running: boolean;
+}
+
+interface BackendWorktreeSessionResult {
+  worktree: WorktreeRecord;
+  session: BackendSessionMeta;
 }
 
 /** Status-kind mapping lives in ../lib/phase (unit-tested, US-10). */
@@ -1071,6 +1271,27 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
   return { session_id: sessionId, request_id: trimmed, summary: trimmed, toolName: "tool", choices: [] };
 }
 
+function parsePendingSnapshot(
+  sessionId: string,
+  pending: unknown,
+): { approvals: ApprovalRequest[]; inputs: InputRequest[] } {
+  if (typeof pending !== "object" || pending === null) {
+    return { approvals: [], inputs: [] };
+  }
+  const raw = pending as { approvals?: unknown; userInputs?: unknown };
+  const approvals = Array.isArray(raw.approvals)
+    ? raw.approvals
+        .map((item) => parseApproval(sessionId, JSON.stringify(item) ?? ""))
+        .filter((item) => item.request_id.length > 0)
+    : [];
+  const inputs = Array.isArray(raw.userInputs)
+    ? raw.userInputs
+        .map((item) => parseInputRequest(sessionId, JSON.stringify(item) ?? ""))
+        .filter((item): item is InputRequest => item !== null)
+    : [];
+  return { approvals, inputs };
+}
+
 /**
  * Session-multiplexing hook.
  *
@@ -1087,12 +1308,59 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
  */
 export function useMuseSessions(): UseMuseSessions {
   const [sessions, setSessions] = useState<MuseSession[]>([]);
+  const sessionsRef = useRef<MuseSession[]>([]);
+  sessionsRef.current = sessions;
   // Do not persist the initial empty render before boot restores history.
   // A state gate also protects StrictMode's setup/cleanup/setup replay.
   const [historyReady, setHistoryReady] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  // M0-02: keep a live heartbeat separate from the transcript. Persisted
+  // entries can be old after a restart and must never masquerade as current
+  // host activity.
+  const [streamActivityBySession, setStreamActivityBySession] = useState<
+    Record<string, StreamActivity>
+  >({});
+  const [resumePendingBySession, setResumePendingBySession] = useState<
+    Record<string, ResumePending>
+  >({});
+  // A cancel request is not the same thing as a confirmed stopped status.
+  // Keep this renderer-only state separate from the persisted session row so
+  // a slow host cannot make a turn look finished or lose its open transcript.
+  const [stoppingBySession, setStoppingBySession] = useState<Record<string, boolean>>({});
+  const stoppingBySessionRef = useRef<Record<string, boolean>>({});
+  const [queuedTurnsBySession, setQueuedTurnsBySession] = useState<Record<string, QueuedTurn[]>>(() => {
+    const stored = loadQueuedTurns();
+    return Object.fromEntries(
+      Object.entries(stored).map(([sessionId, rows]) => [
+        sessionId,
+        rows.map((row) => ({ ...row, recovered: true })),
+      ]),
+    );
+  });
+  /** M1-10: adopt a host queue snapshot only when the server actually serves
+   * one; inline/legacy reads leave local reminders untouched. */
+  const reconcileQueueSnapshot = useCallback(async (sessionId: string): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    try {
+      const snapshot = await invoke<unknown>("read_queue_snapshot", { sessionId });
+      setQueuedTurnsBySession((current) => {
+        const next = reconcileQueuedTurns(sessionId, current[sessionId] ?? [], snapshot);
+        if (next === null) return current;
+        if (next.length === 0) {
+          if (!(sessionId in current)) return current;
+          const copy = { ...current };
+          delete copy[sessionId];
+          return copy;
+        }
+        return { ...current, [sessionId]: next as QueuedTurn[] };
+      });
+    } catch {
+      // Queue snapshots are additive. An older host or a transient read
+      // failure must never erase the local, user-visible reminder.
+    }
+  }, []);
   // Global authorization posture. This is intentionally kept separate from
   // sandbox settings: changing the posture must not mutate host capabilities.
   const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
@@ -1107,12 +1375,22 @@ export function useMuseSessions(): UseMuseSessions {
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
   const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() => loadScheduleRuns());
   const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
+  const [notificationPreferences, setNotificationPreferences] = useState(() => loadNotificationPreferences());
   const [notificationPermissionState, setNotificationPermissionState] = useState<NotificationPermission>(
     () => readNotificationPermission(),
   );
   // w-integrations US-24/US-26: connector registry (survives restarts via
   // localStorage), written through on every change.
   const [connectors, setConnectors] = useState<ConnectorEntry[]>(() => loadConnectors());
+  // Persistent MCP processes are native runtime state, not part of the
+  // persisted connector registry. A relaunch starts them only on explicit
+  // Start/Refresh, never during hydration.
+  const [mcpRunningIds, setMcpRunningIds] = useState<string[]>([]);
+  const mcpPollBusyRef = useRef(false);
+  // Remote bearer tokens and MCP session ids are process memory only. They
+  // intentionally never enter the connector registry or localStorage.
+  const remoteSessionsRef = useRef<Record<string, RemoteMcpSession>>({});
+  const [remoteConnectedIds, setRemoteConnectedIds] = useState<string[]>([]);
   const [remoteNotice, setRemoteNotice] = useState<string | null>(null);
   // w-integrations US-25: skills, builtins merged over stored overrides.
   const [skills, setSkills] = useState<Skill[]>(() => mergeBuiltinSkills(loadSkills()));
@@ -1204,6 +1482,9 @@ export function useMuseSessions(): UseMuseSessions {
     () => loadGlobalSettings(DEFAULT_PROJECT_SETTINGS),
   );
   const [worktrees, setWorktrees] = useState<WorktreeRecord[]>(() => loadWorktrees());
+  const [cleanupIntents, setCleanupIntents] = useState<WorktreeCleanupIntent[]>(() =>
+    loadWorktreeCleanupIntents(),
+  );
   const [projectError, setProjectError] = useState<string | null>(null);
   // Fresh copies for the render-detached send path (same pattern as
   // logsRef): sendInput reads these so instructions never go stale.
@@ -1214,7 +1495,29 @@ export function useMuseSessions(): UseMuseSessions {
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
   const [connectedIds, setConnectedIds] = useState<string[]>([]);
+  const [connectionBySession, setConnectionBySession] = useState<
+    Record<string, SessionConnectionState>
+  >({});
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
+  const [startupProbe, setStartupProbe] = useState<StartupProbe | null>(null);
+
+  const probeStartup = useCallback(
+    async (workspacePath?: string | null): Promise<StartupProbe | null> => {
+      if (!isTauriRuntime()) return null;
+      try {
+        const result = await invoke<StartupProbe>("probe_startup", {
+          workspacePath: workspacePath ?? workspace ?? null,
+        });
+        setStartupProbe(result);
+        return result;
+      } catch {
+        // Older native bundles can lack the optional probe command. The
+        // regular start error remains the source of truth in that case.
+        return null;
+      }
+    },
+    [workspace],
+  );
   // M1-01: review snapshots are owned by the hook so the panel never reads
   // stale or cross-session Git state. A refresh replaces the snapshot; the
   // observed HEAD in each result is the basis for later mutating actions.
@@ -1229,6 +1532,9 @@ export function useMuseSessions(): UseMuseSessions {
   >({});
   const [filesBySession, setFilesBySession] = useState<Record<string, FilesBrowserState>>({});
   const filesRequestSeq = useRef<Record<string, number>>({});
+  // M2-04: operation ids let the renderer cancel a specific native setup
+  // process without trying to infer it from the active view.
+  const setupOperationsRef = useRef<Map<string, string>>(new Map());
   // Mirror of "any session running", read by the poll loop to pick cadence.
   // Plain ref (not state): the loop lives outside render, StrictMode-safe.
   const runningRef = useRef(false);
@@ -1285,6 +1591,54 @@ export function useMuseSessions(): UseMuseSessions {
       const res = await invoke<PollResult>("poll_events", { since: cursorRef.current });
       if (!aliveRef.current) return;
       cursorRef.current = res.head;
+      if (res.truncated === true) {
+        // The native ring is intentionally bounded. Reconcile the sessions
+        // that could have lost a request or terminal item before applying the
+        // surviving tail, so an approval can never disappear into a silent
+        // "thinking" state after a burst of host events.
+        const candidates = new Set(
+          sessionsRef.current
+            .filter((session) => session.running)
+            .map((session) => session.session_id),
+        );
+        for (const event of res.events) candidates.add(event.session_id);
+        setError(
+          `Some host updates were dropped${res.oldest === null || res.oldest === undefined ? "" : ` (oldest available event ${res.oldest})`}. Refreshing active conversation state.`,
+        );
+        await Promise.allSettled(
+          [...candidates].slice(0, 50).map(async (sessionId) => {
+            try {
+              const pending = await invoke<unknown>("list_pending_requests", { sessionId });
+              if (typeof pending === "object" && pending !== null) {
+                const parsed = parsePendingSnapshot(sessionId, pending);
+                setApprovals((cur) => [
+                  ...cur.filter((item) => item.session_id !== sessionId),
+                  ...parsed.approvals,
+                ]);
+                setInputRequests((cur) => [
+                  ...cur.filter((item) => item.session_id !== sessionId),
+                  ...parsed.inputs,
+                ]);
+              }
+            } catch {
+              // Older hosts may not implement the pull path; history below
+              // still provides a useful recovery and the stale action remains.
+            }
+            try {
+              const history = await invoke<unknown>("read_session_history", { sessionId });
+              const remote = historyItemsToLogEntries(extractHistoryItems(history));
+              if (remote.length === 0) return;
+              const local = logsRef.current[sessionId] ?? loadLog(sessionId);
+              const merged = mergeHistoryLog(local, remote);
+              setLogs((cur) => ({ ...cur, [sessionId]: merged }));
+              saveLog(sessionId, merged);
+            } catch {
+              // History reconciliation is additive; keep the local transcript
+              // and let the stream health row offer Reconnect/Stop if needed.
+            }
+          }),
+        );
+      }
       const apply = handleEventRef.current;
       for (const e of res.events) apply(e);
     } catch (err) {
@@ -1324,6 +1678,11 @@ export function useMuseSessions(): UseMuseSessions {
       // Tombstoned ids never come back, even from a stale persisted list.
       const live = stored.filter((s) => !tombstoned.current?.has(s.session_id));
       setSessions(live.map((s) => ({ ...s, running: false })));
+      setConnectionBySession(
+        Object.fromEntries(
+          live.map((s) => [s.session_id, "disconnected" as SessionConnectionState]),
+        ),
+      );
       setLogs(storedLogs);
       // US-4: restore stored summaries (a stored summary = compacted thread).
       const storedSummaries: Record<string, ThreadSummary> = {};
@@ -1384,6 +1743,15 @@ export function useMuseSessions(): UseMuseSessions {
           }
           return next;
         });
+        setConnectionBySession((cur) => {
+          const next = { ...cur };
+          for (const meta of restored) {
+            if (!tombstoned.current?.has(meta.session_id)) {
+              next[meta.session_id] = "connected";
+            }
+          }
+          return next;
+        });
         setActiveId((cur) => {
           if (cur !== null) return cur;
           return restored[0]?.session_id ?? null;
@@ -1432,11 +1800,24 @@ export function useMuseSessions(): UseMuseSessions {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollOnce]);
 
+  // Run the read-only first-launch probe whenever the selected workspace
+  // changes. It never blocks boot and intentionally does not surface a
+  // second global error when an older bundle does not expose the command.
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void probeStartup(workspace);
+  }, [probeStartup, workspace]);
+
   // Write-through persistence.
   useEffect(() => {
     if (!historyReady) return;
     saveSessions(sessions.map(({ running: _r, ...rest }) => rest));
   }, [sessions, historyReady]);
+
+  useEffect(() => {
+    if (!historyReady) return;
+    saveQueuedTurns(queuedTurnsBySession);
+  }, [queuedTurnsBySession, historyReady]);
 
   useEffect(() => {
     if (!historyReady) return;
@@ -1455,6 +1836,10 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveWorktrees(worktrees);
   }, [worktrees]);
+
+  useEffect(() => {
+    saveWorktreeCleanupIntents(cleanupIntents);
+  }, [cleanupIntents]);
 
   useEffect(() => {
     saveThreadProjects(threadProjects);
@@ -1480,6 +1865,10 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveNotifications(notifications);
   }, [notifications]);
+
+  useEffect(() => {
+    saveNotificationPreferences(notificationPreferences);
+  }, [notificationPreferences]);
 
   // M3-09: terminal scheduled runs become durable inbox notifications. The
   // first render only hydrates the seen set so a restart does not replay every
@@ -1520,9 +1909,9 @@ export function useMuseSessions(): UseMuseSessions {
     for (const item of notifications) {
       if (!item.unread || deliveredNotificationIds.current.has(item.id)) continue;
       deliveredNotificationIds.current.add(item.id);
-      deliverDesktopNotification(item);
+      if (!notificationPreferences.desktopMuted) void deliverDesktopNotification(item);
     }
-  }, [notifications]);
+  }, [notifications, notificationPreferences.desktopMuted]);
 
   // Approval and answerable-input prompts are attention notifications. They
   // are in-memory host state, so an app restart does not replay stale prompts.
@@ -1569,6 +1958,10 @@ export function useMuseSessions(): UseMuseSessions {
     return next;
   }, []);
 
+  const setNotificationsMuted = useCallback((muted: boolean): void => {
+    setNotificationPreferences({ desktopMuted: muted });
+  }, []);
+
   const markNotificationRead = useCallback((id: string): void => {
     setNotifications((cur) => markNotificationReadRow(cur, id));
   }, []);
@@ -1583,9 +1976,13 @@ export function useMuseSessions(): UseMuseSessions {
   reviewQueueRef.current = reviewQueue;
   const scheduleRunsRef = useRef(scheduleRuns);
   scheduleRunsRef.current = scheduleRuns;
+  const schedulerLeaseOwner = useRef(`scheduler-${newId()}`);
   const scheduledExecutorRef = useRef<((item: ReviewItem, run: ScheduleRun) => Promise<void>) | null>(null);
   useEffect(() => {
     const check = () => {
+      const owner = schedulerLeaseOwner.current;
+      if (!tryAcquireSchedulerLease(owner, Date.now())) return;
+      renewSchedulerLease(owner, Date.now());
       const res = enqueueDue(schedulesRef.current, reviewQueueRef.current, Date.now());
       if (res.added.length === 0) {
         // `skip` can consume missed cron slots without creating a run. Keep
@@ -1617,6 +2014,7 @@ export function useMuseSessions(): UseMuseSessions {
             ...(item.model ? { model: item.model } : {}),
             ...(item.authorizationMode ? { authorizationMode: item.authorizationMode } : {}),
             ...(item.missedPolicy ? { missedPolicy: item.missedPolicy } : {}),
+            ...(item.timeZone ? { timeZone: item.timeZone } : {}),
             occurrenceAt: item.occurrenceAt ?? item.createdAt,
             ...(item.occurrenceKey ? { occurrenceKey: item.occurrenceKey } : {}),
           }, Date.now());
@@ -1640,6 +2038,7 @@ export function useMuseSessions(): UseMuseSessions {
           ...(run.model ? { model: run.model } : {}),
           ...(run.authorizationMode ? { authorizationMode: run.authorizationMode } : {}),
           ...(run.missedPolicy ? { missedPolicy: run.missedPolicy } : {}),
+          ...(run.timeZone ? { timeZone: run.timeZone } : {}),
           occurrenceAt: run.occurrenceAt,
           ...(run.occurrenceKey ? { occurrenceKey: run.occurrenceKey } : {}),
           createdAt: run.createdAt,
@@ -1650,7 +2049,22 @@ export function useMuseSessions(): UseMuseSessions {
     };
     check();
     const timer = setInterval(check, 15000);
-    return () => clearInterval(timer);
+    // A suspended renderer can miss several interval ticks. Re-check as soon
+    // as the window becomes usable again so the persisted missed-run policy
+    // is applied promptly instead of waiting for the next 15 s tick.
+    const wake = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    window.addEventListener("focus", wake);
+    window.addEventListener("pageshow", wake);
+    document.addEventListener("visibilitychange", wake);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("pageshow", wake);
+      document.removeEventListener("visibilitychange", wake);
+      releaseSchedulerLease(schedulerLeaseOwner.current);
+    };
   }, []);
   // w-settings write-through persistence (best-effort, like the rest here).
   useEffect(() => {
@@ -1835,7 +2249,32 @@ export function useMuseSessions(): UseMuseSessions {
     setSessions((cur) => withUnreadFlag(cur, sessionId, true));
   }
 
-  function closeOpenBlocks(sessionId: string, itemId?: string): void {
+  const setConnectionState = useCallback(
+    (sessionId: string, state: SessionConnectionState): void => {
+      setConnectionBySession((cur) =>
+        cur[sessionId] === state ? cur : { ...cur, [sessionId]: state },
+      );
+    },
+    [],
+  );
+
+  const touchStreamActivity = useCallback(
+    (sessionId: string, kind: string, at = Date.now()): void => {
+      setStreamActivityBySession((cur) => {
+        const previous = cur[sessionId];
+        if (previous?.lastEventAt === at && previous.lastEventKind === kind) {
+          return cur;
+        }
+        return {
+          ...cur,
+          [sessionId]: { lastEventAt: at, lastEventKind: kind },
+        };
+      });
+    },
+    [],
+  );
+
+  function closeOpenBlocks(sessionId: string, itemId?: string, turnId?: string): void {
     setLogs((cur) => {
       const log = cur[sessionId];
       if (!log || !log.some((e) => e.open)) return cur;
@@ -1843,7 +2282,7 @@ export function useMuseSessions(): UseMuseSessions {
       // streaming into their own entries. Without one (turn end), close all.
       const next = log.map((e) =>
         e.open && (itemId === undefined || e.itemId === itemId)
-          ? { ...e, open: false }
+          ? { ...e, open: false, ...(turnId ? { turnId } : {}) }
           : e,
       );
       saveLog(sessionId, next);
@@ -1862,6 +2301,7 @@ export function useMuseSessions(): UseMuseSessions {
     itemId?: string,
     agentId?: string,
     role: "assistant" | "thinking" = "assistant",
+    turnId?: string,
   ): void {
     const stamp = { id: newId(), ts: Date.now() };
     setLogs((cur) => {
@@ -1869,6 +2309,7 @@ export function useMuseSessions(): UseMuseSessions {
         itemId,
         agentId,
         role,
+        turnId,
         stamp,
       });
       if (next === (cur[sessionId] ?? [])) return cur;
@@ -1889,21 +2330,56 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }
 
-  /** M3-08: promote an admitted scheduled turn when the host actually stops. */
-  function completeScheduleRunsForSession(sessionId: string): void {
+  function clearStopping(sessionId: string): void {
+    delete stoppingBySessionRef.current[sessionId];
+    setStoppingBySession((cur) => {
+      if (!(sessionId in cur)) return cur;
+      const next = { ...cur };
+      delete next[sessionId];
+      return next;
+    });
+  }
+
+  function markResumePending(sessionId: string, source: ResumePending["source"]): void {
+    setResumePendingBySession((cur) => ({
+      ...cur,
+      [sessionId]: { requestedAt: Date.now(), source },
+    }));
+    // A successful decision means the host accepted work again even when an
+    // older/reconnected session snapshot still says idle. Let the liveness
+    // row represent that bridge until the next terminal or progress event.
+    setSessions((cur) =>
+      cur.map((session) =>
+        session.session_id === sessionId ? { ...session, running: true } : session,
+      ),
+    );
+    setConnectionState(sessionId, "connected");
+  }
+
+  function clearResumePending(sessionId: string): void {
+    setResumePendingBySession((cur) => {
+      if (!(sessionId in cur)) return cur;
+      const next = { ...cur };
+      delete next[sessionId];
+      return next;
+    });
+  }
+
+  /** M3-08: settle an admitted scheduled turn when the host actually stops. */
+  function settleScheduleRunsForSession(
+    sessionId: string,
+    outcome: Parameters<typeof settleRunsForSession>[2],
+  ): void {
     const log = logsRef.current[sessionId] ?? [];
     const lastAssistant = [...log].reverse().find((entry) =>
       entry.role === "assistant" && entry.text.trim().length > 0,
     );
     const preview = lastAssistant?.text.trim().replace(/\s+/g, " ").slice(0, 320);
     setScheduleRuns((cur) => {
-      let next = cur;
-      for (const run of cur) {
-        if (run.sessionId === sessionId && run.status === "running") {
-          next = completeRun(next, run.id, Date.now(), preview);
-        }
-      }
-      return next;
+      return settleRunsForSession(cur, sessionId, {
+        ...outcome,
+        ...(outcome.status === "completed" && preview ? { resultPreview: preview } : {}),
+      }, Date.now());
     });
   }
 
@@ -1914,6 +2390,60 @@ export function useMuseSessions(): UseMuseSessions {
     // Deleted stays deleted: late in-flight events for a killed session are
     // dropped instead of resurrecting its row.
     if (tombstoned.current?.has(sid)) return;
+    if (kind === "workspace_changed") {
+      let changedPaths: string[] = [];
+      try {
+        const parsed = JSON.parse(payload) as { paths?: unknown };
+        if (Array.isArray(parsed.paths)) {
+          changedPaths = parsed.paths
+            .filter((path): path is string => typeof path === "string" && path.length > 0)
+            .slice(0, 20);
+        }
+      } catch {
+        // Keep the stale marker even when an older watcher emits no payload.
+      }
+      setFilesBySession((cur) => {
+        const previous = cur[sid] ?? emptyFilesBrowserState();
+        const nextPaths = [...previous.changedPaths, ...changedPaths]
+          .filter((path, index, all) => all.indexOf(path) === index)
+          .slice(0, 20);
+        return {
+          ...cur,
+          [sid]: { ...previous, stale: true, changedPaths: nextPaths },
+        };
+      });
+      return;
+    }
+    if (kind === "workspace_watch_error") {
+      setFilesBySession((cur) => ({
+        ...cur,
+        [sid]: {
+          ...(cur[sid] ?? emptyFilesBrowserState()),
+          error: `workspace watcher failed: ${payload}`,
+        },
+      }));
+      return;
+    }
+    // Keep this heartbeat independent from log timestamps: a host status
+    // event can prove progress even when it has no user-facing log line.
+    touchStreamActivity(sid, kind);
+    // A decision is an intentional gap in the host stream. Clear the bridge
+    // marker only when a real host progress/terminal signal arrives; the
+    // approval/input resolution itself is not enough to prove that the turn
+    // resumed and must remain visible to the user.
+    if (
+      kind === "output" ||
+      kind === "thinking" ||
+      kind === "subagent_event" ||
+      kind === "item_done" ||
+      isItemStartKind(kind) ||
+      isRunningKind(kind) ||
+      isStoppedKind(kind) ||
+      kind === "host_exited"
+    ) {
+      clearResumePending(sid);
+    }
+    if (kind !== "host_exited") setConnectionState(sid, "connected");
     if (
       activeId !== sid &&
       (kind === "output" ||
@@ -1926,7 +2456,11 @@ export function useMuseSessions(): UseMuseSessions {
     ) {
       markUnread(sid);
     }
-    if (kind === "host_exited") setConnectedIds((cur) => cur.filter((id) => id !== sid));
+    if (kind === "host_exited") {
+      setConnectedIds((cur) => cur.filter((id) => id !== sid));
+      setConnectionState(sid, "disconnected");
+      clearStopping(sid);
+    }
     if (kind === "output") {
       ensureSessionRow(sid, null);
       const { itemId, text } = parseChunk(payload);
@@ -2039,6 +2573,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "input_request") {
       ensureSessionRow(sid, null);
+      clearResumePending(sid);
       const req = parseInputRequest(sid, payload);
       if (req === null) {
         pushLog(sid, [
@@ -2086,13 +2621,15 @@ export function useMuseSessions(): UseMuseSessions {
       // Close exactly the completed item; other open blocks keep streaming.
       ensureSessionRow(sid, null);
       let itemId: string | undefined;
+      let turnId: string | undefined;
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         if (typeof obj.itemId === "string" && obj.itemId.length > 0) itemId = obj.itemId;
+        if (typeof obj.turnId === "string" && obj.turnId.length > 0) turnId = obj.turnId;
       } catch {
         // unparseable payload: close all, as before
       }
-      closeOpenBlocks(sid, itemId);
+      closeOpenBlocks(sid, itemId, turnId);
       // w-collab US-27: a turn end (item_done without item id) refreshes
       // the auto snapshot; per-item completions never do (no spam).
       if (itemId === undefined) refreshAutoShare(sid);
@@ -2100,6 +2637,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "tool_request") {
       ensureSessionRow(sid, null);
+      clearResumePending(sid);
       const req = parseApproval(sid, payload);
       // Compound shell commands reuse one approval id for every stage. An
       // updated tool_request replaces its choices and requirement while
@@ -2156,8 +2694,35 @@ export function useMuseSessions(): UseMuseSessions {
         cur[sid].usedTokens === usage.usedTokens &&
         cur[sid].windowTokens === usage.windowTokens
           ? cur
-          : { ...cur, [sid]: usage },
+          : {
+              ...cur,
+              [sid]: {
+                ...usage,
+                ...(cur[sid]?.tokenUsage ? { tokenUsage: cur[sid].tokenUsage } : {}),
+              },
+            },
       );
+      return;
+    }
+    // US-4 server half: host-reported token counters. Keep these separate
+    // from the context occupancy triple: the host is the source of truth and
+    // Muse never derives or persists provider totals locally.
+    if (kind === "token_usage") {
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(payload);
+      } catch {
+        return;
+      }
+      const tokenUsage = parseTokenUsage(parsed);
+      if (tokenUsage === null) return;
+      setUsageBySession((cur) => ({
+        ...cur,
+        [sid]: {
+          ...(cur[sid] ?? { pressure: "unknown", usedTokens: null, windowTokens: null }),
+          tokenUsage,
+        },
+      }));
       return;
     }
     if (kind === "approval_mode_changed") {
@@ -2182,12 +2747,14 @@ export function useMuseSessions(): UseMuseSessions {
     if (isItemStartKind(kind)) {
       ensureSessionRow(sid, null);
       let itemId: string | undefined;
+      let turnId: string | undefined;
       let agentId: string | undefined;
       let itemRole: "assistant" | "thinking" = "assistant";
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const rawId = obj.itemId ?? obj.id;
         if (typeof rawId === "string" && rawId.length > 0) itemId = rawId;
+        if (typeof obj.turnId === "string" && obj.turnId.length > 0) turnId = obj.turnId;
         const rawKind = obj.itemKind ?? obj.kind;
         if (typeof rawKind === "string") {
           if (isSubagentItemKind(rawKind)) {
@@ -2202,7 +2769,7 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
       );
-      ensurePlaceholder(sid, itemId, agentId, itemRole);
+      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId);
       return;
     }
     // status (and any future kinds): record + reflect liveness.
@@ -2212,12 +2779,39 @@ export function useMuseSessions(): UseMuseSessions {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         if (typeof obj.turnId === "string" && obj.turnId.length > 0) {
           turnIdsRef.current[sid] = obj.turnId;
+          setQueuedTurnsBySession((cur) => {
+            const queued = cur[sid];
+            if (!queued || !queued.some((turn) => turn.turn_id === obj.turnId)) return cur;
+            const next = { ...cur, [sid]: queued.filter((turn) => turn.turn_id !== obj.turnId) };
+            if (next[sid].length === 0) delete next[sid];
+            return next;
+          });
         }
       } catch {
         // Older supervisor builds may emit an empty started payload.
       }
     }
+    if (kind === "turn/unqueued") {
+      try {
+        const obj = JSON.parse(payload) as Record<string, unknown>;
+        const queuedTurnId = typeof obj.turnId === "string" ? obj.turnId : "";
+        if (queuedTurnId.length > 0) {
+          setQueuedTurnsBySession((cur) => {
+            const queued = cur[sid] ?? [];
+            const next = { ...cur, [sid]: queued.filter((turn) => turn.turn_id !== queuedTurnId) };
+            if (next[sid].length === 0) delete next[sid];
+            return next;
+          });
+        }
+      } catch {
+        // Keep the queue card until the explicit command result settles.
+      }
+    }
+    const completion = kind !== "host_exited" && isStoppedKind(kind)
+      ? parseTurnCompletion(kind, payload)
+      : null;
     if (isRunningKind(kind)) {
+      clearStopping(sid);
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
       );
@@ -2225,11 +2819,22 @@ export function useMuseSessions(): UseMuseSessions {
       // placeholder instead of closing it (US-10).
       ensurePlaceholder(sid);
     } else if (isStoppedKind(kind)) {
+      if (completion?.turnId !== undefined) {
+        // Older hosts may omit item/completed. Preserve the exact turn anchor
+        // on any remaining open lane before closing it.
+        closeOpenBlocks(sid, undefined, completion.turnId);
+      }
+      clearStopping(sid);
       delete turnIdsRef.current[sid];
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: false } : s)),
       );
-      completeScheduleRunsForSession(sid);
+      const failure = completion?.error;
+      settleScheduleRunsForSession(sid, failure
+        ? { status: "failed", error: failure.message, retryable: failure.retryable }
+        : kind === "host_exited"
+          ? { status: "failed", error: "host exited before the scheduled turn completed", retryable: false }
+          : { status: "completed" });
     }
     const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated" || kind === "approval_mode_changed";
     if (kind === "approval/resolved") {
@@ -2249,8 +2854,21 @@ export function useMuseSessions(): UseMuseSessions {
         // Legacy status payloads have no id; the click path still reconciles.
       }
     }
-    if (payload && !isApprovalStatus) {
-      pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text: `[${kind}] ${payload}` }]);
+    if (!isApprovalStatus) {
+      if (completion?.error !== null && completion?.error !== undefined) {
+        const failure: EngineErrorDetails = completion.error;
+        pushLog(sid, [{
+          id: newId(),
+          ts: Date.now(),
+          role: "system",
+          text: engineErrorSummary(failure),
+          engineError: failure,
+        }]);
+      } else if (completion === null && payload) {
+        // Preserve diagnostics for legacy/non-terminal status events while
+        // keeping ordinary completed/cancelled turns quiet in the transcript.
+        pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text: `[${kind}] ${payload}` }]);
+      }
     }
     // Closing a (re)start would kill the just-painted placeholder; only
     // settle blocks for turn-end statuses. Approval updates are protocol
@@ -2394,6 +3012,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   const removeWorktree = useCallback(
     async (sessionId: string, record: WorktreeRecord): Promise<boolean> => {
+      setCleanupIntents((current) => requestWorktreeCleanup(current, record));
       try {
         setError(null);
         await invoke("git_worktree_remove", {
@@ -2401,9 +3020,12 @@ export function useMuseSessions(): UseMuseSessions {
           path: record.path,
         });
         setWorktrees((current) => current.filter((item) => item.path !== record.path));
+        setCleanupIntents((current) => clearWorktreeCleanup(current, record));
         return true;
       } catch (e) {
-        setError(`worktree removal failed: ${e instanceof Error ? e.message : String(e)}`);
+        const detail = e instanceof Error ? e.message : String(e);
+        setCleanupIntents((current) => markWorktreeCleanupFailed(current, record, detail));
+        setError(`worktree removal failed: ${detail}`);
         return false;
       }
     },
@@ -2434,6 +3056,7 @@ export function useMuseSessions(): UseMuseSessions {
       sessionId: string,
       record: WorktreeRecord,
       command: string,
+      envAllowlist: string[],
     ): Promise<WorktreeSetupResult | null> => {
       const validation = validateSetupCommand(command);
       if (validation !== null) {
@@ -2442,14 +3065,61 @@ export function useMuseSessions(): UseMuseSessions {
       }
       try {
         setError(null);
-        return await invoke<WorktreeSetupResult>("worktree_setup_run", {
-          sessionId,
-          path: record.path,
-          command: command.trim(),
-        });
+        const operationId = newId();
+        const operationKey = `${sessionId}:${record.path}`;
+        setupOperationsRef.current.set(operationKey, operationId);
+        try {
+          return await invoke<WorktreeSetupResult>("worktree_setup_run", {
+            sessionId,
+            path: record.path,
+            command: command.trim(),
+            operationId,
+            envAllowlist,
+          });
+        } finally {
+          if (setupOperationsRef.current.get(operationKey) === operationId) {
+            setupOperationsRef.current.delete(operationKey);
+          }
+        }
       } catch (e) {
         setError(`worktree setup failed: ${e instanceof Error ? e.message : String(e)}`);
         return null;
+      }
+    },
+    [],
+  );
+
+  const checkWorktreeReadiness = useCallback(
+    async (
+      sessionId: string,
+      record: WorktreeRecord,
+    ): Promise<WorktreeReadiness | null> => {
+      try {
+        setError(null);
+        return await invoke<WorktreeReadiness>("worktree_setup_readiness", {
+          sessionId,
+          path: record.path,
+        });
+      } catch (e) {
+        setError(`worktree readiness failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
+
+  const cancelWorktreeSetup = useCallback(
+    async (sessionId: string, record: WorktreeRecord): Promise<boolean> => {
+      const operationId = setupOperationsRef.current.get(`${sessionId}:${record.path}`);
+      if (operationId === undefined) return false;
+      try {
+        return await invoke<boolean>("worktree_setup_cancel", {
+          sessionId,
+          operationId,
+        });
+      } catch (e) {
+        setError(`worktree setup cancellation failed: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
       }
     },
     [],
@@ -2489,6 +3159,7 @@ export function useMuseSessions(): UseMuseSessions {
         running: meta.running,
       };
       setConnectedIds((cur) => [...new Set([...cur, meta.session_id])]);
+      setConnectionState(meta.session_id, "connected");
       setSessions((cur) => [...cur, record]);
       setLogs((cur) => (cur[meta.session_id] ? cur : { ...cur, [meta.session_id]: [] }));
       setActiveId(meta.session_id);
@@ -2505,7 +3176,7 @@ export function useMuseSessions(): UseMuseSessions {
       return null;
     }
     },
-    [authorizationMode, setSessionModel, workspace],
+    [authorizationMode, setConnectionState, setSessionModel, workspace],
   );
 
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
@@ -2513,6 +3184,7 @@ export function useMuseSessions(): UseMuseSessions {
     const session = sessions.find((s) => s.session_id === id);
     if (!session || !isTauriRuntime()) return;
     setReconnectingId(id);
+    setConnectionState(id, "connecting");
     setError(null);
     try {
       const meta = await invoke<BackendSessionMeta>("resume_session", {
@@ -2525,16 +3197,62 @@ export function useMuseSessions(): UseMuseSessions {
         sessionId: id,
         mode: authorizationMode,
       });
+      // Cold reconnects can outlive the renderer's local log (for example
+      // after a storage reset or a crash during streaming). Reconcile the
+      // folded server history before enabling the composer again. The read is
+      // point-in-time and never re-emits pending requests; resume remains the
+      // sole path that re-attaches the live session and restarts polling.
+      try {
+        const history = await invoke<unknown>("read_session_history", {
+          sessionId: id,
+        });
+        const remote = historyItemsToLogEntries(extractHistoryItems(history));
+        if (remote.length > 0) {
+          const local = logsRef.current[id] ?? loadLog(id);
+          const merged = mergeHistoryLog(local, remote);
+          setLogs((cur) => ({ ...cur, [id]: merged }));
+          saveLog(id, merged);
+        }
+      } catch (historyError) {
+        // A resumed session remains usable when an older host does not
+        // implement inline history. Keep the local transcript and surface no
+        // second blocking error; reconnect already proved the durable id.
+        console.warn("session history hydration unavailable", historyError);
+      }
+      try {
+        const pending = await invoke<unknown>("list_pending_requests", {
+          sessionId: id,
+        });
+        if (typeof pending === "object" && pending !== null) {
+          const { approvals: nextApprovals, inputs: nextInputs } = parsePendingSnapshot(id, pending);
+          setApprovals((cur) => [
+            ...cur.filter((item) => item.session_id !== id),
+            ...nextApprovals,
+          ]);
+          setInputRequests((cur) => [
+            ...cur.filter((item) => item.session_id !== id),
+            ...nextInputs,
+          ]);
+        }
+      } catch (pendingError) {
+        // Resume still re-emits late-joiner requests on supported hosts. The
+        // pull path is an additive recovery for hosts that expose the method.
+        console.warn("pending request recovery unavailable", pendingError);
+      }
+      await reconcileQueueSnapshot(id);
       setConnectedIds((cur) => [...new Set([...cur, id])]);
+      setConnectionState(id, "connected");
+      clearStopping(id);
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
       kickPoll();
       await refreshModels(id);
     } catch (e) {
+      setConnectionState(id, "error");
       setError(`Reconnect failed: ${String(e)}. Your saved messages are still available.`);
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, sessions, kickPoll, refreshModels]);
+  }, [authorizationMode, sessions, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState]);
 
   const startSession = useCallback(async () => {
     return await startSessionRow(undefined, globalSettings);
@@ -2546,9 +3264,59 @@ export function useMuseSessions(): UseMuseSessions {
     [startSessionRow],
   );
 
+  const createWorktreeSession = useCallback(
+    async (
+      sessionId: string,
+      plan: WorktreePlan,
+      projectSettings?: ProjectSettings,
+    ): Promise<WorktreeRecord | null> => {
+      if (!isTauriRuntime()) {
+        setError("Worktree conversations require the Muse Desktop runtime.");
+        return null;
+      }
+      try {
+        setError(null);
+        const result = await invoke<BackendWorktreeSessionResult>("git_worktree_create_session", {
+          sessionId,
+          branch: plan.branch,
+          relativePath: plan.path,
+          baseRef: plan.base,
+          authorizationMode,
+        });
+        setWorktrees((current) => [
+          ...current.filter((record) => record.path !== result.worktree.path),
+          result.worktree,
+        ]);
+        const meta = result.session;
+        const record: MuseSession = {
+          session_id: meta.session_id,
+          workspace: meta.workspace,
+          title: `Session ${meta.session_id.slice(0, 8)}`,
+          createdAt: Date.now(),
+          running: meta.running,
+        };
+        setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
+        setConnectionState(meta.session_id, "connected");
+        setSessions((current) => [
+          ...current.filter((session) => session.session_id !== meta.session_id),
+          record,
+        ]);
+        setLogs((current) => (current[meta.session_id] ? current : { ...current, [meta.session_id]: [] }));
+        setActiveId(meta.session_id);
+        const modelId = projectSettings?.model.trim();
+        if (modelId && modelId !== "default") await setSessionModel(meta.session_id, modelId);
+        return result.worktree;
+      } catch (e) {
+        setError(`worktree conversation failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [authorizationMode, setConnectionState, setSessionModel],
+  );
+
   const [forkingId, setForkingId] = useState<string | null>(null);
   const forkSession = useCallback(
-    async (sourceId: string): Promise<string | null> => {
+    async (sourceId: string, lastTurnId?: string): Promise<string | null> => {
       if (!isTauriRuntime() || forkingId !== null) return null;
       const source = sessions.find((session) => session.session_id === sourceId);
       if (!source) {
@@ -2560,6 +3328,7 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         const meta = await invoke<BackendSessionMeta>("fork_session", {
           sessionId: sourceId,
+          lastTurnId: lastTurnId?.trim() || null,
         });
         if (tombstoned.current?.has(meta.session_id)) {
           setError("The fork was created but is no longer available.");
@@ -2579,6 +3348,7 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
+        setConnectionState(meta.session_id, "connected");
         setSessions((current) => [
           ...current.filter((session) => session.session_id !== meta.session_id),
           record,
@@ -2594,7 +3364,7 @@ export function useMuseSessions(): UseMuseSessions {
         setForkingId(null);
       }
     },
-    [forkingId, sessions],
+    [forkingId, sessions, setConnectionState],
   );
 
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
@@ -2611,25 +3381,181 @@ export function useMuseSessions(): UseMuseSessions {
     setConnectors(r.registry);
   }, []);
 
-  const uninstallConnectorById = useCallback((id: string): void => {
-    setConnectors((cur) => uninstallConnector(cur, id).registry);
+  const disconnectRemoteMcp = useCallback((id: string): void => {
+    delete remoteSessionsRef.current[id];
+    setRemoteConnectedIds((current) => current.filter((item) => item !== id));
+    setConnectors((current) => current.map((entry) => {
+      if (entry.id !== id || entry.kind !== "remote") return entry;
+      return {
+        ...entry,
+        status: "error",
+        guardMessage: "Disconnected. Connect again to verify the remote endpoint.",
+      };
+    }));
   }, []);
+
+  const uninstallConnectorById = useCallback(async (id: string): Promise<void> => {
+    if (mcpRunningIds.includes(id)) {
+      try {
+        await invoke<boolean>("mcp_local_stop", { connectorId: id });
+        setMcpRunningIds((current) => current.filter((item) => item !== id));
+      } catch (e) {
+        setError(`cannot remove running MCP connector: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+    }
+    if (remoteConnectedIds.includes(id)) disconnectRemoteMcp(id);
+    setConnectors((cur) => uninstallConnector(cur, id).registry);
+  }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
 
   const setConnectorEnabledById = useCallback((id: string, enabled: boolean): void => {
     setConnectors((cur) => setConnectorEnabled(cur, id, enabled).registry);
-  }, []);
-
-  const addRemoteConnector = useCallback((name: string, url: string): boolean => {
-    const id = `remote-${name.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
-    const r = requestRemoteConnector(connectorsRef.current, { id, name, url });
-    if (!r.ok) {
-      setRemoteNotice(r.message);
-      return false;
+    if (!enabled && mcpRunningIds.includes(id)) {
+      // Disabling a connector must release its native child as well. The
+      // registry remains the SSOT for availability; a failed stop is exposed
+      // as an error so the user can retry explicitly.
+      void invoke<boolean>("mcp_local_stop", { connectorId: id })
+        .then((stopped) => {
+          if (stopped) setMcpRunningIds((current) => current.filter((item) => item !== id));
+        })
+        .catch((e) => {
+          setError(`local MCP disable failed to stop server: ${e instanceof Error ? e.message : String(e)}`);
+        });
     }
-    setRemoteNotice(null);
-    setConnectors(r.registry);
-    return true;
-  }, []);
+    if (!enabled && remoteConnectedIds.includes(id)) disconnectRemoteMcp(id);
+  }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
+
+  const probeRemoteMcp = useCallback(
+    async (
+      name: string,
+      url: string,
+      token = "",
+    ): Promise<RemoteMcpProbeResult | null> => {
+      const trimmedName = name.trim();
+      const endpoint = url.trim();
+      const id = `remote-${trimmedName.toLowerCase().replace(/[\s_]+/g, "-")}`;
+      if (!trimmedName || !endpoint) {
+        setRemoteNotice("Remote connector name and URL are required.");
+        return null;
+      }
+      const existing = findConnector(connectorsRef.current, id);
+      if (existing?.kind !== "remote") {
+        const guard = requestRemoteConnector(connectorsRef.current, { id, name: trimmedName, url: endpoint });
+        if (!guard.ok) {
+          setRemoteNotice(guard.message);
+          return null;
+        }
+      }
+      setRemoteNotice(null);
+      try {
+        const result = await probeRemoteMcpTransport(endpoint, token);
+        const registered = registerRemoteConnector(connectorsRef.current, {
+          id,
+          name: trimmedName,
+          url: endpoint,
+          tools: result.tools,
+          protocolVersion: result.protocolVersion,
+          serverVersion: result.serverVersion,
+        });
+        if (registered === null) {
+          setRemoteNotice("Remote MCP returned an invalid tool catalogue.");
+          return null;
+        }
+        remoteSessionsRef.current[id] = {
+          url: endpoint,
+          token,
+          sessionId: result.sessionId,
+          protocolVersion: result.protocolVersion,
+          nextRequestId: 3,
+        };
+        setConnectors(registered.registry);
+        setRemoteConnectedIds((current) => [...new Set([...current, id])]);
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setRemoteNotice(message);
+        setConnectors((current) => current.map((entry) =>
+          entry.id === id && entry.kind === "remote"
+            ? { ...entry, status: "error", guardMessage: message }
+            : entry,
+        ));
+        return null;
+      }
+    },
+    [],
+  );
+
+  const callRemoteMcp = useCallback(
+    async (
+      id: string,
+      toolName: string,
+      argumentsText: string,
+    ): Promise<RemoteMcpCallResult | null> => {
+      const session = remoteSessionsRef.current[id];
+      if (!session) {
+        setRemoteNotice("Remote connector is disconnected. Connect it before calling a tool.");
+        return null;
+      }
+      let args: unknown = {};
+      if (argumentsText.trim()) {
+        try {
+          args = JSON.parse(argumentsText);
+        } catch {
+          setRemoteNotice("Remote tool arguments must be valid JSON.");
+          return null;
+        }
+      }
+      try {
+        const result = await callRemoteMcpTransport(session, toolName, args);
+        setRemoteNotice(null);
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (isRemoteMcpAuthenticationError(message) && session.token.trim()) {
+          // A 401/403 can mean that only the MCP session expired. Re-run the
+          // initialize/tools-list handshake once with the in-memory bearer
+          // token, then retry the call exactly once. Network timeouts and
+          // ambiguous tool outcomes remain non-retryable.
+          const entry = findConnector(connectorsRef.current, id);
+          const name = entry?.kind === "remote" ? entry.name : id.replace(/^remote-/, "");
+          try {
+            const refreshed = await probeRemoteMcpTransport(session.url, session.token);
+            const registered = registerRemoteConnector(connectorsRef.current, {
+              id,
+              name,
+              url: session.url,
+              tools: refreshed.tools,
+              protocolVersion: refreshed.protocolVersion,
+              serverVersion: refreshed.serverVersion,
+            });
+            if (registered !== null) {
+              const nextSession: RemoteMcpSession = {
+                url: session.url,
+                token: session.token,
+                sessionId: refreshed.sessionId,
+                protocolVersion: refreshed.protocolVersion,
+                nextRequestId: 3,
+              };
+              remoteSessionsRef.current[id] = nextSession;
+              setConnectors(registered.registry);
+              setRemoteConnectedIds((current) => [...new Set([...current, id])]);
+              const retried = await callRemoteMcpTransport(nextSession, toolName, args);
+              setRemoteNotice(null);
+              return retried;
+            }
+          } catch {
+            // Fall through to the normal disconnected state below. The
+            // original failure remains actionable without hiding it behind a
+            // second retry loop.
+          }
+        }
+        setRemoteNotice(message);
+        disconnectRemoteMcp(id);
+        return null;
+      }
+    },
+    [connectorsRef, disconnectRemoteMcp],
+  );
 
   const setSkillEnabledByName = useCallback((name: string, enabled: boolean): void => {
     setSkills((cur) => setSkillEnabled(cur, name, enabled).skills);
@@ -2848,6 +3774,7 @@ export function useMuseSessions(): UseMuseSessions {
         // US-10: reflexive indicator synchronously (<200ms), before the first
         // delta or even `item/started` can arrive. The first chunk coalesces
         // into this entry, so no catch-up burst ever paints.
+        touchStreamActivity(sessionId, "client/send");
         ensurePlaceholder(sessionId);
         setSessions((cur) =>
           cur.map((s) =>
@@ -2884,6 +3811,19 @@ export function useMuseSessions(): UseMuseSessions {
           if (typeof ack === "object" && ack !== null) {
             const admission = ack as { disposition?: unknown; turnId?: unknown };
             if (admission.disposition === "queued") {
+              if (typeof admission.turnId === "string" && admission.turnId.length > 0) {
+                const queued: QueuedTurn = {
+                  session_id: sessionId,
+                  turn_id: admission.turnId,
+                  text: originalText,
+                  createdAt: Date.now(),
+                  recovered: false,
+                };
+                setQueuedTurnsBySession((cur) => ({
+                  ...cur,
+                  [sessionId]: [...(cur[sessionId] ?? []).filter((turn) => turn.turn_id !== queued.turn_id), queued],
+                }));
+              }
               pushLog(sessionId, [
                 {
                   id: newId(),
@@ -2942,7 +3882,7 @@ export function useMuseSessions(): UseMuseSessions {
         }
       }
     },
-    [kickPoll, doCompact, workspace],
+    [kickPoll, doCompact, touchStreamActivity, workspace],
   );
 
   const steerInput = useCallback(
@@ -2990,6 +3930,7 @@ export function useMuseSessions(): UseMuseSessions {
         pushLog(sessionId, [
           { id: newId(), ts: Date.now(), role: "system", text: "Guidance accepted by the current turn." },
         ]);
+        touchStreamActivity(sessionId, "client/steer");
         kickPoll();
         return sendAccepted(clientMessageId);
       } catch (error) {
@@ -2998,7 +3939,7 @@ export function useMuseSessions(): UseMuseSessions {
         return sendFailed(clientMessageId, `turn/steer failed: ${message}`);
       }
     },
-    [kickPoll],
+    [kickPoll, touchStreamActivity],
   );
 
   const retrySend = useCallback(
@@ -3058,6 +3999,24 @@ export function useMuseSessions(): UseMuseSessions {
         entry.clientMessageId,
         entry.inputParts,
       );
+    },
+    [sendInput],
+  );
+
+  const retryFailedTurn = useCallback(
+    async (sessionId: string, failureEntryId: string): Promise<void> => {
+      const log = logsRef.current[sessionId] ?? loadLog(sessionId);
+      const prompt = findRetryPrompt(log, failureEntryId);
+      if (prompt === null) {
+        setError("retry failed: the original user message is no longer available");
+        return;
+      }
+      if (inFlightSends.current.has(sessionId)) {
+        setError("the previous send is still pending; wait for it to settle before retrying");
+        return;
+      }
+      const result = await sendInput(sessionId, prompt);
+      if (!result.ok) setError(result.error ?? "retry failed");
     },
     [sendInput],
   );
@@ -3286,7 +4245,9 @@ export function useMuseSessions(): UseMuseSessions {
         }
         // The turn resumes after a decision: drain now, don't wait a tick.
         // US-10: reflexive placeholder synchronously, same as after send.
+        touchStreamActivity(sessionId, "client/approval");
         ensurePlaceholder(sessionId);
+        markResumePending(sessionId, "approval");
         kickPoll();
         return true;
       } catch (e) {
@@ -3294,7 +4255,7 @@ export function useMuseSessions(): UseMuseSessions {
         return false;
       }
     },
-    [kickPoll],
+    [kickPoll, touchStreamActivity],
   );
 
   // Balanced mode removes repetitive prompts for local workspace actions;
@@ -3395,26 +4356,55 @@ export function useMuseSessions(): UseMuseSessions {
   }, []);
 
   const cancelSession = useCallback(async (sessionId: string) => {
+    if (stoppingBySessionRef.current[sessionId]) return;
+    stoppingBySessionRef.current[sessionId] = true;
+    setStoppingBySession((cur) => ({ ...cur, [sessionId]: true }));
     try {
       setError(null);
       await invoke("cancel_session", { sessionId });
-      setSessions((cur) =>
-        cur.map((s) => (s.session_id === sessionId ? { ...s, running: false } : s)),
-      );
-      closeOpenBlocks(sessionId);
-      pushLog(sessionId, [
-        { id: newId(), ts: Date.now(), role: "system", text: "Session cancelled." },
-      ]);
+      // The host owns the terminal state. Poll immediately so a queued
+      // stopped event is reflected without waiting for the slow tick, while
+      // preserving the open transcript until that event is observed.
+      kickPoll();
     } catch (e) {
+      clearStopping(sessionId);
       setError(`cancel_session failed: ${String(e)}`);
     }
+  }, [kickPoll]);
+
+  const unqueueTurn = useCallback(async (sessionId: string, turnId: string): Promise<boolean> => {
+    try {
+      setError(null);
+      await invoke("unqueue_turn", { sessionId, turnId });
+      setQueuedTurnsBySession((cur) => {
+        const queued = cur[sessionId] ?? [];
+        const next = { ...cur, [sessionId]: queued.filter((turn) => turn.turn_id !== turnId) };
+        if (next[sessionId].length === 0) delete next[sessionId];
+        return next;
+      });
+      kickPoll();
+      return true;
+    } catch (e) {
+      setError(`turn/unqueue failed: ${String(e)}`);
+      return false;
+    }
+  }, [kickPoll]);
+
+  const dismissQueuedTurn = useCallback((sessionId: string, turnId: string): void => {
+    setQueuedTurnsBySession((cur) => {
+      const queued = cur[sessionId] ?? [];
+      const next = { ...cur, [sessionId]: queued.filter((turn) => turn.turn_id !== turnId) };
+      if (next[sessionId].length === 0) delete next[sessionId];
+      return next;
+    });
   }, []);
 
   const killSession = useCallback(
     async (sessionId: string) => {
       try {
         setError(null);
-        await invoke("kill_session", { sessionId });
+      await invoke("kill_session", { sessionId });
+      clearStopping(sessionId);
       } catch (e) {
         setError(`kill_session failed: ${String(e)}`);
         return;
@@ -3422,6 +4412,19 @@ export function useMuseSessions(): UseMuseSessions {
       if (tombstoned.current === null) tombstoned.current = new Set();
       tombstoned.current.add(sessionId);
       saveTombstones([...tombstoned.current]);
+      setConnectionBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
+      setStreamActivityBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
+      setConnectedIds((cur) => cur.filter((id) => id !== sessionId));
       setSessions((cur) => cur.filter((s) => s.session_id !== sessionId));
       setLogs((cur) => {
         const next = { ...cur };
@@ -3439,6 +4442,12 @@ export function useMuseSessions(): UseMuseSessions {
       });
       setApprovals((cur) => cur.filter((a) => a.session_id !== sessionId));
       setInputRequests((cur) => cur.filter((r) => r.session_id !== sessionId));
+      setQueuedTurnsBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       // US-4: a killed thread takes its summary with it.
       // US-12 + US-21: and its artifacts.
       dropSummary(sessionId);
@@ -3581,13 +4590,19 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const registerLocalConnectorByProbe = useCallback(
-    (name: string, command: string, tools: ConnectorTool[]): boolean => {
-      const id = `local-mcp-${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    (
+      name: string,
+      command: string,
+      tools: ConnectorTool[],
+      serverVersion?: string,
+    ): boolean => {
+      const id = localConnectorIdForName(name);
       const result = registerLocalConnector(connectorsRef.current, {
         id,
         name,
         command,
         tools,
+        serverVersion,
       });
       if (result === null) {
         setError("local MCP connector could not be saved: name, command and tools are required");
@@ -3745,6 +4760,189 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [activeId, authorizationMode, globalSettings, sendInput, sessions, setSessionModel, startSessionRow],
   );
+
+  const prepareBrowserContext = useCallback(
+    (sessionId: string, context: string): boolean => {
+      const target = sessions.find((session) => session.session_id === sessionId);
+      const text = context.trim();
+      if (target === undefined || text.length === 0) {
+        setError("browser context unavailable: open a conversation before inserting it");
+        return false;
+      }
+      setPrefill((current) => (current ? `${current}\n\n${text}` : text));
+      return true;
+    },
+    [sessions],
+  );
+
+  const applyPersistentMcpProbe = useCallback(
+    (id: string, result: LocalMcpProbeResult): boolean => {
+      const updated = refreshLocalConnector(
+        connectorsRef.current,
+        id,
+        result.tools,
+        Date.now(),
+        result.serverVersion,
+      );
+      if (updated === null) {
+        setError("local MCP probe returned no valid tools");
+        return false;
+      }
+      setConnectors(updated.registry);
+      return true;
+    },
+    [],
+  );
+
+  const rollbackLocalMcp = useCallback((id: string): boolean => {
+    const result = rollbackLocalConnector(connectorsRef.current, id);
+    if (result === null) {
+      setError("local MCP rollback is unavailable for this connector");
+      return false;
+    }
+    setConnectors(result.registry);
+    return true;
+  }, []);
+
+  // MCP servers may announce a changed tool catalog while idle. Polling only
+  // asks the native registry to drain queued notifications; it performs no
+  // work unless `notifications/tools/list_changed` was observed. This keeps
+  // the connector registry as the SSOT while avoiding an always-on process
+  // or a second client-side tools cache.
+  useEffect(() => {
+    if (!isTauriRuntime() || mcpRunningIds.length === 0) return;
+    let disposed = false;
+    const poll = async () => {
+      if (disposed || mcpPollBusyRef.current) return;
+      mcpPollBusyRef.current = true;
+      try {
+        for (const id of mcpRunningIds) {
+          const entry = findConnector(connectorsRef.current, id);
+          if (entry === null || entry.kind !== "local") continue;
+          try {
+            const result = await invoke<LocalMcpProbeResult | null>("mcp_local_poll", {
+              connectorId: id,
+            });
+            if (!disposed && result !== null) applyPersistentMcpProbe(id, result);
+          } catch (e) {
+            if (!disposed) {
+              setMcpRunningIds((current) => current.filter((item) => item !== id));
+              setError(`local MCP notification refresh failed: ${e instanceof Error ? e.message : String(e)}`);
+            }
+          }
+        }
+      } finally {
+        mcpPollBusyRef.current = false;
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 5000);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [applyPersistentMcpProbe, mcpRunningIds]);
+
+  const startLocalMcp = useCallback(
+    async (
+      id: string,
+      workspacePath?: string | null,
+    ): Promise<LocalMcpProbeResult | null> => {
+      const entry = findConnector(connectorsRef.current, id);
+      if (entry === null || entry.kind !== "local" || !entry.command) {
+        setError("local MCP start requires a configured command");
+        return null;
+      }
+      try {
+        const result = await invoke<LocalMcpProbeResult>("mcp_local_start", {
+          connectorId: id,
+          command: entry.command,
+          workspace: workspacePath?.trim() || null,
+        });
+        setMcpRunningIds((current) =>
+          current.includes(id) ? current : [...current, id],
+        );
+        applyPersistentMcpProbe(id, result);
+        return result;
+      } catch (e) {
+        setMcpRunningIds((current) => current.filter((item) => item !== id));
+        setError(`local MCP start failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [applyPersistentMcpProbe],
+  );
+
+  const refreshLocalMcp = useCallback(
+    async (
+      id: string,
+      workspacePath?: string | null,
+    ): Promise<LocalMcpProbeResult | null> => {
+      const entry = findConnector(connectorsRef.current, id);
+      if (entry === null || entry.kind !== "local" || !entry.command) {
+        setError("local MCP refresh requires a configured command");
+        return null;
+      }
+      try {
+        const result = await invoke<LocalMcpProbeResult>("mcp_local_refresh", {
+          connectorId: id,
+          command: entry.command,
+          workspace: workspacePath?.trim() || null,
+        });
+        setMcpRunningIds((current) =>
+          current.includes(id) ? current : [...current, id],
+        );
+        applyPersistentMcpProbe(id, result);
+        return result;
+      } catch (e) {
+        setMcpRunningIds((current) => current.filter((item) => item !== id));
+        setError(`local MCP refresh failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [applyPersistentMcpProbe],
+  );
+
+  const stopLocalMcp = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const stopped = await invoke<boolean>("mcp_local_stop", { connectorId: id });
+      if (stopped) {
+        setMcpRunningIds((current) => current.filter((item) => item !== id));
+      }
+      return stopped;
+    } catch (e) {
+      setError(`local MCP stop failed: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
+  }, []);
+
+  const callRegisteredLocalMcp = useCallback(
+    async (
+      id: string,
+      toolName: string,
+      argumentsText: string,
+    ): Promise<LocalMcpCallResult | null> => {
+      let argumentsValue: unknown = {};
+      try {
+        argumentsValue = argumentsText.trim() ? JSON.parse(argumentsText) : {};
+      } catch {
+        setError("local MCP call failed: arguments must be valid JSON");
+        return null;
+      }
+      try {
+        return await invoke<LocalMcpCallResult>("mcp_local_call_persistent", {
+          connectorId: id,
+          toolName: toolName.trim(),
+          arguments: argumentsValue,
+        });
+      } catch (e) {
+        setMcpRunningIds((current) => current.filter((item) => item !== id));
+        setError(`local MCP persistent call failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
   scheduledExecutorRef.current = async (item, run) => {
     await executeReviewItem(item, run);
   };
@@ -3795,6 +4993,7 @@ export function useMuseSessions(): UseMuseSessions {
       ...(item.model ? { model: item.model } : {}),
       ...(item.authorizationMode ? { authorizationMode: item.authorizationMode } : {}),
       ...(item.missedPolicy ? { missedPolicy: item.missedPolicy } : {}),
+      ...(item.timeZone ? { timeZone: item.timeZone } : {}),
       occurrenceAt: item.occurrenceAt ?? item.createdAt,
       ...(item.occurrenceKey ? { occurrenceKey: item.occurrenceKey } : {}),
     }, Date.now());
@@ -3830,6 +5029,14 @@ export function useMuseSessions(): UseMuseSessions {
 
   const markScheduleRunRead = useCallback((id: string): void => {
     setScheduleRuns((cur) => markRunRead(cur, id));
+  }, []);
+
+  const setScheduleRunArchived = useCallback((id: string, archived: boolean): void => {
+    setScheduleRuns((cur) => archived ? archiveRun(cur, id) : restoreRun(cur, id));
+  }, []);
+
+  const retryScheduleRunNow = useCallback((id: string): void => {
+    setScheduleRuns((cur) => retryRunNow(cur, id, Date.now()));
   }, []);
   // w-collab US-27: explicit share / un-share + mode toggle. Manual mode
   // shares only here; auto additionally refreshes on turn end (see
@@ -3956,13 +5163,15 @@ export function useMuseSessions(): UseMuseSessions {
         // resumes. On error (-32057) the panel stays for a corrected answer.
         // Drain now so the resumed turn paints from its first tokens.
         // US-10: reflexive placeholder synchronously, same as after send.
+        touchStreamActivity(sessionId, "client/input");
         ensurePlaceholder(sessionId);
+        markResumePending(sessionId, "input");
         kickPoll();
       } catch (e) {
         setError(`answer_input failed: ${String(e)}`);
       }
     },
-    [kickPoll],
+    [kickPoll, touchStreamActivity],
   );
 
   const cancelInput = useCallback(async (sessionId: string, inputId: string) => {
@@ -4220,6 +5429,55 @@ export function useMuseSessions(): UseMuseSessions {
           sessionId,
           paths,
           scope,
+          expectedHead: expected.head,
+          expectedStatus: expected.statusFingerprint,
+          expectedPatch: expected.patch,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            status,
+            diff: null,
+            loading: false,
+            error: null,
+          },
+        }));
+        return status;
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+        return null;
+      }
+    },
+    [beginGitRequest],
+  );
+
+  const applyGitHunk = useCallback(
+    async (
+      sessionId: string,
+      path: string,
+      scope: "staged" | "unstaged",
+      action: "stage" | "unstage" | "discard",
+      hunkHeader: string,
+      expected: GitMutationExpectation,
+    ): Promise<GitStatusSnapshot | null> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const status = await invoke<GitStatusSnapshot>("git_apply_hunk", {
+          sessionId,
+          path,
+          scope,
+          action,
+          hunkHeader,
           expectedHead: expected.head,
           expectedStatus: expected.statusFingerprint,
           expectedPatch: expected.patch,
@@ -4527,6 +5785,8 @@ export function useMuseSessions(): UseMuseSessions {
             loading: false,
             error: null,
             observedAt: result.observedAt,
+            stale: false,
+            changedPaths: [],
           },
         }));
       } catch (e) {
@@ -4539,6 +5799,33 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [],
   );
+
+  const watchWorkspaceFiles = useCallback(async (sessionId: string): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    try {
+      await invoke("files_watch", { sessionId });
+    } catch (e) {
+      // A watcher is an enhancement over the explicit Refresh action. Keep
+      // the Files surface usable when an older/native host lacks the command.
+      setFilesBySession((cur) => ({
+        ...cur,
+        [sessionId]: {
+          ...(cur[sessionId] ?? emptyFilesBrowserState()),
+          error: `workspace watcher unavailable: ${String(e)}`,
+        },
+      }));
+    }
+  }, []);
+
+  const unwatchWorkspaceFiles = useCallback(async (sessionId: string): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    try {
+      await invoke("files_unwatch", { sessionId });
+    } catch {
+      // Teardown is best effort; dropping the native registration is safe
+      // even when the renderer is already closing.
+    }
+  }, []);
 
   const readWorkspaceFile = useCallback(
     async (sessionId: string, path: string): Promise<void> => {
@@ -4562,13 +5849,19 @@ export function useMuseSessions(): UseMuseSessions {
         if (filesRequestSeq.current[sessionId] !== request) return;
         setFilesBySession((cur) => ({
           ...cur,
-          [sessionId]: {
-            ...(cur[sessionId] ?? emptyFilesBrowserState()),
-            selectedPath: path,
-            preview,
-            loading: false,
-            error: null,
-          },
+          [sessionId]: (() => {
+            const previous = cur[sessionId] ?? emptyFilesBrowserState();
+            const changedPaths = previous.changedPaths.filter((changedPath) => changedPath !== path);
+            return {
+              ...previous,
+              selectedPath: path,
+              preview,
+              loading: false,
+              error: null,
+              stale: changedPaths.length > 0,
+              changedPaths,
+            };
+          })(),
         }));
       } catch (e) {
         if (filesRequestSeq.current[sessionId] !== request) return;
@@ -4581,6 +5874,43 @@ export function useMuseSessions(): UseMuseSessions {
             error: String(e),
           },
         }));
+      }
+    },
+    [],
+  );
+
+  const prepareWorkspaceFileContext = useCallback(
+    (sessionId: string): boolean => {
+      const preview = filesBySession[sessionId]?.preview;
+      if (preview === undefined || preview === null) {
+        setError("file context unavailable: select a text file first");
+        return false;
+      }
+      if (preview.binary || preview.content === null) {
+        setError("file context unavailable: this file has no text preview");
+        return false;
+      }
+      const context = formatWorkspaceFileContext(preview);
+      if (context.length === 0) {
+        setError("file context unavailable: the file preview is empty");
+        return false;
+      }
+      setPrefill((current) => (current ? `${current}\n${context}` : context));
+      return true;
+    },
+    [filesBySession],
+  );
+
+  const openWorkspacePath = useCallback(
+    async (sessionId: string, path: string): Promise<void> => {
+      if (!isTauriRuntime()) {
+        setError("Opening workspace files requires the Muse Desktop runtime.");
+        return;
+      }
+      try {
+        await invoke("file_open", { sessionId, path });
+      } catch (e) {
+        setError(`file_open failed: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
     [],
@@ -4613,6 +5943,16 @@ export function useMuseSessions(): UseMuseSessions {
   runningRef.current = sessions.some((s) => s.running);
   // Latest event handler for the render-detached poll drain.
   handleEventRef.current = handleEvent;
+  const activeQueuedTurns = activeId === null ? [] : (queuedTurnsBySession[activeId] ?? []);
+  const activeStreamActivity = activeId === null
+    ? null
+    : (streamActivityBySession[activeId] ?? null);
+  const activeResumePending = activeId === null
+    ? null
+    : (resumePendingBySession[activeId] ?? null);
+  const activeConnectionState = activeId === null
+    ? "disconnected"
+    : (connectionBySession[activeId] ?? "disconnected");
 
   return {
     sessions,
@@ -4621,6 +5961,14 @@ export function useMuseSessions(): UseMuseSessions {
     activeLog,
     approvals,
     activeApprovals,
+    streamActivityBySession,
+    activeStreamActivity,
+    resumePendingBySession,
+    activeResumePending,
+    stoppingBySession,
+    connectionBySession,
+    activeConnectionState,
+    queuedTurns: activeQueuedTurns,
     inputRequests,
     activeInputRequests,
     workspace,
@@ -4639,10 +5987,14 @@ export function useMuseSessions(): UseMuseSessions {
     setSessionModel,
     checkPathScope,
     createWorktree,
+    createWorktreeSession,
     worktrees,
+    cleanupIntents,
     removeWorktree,
     inspectWorktree,
+    checkWorktreeReadiness,
     runWorktreeSetup,
+    cancelWorktreeSetup,
     startSession,
     startSessionInWorkspace,
     forkSession,
@@ -4651,8 +6003,10 @@ export function useMuseSessions(): UseMuseSessions {
     connectedIds,
     sendInput,
     steerInput,
+    unqueueTurn,
     pendingSends,
     retrySend,
+    retryFailedTurn,
     discardSend,
     approve,
     allowlist,
@@ -4662,6 +6016,7 @@ export function useMuseSessions(): UseMuseSessions {
     setAllowRuleDecision: setAllowRuleDecisionCb,
     browserAnnotations,
     addBrowserAnnotation: addBrowserAnnotationCb,
+    prepareBrowserContext,
     removeBrowserAnnotation: removeBrowserAnnotationCb,
     browserPermissions,
     setBrowserAppPermission: setBrowserAppPermissionCb,
@@ -4691,8 +6046,10 @@ export function useMuseSessions(): UseMuseSessions {
     scheduleRuns,
     notifications,
     notificationPermission: notificationPermissionState,
+    notificationsMuted: notificationPreferences.desktopMuted,
     unreadNotificationCount: countUnreadNotifications(notifications),
     enableNotifications,
+    setNotificationsMuted,
     markNotificationRead,
     createSchedule: createScheduleCb,
     setScheduleEnabled: setScheduleEnabledCb,
@@ -4700,6 +6057,8 @@ export function useMuseSessions(): UseMuseSessions {
     runScheduleNow,
     cancelScheduleRun,
     markScheduleRunRead,
+    setScheduleRunArchived,
+    retryScheduleRunNow,
     approveReview: approveReviewCb,
     discardReview: discardReviewCb,
     shareMode: shareState.mode,
@@ -4728,11 +6087,20 @@ export function useMuseSessions(): UseMuseSessions {
     probeLocalMcp,
     callLocalMcp,
     registerLocalConnector: registerLocalConnectorByProbe,
+    refreshLocalMcp,
+    rollbackLocalMcp,
+    mcpRunningIds,
+    startLocalMcp,
+    stopLocalMcp,
+    callRegisteredLocalMcp,
+    remoteConnectedIds,
+    probeRemoteMcp,
+    callRemoteMcp,
+    disconnectRemoteMcp,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
     setConnectorEnabledById,
-    addRemoteConnector,
     skills,
     setSkillEnabledByName,
     traceSkillSuggestions,
@@ -4754,6 +6122,7 @@ export function useMuseSessions(): UseMuseSessions {
     loadGitDiff,
     stageGitFiles,
     restoreGitFiles,
+    applyGitHunk,
     commitGit,
     pushGit,
     createGitPr,
@@ -4765,9 +6134,16 @@ export function useMuseSessions(): UseMuseSessions {
     closeTerminal,
     prepareTerminalContext,
     filesForSession,
+    prepareWorkspaceFileContext,
     listWorkspaceFiles,
     readWorkspaceFile,
+    watchWorkspaceFiles,
+    unwatchWorkspaceFiles,
+    openWorkspacePath,
     error,
     evtCount,
+    dismissQueuedTurn,
+    startupProbe,
+    probeStartup,
   };
 }

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { userFacingError } from "../lib/errorCopy";
 import type {
   FilesBrowserState,
   WorkspaceFileEntry,
@@ -9,6 +10,11 @@ interface Props {
   state: FilesBrowserState;
   onList: (sessionId: string, path?: string) => Promise<void>;
   onRead: (sessionId: string, path: string) => Promise<void>;
+  onWatch: (sessionId: string) => Promise<void>;
+  onUnwatch: (sessionId: string) => Promise<void>;
+  onOpen: (sessionId: string, path: string) => Promise<void>;
+  /** Insert the currently selected text preview into the composer draft. */
+  onInsertContext: (sessionId: string) => boolean;
 }
 
 function formatSize(size: number | null): string {
@@ -30,13 +36,39 @@ function entryLabel(entry: WorkspaceFileEntry): string {
   return entry.name;
 }
 
+function formatObservedAt(observedAt: number | null): string {
+  if (observedAt === null) return "Not loaded";
+  return `Updated ${new Date(observedAt).toLocaleTimeString()}`;
+}
+
+function mediaLabel(mediaType: string): string {
+  if (mediaType === "application/pdf") return "PDF preview";
+  if (mediaType === "image/svg+xml") return "SVG preview";
+  return "Image preview";
+}
+
 /** M1-07 real disk browser. Every row comes from the Rust Files service. */
-export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
+export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatch, onOpen, onInsertContext }: Props) {
+  useEffect(() => {
+    void onWatch(sessionId);
+    return () => {
+      void onUnwatch(sessionId);
+    };
+  }, [onUnwatch, onWatch, sessionId]);
+
   useEffect(() => {
     if (state.entries.length === 0 && !state.loading && state.observedAt === null) {
       void onList(sessionId, ".");
     }
   }, [onList, sessionId, state.entries.length, state.loading, state.observedAt]);
+
+  useEffect(() => {
+    if (state.observedAt === null || state.loading) return undefined;
+    const refresh = window.setInterval(() => {
+      void onList(sessionId, state.path || ".");
+    }, 30_000);
+    return () => window.clearInterval(refresh);
+  }, [onList, sessionId, state.loading, state.observedAt, state.path]);
 
   const currentPath = state.path || ".";
   const preview = state.preview;
@@ -48,6 +80,9 @@ export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
           <strong>Files</strong>
           <span className="files-meta" title={currentPath}>
             Disk · {currentPath}
+          </span>
+          <span className="files-meta-status" role="status" aria-live="polite">
+            {formatObservedAt(state.observedAt)}
           </span>
         </div>
         <div className="files-actions">
@@ -63,9 +98,15 @@ export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
           </button>
         </div>
       </header>
-      {state.error && <p className="files-error" role="alert">{state.error}</p>}
+      {state.error && <p className="files-error" role="alert">{userFacingError(state.error)}</p>}
       {state.truncated && (
         <p className="files-note">Showing the first 200 entries. Open a subfolder to narrow the view.</p>
+      )}
+      {state.stale && (
+        <p className="files-stale" role="status">
+          Workspace changed on disk. Refresh to update this view
+          {state.changedPaths.length > 0 ? ` · ${state.changedPaths.slice(0, 3).join(", ")}` : ""}.
+        </p>
       )}
       <div className="files-layout">
         <div className="files-list" role="list" aria-label={`Files in ${currentPath}`}>
@@ -102,11 +143,58 @@ export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
         <article className="file-preview" aria-live="polite">
           {!preview ? (
             <p className="muted">Select a file to preview its current contents from disk.</p>
+          ) : preview.mediaType && preview.base64Data ? (
+            <>
+              <div className="file-preview-head">
+                <strong>{preview.path}</strong>
+                <span className="file-preview-actions">
+                  <span>{mediaLabel(preview.mediaType)} · {formatSize(preview.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => void onOpen(sessionId, preview.path)}
+                    title="Open this file with the system default application"
+                  >
+                    Open in app
+                  </button>
+                </span>
+              </div>
+              {preview.mediaType === "application/pdf" ? (
+                <div className="file-document-preview">
+                  <object
+                    data={`data:${preview.mediaType};base64,${preview.base64Data}`}
+                    type={preview.mediaType}
+                    aria-label={`Preview of ${preview.path}`}
+                  >
+                    <p className="muted">This WebView cannot render the PDF. Use Open in app to view it.</p>
+                  </object>
+                  <span className="muted">PDF preview · {formatSize(preview.size)}</span>
+                </div>
+              ) : preview.mediaType.startsWith("image/") ? (
+                <div className="file-image-preview">
+                  <img
+                    src={`data:${preview.mediaType};base64,${preview.base64Data}`}
+                    alt={`Preview of ${preview.path}`}
+                  />
+                  <span className="muted">{mediaLabel(preview.mediaType)} · {preview.mediaType}</span>
+                </div>
+              ) : (
+                <p className="muted">This file format has no inline preview. Use Open in app to view it.</p>
+              )}
+            </>
           ) : preview.binary ? (
             <>
               <div className="file-preview-head">
                 <strong>{preview.path}</strong>
-                <span>Binary file · {formatSize(preview.size)}</span>
+                <span className="file-preview-actions">
+                  <span>Binary file · {formatSize(preview.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => void onOpen(sessionId, preview.path)}
+                    title="Open this file with the system default application"
+                  >
+                    Open in app
+                  </button>
+                </span>
               </div>
               <p className="muted">Binary content is not rendered in the text preview.</p>
             </>
@@ -114,7 +202,23 @@ export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
             <>
               <div className="file-preview-head">
                 <strong title={preview.path}>{preview.path}</strong>
-                <span>{formatSize(preview.size)}{preview.truncated ? " · preview clipped" : ""}</span>
+                <span className="file-preview-actions">
+                  <span>{formatSize(preview.size)}{preview.truncated ? " · preview clipped" : ""}</span>
+                  <button
+                    type="button"
+                    onClick={() => void onOpen(sessionId, preview.path)}
+                    title="Open this file with the system default application"
+                  >
+                    Open in app
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onInsertContext(sessionId)}
+                    title="Add this text preview to the composer"
+                  >
+                    Add to prompt
+                  </button>
+                </span>
               </div>
               <pre className="file-preview-code">{preview.content}</pre>
             </>
@@ -124,4 +228,3 @@ export function FilesPanel({ sessionId, state, onList, onRead }: Props) {
     </section>
   );
 }
-

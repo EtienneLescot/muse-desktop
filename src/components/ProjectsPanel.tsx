@@ -8,6 +8,7 @@ import {
   type ProjectSettings,
   type ThreadProjectMap,
 } from "../lib/projects";
+import { userFacingError } from "../lib/errorCopy";
 
 interface ProjectsPanelProps {
   projects: Project[];
@@ -89,7 +90,7 @@ export function ProjectsPanel({
       const selected = await open({ directory: true, multiple: false });
       if (typeof selected === "string" && selected.length > 0) setWorkspacePath(selected);
     } catch (error) {
-      setWorkspaceError(`folder picker failed: ${String(error)}`);
+      setWorkspaceError(userFacingError(`folder picker failed: ${String(error)}`));
     }
   }
 
@@ -150,7 +151,7 @@ export function ProjectsPanel({
       </div>
       {projectError !== null && (
         <p className="project-error" role="alert">
-          {projectError}
+          {userFacingError(projectError)}
         </p>
       )}
       {projects.length === 0 && (

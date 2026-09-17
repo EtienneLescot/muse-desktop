@@ -26,3 +26,11 @@ export function capabilityDescription(
   const trimmed = reason?.trim();
   return trimmed ? trimmed : DEFAULT_DETAILS[status];
 }
+
+/** Accessible, self-contained label for the shared status badge. */
+export function capabilityAccessibleLabel(
+  status: CapabilityStatus,
+  reason?: string,
+): string {
+  return `${capabilityLabel(status)}: ${capabilityDescription(status, reason)}`;
+}

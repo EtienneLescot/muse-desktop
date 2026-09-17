@@ -1,0 +1,179 @@
+import type { LogEntry, LogRole } from "./persist.ts";
+
+/** A folded item returned by MSP `session/read`. Unknown additive fields are ignored. */
+export interface SessionHistoryItem {
+  itemId?: unknown;
+  turnId?: unknown;
+  kind?: unknown;
+  status?: unknown;
+  text?: unknown;
+  displayText?: unknown;
+  summary?: unknown;
+  visibleOutput?: unknown;
+  fallbackText?: unknown;
+  message?: unknown;
+  tool?: unknown;
+  args?: unknown;
+  objective?: unknown;
+  role?: unknown;
+  subagentId?: unknown;
+  childSessionId?: unknown;
+  depth?: unknown;
+  recordedAt?: unknown;
+  result?: { summary?: unknown; text?: unknown };
+  commandId?: unknown;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function itemText(item: SessionHistoryItem, kind: string): string {
+  if (kind === "reasoning") {
+    if (Array.isArray(item.summary)) {
+      const parts = item.summary.filter((part): part is string => typeof part === "string");
+      if (parts.length > 0) return parts.join("\n\n");
+    }
+    return stringValue(item.text) ?? stringValue(item.fallbackText) ?? "";
+  }
+  if (kind === "toolCall" || kind === "userShell") {
+    const output =
+      stringValue(item.visibleOutput) ??
+      stringValue(item.message) ??
+      stringValue(item.fallbackText);
+    if (output !== undefined) return output;
+    const tool = stringValue(item.tool);
+    const args = stringValue(item.args);
+    if (tool !== undefined && args !== undefined) return `${tool}: ${args}`;
+    return tool ?? args ?? "";
+  }
+  if (kind === "subagent") {
+    const result = item.result;
+    return (
+      stringValue(result?.summary) ??
+      stringValue(result?.text) ??
+      stringValue(item.text) ??
+      stringValue(item.objective) ??
+      stringValue(item.fallbackText) ??
+      ""
+    );
+  }
+  return (
+    stringValue(item.displayText) ??
+    stringValue(item.text) ??
+    stringValue(item.message) ??
+    stringValue(item.fallbackText) ??
+    ""
+  );
+}
+
+function roleForKind(kind: string): LogRole | null {
+  switch (kind) {
+    case "userMessage":
+      return "user";
+    case "agentMessage":
+      return "assistant";
+    case "reasoning":
+      return "thinking";
+    case "toolCall":
+    case "userShell":
+      return "tool";
+    case "subagent":
+      return "subagent";
+    case "compaction":
+      return "system";
+    default:
+      return null;
+  }
+}
+
+function timestamp(item: SessionHistoryItem, fallback: number): number {
+  const parsed = stringValue(item.recordedAt);
+  if (parsed !== undefined) {
+    const value = Date.parse(parsed);
+    if (Number.isFinite(value)) return value;
+  }
+  return fallback;
+}
+
+/** Convert durable MSP items to the same log lanes used by the live stream. */
+export function historyItemsToLogEntries(items: unknown[], now = Date.now()): LogEntry[] {
+  const entries: LogEntry[] = [];
+  items.forEach((raw, index) => {
+    if (typeof raw !== "object" || raw === null) return;
+    const item = raw as SessionHistoryItem;
+    const kind = stringValue(item.kind);
+    const itemId = stringValue(item.itemId);
+    const turnId = stringValue(item.turnId);
+    if (kind === undefined || itemId === undefined) return;
+    const role = roleForKind(kind);
+    if (role === null) return;
+    const text = itemText(item, kind);
+    if (text.length === 0) return;
+    const entry: LogEntry = {
+      id: `history:${itemId}`,
+      ts: timestamp(item, now + index),
+      role,
+      text,
+      itemId,
+      ...(turnId === undefined ? {} : { turnId }),
+      open: item.status === "inProgress",
+    };
+    const child = stringValue(item.childSessionId);
+    const agent = stringValue(item.subagentId);
+    const objective = stringValue(item.objective);
+    const subagentRole = stringValue(item.role);
+    const depth = typeof item.depth === "number" && Number.isFinite(item.depth) ? item.depth : undefined;
+    const clientMessageId = stringValue(item.commandId);
+    if (child !== undefined) entry.childSessionId = child;
+    if (agent !== undefined) entry.agentId = agent;
+    if (objective !== undefined) entry.objective = objective;
+    if (subagentRole !== undefined) entry.subagentRole = subagentRole;
+    if (depth !== undefined) entry.depth = depth;
+    // A server command id is useful as a durable idempotency hint when an
+    // older local entry has no item id yet. It is intentionally kept in the
+    // existing clientMessageId slot only for user items.
+    if (role === "user" && clientMessageId !== undefined) entry.clientMessageId = clientMessageId;
+    entries.push(entry);
+  });
+  return entries;
+}
+
+/** Read inline items from either the normal history envelope or a snapshot. */
+export function extractHistoryItems(history: unknown): unknown[] {
+  if (typeof history !== "object" || history === null) return [];
+  const envelope = history as { items?: unknown; snapshot?: unknown };
+  if (Array.isArray(envelope.items)) return envelope.items;
+  if (typeof envelope.snapshot !== "object" || envelope.snapshot === null) return [];
+  const snapshot = envelope.snapshot as { state?: unknown };
+  if (typeof snapshot.state !== "object" || snapshot.state === null) return [];
+  const state = snapshot.state as { items?: unknown };
+  return Array.isArray(state.items) ? state.items : [];
+}
+
+/** Merge a point-in-time server history with local notes and streamed state. */
+export function mergeHistoryLog(local: LogEntry[], remote: LogEntry[]): LogEntry[] {
+  const used = new Set<string>();
+  const merged: LogEntry[] = [];
+  for (const incoming of remote) {
+    const byItem = incoming.itemId === undefined
+      ? undefined
+      : local.find((entry) => !used.has(entry.id) && entry.itemId === incoming.itemId);
+    const byUserText = byItem === undefined && incoming.role === "user"
+      ? local.find((entry) => !used.has(entry.id) && entry.role === "user" && entry.text === incoming.text)
+      : undefined;
+    const existing = byItem ?? byUserText;
+    if (existing !== undefined) {
+      used.add(existing.id);
+      merged.push({ ...existing, ...incoming, id: existing.id, clientMessageId: existing.clientMessageId ?? incoming.clientMessageId });
+    } else {
+      merged.push(incoming);
+    }
+  }
+  for (const entry of local) {
+    if (!used.has(entry.id) && !merged.some((candidate) => candidate.id === entry.id)) merged.push(entry);
+  }
+  return merged
+    .sort((a, b) => a.ts - b.ts)
+    .slice(-2000);
+}

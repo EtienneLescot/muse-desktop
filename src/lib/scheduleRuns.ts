@@ -4,7 +4,7 @@
  * while this record tracks the actual scheduled execution. The helpers are
  * pure and storage is best-effort under a dedicated namespaced key.
  */
-import type { ScheduleAuthorizationMode, ThreadReuse } from "./schedules";
+import { isValidTimeZone, type ScheduleAuthorizationMode, type ThreadReuse } from "./schedules.ts";
 import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
@@ -23,6 +23,7 @@ export interface ScheduleRun {
   model?: string;
   authorizationMode?: ScheduleAuthorizationMode;
   missedPolicy?: "skip" | "latest";
+  timeZone?: string;
   occurrenceAt: number;
   /** Stable schedule + occurrence key; legacy rows may omit it. */
   occurrenceKey?: string;
@@ -38,6 +39,8 @@ export interface ScheduleRun {
   resultPreview?: string;
   /** Inbox unread marker, independent of the business status. */
   unread?: boolean;
+  /** Archived rows stay durable but are hidden from the default inbox view. */
+  archived?: boolean;
   status: ScheduleRunStatus;
   error?: string;
 }
@@ -86,7 +89,7 @@ export function settleRun(
     : run);
 }
 
-/** Mark a run complete when the host emits a turn-stopped event. */
+/** Mark a run complete when the host emits a successful turn-stopped event. */
 export function completeRun(
   runs: ScheduleRun[],
   idValue: string,
@@ -106,8 +109,70 @@ export function completeRun(
     : run);
 }
 
+export interface ScheduledTurnOutcome {
+  status: "completed" | "failed";
+  /** Bounded, redacted engine detail when the host rejected the turn. */
+  error?: string;
+  retryable?: boolean;
+  resultPreview?: string;
+}
+
+/**
+ * Settle every scheduled run currently attached to a session when its host
+ * emits a terminal turn event. A failed engine turn may enter the same bounded
+ * retry queue as an admission failure; ambiguous outcomes remain failed.
+ */
+export function settleRunsForSession(
+  runs: ScheduleRun[],
+  sessionId: string,
+  outcome: ScheduledTurnOutcome,
+  now: number,
+): ScheduleRun[] {
+  let next = runs;
+  for (const run of runs) {
+    if (run.sessionId !== sessionId || run.status !== "running") continue;
+    if (outcome.status === "completed") {
+      next = completeRun(next, run.id, now, outcome.resultPreview);
+      continue;
+    }
+    const reason = outcome.error?.trim() || "scheduled turn failed";
+    const failed = settleRun(next, run.id, "failed", now, reason);
+    next = outcome.retryable && isRetryableScheduleError(reason)
+      ? queueRunRetry(failed, run.id, now, reason)
+      : failed;
+  }
+  return next;
+}
+
 export function markRunRead(runs: ScheduleRun[], idValue: string): ScheduleRun[] {
   return runs.map((run) => run.id === idValue ? { ...run, unread: false } : run);
+}
+
+export function archiveRun(runs: ScheduleRun[], idValue: string): ScheduleRun[] {
+  return runs.map((run) => run.id === idValue ? { ...run, archived: true } : run);
+}
+
+export function restoreRun(runs: ScheduleRun[], idValue: string): ScheduleRun[] {
+  return runs.map((run) => run.id === idValue ? { ...run, archived: false } : run);
+}
+
+/** Promote a failed run or a delayed retry to the front of the local queue. */
+export function retryRunNow(runs: ScheduleRun[], idValue: string, now = Date.now()): ScheduleRun[] {
+  return runs.map((run) => {
+    if (run.id !== idValue) return run;
+    const attempt = run.attempt ?? 1;
+    const retryable = run.status === "failed" || (run.status === "queued" && run.nextRetryAt !== undefined);
+    if (!retryable || attempt >= MAX_RUN_ATTEMPTS) return run;
+    return {
+      ...run,
+      status: "queued",
+      nextRetryAt: now,
+      finishedAt: undefined,
+      unread: false,
+      archived: false,
+      error: undefined,
+    };
+  });
 }
 
 /** Exponential backoff, bounded so a local timer remains predictable. */
@@ -178,6 +243,7 @@ function validRun(value: unknown): value is ScheduleRun {
     (row.model === undefined || typeof row.model === "string") &&
     (row.authorizationMode === undefined || row.authorizationMode === "ask" || row.authorizationMode === "workspace" || row.authorizationMode === "yolo") &&
     (row.missedPolicy === undefined || row.missedPolicy === "skip" || row.missedPolicy === "latest") &&
+    (row.timeZone === undefined || (typeof row.timeZone === "string" && isValidTimeZone(row.timeZone))) &&
     (row.occurrenceKey === undefined || typeof row.occurrenceKey === "string") &&
     (row.startedAt === undefined || typeof row.startedAt === "number") &&
     (row.finishedAt === undefined || typeof row.finishedAt === "number") &&
@@ -186,6 +252,7 @@ function validRun(value: unknown): value is ScheduleRun {
     (row.nextRetryAt === undefined || typeof row.nextRetryAt === "number") &&
     (row.resultPreview === undefined || typeof row.resultPreview === "string") &&
     (row.unread === undefined || typeof row.unread === "boolean") &&
+    (row.archived === undefined || typeof row.archived === "boolean") &&
     (row.error === undefined || typeof row.error === "string");
 }
 

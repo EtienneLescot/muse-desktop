@@ -44,6 +44,28 @@ export const IMAGE_GENERATION_NOTE =
   "Image generation is not available in the in-app browser — " +
   "it views pages and anchors comments only.";
 
+/** Keep browser context useful without allowing a page to flood a prompt. */
+export const MAX_BROWSER_CONTEXT_CHARS = 8_000;
+
+/**
+ * Build the explicit text context inserted into the active composer. The
+ * action is user-triggered and preserves provenance; it never executes page
+ * content or implies that a visual screenshot was captured.
+ */
+export function formatBrowserContext(
+  url: string,
+  selection = "",
+  comment = "",
+): string {
+  const normalized = normalizeBrowserUrl(url);
+  if (normalized === null) return "";
+  const lines = [`[Browser context]`, `URL: ${normalized}`];
+  if (selection.trim().length > 0) lines.push(`Selection: ${selection.trim()}`);
+  if (comment.trim().length > 0) lines.push(`Comment: ${comment.trim()}`);
+  const text = lines.join("\n");
+  return Array.from(text).slice(0, MAX_BROWSER_CONTEXT_CHARS).join("");
+}
+
 function read<T>(key: string, fallback: T): T {
   return readStorageJson(key, fallback);
 }

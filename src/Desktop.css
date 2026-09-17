@@ -160,6 +160,54 @@
 .pending-send button {
   flex: none;
 }
+/* M1-10: queued turns stay visible and can be reclaimed before launch. */
+.queued-turns {
+  margin: 0 32px 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+.queued-turns-head,
+.queued-turn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.queued-turns-head {
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+.queued-turn {
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+.queued-turn-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.queued-turn button {
+  flex: none;
+  font-size: 11px;
+}
+.queued-turn-recovered {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  border-top-color: color-mix(in srgb, var(--amber, #d7a43a) 42%, var(--line));
+}
+.queued-turn-recovered .queued-turn-text {
+  flex: 1 1 180px;
+}
+.queued-turn-note {
+  flex: 1 1 100%;
+  color: var(--muted);
+  font-size: 10px;
+}
 .task-heading {
   padding: 30px 32px 15px;
   flex: none;
@@ -184,10 +232,39 @@
   font-size: 11px;
   color: var(--muted);
 }
-.task-metadata span:last-child {
+.task-metadata span:last-child,
+.task-metadata span[title] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.connection-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 4px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.connection-state-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.connection-connected .connection-state-dot {
+  background: var(--green, #2ca579);
+}
+.connection-connecting .connection-state-dot {
+  background: var(--blue);
+  animation: stream-health-pulse 1.5s ease-in-out infinite;
+}
+.connection-error {
+  color: var(--warning, #d89024);
+}
+.connection-error .connection-state-dot {
+  background: var(--warning, #d89024);
 }
 .task-project-context {
   display: flex;
@@ -513,6 +590,12 @@
   font-size: 10px;
   margin-top: 3px;
 }
+.files-meta-status {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 2px;
+}
 .files-actions {
   display: flex;
   gap: 6px;
@@ -620,6 +703,26 @@
   color: var(--muted);
   font-size: 10px;
 }
+.file-preview-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.file-preview-actions button {
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 8px;
+  background: var(--surface, var(--bg));
+  color: var(--text);
+  padding: 4px 9px;
+  font-size: 10px;
+  cursor: pointer;
+}
+.file-preview-actions button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
 .file-preview-head strong {
   min-width: 0;
   overflow: hidden;
@@ -636,6 +739,43 @@
   font: 10px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.file-image-preview {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin-top: 12px;
+}
+.file-image-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  object-fit: contain;
+  background: var(--bg);
+}
+.file-document-preview {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.file-document-preview object {
+  display: block;
+  width: 100%;
+  min-height: 360px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+}
+.files-stale {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: 9px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  font-size: 12px;
 }
 .work-panel .artifacts-tabs {
   padding: 12px 18px;
@@ -783,6 +923,17 @@
   text-align: left;
   justify-content: flex-start;
   padding: 14px 10px;
+}
+
+.work-panel .artifact-export {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.work-panel .artifact-export:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .search-results button > span {
   display: grid;
@@ -1344,5 +1495,11 @@
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+@media (forced-colors: active) {
+  .desktop-app button:focus-visible,
+  .desktop-app summary:focus-visible {
+    outline-color: Highlight;
   }
 }

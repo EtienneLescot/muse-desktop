@@ -1,10 +1,13 @@
 import { useState } from "react";
 import {
   IMAGE_GENERATION_NOTE,
+  formatBrowserContext,
   normalizeBrowserUrl,
   type BrowserAnnotation,
   type BrowserAppPermission,
 } from "../lib/browserAnnotate";
+import { isTauriRuntime } from "../lib/env";
+import { userFacingError } from "../lib/errorCopy";
 
 interface Props {
   annotations: BrowserAnnotation[];
@@ -12,6 +15,8 @@ interface Props {
   onAddAnnotation: (url: string, selection: string, comment: string) => void;
   onRemoveAnnotation: (id: string) => void;
   onSetPermission: (app: string, allowed: boolean) => void;
+  /** Insert a bounded, provenance-labelled page context into the composer. */
+  onInsertContext: (context: string) => void;
 }
 
 /** Apps offered a computer-use toggle (explicit opt-in, default denied). */
@@ -29,13 +34,21 @@ export function BrowserPanel({
   onAddAnnotation,
   onRemoveAnnotation,
   onSetPermission,
+  onInsertContext,
 }: Props) {
   const [url, setUrl] = useState("");
+  const [currentUrl, setCurrentUrl] = useState("");
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [frameKey, setFrameKey] = useState(0);
+  const [frameError, setFrameError] = useState<string | null>(null);
+  const [nativeBrowserStatus, setNativeBrowserStatus] = useState<string | null>(null);
   const [selection, setSelection] = useState("");
   const [comment, setComment] = useState("");
   const [appName, setAppName] = useState("");
 
-  const normalized = normalizeBrowserUrl(url);
+  const normalized = normalizeBrowserUrl(currentUrl);
+  const addressNormalized = normalizeBrowserUrl(url);
   const renderable = normalized !== null;
   const pageNotes =
     normalized !== null
@@ -43,11 +56,72 @@ export function BrowserPanel({
       : [];
 
   const submitAnnotation = () => {
-    if (!renderable || comment.trim().length === 0) return;
-    onAddAnnotation(url, selection, comment);
+    if (!renderable || normalized === null || comment.trim().length === 0) return;
+    onAddAnnotation(normalized, selection, comment);
     setSelection("");
     setComment("");
   };
+
+  const insertCurrentContext = () => {
+    if (!renderable || normalized === null) return;
+    const context = formatBrowserContext(normalized, selection, comment);
+    if (context.length > 0) onInsertContext(context);
+  };
+
+  const navigate = (nextInput: string, record = true) => {
+    const next = normalizeBrowserUrl(nextInput);
+    if (next === null) {
+      setFrameError("That URL can't be shown here (http/https only).");
+      return;
+    }
+    if (record) {
+      const base = historyIndex >= 0 ? history.slice(0, historyIndex + 1) : [];
+      const nextHistory = base[base.length - 1] === next ? base : [...base, next];
+      setHistory(nextHistory);
+      setHistoryIndex(nextHistory.length - 1);
+    }
+    setUrl(next);
+    setCurrentUrl(next);
+    setFrameError(null);
+    setNativeBrowserStatus(null);
+    setFrameKey((key) => key + 1);
+  };
+
+  const goBack = () => {
+    if (historyIndex <= 0) return;
+    const nextIndex = historyIndex - 1;
+    setHistoryIndex(nextIndex);
+    navigate(history[nextIndex], false);
+  };
+
+  const goForward = () => {
+    if (historyIndex < 0 || historyIndex >= history.length - 1) return;
+    const nextIndex = historyIndex + 1;
+    setHistoryIndex(nextIndex);
+    navigate(history[nextIndex], false);
+  };
+
+  async function openNativeBrowser(): Promise<void> {
+    if (!renderable || normalized === null) return;
+    if (!isTauriRuntime()) {
+      setNativeBrowserStatus("The native browser is available in the desktop build.");
+      return;
+    }
+    setNativeBrowserStatus("Opening native browser…");
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("open_native_browser", { url: normalized });
+      setNativeBrowserStatus("Opened in the Muse Browser window.");
+    } catch (error) {
+      setNativeBrowserStatus(
+        userFacingError(
+          `native browser open failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+    }
+  }
 
   const toggleApp = (app: string, allowed: boolean) => {
     onSetPermission(app, allowed);
@@ -66,7 +140,10 @@ export function BrowserPanel({
     <section className="browser-panel" aria-label="In-app browser">
       <details open>
         <summary className="browser-title">Browser</summary>
-        <div className="browser-url-row">
+        <form className="browser-url-row" onSubmit={(event) => {
+          event.preventDefault();
+          navigate(url);
+        }}>
           <input
             className="browser-url"
             type="url"
@@ -75,18 +152,43 @@ export function BrowserPanel({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
           />
+          <button type="submit" disabled={addressNormalized === null}>Go</button>
+        </form>
+        <div className="browser-nav-row" aria-label="Browser navigation">
+          <button type="button" onClick={goBack} disabled={historyIndex <= 0} aria-label="Back">←</button>
+          <button type="button" onClick={goForward} disabled={historyIndex < 0 || historyIndex >= history.length - 1} aria-label="Forward">→</button>
+          <button type="button" onClick={() => renderable && setFrameKey((key) => key + 1)} disabled={!renderable}>Reload</button>
+          <button
+            type="button"
+            className="browser-native-open"
+            onClick={() => void openNativeBrowser()}
+            disabled={!renderable}
+            title="Open this page in a native Muse Browser window"
+          >
+            Open native
+          </button>
+          {normalized && <span className="browser-current-url" title={normalized}>{normalized}</span>}
         </div>
-        {url.trim().length > 0 && !renderable && (
+        {nativeBrowserStatus && (
+          <div className="muted browser-native-status" role="status" aria-live="polite">
+            {nativeBrowserStatus}
+          </div>
+        )}
+        {url.trim().length > 0 && addressNormalized === null && (
           <div className="muted" role="note">
             That URL can&apos;t be shown here (http/https only).
           </div>
         )}
+        {frameError && <div className="browser-frame-error" role="alert">{frameError}</div>}
         {renderable && normalized !== null && (
           <iframe
+            key={frameKey}
             className="browser-frame"
             title={`Preview of ${normalized}`}
             src={normalized}
             sandbox="allow-scripts allow-same-origin"
+            onLoad={() => setFrameError(null)}
+            onError={() => setFrameError("This page could not be loaded in the embedded preview.")}
           />
         )}
         <div className="browser-annotate">
@@ -110,6 +212,14 @@ export function BrowserPanel({
           >
             Add comment
           </button>
+          <button
+            type="button"
+            disabled={!renderable}
+            onClick={insertCurrentContext}
+            title="Add the current page URL, selection and comment to the composer"
+          >
+            Add page context
+          </button>
         </div>
         {pageNotes.length > 0 && (
           <ul className="browser-notes">
@@ -126,6 +236,13 @@ export function BrowserPanel({
                   onClick={() => onRemoveAnnotation(a.id)}
                 >
                   Remove
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onInsertContext(formatBrowserContext(a.url, a.selection, a.comment))}
+                  title="Add this annotation to the composer"
+                >
+                  Add to prompt
                 </button>
               </li>
             ))}
