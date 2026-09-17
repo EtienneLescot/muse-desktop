@@ -560,6 +560,10 @@ fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: St
     // Poll transport: buffer the event with a sequence number. The UI drains
     // via `poll_events`. (`event` is kept for log readability.)
     let state: State<AppState> = app.state();
+    push_event(&state, session_id, kind, payload);
+}
+
+fn push_event(state: &AppState, session_id: &str, kind: &str, payload: String) {
     let (Ok(mut seq), Ok(mut buf)) = (state.event_seq.lock(), state.event_buffer.lock()) else {
         return;
     };
@@ -575,7 +579,7 @@ fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: St
     }
 }
 
-fn mark_running(state: &State<AppState>, session_id: &str, running: bool) {
+fn mark_running(state: &AppState, session_id: &str, running: bool) {
     if let Ok(mut sessions) = state.sessions.lock() {
         if let Some(meta) = sessions.get_mut(session_id) {
             meta.running = running;
@@ -812,7 +816,10 @@ fn pump_notifications(
     });
 }
 
-fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p: &Value) {
+fn route_notification_with_emit<F>(state: &AppState, method: &str, p: &Value, mut emit_fn: F)
+where
+    F: FnMut(&str, &str, &str, String),
+{
     let sid = p.get("sessionId").and_then(Value::as_str).unwrap_or("");
     match method {
         "item/started" => {
@@ -855,9 +862,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                             announce.insert("depth".to_string(), json!(d));
                         }
                     }
-                    emit(
-                        app,
-                        "subagent_event",
+                    emit_fn("subagent_event",
                         sid,
                         "subagent_event",
                         Value::Object(announce).to_string(),
@@ -866,9 +871,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 // US-10: surface the item start so the UI paints the
                 // reflexive phase before the first delta lands (even when
                 // no delta ever follows for this item).
-                emit(
-                    app,
-                    "status",
+                emit_fn("status",
                     sid,
                     "item_started",
                     json!({
@@ -926,9 +929,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                             obj.insert("depth".to_string(), json!(d));
                         }
                     }
-                    emit(
-                        app,
-                        "subagent_event",
+                    emit_fn("subagent_event",
                         sid,
                         "subagent_event",
                         Value::Object(obj).to_string(),
@@ -937,9 +938,9 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 kind if is_thinking_item_kind(kind) => {
                     // Keep reasoning deltas separate from the answer lane so
                     // the UI can expose them behind a disclosure control.
-                    emit(app, "thinking", sid, "thinking", item_ref);
+                    emit_fn("thinking", sid, "thinking", item_ref);
                 }
-                _ => emit(app, "output", sid, "output", item_ref),
+                _ => emit_fn("output", sid, "output", item_ref),
             }
         }
         "item/completed" | "item/updated" => {
@@ -955,9 +956,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 .get("item")
                 .and_then(|i| i.get("turnId"))
                 .or_else(|| p.get("turnId"));
-            emit(
-                app,
-                "status",
+            emit_fn("status",
                 sid,
                 "item_done",
                 json!({"itemId": item_id, "turnId": turn_id}).to_string(),
@@ -1000,9 +999,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                     );
                 }
             }
-            emit(
-                app,
-                "tool_request",
+            emit_fn("tool_request",
                 sid,
                 "tool_request",
                 approval_payload(p, approval_id, method == "approval/updated").to_string(),
@@ -1024,9 +1021,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                         .and_then(Value::as_str)
                 })
                 .unwrap_or("resolved");
-            emit(
-                app,
-                "status",
+            emit_fn("status",
                 sid,
                 method,
                 json!({
@@ -1037,9 +1032,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 .to_string(),
             );
         }
-        "turn/started" => emit(
-            app,
-            "status",
+        "turn/started" => emit_fn("status",
             sid,
             "started",
             json!({
@@ -1055,9 +1048,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
             // error object instead of flattening it into a message string.
             // Older hosts may omit fields; nulls keep the envelope additive
             // and let the renderer fall back to the legacy reason.
-            emit(
-                app,
-                "status",
+            emit_fn("status",
                 sid,
                 terminal,
                 json!({
@@ -1071,23 +1062,21 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
             );
         }
         "turn/retracted" | "turn/unqueued" | "turn/retryScheduled" => {
-            emit(app, "status", sid, method, p.to_string())
+            emit_fn("status", sid, method, p.to_string())
         }
         "userInput/requested" => {
             // The turn suspends until answered: surface as an answerable
             // panel, never a bare log line (a log line leaves the chat
             // hanging with no way to reply).
             match build_input_request_payload(p) {
-                Some(payload) => emit(app, "input_request", sid, "input_request", payload.to_string()),
-                None => emit(app, "status", sid, "input_requested", "input requested (unparseable)".to_string()),
+                Some(payload) => emit_fn("input_request", sid, "input_request", payload.to_string()),
+                None => emit_fn("status", sid, "input_requested", "input requested (unparseable)".to_string()),
             }
         }
         "userInput/settled" => {
             let outcome = p.get("outcome").and_then(Value::as_str).unwrap_or("settled");
             let input_id = p.get("userInputId").and_then(Value::as_str).unwrap_or("");
-            emit(
-                app,
-                "input_settled",
+            emit_fn("input_settled",
                 sid,
                 "input_settled",
                 json!({"inputId": input_id, "outcome": outcome}).to_string(),
@@ -1098,9 +1087,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
             // effective projection. `denyUnmatched` is intentionally not
             // fabricated into a fourth UI posture; the renderer surfaces it.
             if let Some(mode) = p.get("mode").and_then(Value::as_str) {
-                emit(
-                    app,
-                    "status",
+                emit_fn("status",
                     sid,
                     "approval_mode_changed",
                     json!({"mode": mode}).to_string(),
@@ -1118,18 +1105,24 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                     "usedTokens": p.get("usedTokens").and_then(Value::as_u64),
                     "windowTokens": p.get("windowTokens").and_then(Value::as_u64),
                 });
-                emit(app, "context_usage", sid, "context_usage", usage.to_string());
+                emit_fn("context_usage", sid, "context_usage", usage.to_string());
             }
         }
         // US-31/M1-11: preserve the host's token counters verbatim. The
         // renderer displays these projections but never recomputes totals.
         "session/tokenUsage" => {
             if !sid.is_empty() {
-                emit(app, "token_usage", sid, "token_usage", p.to_string());
+                emit_fn("token_usage", sid, "token_usage", p.to_string());
             }
         }
         _ => {}
     }
+}
+
+fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p: &Value) {
+    route_notification_with_emit(state.inner(), method, p, |event, sid, kind, payload| {
+        emit(app, event, sid, kind, payload);
+    });
 }
 
 /// Persist the picked workspace on the Rust side immediately, so the backend
@@ -3175,6 +3168,94 @@ async fn kill_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn empty_state() -> AppState {
+        AppState {
+            resume_mutex: tokio::sync::Mutex::new(()),
+            hosts: Mutex::new(Hosts::default()),
+            workspace: Mutex::new(None),
+            sessions: Mutex::new(HashMap::new()),
+            approvals: Mutex::new(HashMap::new()),
+            item_kinds: Mutex::new(HashMap::new()),
+            subagent_meta: Mutex::new(HashMap::new()),
+            host_mutex: tokio::sync::Mutex::new(()),
+            event_seq: Mutex::new(0),
+            event_buffer: Mutex::new(std::collections::VecDeque::new()),
+            terminals: terminal::TerminalRegistry::default(),
+            setup_cancellations: Mutex::new(HashMap::new()),
+            mcp_servers: Arc::new(Mutex::new(HashMap::new())),
+            workspace_watchers: Mutex::new(HashMap::new()),
+        }
+    }
+
+    #[test]
+    fn notification_lanes_are_scoped_by_session_identity() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "item/started",
+            &json!({"sessionId":"session-a","itemId":"same-item","item":{"kind":"reasoning"}}),
+            &mut emit,
+        );
+        route_notification_with_emit(
+            &state,
+            "item/started",
+            &json!({"sessionId":"session-b","itemId":"same-item","item":{"kind":"agentMessage"}}),
+            &mut emit,
+        );
+        route_notification_with_emit(
+            &state,
+            "item/delta",
+            &json!({"sessionId":"session-a","itemId":"same-item","delta":"private reasoning"}),
+            &mut emit,
+        );
+        route_notification_with_emit(
+            &state,
+            "item/delta",
+            &json!({"sessionId":"session-b","itemId":"same-item","delta":"public answer"}),
+            &mut emit,
+        );
+        let deltas = events
+            .iter()
+            .filter(|(_, _, kind, _)| kind == "thinking" || kind == "output")
+            .collect::<Vec<_>>();
+        assert_eq!(deltas.len(), 2);
+        assert_eq!(deltas[0].0, "thinking");
+        assert_eq!(deltas[0].1, "session-a");
+        assert_eq!(deltas[1].0, "output");
+        assert_eq!(deltas[1].1, "session-b");
+    }
+
+    #[test]
+    fn approval_cards_are_isolated_when_ids_repeat_between_sessions() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        for (sid, requirement) in [("session-a", "req-a"), ("session-b", "req-b")] {
+            route_notification_with_emit(
+                &state,
+                "approval/requested",
+                &json!({
+                    "sessionId": sid,
+                    "approvalId": "same-approval",
+                    "currentRequirementId": requirement,
+                    "subject": {"kind":"shell","command":"echo safe"}
+                }),
+                &mut emit,
+            );
+        }
+        let approvals = state.approvals.lock().unwrap();
+        assert_eq!(approvals.len(), 2);
+        assert_eq!(approvals[&(String::from("session-a"), String::from("same-approval"))].session_id, "session-a");
+        assert_eq!(approvals[&(String::from("session-b"), String::from("same-approval"))].requirement_id, json!("req-b"));
+        assert_eq!(events.iter().filter(|e| e.0 == "tool_request").count(), 2);
+    }
 
     #[test]
     fn fork_params_name_an_explicit_completed_turn() {
