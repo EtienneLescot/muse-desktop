@@ -1771,6 +1771,22 @@ body.dark .composer textarea::placeholder {
   font-size: 11px;
 }
 
+.composer-voice {
+  border-color: color-mix(in srgb, var(--blue) 35%, var(--line));
+}
+
+.composer-voice-active {
+  color: var(--blue);
+  border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, var(--surface));
+}
+
+.composer-voice-status {
+  flex: 1 1 100%;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .attachment-thumb {
   width: 24px;
   height: 24px;
