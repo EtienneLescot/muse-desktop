@@ -1123,11 +1123,22 @@ export default function App() {
                       </span>
                     </div>
                     {activeProject !== null && (
-                      <div className="task-project-context" title="Effective project settings">
+                      <div
+                        className="task-project-context"
+                        title="Project settings: the model is sent to the host; sandbox and network remain local preferences until the host contract is available."
+                      >
                         <span>Project: {activeProject.name}</span>
-                        <span>Model: {activeProjectSettings.model}</span>
-                        <span>Sandbox: {activeProjectSettings.sandbox}</span>
-                        <span>Network: {activeProjectSettings.networkDefault}</span>
+                        <span>
+                          Model: {activeProjectSettings.model === "default"
+                            ? "Host default"
+                            : activeProjectSettings.model}
+                        </span>
+                        <span title="Saved locally; this host has no verified sandbox mutation contract">
+                          Sandbox preference: {activeProjectSettings.sandbox}
+                        </span>
+                        <span title="Saved locally; this host has no verified network mutation contract">
+                          Network preference: {activeProjectSettings.networkDefault}
+                        </span>
                       </div>
                     )}
                   </header>

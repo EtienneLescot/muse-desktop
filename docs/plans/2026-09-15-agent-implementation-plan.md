@@ -369,7 +369,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Code :** projets/settings/skills/connectors, configuration host. Dépend M2-01/M0-06.
 
-**État :** héritage global → projet visible via le helper SSOT `settingsForThread`, avec diff d’override et contexte de la conversation. Le modèle effectif est appliqué à la nouvelle session après `session/start` via `session/setModel`; la valeur `default` conserve le choix du moteur. Le compactage automatique local respecte maintenant la valeur `autoCompact` effective par conversation.
+**État :** héritage global → projet visible via le helper SSOT `settingsForThread`, avec diff d’override et contexte de la conversation. Le modèle effectif est appliqué à la nouvelle session après `session/start` via `session/setModel`; la valeur `default` conserve le choix du moteur. Le compactage automatique local respecte maintenant la valeur `autoCompact` effective par conversation. L'en-tête distingue le modèle effectivement demandé des préférences sandbox/réseau conservées localement, afin de ne pas présenter ces deux dernières comme des capacités moteur appliquées.
 
 **Reste :** le schéma MSP vérifié n’expose pas de mutation sessionnelle pour sandbox ou réseau. Conserver ces préférences locales et afficher leur origine sans les annoncer comme appliquées au moteur jusqu’à preuve du contrat ; ajouter ensuite une application sessionnelle et des tests d’isolement pour deux projets.
 
