@@ -8,6 +8,7 @@ import {
   authorizationModeLabel,
   connectorCallRequiresApproval,
   hostApprovalMode,
+  hostModeMatches,
   parseAuthorizationMode,
   productAuthorizationMode,
 } from "../src/lib/authorization.ts";
@@ -53,6 +54,13 @@ describe("global authorization posture", () => {
     assert.equal(productAuthorizationMode("promptUnmatched"), "workspace");
     assert.equal(productAuthorizationMode("allowAll"), "yolo");
     assert.equal(productAuthorizationMode("denyUnmatched"), null);
+  });
+
+  it("fails closed when a host has not confirmed a requested posture", () => {
+    assert.equal(hostModeMatches("workspace", "promptUnmatched"), true);
+    assert.equal(hostModeMatches("yolo", "promptUnmatched"), false);
+    assert.equal(hostModeMatches("yolo", null), false);
+    assert.equal(hostModeMatches("yolo", undefined), true);
   });
 
   it("keeps connector calls aligned with the global posture", () => {

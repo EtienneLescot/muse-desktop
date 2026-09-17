@@ -48,6 +48,24 @@ function storage(): Storage | null {
   return null;
 }
 
+/** Resolve session storage without letting restricted WebViews throw. */
+function sessionStorage(): Storage | null {
+  try {
+    const candidate = (globalThis as Record<string, unknown>).sessionStorage;
+    if (
+      candidate !== null &&
+      typeof candidate === "object" &&
+      typeof (candidate as Storage).getItem === "function" &&
+      typeof (candidate as Storage).setItem === "function"
+    ) {
+      return candidate as Storage;
+    }
+  } catch {
+    // Private browsing and restricted webviews can deny sessionStorage.
+  }
+  return null;
+}
+
 function record(key: string, kind: StorageIssueKind, message: string): void {
   issues = [
     ...issues.filter((issue) => !(issue.key === key && issue.kind === kind)),
@@ -128,6 +146,53 @@ export function writeStorageString(key: string, value: string): boolean {
     return true;
   } catch (error) {
     record(key, "quota", `local storage write failed: ${String(error)}`);
+    return false;
+  }
+}
+
+/** Read an ephemeral namespaced scalar without throwing in a restricted WebView. */
+export function readSessionStorageString(key: string, fallback = ""): string {
+  const store = sessionStorage();
+  if (store === null) {
+    record(key, "unavailable", "session storage is unavailable");
+    return fallback;
+  }
+  try {
+    return store.getItem(key) ?? fallback;
+  } catch (error) {
+    record(key, "unavailable", `session storage read failed: ${String(error)}`);
+    return fallback;
+  }
+}
+
+/** Write an ephemeral namespaced scalar while keeping the in-memory draft on failure. */
+export function writeSessionStorageString(key: string, value: string): boolean {
+  const store = sessionStorage();
+  if (store === null) {
+    record(key, "unavailable", "session storage is unavailable");
+    return false;
+  }
+  try {
+    store.setItem(key, value);
+    return true;
+  } catch (error) {
+    record(key, "quota", `session storage write failed: ${String(error)}`);
+    return false;
+  }
+}
+
+/** Remove one ephemeral value without throwing. */
+export function removeSessionStorageKey(key: string): boolean {
+  const store = sessionStorage();
+  if (store === null) {
+    record(key, "unavailable", "session storage is unavailable");
+    return false;
+  }
+  try {
+    store.removeItem(key);
+    return true;
+  } catch (error) {
+    record(key, "unavailable", `session storage remove failed: ${String(error)}`);
     return false;
   }
 }

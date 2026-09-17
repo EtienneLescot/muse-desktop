@@ -101,6 +101,7 @@ export function streamEventLabel(kind: string | null | undefined): string | null
     status: "status update",
     subagent_event: "sub-agent update",
     "turn/completed": "turn completed",
+    "turn/retracted": "turn cancelled",
     host_exited: "host disconnected",
   };
   const exact = labels[normalized];

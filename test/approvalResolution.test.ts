@@ -1,8 +1,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseApprovalResolution } from "../src/lib/approvalResolution.ts";
+import {
+  isApprovalDecisionAccepted,
+  parseApprovalResolution,
+} from "../src/lib/approvalResolution.ts";
 
 describe("approval resolution payloads", () => {
+  it("classifies accepted decisions without treating rejects as resumed work", () => {
+    assert.equal(isApprovalDecisionAccepted("allow once"), true);
+    assert.equal(isApprovalDecisionAccepted("approved"), true);
+    assert.equal(isApprovalDecisionAccepted("rejected"), false);
+    assert.equal(isApprovalDecisionAccepted("deny"), false);
+    assert.equal(isApprovalDecisionAccepted(""), false);
+  });
   it("recognizes accepted decisions and all supported id spellings", () => {
     assert.deepEqual(
       parseApprovalResolution('{"approvalId":"a1","decision":"Approved"}'),

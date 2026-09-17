@@ -13,6 +13,11 @@ import {
   type TurnInputPart,
 } from "../lib/attachments";
 import { loadAttachmentDraft, saveAttachmentDraft } from "../lib/attachmentDraft";
+import {
+  readSessionStorageString,
+  removeSessionStorageKey,
+  writeSessionStorageString,
+} from "../lib/storage";
 
 interface Props {
   /** Default folder for the new thread; null until the user picks one. */
@@ -43,19 +48,10 @@ export function EmptySessionScreen({
   authorizationMode,
   onAuthorizationModeChange,
 }: Props) {
-  const [draft, setDraft] = useState(() => {
-    try {
-      return sessionStorage.getItem("muse-desktop.welcome-draft") ?? "";
-    } catch {
-      return "";
-    }
-  });
+  const welcomeDraftKey = "muse-desktop.welcome-draft";
+  const [draft, setDraft] = useState(() => readSessionStorageString(welcomeDraftKey));
   useEffect(() => {
-    try {
-      sessionStorage.setItem("muse-desktop.welcome-draft", draft);
-    } catch {
-      /* Best effort. */
-    }
+    writeSessionStorageString(welcomeDraftKey, draft);
   }, [draft]);
   const [starting, setStarting] = useState(false);
   const [initialAttachmentDraft] = useState(() => loadAttachmentDraft("welcome"));
@@ -108,7 +104,7 @@ export function EmptySessionScreen({
     try {
       const sent = await onStart(draft, buildTurnInputParts(draft, attachments));
       if (sent) {
-        try { sessionStorage.removeItem("muse-desktop.welcome-draft"); } catch { /* Best effort. */ }
+        removeSessionStorageKey(welcomeDraftKey);
         setAttachments([]);
       }
     } finally {

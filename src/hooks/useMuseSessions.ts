@@ -153,6 +153,7 @@ import {
   parseTurnCompletion,
   type EngineErrorDetails,
 } from "../lib/engineError";
+import { statusLogText } from "../lib/statusLog";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
 // endpoint exists); children surface as `subagent` entries as usual.
 import {
@@ -242,9 +243,11 @@ import {
   createScheduleRun,
   isRetryableScheduleError,
   loadScheduleRuns,
+  markRecoveredRunFailed,
   markRunStarted,
   markRunRead,
   queueRunRetry,
+  recoverScheduleRuns,
   restoreRun,
   retryRunNow,
   saveScheduleRuns,
@@ -305,11 +308,16 @@ import {
   AUTHORIZATION_MODE_KEY,
   automaticApprovalChoice,
   authorizationModeLabel,
+  hostApprovalMode,
+  hostModeMatches,
   parseAuthorizationMode,
   productAuthorizationMode,
   type AuthorizationMode,
 } from "../lib/authorization";
-import { parseApprovalResolution } from "../lib/approvalResolution";
+import {
+  isApprovalDecisionAccepted,
+  parseApprovalResolution,
+} from "../lib/approvalResolution";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
@@ -969,6 +977,8 @@ interface UseMuseSessions {
   runScheduleNow: (id: string) => void;
   /** M3-07: cancel a queued retry without touching an in-flight host turn. */
   cancelScheduleRun: (id: string) => void;
+  /** M3-07: explicitly reconcile a row recovered after an app restart. */
+  markScheduleRunRecoveryFailed: (id: string) => void;
   /** M3-08: clear the independent inbox unread marker. */
   markScheduleRunRead: (id: string) => void;
   /** M3-08: archive or restore a run in the inbox. */
@@ -1130,6 +1140,8 @@ interface BackendSessionMeta {
   session_id: string;
   workspace: string;
   running: boolean;
+  /** Host projection, when this sidecar exposes one. */
+  approval_mode?: string;
 }
 
 interface BackendWorktreeSessionResult {
@@ -1382,6 +1394,10 @@ export function useMuseSessions(): UseMuseSessions {
   const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
     return parseAuthorizationMode(readStorageString(AUTHORIZATION_MODE_KEY));
   });
+  /** Effective host posture by session. `null` means a requested change was
+   * refused or the host returned an incomplete projection; in that state the
+   * local selector must never auto-approve a tool. */
+  const [hostApprovalModeBySession, setHostApprovalModeBySession] = useState<Record<string, string | null>>({});
   // US-15 allowlist: restored once (survives restarts via localStorage),
   // written through on every change.
   const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
@@ -1389,7 +1405,9 @@ export function useMuseSessions(): UseMuseSessions {
   // written through on every change (effect below).
   const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
-  const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() => loadScheduleRuns());
+  const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() =>
+    recoverScheduleRuns(loadScheduleRuns(), Date.now()),
+  );
   const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
   const [notificationPreferences, setNotificationPreferences] = useState(() => loadNotificationPreferences());
   const [notificationPermissionState, setNotificationPermissionState] = useState<NotificationPermission>(
@@ -1768,6 +1786,15 @@ export function useMuseSessions(): UseMuseSessions {
           for (const meta of restored) {
             if (!tombstoned.current?.has(meta.session_id)) {
               next[meta.session_id] = "connected";
+            }
+          }
+          return next;
+        });
+        setHostApprovalModeBySession((cur) => {
+          const next = { ...cur };
+          for (const meta of restored) {
+            if (typeof meta.approval_mode === "string" && !tombstoned.current?.has(meta.session_id)) {
+              next[meta.session_id] = meta.approval_mode;
             }
           }
           return next;
@@ -2479,6 +2506,12 @@ export function useMuseSessions(): UseMuseSessions {
     if (kind === "host_exited") {
       setConnectedIds((cur) => cur.filter((id) => id !== sid));
       setConnectionState(sid, "disconnected");
+      setHostApprovalModeBySession((cur) => {
+        if (!(sid in cur)) return cur;
+        const next = { ...cur };
+        delete next[sid];
+        return next;
+      });
       clearStopping(sid);
     }
     if (kind === "output") {
@@ -2754,6 +2787,7 @@ export function useMuseSessions(): UseMuseSessions {
           setError(`The host reported an unsupported approval mode: ${hostMode || "unknown"}.`);
           return;
         }
+        setHostApprovalModeBySession((cur) => ({ ...cur, [sid]: hostMode }));
         setAuthorizationModeState(mapped);
         writeStorageString(AUTHORIZATION_MODE_KEY, mapped);
       } catch {
@@ -2889,10 +2923,14 @@ export function useMuseSessions(): UseMuseSessions {
           text: engineErrorSummary(failure),
           engineError: failure,
         }]);
-      } else if (completion === null && payload) {
-        // Preserve diagnostics for legacy/non-terminal status events while
-        // keeping ordinary completed/cancelled turns quiet in the transcript.
-        pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text: `[${kind}] ${payload}` }]);
+      } else if (completion === null) {
+        // Only lifecycle events with an explicit user-facing consequence enter
+        // the transcript. Protocol housekeeping and unknown future statuses
+        // remain in the live stream/diagnostics instead of leaking raw JSON.
+        const text = statusLogText(kind, payload);
+        if (text !== null) {
+          pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text }]);
+        }
       }
     }
     // Closing a (re)start would kill the just-painted placeholder; only
@@ -2927,17 +2965,38 @@ export function useMuseSessions(): UseMuseSessions {
       connectedIds.includes(session.session_id),
     );
     if (targets.length === 0) return;
+    // Until each host confirms the same closed MSP mode, suspend automatic
+    // decisions for these sessions. A local preference is never authority
+    // enough to bypass a host ceiling (for example promptUnmatched).
+    setHostApprovalModeBySession((cur) => targets.reduce(
+      (next, session) => ({ ...next, [session.session_id]: null }),
+      { ...cur },
+    ));
     // The host applies the new posture to subsequent actions. Pending
     // approvals remain race-guarded by their current requirement token.
     void Promise.allSettled(
-      targets.map((session) =>
-        invoke("set_approval_mode", {
+      targets.map(async (session) => {
+        const result = await invoke<Record<string, unknown>>("set_approval_mode", {
           sessionId: session.session_id,
           mode: next,
-        }),
-      ),
+        });
+        const effective = (result.effectiveMode as Record<string, unknown> | undefined)?.mode;
+        if (result.status !== "accepted" || effective !== hostApprovalMode(next)) {
+          throw new Error("host did not confirm the requested approval posture");
+        }
+        return session.session_id;
+      }),
     ).then((results) => {
-      const failed = results.filter((result) => result.status === "rejected").length;
+      const succeeded = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+      const failed = results.length - succeeded.length;
+      setHostApprovalModeBySession((cur) => {
+        const nextState = { ...cur };
+        for (const sessionId of succeeded) nextState[sessionId] = hostApprovalMode(next);
+        for (const session of targets) {
+          if (!succeeded.includes(session.session_id)) nextState[session.session_id] = null;
+        }
+        return nextState;
+      });
       if (failed > 0) {
         setError(
           `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host.`,
@@ -3185,6 +3244,9 @@ export function useMuseSessions(): UseMuseSessions {
       };
       setConnectedIds((cur) => [...new Set([...cur, meta.session_id])]);
       setConnectionState(meta.session_id, "connected");
+      if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
+        setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
+      }
       setSessions((cur) => [...cur, record]);
       setLogs((cur) => (cur[meta.session_id] ? cur : { ...cur, [meta.session_id]: [] }));
       setActiveId(meta.session_id);
@@ -3280,11 +3342,29 @@ export function useMuseSessions(): UseMuseSessions {
       });
       if (tombstoned.current?.has(id)) return;
       // Resume restores the host's persisted posture. Reconcile it with the
-      // current global selector before enabling the composer again.
-      await invoke("set_approval_mode", {
-        sessionId: id,
-        mode: authorizationMode,
-      });
+      // current global selector before enabling the composer again. A host
+      // ceiling must not make the saved conversation unusable: preserve the
+      // observed projection and keep automatic approval fail-closed.
+      let postureError: unknown = null;
+      try {
+        const posture = await invoke<Record<string, unknown>>("set_approval_mode", {
+          sessionId: id,
+          mode: authorizationMode,
+        });
+        const effective = (posture.effectiveMode as Record<string, unknown> | undefined)?.mode;
+        if (typeof effective === "string") {
+          setHostApprovalModeBySession((cur) => ({ ...cur, [id]: effective }));
+        } else {
+          postureError = new Error("host returned no effective approval mode");
+          setHostApprovalModeBySession((cur) => ({ ...cur, [id]: null }));
+        }
+      } catch (error) {
+        postureError = error;
+        setHostApprovalModeBySession((cur) => ({
+          ...cur,
+          [id]: meta.approval_mode ?? null,
+        }));
+      }
       // Cold reconnects can outlive the renderer's local log (for example
       // after a storage reset or a crash during streaming). Reconcile the
       // folded server history before enabling the composer again. The read is
@@ -3334,6 +3414,9 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
       kickPoll();
       await refreshModels(id);
+      if (postureError !== null) {
+        setError("Conversation reconnected, but the host kept its existing authorization posture.");
+      }
     } catch (e) {
       setConnectionState(id, "error");
       setError(`Reconnect failed: ${String(e)}. Your saved messages are still available.`);
@@ -3384,6 +3467,9 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
+        if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
+          setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
+        }
         setConnectionState(meta.session_id, "connected");
         setSessions((current) => [
           ...current.filter((session) => session.session_id !== meta.session_id),
@@ -3436,6 +3522,9 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
+        if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
+          setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
+        }
         setConnectionState(meta.session_id, "connected");
         setSessions((current) => [
           ...current.filter((session) => session.session_id !== meta.session_id),
@@ -4316,6 +4405,16 @@ export function useMuseSessions(): UseMuseSessions {
     async (sessionId: string, approvalId: string, choiceId: string) => {
       try {
         setError(null);
+        // The selected choice is the only local hint about whether the host
+        // should resume the turn. A reject/deny choice must not paint a
+        // misleading "resuming" bridge; the authoritative resolution event
+        // still settles the approval and any terminal turn state.
+        const selectedChoice = approvals
+          .find((approval) => approval.session_id === sessionId && approval.request_id === approvalId)
+          ?.choices.find((choice) => choice.choiceId === choiceId);
+        const acceptedChoice = selectedChoice === undefined
+          ? true
+          : isApprovalDecisionAccepted(selectedChoice.decision);
         const terminal = await invoke<boolean>("approve", {
           sessionId,
           approvalId,
@@ -4331,11 +4430,14 @@ export function useMuseSessions(): UseMuseSessions {
             ),
           );
         }
-        // The turn resumes after a decision: drain now, don't wait a tick.
-        // US-10: reflexive placeholder synchronously, same as after send.
+        // The turn resumes after an accepted decision: drain now, don't wait
+        // a tick. A rejection follows the host's terminal path instead.
         touchStreamActivity(sessionId, "client/approval");
-        ensurePlaceholder(sessionId);
-        markResumePending(sessionId, "approval");
+        if (acceptedChoice) {
+          // US-10: reflexive placeholder synchronously, same as after send.
+          ensurePlaceholder(sessionId);
+          markResumePending(sessionId, "approval");
+        }
         kickPoll();
         return true;
       } catch (e) {
@@ -4375,6 +4477,10 @@ export function useMuseSessions(): UseMuseSessions {
       }
       const choice = automaticApprovalChoice(authorizationMode, approval.choices);
       if (choice === null) continue;
+      const effectiveHostMode = hostApprovalModeBySession[approval.session_id];
+      if (!hostModeMatches(authorizationMode, effectiveHostMode)) {
+        continue;
+      }
       // Include the current choice set so an approval/updated stage can be
       // auto-decided even though the host intentionally reuses approvalId.
       const key = `${approval.session_id}|${approval.request_id}|${approval.choices
@@ -4384,7 +4490,7 @@ export function useMuseSessions(): UseMuseSessions {
       autoApprovalInFlight.current.add(key);
       void approve(approval.session_id, approval.request_id, choice.choiceId);
     }
-  }, [approvals, authorizationMode, approve, allowlist]);
+  }, [approvals, authorizationMode, approve, allowlist, hostApprovalModeBySession]);
 
   // US-15: effective allowlist decision for one pending approval request
   // (badge in the panel; most-restrictive-wins, network default-deny).
@@ -5133,6 +5239,10 @@ export function useMuseSessions(): UseMuseSessions {
 
   const cancelScheduleRun = useCallback((id: string): void => {
     setScheduleRuns((cur) => cancelRun(cur, id));
+  }, []);
+
+  const markScheduleRunRecoveryFailed = useCallback((id: string): void => {
+    setScheduleRuns((cur) => markRecoveredRunFailed(cur, id, Date.now()));
   }, []);
 
   const markScheduleRunRead = useCallback((id: string): void => {
@@ -6167,6 +6277,7 @@ export function useMuseSessions(): UseMuseSessions {
     deleteSchedule: deleteScheduleCb,
     runScheduleNow,
     cancelScheduleRun,
+    markScheduleRunRecoveryFailed,
     markScheduleRunRead,
     setScheduleRunArchived,
     retryScheduleRunNow,

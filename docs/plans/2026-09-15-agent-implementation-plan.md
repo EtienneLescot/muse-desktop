@@ -55,7 +55,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** `hosts.rs`, `msp.rs`, `main.rs`, hook de sessions. Réutiliser le registre ajouté en PR #13.
 
-**Travail :** ajouter un scénario Tauri avec deux dossiers temporaires, deux sessions et flux entrelacés. Interrompre/faire mourir B pendant que A travaille ; vérifier routes send/model/approval/input/subagent, sessions supprimées et événements tardifs d'une ancienne génération. Traiter aussi fermeture du canal stdout sans événement Terminated et échec pendant initialize.
+**Travail :** ajouter un scénario Tauri avec deux dossiers temporaires, deux sessions et flux entrelacés. Interrompre/faire mourir B pendant que A travaille ; vérifier routes send/model/approval/input/subagent, sessions supprimées et événements tardifs d'une ancienne génération. Traiter aussi fermeture du canal stdout sans événement Terminated et échec pendant initialize. Le contrôle opt-in `npm run smoke:native` couvre désormais le pré-vol réel Windows (deux `muse serve`, handshake, sessions et `model/list`) avec nettoyage et sortie JSON bornée ; il ne remplace pas le scénario Tauri complet.
 
 **Acceptation :** A conserve son identité, ses requêtes et son flux ; B seul devient déconnecté ; aucun processus/consommateur ne reste après fermeture. Dépendance : harnais M0-14. Ne pas clore avec le seul smoke « deux model/list ».
 
@@ -88,6 +88,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **Acceptation :** arrêt avant premier token, pendant outil, après fin, réponse tardive et double-clic. L'arrêt de A n'affecte pas B ; l'état final correspond au moteur. Dépend M0-01/03.
 
 **État au 16/09/2026 :** demande de cancellation conservée dans un état renderer-only jusqu'à réception d'un statut `stopped` (ou déconnexion), avec badge `Stopping Muse`, bouton désactivé contre le double-clic et transcript non fermé prématurément. La qualification native des courses et réponses tardives reste à produire.
+**Pré-vol natif au 17/09/2026 :** `node scripts/native-smoke.mjs --exercise-control` admet en parallèle puis interrompt immédiatement un tour synthétique sur deux sidecars Windows distincts et vérifie l'accusé `accepted` ainsi que la conservation du `turnId`. Cette preuve couvre le contrat de commande, pas la course UI entre un premier token, un outil, un terminal confirmé et une réponse tardive.
 
 ### M0-05 — Demandes en attente
 
@@ -107,13 +108,21 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** lecture/écriture hors racine, symlink, réseau et commande refusée ; verdict moteur conforme au texte UI. Dépend M0-01/08 ; profils testés sans élargir les permissions réelles de l'utilisateur.
 
+**Pré-vol natif au 17/09/2026 :** `--exercise-approval` crée une session sans préférence imposée, relève la projection `approvalMode` du host puis tente `onRequest`, `promptUnmatched` et `allowAll`. Le sidecar 1.3.0 observé accepte la posture courante `promptUnmatched` et refuse les deux autres avec `commandRejected/approval_mode_ceiling`. Cette limite est désormais explicite dans le rapport ; l'UI ne doit pas convertir une préférence locale refusée en permission effective.
+
+**Continuité sous plafond :** si une préférence locale persistée est refusée à `session/start` pour `approval_mode_ceiling`, le bridge retire uniquement ce champ et retente avec la posture par défaut du host. La réponse expose `approval_mode` lorsque disponible. `reconnectSession` garde ensuite l'historique et le compositeur utilisables si `session/setApprovalMode` est refusé, en conservant la projection observée et en suspendant l'auto-approbation jusqu'à confirmation.
+
+**Pump stdout :** `pump_stdout` délègue à `ingest_stdout_chunk`, frontière asynchrone testée avec un child injecté. Le test couvre une réponse coupée entre deux chunks, une notification et une ligne JSON illisible ; il vérifie que les réponses sont corrélées par identifiant et que les diagnostics restent bornés. Il reste à brancher une webview empaquetée et un `CommandEvent` réel dans le contrôle natif M0-14g.
+
+Le contrat de démarrage est également couvert sans webview : une erreur `approval_mode_ceiling` sur la première `session/start` provoque un second appel sans `approvalMode`, tandis qu'une erreur différente reste bloquante. La session reçoit ensuite la projection effective du host (`approval_mode`) pour que la SSOT renderer ne confonde pas préférence locale et permission appliquée.
+
 ### M0-07 — Diagnostics
 
 **Code :** `wire_log`, `push_stderr`, `msp.rs`, erreurs affichées.
 
 **Travail :** supprimer la capture brute en usage normal. Si diagnostic activé : événements structurés, métadonnées minimales, masquage, rotation et rétention bornées ; export explicite avec aperçu. Utiliser une troncature respectant les frontières UTF-8.
 
-**État au 17/09/2026 :** Settings propose un export JSON local borné (`muse-desktop.diagnostics.v1`) contenant plateforme, backend, compteurs de sessions/événements et dernière erreur rédigée. Le bridge Tauri expose aussi `collect_diagnostics` (`muse-desktop.native-diagnostics.v1`) pour ajouter les compteurs natifs de workspace, hosts, sessions, approbations et buffer d'événements ; le web preview conserve un fallback renderer. Les événements `turn/completed` conservent désormais l'erreur terminale MSP structurée (`kind`, `message`, `retryable`, durée/raison), persistée dans le journal et rendue dans une disclosure lisible ; une erreur réessayable propose **Retry turn** à partir du dernier prompt utilisateur précédent. Les hôtes sans enveloppe retombent sur une raison bornée et rédigée. Aucun chemin de workspace ni contenu de conversation n'est exporté ; les secrets courants sont masqués. La qualification native des erreurs détaillées du moteur reste ouverte.
+**État au 17/09/2026 :** Settings propose un export JSON local borné (`muse-desktop.diagnostics.v1`) contenant plateforme, backend, compteurs de sessions/événements et dernière erreur rédigée. Le bridge Tauri expose aussi `collect_diagnostics` (`muse-desktop.native-diagnostics.v1`) pour ajouter les compteurs natifs de workspace, hosts, sessions, approbations et buffer d'événements ; le web preview conserve un fallback renderer. Les événements `turn/completed` conservent désormais l'erreur terminale MSP structurée (`kind`, `message`, `retryable`, durée/raison), persistée dans le journal et rendue dans une disclosure lisible ; une erreur réessayable propose **Retry turn** à partir du dernier prompt utilisateur précédent. Les hôtes sans enveloppe retombent sur une raison bornée et rédigée. Aucun chemin de workspace ni contenu de conversation n'est exporté ; les secrets courants sont masqués. Le pré-vol natif `--exercise-errors` confirme maintenant que les catégories `methodNotFound` et `invalidParams` traversent le transport sur deux hôtes isolés ; la qualification des erreurs détaillées d'un tour réel reste ouverte.
 
 **Acceptation :** Unicode multioctet à la limite, erreur longue, secret synthétique, volume élevé. Aucun prompt ou secret brut écrit par défaut ; pas de panic. Livrable autonome, sans attendre les autres lots.
 
@@ -124,6 +133,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **Travail :** recenser les RPC réellement envoyées, y compris modèles/compaction/subagents/reprise. Contrôler le registre contre l'implémentation plutôt qu'un nombre constant. Stocker les capacités et version de handshake ; définir incompatible vs ajout compatible. Centraliser les codes d'erreur utiles et masquer les actions non supportées.
 
 **Acceptation :** RPC manquante du registre fait échouer le contrôle ; schéma incompatible produit une erreur exploitable ; notification additive inconnue n'arrête pas le flux. Livrer fixtures anonymisées de versions connues.
+
+**Pré-vol natif au 17/09/2026 :** le binaire Muse 1.3.0 répond au handshake attendu et renvoie des erreurs JSON-RPC structurées pour une méthode inconnue et une interruption sans paramètres sur chacun des deux hosts du smoke. Cette preuve ne couvre pas encore la matrice de versions ni les erreurs produites pendant un tour modèle.
 
 ### M0-09 — Persistance
 
@@ -185,7 +196,12 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **État au 17/09/2026 :** les jobs CI frontend et Rust conservent désormais, uniquement en cas d'échec, un rapport borné (250/300 dernières lignes), après masquage des chemins du runner et des formes de secrets courantes. Les artefacts sont rétentionnés sept jours et ne contiennent ni workspace utilisateur ni transcript.
 
-**Reste :** brancher la fixture au superviseur Tauri avec deux workspaces isolés et injecter une panne pendant `send_input`. Ces tests restent séparés d'un tour modèle réel.
+**Fondation d'injection livrée :** le transport MSP dépend maintenant d'une interface enfant minimale, avec adaptateur `CommandChild` en production. Les tests Rust conduisent la corrélation de requêtes, l'isolation A/B, les lanes par session et le réveil des appels en attente avec un enfant déterministe sans démarrer de moteur modèle. Cette frontière prépare le pilote de fixture du superviseur ; elle ne constitue pas encore le scénario Tauri complet.
+
+**Pilote superviseur livré au 17/09/2026 :** `send_input_for_state` est partagé par la commande Tauri et les tests. Deux clients injectés sur des workspaces distincts valident le payload `turn/start`, les réponses hors ordre et l'isolation de l'état `running`; une écriture enfant en erreur reste bornée et ne marque pas de tour comme démarré. Le pilote reste sans provider modèle.
+
+**Reste :** faire traverser la vraie fixture enfant par le pump stdout, puis qualifier l'appel `invoke` de la webview et le scénario A/B natif avec approbations. Ces tests restent séparés d'un tour modèle réel.
+**Pré-vol natif :** le smoke Windows partage désormais cette commande avec `--exercise-control` pour vérifier le contrôle `turn/start` → `turn/interrupt` sur deux hosts réels. Son option `--exercise-errors` vérifie aussi les catégories `methodNotFound` et `invalidParams` sur les deux transports, sans exposer les trames brutes ; il ne remplace pas l'injection de panne dans le superviseur Tauri.
 
 **Acceptation :** depuis un clone propre, `npm test` lance la fixture sans dépendance externe ; détecter volontairement une mauvaise route A/B et un envoi perdu dès que le pilote Tauri isolé est ajouté. Choisir le pilote Tauri selon support réel des plateformes, consigner toute limite dans l'ADR.
 
@@ -473,9 +489,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** clé unique schedule + occurrence, transactions de claim, politique de rattrapage, fuseau/DST, retry borné avec backoff et annulation. Distinguer machine/app fermée et run interrompu ; ne jamais relancer aveuglément une opération externe au résultat ambigu.
 
-**État au 17/09/2026 :** les occurrences portent maintenant `occurrenceAt`/`occurrenceKey`, les cron manqués suivent `latest` ou `skip`, et le journal limite les échecs à trois tentatives avec backoff 15/30/60 secondes. Une retry en attente est annulable depuis Automations ; les timeouts ambigus ne sont jamais relancés automatiquement. Un bail partagé `muse-desktop.scheduler-lease.v1` est acquis, renouvelé et libéré par chaque renderer pour empêcher deux fenêtres de consommer le même tick ; son expiration permet la récupération après crash. Le scheduler réévalue immédiatement les occurrences au `focus`, `pageshow` et retour de visibilité, puis les fuseaux IANA sont résolus en heure murale, y compris les trous et doublons DST.
+**État au 17/09/2026 :** les occurrences portent maintenant `occurrenceAt`/`occurrenceKey`, les cron manqués suivent `latest` ou `skip`, et le journal limite les échecs à trois tentatives avec backoff 15/30/60 secondes. Une retry en attente est annulable depuis Automations ; les timeouts ambigus ne sont jamais relancés automatiquement. Un bail partagé `muse-desktop.scheduler-lease.v1` est acquis, renouvelé et libéré par chaque renderer pour empêcher deux fenêtres de consommer le même tick ; son expiration permet la récupération après crash. Le scheduler réévalue immédiatement les occurrences au `focus`, `pageshow` et retour de visibilité, puis les fuseaux IANA sont résolus en heure murale, y compris les trous et doublons DST. Au boot, les runs non terminaux sans preuve de résultat sont désormais marqués `recovery: after-restart`, rendus visibles comme **Review needed** et bloqués jusqu'à une action explicite **Mark failed** ; aucune opération externe ambiguë n'est rejouée automatiquement.
 
-**Limite restante :** le bail local réduit les doublons entre fenêtres du même profil mais ne remplace pas un scheduler natif multi-instance ; la reprise d’un crash entre claim et démarrage reste à qualifier.
+**Limite restante :** le bail local réduit les doublons entre fenêtres du même profil mais ne remplace pas un scheduler natif multi-instance ; la preuve native de l'état du host après crash et le démarrage d'un service lorsque l'application est fermée restent à qualifier.
 
 **Acceptation :** sommeil/réveil, changement d'heure, double instance, crash entre claim et démarrage, suppression schedule ; pas de doublon d'occurrence.
 

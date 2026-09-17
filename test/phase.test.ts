@@ -74,6 +74,7 @@ describe("isStoppedKind", () => {
   it("covers bare and namespaced stopped kinds", () => {
     for (const k of [
       "cancelled",
+      "retracted",
       "completed",
       "stopped",
       "exited",
@@ -87,6 +88,7 @@ describe("isStoppedKind", () => {
       "turn_end",
       "idle",
       "turn/completed",
+      "turn/retracted",
     ]) {
       assert.equal(isStoppedKind(k), true, k);
     }
@@ -111,6 +113,7 @@ describe("phaseForKind", () => {
     assert.equal(phaseForKind("thinking"), "streaming");
     assert.equal(phaseForKind("reasoning"), "streaming");
     assert.equal(phaseForKind("completed"), "stopped");
+    assert.equal(phaseForKind("turn/retracted"), "stopped");
     assert.equal(phaseForKind("turn_end"), "stopped");
     assert.equal(phaseForKind("approval/resolved"), "other");
     assert.equal(phaseForKind("something-new"), "other");

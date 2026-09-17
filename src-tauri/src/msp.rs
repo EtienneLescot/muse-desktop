@@ -26,11 +26,27 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 pub struct RpcError {
     pub code: i64,
     pub message: String,
+    /// Optional structured fields from the host error envelope. Keeping the
+    /// category/reason here lets command boundaries make a safe decision
+    /// without exposing the raw JSON-RPC frame to the renderer.
+    pub kind: Option<String>,
+    pub reason: Option<String>,
+    pub retryable: Option<bool>,
 }
 
 impl std::fmt::Display for RpcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MSP error {}: {}", self.code, self.message)
+        write!(f, "MSP error {}: {}", self.code, self.message)?;
+        if let Some(kind) = self.kind.as_deref().filter(|value| !value.is_empty()) {
+            write!(f, " [{kind}]")?;
+        }
+        if let Some(reason) = self.reason.as_deref().filter(|value| !value.is_empty()) {
+            write!(f, " ({reason})")?;
+        }
+        if let Some(retryable) = self.retryable {
+            write!(f, " [retryable={retryable}]")?;
+        }
+        Ok(())
     }
 }
 
@@ -113,6 +129,20 @@ pub fn route_frame(
                         .and_then(Value::as_str)
                         .unwrap_or("unknown error")
                         .to_string(),
+                    kind: err
+                        .get("data")
+                        .and_then(|data| data.get("kind"))
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    reason: err
+                        .get("data")
+                        .and_then(|data| data.get("reason"))
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    retryable: err
+                        .get("data")
+                        .and_then(|data| data.get("retryable"))
+                        .and_then(Value::as_bool),
                 })
             } else {
                 Ok(frame.get("result").cloned().unwrap_or(Value::Null))
@@ -127,9 +157,30 @@ pub fn route_frame(
     }
 }
 
+/// The small child-process surface used by the MSP transport.
+///
+/// Keeping this boundary narrower than `CommandChild` lets protocol tests
+/// drive the exact production request/correlation path with a deterministic
+/// child double. The Tauri adapter below remains the only production
+/// implementation; no alternate transport is selected by the renderer.
+pub trait ChildTransport: Send {
+    fn write(&mut self, buf: &[u8]) -> Result<(), String>;
+    fn kill(self: Box<Self>) -> Result<(), String>;
+}
+
+impl ChildTransport for CommandChild {
+    fn write(&mut self, buf: &[u8]) -> Result<(), String> {
+        CommandChild::write(self, buf).map_err(|e| e.to_string())
+    }
+
+    fn kill(self: Box<Self>) -> Result<(), String> {
+        CommandChild::kill(*self).map_err(|e| e.to_string())
+    }
+}
+
 /// The sidecar child, shared between the request writer (needs `&mut` for
 /// `write`) and the owner (needs ownership for `kill`, which consumes).
-pub type SharedChild = Arc<Mutex<Option<CommandChild>>>;
+pub type SharedChild = Arc<Mutex<Option<Box<dyn ChildTransport>>>>;
 
 /// Live handle to one `muse serve` host process.
 pub struct MspClient {
@@ -227,6 +278,53 @@ impl MspClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct TestChild {
+        writes: mpsc::UnboundedSender<Vec<u8>>,
+        killed: Arc<AtomicBool>,
+    }
+
+    impl ChildTransport for TestChild {
+        fn write(&mut self, buf: &[u8]) -> Result<(), String> {
+            self.writes
+                .send(buf.to_vec())
+                .map_err(|_| "test child write receiver dropped".to_string())
+        }
+
+        fn kill(self: Box<Self>) -> Result<(), String> {
+            self.killed.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    fn test_client() -> (
+        Arc<MspClient>,
+        mpsc::UnboundedReceiver<Vec<u8>>,
+        Arc<AtomicBool>,
+    ) {
+        let (writes, received) = mpsc::unbounded_channel();
+        let killed = Arc::new(AtomicBool::new(false));
+        let child = TestChild {
+            writes,
+            killed: killed.clone(),
+        };
+        let (notify_tx, _) = mpsc::unbounded_channel();
+        let client = Arc::new(MspClient::new(
+            Arc::new(Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        (client, received, killed)
+    }
+
+    async fn next_frame(rx: &mut mpsc::UnboundedReceiver<Vec<u8>>) -> Value {
+        let bytes = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("test child did not receive a frame")
+            .expect("test child channel closed");
+        serde_json::from_slice::<Value>(bytes.strip_suffix(b"\n").unwrap_or(&bytes))
+            .expect("request frame must be valid JSON")
+    }
 
     #[tokio::test]
     async fn shutting_down_one_client_wakes_only_its_consumers() {
@@ -304,11 +402,16 @@ mod tests {
         pending.insert("8".to_string(), tx);
         let (ntx, mut nrx) = mpsc::unbounded_channel();
         route_frame(
-            json!({"jsonrpc":"2.0","id":8,"error":{"code":-32052,"message":"stale"}}),
+            json!({"jsonrpc":"2.0","id":8,"error":{"code":-32052,"message":"stale","data":{"kind":"commandRejected","reason":"approval_mode_ceiling","retryable":false}}}),
             &mut pending,
             &ntx,
         );
-        assert!(rx.await.unwrap().unwrap_err().code == -32052);
+        let error = rx.await.unwrap().unwrap_err();
+        assert_eq!(error.code, -32052);
+        assert_eq!(error.kind.as_deref(), Some("commandRejected"));
+        assert_eq!(error.reason.as_deref(), Some("approval_mode_ceiling"));
+        assert_eq!(error.retryable, Some(false));
+        assert!(error.to_string().contains("approval_mode_ceiling"));
         route_frame(
             json!({"jsonrpc":"2.0","method":"turn/completed","params":{"terminal":"cancelled"}}),
             &mut pending,
@@ -317,5 +420,74 @@ mod tests {
         let (m, p) = nrx.recv().await.unwrap();
         assert_eq!(m, "turn/completed");
         assert_eq!(p["terminal"], "cancelled");
+    }
+
+    #[tokio::test]
+    async fn request_correlation_is_order_independent() {
+        let (client, mut writes, _) = test_client();
+        let first = {
+            let client = client.clone();
+            tokio::spawn(async move { client.request("session/start", json!({"slot": "first"})).await })
+        };
+        let second = {
+            let client = client.clone();
+            tokio::spawn(async move { client.request("model/list", Value::Null).await })
+        };
+        let frame_one = next_frame(&mut writes).await;
+        let frame_two = next_frame(&mut writes).await;
+        assert_eq!(frame_one["id"], 1);
+        assert_eq!(frame_two["id"], 2);
+
+        // Feed the second response first. A shared client must complete each
+        // waiter by id rather than by arrival order.
+        client
+            .ingest(json!({"jsonrpc":"2.0","id":2,"result":{"models":[]}}))
+            .await;
+        client
+            .ingest(json!({"jsonrpc":"2.0","id":1,"result":{"session":{"id":"a"}}}))
+            .await;
+        assert_eq!(second.await.unwrap().unwrap()["models"], json!([]));
+        assert_eq!(first.await.unwrap().unwrap()["session"]["id"], "a");
+    }
+
+    #[tokio::test]
+    async fn clients_keep_workspace_responses_isolated() {
+        let (client_a, mut writes_a, _) = test_client();
+        let (client_b, mut writes_b, _) = test_client();
+        let request_a = {
+            let client = client_a.clone();
+            tokio::spawn(async move { client.request("session/start", json!({"workspace": "A"})).await })
+        };
+        let request_b = {
+            let client = client_b.clone();
+            tokio::spawn(async move { client.request("session/start", json!({"workspace": "B"})).await })
+        };
+        let frame_a = next_frame(&mut writes_a).await;
+        let frame_b = next_frame(&mut writes_b).await;
+        client_a
+            .ingest(json!({"jsonrpc":"2.0","id":frame_a["id"],"result":{"workspace":"A"}}))
+            .await;
+        client_b
+            .ingest(json!({"jsonrpc":"2.0","id":frame_b["id"],"result":{"workspace":"B"}}))
+            .await;
+        assert_eq!(request_a.await.unwrap().unwrap()["workspace"], "A");
+        assert_eq!(request_b.await.unwrap().unwrap()["workspace"], "B");
+    }
+
+    #[tokio::test]
+    async fn shutdown_kills_child_and_releases_pending_request() {
+        let (client, mut writes, killed) = test_client();
+        let request = {
+            let client = client.clone();
+            tokio::spawn(async move { client.request("turn/start", json!({"input": []})).await })
+        };
+        let _ = next_frame(&mut writes).await;
+        client.shutdown().await;
+        assert!(killed.load(Ordering::SeqCst));
+        let result = tokio::time::timeout(std::time::Duration::from_secs(1), request)
+            .await
+            .expect("pending request did not wake after shutdown")
+            .unwrap();
+        assert!(result.unwrap_err().contains("dropped"));
     }
 }

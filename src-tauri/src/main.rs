@@ -54,6 +54,11 @@ pub struct SessionMeta {
     pub session_id: String,
     pub workspace: String,
     pub running: bool,
+    /// The host's effective approval projection when the session API returns
+    /// one. This is advisory renderer metadata; automatic decisions still
+    /// require an explicit per-session confirmation in the hook.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_mode: Option<String>,
 }
 
 /// One buffered backend event with its sequence number (poll transport).
@@ -560,6 +565,27 @@ fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: St
     // Poll transport: buffer the event with a sequence number. The UI drains
     // via `poll_events`. (`event` is kept for log readability.)
     let state: State<AppState> = app.state();
+    push_event(&state, session_id, kind, payload);
+}
+
+/// Read the host's effective approval projection from any session-shaped
+/// response. Older hosts omit it, so absence remains `None` and the renderer
+/// keeps its compatibility path instead of inventing a posture.
+fn session_approval_mode(session: &Value) -> Option<String> {
+    session
+        .get("approvalMode")
+        .or_else(|| session.get("approval_mode"))
+        .and_then(|mode| mode.get("mode").or(Some(mode)))
+        .and_then(Value::as_str)
+        .filter(|mode| !mode.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn is_approval_mode_ceiling(error: &str) -> bool {
+    error.contains("approval_mode_ceiling") || error.contains("approval mode ceiling")
+}
+
+fn push_event(state: &AppState, session_id: &str, kind: &str, payload: String) {
     let (Ok(mut seq), Ok(mut buf)) = (state.event_seq.lock(), state.event_buffer.lock()) else {
         return;
     };
@@ -575,7 +601,7 @@ fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: St
     }
 }
 
-fn mark_running(state: &State<AppState>, session_id: &str, running: bool) {
+fn mark_running(state: &AppState, session_id: &str, running: bool) {
     if let Ok(mut sessions) = state.sessions.lock() {
         if let Some(meta) = sessions.get_mut(session_id) {
             meta.running = running;
@@ -598,7 +624,7 @@ async fn ensure_host(
         return Ok(client);
     }
     let (rx, child) = spawn_sidecar(app, root)?;
-    let shared: SharedChild = std::sync::Arc::new(tokio::sync::Mutex::new(Some(child)));
+    let shared: SharedChild = std::sync::Arc::new(tokio::sync::Mutex::new(Some(Box::new(child))));
     let (notify_tx, notify_rx) = mpsc::unbounded_channel::<(String, Value)>();
     let client = std::sync::Arc::new(MspClient::new(shared, notify_tx));
     let stderr_tail = std::sync::Arc::new(Mutex::new(Vec::<String>::new()));
@@ -731,6 +757,24 @@ fn spawn_sidecar(
     })
 }
 
+/// Decode one or more stdout chunks and feed complete MSP frames into the
+/// owning client. Keeping the framing boundary separate from the Tauri event
+/// receiver makes the exact production parser testable with a deterministic
+/// child while preserving the same partial-line behavior in the pump.
+async fn ingest_stdout_chunk(
+    client: &MspClient,
+    out_buf: &mut Vec<u8>,
+    stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>,
+    chunk: &[u8],
+) {
+    for line in split_lines(out_buf, chunk) {
+        match serde_json::from_str::<Value>(&line) {
+            Ok(frame) => client.ingest(frame).await,
+            Err(_) => push_stderr(stderr_tail, format!("unparsable frame: {line}")),
+        }
+    }
+}
+
 /// Forward the host's stdout frames into the MSP client; stash stderr for
 /// diagnostics; announce host death only to sessions owned by this client.
 fn pump_stdout(
@@ -745,12 +789,7 @@ fn pump_stdout(
         while let Some(ev) = rx.recv().await {
             match ev {
                 CommandEvent::Stdout(chunk) => {
-                    for line in split_lines(&mut out_buf, &chunk) {
-                        match serde_json::from_str::<Value>(&line) {
-                            Ok(frame) => client.ingest(frame).await,
-                            Err(_) => push_stderr(&stderr_tail, format!("unparsable frame: {line}")),
-                        }
-                    }
+                    ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &chunk).await;
                 }
                 CommandEvent::Stderr(chunk) => {
                     for line in split_lines(&mut err_buf, &chunk) {
@@ -812,7 +851,10 @@ fn pump_notifications(
     });
 }
 
-fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p: &Value) {
+fn route_notification_with_emit<F>(state: &AppState, method: &str, p: &Value, mut emit_fn: F)
+where
+    F: FnMut(&str, &str, &str, String),
+{
     let sid = p.get("sessionId").and_then(Value::as_str).unwrap_or("");
     match method {
         "item/started" => {
@@ -855,9 +897,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                             announce.insert("depth".to_string(), json!(d));
                         }
                     }
-                    emit(
-                        app,
-                        "subagent_event",
+                    emit_fn("subagent_event",
                         sid,
                         "subagent_event",
                         Value::Object(announce).to_string(),
@@ -866,9 +906,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 // US-10: surface the item start so the UI paints the
                 // reflexive phase before the first delta lands (even when
                 // no delta ever follows for this item).
-                emit(
-                    app,
-                    "status",
+                emit_fn("status",
                     sid,
                     "item_started",
                     json!({
@@ -926,9 +964,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                             obj.insert("depth".to_string(), json!(d));
                         }
                     }
-                    emit(
-                        app,
-                        "subagent_event",
+                    emit_fn("subagent_event",
                         sid,
                         "subagent_event",
                         Value::Object(obj).to_string(),
@@ -937,9 +973,9 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 kind if is_thinking_item_kind(kind) => {
                     // Keep reasoning deltas separate from the answer lane so
                     // the UI can expose them behind a disclosure control.
-                    emit(app, "thinking", sid, "thinking", item_ref);
+                    emit_fn("thinking", sid, "thinking", item_ref);
                 }
-                _ => emit(app, "output", sid, "output", item_ref),
+                _ => emit_fn("output", sid, "output", item_ref),
             }
         }
         "item/completed" | "item/updated" => {
@@ -955,9 +991,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 .get("item")
                 .and_then(|i| i.get("turnId"))
                 .or_else(|| p.get("turnId"));
-            emit(
-                app,
-                "status",
+            emit_fn("status",
                 sid,
                 "item_done",
                 json!({"itemId": item_id, "turnId": turn_id}).to_string(),
@@ -1000,9 +1034,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                     );
                 }
             }
-            emit(
-                app,
-                "tool_request",
+            emit_fn("tool_request",
                 sid,
                 "tool_request",
                 approval_payload(p, approval_id, method == "approval/updated").to_string(),
@@ -1023,10 +1055,12 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                         .and_then(|r| r.get("decision"))
                         .and_then(Value::as_str)
                 })
-                .unwrap_or("resolved");
-            emit(
-                app,
-                "status",
+                // A terminal resolution without a decision is still useful
+                // for retiring the card, but it must never be interpreted as
+                // permission to resume. The renderer's parser fails closed
+                // for this explicit sentinel.
+                .unwrap_or("unknown");
+            emit_fn("status",
                 sid,
                 method,
                 json!({
@@ -1037,9 +1071,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 .to_string(),
             );
         }
-        "turn/started" => emit(
-            app,
-            "status",
+        "turn/started" => emit_fn("status",
             sid,
             "started",
             json!({
@@ -1055,9 +1087,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
             // error object instead of flattening it into a message string.
             // Older hosts may omit fields; nulls keep the envelope additive
             // and let the renderer fall back to the legacy reason.
-            emit(
-                app,
-                "status",
+            emit_fn("status",
                 sid,
                 terminal,
                 json!({
@@ -1070,24 +1100,39 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 .to_string(),
             );
         }
-        "turn/retracted" | "turn/unqueued" | "turn/retryScheduled" => {
-            emit(app, "status", sid, method, p.to_string())
+        "turn/retracted" => {
+            // Retraction is the host's terminal confirmation for an accepted
+            // interrupt. Keep the product status stable (`cancelled`) and
+            // retain the turn anchor so the renderer closes only this turn.
+            mark_running(state, sid, false);
+            emit_fn(
+                "status",
+                sid,
+                "cancelled",
+                json!({
+                    "terminal": "cancelled",
+                    "turnId": p.get("turnId"),
+                    "reason": p.get("reason"),
+                })
+                .to_string(),
+            );
+        }
+        "turn/unqueued" | "turn/retryScheduled" => {
+            emit_fn("status", sid, method, p.to_string())
         }
         "userInput/requested" => {
             // The turn suspends until answered: surface as an answerable
             // panel, never a bare log line (a log line leaves the chat
             // hanging with no way to reply).
             match build_input_request_payload(p) {
-                Some(payload) => emit(app, "input_request", sid, "input_request", payload.to_string()),
-                None => emit(app, "status", sid, "input_requested", "input requested (unparseable)".to_string()),
+                Some(payload) => emit_fn("input_request", sid, "input_request", payload.to_string()),
+                None => emit_fn("status", sid, "input_requested", "input requested (unparseable)".to_string()),
             }
         }
         "userInput/settled" => {
             let outcome = p.get("outcome").and_then(Value::as_str).unwrap_or("settled");
             let input_id = p.get("userInputId").and_then(Value::as_str).unwrap_or("");
-            emit(
-                app,
-                "input_settled",
+            emit_fn("input_settled",
                 sid,
                 "input_settled",
                 json!({"inputId": input_id, "outcome": outcome}).to_string(),
@@ -1098,9 +1143,7 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
             // effective projection. `denyUnmatched` is intentionally not
             // fabricated into a fourth UI posture; the renderer surfaces it.
             if let Some(mode) = p.get("mode").and_then(Value::as_str) {
-                emit(
-                    app,
-                    "status",
+                emit_fn("status",
                     sid,
                     "approval_mode_changed",
                     json!({"mode": mode}).to_string(),
@@ -1118,18 +1161,24 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                     "usedTokens": p.get("usedTokens").and_then(Value::as_u64),
                     "windowTokens": p.get("windowTokens").and_then(Value::as_u64),
                 });
-                emit(app, "context_usage", sid, "context_usage", usage.to_string());
+                emit_fn("context_usage", sid, "context_usage", usage.to_string());
             }
         }
         // US-31/M1-11: preserve the host's token counters verbatim. The
         // renderer displays these projections but never recomputes totals.
         "session/tokenUsage" => {
             if !sid.is_empty() {
-                emit(app, "token_usage", sid, "token_usage", p.to_string());
+                emit_fn("token_usage", sid, "token_usage", p.to_string());
             }
         }
         _ => {}
     }
+}
+
+fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p: &Value) {
+    route_notification_with_emit(state.inner(), method, p, |event, sid, kind, payload| {
+        emit(app, event, sid, kind, payload);
+    });
 }
 
 /// Persist the picked workspace on the Rust side immediately, so the backend
@@ -2175,9 +2224,7 @@ async fn start_session_at_workspace(
             .ok_or_else(|| format!("unknown authorization mode: {mode}"))?;
         params["approvalMode"] = json!(wire_mode);
     }
-    let res = client
-        .request("session/start", params)
-        .await?;
+    let res = request_session_start(&client, params, authorization_mode.as_deref()).await?;
     let session = res.get("session").ok_or("session/start: no session in response")?;
     let session_id = session
         .get("sessionId")
@@ -2191,6 +2238,7 @@ async fn start_session_at_workspace(
         session_id: session_id.clone(),
         workspace: root.display().to_string(),
         running,
+        approval_mode: session_approval_mode(session),
     };
     state
         .sessions
@@ -2198,6 +2246,33 @@ async fn start_session_at_workspace(
         .map_err(|e| format!("state lock: {e}"))?
         .insert(session_id, meta.clone());
     Ok(meta)
+}
+
+/// Start a session with a requested posture, but fall back to the host's
+/// default only when it explicitly reports its approval ceiling. This helper
+/// contains no Tauri state so the retry contract can be exercised by a small
+/// MSP fixture as well as the live command.
+async fn request_session_start(
+    client: &MspClient,
+    mut params: Value,
+    authorization_mode: Option<&str>,
+) -> Result<Value, String> {
+    match client.request("session/start", params.clone()).await {
+        Ok(result) => Ok(result),
+        Err(error) if authorization_mode.is_some() && is_approval_mode_ceiling(&error) => {
+            // A persisted local preference must not make a new conversation
+            // unusable when this host advertises a stricter ceiling. Start
+            // with the host default, expose its effective projection below,
+            // and let the renderer keep automatic decisions fail-closed.
+            if let Some(object) = params.as_object_mut() {
+                object.remove("approvalMode");
+            }
+            Ok(client.request("session/start", params).await.map_err(|fallback| {
+                format!("session/start rejected requested posture ({error}); host default also failed: {fallback}")
+            })?)
+        }
+        Err(error) => return Err(error),
+    }
 }
 
 #[tauri::command]
@@ -2279,6 +2354,7 @@ async fn fork_session(
         session_id: fork_id.clone(),
         workspace: root.display().to_string(),
         running,
+        approval_mode: session_approval_mode(session),
     };
     state
         .sessions
@@ -2333,7 +2409,14 @@ async fn resume_session(
     resume::validate(read.get("session").ok_or("session/read returned no conversation")?, &session_id, &root)?;
     // Register before resume: pending approval/input events may immediately
     // follow the response, before this awaiting task is scheduled again.
-    let mut meta = SessionMeta { session_id: session_id.clone(), workspace: root.display().to_string(), running: false };
+    let mut meta = SessionMeta {
+        session_id: session_id.clone(),
+        workspace: root.display().to_string(),
+        running: false,
+        approval_mode: read
+            .get("session")
+            .and_then(session_approval_mode),
+    };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client)?;
     let result = client.request("session/resume", resume::params(&session_id, new_command_id())).await;
@@ -2344,6 +2427,7 @@ async fn resume_session(
             match checked {
                 Ok(session) => {
                     meta.running = session.get("status").and_then(Value::as_str) == Some("running");
+                    meta.approval_mode = session_approval_mode(session).or(meta.approval_mode);
                     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
                     Ok(meta)
                 }
@@ -2616,9 +2700,12 @@ async fn set_model(
     Ok(())
 }
 
-#[tauri::command]
-async fn send_input(
-    state: State<'_, AppState>,
+/// Start one turn through the session-owned MSP client. Keeping the command
+/// body behind an `AppState` helper lets the supervisor fixture exercise the
+/// exact production payload and failure path without constructing a Tauri
+/// window or starting a model provider.
+async fn send_input_for_state(
+    state: &AppState,
     session_id: String,
     command_id: String,
     text: String,
@@ -2651,6 +2738,17 @@ async fn send_input(
         .await?;
     mark_running(&state, &session_id, true);
     Ok(result)
+}
+
+#[tauri::command]
+async fn send_input(
+    state: State<'_, AppState>,
+    session_id: String,
+    command_id: String,
+    text: String,
+    input_parts: Option<Value>,
+) -> Result<Value, String> {
+    send_input_for_state(&state, session_id, command_id, text, input_parts).await
 }
 
 /// Reclaim one queued turn before the host launches it. This is deliberately
@@ -3110,31 +3208,48 @@ async fn cancel_session(
     state: State<'_, AppState>,
     session_id: String,
 ) -> Result<(), String> {
-    interrupt_session(&app, &state, &session_id).await;
-    Ok(())
+    interrupt_session(&app, &state, &session_id).await
 }
 
-/// Shared body of `cancel_session`: best-effort turn interrupt, mark stopped.
-async fn interrupt_session(app: &AppHandle, state: &State<'_, AppState>, session_id: &str) {
+/// Send the interrupt command without changing local turn state. Keeping the
+/// transport request separate makes the admission-only semantics testable
+/// without constructing a Tauri application handle.
+async fn request_interrupt(state: &AppState, session_id: &str) -> Result<Value, String> {
+    let client = session_client(state, session_id)?;
+    client
+        .request(
+            "turn/interrupt",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": session_id,
+                "retract": false,
+            }),
+        )
+        .await
+}
+
+/// Shared body of `cancel_session`: request an interrupt and let the host
+/// prove the terminal state. An accepted `turn/interrupt` is admission only;
+/// the renderer remains in its stopping state until `turn/completed`,
+/// `turn/retracted` or another terminal notification arrives. This avoids a
+/// late response being rendered as a new turn after the UI already declared
+/// the conversation idle.
+async fn interrupt_session(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    session_id: &str,
+) -> Result<(), String> {
     // Clone the client out of the lock first: the std guard must never be
     // held across an await (it is !Send through the child handle).
-    let client = session_client(state, session_id).ok();
-    if let Some(c) = client {
-        // Best effort: no running turn means the host rejects this; the
-        // session is stopped either way.
-        let _ = c
-            .request(
-                "turn/interrupt",
-                json!({
-                    "commandId": new_command_id(),
-                    "sessionId": session_id,
-                    "retract": false,
-                }),
-            )
-            .await;
+    let result = request_interrupt(state, session_id).await;
+    match result {
+        Ok(_) => Ok(()),
+        Err(error) => {
+            mark_running(state, session_id, false);
+            emit(app, "status", session_id, "cancelled", String::new());
+            Err(format!("turn interrupt failed: {error}"))
+        }
     }
-    mark_running(state, session_id, false);
-    emit(app, "status", session_id, "cancelled", String::new());
 }
 
 #[tauri::command]
@@ -3148,7 +3263,7 @@ async fn kill_session(
     // Retire ownership before accepting further notifications for this session.
     // The host process is shared by all sessions, so it is NOT killed here:
     // end the turn (best effort) and forget local records.
-    interrupt_session(&app, &state, &session_id).await;
+    let _ = interrupt_session(&app, &state, &session_id).await;
     if let Ok(mut hosts) = state.hosts.lock() { hosts.forget(&session_id); }
     if let Ok(mut sessions) = state.sessions.lock() {
         sessions.remove(&session_id);
@@ -3175,6 +3290,429 @@ async fn kill_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct RecordingChild {
+        writes: mpsc::UnboundedSender<Vec<u8>>,
+        fail_write: bool,
+    }
+
+    impl msp::ChildTransport for RecordingChild {
+        fn write(&mut self, buf: &[u8]) -> Result<(), String> {
+            if self.fail_write {
+                return Err("fixture write failed".to_string());
+            }
+            self.writes
+                .send(buf.to_vec())
+                .map_err(|_| "fixture receiver dropped".to_string())
+        }
+
+        fn kill(self: Box<Self>) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    fn fixture_client(fail_write: bool) -> (Arc<MspClient>, mpsc::UnboundedReceiver<Vec<u8>>) {
+        let (writes, received) = mpsc::unbounded_channel();
+        let child = RecordingChild { writes, fail_write };
+        let (notify_tx, _) = mpsc::unbounded_channel();
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        (client, received)
+    }
+
+    async fn fixture_frame(rx: &mut mpsc::UnboundedReceiver<Vec<u8>>) -> Value {
+        let bytes = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("fixture did not receive a request")
+            .expect("fixture channel closed");
+        serde_json::from_slice::<Value>(bytes.strip_suffix(b"\n").unwrap_or(&bytes))
+            .expect("fixture request must be valid JSON")
+    }
+
+    fn register_fixture_session(
+        state: &AppState,
+        session_id: &str,
+        workspace: &str,
+        client: Arc<MspClient>,
+    ) {
+        let root = PathBuf::from(workspace);
+        state.hosts.lock().unwrap().insert(root.clone(), client.clone());
+        state
+            .hosts
+            .lock()
+            .unwrap()
+            .bind(session_id, &root, &client)
+            .unwrap();
+        state.sessions.lock().unwrap().insert(
+            session_id.to_string(),
+            SessionMeta {
+                session_id: session_id.to_string(),
+                workspace: workspace.to_string(),
+                running: false,
+                approval_mode: None,
+            },
+        );
+    }
+
+    fn empty_state() -> AppState {
+        AppState {
+            resume_mutex: tokio::sync::Mutex::new(()),
+            hosts: Mutex::new(Hosts::default()),
+            workspace: Mutex::new(None),
+            sessions: Mutex::new(HashMap::new()),
+            approvals: Mutex::new(HashMap::new()),
+            item_kinds: Mutex::new(HashMap::new()),
+            subagent_meta: Mutex::new(HashMap::new()),
+            host_mutex: tokio::sync::Mutex::new(()),
+            event_seq: Mutex::new(0),
+            event_buffer: Mutex::new(std::collections::VecDeque::new()),
+            terminals: terminal::TerminalRegistry::default(),
+            setup_cancellations: Mutex::new(HashMap::new()),
+            mcp_servers: Arc::new(Mutex::new(HashMap::new())),
+            workspace_watchers: Mutex::new(HashMap::new()),
+        }
+    }
+
+    #[test]
+    fn notification_lanes_are_scoped_by_session_identity() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "item/started",
+            &json!({"sessionId":"session-a","itemId":"same-item","item":{"kind":"reasoning"}}),
+            &mut emit,
+        );
+        route_notification_with_emit(
+            &state,
+            "item/started",
+            &json!({"sessionId":"session-b","itemId":"same-item","item":{"kind":"agentMessage"}}),
+            &mut emit,
+        );
+        route_notification_with_emit(
+            &state,
+            "item/delta",
+            &json!({"sessionId":"session-a","itemId":"same-item","delta":"private reasoning"}),
+            &mut emit,
+        );
+        route_notification_with_emit(
+            &state,
+            "item/delta",
+            &json!({"sessionId":"session-b","itemId":"same-item","delta":"public answer"}),
+            &mut emit,
+        );
+        let deltas = events
+            .iter()
+            .filter(|(_, _, kind, _)| kind == "thinking" || kind == "output")
+            .collect::<Vec<_>>();
+        assert_eq!(deltas.len(), 2);
+        assert_eq!(deltas[0].0, "thinking");
+        assert_eq!(deltas[0].1, "session-a");
+        assert_eq!(deltas[1].0, "output");
+        assert_eq!(deltas[1].1, "session-b");
+    }
+
+    #[test]
+    fn approval_cards_are_isolated_when_ids_repeat_between_sessions() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        for (sid, requirement) in [("session-a", "req-a"), ("session-b", "req-b")] {
+            route_notification_with_emit(
+                &state,
+                "approval/requested",
+                &json!({
+                    "sessionId": sid,
+                    "approvalId": "same-approval",
+                    "currentRequirementId": requirement,
+                    "subject": {"kind":"shell","command":"echo safe"}
+                }),
+                &mut emit,
+            );
+        }
+        let approvals = state.approvals.lock().unwrap();
+        assert_eq!(approvals.len(), 2);
+        assert_eq!(approvals[&(String::from("session-a"), String::from("same-approval"))].session_id, "session-a");
+        assert_eq!(approvals[&(String::from("session-b"), String::from("same-approval"))].requirement_id, json!("req-b"));
+        assert_eq!(events.iter().filter(|e| e.0 == "tool_request").count(), 2);
+    }
+
+    #[tokio::test]
+    async fn send_input_keeps_session_routes_and_correlates_out_of_order_replies() {
+        let state = Arc::new(empty_state());
+        let (client_a, mut frames_a) = fixture_client(false);
+        let (client_b, mut frames_b) = fixture_client(false);
+        register_fixture_session(state.as_ref(), "session-a", "fixture-a", client_a.clone());
+        register_fixture_session(state.as_ref(), "session-b", "fixture-b", client_b.clone());
+
+        let task_a = tokio::spawn({
+            let state = state.clone();
+            async move {
+                send_input_for_state(
+                    state.as_ref(),
+                    "session-a".to_string(),
+                    "client-message-a".to_string(),
+                    "inspect A".to_string(),
+                    None,
+                )
+                .await
+            }
+        });
+        let task_b = tokio::spawn({
+            let state = state.clone();
+            async move {
+                send_input_for_state(
+                    state.as_ref(),
+                    "session-b".to_string(),
+                    "client-message-b".to_string(),
+                    "inspect B".to_string(),
+                    None,
+                )
+                .await
+            }
+        });
+
+        let frame_a = fixture_frame(&mut frames_a).await;
+        let frame_b = fixture_frame(&mut frames_b).await;
+        assert_eq!(frame_a["method"], "turn/start");
+        assert_eq!(frame_b["method"], "turn/start");
+        assert_eq!(frame_a["params"]["sessionId"], "session-a");
+        assert_eq!(frame_b["params"]["sessionId"], "session-b");
+        assert_eq!(frame_a["params"]["input"][0]["text"], "inspect A");
+        assert_eq!(frame_b["params"]["input"][0]["text"], "inspect B");
+
+        // Deliver B first even though A was admitted first. Each response is
+        // ingested by its owning client and must wake only its own caller.
+        client_b
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": frame_b["id"],
+                "result": {"status": "accepted", "turnId": "turn-b"}
+            }))
+            .await;
+        client_a
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": frame_a["id"],
+                "result": {"status": "accepted", "turnId": "turn-a"}
+            }))
+            .await;
+
+        assert_eq!(task_a.await.unwrap().unwrap()["turnId"], "turn-a");
+        assert_eq!(task_b.await.unwrap().unwrap()["turnId"], "turn-b");
+        assert!(state.sessions.lock().unwrap()["session-a"].running);
+        assert!(state.sessions.lock().unwrap()["session-b"].running);
+    }
+
+    #[tokio::test]
+    async fn send_input_write_failure_is_bounded_and_does_not_mark_running() {
+        let state = empty_state();
+        let (client, _frames) = fixture_client(true);
+        register_fixture_session(&state, "session-a", "fixture-a", client);
+
+        let error = send_input_for_state(
+            &state,
+            "session-a".to_string(),
+            "client-message-a".to_string(),
+            "inspect A".to_string(),
+            None,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(error.contains("sidecar write failed"), "{error}");
+        assert!(!state.sessions.lock().unwrap()["session-a"].running);
+    }
+
+    #[tokio::test]
+    async fn interrupt_ack_keeps_session_running_until_terminal_notification() {
+        let state = Arc::new(empty_state());
+        let (client, mut frames) = fixture_client(false);
+        register_fixture_session(state.as_ref(), "session-a", "fixture-a", client.clone());
+        state.sessions.lock().unwrap().get_mut("session-a").unwrap().running = true;
+
+        let request = tokio::spawn({
+            let state = state.clone();
+            async move { request_interrupt(state.as_ref(), "session-a").await }
+        });
+        let frame = fixture_frame(&mut frames).await;
+        assert_eq!(frame["method"], "turn/interrupt");
+        assert_eq!(frame["params"]["sessionId"], "session-a");
+        client
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": frame["id"],
+                "result": {"status": "accepted", "turnId": "turn-a"}
+            }))
+            .await;
+
+        assert_eq!(request.await.unwrap().unwrap()["status"], "accepted");
+        // The admission ack alone must not flip the live session to idle.
+        assert!(state.sessions.lock().unwrap()["session-a"].running);
+
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            state.as_ref(),
+            "turn/completed",
+            &json!({"sessionId":"session-a","turnId":"turn-a","terminal":"cancelled"}),
+            &mut emit,
+        );
+        assert!(!state.sessions.lock().unwrap()["session-a"].running);
+        assert_eq!(events.last().map(|event| event.2.as_str()), Some("cancelled"));
+    }
+
+    #[test]
+    fn turn_retracted_is_terminal_cancellation() {
+        let state = empty_state();
+        state.sessions.lock().unwrap().insert(
+            "session-a".to_string(),
+            SessionMeta {
+                session_id: "session-a".to_string(),
+                workspace: "C:/fixture".to_string(),
+                running: true,
+                approval_mode: None,
+            },
+        );
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "turn/retracted",
+            &json!({"sessionId":"session-a","turnId":"turn-a","reason":"interrupted"}),
+            &mut emit,
+        );
+
+        assert!(!state.sessions.lock().unwrap()["session-a"].running);
+        let (_, sid, kind, payload) = events.last().expect("terminal status event");
+        assert_eq!(sid, "session-a");
+        assert_eq!(kind, "cancelled");
+        assert!(payload.contains("\"terminal\":\"cancelled\""));
+        assert!(payload.contains("\"turnId\":\"turn-a\""));
+    }
+
+    #[test]
+    fn approval_resolution_without_decision_fails_closed() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "approval/resolved",
+            &json!({"sessionId":"session-a","approvalId":"approval-a"}),
+            &mut emit,
+        );
+
+        let (_, sid, kind, payload) = events.last().expect("approval resolution event");
+        assert_eq!(sid, "session-a");
+        assert_eq!(kind, "approval/resolved");
+        assert!(payload.contains("\"decision\":\"unknown\""));
+        assert!(payload.contains("\"terminal\":true"));
+    }
+
+    #[tokio::test]
+    async fn stdout_pump_reassembles_frames_and_routes_notifications() {
+        let (writes, mut frames) = mpsc::unbounded_channel();
+        let (notify_tx, mut notify_rx) = mpsc::unbounded_channel();
+        let child = RecordingChild { writes, fail_write: false };
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let mut out_buf = Vec::new();
+
+        let request = tokio::spawn({
+            let client = client.clone();
+            async move { client.request("model/list", Value::Null).await }
+        });
+        let request_frame = fixture_frame(&mut frames).await;
+        let mut response = serde_json::to_vec(&json!({
+            "jsonrpc": "2.0",
+            "id": request_frame["id"],
+            "result": {"models": []}
+        }))
+        .unwrap();
+        response.push(b'\n');
+        let split_at = response.len() / 2;
+        ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &response[..split_at]).await;
+        assert!(!request.is_finished(), "partial stdout must not complete a request");
+        ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &response[split_at..]).await;
+        assert_eq!(request.await.unwrap().unwrap()["models"], json!([]));
+
+        let mut notification = serde_json::to_vec(&json!({
+            "jsonrpc": "2.0",
+            "method": "turn/started",
+            "params": {"sessionId": "s"}
+        }))
+        .unwrap();
+        notification.push(b'\n');
+        ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &notification).await;
+        let (method, params) = tokio::time::timeout(std::time::Duration::from_secs(1), notify_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(method, "turn/started");
+        assert_eq!(params["sessionId"], "s");
+
+        ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, b"not-json\n").await;
+        assert!(stderr_tail.lock().unwrap()[0].contains("unparsable frame"));
+    }
+
+    #[tokio::test]
+    async fn session_start_retries_without_posture_only_on_host_ceiling() {
+        let (client, mut frames) = fixture_client(false);
+        let request = tokio::spawn({
+            let client = client.clone();
+            async move {
+                request_session_start(
+                    &client,
+                    json!({"commandId":"cmd","workspaceRoot":"C:/fixture","approvalMode":"allowAll"}),
+                    Some("yolo"),
+                )
+                .await
+            }
+        });
+        let first = fixture_frame(&mut frames).await;
+        assert_eq!(first["method"], "session/start");
+        assert_eq!(first["params"]["approvalMode"], "allowAll");
+        client
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": first["id"],
+                "error": {
+                    "code": -32030,
+                    "message": "requested approval mode exceeds host ceiling",
+                    "data": {"kind": "commandRejected", "reason": "approval_mode_ceiling", "retryable": false}
+                }
+            }))
+            .await;
+        let fallback = fixture_frame(&mut frames).await;
+        assert_eq!(fallback["method"], "session/start");
+        assert!(fallback["params"].get("approvalMode").is_none());
+        client
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": fallback["id"],
+                "result": {"session": {"sessionId": "session-a", "approvalMode": {"mode": "promptUnmatched"}}}
+            }))
+            .await;
+        let result = request.await.unwrap().unwrap();
+        assert_eq!(result["session"]["sessionId"], "session-a");
+    }
 
     #[test]
     fn fork_params_name_an_explicit_completed_turn() {
@@ -3228,6 +3766,23 @@ mod tests {
         assert_eq!(host_approval_mode("workspace"), Some("promptUnmatched"));
         assert_eq!(host_approval_mode("yolo"), Some("allowAll"));
         assert_eq!(host_approval_mode("deny"), None);
+    }
+
+    #[test]
+    fn session_approval_projection_accepts_host_shapes_and_ignores_empty_values() {
+        assert_eq!(session_approval_mode(&json!({"approvalMode": "promptUnmatched"})), Some("promptUnmatched".into()));
+        assert_eq!(session_approval_mode(&json!({"approval_mode": {"mode": "allowAll"}})), Some("allowAll".into()));
+        assert_eq!(session_approval_mode(&json!({"approvalMode": {"mode": "onRequest"}})), Some("onRequest".into()));
+        assert_eq!(session_approval_mode(&json!({"approvalMode": "  "})), None);
+        assert_eq!(session_approval_mode(&json!({"approvalMode": {"mode": ""}})), None);
+        assert_eq!(session_approval_mode(&json!({})), None);
+    }
+
+    #[test]
+    fn approval_mode_ceiling_detection_is_specific_and_case_sensitive() {
+        assert!(is_approval_mode_ceiling("MSP error: approval_mode_ceiling"));
+        assert!(is_approval_mode_ceiling("command rejected (approval mode ceiling)"));
+        assert!(!is_approval_mode_ceiling("approval required for this command"));
     }
 
     #[test]

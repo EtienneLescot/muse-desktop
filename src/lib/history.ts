@@ -28,6 +28,31 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+/** Normalize additive host aliases before choosing a transcript lane. */
+function canonicalKind(raw: string): string {
+  const compact = raw.trim().toLowerCase().replace(/[\s_-]+/g, "");
+  switch (compact) {
+    case "reasoning":
+    case "analysis":
+    case "reasoningsummary":
+      return "reasoning";
+    case "toolcall":
+      return "toolCall";
+    case "usershell":
+      return "userShell";
+    case "usermessage":
+      return "userMessage";
+    case "agentmessage":
+      return "agentMessage";
+    case "subagent":
+      return "subagent";
+    case "compaction":
+      return "compaction";
+    default:
+      return raw;
+  }
+}
+
 function itemText(item: SessionHistoryItem, kind: string): string {
   if (kind === "reasoning") {
     if (Array.isArray(item.summary)) {
@@ -102,10 +127,11 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
   items.forEach((raw, index) => {
     if (typeof raw !== "object" || raw === null) return;
     const item = raw as SessionHistoryItem;
-    const kind = stringValue(item.kind);
+    const rawKind = stringValue(item.kind);
     const itemId = stringValue(item.itemId);
     const turnId = stringValue(item.turnId);
-    if (kind === undefined || itemId === undefined) return;
+    if (rawKind === undefined || itemId === undefined) return;
+    const kind = canonicalKind(rawKind);
     const role = roleForKind(kind);
     if (role === null) return;
     const text = itemText(item, kind);

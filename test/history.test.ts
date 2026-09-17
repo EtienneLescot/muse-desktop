@@ -21,6 +21,17 @@ describe("session history hydration", () => {
     assert.equal(entries[2].turnId, "turn-1");
   });
 
+  it("keeps reasoning aliases in the collapsible thinking lane", () => {
+    const entries = historyItemsToLogEntries([
+      { itemId: "r1", kind: "reasoningSummary", summary: ["Plan step one"] },
+      { itemId: "r2", kind: "analysis", text: "Check the workspace" },
+    ], 1000);
+    assert.deepEqual(entries.map((entry) => [entry.role, entry.text]), [
+      ["thinking", "Plan step one"],
+      ["thinking", "Check the workspace"],
+    ]);
+  });
+
   it("reconciles by item id and keeps local notes without duplicating user text", () => {
     const local = [
       { id: "local-user", ts: 1, role: "user" as const, text: "Hello" },
