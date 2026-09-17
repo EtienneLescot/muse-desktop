@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { KNOWN_CONFIG_PATHS, type ResumableSession } from "../lib/importConfig";
+import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
   imported: ResumableSession[];
@@ -28,6 +29,13 @@ export function ImportPanel({ imported, notes, onImportText, onDismiss }: Props)
       <header className="collab-head">
         <strong>Import config</strong>
       </header>
+      <p className="muted capability-line">
+        <CapabilityBadge
+          status="manual"
+          reason="Import parses content you choose; it never overwrites live conversations or runs a config."
+        />
+        Import only
+      </p>
       <label className="collab-mode">
         Known source{" "}
         <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="Known config path">

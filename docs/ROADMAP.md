@@ -41,7 +41,7 @@ Priorité immédiate. Ne pas ajouter de nouvelles surfaces avant de sécuriser c
 | M0-10 | Réussir le premier lancement Windows | Adapté | Présente | Partielle | Unitaire | Guidance contextuelle après échec (sidecar, WSL, Muse CLI, authentification, dossier) et bouton Réessayer ; détection native sur machine propre et matrice WSL/auth restent à valider |
 | M0-11 | Finir l'anglais et les détails de navigation | Adapté | Présente | Locale | UI | Libellés résiduels harmonisés sur accueil, conversation, projets, import et résumé ; recherche indépendante de la locale française ; reste : checklist complète des erreurs générées, titres et raccourcis par OS |
 | M0-12 | Utiliser l'existant au clavier et au lecteur d'écran | Adapté | Présente | Locale | UI | Focus initial et restauration après dialogues, navigation clavier et annonces de streaming en place ; validation assistive réelle, zoom 200 % et contraste restent à qualifier |
-| M0-13 | Identifier clairement les capacités non connectées | Adapté | Présente | Locale | UI | Vocabulaire commun Available / Local / Manual / Not connected avec raison ; badges ajoutés aux connecteurs, channels, exports et worktrees ; reste : couvrir les surfaces secondaires et vérifier chaque action réelle |
+| M0-13 | Identifier clairement les capacités non connectées | Adapté | Présente | Locale | UI | Vocabulaire commun Available / Local / Manual / Not connected avec raison ; badges ajoutés aux connecteurs, channels, exports, worktrees, index local et import CLI/IDE ; reste : vérifier chaque action réelle |
 | M0-14 | Disposer de contrôles reproductibles avant fusion | — | — | Partielle | Unitaire | CI build/Node/Rust ajoutée sans credentials ni binaire sidecar ; restent les fixtures MSP, scénarios natifs A/B et rapports de capture en cas d'échec |
 
 Preuves principales : [backend](../src-tauri/src/main.rs), [sessions](../src/hooks/useMuseSessions.ts), [Composer](../src/components/Composer.tsx), [paramètres](../src/components/SettingsPanel.tsx), [persistance défensive](../src/lib/storage.ts), [conformité MSP](../src/lib/msp.ts), [bridge Windows](../scripts/wsl-bridge/README.md).
@@ -100,7 +100,7 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 ### Livraison M0-13 — états de capacité honnêtes (première passe)
 
 - **M0-13a — vocabulaire commun** : `CapabilityBadge` et `capability.ts` distinguent `Available`, `Local`, `Manual` et `Not connected`, avec une raison consultable au survol. Les états restent informatifs et n'ajoutent pas de fausse confirmation.
-- **M0-13b — surfaces couvertes** : connecteurs (catalogue local), channels (transport absent), exports (local uniquement) et worktrees (préparation manuelle) affichent leur niveau réel.
+- **M0-13b — surfaces couvertes** : connecteurs (catalogue local), channels (transport absent), exports (local uniquement), worktrees (préparation manuelle), index workspace (local) et import CLI/IDE (manuel) affichent leur niveau réel.
 - **M0-13c — limite restante** : l'audit clic → effet réel des panneaux secondaires et du backend absent reste à exécuter ; aucune action d'installation ou de connexion n'est ajoutée par ce lot.
 - **Validation** : tests unitaires du vocabulaire et build frontend verts.
 
