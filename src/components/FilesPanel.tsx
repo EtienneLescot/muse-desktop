@@ -235,7 +235,7 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
                       <caption className="sr-only">Structured preview of {preview.path}</caption>
                       <thead>
                         <tr>
-                          {structuredPreview.columns.map((column) => <th scope="col" key={column}>{column}</th>)}
+                          {structuredPreview.columns.map((column, columnIndex) => <th scope="col" key={`${column}-${columnIndex}`}>{column}</th>)}
                         </tr>
                       </thead>
                       <tbody>
