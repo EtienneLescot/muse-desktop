@@ -396,6 +396,13 @@
   color: var(--muted);
   font-size: 11px;
 }
+.terminal-actions .terminal-context {
+  margin-left: 4px;
+  padding-inline: 9px;
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+  color: var(--blue);
+  font-size: 10px;
+}
 .terminal-size {
   min-width: 48px;
   text-align: center;

@@ -330,6 +330,7 @@ import {
   type GitReviewState,
   type GitStatusSnapshot,
 } from "../lib/git";
+import { formatTerminalContext } from "../lib/terminalContext";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -604,6 +605,8 @@ interface UseMuseSessions {
   writeTerminal: (terminalId: string, input: string) => Promise<void>;
   resizeTerminal: (terminalId: string, cols: number, rows: number) => Promise<void>;
   closeTerminal: (sessionId: string) => Promise<void>;
+  /** Add a bounded, attributed terminal snapshot to the next prompt. */
+  prepareTerminalContext: (sessionId: string) => boolean;
   /** US-5: move a thread to the archived list (persisted flag). */
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -3617,6 +3620,24 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, [terminalsBySession]);
 
+  const prepareTerminalContext = useCallback(
+    (sessionId: string): boolean => {
+      const terminal = terminalsBySession[sessionId];
+      if (!terminal) {
+        setError("terminal context unavailable: open a terminal first");
+        return false;
+      }
+      if (!terminal.output.trim()) {
+        setError("terminal context unavailable: there is no output to add");
+        return false;
+      }
+      const context = formatTerminalContext(terminal.info, terminal.output);
+      setPrefill((current) => (current ? `${current}\n${context}` : context));
+      return true;
+    },
+    [terminalsBySession],
+  );
+
   // US-23 search over the stored index (empty unless opted in). Search
   // keeps working while paused — pause only suspends indexing updates.
   const indexResults = searchIndex(indexStore, indexEnabled ? indexQuery : "");
@@ -3772,6 +3793,7 @@ export function useMuseSessions(): UseMuseSessions {
     writeTerminal,
     resizeTerminal,
     closeTerminal,
+    prepareTerminalContext,
     error,
     evtCount,
   };
