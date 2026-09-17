@@ -21,14 +21,26 @@ Push-Location $repo
 try {
     npm run build
     npm run tauri -- build --bundles $Bundle
+
+    $bundleRoot = Join-Path $repo "src-tauri\target\release\bundle"
+    $artifacts = @()
     if ($Bundle -eq "nsis" -or $Bundle -eq "all") {
-        $bundleDir = Join-Path $repo "src-tauri\target\release\bundle\nsis"
-        $installer = Get-ChildItem -LiteralPath $bundleDir -Filter "*-setup.exe" -File |
+        $nsisDir = Join-Path $bundleRoot "nsis"
+        $artifacts += Get-ChildItem -LiteralPath $nsisDir -Filter "*-setup.exe" -File |
             Sort-Object LastWriteTimeUtc -Descending |
             Select-Object -First 1
-        if ($null -eq $installer) {
-            throw "No NSIS installer found in $bundleDir"
-        }
+    }
+    if ($Bundle -eq "msi" -or $Bundle -eq "all") {
+        $msiDir = Join-Path $bundleRoot "msi"
+        $artifacts += Get-ChildItem -LiteralPath $msiDir -Filter "*.msi" -File |
+            Sort-Object LastWriteTimeUtc -Descending |
+            Select-Object -First 1
+    }
+    if ($artifacts.Count -eq 0) {
+        throw "No Windows installer found in $bundleRoot"
+    }
+
+    foreach ($installer in $artifacts) {
         $manifest = Join-Path $installer.DirectoryName "$($installer.BaseName).manifest.json"
         node (Join-Path $repo "scripts\release-manifest.mjs") `
             --artifact $installer.FullName `
