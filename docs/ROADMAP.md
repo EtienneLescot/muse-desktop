@@ -182,7 +182,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
 | M1-01 | Voir les fichiers réellement modifiés | Adapté | Présente | Câblée | Unitaire | Socle livré en lecture seule ; restent les scénarios E2E webview/live, le snapshot « dernier tour » et la vérification runtime des cas hors Git/modifications externes |
-| M1-02 | Commenter une ligne de diff et demander sa correction | Adapté | Présente | Câblée | Unitaire | Socle livré ; restent la qualification native avec un moteur live et la persistance/triage multi-commentaires |
+| M1-02 | Commenter une ligne de diff et demander sa correction | Adapté | Présente | Câblée | Unitaire | File multi-commentaires persistante et triage livrés ; restent la qualification native avec un moteur live et l'envoi collaboratif distant |
 | M1-03 | Indexer ou annuler une modification | Adapté | Présente | Câblée | Intégration | Stage, unstage et discard fichier/hunk, plus sélection multiple de fichiers, livrés avec garde HEAD/statut/diff ; qualification native reste à faire |
 | M1-04 | Commit, push et création de PR depuis l'app | Adapté | Présente | Câblée | Intégration | Commit, push et PR GitHub CLI livrés avec destinations explicites ; restent qualification hooks/auth live, PR existante/rejet distant et revue native |
 | M1-05 | Ouvrir et utiliser un terminal du projet | Adapté | Présente | Câblée | Unitaire | Socle PTY persistant livré : shell lié au cwd de la conversation, entrée/sortie bornées, resize, fermeture contrôlée, rendu ANSI courant/avancé et raccourcis Ctrl+C/Ctrl+D/Ctrl+L/Tab/Échap. Reste : validation native Windows/macOS/Linux |
@@ -210,8 +210,9 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Ancre :** chaque ligne sélectionnable conserve le dépôt, la révision HEAD observée, le scope et la base, le chemin (et l’ancien chemin en cas de renommage), le côté old/new, le numéro de ligne et l’en-tête du hunk.
 - **UX :** l’utilisateur sélectionne une ligne dans le diff, rédige un commentaire puis l’envoie dans la conversation. Le texte transmis contient un bloc de contexte explicite afin que Muse puisse corriger la bonne ligne sans dépendre d’un copier-coller implicite.
 - **Garde de fraîcheur :** avant l’envoi, Muse relit le statut puis le diff exacts. Si HEAD, le fichier, le hunk, le côté ou la ligne ont bougé, le commentaire est refusé avec une invitation à resélectionner ; aucune ancre n’est déplacée silencieusement.
-- **Validation :** suite Node 384 tests, dont les coordonnées old/new, le format de contexte et le rejet d’une ancre périmée ; build TypeScript/Vite réussi.
-- **Limites assumées :** les commentaires sont envoyés comme contexte d’un tour et ne forment pas encore une boîte de triage persistante. La qualification native avec un vrai moteur et les actions de modification du dépôt restent M1-03/M1-04.
+- **File et triage :** les brouillons sont persistés par conversation sous `muse-desktop.review-comments.v1.<sessionId>`, bornés à 40 entrées et 8 000 caractères par corps. Une même ancre met à jour le brouillon existant ; l’utilisateur peut sélectionner une note, l’envoyer seule, envoyer les notes prêtes en séquence, retirer une note ou vider les notes déjà envoyées. Chaque envoi repasse par la garde de fraîcheur ; les ancres invalides passent à `stale` et ne sont jamais déplacées silencieusement.
+- **Validation :** suite Node complète, dont les coordonnées old/new, le format de contexte, la persistance isolée par session, la déduplication, le triage et le rejet d’une ancre périmée ; build TypeScript/Vite réussi.
+- **Limites assumées :** les commentaires sont transmis comme contexte de tours Muse et ne prétendent pas être des commentaires natifs d’une forge. La qualification native avec un vrai moteur et l’envoi collaboratif distant restent à couvrir ; les actions de modification du dépôt restent M1-03/M1-04.
 
 ### Livraison M1-03 — stage, unstage et discard protégés
 

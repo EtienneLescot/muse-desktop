@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   shortRepoName,
   statusCode,
@@ -13,8 +13,16 @@ import {
 import {
   anchorMatchesDiff,
   createReviewAnchor,
+  loadReviewComments,
   patchLinesForFile,
+  reconcileReviewComments,
+  removeReviewComment,
+  saveReviewComments,
+  sameReviewAnchor,
+  updateReviewComment,
+  upsertReviewComment,
   type ReviewAnchor,
+  type ReviewComment,
   type ReviewPatchLine,
 } from "../lib/reviewComments";
 import { userFacingError } from "../lib/errorCopy";
@@ -100,6 +108,12 @@ export function ReviewPanel({
   const [commentError, setCommentError] = useState<string | null>(null);
   const [commentSending, setCommentSending] = useState(false);
   const [commentSent, setCommentSent] = useState(false);
+  const [commentQueue, setCommentQueue] = useState<ReviewComment[]>([]);
+  const [commentQueueLoadedFor, setCommentQueueLoadedFor] = useState<string | null>(null);
+  const [commentQueueBusy, setCommentQueueBusy] = useState<string | null>(null);
+  const [commentQueueError, setCommentQueueError] = useState<string | null>(null);
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
+  const commentQueueRef = useRef<ReviewComment[]>([]);
   const [mutationBusy, setMutationBusy] = useState<"stage" | "unstage" | "discard" | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -144,8 +158,26 @@ export function ReviewPanel({
     setPrResult(null);
     setScope("unstaged");
     setBaseRef("");
+    const loadedComments = loadReviewComments(sessionId);
+    commentQueueRef.current = loadedComments;
+    setCommentQueue(loadedComments);
+    setCommentQueueLoadedFor(sessionId);
+    setCommentQueueBusy(null);
+    setCommentQueueError(null);
+    setSelectedCommentId(null);
     void onRefreshStatus(sessionId);
   }, [sessionId, onRefreshStatus]);
+
+  useEffect(() => {
+    if (commentQueueLoadedFor !== sessionId) return;
+    setCommentQueue((current) => {
+      const next = reconcileReviewComments(current, review.status, review.diff);
+      if (JSON.stringify(next) === JSON.stringify(current)) return current;
+      commentQueueRef.current = next;
+      saveReviewComments(sessionId, next);
+      return next;
+    });
+  }, [commentQueueLoadedFor, sessionId, review.status, review.diff]);
 
   const branchRef = review.status?.upstream ?? "";
   const resolvedBase = baseRef.trim() || branchRef;
@@ -238,6 +270,14 @@ export function ReviewPanel({
       selectedDiff,
       selectedLine,
     );
+    const body = commentDraft.trim();
+    const queued = upsertReviewComment(commentQueueRef.current, anchor, body);
+    const queuedComment = queued.find((comment) => sameReviewAnchor(comment.anchor, anchor) && comment.status !== "sent");
+    commentQueueRef.current = queued;
+    setCommentQueue(queued);
+    saveReviewComments(sessionId, queued);
+    if (!queuedComment) return;
+    setCommentQueueError(null);
     setCommentSending(true);
     setCommentError(null);
     setCommentSent(false);
@@ -247,6 +287,10 @@ export function ReviewPanel({
         latestStatus === null ||
         !anchorMatchesDiff(anchor, latestStatus, review.diff)
       ) {
+        const stale = updateReviewComment(commentQueueRef.current, queuedComment.id, { status: "stale" });
+        commentQueueRef.current = stale;
+        setCommentQueue(stale);
+        saveReviewComments(sessionId, stale);
         setCommentError("This diff changed. Refresh and select the line again.");
         return;
       }
@@ -259,19 +303,107 @@ export function ReviewPanel({
         latestDiff === null ||
         !anchorMatchesDiff(anchor, latestStatus, latestDiff)
       ) {
+        const stale = updateReviewComment(commentQueueRef.current, queuedComment.id, { status: "stale" });
+        commentQueueRef.current = stale;
+        setCommentQueue(stale);
+        saveReviewComments(sessionId, stale);
         setCommentError("This diff changed. Refresh and select the line again.");
         return;
       }
-      const sent = await onSendComment(anchor, commentDraft);
+      const sent = await onSendComment(anchor, body);
       if (!sent) {
         setCommentError("The comment could not be sent. The draft is preserved.");
         return;
       }
+      const sentQueue = updateReviewComment(commentQueueRef.current, queuedComment.id, { status: "sent" });
+      commentQueueRef.current = sentQueue;
+      setCommentQueue(sentQueue);
+      saveReviewComments(sessionId, sentQueue);
       setCommentDraft("");
       setCommentSent(true);
     } finally {
       setCommentSending(false);
     }
+  }
+
+  function saveCommentDraft(): void {
+    if (!selectedLine || !selectedDiff || !review.status || !review.diff || commentDraft.trim().length === 0) return;
+    const anchor = createReviewAnchor(review.status, review.diff, selectedDiff, selectedLine);
+    const next = upsertReviewComment(commentQueueRef.current, anchor, commentDraft);
+    commentQueueRef.current = next;
+    setCommentQueue(next);
+    saveReviewComments(sessionId, next);
+    const saved = next.find((comment) => sameReviewAnchor(comment.anchor, anchor) && comment.status !== "sent");
+    setSelectedCommentId(saved?.id ?? null);
+    setCommentQueueError(null);
+    setCommentSent(false);
+  }
+
+  async function sendQueuedComment(comment: ReviewComment, manageBusy = true): Promise<void> {
+    if (comment.status === "stale" || comment.status === "sent") return;
+    if (manageBusy) setCommentQueueBusy(comment.id);
+    setCommentQueueError(null);
+    try {
+      const latestStatus = await onRefreshStatus(sessionId);
+      const latestDiff = latestStatus ? await onLoadDiff(sessionId, comment.anchor.scope, comment.anchor.scope === "branch" ? comment.anchor.baseRef ?? undefined : undefined) : null;
+      if (!latestStatus || !latestDiff || !anchorMatchesDiff(comment.anchor, latestStatus, latestDiff)) {
+        const stale = updateReviewComment(commentQueueRef.current, comment.id, { status: "stale" });
+        commentQueueRef.current = stale;
+        setCommentQueue(stale);
+        saveReviewComments(sessionId, stale);
+        setCommentQueueError("One or more comments need a fresh diff before sending.");
+        return;
+      }
+      const sent = await onSendComment(comment.anchor, comment.body);
+      if (!sent) {
+        setCommentQueueError("The comment could not be sent. It remains in the queue.");
+        return;
+      }
+      const next = updateReviewComment(commentQueueRef.current, comment.id, { status: "sent" });
+      commentQueueRef.current = next;
+      setCommentQueue(next);
+      saveReviewComments(sessionId, next);
+    } finally {
+      if (manageBusy) setCommentQueueBusy(null);
+    }
+  }
+
+  async function sendReadyComments(): Promise<void> {
+    const ready = commentQueueRef.current.filter((comment) => comment.status === "ready" || comment.status === "draft");
+    if (ready.length === 0) return;
+    setCommentQueueBusy("all");
+    for (const comment of ready) {
+      await sendQueuedComment(comment, false);
+    }
+    setCommentQueueBusy(null);
+  }
+
+  function deleteQueuedComment(id: string): void {
+    const next = removeReviewComment(commentQueueRef.current, id);
+    commentQueueRef.current = next;
+    setCommentQueue(next);
+    saveReviewComments(sessionId, next);
+    if (selectedCommentId === id) setSelectedCommentId(null);
+  }
+
+  function selectQueuedComment(comment: ReviewComment): void {
+    const file = review.diff?.files.find((candidate) => candidate.path === comment.anchor.path);
+    if (!file || !review.diff) {
+      setCommentQueueError("Load the matching diff to select this comment.");
+      return;
+    }
+    const row = patchLinesForFile(review.diff.patch, file).find((candidate) =>
+      candidate.side === comment.anchor.side && (candidate.side === "old" ? candidate.oldLine : candidate.newLine) === comment.anchor.line && candidate.hunk === comment.anchor.hunk,
+    );
+    if (!row) {
+      setCommentQueueError("This comment is stale. Refresh the diff before selecting it.");
+      return;
+    }
+    setSelectedPath(file.path);
+    setSelectedLineKey(row.key);
+    setSelectedCommentId(comment.id);
+    setCommentDraft(comment.body);
+    setCommentError(null);
   }
 
   function expectationFor(scope: "staged" | "unstaged"): GitMutationExpectation | null {
@@ -863,6 +995,76 @@ export function ReviewPanel({
                   <span className="muted">Patch truncated for safety</span>
                 )}
               </div>
+              {commentQueue.length > 0 && (
+                <section className="review-comment-queue" aria-label="Review comment queue">
+                  <div className="review-comment-queue-head">
+                    <div>
+                      <span className="eyebrow">COMMENT QUEUE</span>
+                      <strong>{commentQueue.filter((comment) => comment.status !== "sent").length} to review</strong>
+                    </div>
+                    <div className="review-comment-queue-actions">
+                      {commentQueue.some((comment) => comment.status === "ready" || comment.status === "draft") && (
+                        <button
+                          type="button"
+                          className="review-action"
+                          disabled={commentQueueBusy !== null}
+                          onClick={() => void sendReadyComments()}
+                        >
+                          {commentQueueBusy === "all" ? "Sending…" : "Send ready"}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="review-action"
+                        disabled={commentQueueBusy !== null}
+                        onClick={() => {
+                          const next = commentQueueRef.current.filter((comment) => comment.status !== "sent");
+                          commentQueueRef.current = next;
+                          setCommentQueue(next);
+                          saveReviewComments(sessionId, next);
+                        }}
+                      >
+                        Clear sent
+                      </button>
+                    </div>
+                  </div>
+                  {commentQueueError && <p className="review-comment-queue-error" role="alert">{commentQueueError}</p>}
+                  <ul className="review-comment-queue-list">
+                    {commentQueue.map((comment) => (
+                      <li key={comment.id} className={`review-comment-queue-item status-${comment.status}${selectedCommentId === comment.id ? " selected" : ""}`}>
+                        <button type="button" className="review-comment-queue-main" onClick={() => selectQueuedComment(comment)}>
+                          <span className="review-comment-queue-anchor">
+                            <code>{comment.anchor.path}:{comment.anchor.line}</code>
+                            <span className={`review-comment-status review-comment-status-${comment.status}`}>{comment.status}</span>
+                          </span>
+                          <span className="review-comment-queue-body">{comment.body}</span>
+                        </button>
+                        <div className="review-comment-queue-item-actions">
+                          {(comment.status === "ready" || comment.status === "draft") && (
+                            <button
+                              type="button"
+                              className="review-action"
+                              disabled={commentQueueBusy !== null}
+                              onClick={() => void sendQueuedComment(comment)}
+                            >
+                              {commentQueueBusy === comment.id ? "Sending…" : "Send"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="review-action"
+                            disabled={commentQueueBusy !== null}
+                            onClick={() => deleteQueuedComment(comment.id)}
+                            aria-label={`Remove comment on ${comment.anchor.path}:${comment.anchor.line}`}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
               {selectedDiff !== null && (
                 <div className="review-selected-file">
                   <strong>{selectedDiff.path}</strong>
@@ -925,6 +1127,9 @@ export function ReviewPanel({
                   <div className="review-comment-actions">
                     {commentError && <span className="review-comment-error" role="alert">{commentError}</span>}
                     {commentSent && <span className="review-comment-sent">Sent to conversation</span>}
+                    <button type="button" className="review-action" disabled={commentSending || commentDraft.trim().length === 0} onClick={saveCommentDraft}>
+                      Add to queue
+                    </button>
                     <button type="submit" className="review-send-comment" disabled={commentSending || commentDraft.trim().length === 0}>
                       {commentSending ? "Checking diff…" : "Send comment"}
                     </button>

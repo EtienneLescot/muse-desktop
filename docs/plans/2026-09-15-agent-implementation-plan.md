@@ -227,7 +227,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Acceptation :** commentaire transmis sur bonne ligne/côté ; fichier renommé ou diff modifié entre sélection et envoi ; aucune confusion entre deux dépôts.
 
-**État au 16/09/2026 :** socle livré dans la PR M1. Le panneau Review rend les lignes old/new sélectionnables, vérifie à nouveau le statut et le diff avant envoi, puis transmet un contexte structuré à la conversation. La persistance d’une file de commentaires et le triage multi-commentaires restent à décider avant M1-04.
+**État au 17/09/2026 :** socle livré puis complété par une file de commentaires bornée et persistée par conversation (`muse-desktop.review-comments.v1.<sessionId>`). Une ancre identique met à jour le brouillon au lieu de dupliquer ; le panneau permet de sélectionner une note, l’envoyer seule, envoyer les notes prêtes en séquence, retirer une note ou vider les notes déjà envoyées. Chaque envoi relit le statut et le diff ; les notes dont l’ancre n’est plus observable passent à `stale` et restent récupérables jusqu’à suppression explicite. La suite native avec un moteur live et l’envoi collaboratif d’une forge restent à qualifier.
 
 ### M1-03 — Stage et revert
 

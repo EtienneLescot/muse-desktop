@@ -4,8 +4,14 @@ import {
   anchorMatchesDiff,
   createReviewAnchor,
   formatReviewComment,
+  loadReviewComments,
   patchLinesForFile,
+  reconcileReviewComments,
+  removeReviewComment,
+  saveReviewComments,
   type ReviewPatchLine,
+  updateReviewComment,
+  upsertReviewComment,
 } from "../src/lib/reviewComments.ts";
 import type { GitDiffFile, GitDiffSnapshot, GitStatusSnapshot } from "../src/lib/git.ts";
 
@@ -55,6 +61,18 @@ const diff: GitDiffSnapshot = {
   observedAt: 2,
 };
 
+function fakeStorage() {
+  const values = new Map<string, string>();
+  (globalThis as Record<string, unknown>).localStorage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+    removeItem: (key: string) => values.delete(key),
+    key: (index: number) => [...values.keys()][index] ?? null,
+    get length() { return values.size; },
+  };
+  return values;
+}
+
 describe("review diff comments", () => {
   it("keeps old/new coordinates for selectable rows", () => {
     const rows = patchLinesForFile(diff.patch, file);
@@ -87,5 +105,32 @@ describe("review diff comments", () => {
       anchorMatchesDiff(anchor, status, { ...diff, patch: "", files: [] }),
       false,
     );
+  });
+
+  it("deduplicates an anchored draft and persists it per session", () => {
+    fakeStorage();
+    const row = patchLinesForFile(diff.patch, file)[2] as ReviewPatchLine;
+    const anchor = createReviewAnchor(status, diff, file, row);
+    let comments = upsertReviewComment([], anchor, "First wording", 10);
+    comments = upsertReviewComment(comments, anchor, "Refined wording", 20);
+    assert.equal(comments.length, 1);
+    assert.equal(comments[0]?.body, "Refined wording");
+    assert.equal(saveReviewComments("session-a", comments), true);
+    assert.equal(loadReviewComments("session-a")[0]?.body, "Refined wording");
+    assert.deepEqual(loadReviewComments("session-b"), []);
+  });
+
+  it("marks only unsent notes stale and can triage them", () => {
+    const row = patchLinesForFile(diff.patch, file)[2] as ReviewPatchLine;
+    const anchor = createReviewAnchor(status, diff, file, row);
+    const sent = { ...upsertReviewComment([], anchor, "Already sent", 10)[0], status: "sent" as const };
+    const ready = upsertReviewComment([sent], { ...anchor, line: 99 }, "Needs refresh", 20)[0];
+    assert.ok(ready);
+    const reconciled = reconcileReviewComments([sent, ready], status, diff);
+    assert.equal(reconciled.find((comment) => comment.id === sent.id)?.status, "sent");
+    assert.equal(reconciled.find((comment) => comment.id === ready?.id)?.status, "stale");
+    const updated = updateReviewComment(reconciled, ready.id, { status: "ready" }, 30);
+    assert.equal(updated.find((comment) => comment.id === ready.id)?.status, "ready");
+    assert.equal(removeReviewComment(updated, sent.id).some((comment) => comment.id === sent.id), false);
   });
 });
