@@ -268,7 +268,7 @@ Prouvé par le code lu : sous-agents = orchestration sidecar, **aucun spawn IPC 
 
 - Prouvé : tests Rust `msp.rs` (framing, formes de frames, routage réponse/erreur/notification), tests `main.rs` (payloads input, routage scope, modèles, sous-agents, approbations composées et lanes thinking) ; helpers `input.ts` purs sans imports (testables `node:test`), `poll.ts` sans dépendance.
 - Cible V1 : unit (coalescence `itemId` — `lastOpenIndex` + `parseChunk`, groupement `agentId` — `parseSubagent`, caps 2000/500 — `slice(-…)`, validation input — `buildAnswers` + garde Rust, anti-rejeu — mismatch session), intégration (1 host partagé + kill/respawn workspace via `ensure_host`, `initialize→initialized`, timeout 120 s), e2e (send→stream→approve→answer→completed), perfs (150 ms sans doublon via chaîne, 2000 entrées fluides + virtualisation **[TROU : virtualisation non prouvée dans le code lu]**), packaging (matrice triples, sidecar manquant → erreur claire via `resolve_sidecar`).
-- CI câblée : `.github/workflows/ci.yml` exécute `npm ci`, `npm test`, `npm run build` et `cargo test --manifest-path src-tauri/Cargo.toml` sur push/PR, sans credentials ni binaire sidecar. La suite locale actuelle est à 560 tests Node et 111 tests Rust.
+- CI câblée : `.github/workflows/ci.yml` exécute `npm ci`, `npm test`, `npm run build` et `cargo test --manifest-path src-tauri/Cargo.toml` sur push/PR, sans credentials ni binaire sidecar. La suite locale actuelle est à 561 tests Node et 111 tests Rust.
 - **[TROU]** : `LICENSE`, couverture e2e native, fixture MSP contrôlée et rapports de capture sans données utilisateur — à ajouter avant la sortie M0-14 complète.
 
 ## 7. Roadmap (jalons depuis l'existant)
