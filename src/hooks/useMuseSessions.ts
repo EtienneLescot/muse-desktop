@@ -1132,6 +1132,8 @@ interface UseMuseSessions {
   ) => Promise<RemoteMcpCallResult | null>;
   /** M3-02: drop the in-memory token/session and mark the entry disconnected. */
   disconnectRemoteMcp: (id: string) => void;
+  /** M3-02: revoke the native credential and disconnect the remote entry. */
+  forgetRemoteMcpCredential: (id: string) => Promise<void>;
   /** w-integrations US-26: last remote-guard refusal message, if any. */
   remoteNotice: string | null;
   /** w-integrations US-24: 1-click install from the curated directory. */
@@ -3820,6 +3822,19 @@ export function useMuseSessions(): UseMuseSessions {
       };
     }));
   }, []);
+
+  const forgetRemoteMcpCredential = useCallback(async (id: string): Promise<void> => {
+    disconnectRemoteMcp(id);
+    if (isTauriRuntime()) {
+      try {
+        await invoke("secure_store_remove", { key: remoteMcpCredentialKey(id) });
+      } catch {
+        setRemoteNotice("The remote session was disconnected, but its native credential could not be removed.");
+        return;
+      }
+    }
+    setRemoteNotice("Remote credential forgotten. Reconnect will require a new token.");
+  }, [disconnectRemoteMcp]);
 
   const uninstallConnectorById = useCallback(async (id: string): Promise<void> => {
     const entry = findConnector(connectorsRef.current, id);
@@ -6779,6 +6794,7 @@ export function useMuseSessions(): UseMuseSessions {
     probeRemoteMcp,
     callRemoteMcp,
     disconnectRemoteMcp,
+    forgetRemoteMcpCredential,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
