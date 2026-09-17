@@ -88,6 +88,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **Acceptation :** arrêt avant premier token, pendant outil, après fin, réponse tardive et double-clic. L'arrêt de A n'affecte pas B ; l'état final correspond au moteur. Dépend M0-01/03.
 
 **État au 16/09/2026 :** demande de cancellation conservée dans un état renderer-only jusqu'à réception d'un statut `stopped` (ou déconnexion), avec badge `Stopping Muse`, bouton désactivé contre le double-clic et transcript non fermé prématurément. La qualification native des courses et réponses tardives reste à produire.
+**Pré-vol natif au 17/09/2026 :** `node scripts/native-smoke.mjs --exercise-control` admet puis interrompt immédiatement un tour synthétique sur deux sidecars Windows distincts et vérifie l'accusé `accepted` ainsi que la conservation du `turnId`. Cette preuve couvre le contrat de commande, pas la course UI entre un premier token, un outil, un terminal confirmé et une réponse tardive.
 
 ### M0-05 — Demandes en attente
 
@@ -186,6 +187,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **État au 17/09/2026 :** les jobs CI frontend et Rust conservent désormais, uniquement en cas d'échec, un rapport borné (250/300 dernières lignes), après masquage des chemins du runner et des formes de secrets courantes. Les artefacts sont rétentionnés sept jours et ne contiennent ni workspace utilisateur ni transcript.
 
 **Reste :** brancher la fixture au superviseur Tauri avec deux workspaces isolés et injecter une panne pendant `send_input`. Ces tests restent séparés d'un tour modèle réel.
+**Pré-vol natif :** le smoke Windows partage désormais cette commande avec `--exercise-control` pour vérifier le contrôle `turn/start` → `turn/interrupt` sur deux hosts réels ; il ne remplace pas l'injection de panne dans le superviseur Tauri.
 
 **Acceptation :** depuis un clone propre, `npm test` lance la fixture sans dépendance externe ; détecter volontairement une mauvaise route A/B et un envoi perdu dès que le pilote Tauri isolé est ajouté. Choisir le pilote Tauri selon support réel des plateformes, consigner toute limite dans l'ADR.
 

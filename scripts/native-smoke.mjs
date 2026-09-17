@@ -2,14 +2,17 @@
 /**
  * Small, opt-in native MSP smoke test for the Windows sidecar.
  *
- * This intentionally stops before a model turn: it proves that two real
+ * By default this stops before a model turn: it proves that two real
  * `muse serve` processes can handshake, own independent workspaces, create a
- * session and answer a read-only model catalogue request. It is a diagnostic
+ * session and answer a read-only model catalogue request. The explicit
+ * `--exercise-control` path admits and immediately interrupts one turn per
+ * host to validate the native cancellation contract. It is a diagnostic
  * harness, not a substitute for the full Tauri E2E scenario in M0-01c.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
  *   node scripts/native-smoke.mjs --binary C:\\path\\to\\muse.exe
+ *   node scripts/native-smoke.mjs --exercise-control
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -32,6 +35,10 @@ function binaryArgument() {
   return index >= 0 && process.argv[index + 1]
     ? resolve(process.argv[index + 1])
     : DEFAULT_BINARY;
+}
+
+function exercisesControlPath() {
+  return process.argv.includes("--exercise-control");
 }
 
 function fail(message) {
@@ -163,6 +170,7 @@ async function main() {
     fail("The bundled smoke binary is Windows-only; pass --binary for another target.");
   }
   const binary = binaryArgument();
+  const exerciseControl = exercisesControlPath();
   const roots = await Promise.all([
     mkdtemp(join(tmpdir(), "muse-native-smoke-a-")),
     mkdtemp(join(tmpdir(), "muse-native-smoke-b-")),
@@ -172,6 +180,7 @@ async function main() {
   );
   try {
     const sessions = [];
+    const controls = [];
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
         clientInfo: { name: "muse_desktop_native_smoke", version: "0.1.0" },
@@ -191,6 +200,29 @@ async function main() {
       sessions.push(sessionId);
       const catalogue = await host.request("model/list");
       if (catalogue === null || typeof catalogue !== "object") fail(`host-${index === 0 ? "A" : "B"} returned no model catalogue`);
+      if (exerciseControl) {
+        // This path is deliberately opt-in: it admits a real turn and
+        // interrupts it immediately, proving the native control contract
+        // without waiting for a model response or persisting user content.
+        const turn = await host.request("turn/start", {
+          commandId: uuidv7(),
+          sessionId,
+          input: [{ type: "text", text: "Native control smoke probe. Stop immediately." }],
+        });
+        const turnId = turn?.turnId;
+        if (turn?.status !== "accepted" || typeof turnId !== "string" || turnId.length === 0) {
+          fail(`host-${index === 0 ? "A" : "B"} did not accept the control probe`);
+        }
+        const interrupted = await host.request("turn/interrupt", {
+          commandId: uuidv7(),
+          sessionId,
+          retract: false,
+        });
+        if (interrupted?.status !== "accepted" || interrupted?.turnId !== turnId) {
+          fail(`host-${index === 0 ? "A" : "B"} did not acknowledge interruption of ${turnId}`);
+        }
+        controls.push({ host: String.fromCharCode(65 + index), turnId, status: "interrupted" });
+      }
     }
     if (new Set(sessions).size !== sessions.length) fail("the two native hosts returned the same session id");
     process.stdout.write(`${JSON.stringify({
@@ -198,7 +230,8 @@ async function main() {
       hosts: sessions.map((sessionId, index) => ({ host: String.fromCharCode(65 + index), sessionId })),
       distinctWorkspaces: true,
       modelCatalogue: "available",
-      turnsSent: 0,
+      turnsSent: exerciseControl ? controls.length : 0,
+      ...(exerciseControl ? { controls } : {}),
     })}\n`);
   } finally {
     await Promise.all(hosts.map((host) => host.close()));
