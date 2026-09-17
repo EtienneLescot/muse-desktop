@@ -3928,6 +3928,69 @@ mod tests {
         assert_eq!(request.await.unwrap().unwrap()["models"], json!([]));
     }
 
+    #[test]
+    fn generated_tauri_invoke_routes_send_input_through_session_state() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![send_input])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client.clone());
+
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames).await;
+                assert_eq!(frame["method"], "turn/start");
+                assert_eq!(frame["params"]["sessionId"], "session-a");
+                assert_eq!(frame["params"]["commandId"], "ipc-command");
+                client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": frame["id"],
+                        "result": {"status": "accepted", "turnId": "turn-ipc"}
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "send_input".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({
+                    "sessionId": "session-a",
+                    "commandId": "ipc-command",
+                    "text": "inspect through invoke",
+                    "inputParts": null
+                })),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("send_input invoke should succeed")
+        .deserialize::<Value>()
+        .expect("send_input response should be JSON");
+
+        responder.join().expect("fixture responder should finish");
+        assert_eq!(response["turnId"], "turn-ipc");
+        assert!(state.inner().sessions.lock().unwrap()["session-a"].running);
+    }
+
     #[tokio::test]
     async fn session_start_retries_without_posture_only_on_host_ceiling() {
         let (client, mut frames) = fixture_client(false);
