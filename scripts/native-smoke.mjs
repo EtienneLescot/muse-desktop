@@ -101,7 +101,7 @@ function createHost(binary, workspace, label) {
         if (!request) continue;
         pending.delete(String(frame.id));
         clearTimeout(request.timer);
-        if (frame.error) request.reject(new Error(frame.error.message || "MSP request failed"));
+        if (frame.error) request.reject(new Error(`${request.method} failed: ${frame.error.message || "MSP request failed"}`));
         else request.resolve(frame.result);
       }
     }
@@ -129,7 +129,7 @@ function createHost(binary, workspace, label) {
         pending.delete(String(id));
         reject(new Error(`${label} timed out on ${method}`));
       }, REQUEST_TIMEOUT_MS);
-      pending.set(String(id), { resolve: resolveRequest, reject, timer });
+      pending.set(String(id), { method, resolve: resolveRequest, reject, timer });
       child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
     });
   }
