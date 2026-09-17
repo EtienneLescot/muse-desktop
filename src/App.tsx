@@ -1098,6 +1098,7 @@ export default function App() {
                           <OrchestrationPanel
                             agents={orchestrationAgents}
                             sessionId={active.session_id}
+                            workspace={active.workspace}
                             onCreateWorktree={createWorktree}
                             worktrees={worktrees}
                             onRemoveWorktree={removeWorktree}

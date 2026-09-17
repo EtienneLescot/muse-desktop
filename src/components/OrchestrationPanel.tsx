@@ -14,6 +14,7 @@ interface Props {
   agents: string[];
   /** Conversation whose workspace is used as the Git repository root. */
   sessionId: string;
+  workspace: string;
   onCreateWorktree: (
     sessionId: string,
     plan: WorktreePlan,
@@ -33,6 +34,7 @@ interface Props {
 export function OrchestrationPanel({
   agents,
   sessionId,
+  workspace,
   onCreateWorktree,
   worktrees,
   onRemoveWorktree,
@@ -46,6 +48,12 @@ export function OrchestrationPanel({
   const plans = useMemo(() => planWorktrees(agents), [agents]);
   const snippet = useMemo(() => worktreeShellSnippet(plans), [plans]);
   const queueNote = fanoutQueueNote(plans.length);
+  const recordFor = (plan: WorktreePlan): WorktreeRecord | undefined =>
+    worktrees.find(
+      (record) =>
+        record.repoRoot.toLowerCase() === workspace.toLowerCase() &&
+        record.branch === plan.branch,
+    );
 
   if (plans.length === 0) return null;
 
@@ -62,7 +70,7 @@ export function OrchestrationPanel({
   }
 
   async function create(plan: WorktreePlan): Promise<void> {
-    if (creating !== null || worktrees.some((record) => record.branch === plan.branch)) return;
+    if (creating !== null || recordFor(plan) !== undefined) return;
     setCreating(plan.agent);
     await onCreateWorktree(sessionId, plan);
     setCreating(null);
@@ -88,18 +96,18 @@ export function OrchestrationPanel({
               <code>{p.path}</code>
               <span className="muted">{p.branch}</span>
             </div>
-            {worktrees.find((record) => record.branch === p.branch) ? (
+            {recordFor(p) ? (
               <>
                 <span
                   className="orchestration-created"
-                  title={worktrees.find((record) => record.branch === p.branch)?.path}
+                  title={recordFor(p)?.path}
                 >
                   Created
                 </span>
                 <button
                   type="button"
                   onClick={() => {
-                    const record = worktrees.find((item) => item.branch === p.branch);
+                    const record = recordFor(p);
                     if (!record || !window.confirm(`Remove worktree ${record.path}?`)) return;
                     void onRemoveWorktree(sessionId, record);
                   }}
