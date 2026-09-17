@@ -16,6 +16,7 @@ import {
   annotationsForUrl,
   BROWSER_ANNOTATIONS_KEY,
   BROWSER_PERMS_KEY,
+  BROWSER_TABS_KEY,
   browserCaptureAttachment,
   createBrowserAnnotation,
   normalizeBrowserElementAnchor,
@@ -28,10 +29,12 @@ import {
   isRenderableBrowserUrl,
   loadBrowserAnnotations,
   loadBrowserPermissions,
+  loadBrowserTabs,
   normalizeBrowserUrl,
   removeBrowserAnnotation,
   saveBrowserAnnotations,
   saveBrowserPermissions,
+  saveBrowserTabs,
   setBrowserAppPermission,
   type BrowserAnnotation,
   type BrowserCapture,
@@ -236,6 +239,27 @@ describe("browser persistence", () => {
   it("returns [] when nothing was stored", () => {
     assert.deepEqual(loadBrowserAnnotations(), []);
     assert.deepEqual(loadBrowserPermissions(), []);
+    assert.deepEqual(loadBrowserTabs(), []);
+  });
+
+  it("round-trips bounded tab navigation without persisting unsafe URLs", () => {
+    saveBrowserTabs([
+      {
+        id: "tab-a",
+        url: "https://example.com/current",
+        history: ["https://example.com/", "javascript:alert(1)", "https://example.com/current"],
+        historyIndex: 2,
+      },
+    ]);
+    const store = (globalThis as Record<string, unknown>).localStorage as {
+      getItem: (k: string) => string | null;
+    };
+    assert.ok(store.getItem(BROWSER_TABS_KEY)?.includes("tab-a"));
+    const back = loadBrowserTabs();
+    assert.equal(back.length, 1);
+    assert.deepEqual(back[0].history, ["https://example.com/", "https://example.com/current"]);
+    assert.equal(back[0].historyIndex, 1);
+    assert.ok(!store.getItem(BROWSER_TABS_KEY)?.includes("javascript:"));
   });
 
   it("round-trips annotations under the muse-desktop.* key", () => {

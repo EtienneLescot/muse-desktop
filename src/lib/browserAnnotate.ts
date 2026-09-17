@@ -49,12 +49,24 @@ export interface BrowserAppPermission {
   updatedAt: number;
 }
 
+/** One bounded in-app browser tab. Only navigation state is persisted; page
+ * cookies, script state and credentials stay owned by the browser runtime. */
+export interface BrowserTab {
+  id: string;
+  url: string;
+  history: string[];
+  historyIndex: number;
+}
+
 export const BROWSER_ANNOTATIONS_KEY = "muse-desktop.browser.annotations.v1";
 export const BROWSER_PERMS_KEY = "muse-desktop.browser.permissions.v1";
+export const BROWSER_TABS_KEY = "muse-desktop.browser.tabs.v1";
 
 /** Cap stored rows so a runaway annotator stays bounded. */
 export const MAX_BROWSER_ANNOTATIONS = 500;
 export const MAX_BROWSER_PERMS = 100;
+export const MAX_BROWSER_TABS = 8;
+export const MAX_BROWSER_HISTORY = 50;
 
 /**
  * Honest out-of-scope notice for image generation (rendered verbatim by the
@@ -359,6 +371,67 @@ function isValidPerm(p: unknown): p is BrowserAppPermission {
     typeof o.allowed === "boolean" &&
     typeof o.updatedAt === "number"
   );
+}
+
+function isValidTab(tab: unknown): tab is BrowserTab {
+  if (typeof tab !== "object" || tab === null) return false;
+  const value = tab as Record<string, unknown>;
+  if (typeof value.id !== "string" || value.id.trim().length === 0) return false;
+  if (typeof value.url !== "string") return false;
+  if (!Array.isArray(value.history) || !value.history.every((entry) => typeof entry === "string")) return false;
+  if (typeof value.historyIndex !== "number" || !Number.isInteger(value.historyIndex)) return false;
+  return true;
+}
+
+function normalizeBrowserTab(tab: unknown): BrowserTab | null {
+  if (!isValidTab(tab)) return null;
+  const history = tab.history
+    .map((entry) => normalizeBrowserUrl(entry))
+    .filter((entry): entry is string => entry !== null)
+    .slice(-MAX_BROWSER_HISTORY);
+  const url = normalizeBrowserUrl(tab.url) ?? "";
+  if (url && (history.length === 0 || history[history.length - 1] !== url)) {
+    history.push(url);
+  }
+  const historyIndex = history.length === 0
+    ? -1
+    : Math.max(0, Math.min(history.length - 1, tab.historyIndex));
+  return { id: tab.id.trim().slice(0, 120), url, history, historyIndex };
+}
+
+/** Create a blank tab without touching storage. */
+export function createBrowserTab(): BrowserTab {
+  return { id: `tab-${makeId()}`, url: "", history: [], historyIndex: -1 };
+}
+
+/** Load navigation state while dropping malformed or unsafe URLs. */
+export function loadBrowserTabs(): BrowserTab[] {
+  const raw = read<unknown>(BROWSER_TABS_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const tabs: BrowserTab[] = [];
+  for (const candidate of raw) {
+    const tab = normalizeBrowserTab(candidate);
+    if (tab === null || seen.has(tab.id)) continue;
+    seen.add(tab.id);
+    tabs.push(tab);
+    if (tabs.length >= MAX_BROWSER_TABS) break;
+  }
+  return tabs;
+}
+
+/** Persist only the bounded navigation projection; never page cookies/state. */
+export function saveBrowserTabs(tabs: BrowserTab[]): void {
+  const seen = new Set<string>();
+  const safe: BrowserTab[] = [];
+  for (const candidate of tabs) {
+    const tab = normalizeBrowserTab(candidate);
+    if (tab === null || seen.has(tab.id)) continue;
+    seen.add(tab.id);
+    safe.push(tab);
+    if (safe.length >= MAX_BROWSER_TABS) break;
+  }
+  write(BROWSER_TABS_KEY, safe);
 }
 
 export function loadBrowserAnnotations(): BrowserAnnotation[] {

@@ -8,6 +8,11 @@ import {
   formatBrowserObservation,
   normalizeBrowserObservation,
   normalizeBrowserUrl,
+  createBrowserTab,
+  loadBrowserTabs,
+  MAX_BROWSER_TABS,
+  saveBrowserTabs,
+  type BrowserTab,
   type BrowserAnnotation,
   type BrowserAppPermission,
   type BrowserCapture,
@@ -47,10 +52,19 @@ export function BrowserPanel({
   onInsertContext,
   onInsertCapture,
 }: Props) {
-  const [url, setUrl] = useState("");
-  const [currentUrl, setCurrentUrl] = useState("");
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const initialTabsRef = useRef<BrowserTab[] | null>(null);
+  if (initialTabsRef.current === null) {
+    const stored = loadBrowserTabs();
+    initialTabsRef.current = stored.length > 0 ? stored : [createBrowserTab()];
+  }
+  const initialTabs = initialTabsRef.current;
+  const initialTab = initialTabs[0];
+  const [tabs, setTabs] = useState<BrowserTab[]>(initialTabs);
+  const [activeTabId, setActiveTabId] = useState(initialTab.id);
+  const [url, setUrl] = useState(initialTab.url);
+  const [currentUrl, setCurrentUrl] = useState(initialTab.url);
+  const [history, setHistory] = useState<string[]>(initialTab.history);
+  const [historyIndex, setHistoryIndex] = useState(initialTab.historyIndex);
   const [frameKey, setFrameKey] = useState(0);
   const [frameError, setFrameError] = useState<string | null>(null);
   const [nativeBrowserStatus, setNativeBrowserStatus] = useState<string | null>(null);
@@ -68,6 +82,10 @@ export function BrowserPanel({
   const captureImageRef = useRef<HTMLImageElement>(null);
   const captureDragRef = useRef<{ x: number; y: number } | null>(null);
   const selectionCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    saveBrowserTabs(tabs);
+  }, [tabs]);
 
   useEffect(() => () => {
     selectionCleanupRef.current?.();
@@ -355,41 +373,89 @@ export function BrowserPanel({
     if (context.length > 0) onInsertContext(context);
   };
 
-  const navigate = (nextInput: string, record = true) => {
-    const next = normalizeBrowserUrl(nextInput);
-    if (next === null) {
-      setFrameError("That URL can't be shown here (http/https only).");
-      return;
-    }
-    if (record) {
-      const base = historyIndex >= 0 ? history.slice(0, historyIndex + 1) : [];
-      const nextHistory = base[base.length - 1] === next ? base : [...base, next];
-      setHistory(nextHistory);
-      setHistoryIndex(nextHistory.length - 1);
-    }
-    setUrl(next);
-    setCurrentUrl(next);
+  const resetPageState = () => {
     setFrameError(null);
     setNativeBrowserStatus(null);
     setSelection("");
     setElementAnchor(null);
     setPageObservation(null);
     setControlStatus(null);
+    setCapture(null);
+    setCaptureRegion(null);
+    setCaptureStatus(null);
+    setTypeText("");
     setFrameKey((key) => key + 1);
+  };
+
+  const activateTab = (tab: BrowserTab) => {
+    setActiveTabId(tab.id);
+    setUrl(tab.url);
+    setCurrentUrl(tab.url);
+    setHistory(tab.history);
+    setHistoryIndex(tab.historyIndex);
+    resetPageState();
+  };
+
+  const updateActiveTab = (nextUrl: string, nextHistory: string[], nextHistoryIndex: number) => {
+    setTabs((cur) => cur.map((tab) =>
+      tab.id === activeTabId
+        ? { ...tab, url: nextUrl, history: nextHistory, historyIndex: nextHistoryIndex }
+        : tab,
+    ));
+  };
+
+  const navigate = (nextInput: string, record = true, requestedIndex?: number) => {
+    const next = normalizeBrowserUrl(nextInput);
+    if (next === null) {
+      setFrameError("That URL can't be shown here (http/https only).");
+      return;
+    }
+    let nextHistory = history;
+    let nextHistoryIndex = requestedIndex ?? historyIndex;
+    if (record) {
+      const base = historyIndex >= 0 ? history.slice(0, historyIndex + 1) : [];
+      nextHistory = base[base.length - 1] === next ? base : [...base, next];
+      nextHistoryIndex = nextHistory.length - 1;
+    }
+    setHistory(nextHistory);
+    setHistoryIndex(nextHistoryIndex);
+    setUrl(next);
+    setCurrentUrl(next);
+    updateActiveTab(next, nextHistory, nextHistoryIndex);
+    resetPageState();
   };
 
   const goBack = () => {
     if (historyIndex <= 0) return;
     const nextIndex = historyIndex - 1;
-    setHistoryIndex(nextIndex);
-    navigate(history[nextIndex], false);
+    navigate(history[nextIndex], false, nextIndex);
   };
 
   const goForward = () => {
     if (historyIndex < 0 || historyIndex >= history.length - 1) return;
     const nextIndex = historyIndex + 1;
-    setHistoryIndex(nextIndex);
-    navigate(history[nextIndex], false);
+    navigate(history[nextIndex], false, nextIndex);
+  };
+
+  const createTab = () => {
+    if (tabs.length >= MAX_BROWSER_TABS) return;
+    const tab = createBrowserTab();
+    setTabs((cur) => [...cur, tab]);
+    activateTab(tab);
+  };
+
+  const closeTab = (tabId: string) => {
+    if (tabs.length <= 1) {
+      const blank = createBrowserTab();
+      setTabs([blank]);
+      activateTab(blank);
+      return;
+    }
+    const index = tabs.findIndex((tab) => tab.id === tabId);
+    const nextTabs = tabs.filter((tab) => tab.id !== tabId);
+    const nextTab = nextTabs[Math.max(0, Math.min(index, nextTabs.length - 1))] ?? nextTabs[0];
+    setTabs(nextTabs);
+    if (nextTab) activateTab(nextTab);
   };
 
   async function openNativeBrowser(): Promise<void> {
@@ -431,6 +497,43 @@ export function BrowserPanel({
     <section className="browser-panel" aria-label="In-app browser">
       <details open>
         <summary className="browser-title">Browser</summary>
+        <div className="browser-tabs" role="tablist" aria-label="Browser tabs">
+          {tabs.map((tab) => {
+            const host = tab.url ? new URL(tab.url).hostname.replace(/^www\./, "") : "New tab";
+            return (
+              <div className={`browser-tab${tab.id === activeTabId ? " is-active" : ""}`} key={tab.id}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={tab.id === activeTabId}
+                  className="browser-tab-select"
+                  onClick={() => activateTab(tab)}
+                  title={tab.url || "New tab"}
+                >
+                  <span>{host}</span>
+                </button>
+                <button
+                  type="button"
+                  className="browser-tab-close"
+                  aria-label={`Close ${host} tab`}
+                  title={`Close ${host} tab`}
+                  onClick={() => closeTab(tab.id)}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            className="browser-tab-new"
+            onClick={createTab}
+            disabled={tabs.length >= MAX_BROWSER_TABS}
+            title={tabs.length >= MAX_BROWSER_TABS ? `Maximum of ${MAX_BROWSER_TABS} tabs` : "Open a new browser tab"}
+          >
+            +
+          </button>
+        </div>
         <form className="browser-url-row" onSubmit={(event) => {
           event.preventDefault();
           navigate(url);
