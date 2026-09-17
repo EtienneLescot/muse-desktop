@@ -5,6 +5,7 @@
 //! listings and file content have explicit caps so a large repository cannot
 //! block the UI or exhaust memory.
 
+use base64::Engine as _;
 use serde::Serialize;
 use std::fs::{self, File};
 use std::io::Read;
@@ -15,6 +16,7 @@ const DEFAULT_ENTRY_LIMIT: usize = 200;
 const MAX_ENTRY_LIMIT: usize = 500;
 const DEFAULT_MAX_CHARS: usize = 120_000;
 const MAX_READ_BYTES: u64 = 512 * 1024;
+const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -45,6 +47,8 @@ pub struct FileReadResult {
     pub modified_at: Option<u64>,
     pub binary: bool,
     pub content: Option<String>,
+    pub media_type: Option<String>,
+    pub base64_data: Option<String>,
     pub truncated: bool,
     pub observed_at: u64,
 }
@@ -163,11 +167,26 @@ pub fn read(
     file.take(MAX_READ_BYTES + 1)
         .read_to_end(&mut bytes)
         .map_err(|e| format!("cannot read {relative_path}: {e}"))?;
-    let byte_truncated = bytes.len() as u64 > MAX_READ_BYTES || size > MAX_READ_BYTES;
+    let probe_truncated = bytes.len() as u64 > MAX_READ_BYTES || size > MAX_READ_BYTES;
     if bytes.len() as u64 > MAX_READ_BYTES {
         bytes.truncate(MAX_READ_BYTES as usize);
     }
     let binary = bytes.contains(&0) || std::str::from_utf8(&bytes).is_err();
+    let detected_media_type = image_media_type(&file_path);
+    let image_bytes = if detected_media_type.is_some() && size <= MAX_IMAGE_BYTES {
+        let mut full = Vec::with_capacity(size as usize);
+        File::open(&file_path)
+            .map_err(|e| format!("cannot read {relative_path}: {e}"))?
+            .take(MAX_IMAGE_BYTES + 1)
+            .read_to_end(&mut full)
+            .map_err(|e| format!("cannot read {relative_path}: {e}"))?;
+        (full.len() as u64 == size).then_some(full)
+    } else {
+        None
+    };
+    // A full image payload is available to the UI even when the bounded text
+    // probe had to stop at MAX_READ_BYTES.
+    let byte_truncated = probe_truncated && image_bytes.is_none();
     let (content, char_truncated) = if binary {
         (None, false)
     } else {
@@ -183,9 +202,28 @@ pub fn read(
         modified_at: modified_at(&metadata),
         binary,
         content,
+        media_type: image_bytes
+            .as_ref()
+            .and_then(|_| detected_media_type.map(str::to_string)),
+        base64_data: image_bytes
+            .as_ref()
+            .map(|value| base64::engine::general_purpose::STANDARD.encode(value)),
         truncated: byte_truncated || char_truncated,
         observed_at: now_ms(),
     })
+}
+
+fn image_media_type(path: &Path) -> Option<&'static str> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    match extension.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "bmp" => Some("image/bmp"),
+        "svg" => Some("image/svg+xml"),
+        _ => None,
+    }
 }
 
 /// Resolve one existing workspace entry for an explicit "open in system"
@@ -306,9 +344,15 @@ mod tests {
         let text = read(&root, "src/main.ts", Some(100)).unwrap();
         assert_eq!(text.content.as_deref(), Some("console.log('Muse')\n"));
         assert!(!text.binary);
+        assert!(text.media_type.is_none());
         let binary = read(&root, "image.bin", None).unwrap();
         assert!(binary.binary);
         assert!(binary.content.is_none());
+        assert!(binary.base64_data.is_none());
+        fs::write(root.join("pixel.png"), [137u8, 80, 78, 71]).unwrap();
+        let image = read(&root, "pixel.png", None).unwrap();
+        assert_eq!(image.media_type.as_deref(), Some("image/png"));
+        assert!(image.base64_data.is_some());
         let _ = fs::remove_dir_all(root);
     }
 

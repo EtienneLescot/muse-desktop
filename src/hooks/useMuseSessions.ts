@@ -519,6 +519,8 @@ export interface FileReadResult {
   modifiedAt: number | null;
   binary: boolean;
   content: string | null;
+  mediaType?: string | null;
+  base64Data?: string | null;
   truncated: boolean;
   observedAt: number;
 }

@@ -126,7 +126,17 @@ export function FilesPanel({ sessionId, state, onList, onRead, onOpen }: Props) 
                 <strong>{preview.path}</strong>
                 <span>Binary file · {formatSize(preview.size)}</span>
               </div>
-              <p className="muted">Binary content is not rendered in the text preview.</p>
+              {preview.mediaType && preview.base64Data ? (
+                <div className="file-image-preview">
+                  <img
+                    src={`data:${preview.mediaType};base64,${preview.base64Data}`}
+                    alt={`Preview of ${preview.path}`}
+                  />
+                  <span className="muted">Image preview · {preview.mediaType}</span>
+                </div>
+              ) : (
+                <p className="muted">Binary content is not rendered in the text preview.</p>
+              )}
             </>
           ) : (
             <>
