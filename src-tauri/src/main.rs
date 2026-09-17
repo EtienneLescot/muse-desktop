@@ -757,6 +757,24 @@ fn spawn_sidecar(
     })
 }
 
+/// Decode one or more stdout chunks and feed complete MSP frames into the
+/// owning client. Keeping the framing boundary separate from the Tauri event
+/// receiver makes the exact production parser testable with a deterministic
+/// child while preserving the same partial-line behavior in the pump.
+async fn ingest_stdout_chunk(
+    client: &MspClient,
+    out_buf: &mut Vec<u8>,
+    stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>,
+    chunk: &[u8],
+) {
+    for line in split_lines(out_buf, chunk) {
+        match serde_json::from_str::<Value>(&line) {
+            Ok(frame) => client.ingest(frame).await,
+            Err(_) => push_stderr(stderr_tail, format!("unparsable frame: {line}")),
+        }
+    }
+}
+
 /// Forward the host's stdout frames into the MSP client; stash stderr for
 /// diagnostics; announce host death only to sessions owned by this client.
 fn pump_stdout(
@@ -771,12 +789,7 @@ fn pump_stdout(
         while let Some(ev) = rx.recv().await {
             match ev {
                 CommandEvent::Stdout(chunk) => {
-                    for line in split_lines(&mut out_buf, &chunk) {
-                        match serde_json::from_str::<Value>(&line) {
-                            Ok(frame) => client.ingest(frame).await,
-                            Err(_) => push_stderr(&stderr_tail, format!("unparsable frame: {line}")),
-                        }
-                    }
+                    ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &chunk).await;
                 }
                 CommandEvent::Stderr(chunk) => {
                     for line in split_lines(&mut err_buf, &chunk) {
@@ -3466,6 +3479,55 @@ mod tests {
 
         assert!(error.contains("sidecar write failed"), "{error}");
         assert!(!state.sessions.lock().unwrap()["session-a"].running);
+    }
+
+    #[tokio::test]
+    async fn stdout_pump_reassembles_frames_and_routes_notifications() {
+        let (writes, mut frames) = mpsc::unbounded_channel();
+        let (notify_tx, mut notify_rx) = mpsc::unbounded_channel();
+        let child = RecordingChild { writes, fail_write: false };
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let mut out_buf = Vec::new();
+
+        let request = tokio::spawn({
+            let client = client.clone();
+            async move { client.request("model/list", Value::Null).await }
+        });
+        let request_frame = fixture_frame(&mut frames).await;
+        let mut response = serde_json::to_vec(&json!({
+            "jsonrpc": "2.0",
+            "id": request_frame["id"],
+            "result": {"models": []}
+        }))
+        .unwrap();
+        response.push(b'\n');
+        let split_at = response.len() / 2;
+        ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &response[..split_at]).await;
+        assert!(!request.is_finished(), "partial stdout must not complete a request");
+        ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &response[split_at..]).await;
+        assert_eq!(request.await.unwrap().unwrap()["models"], json!([]));
+
+        let mut notification = serde_json::to_vec(&json!({
+            "jsonrpc": "2.0",
+            "method": "turn/started",
+            "params": {"sessionId": "s"}
+        }))
+        .unwrap();
+        notification.push(b'\n');
+        ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &notification).await;
+        let (method, params) = tokio::time::timeout(std::time::Duration::from_secs(1), notify_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(method, "turn/started");
+        assert_eq!(params["sessionId"], "s");
+
+        ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, b"not-json\n").await;
+        assert!(stderr_tail.lock().unwrap()[0].contains("unparsable frame"));
     }
 
     #[test]
