@@ -3436,7 +3436,7 @@ export function useMuseSessions(): UseMuseSessions {
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
         authorizationMode,
-        mcpServers: buildHostMcpServers(connectorsRef.current),
+        mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
       });
       const record: MuseSession = {
         session_id: meta.session_id,
@@ -3554,7 +3554,7 @@ export function useMuseSessions(): UseMuseSessions {
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
         workspacePath: session.workspace,
-        mcpServers: buildHostMcpServers(connectorsRef.current),
+        mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
       });
       if (tombstoned.current?.has(id)) return;
       setGrantedCapabilitiesBySession((cur) => ({
@@ -3674,7 +3674,7 @@ export function useMuseSessions(): UseMuseSessions {
           relativePath: plan.path,
           baseRef: plan.base,
           authorizationMode,
-          mcpServers: buildHostMcpServers(connectorsRef.current),
+          mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
         });
         setWorktrees((current) => [
           ...current.filter((record) => record.path !== result.worktree.path),

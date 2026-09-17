@@ -22,6 +22,7 @@ import {
   rollbackLocalConnector,
   refreshLocalConnector,
   setConnectorEnabled,
+  setConnectorUseInMuse,
   uninstallConnector,
   VPN_FAILURE_MESSAGE,
   type ConnectorEntry,
@@ -113,6 +114,25 @@ describe("verified local MCP connector registration", () => {
     assert.ok(refreshed);
     assert.equal(refreshed.entry.status, "disabled");
     assert.equal(refreshed.entry.command, "demo --new");
+  });
+
+  it("preserves the Muse opt-in across a verified catalog refresh", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "" }],
+    });
+    assert.ok(first);
+    const opted = setConnectorUseInMuse(first.registry, "local-mcp-demo", true);
+    const refreshed = registerLocalConnector(opted, {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo --new",
+      tools: [{ name: "two", description: "" }],
+    });
+    assert.ok(refreshed);
+    assert.equal(refreshed.entry.useInMuse, true);
   });
 
   it("refreshes one existing local entry without changing its identity or status", () => {
@@ -351,6 +371,26 @@ describe("remote guard (US-26: single remote + public internet)", () => {
     assert.ok(refreshed);
     assert.equal(refreshed.entry.status, "disabled");
     assert.equal(refreshed.entry.tools[0].name, "new");
+  });
+
+  it("allows the explicit Muse opt-in for a remote endpoint", () => {
+    const first = registerRemoteConnector([], {
+      id: "remote-acme",
+      name: "Acme",
+      url: "https://mcp.acme.com/rpc",
+      tools: [{ name: "echo", description: "" }],
+    });
+    assert.ok(first);
+    const opted = setConnectorUseInMuse(first.registry, "remote-acme", true);
+    assert.equal(opted[0].useInMuse, true);
+    const refreshed = registerRemoteConnector(opted, {
+      id: "remote-acme",
+      name: "Acme",
+      url: "https://mcp.acme.com/rpc",
+      tools: [{ name: "echo", description: "updated" }],
+    });
+    assert.ok(refreshed);
+    assert.equal(refreshed.entry.useInMuse, true);
   });
 });
 

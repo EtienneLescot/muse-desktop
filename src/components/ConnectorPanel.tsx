@@ -24,7 +24,7 @@ interface Props {
   onInstall: (dirId: string) => void;
   onUninstall: (id: string) => void;
   onToggle: (id: string, enabled: boolean) => void;
-  /** Opt a verified local connector into new Muse session startup config. */
+  /** Opt a verified connector into new Muse session startup config. */
   onUseInMuse: (id: string, enabled: boolean) => void;
   /** Probe an explicit local MCP stdio command. */
   onProbeLocal: (command: string) => Promise<LocalMcpProbeResult | null>;
@@ -400,12 +400,15 @@ export function ConnectorPanel({
                     onChange={(ev) => onToggle(e.id, ev.target.checked)}
                   />
                 </label>
-                {e.kind === "local" && e.command && (
+                {((e.kind === "local" && e.command) || e.kind === "remote") && (
                   <label className="integration-toggle" title="Attach to new Muse conversations">
                     <input
                       type="checkbox"
                       checked={e.useInMuse === true}
-                      disabled={e.status === "disabled"}
+                      disabled={
+                        e.status === "disabled" ||
+                        (e.kind === "remote" && !remoteConnectedIds.includes(e.id))
+                      }
                       onChange={(ev) => onUseInMuse(e.id, ev.target.checked)}
                     />
                     <small>Use in Muse</small>
