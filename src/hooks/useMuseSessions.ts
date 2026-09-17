@@ -429,6 +429,7 @@ import {
   type GitStatusSnapshot,
 } from "../lib/git";
 import { formatTerminalContext } from "../lib/terminalContext";
+import { formatWorkspaceFileContext } from "../lib/fileContext";
 import {
   extractHistoryItems,
   historyItemsToLogEntries,
@@ -899,6 +900,8 @@ interface UseMuseSessions {
   prepareTerminalContext: (sessionId: string) => boolean;
   /** M1-07: session-scoped real filesystem listing and bounded preview. */
   filesForSession: (sessionId: string) => FilesBrowserState;
+  /** M1-07: insert the current text-file preview into the composer draft. */
+  prepareWorkspaceFileContext: (sessionId: string) => boolean;
   listWorkspaceFiles: (sessionId: string, path?: string) => Promise<void>;
   readWorkspaceFile: (sessionId: string, path: string) => Promise<void>;
   watchWorkspaceFiles: (sessionId: string) => Promise<void>;
@@ -5812,6 +5815,28 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
+  const prepareWorkspaceFileContext = useCallback(
+    (sessionId: string): boolean => {
+      const preview = filesBySession[sessionId]?.preview;
+      if (preview === undefined || preview === null) {
+        setError("file context unavailable: select a text file first");
+        return false;
+      }
+      if (preview.binary || preview.content === null) {
+        setError("file context unavailable: this file has no text preview");
+        return false;
+      }
+      const context = formatWorkspaceFileContext(preview);
+      if (context.length === 0) {
+        setError("file context unavailable: the file preview is empty");
+        return false;
+      }
+      setPrefill((current) => (current ? `${current}\n${context}` : context));
+      return true;
+    },
+    [filesBySession],
+  );
+
   const openWorkspacePath = useCallback(
     async (sessionId: string, path: string): Promise<void> => {
       if (!isTauriRuntime()) {
@@ -6045,6 +6070,7 @@ export function useMuseSessions(): UseMuseSessions {
     closeTerminal,
     prepareTerminalContext,
     filesForSession,
+    prepareWorkspaceFileContext,
     listWorkspaceFiles,
     readWorkspaceFile,
     watchWorkspaceFiles,

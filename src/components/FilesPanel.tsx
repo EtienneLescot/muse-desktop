@@ -13,6 +13,8 @@ interface Props {
   onWatch: (sessionId: string) => Promise<void>;
   onUnwatch: (sessionId: string) => Promise<void>;
   onOpen: (sessionId: string, path: string) => Promise<void>;
+  /** Insert the currently selected text preview into the composer draft. */
+  onInsertContext: (sessionId: string) => boolean;
 }
 
 function formatSize(size: number | null): string {
@@ -46,7 +48,7 @@ function mediaLabel(mediaType: string): string {
 }
 
 /** M1-07 real disk browser. Every row comes from the Rust Files service. */
-export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatch, onOpen }: Props) {
+export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatch, onOpen, onInsertContext }: Props) {
   useEffect(() => {
     void onWatch(sessionId);
     return () => {
@@ -208,6 +210,13 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
                     title="Open this file with the system default application"
                   >
                     Open in app
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onInsertContext(sessionId)}
+                    title="Add this text preview to the composer"
+                  >
+                    Add to prompt
                   </button>
                 </span>
               </div>

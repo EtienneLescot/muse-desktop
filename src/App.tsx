@@ -232,6 +232,7 @@ export default function App() {
     closeTerminal,
     prepareTerminalContext,
     filesForSession,
+    prepareWorkspaceFileContext,
     listWorkspaceFiles,
     readWorkspaceFile,
     watchWorkspaceFiles,
@@ -1277,6 +1278,7 @@ export default function App() {
                           onWatch={watchWorkspaceFiles}
                           onUnwatch={unwatchWorkspaceFiles}
                           onOpen={openWorkspacePath}
+                          onInsertContext={prepareWorkspaceFileContext}
                         />
                       )}
                       {workPanel === "browser" && (

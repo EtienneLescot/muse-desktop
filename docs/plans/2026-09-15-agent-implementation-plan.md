@@ -251,11 +251,11 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** nouveau service fichiers, panneau Files, `ArtifactsPane`, scope. Dépend M0-06.
 
-**Travail :** listing paresseux, read borné, détection binaire, ouverture externe/preview ; symlinks et racines autorisées. Distinguer fichier du disque et extrait de réponse. Watcher ou rafraîchissement explicite avec état obsolète.
+**Travail :** listing paresseux, read borné, détection binaire, ouverture externe/preview et handoff explicite de l'aperçu texte vers le composer ; symlinks et racines autorisées. Distinguer fichier du disque et extrait de réponse. Watcher ou rafraîchissement explicite avec état obsolète.
 
 **Acceptation :** gros dépôt, fichier disparu/renommé, hors scope et fichier volumineux ; afficher le contenu réellement sur disque sans bloquer l'UI.
 
-**État au 17/09/2026 :** tranche locale livrée sur `feat/m1-real-files` : commandes sessionnées `files_list`/`file_read`, garde de racine et de symlink, bornage listing/lecture, détection binaire et aperçus image/PDF dans l’onglet **Files**. L'onglet relit périodiquement le dossier courant et affiche l'heure du snapshot. Le bouton **Open in app** appelle `file_open(sessionId, path)` ; Rust recanonicalise l'entrée et ne délègue au handler système par défaut qu'un fichier ou dossier prouvé dans le workspace. `workspace_watch` ajoute maintenant un watcher natif par session, limité aux chemins relatifs, qui marque la vue obsolète sans lire le contenu ni rafraîchir silencieusement le transcript ; l'utilisateur confirme le nouveau snapshot avec **Refresh**. La qualification E2E multi-plateforme, les gros dépôts, renommages et racines supprimées restent ouverts.
+**État au 17/09/2026 :** tranche locale livrée sur `feat/m1-real-files` : commandes sessionnées `files_list`/`file_read`, garde de racine et de symlink, bornage listing/lecture, détection binaire et aperçus image/PDF dans l’onglet **Files**. L'onglet relit périodiquement le dossier courant et affiche l'heure du snapshot. Le bouton **Open in app** appelle `file_open(sessionId, path)` ; Rust recanonicalise l'entrée et ne délègue au handler système par défaut qu'un fichier ou dossier prouvé dans le workspace. `workspace_watch` ajoute maintenant un watcher natif par session, limité aux chemins relatifs, qui marque la vue obsolète sans lire le contenu ni rafraîchir silencieusement le transcript ; l'utilisateur confirme le nouveau snapshot avec **Refresh**. **Add to prompt** réutilise ensuite l'aperçu texte borné avec son chemin, sa taille et son horodatage d'observation via la SSOT du hook. La qualification E2E multi-plateforme, les gros dépôts, renommages, racines supprimées et formats riches restent ouverts.
 
 ### M1-08 — Pièces jointes
 
