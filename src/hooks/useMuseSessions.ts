@@ -2808,9 +2808,11 @@ export function useMuseSessions(): UseMuseSessions {
         saveLog(sid, next);
         return { ...cur, [sid]: next };
       });
-      setSessions((cur) => cur.map((session) =>
-        session.session_id === sid ? { ...session, running: true } : session,
-      ));
+      if (lane !== "tool") {
+        setSessions((cur) => cur.map((session) =>
+          session.session_id === sid ? { ...session, running: true } : session,
+        ));
+      }
       return;
     }
     if (kind === "item_done") {

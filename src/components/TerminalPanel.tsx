@@ -36,6 +36,7 @@ export function TerminalPanel({
 }: Props) {
   const [command, setCommand] = useState("");
   const [opening, setOpening] = useState(false);
+  const [runningThroughMuse, setRunningThroughMuse] = useState(false);
   const attemptedSession = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const outputRef = useRef<HTMLPreElement>(null);
@@ -78,10 +79,13 @@ export function TerminalPanel({
   };
 
   const runThroughMuse = () => {
-    if (!canRunThroughMuse || command.trim().length === 0) return;
-    void onRunThroughMuse(sessionId, command).then((accepted) => {
-      if (accepted) setCommand("");
-    });
+    if (!canRunThroughMuse || command.trim().length === 0 || runningThroughMuse) return;
+    setRunningThroughMuse(true);
+    void onRunThroughMuse(sessionId, command)
+      .then((accepted) => {
+        if (accepted) setCommand("");
+      })
+      .finally(() => setRunningThroughMuse(false));
   };
 
   if (!terminal) {
@@ -148,7 +152,7 @@ export function TerminalPanel({
           type="button"
           className="terminal-muse"
           onClick={runThroughMuse}
-          disabled={!canRunThroughMuse || !command.trim()}
+          disabled={!canRunThroughMuse || !command.trim() || runningThroughMuse}
           title={canRunThroughMuse
             ? "Run this command through the Muse host (userShell)"
             : "This Muse host did not grant the userShell capability"}

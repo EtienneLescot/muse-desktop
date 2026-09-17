@@ -20,7 +20,13 @@ if (-not (Test-Path -LiteralPath $sidecar -PathType Leaf)) {
 Push-Location $repo
 try {
     npm run build
+    if ($LASTEXITCODE -ne 0) {
+        throw "Frontend build failed with exit code $LASTEXITCODE"
+    }
     npm run tauri -- build --bundles $Bundle
+    if ($LASTEXITCODE -ne 0) {
+        throw "Tauri build failed with exit code $LASTEXITCODE"
+    }
 
     $bundleRoot = Join-Path $repo "src-tauri\target\release\bundle"
     $artifacts = @()
@@ -48,6 +54,9 @@ try {
             --output $manifest `
             --version $version `
             --target "x86_64-pc-windows-msvc"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Release manifest generation failed: $manifest"
+        }
         node (Join-Path $repo "scripts\verify-release-manifest.mjs") `
             --manifest $manifest `
             --artifact $installer.FullName `
