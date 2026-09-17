@@ -102,6 +102,18 @@ pub struct ScopeCheck {
     pub reason: String,
 }
 
+/// Non-mutating health check for a project folder configured in the
+/// renderer. The command never changes the active workspace or follows a
+/// user-provided command; it only reports filesystem metadata.
+#[derive(Debug, Serialize, Clone)]
+pub struct WorkspaceRootCheck {
+    pub path: String,
+    pub exists: bool,
+    pub is_directory: bool,
+    pub canonical_path: Option<String>,
+    pub reason: String,
+}
+
 /// One row of the host model catalog (`model/list` result `models[]`,
 /// US-31). Field names are camelCase on the wire; the struct renames them
 /// for the TS side, which uses the same names. Only `modelId` is required —
@@ -1593,6 +1605,46 @@ fn set_workspace(state: State<'_, AppState>, path: String) -> Result<String, Str
         *w = Some(root.clone());
     }
     Ok(root.display().to_string())
+}
+
+/// Inspect one configured project folder without changing application state.
+/// Missing paths are a normal observation so the UI can offer a repair path;
+/// permission and other I/O failures remain explicit command errors.
+#[tauri::command]
+fn inspect_workspace_root(path: String) -> Result<WorkspaceRootCheck, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("empty project folder".to_string());
+    }
+    let root = PathBuf::from(trimmed);
+    match std::fs::metadata(&root) {
+        Ok(metadata) => {
+            let is_directory = metadata.is_dir();
+            let canonical_path = root
+                .canonicalize()
+                .ok()
+                .map(|resolved| resolved.display().to_string());
+            Ok(WorkspaceRootCheck {
+                path: trimmed.to_string(),
+                exists: true,
+                is_directory,
+                canonical_path,
+                reason: if is_directory {
+                    "Folder is available.".to_string()
+                } else {
+                    "The configured path is a file, not a folder.".to_string()
+                },
+            })
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(WorkspaceRootCheck {
+            path: trimmed.to_string(),
+            exists: false,
+            is_directory: false,
+            canonical_path: None,
+            reason: "The configured folder could not be found.".to_string(),
+        }),
+        Err(error) => Err(format!("could not inspect project folder {trimmed}: {error}")),
+    }
 }
 
 fn workspace_for_inspection(state: &State<'_, AppState>, session_id: &str) -> Result<PathBuf, String> {
@@ -5385,6 +5437,35 @@ mod tests {
     }
 
     #[test]
+    fn workspace_root_check_distinguishes_directory_file_and_missing() {
+        let base = std::env::temp_dir().join(format!(
+            "muse-root-health-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&base).unwrap();
+        let directory = inspect_workspace_root(base.display().to_string()).unwrap();
+        assert!(directory.exists);
+        assert!(directory.is_directory);
+        assert!(directory.canonical_path.is_some());
+
+        let file = base.join("file.txt");
+        std::fs::write(&file, "ok").unwrap();
+        let file_result = inspect_workspace_root(file.display().to_string()).unwrap();
+        assert!(file_result.exists);
+        assert!(!file_result.is_directory);
+
+        let missing = inspect_workspace_root(base.join("gone").display().to_string()).unwrap();
+        assert!(!missing.exists);
+        assert!(!missing.is_directory);
+        assert!(missing.canonical_path.is_none());
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
     #[cfg(unix)]
     fn scope_symlink_escape_is_denied_after_canonicalize() {
         // End-to-end pattern of the command: canonicalize (resolves the
@@ -5656,6 +5737,7 @@ fn main() {
             cancel_session,
             kill_session,
             set_workspace,
+            inspect_workspace_root,
             check_scope,
             git_status,
             git_diff,

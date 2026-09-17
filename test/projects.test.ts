@@ -18,6 +18,7 @@ import {
   PROJECT_LIMIT_MESSAGE,
   projectOfThread,
   projectsNeedingWorkspace,
+  parseWorkspaceRootObservation,
   resolveProjectSettings,
   settingsForThread,
   sanitizeProjects,
@@ -174,6 +175,26 @@ describe("M2-01 project root migration", () => {
       projectsNeedingWorkspace(projects).map((project) => project.id),
       ["legacy"],
     );
+  });
+
+  it("parses native folder health without accepting malformed data", () => {
+    assert.deepEqual(
+      parseWorkspaceRootObservation({
+        path: "C:\\work",
+        exists: true,
+        is_directory: true,
+        canonical_path: "C:\\work",
+        reason: "Folder is available.",
+      }),
+      {
+        path: "C:\\work",
+        exists: true,
+        isDirectory: true,
+        canonicalPath: "C:\\work",
+        reason: "Folder is available.",
+      },
+    );
+    assert.equal(parseWorkspaceRootObservation({ exists: true }), null);
   });
 });
 

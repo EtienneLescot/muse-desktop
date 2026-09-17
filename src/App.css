@@ -2678,6 +2678,24 @@ body.dark .composer textarea::placeholder {
   border-color: color-mix(in srgb, var(--blue) 18%, transparent);
 }
 
+.workspace-health {
+  flex: 0 0 auto;
+  border-radius: 8px;
+  padding: 2px 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.workspace-health-ready {
+  color: var(--success, #2a8f65);
+  background: color-mix(in srgb, var(--success, #2a8f65) 12%, var(--bg));
+}
+
+.workspace-health-missing {
+  color: var(--muted);
+  background: var(--pale);
+}
+
 .project-badge {
   color: var(--blue);
   background: var(--pale);
