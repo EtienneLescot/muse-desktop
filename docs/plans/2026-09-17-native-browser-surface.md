@@ -20,7 +20,8 @@ native window cannot be created.
 - Visual capture is available only as an explicit `getDisplayMedia` gesture in
   the renderer: the user chooses the browser surface, Muse bounds the JPEG,
   shows a preview, allows a pointer-drawn crop and keeps URL/time/viewport/DPR
-  and crop coordinates next to the image before it is inserted into the
+  crop coordinates and any same-origin DOM element anchor next to the image
+  before it is inserted into the
   composer. The runtime cannot force the chooser to pick the Muse Browser
   window, so a capture is never treated as proof that the selected pixels came
   from the URL without that user check.
@@ -29,7 +30,7 @@ native window cannot be created.
 
 The Rust unit tests cover web schemes, bare hosts, localhost, credentials,
 missing hosts and the URL bound. Browser logic tests cover capture provenance,
-crop bounds, safe image payloads and the attachment size bound. The browser panel keeps a
+element-anchor bounding, crop bounds, safe image payloads and the attachment size bound. The browser panel keeps a
 status message for web preview, native desktop outcomes and capture consent.
 A real-site WebView2 run is still a native qualification step and must record
 the OS, app build, selected surface and URL without claiming cross-platform

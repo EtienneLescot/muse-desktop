@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   browserCaptureAttachment,
+  describeBrowserElement,
   IMAGE_GENERATION_NOTE,
   formatBrowserContext,
   formatBrowserCaptureContext,
@@ -9,6 +10,7 @@ import {
   type BrowserAppPermission,
   type BrowserCapture,
   type BrowserCaptureRegion,
+  type BrowserElementAnchor,
 } from "../lib/browserAnnotate";
 import { isTauriRuntime } from "../lib/env";
 import { userFacingError } from "../lib/errorCopy";
@@ -16,7 +18,7 @@ import { userFacingError } from "../lib/errorCopy";
 interface Props {
   annotations: BrowserAnnotation[];
   permissions: BrowserAppPermission[];
-  onAddAnnotation: (url: string, selection: string, comment: string) => void;
+  onAddAnnotation: (url: string, selection: string, comment: string, element?: BrowserElementAnchor | null) => void;
   onRemoveAnnotation: (id: string) => void;
   onSetPermission: (app: string, allowed: boolean) => void;
   /** Insert a bounded, provenance-labelled page context into the composer. */
@@ -51,6 +53,7 @@ export function BrowserPanel({
   const [frameError, setFrameError] = useState<string | null>(null);
   const [nativeBrowserStatus, setNativeBrowserStatus] = useState<string | null>(null);
   const [selection, setSelection] = useState("");
+  const [elementAnchor, setElementAnchor] = useState<BrowserElementAnchor | null>(null);
   const [comment, setComment] = useState("");
   const [appName, setAppName] = useState("");
   const [capture, setCapture] = useState<BrowserCapture | null>(null);
@@ -76,8 +79,9 @@ export function BrowserPanel({
 
   const submitAnnotation = () => {
     if (!renderable || normalized === null || comment.trim().length === 0) return;
-    onAddAnnotation(normalized, selection, comment);
+    onAddAnnotation(normalized, selection, comment, elementAnchor);
     setSelection("");
+    setElementAnchor(null);
     setComment("");
   };
 
@@ -99,11 +103,25 @@ export function BrowserPanel({
           // Cross-origin selection is unavailable by design.
         }
       };
+      const syncElement = (event: MouseEvent) => {
+        try {
+          const target = event.target;
+          setElementAnchor(
+            target && typeof (target as Element).tagName === "string"
+              ? describeBrowserElement(target as Element)
+              : null,
+          );
+        } catch {
+          // Cross-origin access is unavailable by design.
+        }
+      };
       document.addEventListener("selectionchange", syncSelection);
       document.addEventListener("mouseup", syncSelection);
+      document.addEventListener("click", syncElement, true);
       selectionCleanupRef.current = () => {
         document.removeEventListener("selectionchange", syncSelection);
         document.removeEventListener("mouseup", syncSelection);
+        document.removeEventListener("click", syncElement, true);
       };
     } catch {
       // The iframe is cross-origin; the explicit selection field remains the
@@ -152,6 +170,7 @@ export function BrowserPanel({
         url: normalized,
         ...(selection.trim() ? { selection: selection.trim() } : {}),
         ...(comment.trim() ? { comment: comment.trim() } : {}),
+        ...(elementAnchor ? { element: elementAnchor } : {}),
         capturedAt: Date.now(),
         width,
         height,
@@ -237,7 +256,7 @@ export function BrowserPanel({
 
   const insertCurrentContext = () => {
     if (!renderable || normalized === null) return;
-    const context = formatBrowserContext(normalized, selection, comment);
+    const context = formatBrowserContext(normalized, selection, comment, elementAnchor ?? undefined);
     if (context.length > 0) onInsertContext(context);
   };
 
@@ -257,6 +276,8 @@ export function BrowserPanel({
     setCurrentUrl(next);
     setFrameError(null);
     setNativeBrowserStatus(null);
+    setSelection("");
+    setElementAnchor(null);
     setFrameKey((key) => key + 1);
   };
 
@@ -367,6 +388,19 @@ export function BrowserPanel({
         )}
         <div className="browser-annotate">
           <div className="muted">Anchor a comment to this page + selection:</div>
+          {elementAnchor && (
+            <div className="browser-element-anchor" role="status" aria-live="polite">
+              <span>Element anchor: <code>{elementAnchor.selector}</code></span>
+              <button
+                type="button"
+                className="quiet"
+                onClick={() => setElementAnchor(null)}
+                title="Clear the selected element anchor"
+              >
+                Clear
+              </button>
+            </div>
+          )}
           <input
             aria-label="Selection text"
             placeholder="Quoted selection (optional)"
@@ -493,7 +527,7 @@ export function BrowserPanel({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onInsertContext(formatBrowserContext(a.url, a.selection, a.comment))}
+                  onClick={() => onInsertContext(formatBrowserContext(a.url, a.selection, a.comment, a.element))}
                   title="Add this annotation to the composer"
                 >
                   Add to prompt
