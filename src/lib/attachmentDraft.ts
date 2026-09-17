@@ -9,6 +9,11 @@
  */
 
 import type { ComposerAttachment } from "./attachments";
+import {
+  readSessionStorageString,
+  removeSessionStorageKey,
+  writeSessionStorageString,
+} from "./storage.ts";
 
 export const ATTACHMENT_DRAFT_PREFIX = "muse-desktop.attachment-draft.v1.";
 /** Keep recovery values below common WebView sessionStorage quotas. */
@@ -30,23 +35,6 @@ interface StoredAttachment {
   base64Data?: string;
   width?: number;
   height?: number;
-}
-
-function sessionStore(): Storage | null {
-  try {
-    const candidate = (globalThis as Record<string, unknown>).sessionStorage;
-    if (
-      candidate !== null &&
-      typeof candidate === "object" &&
-      typeof (candidate as Storage).getItem === "function" &&
-      typeof (candidate as Storage).setItem === "function"
-    ) {
-      return candidate as Storage;
-    }
-  } catch {
-    // Private browsing and restricted webviews can deny sessionStorage.
-  }
-  return null;
 }
 
 function storageKey(draftKey: string): string {
@@ -132,13 +120,7 @@ export function serializeAttachmentDraft(
 
 /** Load one conversation's ephemeral attachment draft. */
 export function loadAttachmentDraft(draftKey: string): AttachmentDraftLoad {
-  const store = sessionStore();
-  if (store === null) return { attachments: [], truncated: false };
-  try {
-    return parseAttachmentDraft(store.getItem(storageKey(draftKey)));
-  } catch {
-    return { attachments: [], truncated: false };
-  }
+  return parseAttachmentDraft(readSessionStorageString(storageKey(draftKey), ""));
 }
 
 /** Persist one conversation's attachment draft; failures leave memory intact. */
@@ -146,16 +128,7 @@ export function saveAttachmentDraft(
   draftKey: string,
   attachments: readonly ComposerAttachment[],
 ): boolean {
-  const store = sessionStore();
-  if (store === null) return false;
-  try {
-    if (attachments.length === 0) {
-      store.removeItem(storageKey(draftKey));
-      return true;
-    }
-    store.setItem(storageKey(draftKey), serializeAttachmentDraft(attachments).raw);
-    return true;
-  } catch {
-    return false;
-  }
+  const key = storageKey(draftKey);
+  if (attachments.length === 0) return removeSessionStorageKey(key);
+  return writeSessionStorageString(key, serializeAttachmentDraft(attachments).raw);
 }

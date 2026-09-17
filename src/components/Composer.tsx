@@ -39,7 +39,12 @@ import {
   type TurnInputPart,
 } from "../lib/attachments";
 import { loadAttachmentDraft, saveAttachmentDraft } from "../lib/attachmentDraft";
-import { readStorageJson, writeStorageJson } from "../lib/storage.ts";
+import {
+  readSessionStorageString,
+  readStorageJson,
+  writeSessionStorageString,
+  writeStorageJson,
+} from "../lib/storage.ts";
 import {
   appendVoiceTranscript,
   getVoiceRecognitionFactory,
@@ -152,20 +157,11 @@ export function Composer({
   authorizationMode,
   onAuthorizationModeChange,
 }: Props) {
-  const [text, setText] = useState(() => {
-    try {
-      return sessionStorage.getItem(`muse-desktop.draft.${draftKey}`) ?? "";
-    } catch {
-      return "";
-    }
-  });
+  const draftStorageKey = `muse-desktop.draft.${draftKey}`;
+  const [text, setText] = useState(() => readSessionStorageString(draftStorageKey));
   useEffect(() => {
-    try {
-      sessionStorage.setItem(`muse-desktop.draft.${draftKey}`, text);
-    } catch {
-      /* Draft stays in memory. */
-    }
-  }, [draftKey, text]);
+    writeSessionStorageString(draftStorageKey, text);
+  }, [draftStorageKey, text]);
   const [caret, setCaret] = useState(0);
   const [selIndex, setSelIndex] = useState(0);
   const [blocked, setBlocked] = useState<string | null>(null);

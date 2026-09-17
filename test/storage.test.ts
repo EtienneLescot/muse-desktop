@@ -8,9 +8,12 @@ import {
   migrateLegacyStorage,
   readStorageJson,
   readStorageString,
+  readSessionStorageString,
   removeStorageKey,
+  removeSessionStorageKey,
   writeStorageJson,
   writeStorageString,
+  writeSessionStorageString,
   RECOVERY_RAW_LIMIT,
 } from "../src/lib/storage.ts";
 
@@ -37,9 +40,27 @@ function fakeStorage(initial: Record<string, string> = {}) {
   return { storage, values };
 }
 
+function fakeSessionStorage(initial: Record<string, string> = {}) {
+  const values = new Map(Object.entries(initial));
+  const storage = {
+    getItem(key: string): string | null {
+      return values.get(key) ?? null;
+    },
+    setItem(key: string, value: string): void {
+      values.set(key, String(value));
+    },
+    removeItem(key: string): void {
+      values.delete(key);
+    },
+  };
+  (globalThis as Record<string, unknown>).sessionStorage = storage;
+  return { storage, values };
+}
+
 describe("defensive storage facade", () => {
   beforeEach(() => {
     fakeStorage();
+    delete (globalThis as Record<string, unknown>).sessionStorage;
     consumeStorageIssues();
   });
 
@@ -124,6 +145,30 @@ describe("defensive storage facade", () => {
     assert.equal(readStorageString("muse-desktop.theme.v1"), "dark");
     assert.equal(writeStorageString("muse-desktop.theme.v1", "light"), true);
     assert.equal(values.get("muse-desktop.theme.v1"), "light");
+  });
+
+  it("keeps session drafts behind the same defensive facade", () => {
+    const { values } = fakeSessionStorage({ "muse-desktop.draft.s1": "hello" });
+    assert.equal(readSessionStorageString("muse-desktop.draft.s1"), "hello");
+    assert.equal(writeSessionStorageString("muse-desktop.draft.s1", "updated"), true);
+    assert.equal(values.get("muse-desktop.draft.s1"), "updated");
+    assert.equal(removeSessionStorageKey("muse-desktop.draft.s1"), true);
+    assert.equal(values.has("muse-desktop.draft.s1"), false);
+  });
+
+  it("keeps ephemeral drafts usable in memory when session storage is unavailable", () => {
+    assert.equal(readSessionStorageString("muse-desktop.draft.missing", "fallback"), "fallback");
+    assert.equal(consumeStorageIssues()[0]?.kind, "unavailable");
+
+    (globalThis as Record<string, unknown>).sessionStorage = {
+      getItem: () => null,
+      setItem: () => { throw new Error("quota exceeded"); },
+      removeItem: () => { throw new Error("blocked"); },
+    };
+    assert.equal(writeSessionStorageString("muse-desktop.draft.full", "draft"), false);
+    assert.equal(consumeStorageIssues()[0]?.kind, "quota");
+    assert.equal(removeSessionStorageKey("muse-desktop.draft.full"), false);
+    assert.equal(consumeStorageIssues()[0]?.kind, "unavailable");
   });
 
   it("restores a snapshot without overwriting live data unless confirmed", () => {
