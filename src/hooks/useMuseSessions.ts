@@ -837,6 +837,10 @@ export function useMuseSessions(): UseMuseSessions {
       return DEFAULT_AUTHORIZATION_MODE;
     }
   });
+  // Host mode notifications are scoped to one session. Keep the observed
+  // posture per session so a delayed event from another conversation can
+  // never overwrite the global composer selector or trigger YOLO approvals.
+  const authorizationModeBySessionRef = useRef<Record<string, AuthorizationMode>>({});
   // US-15 allowlist: restored once (survives restarts via localStorage),
   // written through on every change.
   const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
@@ -1714,12 +1718,7 @@ export function useMuseSessions(): UseMuseSessions {
           setError(`The host reported an unsupported approval mode: ${hostMode || "unknown"}.`);
           return;
         }
-        setAuthorizationModeState(mapped);
-        try {
-          localStorage.setItem(AUTHORIZATION_MODE_KEY, mapped);
-        } catch {
-          // The live host state remains authoritative even when storage is unavailable.
-        }
+        authorizationModeBySessionRef.current[sid] = mapped;
       } catch {
         setError("The host reported an invalid approval mode update.");
       }

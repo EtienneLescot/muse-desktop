@@ -5,6 +5,7 @@ import {
   exportStorageSnapshot,
   readStorageJson,
   removeStorageKey,
+  subscribeStorageIssues,
   writeStorageJson,
 } from "../src/lib/storage.ts";
 
@@ -66,6 +67,27 @@ describe("defensive storage facade", () => {
     (globalThis as Record<string, unknown>).localStorage = failing;
     assert.equal(writeStorageJson("muse-desktop.full.v1", { ok: true }), false);
     assert.equal(consumeStorageIssues()[0]?.kind, "quota");
+
+    const blocked = {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException("storage blocked", "SecurityError");
+      },
+      removeItem: () => {},
+    };
+    (globalThis as Record<string, unknown>).localStorage = blocked;
+    assert.equal(writeStorageJson("muse-desktop.blocked.v1", { ok: true }), false);
+    assert.equal(consumeStorageIssues()[0]?.kind, "unavailable");
+  });
+
+  it("rejects undefined serialization and notifies mounted subscribers", () => {
+    const seen: string[] = [];
+    const unsubscribe = subscribeStorageIssues(() => {
+      seen.push(...consumeStorageIssues().map((issue) => issue.kind));
+    });
+    assert.equal(writeStorageJson("muse-desktop.invalid.v1", undefined), false);
+    assert.deepEqual(seen, ["corrupt"]);
+    unsubscribe();
   });
 
   it("exports valid and damaged namespaced entries for recovery", () => {

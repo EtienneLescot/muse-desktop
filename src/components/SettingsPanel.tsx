@@ -14,7 +14,7 @@
  *   providers" (never a live list). Provider selection persists per
  *   project either way.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
 import type { ScopeVerdict } from "../lib/scope";
 import {
@@ -36,6 +36,7 @@ import {
 import {
   consumeStorageIssues,
   exportStorageSnapshot,
+  subscribeStorageIssues,
   type StorageIssue,
 } from "../lib/storage";
 
@@ -93,6 +94,23 @@ export function SettingsPanel({
   const [storageIssues, setStorageIssues] = useState<StorageIssue[]>(() =>
     consumeStorageIssues(),
   );
+
+  useEffect(() => {
+    const unsubscribe = subscribeStorageIssues(() => {
+      const next = consumeStorageIssues();
+      if (next.length === 0) return;
+      setStorageIssues((previous) => {
+        const merged = [...previous, ...next];
+        return merged.filter(
+          (issue, index) =>
+            merged.findIndex(
+              (candidate) => candidate.key === issue.key && candidate.kind === issue.kind,
+            ) === index,
+        );
+      });
+    });
+    return unsubscribe;
+  }, []);
 
   const effective = effectiveSandboxMode(sandbox);
 
