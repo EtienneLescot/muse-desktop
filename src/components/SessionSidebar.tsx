@@ -20,6 +20,7 @@ interface Props {
   onCancel: (id: string) => void;
   onKill: (id: string) => void;
   onRename: (id: string, title: string) => void;
+  onTogglePin: (id: string) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
   canStart: boolean;
@@ -54,6 +55,7 @@ export function SessionSidebar({
   onCancel,
   onKill,
   onRename,
+  onTogglePin,
   onArchive,
   onRestore,
   canStart,
@@ -136,6 +138,11 @@ export function SessionSidebar({
             {s.title?.replace(/^Session [\w-]+$/, "New conversation") ||
               "New conversation"}
           </span>
+          {s.pinned === true && (
+            <span className="session-pin" title="Pinned conversation">
+              <Icon name="pin" />
+            </span>
+          )}
           {pending > 0 && (
             <span className="badge" title={`${pending} response(s) needed`}>
               {pending}
@@ -338,6 +345,16 @@ export function SessionSidebar({
                 }}
               >
                 Stop response
+              </button>
+            )}
+            {selected && (
+              <button
+                onClick={() => {
+                  onTogglePin(selected.session_id);
+                  closeActions();
+                }}
+              >
+                {selected.pinned === true ? "Unpin conversation" : "Pin conversation"}
               </button>
             )}
             <button

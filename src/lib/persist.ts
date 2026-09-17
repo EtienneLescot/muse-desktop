@@ -33,6 +33,8 @@ export interface StoredSession {
    * archived section. Persisted like the rest; absent = active (V1 data).
    */
   archived?: boolean;
+  /** US-5/M1-12: pinned conversations stay at the top of the active list. */
+  pinned?: boolean;
 }
 
 /** Reasoning is persisted separately so it can be disclosed in the stream. */
@@ -91,7 +93,8 @@ function isValidSession(s: unknown): s is StoredSession {
     typeof r.workspace === "string" &&
     typeof r.title === "string" &&
     typeof r.createdAt === "number" &&
-    (r.archived === undefined || typeof r.archived === "boolean")
+    (r.archived === undefined || typeof r.archived === "boolean") &&
+    (r.pinned === undefined || typeof r.pinned === "boolean")
   );
 }
 
@@ -261,7 +264,8 @@ function isValidProjectRow(p: unknown): p is Project {
     r.id.length > 0 &&
     typeof r.name === "string" &&
     typeof r.instructions === "string" &&
-    typeof r.createdAt === "number"
+    typeof r.createdAt === "number" &&
+    (r.pinned === undefined || typeof r.pinned === "boolean")
   );
 }
 

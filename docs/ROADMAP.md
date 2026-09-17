@@ -151,7 +151,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-09 | Créer une branche de conversation fidèle | Adapté | Présente | Câblée | Intégration | Fork serveur depuis le dernier tour terminé livré ; restent le sélecteur d’une ancre MSP précise, qualification du point invalide et reprise live |
 | M1-10 | Réorienter une exécution ou mettre un message en attente | Adapté | Partielle | Locale | Unitaire | Queue MSP par défaut et disposition `queued`/`steered` visibles ; restent le pilotage explicite, unqueue et ordre persistant |
 | M1-11 | Choisir un modèle disponible et suivre le contexte | Adapté | Présente | Câblée | Unitaire | Consolider tests live list/setModel/compact, erreurs et persistance ; fallback explicitement non live ; état confirmé par le moteur |
-| M1-12 | Retrouver et organiser les conversations | Adapté | Partielle | Locale | UI | Étendre recherche à l'historique, épinglage/ordre et états non lus ; préserver les résultats au redémarrage sans déplacer le focus |
+| M1-12 | Retrouver et organiser les conversations | Adapté | Présente | Locale | UI | Recherche contenu + métadonnées et épinglage persistants livrés ; restent ordre manuel, états non lus et mesure de longues listes |
 | M1-13 | Lire une longue conversation confortablement | Adapté | Présente | Partielle | UI | Vérifier rendu Markdown/code/liens et outils ; mesurer longue session, mémoire et scroll ; virtualiser si les mesures l'exigent |
 
 Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components/ArtifactsPane.tsx), [messages](../src/components/MessageContent.tsx), [mentions](../src/lib/mentions.ts), [shell applicatif](../src/App.tsx).
@@ -237,6 +237,12 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **UX :** après l’accusé de réception, Muse ajoute une information discrète dans la conversation lorsque la demande est mise en file ou absorbée par le tour courant ; l’utilisateur ne voit plus un simple état `Thinking` sans explication.
 - **Transport :** les notifications `turn/started` conservent maintenant `turnId` et `commandId` dans leur payload relayé, afin que le futur pilotage puisse cibler le bon tour sans course.
 - **Reste :** `turn/steer` explicite, `turn/unqueue`, annulation ciblée et une file persistante avec actions UI sont à câbler après qualification live des capacités du modèle.
+
+### Livraison M1-12 — recherche et épinglage des conversations
+
+- **Recherche :** la boîte `Search conversations` parcourt désormais titre, dossier et texte des journaux locaux, avec un extrait de la première correspondance et la navigation clavier conservée.
+- **Organisation :** une conversation peut être épinglée depuis son menu. Le drapeau est validé, persisté dans `muse-desktop.sessions.v1` et remonte avant les conversations en cours puis les plus récentes.
+- **Limites :** l’ordre manuel, les indicateurs non lus et la virtualisation des listes restent à mesurer avant de les ajouter.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 

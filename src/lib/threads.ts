@@ -9,6 +9,7 @@ export interface ThreadLike {
   title: string;
   createdAt: number;
   archived?: boolean;
+  pinned?: boolean;
   running?: boolean;
 }
 
@@ -28,11 +29,24 @@ export function selectActiveThreads<T extends ThreadLike>(sessions: T[]): T[] {
   return sessions
     .filter((s) => !isArchived(s))
     .sort((a, b) => {
+      const pa = a.pinned === true ? 0 : 1;
+      const pb = b.pinned === true ? 0 : 1;
+      if (pa !== pb) return pa - pb;
       const ra = a.running === true ? 0 : 1;
       const rb = b.running === true ? 0 : 1;
       if (ra !== rb) return ra - rb;
       return b.createdAt - a.createdAt;
     });
+}
+
+export function withPinnedFlag<T extends ThreadLike>(
+  sessions: T[],
+  sessionId: string,
+  pinned: boolean,
+): T[] {
+  return sessions.map((s) =>
+    s.session_id === sessionId ? { ...s, pinned } : s,
+  );
 }
 
 /** Archived threads, most recently created first. */
