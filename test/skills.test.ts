@@ -19,6 +19,7 @@ import {
   parseSkillCommand,
   resolveSkill,
   setSkillEnabled,
+  skillInvocationStageLabel,
   suggestSkills,
   type Skill,
 } from "../src/lib/skills.ts";
@@ -116,6 +117,19 @@ describe("progressive disclosure (view-only default)", () => {
     assert.match(text, /skill-resource path=/);
     assert.match(text, /Rules/);
     assert.match(text, /Request: apply/);
+  });
+});
+
+describe("skill invocation progress", () => {
+  it("keeps user-facing labels stable for every pipeline stage", () => {
+    assert.equal(skillInvocationStageLabel("preparing"), "Preparing invocation");
+    assert.equal(skillInvocationStageLabel("loading-resources"), "Loading skill resources");
+    assert.equal(skillInvocationStageLabel("sending"), "Sending to Muse");
+    assert.equal(skillInvocationStageLabel("queued"), "Queued by Muse");
+    assert.equal(skillInvocationStageLabel("running"), "Running");
+    assert.equal(skillInvocationStageLabel("completed"), "Completed");
+    assert.equal(skillInvocationStageLabel("failed"), "Failed");
+    assert.equal(skillInvocationStageLabel("unknown"), "Needs attention");
   });
 });
 

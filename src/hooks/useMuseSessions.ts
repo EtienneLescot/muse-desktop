@@ -377,6 +377,7 @@ import {
   setSkillEnabled,
   suggestSkills,
   type Skill,
+  type SkillInvocationProgress,
   type SkillResourceContext,
   type SkillSuggestion,
 } from "../lib/skills";
@@ -1150,6 +1151,8 @@ interface UseMuseSessions {
   skills: Skill[];
   /** M3-05: skills exposed by the connected Muse host, keyed by session. */
   hostSkillsBySession: Record<string, HostSkill[]>;
+  /** M3-05: renderer-only progress for the most recent skill invocation. */
+  skillInvocationsBySession: Record<string, SkillInvocationProgress | undefined>;
   /** Refresh one host-owned skill catalogue (safe no-op in browser preview). */
   refreshHostSkills: (sessionId: string) => Promise<HostSkill[] | null>;
   /** w-integrations US-25: enable/disable a skill by slash name. */
@@ -1488,6 +1491,40 @@ export function useMuseSessions(): UseMuseSessions {
   // a selector discovered in another workspace.
   const hostSkillsRef = useRef<Record<string, HostSkill[]>>({});
   hostSkillsRef.current = hostSkillsBySession;
+  // M3-05: skill invocation progress is deliberately ephemeral. The host
+  // remains authoritative for turn state; this map only makes the client
+  // expansion/admission pipeline observable without polluting the transcript.
+  const [skillInvocationsBySession, setSkillInvocationsBySession] = useState<
+    Record<string, SkillInvocationProgress | undefined>
+  >({});
+  const updateSkillInvocation = useCallback(
+    (sessionId: string, patch: Partial<SkillInvocationProgress> & { clear?: boolean }): void => {
+      setSkillInvocationsBySession((current) => {
+        if (patch.clear) {
+          if (!(sessionId in current)) return current;
+          const next = { ...current };
+          delete next[sessionId];
+          return next;
+        }
+        const previous = current[sessionId];
+        if (previous === undefined) return current;
+        const next = { ...previous, ...patch };
+        delete (next as Partial<SkillInvocationProgress> & { clear?: boolean }).clear;
+        return { ...current, [sessionId]: next };
+      });
+    },
+    [],
+  );
+  const startSkillInvocation = useCallback(
+    (sessionId: string, name: string, source: "host" | "local"): void => {
+      const now = Date.now();
+      setSkillInvocationsBySession((current) => ({
+        ...current,
+        [sessionId]: { name, source, stage: "preparing", startedAt: now, updatedAt: now },
+      }));
+    },
+    [],
+  );
   const refreshHostSkills = useCallback(async (sessionId: string): Promise<HostSkill[] | null> => {
     if (!isTauriRuntime() || sessionId.trim().length === 0) return null;
     try {
@@ -2539,6 +2576,45 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }
 
+  /** Update the ephemeral skill progress only when the event can belong to
+   * the current invocation. A known turn id protects a new invocation from a
+   * late completion event from the previous turn. */
+  function updateSkillInvocationFromHost(
+    sessionId: string,
+    stage: SkillInvocationProgress["stage"],
+    payload: string,
+    detail: string,
+  ): void {
+    let incomingTurnId: string | undefined;
+    try {
+      const parsed = JSON.parse(payload) as Record<string, unknown>;
+      if (typeof parsed.turnId === "string" && parsed.turnId.length > 0) {
+        incomingTurnId = parsed.turnId;
+      }
+    } catch {
+      // Older hosts can emit an empty or plain-text status payload.
+    }
+    setSkillInvocationsBySession((current) => {
+      const previous = current[sessionId];
+      if (previous === undefined || previous.stage === "completed" || previous.stage === "failed") {
+        return current;
+      }
+      if (previous.turnId !== undefined && incomingTurnId !== undefined && previous.turnId !== incomingTurnId) {
+        return current;
+      }
+      return {
+        ...current,
+        [sessionId]: {
+          ...previous,
+          stage,
+          updatedAt: Date.now(),
+          ...(incomingTurnId && previous.turnId === undefined ? { turnId: incomingTurnId } : {}),
+          detail,
+        },
+      };
+    });
+  }
+
   function handleEvent(evt: MuseEvent): void {
     const { session_id: sid, kind, payload } = evt;
     setEvtCount((c) => c + 1);
@@ -2645,6 +2721,7 @@ export function useMuseSessions(): UseMuseSessions {
       markUnread(sid);
     }
     if (kind === "host_exited") {
+      updateSkillInvocationFromHost(sid, "failed", payload, "Muse stopped before the skill invocation completed");
       setConnectedIds((cur) => cur.filter((id) => id !== sid));
       setGrantedCapabilitiesBySession((cur) => {
         if (!(sid in cur)) return cur;
@@ -3020,6 +3097,7 @@ export function useMuseSessions(): UseMuseSessions {
     // open block even when no chunk has landed yet (no system-line noise,
     // and other open items keep streaming).
     if (isItemStartKind(kind)) {
+      updateSkillInvocationFromHost(sid, "running", payload, "Muse is executing the skill");
       ensureSessionRow(sid, null);
       let itemId: string | undefined;
       let turnId: string | undefined;
@@ -3095,6 +3173,7 @@ export function useMuseSessions(): UseMuseSessions {
       ? parseTurnCompletion(kind, payload)
       : null;
     if (isRunningKind(kind)) {
+      updateSkillInvocationFromHost(sid, "running", payload, "Muse is executing the skill");
       clearStopping(sid);
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
@@ -3114,6 +3193,12 @@ export function useMuseSessions(): UseMuseSessions {
         cur.map((s) => (s.session_id === sid ? { ...s, running: false } : s)),
       );
       const failure = completion?.error;
+      updateSkillInvocationFromHost(
+        sid,
+        failure ? "failed" : "completed",
+        payload,
+        failure?.message ?? "Muse completed the skill invocation",
+      );
       settleScheduleRunsForSession(sid, failure
         ? { status: "failed", error: failure.message, retryable: failure.retryable }
         : kind === "host_exited"
@@ -4137,6 +4222,7 @@ export function useMuseSessions(): UseMuseSessions {
       let fanout: ReturnType<typeof parseFanoutCommand> = null;
       let nativeSkill: { selector: string; arguments?: string } | null = null;
       let nativeProjectContext = "";
+      let skillInvocation: { name: string; source: "host" | "local" } | null = null;
       if (prior === null) {
         // w-integrations US-25: `/skill-name args` expands to the skill
         // instructions (traced in the log) and sends as the turn.
@@ -4144,6 +4230,8 @@ export function useMuseSessions(): UseMuseSessions {
         if (skillCmd !== null) {
           const hostSkill = findHostSkill(hostSkillsRef.current[sessionId] ?? [], skillCmd.name);
           if (hostSkill !== null) {
+            skillInvocation = { name: hostSkill.selector, source: "host" };
+            startSkillInvocation(sessionId, hostSkill.selector, "host");
             // Native skills are expanded by the host. Keep the slash command
             // in the durable transcript while sending the typed selector as
             // a protocol `skill` part, which avoids leaking host instructions
@@ -4175,8 +4263,16 @@ export function useMuseSessions(): UseMuseSessions {
             setError(`unknown skill /${skillCmd.name}`);
             return sendFailed(clientMessageId, `unknown skill /${skillCmd.name}`);
           }
+          skillInvocation = { name: skill.name, source: "local" };
+          startSkillInvocation(sessionId, skill.name, "local");
           let resources: SkillResourceContext[] = [];
-          if (skill.discovered && skill.path && (skill.resources?.length ?? 0) > 0) {
+          const declaredResourceCount = skill.resources?.length ?? 0;
+          if (skill.discovered && skill.path && declaredResourceCount > 0) {
+            updateSkillInvocation(sessionId, {
+              stage: "loading-resources",
+              updatedAt: Date.now(),
+              detail: `Loading ${declaredResourceCount} resource${declaredResourceCount === 1 ? "" : "s"}`,
+            });
             try {
               const loaded = await invoke<{
                 resources: SkillResourceContext[];
@@ -4190,13 +4286,28 @@ export function useMuseSessions(): UseMuseSessions {
                 const detail = loaded.errors.map((item) => `${item.path}: ${item.message}`).join("; ");
                 pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: `skill /${skill.name} resources unavailable: ${detail}` }]);
                 setError(`skill /${skill.name} resources unavailable`);
+                updateSkillInvocation(sessionId, {
+                  stage: "failed",
+                  updatedAt: Date.now(),
+                  detail: "One or more resources could not be loaded",
+                });
                 return sendFailed(clientMessageId, `skill /${skill.name} resources unavailable`);
               }
               resources = loaded.resources;
+              updateSkillInvocation(sessionId, {
+                stage: "preparing",
+                updatedAt: Date.now(),
+                detail: `${resources.length} resource${resources.length === 1 ? "" : "s"} loaded`,
+              });
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: `skill /${skill.name} could not load resources: ${message}` }]);
               setError(`skill /${skill.name} could not load resources`);
+              updateSkillInvocation(sessionId, {
+                stage: "failed",
+                updatedAt: Date.now(),
+                detail: "The resource loader was unavailable",
+              });
               return sendFailed(clientMessageId, `skill /${skill.name} could not load resources`);
             }
           }
@@ -4266,6 +4377,15 @@ export function useMuseSessions(): UseMuseSessions {
             : "could not create a durable server command id",
         );
       }
+      if (skillInvocation !== null) {
+        updateSkillInvocation(sessionId, {
+          stage: "sending",
+          updatedAt: Date.now(),
+          detail: skillInvocation.source === "host"
+            ? "Sending the native skill part"
+            : "Sending expanded instructions",
+        });
+      }
       inFlightSends.current.add(sessionId);
       let requestPending = false;
       let underlyingSettled = false;
@@ -4319,6 +4439,8 @@ export function useMuseSessions(): UseMuseSessions {
         let acked = false;
         let failure = "";
         let ambiguous = false;
+        let admissionDisposition: string | undefined;
+        let admissionTurnId: string | undefined;
         try {
           setError(null);
           // Tauri cannot cancel an in-flight invoke. Keep the logical lane
@@ -4339,6 +4461,10 @@ export function useMuseSessions(): UseMuseSessions {
           const ack = await withAckTimeout(request);
           if (typeof ack === "object" && ack !== null) {
             const admission = ack as { disposition?: unknown; turnId?: unknown };
+            admissionDisposition = typeof admission.disposition === "string" ? admission.disposition : undefined;
+            admissionTurnId = typeof admission.turnId === "string" && admission.turnId.length > 0
+              ? admission.turnId
+              : undefined;
             if (admission.disposition === "queued") {
               if (typeof admission.turnId === "string" && admission.turnId.length > 0) {
                 const queued: QueuedTurn = {
@@ -4373,6 +4499,16 @@ export function useMuseSessions(): UseMuseSessions {
             }
           }
           acked = true;
+          if (skillInvocation !== null) {
+            updateSkillInvocation(sessionId, {
+              stage: admissionDisposition === "queued" ? "queued" : "running",
+              updatedAt: Date.now(),
+              ...(admissionTurnId ? { turnId: admissionTurnId } : {}),
+              detail: admissionDisposition === "queued"
+                ? "Waiting for the current turn to finish"
+                : "Muse accepted the invocation",
+            });
+          }
         } catch (e) {
           failure = e instanceof Error ? e.message : String(e);
           ambiguous = failure === ACK_TIMEOUT_MSG;
@@ -4390,6 +4526,15 @@ export function useMuseSessions(): UseMuseSessions {
         updateOutbox(sessionId, (cur) =>
           upsertOutbox(cur, markFailed(entry, failure, Date.now(), ambiguous)),
         );
+        if (skillInvocation !== null) {
+          updateSkillInvocation(sessionId, {
+            stage: ambiguous ? "unknown" : "failed",
+            updatedAt: Date.now(),
+            detail: ambiguous
+              ? "The host did not confirm admission; verify before retrying"
+              : failure,
+          });
+        }
         setError(failure);
         if (!ambiguous) {
           // Definitive refusal: the turn never started, so withdraw the
@@ -4411,7 +4556,7 @@ export function useMuseSessions(): UseMuseSessions {
         }
       }
     },
-    [kickPoll, doCompact, touchStreamActivity, workspace],
+    [kickPoll, doCompact, touchStreamActivity, workspace, startSkillInvocation, updateSkillInvocation],
   );
 
   const steerInput = useCallback(
@@ -4984,6 +5129,12 @@ export function useMuseSessions(): UseMuseSessions {
       });
       setApprovals((cur) => cur.filter((a) => a.session_id !== sessionId));
       setInputRequests((cur) => cur.filter((r) => r.session_id !== sessionId));
+      setSkillInvocationsBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       setQueuedTurnsBySession((cur) => {
         if (!(sessionId in cur)) return cur;
         const next = { ...cur };
@@ -6808,6 +6959,7 @@ export function useMuseSessions(): UseMuseSessions {
     setConnectorUseInMuseById,
     skills,
     hostSkillsBySession,
+    skillInvocationsBySession,
     refreshHostSkills,
     setSkillEnabledByName,
     traceSkillSuggestions,
