@@ -1106,6 +1106,7 @@ export default function App() {
                             worktrees={worktrees}
                             onRemoveWorktree={removeWorktree}
                             onRunSetup={runWorktreeSetup}
+                            sourceStatus={gitReview(active.session_id).status}
                           />{" "}
                           <SharePanel
                             sessionId={active.session_id}

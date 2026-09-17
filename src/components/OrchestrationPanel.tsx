@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { fanoutQueueNote } from "../lib/fanout";
+import { buildHandoffPlan, type HandoffPlan } from "../lib/handoff";
+import type { GitStatusSnapshot } from "../lib/git";
 import {
   compareHeadHashes,
   MAX_SETUP_COMMAND_CHARS,
@@ -32,6 +34,7 @@ interface Props {
     record: WorktreeRecord,
     command: string,
   ) => Promise<WorktreeSetupResult | null>;
+  sourceStatus: GitStatusSnapshot | null;
 }
 
 /**
@@ -47,6 +50,7 @@ export function OrchestrationPanel({
   worktrees,
   onRemoveWorktree,
   onRunSetup,
+  sourceStatus,
 }: Props) {
   const [baseline, setBaseline] = useState("");
   const [current, setCurrent] = useState("");
@@ -58,6 +62,9 @@ export function OrchestrationPanel({
   const [setupRunning, setSetupRunning] = useState<string | null>(null);
   const [setupByBranch, setSetupByBranch] = useState<
     Record<string, WorktreeSetupResult>
+  >({});
+  const [handoffByBranch, setHandoffByBranch] = useState<
+    Record<string, HandoffPlan>
   >({});
 
   const plans = useMemo(() => planWorktrees(agents), [agents]);
@@ -104,6 +111,22 @@ export function OrchestrationPanel({
       setSetupByBranch((current) => ({ ...current, [record.branch]: result }));
     }
     setSetupRunning(null);
+  }
+
+  function prepareHandoff(record: WorktreeRecord): void {
+    const sourceFiles = sourceStatus?.files ?? [];
+    const plan = buildHandoffPlan({
+      direction: "local-to-worktree",
+      sourceWorkspace: workspace,
+      sourceBranch: sourceStatus?.branch ?? null,
+      sourceChangedFiles: sourceFiles.length,
+      sourceConflictedFiles: sourceFiles.filter((file) => file.conflicted).length,
+      sourceStatusObserved: sourceStatus !== null,
+      targetPath: record.path,
+      targetBranch: record.branch,
+      targetExists: true,
+    });
+    setHandoffByBranch((current) => ({ ...current, [record.branch]: plan }));
   }
 
   return (
@@ -174,6 +197,16 @@ export function OrchestrationPanel({
                 >
                   {setupRunning === recordFor(p)?.branch ? "Running…" : "Run setup"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const record = recordFor(p);
+                    if (record) prepareHandoff(record);
+                  }}
+                  title="Prepare a read-only handoff plan"
+                >
+                  Prepare handoff
+                </button>
                 {setupByBranch[p.branch] && (
                   <details className="orchestration-setup-output">
                     <summary>
@@ -187,6 +220,24 @@ export function OrchestrationPanel({
                         : ` · exit ${setupByBranch[p.branch].exitCode}`}
                     </summary>
                     <pre>{setupByBranch[p.branch].output || "(no output)"}</pre>
+                  </details>
+                )}
+                {handoffByBranch[p.branch] && (
+                  <details className="orchestration-handoff">
+                    <summary>
+                      Handoff plan · {handoffByBranch[p.branch].ready ? "reviewable" : "blocked"}
+                    </summary>
+                    <ul>
+                      {handoffByBranch[p.branch].checks.map((item) => (
+                        <li key={item.id} data-status={item.status}>
+                          <strong>{item.label}</strong>
+                          <span>{item.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <ol>
+                      {handoffByBranch[p.branch].steps.map((step) => <li key={step}>{step}</li>)}
+                    </ol>
                   </details>
                 )}
               </>

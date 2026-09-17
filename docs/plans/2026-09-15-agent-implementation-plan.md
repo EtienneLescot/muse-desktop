@@ -335,7 +335,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** services Git/hosts/projets, dialogue dédié. Dépend M2-03/04 et M1-03.
 
-**Travail :** produire d'abord un plan de transfert avec préconditions ; gérer branche déjà checkout, index/working tree dirty, fichiers ignorés et conflits. Transférer identité d'environnement et contexte seulement après réussite ; rollback explicite en cas d'échec.
+**État :** le panneau d'orchestration propose un plan de handoff local et en lecture seule pour chaque worktree créé. Les préconditions source/cible sont évaluées avec les statuts `pass/warn/blocked` : workspace et cible, conflits, changements non commités, état Git cible observé et branche déjà utilisée. Le plan propose ensuite les étapes d'observation, snapshot et transfert sans déclencher de bascule.
+
+**Reste :** transfert atomique du host MSP, déplacement du contexte, inspection de fichiers ignorés, verrou de processus et rollback explicite. Tant que le host reste mono-workspace, aucun bouton ne doit présenter une conversation comme transférée avant confirmation native.
 
 **Acceptation :** aller/retour Local ↔ Worktree avec fichiers suivis/non suivis ; conflit volontaire et échec intermédiaire sans perte.
 
