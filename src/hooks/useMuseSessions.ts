@@ -927,6 +927,16 @@ interface UseMuseSessions {
     message: string,
     expected: GitMutationExpectation,
   ) => Promise<GitCommitResult | null>;
+  /** M1-04: synchronize one explicit remote without guessing a destination. */
+  fetchGit: (sessionId: string, remote: string) => Promise<GitStatusSnapshot | null>;
+  /** M1-04: fast-forward the current branch from an explicit remote branch. */
+  pullGit: (
+    sessionId: string,
+    remote: string,
+    branch: string,
+    expectedHead: string | null,
+    expectedStatus: string | null,
+  ) => Promise<GitStatusSnapshot | null>;
   pushGit: (
     sessionId: string,
     remote: string,
@@ -6368,6 +6378,87 @@ export function useMuseSessions(): UseMuseSessions {
     [beginGitRequest],
   );
 
+  const fetchGit = useCallback(
+    async (sessionId: string, remote: string): Promise<GitStatusSnapshot | null> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const status = await invoke<GitStatusSnapshot>("git_fetch", {
+          sessionId,
+          remote,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            status,
+            diff: null,
+            loading: false,
+            error: null,
+          },
+        }));
+        return status;
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+        return null;
+      }
+    },
+    [beginGitRequest],
+  );
+
+  const pullGit = useCallback(
+    async (
+      sessionId: string,
+      remote: string,
+      branch: string,
+      expectedHead: string | null,
+      expectedStatus: string | null,
+    ): Promise<GitStatusSnapshot | null> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const status = await invoke<GitStatusSnapshot>("git_pull", {
+          sessionId,
+          remote,
+          branch,
+          expectedHead,
+          expectedStatus,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            status,
+            diff: null,
+            loading: false,
+            error: null,
+          },
+        }));
+        return status;
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+        return null;
+      }
+    },
+    [beginGitRequest],
+  );
+
   const pushGit = useCallback(
     async (
       sessionId: string,
@@ -6986,6 +7077,8 @@ export function useMuseSessions(): UseMuseSessions {
     restoreGitFiles,
     applyGitHunk,
     commitGit,
+    fetchGit,
+    pullGit,
     pushGit,
     createGitPr,
     terminalForSession,

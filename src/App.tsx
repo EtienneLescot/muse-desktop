@@ -240,6 +240,8 @@ export default function App() {
     restoreGitFiles,
     applyGitHunk,
     commitGit,
+    fetchGit,
+    pullGit,
     pushGit,
     createGitPr,
     terminalForSession,
@@ -1328,6 +1330,8 @@ export default function App() {
                           onRestoreFiles={restoreGitFiles}
                           onApplyHunk={applyGitHunk}
                           onCommit={commitGit}
+                          onFetch={fetchGit}
+                          onPull={pullGit}
                           onPush={pushGit}
                           onCreatePr={createGitPr}
                           onSendComment={async (anchor: ReviewAnchor, body: string) => {
