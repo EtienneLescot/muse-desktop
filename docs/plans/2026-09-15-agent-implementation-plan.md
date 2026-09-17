@@ -291,7 +291,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** deux messages en attente, suppression du second, fin simultanée du tour, refus serveur et reboot ; ordre vérifié dans le moteur.
 
-**État au 17/09/2026 :** l'ordre des tours admis est persisté sous `muse-desktop.queued-turns.v1`. Une restauration les marque à vérifier et permet de retirer le rappel local sans les rejouer ; l'admission host reste la seule source de vérité jusqu'à l'arrivée d'un snapshot MSP de queue.
+**État au 17/09/2026 :** l'ordre des tours admis est persisté sous `muse-desktop.queued-turns.v1`. Une restauration les marque à vérifier et permet de retirer le rappel local sans les rejouer. Quand `session/read` sert réellement `history.snapshot.queuedTurns`, le hook réconcilie cette liste, conserve les textes locaux connus et signale les identifiants nouveaux à vérifier ; une réponse inline ou absente laisse la file locale intacte. L'admission host reste la seule source de vérité jusqu'à cette observation.
 
 ### M1-11 — Modèles et compaction
 

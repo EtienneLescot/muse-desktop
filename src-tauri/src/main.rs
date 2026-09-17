@@ -2354,6 +2354,30 @@ async fn read_session_history(
     Ok(read.get("history").cloned().unwrap_or_else(|| json!({"items": []})))
 }
 
+/// Read the host's folded queue when its history response includes a snapshot.
+/// A null result means this host served inline metadata without queue state;
+/// the renderer must retain its local reminders in that case.
+#[tauri::command]
+async fn read_queue_snapshot(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let client = session_client(&state, &session_id)?;
+    let read = client
+        .request(
+            "session/read",
+            json!({"sessionId": session_id, "excludeItems": false}),
+        )
+        .await?;
+    Ok(read
+        .get("history")
+        .and_then(|history| history.get("snapshot"))
+        .and_then(|snapshot| snapshot.get("queuedTurns"))
+        .cloned()
+        .unwrap_or(Value::Null))
+}
+
 /// Pull the current approval/input set after reconnect. Unlike the resume
 /// response this command is safe to call repeatedly: it is a point-in-time
 /// fold read and carries the requirement token used by later decisions.
@@ -3642,6 +3666,7 @@ fn main() {
             set_approval_mode,
             resume_session,
             read_session_history,
+            read_queue_snapshot,
             list_pending_requests,
             restore_sessions,
             send_input,

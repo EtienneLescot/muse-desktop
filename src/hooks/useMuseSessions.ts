@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/env";
-import { loadQueuedTurns, saveQueuedTurns } from "../lib/queuedTurns";
+import { loadQueuedTurns, reconcileQueuedTurns, saveQueuedTurns } from "../lib/queuedTurns";
 import {
   appendLog,
   dropLog,
@@ -1338,6 +1338,28 @@ export function useMuseSessions(): UseMuseSessions {
       ]),
     );
   });
+  /** M1-10: adopt a host queue snapshot only when the server actually serves
+   * one; inline/legacy reads leave local reminders untouched. */
+  const reconcileQueueSnapshot = useCallback(async (sessionId: string): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    try {
+      const snapshot = await invoke<unknown>("read_queue_snapshot", { sessionId });
+      setQueuedTurnsBySession((current) => {
+        const next = reconcileQueuedTurns(sessionId, current[sessionId] ?? [], snapshot);
+        if (next === null) return current;
+        if (next.length === 0) {
+          if (!(sessionId in current)) return current;
+          const copy = { ...current };
+          delete copy[sessionId];
+          return copy;
+        }
+        return { ...current, [sessionId]: next as QueuedTurn[] };
+      });
+    } catch {
+      // Queue snapshots are additive. An older host or a transient read
+      // failure must never erase the local, user-visible reminder.
+    }
+  }, []);
   // Global authorization posture. This is intentionally kept separate from
   // sandbox settings: changing the posture must not mutate host capabilities.
   const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
@@ -3189,6 +3211,7 @@ export function useMuseSessions(): UseMuseSessions {
         // pull path is an additive recovery for hosts that expose the method.
         console.warn("pending request recovery unavailable", pendingError);
       }
+      await reconcileQueueSnapshot(id);
       setConnectedIds((cur) => [...new Set([...cur, id])]);
       setConnectionState(id, "connected");
       clearStopping(id);
@@ -3201,7 +3224,7 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, sessions, kickPoll, refreshModels, setConnectionState]);
+  }, [authorizationMode, sessions, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState]);
 
   const startSession = useCallback(async () => {
     return await startSessionRow(undefined, globalSettings);

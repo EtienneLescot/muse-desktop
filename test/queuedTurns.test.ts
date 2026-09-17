@@ -4,6 +4,7 @@ import {
   loadQueuedTurns,
   MAX_QUEUED_TURNS,
   QUEUED_TURNS_KEY,
+  reconcileQueuedTurns,
   saveQueuedTurns,
 } from "../src/lib/queuedTurns.ts";
 
@@ -47,5 +48,24 @@ describe("M1-10 persistent queued turns", () => {
     fakeStorage();
     localStorage.setItem(QUEUED_TURNS_KEY, "[]");
     assert.deepEqual(loadQueuedTurns(), {});
+  });
+
+  it("adopts a host snapshot without inventing text for known turns", () => {
+    const rows = reconcileQueuedTurns("s", [
+      { session_id: "s", turn_id: "t1", text: "build", createdAt: 10 },
+    ], [
+      { turnId: "t2", commandId: "c2" },
+      { turnId: "t1", commandId: "c1" },
+      { turnId: "t2", commandId: "duplicate" },
+    ], 20);
+    assert.deepEqual(rows, [
+      { session_id: "s", turn_id: "t2", text: "Queued turn t2 — verify the host queue", createdAt: 20, recovered: true },
+      { session_id: "s", turn_id: "t1", text: "build", createdAt: 10 },
+    ]);
+  });
+
+  it("leaves local state untouched when no snapshot was served", () => {
+    assert.equal(reconcileQueuedTurns("s", [], null), null);
+    assert.equal(reconcileQueuedTurns("s", [], { queuedTurns: [] }), null);
   });
 });

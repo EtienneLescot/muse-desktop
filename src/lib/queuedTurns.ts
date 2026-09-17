@@ -14,6 +14,48 @@ export interface PersistedQueuedTurn {
 
 export type PersistedQueuedTurns = Record<string, PersistedQueuedTurn[]>;
 
+/** A server snapshot names queued turns but does not echo their prompt text. */
+export interface QueueSnapshotTurn {
+  turn_id: string;
+  command_id?: string;
+}
+
+/**
+ * Reconcile a host-provided queued-turn snapshot with the local durable queue.
+ * `null` means the host did not serve a snapshot, so callers must keep their
+ * local state untouched. When a turn is new to the renderer, retain its
+ * identity with a visible verification label instead of inventing prompt
+ * text or replaying it automatically.
+ */
+export function reconcileQueuedTurns(
+  sessionId: string,
+  local: readonly (PersistedQueuedTurn & { recovered?: boolean })[],
+  snapshot: unknown,
+  now = Date.now(),
+): Array<PersistedQueuedTurn & { recovered?: boolean }> | null {
+  if (!Array.isArray(snapshot)) return null;
+  const known = new Map(local.map((row) => [row.turn_id, row]));
+  const seen = new Set<string>();
+  const next: Array<PersistedQueuedTurn & { recovered?: boolean }> = [];
+  for (const raw of snapshot) {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) continue;
+    const row = raw as Record<string, unknown>;
+    const turnId = typeof row.turnId === "string" ? row.turnId.trim() :
+      typeof row.turn_id === "string" ? row.turn_id.trim() : "";
+    if (!turnId || seen.has(turnId)) continue;
+    seen.add(turnId);
+    const previous = known.get(turnId);
+    next.push(previous ?? {
+      session_id: sessionId,
+      turn_id: turnId,
+      text: `Queued turn ${turnId.slice(0, 12)} — verify the host queue`,
+      createdAt: now,
+      recovered: true,
+    });
+  }
+  return next.slice(-MAX_QUEUED_TURNS);
+}
+
 function isQueuedTurn(value: unknown): value is PersistedQueuedTurn {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
