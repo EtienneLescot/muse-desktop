@@ -200,6 +200,20 @@ describe("US-5 archive / restore", () => {
     assert.equal(restored.unread, true);
     assert.equal(restored.sortOrder, 0);
   });
+
+  it("persists the host session durability posture across save/load", () => {
+    fakeStorage();
+    saveSessions([
+      {
+        session_id: "ephemeral",
+        workspace: "/w",
+        title: "saved transcript",
+        createdAt: 1,
+        session_durability: "ephemeral",
+      },
+    ]);
+    assert.equal(loadSessions()[0].session_durability, "ephemeral");
+  });
 });
 
 describe("US-5 keyboard cycling", () => {
