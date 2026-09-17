@@ -4956,6 +4956,34 @@ body.dark .composer textarea::placeholder {
   background: var(--bg);
 }
 
+.browser-capture-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex-basis: 100%;
+  padding-top: var(--space-1);
+}
+
+.browser-capture-preview {
+  width: 128px;
+  height: 72px;
+  object-fit: cover;
+  border: 1px solid color-mix(in srgb, var(--blue) 55%, var(--line));
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+}
+
+.browser-capture-status,
+.browser-capture-meta {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+}
+
+.browser-capture-meta {
+  color: var(--muted);
+}
+
 .browser-notes {
   list-style: none;
   margin: var(--space-2) 0 0;

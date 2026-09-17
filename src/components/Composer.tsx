@@ -61,6 +61,9 @@ interface Props {
   /** US-4: summary text to load into the box after « New From Summary ». */
   prefill?: string | null;
   onPrefillConsumed?: () => void;
+  /** M4-02: a captured browser image to append as a real attachment. */
+  prefillAttachment?: ComposerAttachment | null;
+  onPrefillAttachmentConsumed?: () => void;
   /** US-20: memory entries offered as `@mem/<id>` context chips. */
   memories?: MemoryEntry[];
   /** US-20: one `@mem/…` query to insert (from the memory panel). */
@@ -134,6 +137,8 @@ export function Composer({
   onCancel,
   prefill,
   onPrefillConsumed,
+  prefillAttachment,
+  onPrefillAttachmentConsumed,
   memories,
   memoryInsert,
   onMemoryInsertConsumed,
@@ -218,6 +223,21 @@ export function Composer({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
+
+  useEffect(() => {
+    if (prefillAttachment === null || prefillAttachment === undefined) return;
+    if (attachments.length >= MAX_ATTACHMENTS) {
+      setAttachmentError(`Remove an attachment before adding ${prefillAttachment.name}.`);
+      return;
+    }
+    setAttachments((current) =>
+      current.some((attachment) => attachment.id === prefillAttachment.id)
+        ? current
+        : [...current, prefillAttachment].slice(0, MAX_ATTACHMENTS),
+    );
+    setAttachmentError(null);
+    onPrefillAttachmentConsumed?.();
+  }, [attachments.length, onPrefillAttachmentConsumed, prefillAttachment]);
 
   const mentions: ResolvedMention[] = useMemo(
     () => (workspace !== null ? resolveMentions(workspace, text) : []),

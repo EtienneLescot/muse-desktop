@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  browserCaptureAttachment,
   IMAGE_GENERATION_NOTE,
   formatBrowserContext,
+  formatBrowserCaptureContext,
   normalizeBrowserUrl,
   type BrowserAnnotation,
   type BrowserAppPermission,
+  type BrowserCapture,
 } from "../lib/browserAnnotate";
 import { isTauriRuntime } from "../lib/env";
 import { userFacingError } from "../lib/errorCopy";
@@ -17,6 +20,8 @@ interface Props {
   onSetPermission: (app: string, allowed: boolean) => void;
   /** Insert a bounded, provenance-labelled page context into the composer. */
   onInsertContext: (context: string) => void;
+  /** Insert an explicitly captured visual page as context + image attachment. */
+  onInsertCapture: (capture: BrowserCapture) => boolean;
 }
 
 /** Apps offered a computer-use toggle (explicit opt-in, default denied). */
@@ -35,6 +40,7 @@ export function BrowserPanel({
   onRemoveAnnotation,
   onSetPermission,
   onInsertContext,
+  onInsertCapture,
 }: Props) {
   const [url, setUrl] = useState("");
   const [currentUrl, setCurrentUrl] = useState("");
@@ -46,6 +52,15 @@ export function BrowserPanel({
   const [selection, setSelection] = useState("");
   const [comment, setComment] = useState("");
   const [appName, setAppName] = useState("");
+  const [capture, setCapture] = useState<BrowserCapture | null>(null);
+  const [captureStatus, setCaptureStatus] = useState<string | null>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const selectionCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => {
+    selectionCleanupRef.current?.();
+    selectionCleanupRef.current = null;
+  }, []);
 
   const normalized = normalizeBrowserUrl(currentUrl);
   const addressNormalized = normalizeBrowserUrl(url);
@@ -60,6 +75,106 @@ export function BrowserPanel({
     onAddAnnotation(normalized, selection, comment);
     setSelection("");
     setComment("");
+  };
+
+  const handleFrameLoad = () => {
+    setFrameError(null);
+    // Same-origin previews can provide a real browser selection without
+    // asking users to copy/paste it. Cross-origin frames remain usable; the
+    // access error is intentionally swallowed because it is a browser rule.
+    selectionCleanupRef.current?.();
+    selectionCleanupRef.current = null;
+    try {
+      const document = frameRef.current?.contentDocument;
+      if (!document) return;
+      const syncSelection = () => {
+        try {
+          const selected = frameRef.current?.contentWindow?.getSelection()?.toString() ?? "";
+          if (selected.trim().length > 0) setSelection(selected.trim());
+        } catch {
+          // Cross-origin selection is unavailable by design.
+        }
+      };
+      document.addEventListener("selectionchange", syncSelection);
+      document.addEventListener("mouseup", syncSelection);
+      selectionCleanupRef.current = () => {
+        document.removeEventListener("selectionchange", syncSelection);
+        document.removeEventListener("mouseup", syncSelection);
+      };
+    } catch {
+      // The iframe is cross-origin; the explicit selection field remains the
+      // safe fallback and no page script is executed by Muse.
+    }
+  };
+
+  const captureVisiblePage = async (): Promise<void> => {
+    if (!renderable || normalized === null) return;
+    const getDisplayMedia = navigator.mediaDevices?.getDisplayMedia;
+    if (typeof getDisplayMedia !== "function") {
+      setCaptureStatus("Visual capture is unavailable in this browser build.");
+      return;
+    }
+    setCaptureStatus("Choose the browser surface to capture…");
+    let stream: MediaStream | null = null;
+    try {
+      stream = await getDisplayMedia.call(navigator.mediaDevices, {
+        video: { displaySurface: "browser" },
+        audio: false,
+      });
+      const video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      video.srcObject = stream;
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve();
+        video.onerror = () => reject(new Error("the selected surface could not be read"));
+      });
+      await video.play();
+      const sourceWidth = video.videoWidth;
+      const sourceHeight = video.videoHeight;
+      if (sourceWidth < 1 || sourceHeight < 1) throw new Error("the selected surface has no visible pixels");
+      const scale = Math.min(1, 2400 / sourceWidth, 1600 / sourceHeight);
+      const width = Math.max(1, Math.floor(sourceWidth * scale));
+      const height = Math.max(1, Math.floor(sourceHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (context === null) throw new Error("the capture surface is unavailable");
+      context.drawImage(video, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+      const next: BrowserCapture = {
+        dataUrl,
+        url: normalized,
+        ...(selection.trim() ? { selection: selection.trim() } : {}),
+        ...(comment.trim() ? { comment: comment.trim() } : {}),
+        capturedAt: Date.now(),
+        width,
+        height,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      };
+      if (browserCaptureAttachment(next) === null) {
+        throw new Error("the captured image exceeds the 5 MB attachment limit");
+      }
+      setCapture(next);
+      setCaptureStatus("Capture ready. Review it, then add it to the composer.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCaptureStatus(
+        /denied|abort|cancel/i.test(message)
+          ? "Visual capture was cancelled."
+          : `Visual capture failed: ${userFacingError(message)}`,
+      );
+    } finally {
+      stream?.getTracks().forEach((track) => track.stop());
+    }
+  };
+
+  const addCaptureToPrompt = () => {
+    if (capture === null) return;
+    if (onInsertCapture(capture)) {
+      setCaptureStatus("Screenshot attached to the composer.");
+    }
   };
 
   const insertCurrentContext = () => {
@@ -182,12 +297,13 @@ export function BrowserPanel({
         {frameError && <div className="browser-frame-error" role="alert">{frameError}</div>}
         {renderable && normalized !== null && (
           <iframe
+            ref={frameRef}
             key={frameKey}
             className="browser-frame"
             title={`Preview of ${normalized}`}
             src={normalized}
             sandbox="allow-scripts allow-same-origin"
-            onLoad={() => setFrameError(null)}
+            onLoad={handleFrameLoad}
             onError={() => setFrameError("This page could not be loaded in the embedded preview.")}
           />
         )}
@@ -220,6 +336,41 @@ export function BrowserPanel({
           >
             Add page context
           </button>
+          <div className="browser-capture-actions">
+            <button
+              type="button"
+              disabled={!renderable}
+              onClick={() => void captureVisiblePage()}
+              title="Capture a visible browser surface after explicit system consent"
+            >
+              Capture visible page
+            </button>
+            {capture !== null && (
+              <>
+                <img
+                  className="browser-capture-preview"
+                  src={capture.dataUrl}
+                  alt="Captured browser page preview"
+                />
+                <button type="button" onClick={addCaptureToPrompt}>
+                  Add screenshot to prompt
+                </button>
+                <button type="button" className="quiet" onClick={() => setCapture(null)}>
+                  Remove capture
+                </button>
+              </>
+            )}
+          </div>
+          {captureStatus !== null && (
+            <div className="muted browser-capture-status" role="status" aria-live="polite">
+              {captureStatus}
+            </div>
+          )}
+          {capture !== null && (
+            <div className="muted browser-capture-meta">
+              {formatBrowserCaptureContext(capture).split("\n").slice(1, 4).join(" · ")}
+            </div>
+          )}
         </div>
         {pageNotes.length > 0 && (
           <ul className="browser-notes">

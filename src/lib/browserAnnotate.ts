@@ -12,6 +12,7 @@
  */
 
 import { readStorageJson, writeStorageJson } from "./storage.ts";
+import type { ComposerAttachment } from "./attachments.ts";
 
 export interface BrowserAnnotation {
   id: string;
@@ -46,6 +47,77 @@ export const IMAGE_GENERATION_NOTE =
 
 /** Keep browser context useful without allowing a page to flood a prompt. */
 export const MAX_BROWSER_CONTEXT_CHARS = 8_000;
+
+/** Maximum encoded image size accepted for a browser capture. */
+export const MAX_BROWSER_CAPTURE_BYTES = 5 * 1024 * 1024;
+
+/** One explicit visual capture from a browser surface. */
+export interface BrowserCapture {
+  /** Data URL, kept in memory until the user sends or removes it. */
+  dataUrl: string;
+  /** URL shown in the browser surface when the capture was made. */
+  url: string;
+  selection?: string;
+  comment?: string;
+  capturedAt: number;
+  width: number;
+  height: number;
+  devicePixelRatio: number;
+}
+
+function imageDataUrlParts(dataUrl: string): { mediaType: string; base64Data: string } | null {
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=]+)$/i.exec(dataUrl.trim());
+  if (!match || match[2].length === 0) return null;
+  const mediaType = match[1].toLowerCase();
+  const base64Data = match[2];
+  const estimatedBytes = Math.floor((base64Data.length * 3) / 4) -
+    (base64Data.endsWith("==") ? 2 : base64Data.endsWith("=") ? 1 : 0);
+  if (estimatedBytes <= 0 || estimatedBytes > MAX_BROWSER_CAPTURE_BYTES) return null;
+  return { mediaType, base64Data };
+}
+
+/**
+ * Turn a user-confirmed capture into the same attachment shape as a pasted
+ * image. The URL and timestamp remain prompt text so an image never loses
+ * its provenance when it leaves the browser panel.
+ */
+export function browserCaptureAttachment(capture: BrowserCapture): ComposerAttachment | null {
+  const url = normalizeBrowserUrl(capture.url);
+  const parts = imageDataUrlParts(capture.dataUrl);
+  if (url === null || parts === null) return null;
+  if (!Number.isInteger(capture.width) || capture.width < 1 || capture.width > 8_000) return null;
+  if (!Number.isInteger(capture.height) || capture.height < 1 || capture.height > 8_000) return null;
+  if (!Number.isFinite(capture.capturedAt) || capture.capturedAt <= 0) return null;
+  return {
+    id: `browser-capture:${capture.capturedAt}:${capture.width}x${capture.height}`,
+    name: `muse-browser-${new Date(capture.capturedAt).toISOString().replace(/[:.]/g, "-")}.jpg`,
+    mediaType: parts.mediaType,
+    size: Math.floor((parts.base64Data.length * 3) / 4),
+    kind: "image",
+    base64Data: parts.base64Data,
+    width: capture.width,
+    height: capture.height,
+  };
+}
+
+/** Build bounded text metadata to accompany a captured image attachment. */
+export function formatBrowserCaptureContext(capture: BrowserCapture): string {
+  const normalized = normalizeBrowserUrl(capture.url);
+  if (normalized === null) return "";
+  const dpr = Number.isFinite(capture.devicePixelRatio) && capture.devicePixelRatio > 0
+    ? capture.devicePixelRatio
+    : 1;
+  const lines = [
+    "[Browser capture]",
+    `URL: ${normalized}`,
+    `Captured: ${new Date(capture.capturedAt).toISOString()}`,
+    `Viewport: ${capture.width}×${capture.height} · device pixel ratio ${dpr.toFixed(2)}`,
+  ];
+  if (capture.selection?.trim()) lines.push(`Selection: ${capture.selection.trim()}`);
+  if (capture.comment?.trim()) lines.push(`Comment: ${capture.comment.trim()}`);
+  lines.push("Image: attached below. Verify the page is still current before acting on it.");
+  return Array.from(lines.join("\n")).slice(0, MAX_BROWSER_CONTEXT_CHARS).join("");
+}
 
 /**
  * Build the explicit text context inserted into the active composer. The
