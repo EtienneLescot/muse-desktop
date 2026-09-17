@@ -357,7 +357,9 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **État :** Câblé côté modèle et UI locale. `Project.workspace` est optionnel et persiste sous le schéma existant ; le panneau Projects fournit le sélecteur natif, l’édition et la remise à zéro du dossier. `New conversation here` réutilise le chemin `start_session` du hook, crée la session dans la racine choisie puis rattache la conversation au projet.
 
-**Reste :** migration guidée des anciens groupes sans racine, validation native d’un dossier déplacé ou supprimé, et choix explicite d’un environnement/worktree. Ne jamais déduire un dossier depuis le nom du projet.
+**Livré :** `projectsNeedingWorkspace` définit les anciens projets sans racine exploitable ni marqueur de choix. Les projets créés ou édités maintenant portent `workspaceReviewed`; Projects affiche une notice de migration bornée et ouvre le sélecteur natif pour un seul projet à la fois. Seules les propriétés `workspace` et `workspaceReviewed` sont écrites via `updateProject`, sans déduction depuis le nom ni modification des conversations existantes.
+
+**Reste :** validation native d’un dossier déplacé ou supprimé, et choix explicite d’un environnement/worktree. Ne jamais déduire un dossier depuis le nom du projet.
 
 **Acceptation :** projet multi-dossiers, dossier déplacé, ancien groupe sans racine et nouvelle conversation dans le bon workspace.
 

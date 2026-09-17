@@ -2541,6 +2541,34 @@ body.dark .composer textarea::placeholder {
   gap: 6px;
 }
 
+.project-migration {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--blue) 7%, var(--bg));
+}
+
+.project-migration p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.project-migration button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.project-migration-error {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 .project-workspace-picker,
 .project-workspace-setting {
   display: flex;
@@ -2636,6 +2664,18 @@ body.dark .composer textarea::placeholder {
   padding: 0 6px;
   font-size: 0.75rem;
   font-weight: 700;
+}
+
+.project-root-flag {
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 0 6px;
+  font-size: 0.72rem;
+}
+
+.project-item-unrooted {
+  border-color: color-mix(in srgb, var(--blue) 18%, transparent);
 }
 
 .project-badge {

@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   diffProjectSettings,
   MAX_PROJECTS,
+  projectsNeedingWorkspace,
   threadsInProject,
   type Project,
   type ProjectSettings,
@@ -79,6 +80,9 @@ export function ProjectsPanel({
   const [instructions, setInstructions] = useState("");
   const [workspacePath, setWorkspacePath] = useState("");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [migrationBusy, setMigrationBusy] = useState(false);
+  const [migrationError, setMigrationError] = useState<string | null>(null);
+  const projectsWithoutRoots = projectsNeedingWorkspace(projects);
 
   async function pickWorkspace(): Promise<void> {
     try {
@@ -91,6 +95,27 @@ export function ProjectsPanel({
       if (typeof selected === "string" && selected.length > 0) setWorkspacePath(selected);
     } catch (error) {
       setWorkspaceError(userFacingError(`folder picker failed: ${String(error)}`));
+    }
+  }
+
+  async function migrateNextProject(): Promise<void> {
+    const next = projectsNeedingWorkspace(projects)[0];
+    if (!next || migrationBusy) return;
+    setMigrationError(null);
+    if (!("__TAURI_INTERNALS__" in window)) {
+      setMigrationError("The guided folder migration is available in the desktop app.");
+      return;
+    }
+    setMigrationBusy(true);
+    try {
+      const selected = await open({ directory: true, multiple: false });
+      if (typeof selected === "string" && selected.trim().length > 0) {
+        onUpdate(next.id, { workspace: selected });
+      }
+    } catch (error) {
+      setMigrationError(userFacingError(`folder migration failed: ${String(error)}`));
+    } finally {
+      setMigrationBusy(false);
     }
   }
 
@@ -109,6 +134,27 @@ export function ProjectsPanel({
           Projects ({projects.length}/{MAX_PROJECTS})
         </span>
       </div>
+      {projectsWithoutRoots.length > 0 && (
+        <section className="project-migration" aria-labelledby="project-migration-title">
+          <div>
+            <strong id="project-migration-title">
+              {projectsWithoutRoots.length} project{projectsWithoutRoots.length === 1 ? "" : "s"} need a folder
+            </strong>
+            <p>
+              These projects were created before project roots were saved. Choose a folder to make
+              new conversations deterministic; existing conversation folders stay unchanged.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void migrateNextProject()}
+            disabled={migrationBusy}
+          >
+            {migrationBusy ? "Choosing folder…" : "Choose next folder"}
+          </button>
+          {migrationError && <span className="project-migration-error" role="status">{migrationError}</span>}
+        </section>
+      )}
       <div className="project-create">
         <input
           type="text"
@@ -291,7 +337,7 @@ function ProjectRow({
     draftWorkspace.trim() !== (project.workspace ?? "");
 
   return (
-    <li className="project-item">
+    <li className={`project-item${project.workspace?.trim() ? "" : " project-item-unrooted"}`}>
       <details>
         <summary>
           <span className="project-name">{project.name}</span>
@@ -303,6 +349,7 @@ function ProjectRow({
               override
             </span>
           )}
+          {!project.workspace?.trim() && <span className="project-root-flag">folder needed</span>}
         </summary>
         <div className="project-detail">
           <label className="project-setting">

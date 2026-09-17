@@ -17,6 +17,7 @@ import {
   MAX_PROJECTS,
   PROJECT_LIMIT_MESSAGE,
   projectOfThread,
+  projectsNeedingWorkspace,
   resolveProjectSettings,
   settingsForThread,
   sanitizeProjects,
@@ -64,6 +65,7 @@ describe("US-3 project creation", () => {
     assert.ok(res.project !== null);
     assert.equal(res.project.name, "Web");
     assert.equal(res.project.instructions, "be terse");
+    assert.equal(res.project.workspaceReviewed, true);
     assert.ok(res.project.id.length > 0);
     assert.equal(res.projects.length, 1);
   });
@@ -138,6 +140,7 @@ describe("US-3 thread attach / detach", () => {
     assert.equal(set[0].workspace, "C:\\work\\site");
     const cleared = updateProject(set, "p0", { workspace: "   " });
     assert.equal(cleared[0].workspace, undefined);
+    assert.equal(cleared[0].workspaceReviewed, true);
   });
 });
 
@@ -156,6 +159,21 @@ describe("US-3 instruction prepending", () => {
     assert.equal(buildProjectInput("  hi ", null), "hi");
     assert.equal(buildProjectInput("  hi ", undefined), "hi");
     assert.equal(buildProjectInput("  hi ", projects[0]), "hi");
+  });
+});
+
+describe("M2-01 project root migration", () => {
+  it("finds only projects without a usable workspace root", () => {
+    const projects = [
+      { ...fill(1)[0], id: "legacy", name: "Legacy", workspaceReviewed: undefined },
+      { ...fill(1)[0], id: "reviewed", name: "Reviewed", workspaceReviewed: true },
+      { ...fill(1)[0], id: "p2", name: "Whitespace", workspace: "  " },
+      { ...fill(1)[0], id: "p3", name: "Rooted", workspace: "C:\\work\\root" },
+    ];
+    assert.deepEqual(
+      projectsNeedingWorkspace(projects).map((project) => project.id),
+      ["legacy"],
+    );
   });
 });
 

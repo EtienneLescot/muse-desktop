@@ -16,6 +16,8 @@ export interface Project {
   createdAt: number;
   /** Optional canonical folder used when starting conversations in a project. */
   workspace?: string;
+  /** True once the user has explicitly reviewed the optional folder choice. */
+  workspaceReviewed?: boolean;
   /** Per-project settings override (US-30); absent keys inherit global. */
   settings?: ProjectSettingsOverride;
 }
@@ -70,6 +72,7 @@ function isValidProject(p: unknown): p is Project {
     typeof r.instructions === "string" &&
     typeof r.createdAt === "number" &&
     (r.workspace === undefined || typeof r.workspace === "string")
+    && (r.workspaceReviewed === undefined || typeof r.workspaceReviewed === "boolean")
   );
 }
 
@@ -77,6 +80,19 @@ function isValidProject(p: unknown): p is Project {
 export function sanitizeProjects(raw: unknown): Project[] {
   if (!Array.isArray(raw)) return [];
   return (raw.filter(isValidProject) as Project[]).slice(0, MAX_PROJECTS);
+}
+
+/**
+ * Projects restored from the pre-root format have no usable workspace. Keep
+ * this predicate in the project model so the migration UI and future import
+ * paths share the same definition of an unrooted project.
+ */
+export function projectsNeedingWorkspace(projects: Project[]): Project[] {
+  return projects.filter(
+    (project) =>
+      (project.workspace ?? "").trim().length === 0 &&
+      project.workspaceReviewed !== true,
+  );
 }
 
 /**
@@ -99,6 +115,7 @@ export function createProject(
     name,
     instructions: (draft.instructions ?? "").trim(),
     createdAt: Date.now(),
+    workspaceReviewed: true,
     ...(draft.workspace?.trim() ? { workspace: draft.workspace.trim() } : {}),
   };
   return { projects: [...projects, project], project, error: null };
@@ -136,7 +153,12 @@ export function updateProject(
       instructions:
         patch.instructions !== undefined ? patch.instructions.trim() : p.instructions,
       ...(patch.workspace !== undefined
-        ? (patch.workspace.trim() ? { workspace: patch.workspace.trim() } : { workspace: undefined })
+        ? {
+            workspaceReviewed: true,
+            ...(patch.workspace.trim()
+              ? { workspace: patch.workspace.trim() }
+              : { workspace: undefined }),
+          }
         : {}),
     };
   });
