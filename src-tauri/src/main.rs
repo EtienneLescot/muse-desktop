@@ -3991,6 +3991,91 @@ mod tests {
         assert!(state.inner().sessions.lock().unwrap()["session-a"].running);
     }
 
+    #[test]
+    fn generated_tauri_invoke_approves_only_the_target_session() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![approve])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client_a, mut frames_a) = fixture_client(false);
+        let (client_b, _frames_b) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client_a.clone());
+        register_fixture_session(state.inner(), "session-b", "fixture-b", client_b);
+        let mut emitted = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            emitted.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        for (sid, requirement) in [("session-a", "req-a"), ("session-b", "req-b")] {
+            route_notification_with_emit(
+                state.inner(),
+                "approval/requested",
+                &json!({
+                    "sessionId": sid,
+                    "approvalId": "same-approval",
+                    "currentRequirementId": requirement,
+                    "subject": {"kind":"shell","command":"echo safe"}
+                }),
+                &mut emit,
+            );
+        }
+        assert_eq!(emitted.len(), 2);
+
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames_a).await;
+                assert_eq!(frame["method"], "approval/decide");
+                assert_eq!(frame["params"]["sessionId"], "session-a");
+                assert_eq!(frame["params"]["approvalId"], "same-approval");
+                assert_eq!(frame["params"]["requirementId"], "req-a");
+                client_a
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": frame["id"],
+                        "result": {"terminal": true}
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "approve".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({
+                    "sessionId": "session-a",
+                    "approvalId": "same-approval",
+                    "choiceId": "allow-once"
+                })),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("approve invoke should succeed")
+        .deserialize::<bool>()
+        .expect("approve response should be a boolean");
+
+        responder.join().expect("approval responder should finish");
+        assert!(response);
+        let approvals = state.inner().approvals.lock().unwrap();
+        assert!(!approvals.contains_key(&("session-a".to_string(), "same-approval".to_string())));
+        assert!(approvals.contains_key(&("session-b".to_string(), "same-approval".to_string())));
+    }
+
     #[tokio::test]
     async fn session_start_retries_without_posture_only_on_host_ceiling() {
         let (client, mut frames) = fixture_client(false);
