@@ -114,6 +114,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Pump stdout :** `pump_stdout` délègue à `ingest_stdout_chunk`, frontière asynchrone testée avec un child injecté. Le test couvre une réponse coupée entre deux chunks, une notification et une ligne JSON illisible ; il vérifie que les réponses sont corrélées par identifiant et que les diagnostics restent bornés. Il reste à brancher une webview empaquetée et un `CommandEvent` réel dans le contrôle natif M0-14g.
 
+Le contrat de démarrage est également couvert sans webview : une erreur `approval_mode_ceiling` sur la première `session/start` provoque un second appel sans `approvalMode`, tandis qu'une erreur différente reste bloquante. La session reçoit ensuite la projection effective du host (`approval_mode`) pour que la SSOT renderer ne confonde pas préférence locale et permission appliquée.
+
 ### M0-07 — Diagnostics
 
 **Code :** `wire_log`, `push_stderr`, `msp.rs`, erreurs affichées.

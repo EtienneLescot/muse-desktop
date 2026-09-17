@@ -2203,22 +2203,7 @@ async fn start_session_at_workspace(
             .ok_or_else(|| format!("unknown authorization mode: {mode}"))?;
         params["approvalMode"] = json!(wire_mode);
     }
-    let res = match client.request("session/start", params.clone()).await {
-        Ok(result) => result,
-        Err(error) if authorization_mode.is_some() && is_approval_mode_ceiling(&error) => {
-            // A persisted local preference must not make a new conversation
-            // unusable when this host advertises a stricter ceiling. Start
-            // with the host default, expose its effective projection below,
-            // and let the renderer keep automatic decisions fail-closed.
-            if let Some(object) = params.as_object_mut() {
-                object.remove("approvalMode");
-            }
-            client.request("session/start", params).await.map_err(|fallback| {
-                format!("session/start rejected requested posture ({error}); host default also failed: {fallback}")
-            })?
-        }
-        Err(error) => return Err(error),
-    };
+    let res = request_session_start(&client, params, authorization_mode.as_deref()).await?;
     let session = res.get("session").ok_or("session/start: no session in response")?;
     let session_id = session
         .get("sessionId")
@@ -2240,6 +2225,33 @@ async fn start_session_at_workspace(
         .map_err(|e| format!("state lock: {e}"))?
         .insert(session_id, meta.clone());
     Ok(meta)
+}
+
+/// Start a session with a requested posture, but fall back to the host's
+/// default only when it explicitly reports its approval ceiling. This helper
+/// contains no Tauri state so the retry contract can be exercised by a small
+/// MSP fixture as well as the live command.
+async fn request_session_start(
+    client: &MspClient,
+    mut params: Value,
+    authorization_mode: Option<&str>,
+) -> Result<Value, String> {
+    match client.request("session/start", params.clone()).await {
+        Ok(result) => Ok(result),
+        Err(error) if authorization_mode.is_some() && is_approval_mode_ceiling(&error) => {
+            // A persisted local preference must not make a new conversation
+            // unusable when this host advertises a stricter ceiling. Start
+            // with the host default, expose its effective projection below,
+            // and let the renderer keep automatic decisions fail-closed.
+            if let Some(object) = params.as_object_mut() {
+                object.remove("approvalMode");
+            }
+            Ok(client.request("session/start", params).await.map_err(|fallback| {
+                format!("session/start rejected requested posture ({error}); host default also failed: {fallback}")
+            })?)
+        }
+        Err(error) => return Err(error),
+    }
 }
 
 #[tauri::command]
@@ -3528,6 +3540,48 @@ mod tests {
 
         ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, b"not-json\n").await;
         assert!(stderr_tail.lock().unwrap()[0].contains("unparsable frame"));
+    }
+
+    #[tokio::test]
+    async fn session_start_retries_without_posture_only_on_host_ceiling() {
+        let (client, mut frames) = fixture_client(false);
+        let request = tokio::spawn({
+            let client = client.clone();
+            async move {
+                request_session_start(
+                    &client,
+                    json!({"commandId":"cmd","workspaceRoot":"C:/fixture","approvalMode":"allowAll"}),
+                    Some("yolo"),
+                )
+                .await
+            }
+        });
+        let first = fixture_frame(&mut frames).await;
+        assert_eq!(first["method"], "session/start");
+        assert_eq!(first["params"]["approvalMode"], "allowAll");
+        client
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": first["id"],
+                "error": {
+                    "code": -32030,
+                    "message": "requested approval mode exceeds host ceiling",
+                    "data": {"kind": "commandRejected", "reason": "approval_mode_ceiling", "retryable": false}
+                }
+            }))
+            .await;
+        let fallback = fixture_frame(&mut frames).await;
+        assert_eq!(fallback["method"], "session/start");
+        assert!(fallback["params"].get("approvalMode").is_none());
+        client
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": fallback["id"],
+                "result": {"session": {"sessionId": "session-a", "approvalMode": {"mode": "promptUnmatched"}}}
+            }))
+            .await;
+        let result = request.await.unwrap().unwrap();
+        assert_eq!(result["session"]["sessionId"], "session-a");
     }
 
     #[test]
