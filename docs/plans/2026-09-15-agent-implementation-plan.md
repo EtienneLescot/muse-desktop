@@ -1,6 +1,6 @@
 # Plan d'implémentation pour les agents de codage
 
-Référence : [roadmap opérationnelle](../ROADMAP.md). Ce plan précise **comment réaliser le reste**, sans modifier les statuts de livraison. Base observée : `main` après PR #96 ; reprise explicite, MCPB, secret-store, file de commentaires de revue et résumés extractifs de runs sont déjà fusionnés. Avant toute intervention, vérifier quelles PR sont fusionnées et lire leur code actuel. Ne pas réimplémenter `hosts.rs`, `resume.rs` ou Reconnect si déjà présents.
+Référence : [roadmap opérationnelle](../ROADMAP.md). Ce plan précise **comment réaliser le reste**, sans modifier les statuts de livraison. Base observée : `main` après PR #98 ; reprise explicite, MCPB, secret-store, file de commentaires de revue, résumés extractifs de runs et progression d'invocation des skills sont déjà fusionnés. Avant toute intervention, vérifier quelles PR sont fusionnées et lire leur code actuel. Ne pas réimplémenter `hosts.rs`, `resume.rs` ou Reconnect si déjà présents.
 
 Les noms de commandes, modules et structures proposés ci-dessous sont des **contrats à implémenter**, pas des capacités déjà disponibles. Les méthodes MSP doivent être confirmées dans le schéma installé et sur le binaire servi ; ne jamais inventer une RPC pour satisfaire une maquette. Les fonctionnalités dépendantes d'un service distant commencent par une décision d'architecture et une preuve de faisabilité.
 
@@ -473,9 +473,9 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Code :** Composer, resolver skills et adaptateur moteur. Dépend M3-04/M0-08.
 
-**Travail :** invocation explicite, chargement des instructions et ressources via contrat moteur ; progression/découverte avec trace compréhensible. Les suggestions ne doivent pas prétendre exécuter une skill.
+**Travail :** invocation explicite, chargement des instructions et ressources via contrat moteur ; progression/découverte avec trace compréhensible. Les suggestions ne doivent pas prétendre exécuter une skill. L'état de progression reste éphémère et doit rester dérivé du hook de session, tandis que les événements du host font foi pour le démarrage et la fin.
 
-**État au 16/09/2026 :** une invocation slash d'une skill découverte relit ses ressources relatives juste avant l'envoi via `skills_read_resources`. Les contenus sont bornés, balisés avec leur chemin, et un fichier disparu fait échouer l'envoi avec une entrée système explicite ; les retries réutilisent l'expansion de l'outbox. Le host reçoit encore du texte enrichi, faute de part `skill` documentée avec ressources.
+**État au 17/09/2026 :** une invocation slash d'une skill découverte relit ses ressources relatives juste avant l'envoi via `skills_read_resources`. Les contenus sont bornés, balisés avec leur chemin, et un fichier disparu fait échouer l'envoi avec une entrée système explicite ; les retries réutilisent l'expansion de l'outbox. Une skill hôte vérifiée est envoyée comme part native `skill`; le hook expose maintenant `preparing`, `loading-resources`, `sending`, `queued`, `running`, `completed`, `failed` et `unknown` par conversation. Extensions annonce l'étape et le détail sans persister cet état. Les ressources natives supplémentaires, le contrat d'invocation détaillé côté host et la qualification live restent à confirmer.
 
 **Acceptation :** invocation réelle avec ressource, skill supprimée entre suggestion et envoi, permission refusée ; pas de double insertion au retry.
 
