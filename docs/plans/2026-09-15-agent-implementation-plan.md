@@ -231,6 +231,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** gros dépôt, fichier disparu/renommé, hors scope et fichier volumineux ; afficher le contenu réellement sur disque sans bloquer l'UI.
 
+**État au 16/09/2026 :** tranche locale livrée sur `feat/m1-real-files` : commandes sessionnées `files_list`/`file_read`, garde de racine et de symlink, bornage listing/lecture, détection binaire et aperçu réel dans l’onglet **Files**. Le watcher, l’ouverture native externe et la qualification E2E multi-plateforme restent ouverts.
+
 ### M1-08 — Pièces jointes
 
 **Code :** Composer, `mentions.ts`, service fichiers, adaptation TurnInputPart. Dépend M1-07 et de la vérification des capacités moteur M0-08.
