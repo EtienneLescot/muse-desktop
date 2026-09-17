@@ -79,6 +79,8 @@ export default function App() {
     setSessionModel,
     checkPathScope,
     createWorktree,
+    worktrees,
+    removeWorktree,
     setActive,
     startSession,
     startSessionInWorkspace,
@@ -1097,6 +1099,8 @@ export default function App() {
                             agents={orchestrationAgents}
                             sessionId={active.session_id}
                             onCreateWorktree={createWorktree}
+                            worktrees={worktrees}
+                            onRemoveWorktree={removeWorktree}
                           />{" "}
                           <SharePanel
                             sessionId={active.session_id}

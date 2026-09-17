@@ -315,9 +315,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** remplacer helper `worktrees.ts` par service Rust Git ; nouvelles actions de création. Dépend M2-01/M1-01/M0-01.
 
-**État :** le service Rust `git_worktree_create` crée un checkout réel sous `.muse/worktrees/` depuis une base et une branche explicites. Le panneau d’orchestration garde le plan manuel, ajoute une action par agent et reçoit le chemin canonique retourné ; les segments issus des identités sont nettoyés et dédoublonnés.
+**État :** le service Rust `git_worktree_create` crée un checkout réel sous `.muse/worktrees/` depuis une base et une branche explicites. Le panneau d’orchestration garde le plan manuel, ajoute une action par agent et reçoit le chemin canonique retourné ; les segments issus des identités sont nettoyés et dédoublonnés. Les records sont persistés sous `muse-desktop.worktrees.v1` et peuvent être supprimés après confirmation via `git_worktree_remove` avec garde de confinement.
 
-**Reste :** persister le record id/repo/path/base/branch/session/status, implémenter suppression/rétention et transaction création-worktree → session. Le host MSP actuel étant lié à un workspace à la fois, ne pas basculer automatiquement une conversation tant que ce cycle n’est pas conçu.
+**Reste :** ajouter retention/état Git détaillés et une transaction création-worktree → session. Le host MSP actuel étant lié à un workspace à la fois, ne pas basculer automatiquement une conversation tant que ce cycle n’est pas conçu.
 
 **Acceptation :** deux créations simultanées, branche absente, espace disque, échec partiel ; checkout de départ inchangé.
 

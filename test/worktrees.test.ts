@@ -12,6 +12,20 @@ import {
   WORKTREE_BASE,
   worktreeShellSnippet,
 } from "../src/lib/worktrees.ts";
+import { loadWorktrees, saveWorktrees } from "../src/lib/persist.ts";
+
+function fakeStorage(): void {
+  const values = new Map<string, string>();
+  (globalThis as Record<string, unknown>).localStorage = {
+    getItem: (key: string): string | null => values.get(key) ?? null,
+    setItem: (key: string, value: string): void => {
+      values.set(key, value);
+    },
+    removeItem: (key: string): void => {
+      values.delete(key);
+    },
+  };
+}
 
 describe("planWorktrees", () => {
   it("plans one worktree per agent with path/branch/base shape", () => {
@@ -90,5 +104,23 @@ describe("compareHeadHashes", () => {
     const r = compareHeadHashes("", "def456");
     assert.equal(r.match, false);
     assert.match(r.report, /nothing checked/);
+  });
+});
+
+describe("worktree persistence", () => {
+  it("round-trips records under the namespaced key and caps old rows", () => {
+    fakeStorage();
+    const records = Array.from({ length: 105 }, (_, index) => ({
+      repoRoot: `C:/repo-${index}`,
+      path: `C:/repo-${index}/.muse/worktrees/a`,
+      branch: `task-${index}`,
+      base: "HEAD",
+      createdAt: index,
+    }));
+    saveWorktrees(records);
+    const loaded = loadWorktrees();
+    assert.equal(loaded.length, 100);
+    assert.equal(loaded[0]?.branch, "task-5");
+    assert.equal(loaded.at(-1)?.branch, "task-104");
   });
 });
