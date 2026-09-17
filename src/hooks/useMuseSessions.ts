@@ -312,7 +312,10 @@ import {
   productAuthorizationMode,
   type AuthorizationMode,
 } from "../lib/authorization";
-import { parseApprovalResolution } from "../lib/approvalResolution";
+import {
+  isApprovalDecisionAccepted,
+  parseApprovalResolution,
+} from "../lib/approvalResolution";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
@@ -4396,6 +4399,16 @@ export function useMuseSessions(): UseMuseSessions {
     async (sessionId: string, approvalId: string, choiceId: string) => {
       try {
         setError(null);
+        // The selected choice is the only local hint about whether the host
+        // should resume the turn. A reject/deny choice must not paint a
+        // misleading "resuming" bridge; the authoritative resolution event
+        // still settles the approval and any terminal turn state.
+        const selectedChoice = approvals
+          .find((approval) => approval.session_id === sessionId && approval.request_id === approvalId)
+          ?.choices.find((choice) => choice.choiceId === choiceId);
+        const acceptedChoice = selectedChoice === undefined
+          ? true
+          : isApprovalDecisionAccepted(selectedChoice.decision);
         const terminal = await invoke<boolean>("approve", {
           sessionId,
           approvalId,
@@ -4411,11 +4424,14 @@ export function useMuseSessions(): UseMuseSessions {
             ),
           );
         }
-        // The turn resumes after a decision: drain now, don't wait a tick.
-        // US-10: reflexive placeholder synchronously, same as after send.
+        // The turn resumes after an accepted decision: drain now, don't wait
+        // a tick. A rejection follows the host's terminal path instead.
         touchStreamActivity(sessionId, "client/approval");
-        ensurePlaceholder(sessionId);
-        markResumePending(sessionId, "approval");
+        if (acceptedChoice) {
+          // US-10: reflexive placeholder synchronously, same as after send.
+          ensurePlaceholder(sessionId);
+          markResumePending(sessionId, "approval");
+        }
         kickPoll();
         return true;
       } catch (e) {

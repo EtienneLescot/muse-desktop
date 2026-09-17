@@ -32,6 +32,12 @@ function normalizeDecision(value: unknown): string | null {
   return decision.length > 0 ? decision : null;
 }
 
+/** Whether a host decision represents permission to continue the turn. */
+export function isApprovalDecisionAccepted(value: unknown): boolean {
+  const decision = normalizeDecision(value);
+  return decision !== null && ACCEPTED_DECISIONS.has(decision);
+}
+
 /** Parse a host approval status without exposing its raw payload to the UI. */
 export function parseApprovalResolution(payload: string): ApprovalResolution {
   try {
@@ -47,7 +53,7 @@ export function parseApprovalResolution(payload: string): ApprovalResolution {
     return {
       approvalId,
       decision,
-      accepted: decision !== null && ACCEPTED_DECISIONS.has(decision),
+      accepted: isApprovalDecisionAccepted(decision),
     };
   } catch {
     return { approvalId: null, decision: null, accepted: false };
