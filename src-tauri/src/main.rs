@@ -2609,9 +2609,12 @@ async fn set_model(
     Ok(())
 }
 
-#[tauri::command]
-async fn send_input(
-    state: State<'_, AppState>,
+/// Start one turn through the session-owned MSP client. Keeping the command
+/// body behind an `AppState` helper lets the supervisor fixture exercise the
+/// exact production payload and failure path without constructing a Tauri
+/// window or starting a model provider.
+async fn send_input_for_state(
+    state: &AppState,
     session_id: String,
     command_id: String,
     text: String,
@@ -2644,6 +2647,17 @@ async fn send_input(
         .await?;
     mark_running(&state, &session_id, true);
     Ok(result)
+}
+
+#[tauri::command]
+async fn send_input(
+    state: State<'_, AppState>,
+    session_id: String,
+    command_id: String,
+    text: String,
+    input_parts: Option<Value>,
+) -> Result<Value, String> {
+    send_input_for_state(&state, session_id, command_id, text, input_parts).await
 }
 
 /// Reclaim one queued turn before the host launches it. This is deliberately
@@ -3169,6 +3183,70 @@ async fn kill_session(
 mod tests {
     use super::*;
 
+    struct RecordingChild {
+        writes: mpsc::UnboundedSender<Vec<u8>>,
+        fail_write: bool,
+    }
+
+    impl msp::ChildTransport for RecordingChild {
+        fn write(&mut self, buf: &[u8]) -> Result<(), String> {
+            if self.fail_write {
+                return Err("fixture write failed".to_string());
+            }
+            self.writes
+                .send(buf.to_vec())
+                .map_err(|_| "fixture receiver dropped".to_string())
+        }
+
+        fn kill(self: Box<Self>) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    fn fixture_client(fail_write: bool) -> (Arc<MspClient>, mpsc::UnboundedReceiver<Vec<u8>>) {
+        let (writes, received) = mpsc::unbounded_channel();
+        let child = RecordingChild { writes, fail_write };
+        let (notify_tx, _) = mpsc::unbounded_channel();
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        (client, received)
+    }
+
+    async fn fixture_frame(rx: &mut mpsc::UnboundedReceiver<Vec<u8>>) -> Value {
+        let bytes = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("fixture did not receive a request")
+            .expect("fixture channel closed");
+        serde_json::from_slice::<Value>(bytes.strip_suffix(b"\n").unwrap_or(&bytes))
+            .expect("fixture request must be valid JSON")
+    }
+
+    fn register_fixture_session(
+        state: &AppState,
+        session_id: &str,
+        workspace: &str,
+        client: Arc<MspClient>,
+    ) {
+        let root = PathBuf::from(workspace);
+        state.hosts.lock().unwrap().insert(root.clone(), client.clone());
+        state
+            .hosts
+            .lock()
+            .unwrap()
+            .bind(session_id, &root, &client)
+            .unwrap();
+        state.sessions.lock().unwrap().insert(
+            session_id.to_string(),
+            SessionMeta {
+                session_id: session_id.to_string(),
+                workspace: workspace.to_string(),
+                running: false,
+            },
+        );
+    }
+
     fn empty_state() -> AppState {
         AppState {
             resume_mutex: tokio::sync::Mutex::new(()),
@@ -3255,6 +3333,93 @@ mod tests {
         assert_eq!(approvals[&(String::from("session-a"), String::from("same-approval"))].session_id, "session-a");
         assert_eq!(approvals[&(String::from("session-b"), String::from("same-approval"))].requirement_id, json!("req-b"));
         assert_eq!(events.iter().filter(|e| e.0 == "tool_request").count(), 2);
+    }
+
+    #[tokio::test]
+    async fn send_input_keeps_session_routes_and_correlates_out_of_order_replies() {
+        let state = Arc::new(empty_state());
+        let (client_a, mut frames_a) = fixture_client(false);
+        let (client_b, mut frames_b) = fixture_client(false);
+        register_fixture_session(state.as_ref(), "session-a", "fixture-a", client_a.clone());
+        register_fixture_session(state.as_ref(), "session-b", "fixture-b", client_b.clone());
+
+        let task_a = tokio::spawn({
+            let state = state.clone();
+            async move {
+                send_input_for_state(
+                    state.as_ref(),
+                    "session-a".to_string(),
+                    "client-message-a".to_string(),
+                    "inspect A".to_string(),
+                    None,
+                )
+                .await
+            }
+        });
+        let task_b = tokio::spawn({
+            let state = state.clone();
+            async move {
+                send_input_for_state(
+                    state.as_ref(),
+                    "session-b".to_string(),
+                    "client-message-b".to_string(),
+                    "inspect B".to_string(),
+                    None,
+                )
+                .await
+            }
+        });
+
+        let frame_a = fixture_frame(&mut frames_a).await;
+        let frame_b = fixture_frame(&mut frames_b).await;
+        assert_eq!(frame_a["method"], "turn/start");
+        assert_eq!(frame_b["method"], "turn/start");
+        assert_eq!(frame_a["params"]["sessionId"], "session-a");
+        assert_eq!(frame_b["params"]["sessionId"], "session-b");
+        assert_eq!(frame_a["params"]["input"][0]["text"], "inspect A");
+        assert_eq!(frame_b["params"]["input"][0]["text"], "inspect B");
+
+        // Deliver B first even though A was admitted first. Each response is
+        // ingested by its owning client and must wake only its own caller.
+        client_b
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": frame_b["id"],
+                "result": {"status": "accepted", "turnId": "turn-b"}
+            }))
+            .await;
+        client_a
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": frame_a["id"],
+                "result": {"status": "accepted", "turnId": "turn-a"}
+            }))
+            .await;
+
+        assert_eq!(task_a.await.unwrap().unwrap()["turnId"], "turn-a");
+        assert_eq!(task_b.await.unwrap().unwrap()["turnId"], "turn-b");
+        assert!(state.sessions.lock().unwrap()["session-a"].running);
+        assert!(state.sessions.lock().unwrap()["session-b"].running);
+    }
+
+    #[tokio::test]
+    async fn send_input_write_failure_is_bounded_and_does_not_mark_running() {
+        let state = empty_state();
+        let (client, _frames) = fixture_client(true);
+        register_fixture_session(&state, "session-a", "fixture-a", client);
+
+        let error = send_input_for_state(
+            &state,
+            "session-a".to_string(),
+            "client-message-a".to_string(),
+            "inspect A".to_string(),
+            None,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(error.contains("sidecar write failed"), "{error}");
+        assert!(!state.sessions.lock().unwrap()["session-a"].running);
     }
 
     #[test]
