@@ -25,6 +25,7 @@ mod git;
 mod terminal;
 mod files;
 mod setup;
+mod mcp;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -1225,6 +1226,34 @@ async fn worktree_setup_run(
     tokio::task::spawn_blocking(move || setup::run(&root, &path, &command))
         .await
         .map_err(|e| format!("worktree setup task failed: {e}"))?
+}
+
+/// Probe an explicitly configured local MCP server with initialize + tools/list.
+#[tauri::command]
+async fn mcp_local_probe(
+    command: String,
+    workspace: Option<String>,
+) -> Result<mcp::ProbeResult, String> {
+    let workspace = workspace.map(PathBuf::from);
+    tokio::task::spawn_blocking(move || mcp::probe(&command, workspace.as_deref()))
+        .await
+        .map_err(|e| format!("MCP probe task failed: {e}"))?
+}
+
+/// Call one tool on an explicitly configured local MCP server.
+#[tauri::command]
+async fn mcp_local_call(
+    command: String,
+    workspace: Option<String>,
+    tool_name: String,
+    arguments: Value,
+) -> Result<mcp::CallResult, String> {
+    let workspace = workspace.map(PathBuf::from);
+    tokio::task::spawn_blocking(move || {
+        mcp::call(&command, workspace.as_deref(), &tool_name, arguments)
+    })
+    .await
+    .map_err(|e| format!("MCP call task failed: {e}"))?
 }
 
 /// Open (or reuse) the persistent PTY owned by a conversation workspace.
@@ -2820,6 +2849,8 @@ fn main() {
             git_worktree_remove,
             git_worktree_inspect,
             worktree_setup_run,
+            mcp_local_probe,
+            mcp_local_call,
             terminal_open,
             terminal_write,
             terminal_resize,

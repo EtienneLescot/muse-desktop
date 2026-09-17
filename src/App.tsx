@@ -148,6 +148,8 @@ export default function App() {
     subagentDrilldown,
     connectors,
     connectorTools,
+    probeLocalMcp,
+    callLocalMcp,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
@@ -718,6 +720,11 @@ export default function App() {
                 <ConnectorPanel
                   installed={connectors}
                   toolNames={connectorTools.map((t) => t.name)}
+                  workspace={workspace}
+                  onProbeLocal={(command) => probeLocalMcp(command, workspace)}
+                  onCallLocal={(command, toolName, argumentsText) =>
+                    callLocalMcp(command, toolName, argumentsText, workspace)
+                  }
                   remoteNotice={remoteNotice}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}

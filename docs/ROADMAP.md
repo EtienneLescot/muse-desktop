@@ -319,11 +319,20 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 
 **Dépendances :** M0-01/02 et M1-01 avant M2-03 ; M2-03 avant M2-04/05/06/08. **Sortie M2 :** deux conversations modifient/testent des espaces indépendants ; redémarrage, transfert et nettoyage préservent les changements.
 
+### Livraison M3-01 — transport MCP local explicite
+
+- **Transport réel :** `mcp_local_probe` démarre la commande locale choisie par l'utilisateur, effectue `initialize` puis `notifications/initialized` et appelle `tools/list` sur stdio MCP avec support des frames `Content-Length` et JSON par ligne.
+- **Appel réel :** `mcp_local_call` refait le handshake, appelle `tools/call` avec des arguments JSON et renvoie le résultat/isError. Chaque opération possède son processus borné (30 s) ; aucun serveur n'est lancé en arrière-plan ou au démarrage.
+- **UX :** Extensions contient un panneau **Local MCP server** avec commande, workspace effectif, liste des outils découverts, arguments JSON et résultat repliable. Les erreurs de démarrage, handshake, JSON ou timeout restent visibles via le store d'erreur.
+- **Garde-fous :** commande ≤2 000 caractères, nom d'outil ≤200 caractères, sortie ≤200 000 caractères et maximum 500 outils ; stdin et stderr du serveur ne sont pas exposés à la conversation.
+- **Limites :** les outils découverts ne sont pas encore injectés dans le catalogue MSP de Muse et aucun processus persistant/hot-reload `list_changed` n'est maintenu. Cette tranche prouve le transport local et l'appel contrôlé, pas la parité MCP complète.
+- **Validation :** tests Rust de framing et parsing des outils, tests Node existants, TypeScript, Vite et Cargo verts.
+
 ## M3 — Extensions et automatisations opérationnelles
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
-| M3-01 | Connecter un serveur MCP local | Adapté | Présente | Locale | Unitaire | Transport, processus, handshake et vrais tools/list/call ; appel observé par le moteur, erreurs et arrêt propres |
+| M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; restent injection dans le host Muse, processus persistant et hot-reload |
 | M3-02 | Connecter un serveur MCP distant | À définir | Partielle | Locale | Unitaire | Transport/auth/secrets, restrictions et reconnexion ; aucun statut « connecté » sans échange réel |
 | M3-03 | Installer/désactiver une extension réellement utilisable | Adapté | Présente | Locale | Unitaire | Relier registre et runtime, actualiser outils, désinstallation et permissions ; effet observable sur les outils du moteur |
 | M3-04 | Découvrir les skills du disque et du projet | À définir | Partielle | Locale | Unitaire | SKILL.md, ressources relatives, priorité de scopes et rechargement ; une skill installée est utilisable sans recopie manuelle |
