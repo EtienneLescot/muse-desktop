@@ -19,6 +19,8 @@ import {
   MAX_SCHEDULE_RUNS,
   markRecoveredRunFailed,
   recoverScheduleRuns,
+  mergeScheduleRuns,
+  normalizeScheduleRuns,
   saveScheduleRuns,
   SCHEDULE_RUN_RECOVERY_ERROR,
   settleRun,
@@ -210,6 +212,18 @@ describe("M3-06 schedule run ledger", () => {
     assert.equal(recovered[2].recovery, undefined);
     assert.equal(recovered[2].nextRetryAt, 20_000);
     assert.deepEqual(recoverScheduleRuns(recovered, 6000), recovered);
+  });
+
+  it("merges native and web ledgers by occurrence and keeps the newest lifecycle snapshot", () => {
+    const queued = run(1000);
+    const completed = completeRun(markRunStarted([queued], queued.id, 2000, "session-1"), queued.id, 3000, "done")[0];
+    const second = run(2000);
+    const merged = mergeScheduleRuns([queued, second], [completed]);
+    assert.deepEqual(merged.map((item) => item.id), [queued.id, second.id]);
+    assert.equal(merged[0].status, "completed");
+    const recovered = recoverScheduleRuns([queued], 9000)[0];
+    assert.equal(mergeScheduleRuns([recovered], [completed])[0].status, "completed");
+    assert.equal(normalizeScheduleRuns({ nope: true }).length, 0);
   });
 
   it("requires an explicit reconciliation before a recovered run can be retried", () => {

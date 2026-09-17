@@ -257,9 +257,11 @@ import {
   saveScheduleRuns,
   settleRunsForSession,
   settleRun,
+  mergeScheduleRuns,
   type ScheduleRun,
 } from "../lib/scheduleRuns";
 export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
+import { loadNativeScheduleRuns, saveNativeScheduleRuns } from "../lib/scheduleRunLedger";
 import { buildScheduleRunSummary } from "../lib/runSummary";
 export type { ScheduleRunSummary } from "../lib/runSummary";
 import {
@@ -1476,6 +1478,10 @@ export function useMuseSessions(): UseMuseSessions {
   const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() =>
     recoverScheduleRuns(loadScheduleRuns(), Date.now()),
   );
+  // The native app-data copy is hydrated once before any subsequent state
+  // write. The renderer state remains the SSOT; this gate prevents a startup
+  // localStorage render from overwriting a newer native snapshot.
+  const nativeScheduleRunsHydratedRef = useRef(!isTauriRuntime());
   const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
   const [notificationPreferences, setNotificationPreferences] = useState(() => loadNotificationPreferences());
   const [notificationPermissionState, setNotificationPermissionState] = useState<NotificationPermission>(
@@ -2057,7 +2063,25 @@ export function useMuseSessions(): UseMuseSessions {
 
   useEffect(() => {
     saveScheduleRuns(scheduleRuns);
+    if (nativeScheduleRunsHydratedRef.current) {
+      void saveNativeScheduleRuns(scheduleRuns);
+    }
   }, [scheduleRuns]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    void loadNativeScheduleRuns().then((nativeRuns) => {
+      if (cancelled) return;
+      if (nativeRuns !== null) {
+        setScheduleRuns((current) => mergeScheduleRuns(current, nativeRuns));
+      }
+      nativeScheduleRunsHydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     saveNotifications(notifications);
