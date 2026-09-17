@@ -207,6 +207,7 @@ async function main() {
   );
   try {
     const sessions = [];
+    const durabilities = [];
     const controls = [];
     const errors = [];
     const approvalModes = [];
@@ -218,6 +219,10 @@ async function main() {
       if (initialized?.schema?.version !== 1 || typeof initialized?.schema?.fingerprint !== "string") {
         fail(`host-${index === 0 ? "A" : "B"} returned an incompatible schema`);
       }
+      const sessionDurability = typeof initialized?.sessionDurability === "string" && initialized.sessionDurability.trim().length > 0
+        ? initialized.sessionDurability.trim()
+        : "unknown";
+      durabilities.push(sessionDurability);
       host.notify("initialized");
       const result = await host.request("session/start", {
         commandId: uuidv7(),
@@ -315,7 +320,11 @@ async function main() {
     }
     process.stdout.write(`${JSON.stringify({
       schema: "muse-desktop.native-smoke.v1",
-      hosts: sessions.map((sessionId, index) => ({ host: String.fromCharCode(65 + index), sessionId })),
+      hosts: sessions.map((sessionId, index) => ({
+        host: String.fromCharCode(65 + index),
+        sessionId,
+        sessionDurability: durabilities[index],
+      })),
       distinctWorkspaces: true,
       modelCatalogue: "available",
       turnsSent: exerciseControl ? controls.length : 0,

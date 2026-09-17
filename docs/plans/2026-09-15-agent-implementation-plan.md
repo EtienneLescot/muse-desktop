@@ -88,7 +88,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **Acceptation :** arrêt avant premier token, pendant outil, après fin, réponse tardive et double-clic. L'arrêt de A n'affecte pas B ; l'état final correspond au moteur. Dépend M0-01/03.
 
 **État au 16/09/2026 :** demande de cancellation conservée dans un état renderer-only jusqu'à réception d'un statut `stopped` (ou déconnexion), avec badge `Stopping Muse`, bouton désactivé contre le double-clic et transcript non fermé prématurément. La qualification native des courses et réponses tardives reste à produire.
-**Pré-vol natif au 17/09/2026 :** `node scripts/native-smoke.mjs --exercise-control` admet en parallèle puis interrompt immédiatement un tour synthétique sur deux sidecars Windows distincts et vérifie l'accusé `accepted` ainsi que la conservation du `turnId`. Cette preuve couvre le contrat de commande, pas la course UI entre un premier token, un outil, un terminal confirmé et une réponse tardive.
+**Pré-vol natif au 17/09/2026 :** `node scripts/native-smoke.mjs --exercise-control` admet en parallèle puis interrompt immédiatement un tour synthétique sur deux sidecars Windows distincts et vérifie l'accusé `accepted` ainsi que la conservation du `turnId`. Le rapport de base expose aussi `initialize.sessionDurability` pour éviter de présenter une reconnexion comme disponible sur un host éphémère. Cette preuve couvre le contrat de commande, pas la course UI entre un premier token, un outil, un terminal confirmé et une réponse tardive.
 
 ### M0-05 — Demandes en attente
 
