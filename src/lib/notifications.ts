@@ -193,13 +193,29 @@ function validNotification(value: unknown): value is MuseNotification {
     (row.unread === undefined || typeof row.unread === "boolean");
 }
 
+/** Parse a persisted inbox without trusting webview or native JSON. */
+export function normalizeNotifications(raw: unknown): MuseNotification[] {
+  return Array.isArray(raw) ? raw.filter(validNotification).slice(-MAX_NOTIFICATIONS) : [];
+}
+
 export function loadNotifications(): MuseNotification[] {
-  const parsed = readStorageJson<unknown>(NOTIFICATIONS_KEY, []);
-  return Array.isArray(parsed) ? parsed.filter(validNotification).slice(-MAX_NOTIFICATIONS) : [];
+  return normalizeNotifications(readStorageJson<unknown>(NOTIFICATIONS_KEY, []));
 }
 
 export function saveNotifications(notifications: MuseNotification[]): void {
   writeStorageJson(NOTIFICATIONS_KEY, notifications.slice(-MAX_NOTIFICATIONS));
+}
+
+/** Merge webview/native inbox copies by dedupe key, keeping the newest row. */
+export function mergeNotifications(...ledgers: MuseNotification[][]): MuseNotification[] {
+  const merged = new Map<string, MuseNotification>();
+  for (const ledger of ledgers) {
+    for (const item of normalizeNotifications(ledger)) {
+      const existing = merged.get(item.dedupeKey);
+      if (!existing || item.createdAt >= existing.createdAt) merged.set(item.dedupeKey, item);
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => a.createdAt - b.createdAt).slice(-MAX_NOTIFICATIONS);
 }
 
 export type NotificationPermission = "default" | "granted" | "denied" | "unsupported";

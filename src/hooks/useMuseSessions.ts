@@ -280,6 +280,7 @@ import {
   deliverDesktopNotification,
   loadNotifications,
   loadNotificationPreferences,
+  mergeNotifications,
   markNotificationRead as markNotificationReadRow,
   notificationPermission as readNotificationPermission,
   requestNotificationPermission,
@@ -290,6 +291,7 @@ import {
   type NotificationPermission,
 } from "../lib/notifications";
 export type { MuseNotification, NotificationPermission } from "../lib/notifications";
+import { loadNativeNotifications, saveNativeNotifications } from "../lib/notificationLedger";
 // US-12 + US-21 versioned artifacts + thread recap: extraction, versioning
 // and per-thread persistence live in ../lib/artifacts (dependency-free,
 // unit-tested); restore reuses the US-4 composer prefill below.
@@ -1483,6 +1485,9 @@ export function useMuseSessions(): UseMuseSessions {
   // localStorage render from overwriting a newer native snapshot.
   const nativeScheduleRunsHydratedRef = useRef(!isTauriRuntime());
   const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
+  // As with schedule runs, native inbox hydration happens before the first
+  // desktop write so a webview reload cannot erase unread attention items.
+  const nativeNotificationsHydratedRef = useRef(!isTauriRuntime());
   const [notificationPreferences, setNotificationPreferences] = useState(() => loadNotificationPreferences());
   const [notificationPermissionState, setNotificationPermissionState] = useState<NotificationPermission>(
     () => readNotificationPermission(),
@@ -2085,7 +2090,25 @@ export function useMuseSessions(): UseMuseSessions {
 
   useEffect(() => {
     saveNotifications(notifications);
+    if (nativeNotificationsHydratedRef.current) {
+      void saveNativeNotifications(notifications);
+    }
   }, [notifications]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    void loadNativeNotifications().then((nativeNotifications) => {
+      if (cancelled) return;
+      if (nativeNotifications !== null) {
+        setNotifications((current) => mergeNotifications(current, nativeNotifications));
+      }
+      nativeNotificationsHydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     saveNotificationPreferences(notificationPreferences);
