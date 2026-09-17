@@ -35,7 +35,7 @@ use hosts::Hosts;
 
 use base64::Engine as _;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -584,6 +584,21 @@ fn initialize_session_durability(result: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
+fn cache_initialize_session_durability(
+    host_durability: &mut HashMap<PathBuf, String>,
+    root: &Path,
+    result: &Value,
+) {
+    if let Some(durability) = initialize_session_durability(result) {
+        host_durability.insert(root.to_path_buf(), durability);
+    } else {
+        // A successful handshake without the optional field is an explicit
+        // compatibility result. Do not let a previous host's fact leak into
+        // a newly started host for the same workspace.
+        host_durability.remove(root);
+    }
+}
+
 /// Read the host's effective approval projection from any session-shaped
 /// response. Older hosts omit it, so absence remains `None` and the renderer
 /// keeps its compatibility path instead of inventing a posture.
@@ -685,13 +700,11 @@ async fn ensure_host(
     // is intentionally advisory: unknown/missing values preserve the legacy
     // reconnect path, while an explicit `ephemeral` value is enforced by the
     // resume command and exposed to the renderer.
-    if let Some(durability) = initialize_session_durability(&initialized) {
-        state
-            .host_durability
-            .lock()
-            .map_err(|e| format!("state lock: {e}"))?
-            .insert(root.clone(), durability);
-    }
+    let mut host_durability = state
+        .host_durability
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?;
+    cache_initialize_session_durability(&mut host_durability, &root, &initialized);
 
     Ok(client)
 }
@@ -3899,6 +3912,20 @@ mod tests {
             None
         );
         assert_eq!(initialize_session_durability(&json!({})), None);
+    }
+
+    #[test]
+    fn missing_durability_clears_the_previous_workspace_observation() {
+        let root = PathBuf::from("C:/fixture");
+        let mut facts = HashMap::new();
+        cache_initialize_session_durability(
+            &mut facts,
+            &root,
+            &json!({"sessionDurability":"ephemeral"}),
+        );
+        assert_eq!(facts.get(&root).map(String::as_str), Some("ephemeral"));
+        cache_initialize_session_durability(&mut facts, &root, &json!({}));
+        assert!(facts.get(&root).is_none());
     }
 
     #[test]
