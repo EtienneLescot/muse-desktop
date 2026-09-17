@@ -565,6 +565,24 @@ export function BrowserPanel({
     }
   }
 
+  async function closeNativeBrowser(): Promise<void> {
+    if (!isTauriRuntime()) {
+      setNativeBrowserStatus("The native browser is available in the desktop build.");
+      return;
+    }
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const closed = await invoke<boolean>("close_native_browser");
+      setNativeBrowserStatus(closed ? "Closed the Muse Browser window." : "The Muse Browser window is already closed.");
+    } catch (error) {
+      setNativeBrowserStatus(
+        userFacingError(
+          `native browser close failed: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
+    }
+  }
+
   const toggleApp = (app: string, allowed: boolean) => {
     onSetPermission(app, allowed);
   };
@@ -645,6 +663,15 @@ export function BrowserPanel({
             title="Open this page in a native Muse Browser window"
           >
             Open native
+          </button>
+          <button
+            type="button"
+            className="browser-native-close"
+            onClick={() => void closeNativeBrowser()}
+            disabled={!isTauriRuntime()}
+            title="Close the dedicated Muse Browser window"
+          >
+            Close native
           </button>
           {normalized && <span className="browser-current-url" title={normalized}>{normalized}</span>}
         </div>
