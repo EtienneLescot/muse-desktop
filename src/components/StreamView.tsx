@@ -22,6 +22,7 @@ import {
   searchTranscript,
   type TranscriptHit,
 } from "../lib/transcriptSearch";
+import { streamEntryA11y, streamWindowAnnouncement } from "../lib/streamA11y";
 import { MessageContent } from "./MessageContent";
 
 /** US-6 controls for one sub-agent block. Read-result and drill-down resolve
@@ -151,6 +152,11 @@ export function StreamView({
   const visibleEntries = streamWindowed
     ? entries.slice(safeWindowStart, safeWindowEnd)
     : entries;
+  const windowAnnouncement = streamWindowAnnouncement(
+    safeWindowStart,
+    safeWindowEnd,
+    entries.length,
+  );
   const findHits = useMemo(
     () => searchTranscript(entries, findQuery),
     [entries, findQuery],
@@ -391,8 +397,14 @@ export function StreamView({
       role="log"
       aria-live="off"
       aria-label="Conversation messages"
+      aria-busy={running || reconciling}
       data-entry-count={entries.length}
     >
+      {streamWindowed && (
+        <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {windowAnnouncement}
+        </span>
+      )}
       <div className="stream-find" aria-label="Find in conversation">
         {!findOpen ? (
           <button type="button" onClick={() => setFindOpen(true)}>
@@ -498,6 +510,7 @@ export function StreamView({
       )}
       {visibleEntries.map((e, visibleIndex) => {
         const entryIndex = safeWindowStart + visibleIndex;
+        const entryA11y = streamEntryA11y(roleLabel(e), entryIndex, entries.length);
         // US-10 reflexive phase: an open entry with no text yet (send just
         // happened, or `item/started` arrived before the first delta) shows
         // a plain muted label. The label is rendered, never stored: the
@@ -510,6 +523,10 @@ export function StreamView({
               key={e.id}
               className={`msg thinking${e.open ? " is-live" : ""}`}
               data-entry-index={entryIndex}
+              role={entryA11y.role}
+              aria-posinset={entryA11y.position}
+              aria-setsize={entryA11y.setSize}
+              aria-label={entryA11y.label}
               // Keep live reasoning visible while tokens arrive. Once the
               // item closes, leaving `open` undefined hands disclosure back
               // to the user instead of forcing it shut.
@@ -646,7 +663,15 @@ export function StreamView({
             )}
           </details>
         ) : (
-          <div key={e.id} className={`msg ${e.role}`} data-entry-index={entryIndex}>
+          <div
+            key={e.id}
+            className={`msg ${e.role}`}
+            data-entry-index={entryIndex}
+            role={entryA11y.role}
+            aria-posinset={entryA11y.position}
+            aria-setsize={entryA11y.setSize}
+            aria-label={entryA11y.label}
+          >
             <span className="role">{roleLabel(e)}</span>
             {e.engineError ? (
               <details className="engine-error" open>
