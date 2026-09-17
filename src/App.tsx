@@ -37,6 +37,7 @@ import { IndexPanel } from "./components/IndexPanel";
 import { BrowserPanel } from "./components/BrowserPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
+import { searchConversations } from "./lib/conversationSearch";
 import { WindowControls, dragWindow } from "./components/WindowControls";
 import "./App.css";
 import "./Desktop.css";
@@ -58,6 +59,7 @@ export default function App() {
   const {
     sessions,
     activeId,
+    logs,
     activeLog,
     approvals,
     activeApprovals,
@@ -208,11 +210,7 @@ export default function App() {
   const searchWasOpen = useRef(false);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const settingsWasOpen = useRef(false);
-  const searchResults = sessions.filter((session) =>
-    (session.title + " " + session.workspace)
-      .toLocaleLowerCase()
-      .includes(search.toLocaleLowerCase()),
-  );
+  const searchResults = searchConversations(sessions, logs, search);
   useEffect(() => setSearchIndex(0), [search, searchOpen]);
   const searchDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -1164,7 +1162,7 @@ export default function App() {
               event.preventDefault();
               setActive(
                 searchResults[Math.min(searchIndex, searchResults.length - 1)]
-                  .session_id,
+                  .session.session_id,
               );
               openPage("task");
               setSearchOpen(false);
@@ -1172,26 +1170,25 @@ export default function App() {
           }}
         />
         <div className="search-results">
-          {searchResults.map((session, index) => (
+          {searchResults.map((hit, index) => (
             <button
-              key={session.session_id}
+              key={hit.session.session_id}
               className={index === searchIndex ? "search-highlight" : undefined}
               onClick={() => {
-                setActive(session.session_id);
+                setActive(hit.session.session_id);
                 openPage("task");
                 setSearchOpen(false);
               }}
             >
               <Icon name="code" />
-              {session.title || session.session_id.slice(0, 8)}
-              <small>{session.archived ? "Archived" : ""}</small>
+              <span>
+                {hit.session.title || hit.session.session_id.slice(0, 8)}
+                {hit.excerpt !== null && <small className="search-excerpt">{hit.excerpt}</small>}
+              </span>
+              <small>{hit.session.archived ? "Archived" : ""}</small>
             </button>
           ))}
-          {!sessions.some((session) =>
-            (session.title + " " + session.workspace)
-              .toLowerCase()
-              .includes(search.toLowerCase()),
-          ) && <p className="muted">No conversations found.</p>}
+          {searchResults.length === 0 && <p className="muted">No conversations found.</p>}
         </div>
       </dialog>
     </div>

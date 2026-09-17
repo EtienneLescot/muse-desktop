@@ -768,6 +768,20 @@
   justify-content: flex-start;
   padding: 14px 10px;
 }
+.search-results button > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  text-align: left;
+}
+.search-results .search-excerpt {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .search-results small {
   margin-left: auto;
 }
