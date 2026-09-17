@@ -18,6 +18,16 @@ function targetLabel(
   return sessionTitle(r.sessionId);
 }
 
+function contextLabel(item: ReviewItem): string | null {
+  const labels = [
+    item.workspace ? `workspace ${item.workspace}` : null,
+    item.projectId ? `project ${item.projectId}` : null,
+    item.model ? `model ${item.model}` : null,
+    item.authorizationMode ? `policy ${item.authorizationMode}` : null,
+  ].filter((value): value is string => value !== null);
+  return labels.length > 0 ? labels.join(" · ") : null;
+}
+
 /**
  * US-9 review queue: due schedules land here and wait — nothing auto-sends.
  * Approve sends the instructions as normal turn input into the recorded
@@ -49,6 +59,7 @@ export function ReviewQueuePanel({
               → {targetLabel(item, sessionTitle)} ·{" "}
               {new Date(item.createdAt).toLocaleString()}
             </span>
+            {contextLabel(item) && <small className="review-context">{contextLabel(item)}</small>}
             <pre>{item.instructions}</pre>
           </div>
           <div className="review-actions">

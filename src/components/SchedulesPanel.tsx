@@ -3,6 +3,7 @@ import {
   validateScheduleInput,
   type Schedule,
   type ScheduleInput,
+  type ScheduleAuthorizationMode,
   type ThreadReuse,
 } from "../lib/schedules";
 
@@ -15,6 +16,10 @@ interface Props {
   schedules: Schedule[];
   sessions: SessionRef[];
   activeId: string | null;
+  workspace: string | null;
+  projectId: string | null;
+  model: string;
+  authorizationMode: ScheduleAuthorizationMode;
   onCreate: (input: ScheduleInput) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onDelete: (id: string) => void;
@@ -49,6 +54,10 @@ export function SchedulesPanel({
   schedules,
   sessions,
   activeId,
+  workspace,
+  projectId,
+  model,
+  authorizationMode,
   onCreate,
   onToggle,
   onDelete,
@@ -75,6 +84,10 @@ export function SchedulesPanel({
         reuseKind === "session"
           ? { kind: "session", sessionId: reuseSession || activeId || "" }
           : { kind: reuseKind },
+      workspace: workspace ?? undefined,
+      projectId: projectId ?? undefined,
+      model,
+      authorizationMode,
     };
     const err = validateScheduleInput(input);
     if (err !== null) {

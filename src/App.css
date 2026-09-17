@@ -3258,6 +3258,16 @@ body.dark .composer textarea::placeholder {
   font-size: 0.85rem;
 }
 
+.review-context {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .review-actions {
   display: flex;
   gap: 8px;
