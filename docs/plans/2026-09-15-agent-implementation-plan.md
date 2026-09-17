@@ -134,7 +134,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Acceptation :** RPC manquante du registre fait échouer le contrôle ; schéma incompatible produit une erreur exploitable ; notification additive inconnue n'arrête pas le flux. Livrer fixtures anonymisées de versions connues.
 
-**Pré-vol natif au 17/09/2026 :** le binaire Muse 1.3.0 répond au handshake attendu et renvoie des erreurs JSON-RPC structurées pour une méthode inconnue et une interruption sans paramètres sur chacun des deux hosts du smoke. Cette preuve ne couvre pas encore la matrice de versions ni les erreurs produites pendant un tour modèle.
+**Pré-vol natif au 17/09/2026 :** le binaire Muse 1.3.0 répond au handshake attendu et renvoie des erreurs JSON-RPC structurées pour une méthode inconnue et une interruption sans paramètres sur chacun des deux hosts du smoke. Le contrôle combiné ajoute deux interruptions corrélées, six tentatives de posture avec le plafond `approval_mode_ceiling` observé et l'arrêt isolé de B pendant qu'A continue de répondre. Cette preuve ne couvre pas encore la matrice de versions ni les erreurs produites pendant un tour modèle.
 
 ### M0-09 — Persistance
 
