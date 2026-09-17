@@ -415,6 +415,14 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 - **Limites :** les outils découverts ne sont pas encore injectés dans le catalogue MSP de Muse. Cette tranche prouve le transport local, l'appel contrôlé, la durée de vie explicite, la récupération manuelle et le hot-reload borné, pas la parité MCP complète.
 - **Validation :** tests Rust de framing, corrélation des réponses persistantes et parsing des outils, tests Node existants, TypeScript, Vite et Cargo verts.
 
+### Livraison M3-01 — injection opt-in dans les conversations Muse
+
+- **Choix utilisateur explicite :** chaque connecteur local installé et vérifié expose **Use in Muse** dans Extensions. Le choix est conservé dans le registre des connecteurs et reste indépendant du toggle de disponibilité du connecteur.
+- **Injection SSOT :** à la création d'une conversation, à la reprise à froid et à la création d'un worktree, le hook reconstruit la configuration depuis le registre courant et transmet `config.mcpServers` à `session/start` ou `session/resume`. Une session déjà connectée n'est pas reconfigurée implicitement.
+- **Contrat natif borné :** seuls les serveurs `stdio` explicitement activés sont injectés pour cette passe. La commande est tokenisée sans expansion shell, les doublons sont supprimés et les limites de serveurs, arguments, variables et longueur sont contrôlées côté TypeScript puis côté Tauri. Le mode `optional` évite qu'un connecteur indisponible bloque l'ouverture de la conversation.
+- **Limites :** l'injection distante, le stockage sécurisé des identifiants, la qualification des résultats natifs et la gestion d'un changement de configuration pendant une session restent ouverts ; les connecteurs locaux restent inspectables et appelables depuis Extensions.
+- **Validation :** tests Node dédiés au tokenizer et au filtrage opt-in, tests Rust dédiés au contrat `mcpServers`, TypeScript, Vite et Cargo verts.
+
 ### Livraison M3-03 — cycle de vie d'un connecteur MCP local
 
 - **Enregistrement vérifié :** après un probe `tools/list` réussi, l'utilisateur peut enregistrer le nom, la commande et les outils réellement découverts dans le registre local persistant.
@@ -447,7 +455,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
-| M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; processus persistant par connecteur, Start/Stop, rafraîchissement manuel et hot-reload `list_changed` livrés ; reste l'injection dans le host Muse |
+| M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; processus persistant par connecteur, Start/Stop, rafraîchissement manuel, hot-reload `list_changed` et injection opt-in `config.mcpServers` sur start/resume/worktree livrés ; restent injection distante, secrets natifs et reconfiguration d'une session déjà connectée |
 | M3-02 | Connecter un serveur MCP distant | Adapté | Présente | Partielle | Unitaire | Transport streamable HTTP/SSE, bearer token en mémoire, session, reconnexion explicite et renouvellement automatique d'une session expirée livrés ; restent OAuth/secret-store natif et qualification réseau multiplateforme |
 | M3-03 | Installer/désactiver une extension réellement utilisable | Adapté | Présente | Partielle | Intégration | Enregistrement post-probe, runtime persistant explicite, hot-list, hot-reload et rollback d'une révision du registre livrés ; restent package/update/source et injection dans le moteur |
 | M3-04 | Découvrir les skills du disque et du projet | Adapté | Présente | Partielle | Intégration | Scanner borné `SKILL.md`, ressources relatives, priorité projet/repo/équipe et rechargement explicite livrés ; le catalogue hôte est désormais séparé et rafraîchi par session |
@@ -457,7 +465,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | M3-08 | Examiner les résultats des runs | Adapté | Présente | Partielle | Intégration | Historique borné, aperçu, statut, non-lu, lien vers la conversation, archivage, filtres, retry manuel et inspecteur de contexte livrés ; résumé métier riche et fin de run native restent ouverts |
 | M3-09 | Recevoir une notification utile | Adapté | Présente | Partielle | Intégration | Inbox locale dédupliquée pour fins/échecs, non-lus, ouverture de conversation, silence persistant et retour au premier plan au clic livrés ; les actions OS/Tauri et le fallback web routent maintenant vers la conversation ciblée ; restent le service persistant application fermée et la qualification native |
 
-Preuves : [connecteurs](../src/lib/connectors.ts), [skills locaux](../src/lib/skills.ts), [skills hôte](../src/lib/hostSkills.ts), [planning](../src/lib/schedules.ts), [journal des runs](../src/lib/scheduleRuns.ts), [file actuelle](../src/components/ReviewQueuePanel.tsx).
+Preuves : [connecteurs](../src/lib/connectors.ts), [configuration MCP hôte](../src/lib/hostMcp.ts), [skills locaux](../src/lib/skills.ts), [skills hôte](../src/lib/hostSkills.ts), [planning](../src/lib/schedules.ts), [journal des runs](../src/lib/scheduleRuns.ts), [file actuelle](../src/components/ReviewQueuePanel.tsx).
 
 **Dépendances :** M0-06/08 avant MCP ; M2-01 et M0-02/09 avant M3-06 ; M2-03 si run isolé ; M3-06/07 avant inbox. **Sortie M3 :** un run programmé utilise un vrai outil/skill, s'exécute selon la politique et produit un résultat consultable. Pour les runs locaux, app et ordinateur allumés restent une contrainte explicitée.
 
