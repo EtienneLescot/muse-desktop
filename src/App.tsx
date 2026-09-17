@@ -33,6 +33,7 @@ import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnosti
 import { userFacingError } from "./lib/errorCopy";
 import { isTauriRuntime } from "./lib/env";
 import type { Artifact, ArtifactVersion } from "./lib/artifacts";
+import { parseWorkspaceRootObservation } from "./lib/projects";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -875,6 +876,15 @@ export default function App() {
                   onSetGlobal={setGlobalSettings}
                   onSetOverride={setProjectOverride}
                   settingsFor={settingsFor}
+                  onCheckWorkspace={async (path) => {
+                    if (!isTauriRuntime()) return null;
+                    try {
+                      const raw = await invoke<unknown>("inspect_workspace_root", { path });
+                      return parseWorkspaceRootObservation(raw);
+                    } catch {
+                      return null;
+                    }
+                  }}
                   hideGlobalSettings
                 />
               </>

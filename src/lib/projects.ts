@@ -51,6 +51,36 @@ export const PROJECT_LIMIT_MESSAGE =
 /** Thread→project attachment map (session id → project id). */
 export type ThreadProjectMap = Record<string, string>;
 
+/** Native observation of a configured project folder. */
+export interface WorkspaceRootObservation {
+  path: string;
+  exists: boolean;
+  isDirectory: boolean;
+  canonicalPath: string | null;
+  reason: string;
+}
+
+/** Parse the additive native folder-health response without trusting its shape. */
+export function parseWorkspaceRootObservation(raw: unknown): WorkspaceRootObservation | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const value = raw as Record<string, unknown>;
+  if (
+    typeof value.path !== "string" ||
+    typeof value.exists !== "boolean" ||
+    typeof value.is_directory !== "boolean" ||
+    typeof value.reason !== "string"
+  ) {
+    return null;
+  }
+  return {
+    path: value.path,
+    exists: value.exists,
+    isDirectory: value.is_directory,
+    canonicalPath: typeof value.canonical_path === "string" ? value.canonical_path : null,
+    reason: value.reason,
+  };
+}
+
 export interface CreateResult {
   projects: Project[];
   project: Project | null;

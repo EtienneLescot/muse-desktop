@@ -8,6 +8,7 @@ import {
   type Project,
   type ProjectSettings,
   type ThreadProjectMap,
+  type WorkspaceRootObservation,
 } from "../lib/projects";
 import { userFacingError } from "../lib/errorCopy";
 
@@ -32,6 +33,7 @@ interface ProjectsPanelProps {
     value: ProjectSettings[keyof ProjectSettings] | undefined,
   ) => void;
   settingsFor: (projectId: string | null) => ProjectSettings;
+  onCheckWorkspace: (path: string) => Promise<WorkspaceRootObservation | null>;
   /**
    * Hide the global-defaults editor: global settings live in the Settings
    * panel (sidebar footer). Per-project overrides stay — they are
@@ -74,6 +76,7 @@ export function ProjectsPanel({
   onSetGlobal,
   onSetOverride,
   settingsFor,
+  onCheckWorkspace,
   hideGlobalSettings = false,
 }: ProjectsPanelProps) {
   const [name, setName] = useState("");
@@ -82,6 +85,8 @@ export function ProjectsPanel({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [migrationBusy, setMigrationBusy] = useState(false);
   const [migrationError, setMigrationError] = useState<string | null>(null);
+  const [workspaceChecks, setWorkspaceChecks] = useState<Record<string, WorkspaceRootObservation>>({});
+  const [checkingWorkspaceId, setCheckingWorkspaceId] = useState<string | null>(null);
   const projectsWithoutRoots = projectsNeedingWorkspace(projects);
 
   async function pickWorkspace(): Promise<void> {
@@ -116,6 +121,20 @@ export function ProjectsPanel({
       setMigrationError(userFacingError(`folder migration failed: ${String(error)}`));
     } finally {
       setMigrationBusy(false);
+    }
+  }
+
+  async function checkProjectWorkspace(project: Project): Promise<void> {
+    const path = project.workspace?.trim();
+    if (!path || checkingWorkspaceId !== null) return;
+    setCheckingWorkspaceId(project.id);
+    try {
+      const observation = await onCheckWorkspace(path);
+      if (observation !== null) {
+        setWorkspaceChecks((current) => ({ ...current, [project.id]: observation }));
+      }
+    } finally {
+      setCheckingWorkspaceId(null);
     }
   }
 
@@ -228,6 +247,9 @@ export function ProjectsPanel({
               if (activeSessionId !== null) onAttach(activeSessionId, null);
             }}
             onSetOverride={(key, value) => onSetOverride(p.id, key, value)}
+            workspaceObservation={workspaceChecks[p.id]}
+            checkingWorkspace={checkingWorkspaceId === p.id}
+            onCheckWorkspace={() => void checkProjectWorkspace(p)}
           />
         ))}
       </ul>
@@ -309,6 +331,9 @@ interface ProjectRowProps {
     key: keyof ProjectSettings,
     value: ProjectSettings[keyof ProjectSettings] | undefined,
   ) => void;
+  workspaceObservation?: WorkspaceRootObservation;
+  checkingWorkspace: boolean;
+  onCheckWorkspace: () => void;
 }
 
 function ProjectRow({
@@ -324,6 +349,9 @@ function ProjectRow({
   onAttachActive,
   onDetachActive,
   onSetOverride,
+  workspaceObservation,
+  checkingWorkspace,
+  onCheckWorkspace,
 }: ProjectRowProps) {
   const [draftName, setDraftName] = useState(project.name);
   const [draftInstructions, setDraftInstructions] = useState(
@@ -396,6 +424,24 @@ function ProjectRow({
               <button type="button" onClick={() => setDraftWorkspace("")}>
                 Clear
               </button>
+            )}
+            {project.workspace?.trim() && (
+              <button type="button" onClick={onCheckWorkspace} disabled={checkingWorkspace}>
+                {checkingWorkspace ? "Checking…" : "Check folder"}
+              </button>
+            )}
+            {workspaceObservation && (
+              <span
+                className={`workspace-health workspace-health-${workspaceObservation.exists && workspaceObservation.isDirectory ? "ready" : "missing"}`}
+                role="status"
+                title={workspaceObservation.reason}
+              >
+                {workspaceObservation.exists
+                  ? workspaceObservation.isDirectory
+                    ? "Available"
+                    : "Not a folder"
+                  : "Missing"}
+              </span>
             )}
           </div>
           <div className="project-actions">
