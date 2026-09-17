@@ -14,6 +14,8 @@
  * The explicit `--exercise-approval` path records the host's startup posture
  * and attempts each supported mode, accepting either an effective projection
  * or the host's explicit ceiling rejection.
+ * The explicit `--exercise-isolation` path kills host B after setup and
+ * verifies that host A still answers a read-only request.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
@@ -21,6 +23,7 @@
  *   node scripts/native-smoke.mjs --exercise-control
  *   node scripts/native-smoke.mjs --exercise-errors
  *   node scripts/native-smoke.mjs --exercise-approval
+ *   node scripts/native-smoke.mjs --exercise-isolation
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -55,6 +58,10 @@ function exercisesErrorPath() {
 
 function exercisesApprovalPath() {
   return process.argv.includes("--exercise-approval");
+}
+
+function exercisesIsolationPath() {
+  return process.argv.includes("--exercise-isolation");
 }
 
 function fail(message) {
@@ -198,6 +205,7 @@ async function main() {
   const exerciseControl = exercisesControlPath();
   const exerciseErrors = exercisesErrorPath();
   const exerciseApproval = exercisesApprovalPath();
+  const exerciseIsolation = exercisesIsolationPath();
   const roots = await Promise.all([
     mkdtemp(join(tmpdir(), "muse-native-smoke-a-")),
     mkdtemp(join(tmpdir(), "muse-native-smoke-b-")),
@@ -211,6 +219,7 @@ async function main() {
     const controls = [];
     const errors = [];
     const approvalModes = [];
+    let isolation = null;
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
         clientInfo: { name: "muse_desktop_native_smoke", version: "0.1.0" },
@@ -318,6 +327,20 @@ async function main() {
         controls.push({ host: String.fromCharCode(65 + index), turnId: turnIds[index], status: "interrupted" });
       });
     }
+    if (exerciseIsolation) {
+      // Kill only B after both hosts have completed their setup. A must keep
+      // its own process, session identity and read-only catalogue alive.
+      await hosts[1].close();
+      const catalogue = await hosts[0].request("model/list");
+      if (catalogue === null || typeof catalogue !== "object") {
+        fail("host-A stopped answering after host-B exited");
+      }
+      isolation = {
+        failedHost: "B",
+        survivingHost: "A",
+        survivingModelCatalogue: "available",
+      };
+    }
     process.stdout.write(`${JSON.stringify({
       schema: "muse-desktop.native-smoke.v1",
       hosts: sessions.map((sessionId, index) => ({
@@ -331,6 +354,7 @@ async function main() {
       ...(exerciseControl ? { controls } : {}),
       ...(exerciseErrors ? { errorsChecked: errors.length, errors } : {}),
       ...(exerciseApproval ? { approvalModes } : {}),
+      ...(exerciseIsolation ? { isolation } : {}),
     })}\n`);
   } finally {
     await Promise.all(hosts.map((host) => host.close()));

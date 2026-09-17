@@ -55,7 +55,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** `hosts.rs`, `msp.rs`, `main.rs`, hook de sessions. Réutiliser le registre ajouté en PR #13.
 
-**Travail :** ajouter un scénario Tauri avec deux dossiers temporaires, deux sessions et flux entrelacés. Interrompre/faire mourir B pendant que A travaille ; vérifier routes send/model/approval/input/subagent, sessions supprimées et événements tardifs d'une ancienne génération. Traiter aussi fermeture du canal stdout sans événement Terminated et échec pendant initialize. Le contrôle opt-in `npm run smoke:native` couvre désormais le pré-vol réel Windows (deux `muse serve`, handshake, sessions et `model/list`) avec nettoyage et sortie JSON bornée ; il ne remplace pas le scénario Tauri complet.
+**Travail :** ajouter un scénario Tauri avec deux dossiers temporaires, deux sessions et flux entrelacés. Interrompre/faire mourir B pendant que A travaille ; vérifier routes send/model/approval/input/subagent, sessions supprimées et événements tardifs d'une ancienne génération. Traiter aussi fermeture du canal stdout sans événement Terminated et échec pendant initialize. Le contrôle opt-in `npm run smoke:native` couvre désormais le pré-vol réel Windows (deux `muse serve`, handshake, sessions et `model/list`) avec nettoyage et sortie JSON bornée ; `--exercise-isolation` tue B et vérifie qu'une requête read-only sur A reste servie. Il ne remplace pas le scénario Tauri complet.
 
 **Acceptation :** A conserve son identité, ses requêtes et son flux ; B seul devient déconnecté ; aucun processus/consommateur ne reste après fermeture. Dépendance : harnais M0-14. Ne pas clore avec le seul smoke « deux model/list ».
 
