@@ -259,24 +259,45 @@ export function BrowserPanel({
         return;
       }
       setDownloadStatus("Fetching the selected link…");
-      const response = await fetch(target.toString(), { credentials: "omit", redirect: "error" });
-      if (!response.ok) throw new Error(`server returned ${response.status}`);
-      const declaredLength = Number(response.headers.get("content-length") ?? "");
-      if (Number.isFinite(declaredLength) && declaredLength > MAX_BROWSER_DOWNLOAD_BYTES) {
-        throw new Error("the selected file exceeds the 10 MB download limit");
-      }
-      const bytes = await response.arrayBuffer();
-      if (bytes.byteLength < 1 || bytes.byteLength > MAX_BROWSER_DOWNLOAD_BYTES) {
-        throw new Error("the selected file exceeds the 10 MB download limit");
-      }
-      const filename = browserDownloadFilename(target.toString(), elementAnchor?.downloadName);
+      let encoded: string;
+      let contentType = "application/octet-stream";
+      let bytes: ArrayBuffer | null = null;
       if (isTauriRuntime()) {
+        // The native runtime avoids webview CORS while keeping the same
+        // explicit same-origin, no-credentials and 10 MiB policy in Rust.
+        const { invoke } = await import("@tauri-apps/api/core");
+        const payload = await invoke<{ data?: unknown; contentType?: unknown }>(
+          "browser_download_fetch",
+          { pageUrl: page.toString(), targetUrl: target.toString() },
+        );
+        if (typeof payload?.data !== "string" || payload.data.length === 0) {
+          throw new Error("native browser returned an invalid download payload");
+        }
+        encoded = payload.data;
+        if (typeof payload.contentType === "string" && payload.contentType.trim().length > 0) {
+          contentType = payload.contentType.split(";", 1)[0] || contentType;
+        }
+      } else {
+        const response = await fetch(target.toString(), { credentials: "omit", redirect: "error" });
+        if (!response.ok) throw new Error(`server returned ${response.status}`);
+        const declaredLength = Number(response.headers.get("content-length") ?? "");
+        if (Number.isFinite(declaredLength) && declaredLength > MAX_BROWSER_DOWNLOAD_BYTES) {
+          throw new Error("the selected file exceeds the 10 MB download limit");
+        }
+        bytes = await response.arrayBuffer();
+        if (bytes.byteLength < 1 || bytes.byteLength > MAX_BROWSER_DOWNLOAD_BYTES) {
+          throw new Error("the selected file exceeds the 10 MB download limit");
+        }
+        contentType = response.headers.get("content-type")?.split(";", 1)[0] || contentType;
         const binary = new Uint8Array(bytes);
         let text = "";
         for (let offset = 0; offset < binary.length; offset += 0x8000) {
           text += String.fromCharCode(...binary.subarray(offset, offset + 0x8000));
         }
-        const encoded = btoa(text);
+        encoded = btoa(text);
+      }
+      const filename = browserDownloadFilename(target.toString(), elementAnchor?.downloadName);
+      if (isTauriRuntime()) {
         const [{ save }, { invoke }] = await Promise.all([
           import("@tauri-apps/plugin-dialog"),
           import("@tauri-apps/api/core"),
@@ -291,9 +312,8 @@ export function BrowserPanel({
         }
         await invoke("browser_download_write", { path, data: encoded });
       } else {
-        const objectUrl = URL.createObjectURL(new Blob([bytes], {
-          type: response.headers.get("content-type")?.split(";", 1)[0] || "application/octet-stream",
-        }));
+        if (bytes === null) throw new Error("browser returned no download bytes");
+        const objectUrl = URL.createObjectURL(new Blob([bytes], { type: contentType }));
         const anchor = document.createElement("a");
         anchor.href = objectUrl;
         anchor.download = filename;
