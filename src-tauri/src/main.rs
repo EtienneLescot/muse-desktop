@@ -1220,6 +1220,15 @@ where
             let turn_id = item
                 .and_then(|i| i.get("turnId"))
                 .or_else(|| p.get("turnId"));
+            // MSP `item/updated` is a non-terminal replacement while the
+            // item status remains `inProgress`. Only a completed notification
+            // or an explicitly terminal status may close the UI lane.
+            let item_terminal = method == "item/completed"
+                || item
+                    .and_then(|i| i.get("status"))
+                    .and_then(Value::as_str)
+                    .map(|status| status != "inProgress")
+                    .unwrap_or(false);
             let kind = item
                 .and_then(|i| i.get("kind"))
                 .and_then(Value::as_str)
@@ -1246,7 +1255,8 @@ where
                         .lock()
                         .map(|seen| seen.contains(&(sid.to_string(), item_id.to_string())))
                         .unwrap_or(true);
-                    if !delta_seen && !already_emitted {
+                    let fallback_text = item.and_then(|i| completed_item_text(i, kind));
+                    if !delta_seen && !already_emitted && item_terminal {
                         // If the start event was lost, recreate the reflexive
                         // block before appending the completed text. The
                         // renderer de-duplicates this by itemId.
@@ -1262,8 +1272,6 @@ where
                             })
                             .to_string(),
                         );
-                        let fallback_text = item.and_then(|i| completed_item_text(i, kind));
-                        let has_fallback_text = fallback_text.is_some();
                         if let Some(text) = fallback_text {
                             let lane = if is_thinking_item_kind(kind) {
                                 "thinking"
@@ -1279,24 +1287,24 @@ where
                                 json!({"itemId": item_id, "text": text}).to_string(),
                             );
                         }
-                        // A metadata-only update may precede the terminal
-                        // item carrying output. Keep it eligible for that
-                        // later completed event; once text was emitted, both
+                        // A metadata-only, non-terminal update never emits a
+                        // lane. It remains eligible for the later terminal
+                        // item carrying output; once text was emitted, both
                         // update and completed notifications are idempotent.
-                        if has_fallback_text || method == "item/completed" {
-                            if let Ok(mut emitted) = state.item_fallback_emitted.lock() {
-                                emitted.insert((sid.to_string(), item_id.to_string()));
-                            }
+                        if let Ok(mut emitted) = state.item_fallback_emitted.lock() {
+                            emitted.insert((sid.to_string(), item_id.to_string()));
                         }
                     }
                 }
             }
-            emit_fn(
-                "status",
-                sid,
-                "item_done",
-                json!({"itemId": item_id, "turnId": turn_id}).to_string(),
-            );
+            if item_terminal {
+                emit_fn(
+                    "status",
+                    sid,
+                    "item_done",
+                    json!({"itemId": item_id, "turnId": turn_id}).to_string(),
+                );
+            }
         }
         "approval/requested" | "approval/updated" => {
             let approval_id = match p.get("approvalId").and_then(Value::as_str) {
@@ -4645,6 +4653,50 @@ mod tests {
         let thinking_payload: Value = serde_json::from_str(&thinking.3).unwrap();
         assert_eq!(thinking_payload["text"], "inspect\n\nrespond");
         assert!(events.iter().all(|(_, _, kind, _)| kind != "output"));
+    }
+
+    #[test]
+    fn non_terminal_item_update_does_not_close_a_live_lane() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        route_notification_with_emit(
+            &state,
+            "item/started",
+            &json!({
+                "sessionId": "session-a",
+                "item": {"itemId": "shell-live", "kind": "userShell", "commandText": "long task"}
+            }),
+            &mut |event: &str, sid: &str, kind: &str, payload: String| {
+                events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+            },
+        );
+        let before = events.len();
+        route_notification_with_emit(
+            &state,
+            "item/updated",
+            &json!({
+                "sessionId": "session-a",
+                "item": {
+                    "itemId": "shell-live",
+                    "kind": "userShell",
+                    "status": "inProgress",
+                    "visibleOutput": "still running"
+                }
+            }),
+            &mut |event: &str, sid: &str, kind: &str, payload: String| {
+                events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+            },
+        );
+        assert_eq!(
+            events[before..].iter().filter(|(_, _, kind, _)| kind == "item_done").count(),
+            0,
+            "an in-progress item update must leave the lane open",
+        );
+        assert_eq!(
+            events[before..].iter().filter(|(_, _, kind, _)| kind == "shell_output").count(),
+            0,
+            "metadata-only updates must not replay a full output as a delta",
+        );
     }
 
     #[test]
