@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   isApprovalDecisionAccepted,
+  isSelectedApprovalAccepted,
   parseApprovalResolution,
 } from "../src/lib/approvalResolution.ts";
 
@@ -34,5 +35,27 @@ describe("approval resolution payloads", () => {
       accepted: false,
     });
     assert.equal(parseApprovalResolution('{"approvalId":"a1"}').accepted, false);
+  });
+
+  it("classifies the clicked choice in the current session only", () => {
+    const approvals = [
+      {
+        session_id: "session-a",
+        request_id: "request-1",
+        choices: [
+          { choiceId: "deny", decision: "rejected" },
+          { choiceId: "allow", decision: "allow once" },
+        ],
+      },
+      {
+        session_id: "session-b",
+        request_id: "request-1",
+        choices: [{ choiceId: "allow", decision: "allow once" }],
+      },
+    ];
+    assert.equal(isSelectedApprovalAccepted(approvals, "session-a", "request-1", "deny"), false);
+    assert.equal(isSelectedApprovalAccepted(approvals, "session-a", "request-1", "allow"), true);
+    assert.equal(isSelectedApprovalAccepted(approvals, "session-b", "request-1", "allow"), true);
+    assert.equal(isSelectedApprovalAccepted(approvals, "session-a", "missing", "allow"), true);
   });
 });

@@ -12,6 +12,13 @@ export interface ApprovalResolution {
   accepted: boolean;
 }
 
+/** Minimal approval shape needed to classify the choice currently selected. */
+export interface ApprovalDecisionRequest {
+  session_id: string;
+  request_id: string;
+  choices: readonly { choiceId: string; decision: unknown }[];
+}
+
 const ACCEPTED_DECISIONS = new Set([
   "allow",
   "allowed",
@@ -36,6 +43,25 @@ function normalizeDecision(value: unknown): string | null {
 export function isApprovalDecisionAccepted(value: unknown): boolean {
   const decision = normalizeDecision(value);
   return decision !== null && ACCEPTED_DECISIONS.has(decision);
+}
+
+/**
+ * Resolve a click against the session-scoped approval snapshot. An unknown
+ * request/choice keeps the legacy optimistic path; a known choice is always
+ * classified from its current decision so a rejection cannot paint a resume
+ * state. Keeping this lookup pure makes the identity boundary testable.
+ */
+export function isSelectedApprovalAccepted(
+  approvals: readonly ApprovalDecisionRequest[],
+  sessionId: string,
+  approvalId: string,
+  choiceId: string,
+): boolean {
+  const approval = approvals.find(
+    (candidate) => candidate.session_id === sessionId && candidate.request_id === approvalId,
+  );
+  const choice = approval?.choices.find((candidate) => candidate.choiceId === choiceId);
+  return choice === undefined ? true : isApprovalDecisionAccepted(choice.decision);
 }
 
 /** Parse a host approval status without exposing its raw payload to the UI. */

@@ -315,7 +315,7 @@ import {
   type AuthorizationMode,
 } from "../lib/authorization";
 import {
-  isApprovalDecisionAccepted,
+  isSelectedApprovalAccepted,
   parseApprovalResolution,
 } from "../lib/approvalResolution";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
@@ -4428,12 +4428,12 @@ export function useMuseSessions(): UseMuseSessions {
         // should resume the turn. A reject/deny choice must not paint a
         // misleading "resuming" bridge; the authoritative resolution event
         // still settles the approval and any terminal turn state.
-        const selectedChoice = approvals
-          .find((approval) => approval.session_id === sessionId && approval.request_id === approvalId)
-          ?.choices.find((choice) => choice.choiceId === choiceId);
-        const acceptedChoice = selectedChoice === undefined
-          ? true
-          : isApprovalDecisionAccepted(selectedChoice.decision);
+        const acceptedChoice = isSelectedApprovalAccepted(
+          approvals,
+          sessionId,
+          approvalId,
+          choiceId,
+        );
         const terminal = await invoke<boolean>("approve", {
           sessionId,
           approvalId,
@@ -4464,7 +4464,7 @@ export function useMuseSessions(): UseMuseSessions {
         return false;
       }
     },
-    [kickPoll, touchStreamActivity],
+    [approvals, kickPoll, touchStreamActivity],
   );
 
   // Balanced mode removes repetitive prompts for local workspace actions;
