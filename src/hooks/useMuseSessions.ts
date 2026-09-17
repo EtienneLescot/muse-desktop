@@ -156,6 +156,7 @@ import {
   type EngineErrorDetails,
 } from "../lib/engineError";
 import { statusLogText } from "../lib/statusLog";
+import { parseRetryScheduled, type RetryScheduled } from "../lib/streamHealth";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
 // endpoint exists); children surface as `subagent` entries as usual.
 import {
@@ -751,6 +752,9 @@ interface UseMuseSessions {
   /** M0-02/M0-05: explicit bridge state after a permission or input decision. */
   resumePendingBySession: Record<string, ResumePending>;
   activeResumePending: ResumePending | null;
+  /** Host-provided retry backoff, kept live beside the conversation stream. */
+  retryScheduledBySession: Record<string, RetryScheduled>;
+  activeRetryScheduled: RetryScheduled | null;
   /** M0-04: cancellation accepted by the host, awaiting terminal status. */
   stoppingBySession: Record<string, boolean>;
   /** M0-02: connection lifecycle, separate from turn execution state. */
@@ -1424,6 +1428,9 @@ export function useMuseSessions(): UseMuseSessions {
   >({});
   const [resumePendingBySession, setResumePendingBySession] = useState<
     Record<string, ResumePending>
+  >({});
+  const [retryScheduledBySession, setRetryScheduledBySession] = useState<
+    Record<string, RetryScheduled>
   >({});
   // A cancel request is not the same thing as a confirmed stopped status.
   // Keep this renderer-only state separate from the persisted session row so
@@ -2640,6 +2647,15 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }
 
+  function clearRetryScheduled(sessionId: string): void {
+    setRetryScheduledBySession((cur) => {
+      if (!(sessionId in cur)) return cur;
+      const next = { ...cur };
+      delete next[sessionId];
+      return next;
+    });
+  }
+
   /** M3-08: settle an admitted scheduled turn when the host actually stops. */
   function settleScheduleRunsForSession(
     sessionId: string,
@@ -2791,6 +2807,7 @@ export function useMuseSessions(): UseMuseSessions {
       kind === "host_exited"
     ) {
       clearResumePending(sid);
+      clearRetryScheduled(sid);
     }
     if (kind !== "host_exited") setConnectionState(sid, "connected");
     if (
@@ -2823,6 +2840,7 @@ export function useMuseSessions(): UseMuseSessions {
         return next;
       });
       clearStopping(sid);
+      clearRetryScheduled(sid);
     }
     if (kind === "output") {
       ensureSessionRow(sid, null);
@@ -3088,6 +3106,27 @@ export function useMuseSessions(): UseMuseSessions {
       // w-collab US-27: a turn end (item_done without item id) refreshes
       // the auto snapshot; per-item completions never do (no spam).
       if (itemId === undefined) refreshAutoShare(sid);
+      return;
+    }
+    // Hosts with a retry policy can explain the backoff directly. Keep this
+    // in the live stream state so the transcript stays quiet and the user
+    // can see the attempt/countdown instead of an indefinite thinking lane.
+    if (kind === "turn/retryScheduled") {
+      ensureSessionRow(sid, null);
+      const retry = parseRetryScheduled(payload);
+      if (retry === null) {
+        // Older/incomplete hosts still get the generic bounded status copy.
+        const text = statusLogText(kind, payload);
+        if (text !== null) pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text }]);
+        return;
+      }
+      clearResumePending(sid);
+      clearStopping(sid);
+      setRetryScheduledBySession((cur) => ({ ...cur, [sid]: retry }));
+      setSessions((cur) => cur.map((session) =>
+        session.session_id === sid ? { ...session, running: true } : session,
+      ));
+      ensurePlaceholder(sid, undefined, undefined, "thinking", retry.turnId);
       return;
     }
     if (kind === "tool_request") {
@@ -5234,6 +5273,12 @@ export function useMuseSessions(): UseMuseSessions {
         delete next[sessionId];
         return next;
       });
+      setRetryScheduledBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       setConnectedIds((cur) => cur.filter((id) => id !== sessionId));
       setSessions((cur) => cur.filter((s) => s.session_id !== sessionId));
       setLogs((cur) => {
@@ -7002,6 +7047,9 @@ export function useMuseSessions(): UseMuseSessions {
   const activeResumePending = activeId === null
     ? null
     : (resumePendingBySession[activeId] ?? null);
+  const activeRetryScheduled = activeId === null
+    ? null
+    : (retryScheduledBySession[activeId] ?? null);
   const activeConnectionState = activeId === null
     ? "disconnected"
     : (connectionBySession[activeId] ?? "disconnected");
@@ -7017,6 +7065,8 @@ export function useMuseSessions(): UseMuseSessions {
     activeStreamActivity,
     resumePendingBySession,
     activeResumePending,
+    retryScheduledBySession,
+    activeRetryScheduled,
     stoppingBySession,
     connectionBySession,
     activeConnectionState,

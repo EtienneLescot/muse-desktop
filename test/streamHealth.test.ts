@@ -4,6 +4,7 @@ import {
   STREAM_STALE_AFTER_MS,
   classifyStreamHealth,
   formatElapsed,
+  parseRetryScheduled,
   streamEventLabel,
   streamHealthLabel,
 } from "../src/lib/streamHealth.ts";
@@ -47,6 +48,26 @@ describe("stream health", () => {
     assert.equal(classifyStreamHealth({ ...base, running: false }), "idle");
   });
 
+  it("keeps a host retry visible through its backoff", () => {
+    const retry = {
+      delayMs: 5_000,
+      attempt: 2,
+      maxAttempts: 3,
+      reason: "temporary capacity",
+      scheduledAt: base.now,
+    };
+    assert.equal(classifyStreamHealth({ ...base, retryScheduled: retry }), "retrying");
+    assert.equal(
+      classifyStreamHealth({
+        ...base,
+        retryScheduled: retry,
+        now: base.now + retry.delayMs + STREAM_STALE_AFTER_MS,
+      }),
+      "stalled",
+    );
+    assert.equal(streamHealthLabel("retrying"), "Muse is retrying");
+  });
+
   it("exposes the short bridge state after an accepted decision", () => {
     assert.equal(
       classifyStreamHealth({ ...base, resumePendingAt: base.now }),
@@ -80,5 +101,21 @@ describe("stream health", () => {
     assert.equal(streamEventLabel("history/reconciled"), "conversation synchronized");
     assert.equal(streamEventLabel("future/new_event"), "future new event");
     assert.equal(streamEventLabel(""), null);
+  });
+
+  it("parses bounded retry metadata and rejects unstructured payloads", () => {
+    assert.deepEqual(parseRetryScheduled(
+      JSON.stringify({ delayMs: 2_500, attempt: 2, maxAttempts: 4, reason: "busy", turnId: "turn-1" }),
+      123,
+    ), {
+      delayMs: 2_500,
+      attempt: 2,
+      maxAttempts: 4,
+      reason: "busy",
+      turnId: "turn-1",
+      scheduledAt: 123,
+    });
+    assert.equal(parseRetryScheduled(JSON.stringify({ delayMs: "later" }), 123), null);
+    assert.equal(parseRetryScheduled("not-json", 123), null);
   });
 });

@@ -86,6 +86,7 @@ export default function App() {
     activeApprovals,
     activeStreamActivity,
     activeResumePending,
+    activeRetryScheduled,
     stoppingBySession,
     activeConnectionState,
     queuedTurns,
@@ -1187,6 +1188,7 @@ export default function App() {
                     lastEventAt={activeStreamActivity?.lastEventAt ?? null}
                     lastEventKind={activeStreamActivity?.lastEventKind ?? null}
                     resumePendingAt={activeResumePending?.requestedAt ?? null}
+                    retryScheduled={activeRetryScheduled}
                     pendingApprovals={activeApprovals.length}
                     pendingInputs={activeInputRequests.length}
                     reconnecting={reconnectingId === active.session_id}
