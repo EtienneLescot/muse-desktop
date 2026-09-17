@@ -470,6 +470,20 @@ async fn open_native_browser(app: AppHandle, url: String) -> Result<String, Stri
     Ok("opened".to_string())
 }
 
+/// Close the dedicated native browser window when it exists. The command is
+/// idempotent so a user closing the window manually and then pressing the
+/// panel action does not surface a protocol error.
+#[tauri::command]
+fn close_native_browser(app: AppHandle) -> Result<bool, String> {
+    let Some(window) = app.get_webview_window(NATIVE_BROWSER_LABEL) else {
+        return Ok(false);
+    };
+    window
+        .close()
+        .map_err(|error| format!("could not close native browser: {error}"))?;
+    Ok(true)
+}
+
 /// Reasoning items are streamed through the same `item/delta` notification as
 /// assistant messages. Keep the aliases in one place so the frontend can
 /// render a dedicated, collapsible thinking lane as hosts evolve.
@@ -6118,6 +6132,7 @@ fn main() {
             notifications_read,
             notifications_write,
             open_native_browser,
+            close_native_browser,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build muse-desktop app")
