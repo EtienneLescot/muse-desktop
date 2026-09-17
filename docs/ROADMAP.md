@@ -133,7 +133,7 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 - **M0-14d — smoke natif Windows livré** : `scripts/native-smoke.mjs` est un contrôle opt-in séparé de la CI. Il exige le sidecar local, conserve un timeout de 15 secondes par requête, ne lit aucun credential et n'envoie aucun prompt modèle par défaut ; `npm run smoke:native` fournit une preuve JSON des deux hôtes, des sessions distinctes et du catalogue modèle. Le mode `--exercise-control` est séparé et admet/interrompt un tour synthétique pour vérifier le contrôle natif sans attendre une réponse modèle. Le mode `--exercise-errors` envoie deux opérations invalides sans toucher au workspace et vérifie les catégories JSON-RPC `methodNotFound`/`invalidParams` sur A et B, sans imprimer la trame brute. Le mode `--exercise-approval` mesure la posture de démarrage et les refus de plafond du host pour les trois modes produit. Le scénario Tauri complet reste hors de ce contrôle.
 - **M0-14e — rapports d'échec livrés** : les jobs frontend et Rust conservent, uniquement en cas d'échec, les 250/300 dernières lignes de leurs commandes dans un artefact GitHub à rétention de 7 jours. Les chemins de runner et les formes de secrets courantes sont masqués ; aucun workspace, credential ou transcript utilisateur n'est ajouté.
 - **M0-14f — limite restante** : le scénario natif A/B complet et la panne d'envoi avec l'interface Tauri restent à ajouter avant de déclarer M0-14 complet.
-- **Validation** : `npm test` (550 tests Node, dont cinq tests fixture), build frontend et 101 tests Rust du superviseur verts. La fixture s'exécute aussi dans le job Node de la CI depuis un clone propre.
+- **Validation** : `npm test` (551 tests Node, dont cinq tests fixture), build frontend et 101 tests Rust du superviseur verts. La fixture s'exécute aussi dans le job Node de la CI depuis un clone propre.
 
 ### Livraison M0-06 — posture d'autorisation globale
 
@@ -146,7 +146,7 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 
 - **M0-08a — câblé** : le handshake exige `serverInfo.name=muse`, une version serveur, `schema.version=1` et un fingerprint `sha256:*` avant d'envoyer `initialized`. Le registre compile-time recense aussi les RPC modèles, compaction, reprise et contrôles subagent réellement émises. Les champs inconnus restent acceptés pour préserver les extensions additives du protocole.
 - **M0-08b — erreur exploitable** : une réponse absente ou incompatible ferme le sidecar immédiatement et remonte une phrase actionnable au bandeau d'erreur, au lieu de laisser les conversations tourner dans un état indéterminé.
-- **M0-08c — preuve locale** : le binaire Windows/WSL Muse 1.3.0 a répondu avec le contrat attendu et les quatre postures d'approbation supportées ; la matrice d'anciennes versions reste à qualifier séparément.
+- **M0-08c — preuve locale** : le binaire Windows/WSL Muse 1.3.0 a répondu avec le contrat attendu et l'enum des trois postures produit ; la posture effective reste bornée par le plafond du host observé dans M0-06d, et la matrice d'anciennes versions reste à qualifier séparément.
 - **Critères de sortie** : changement de posture sans redémarrage, conservation après relance, mode intermédiaire qui laisse une demande externe visible, YOLO qui suit le chemin d'approbation existant, et test natif de la décision refusée/stale.
 
 ### Livraison M0-02 — reconnexion explicite
