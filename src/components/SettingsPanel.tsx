@@ -126,23 +126,6 @@ export function SettingsPanel({
   } | null>(null);
   const [selectedRecoveryKeys, setSelectedRecoveryKeys] = useState<string[]>([]);
 
-  useEffect(() => {
-    const unsubscribe = subscribeStorageIssues(() => {
-      const next = consumeStorageIssues();
-      if (next.length === 0) return;
-      setStorageIssues((previous) => {
-        const merged = [...previous, ...next];
-        return merged.filter(
-          (issue, index) =>
-            merged.findIndex(
-              (candidate) => candidate.key === issue.key && candidate.kind === issue.kind,
-            ) === index,
-        );
-      });
-    });
-    return unsubscribe;
-  }, []);
-
   const effective = effectiveSandboxMode(sandbox);
 
   async function runProbe(): Promise<void> {
