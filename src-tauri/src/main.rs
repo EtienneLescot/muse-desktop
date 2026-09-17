@@ -3827,6 +3827,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn command_event_pump_preserves_exit_payload_and_wakes_pending_request() {
+        let (tx, rx) = tauri::async_runtime::channel(4);
+        let (writes, mut frames) = mpsc::unbounded_channel();
+        let (notify_tx, _notify_rx) = mpsc::unbounded_channel();
+        let child = RecordingChild { writes, fail_write: false };
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let pump = tokio::spawn(consume_command_events(rx, client.clone(), stderr_tail));
+
+        let request = tokio::spawn({
+            let client = client.clone();
+            async move { client.request("model/list", Value::Null).await }
+        });
+        let request_frame = fixture_frame(&mut frames).await;
+        assert_eq!(request_frame["method"], "model/list");
+
+        tx.send(CommandEvent::Terminated(TerminatedPayload {
+            code: Some(17),
+            signal: None,
+        }))
+        .await
+        .unwrap();
+
+        let exit = pump.await.unwrap();
+        assert!(matches!(
+            exit,
+            PumpExit::Terminated(TerminatedPayload {
+                code: Some(17),
+                signal: None
+            })
+        ));
+        let request_error = tokio::time::timeout(std::time::Duration::from_secs(1), request)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(request_error, "sidecar dropped the response");
+    }
+
+    #[tokio::test]
     async fn session_start_retries_without_posture_only_on_host_ceiling() {
         let (client, mut frames) = fixture_client(false);
         let request = tokio::spawn({
