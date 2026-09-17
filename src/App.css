@@ -4895,6 +4895,85 @@ body.dark .composer textarea::placeholder {
   font-weight: 600;
 }
 
+.browser-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin-top: var(--space-2);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 55%, transparent) transparent;
+}
+
+.browser-tab {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 180px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+}
+
+.browser-tab.is-active {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+}
+
+.browser-tab-select,
+.browser-tab-close,
+.browser-tab-new {
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  min-height: 30px;
+}
+
+.browser-tab-select {
+  min-width: 0;
+  flex: 1;
+  padding: 0 7px 0 10px;
+  text-align: left;
+  font-size: 0.75rem;
+}
+
+.browser-tab-select span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-tab.is-active .browser-tab-select {
+  color: var(--text);
+}
+
+.browser-tab-select:hover,
+.browser-tab-close:hover,
+.browser-tab-new:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.browser-tab-close {
+  width: 26px;
+  padding: 0;
+  border-radius: 0 8px 8px 0;
+  font-size: 1rem;
+}
+
+.browser-tab-new {
+  flex: 0 0 30px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font-size: 1.1rem;
+}
+
+.browser-tab-new:disabled {
+  opacity: 0.4;
+}
+
 .browser-url-row {
   display: flex;
   gap: var(--space-2);

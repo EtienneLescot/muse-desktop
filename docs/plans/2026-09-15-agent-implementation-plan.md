@@ -509,7 +509,7 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 **Code :** BrowserPanel et nouvelle surface native ; dépend M0-06/14. Comparer webview dédiée et moteur navigateur contrôlable, sessions/cookies, navigation, téléchargements et restrictions d'embed. **Acceptation :** vrais sites non iframe, erreurs réseau et isolation ; aucune URL dangereuse chargée via protocole non prévu.
 
-**État au 16/09/2026 :** première passe UI livrée dans `BrowserPanel` : URL normalisée, historique précédent/suivant, Reload, URL effectivement affichée et erreurs de chargement/protocole dans la surface. La sandbox iframe reste une prévisualisation bornée ; webview native, sessions/cookies et téléchargements restent à qualifier.
+**État au 17/09/2026 :** première passe UI livrée dans `BrowserPanel` : URL normalisée, historique précédent/suivant, Reload, URL effectivement affichée, erreurs de chargement/protocole et jusqu'à huit onglets locaux restaurés sous `muse-desktop.browser.tabs.v1`. La persistance ne contient que des URL http(s) et un historique borné ; cookies, credentials et état de page restent dans le runtime navigateur. La sandbox iframe reste une prévisualisation bornée ; webview native, sessions/cookies et téléchargements restent à qualifier.
 
 ### M4-02 — Annotation visuelle
 
