@@ -598,7 +598,7 @@ async fn ensure_host(
         return Ok(client);
     }
     let (rx, child) = spawn_sidecar(app, root)?;
-    let shared: SharedChild = std::sync::Arc::new(tokio::sync::Mutex::new(Some(child)));
+    let shared: SharedChild = std::sync::Arc::new(tokio::sync::Mutex::new(Some(Box::new(child))));
     let (notify_tx, notify_rx) = mpsc::unbounded_channel::<(String, Value)>();
     let client = std::sync::Arc::new(MspClient::new(shared, notify_tx));
     let stderr_tail = std::sync::Arc::new(Mutex::new(Vec::<String>::new()));
