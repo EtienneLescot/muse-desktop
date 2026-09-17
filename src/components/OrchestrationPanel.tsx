@@ -4,12 +4,20 @@ import {
   compareHeadHashes,
   planWorktrees,
   worktreeShellSnippet,
+  type WorktreePlan,
+  type WorktreeRecord,
 } from "../lib/worktrees";
 import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
   /** Agent ids seen as `subagent` entries in the active thread log. */
   agents: string[];
+  /** Conversation whose workspace is used as the Git repository root. */
+  sessionId: string;
+  onCreateWorktree: (
+    sessionId: string,
+    plan: WorktreePlan,
+  ) => Promise<WorktreeRecord | null>;
 }
 
 /**
@@ -17,11 +25,13 @@ interface Props {
  * setup snippet + pre-flight HEAD-hash compare (report-only). Returns
  * null until at least one subagent entry exists in the active thread.
  */
-export function OrchestrationPanel({ agents }: Props) {
+export function OrchestrationPanel({ agents, sessionId, onCreateWorktree }: Props) {
   const [baseline, setBaseline] = useState("");
   const [current, setCurrent] = useState("");
   const [report, setReport] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [created, setCreated] = useState<Record<string, WorktreeRecord>>({});
+  const [creating, setCreating] = useState<string | null>(null);
 
   const plans = useMemo(() => planWorktrees(agents), [agents]);
   const snippet = useMemo(() => worktreeShellSnippet(plans), [plans]);
@@ -41,6 +51,14 @@ export function OrchestrationPanel({ agents }: Props) {
     }
   }
 
+  async function create(plan: WorktreePlan): Promise<void> {
+    if (creating !== null || created[plan.agent]) return;
+    setCreating(plan.agent);
+    const result = await onCreateWorktree(sessionId, plan);
+    if (result !== null) setCreated((current) => ({ ...current, [plan.agent]: result }));
+    setCreating(null);
+  }
+
   return (
     <section className="orchestration" aria-label="Agent worktrees">
       <header className="orchestration-head">
@@ -57,8 +75,24 @@ export function OrchestrationPanel({ agents }: Props) {
       <ul className="orchestration-list">
         {plans.map((p) => (
           <li key={p.agent} title={`base ${p.base}`}>
-            <code>{p.path}</code>
-            <span className="muted">{p.branch}</span>
+            <div className="orchestration-plan">
+              <code>{p.path}</code>
+              <span className="muted">{p.branch}</span>
+            </div>
+            {created[p.agent] ? (
+              <span className="orchestration-created" title={created[p.agent].path}>
+                Created
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void create(p)}
+                disabled={creating !== null}
+                title="Create this Git worktree"
+              >
+                {creating === p.agent ? "Creating…" : "Create worktree"}
+              </button>
+            )}
           </li>
         ))}
       </ul>

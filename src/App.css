@@ -2848,7 +2848,35 @@ body.dark .composer textarea::placeholder {
 .orchestration-list li {
   display: flex;
   gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+.orchestration-plan {
+  display: flex;
   align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.orchestration-plan code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orchestration-list button {
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 11px;
+}
+.orchestration-created {
+  flex: none;
+  color: var(--success, #2aa876);
+  font-size: 11px;
+  font-weight: 600;
 }
 .orchestration-list code {
   background: var(--code-bg);

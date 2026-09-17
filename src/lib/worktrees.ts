@@ -20,6 +20,22 @@ export interface WorktreePlan {
   base: string;
 }
 
+/** Record returned after Git has created a real worktree. */
+export interface WorktreeRecord {
+  repoRoot: string;
+  path: string;
+  branch: string;
+  base: string;
+  createdAt: number;
+}
+
+function safePathSegment(agent: string): string {
+  const segment = agent.replace(/[^a-zA-Z0-9._-]+/g, "-");
+  return segment === "." || segment === ".." || segment.length === 0
+    ? "agent"
+    : segment;
+}
+
 /**
  * Build one plan per agent id: path `.muse/worktrees/<agent>`, branch
  * `task<N>-branch` (1-based position), base HEAD by default. Pure and
@@ -30,15 +46,24 @@ export function planWorktrees(
   base: string = WORKTREE_BASE,
 ): WorktreePlan[] {
   const plans: WorktreePlan[] = [];
+  const usedSegments = new Set<string>();
   let n = 0;
   for (const raw of agentIds) {
     const agent = raw.trim();
     if (agent.length === 0) continue;
     if (plans.some((p) => p.agent === agent)) continue;
     n += 1;
+    const baseSegment = safePathSegment(agent);
+    let segment = baseSegment;
+    let suffix = 2;
+    while (usedSegments.has(segment)) {
+      segment = `${baseSegment}-${suffix}`;
+      suffix += 1;
+    }
+    usedSegments.add(segment);
     plans.push({
       agent,
-      path: `${WORKTREE_ROOT}/${agent}`,
+      path: `${WORKTREE_ROOT}/${segment}`,
       branch: `task${n}-branch`,
       base,
     });

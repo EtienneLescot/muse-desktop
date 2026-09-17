@@ -200,6 +200,7 @@ Garde-fous perf sourcés (à transposer en tests V1) : client Codex Electron 26.
 | Commande front (`invoke`, camelCase) | Méthode MSP | Params | Fichier/fonction |
 |---|---|---|---|
 | `set_workspace{path}` | — (local) | vérifie `is_dir` + `canonicalize`, source de vérité Rust | `main.rs:548 set_workspace` |
+| `git_worktree_create{sessionId,branch,relativePath,baseRef}` | — (local Git) | résout la racine de la conversation, exige un chemin sous `.muse/worktrees/`, valide refs et renvoie le checkout canonique | `main.rs:1175 git_worktree_create` |
 | `start_session{workspacePath?,authorizationMode?}` | `session/start` | `{commandId:UUIDv7, workspaceRoot, approvalMode?}` ; mapping produit `ask→onRequest`, `workspace→promptUnmatched`, `yolo→allowAll`. Un modèle global/projet concret est ensuite appliqué par `session/setModel`; `default` conserve le choix du moteur | `main.rs:1064 start_session` |
 | `fork_session{sessionId}` | `session/fork` | `{commandId:UUIDv7, sessionId, excludeItems:true}` ; copie tous les tours terminés, conserve l’engine/workspace et exige un nouvel identifiant | `main.rs:1474 fork_session` |
 | `set_approval_mode{sessionId,mode}` | `session/setApprovalMode` | `{commandId:UUIDv7, sessionId, mode}` ; applique le mode aux actions suivantes | `main.rs:1099 set_approval_mode` |

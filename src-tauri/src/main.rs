@@ -1166,6 +1166,25 @@ async fn git_create_pr(
         .map_err(|e| format!("pull request task failed: {e}"))?
 }
 
+/// Create a real Git worktree below the conversation workspace. The caller
+/// supplies an explicit branch, base ref and relative `.muse/worktrees/` path;
+/// the Git service validates all three before running off the UI thread.
+#[tauri::command]
+async fn git_worktree_create(
+    state: State<'_, AppState>,
+    session_id: String,
+    branch: String,
+    relative_path: String,
+    base_ref: String,
+) -> Result<git::GitWorktreeResult, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || {
+        git::create_worktree(&root, &branch, &relative_path, &base_ref)
+    })
+    .await
+    .map_err(|e| format!("worktree create task failed: {e}"))?
+}
+
 /// Open (or reuse) the persistent PTY owned by a conversation workspace.
 #[tauri::command]
 fn terminal_open(
@@ -2755,6 +2774,7 @@ fn main() {
             git_commit,
             git_push,
             git_create_pr,
+            git_worktree_create,
             terminal_open,
             terminal_write,
             terminal_resize,
