@@ -1,6 +1,6 @@
 # Plan d'implémentation pour les agents de codage
 
-Référence : [roadmap opérationnelle](../ROADMAP.md). Ce plan précise **comment réaliser le reste**, sans modifier les statuts de livraison. Base observée : `main` après PR #92 ; reprise explicite, MCPB et secret-store sont déjà fusionnés. Avant toute intervention, vérifier quelles PR sont fusionnées et lire leur code actuel. Ne pas réimplémenter `hosts.rs`, `resume.rs` ou Reconnect si déjà présents.
+Référence : [roadmap opérationnelle](../ROADMAP.md). Ce plan précise **comment réaliser le reste**, sans modifier les statuts de livraison. Base observée : `main` après PR #96 ; reprise explicite, MCPB, secret-store, file de commentaires de revue et résumés extractifs de runs sont déjà fusionnés. Avant toute intervention, vérifier quelles PR sont fusionnées et lire leur code actuel. Ne pas réimplémenter `hosts.rs`, `resume.rs` ou Reconnect si déjà présents.
 
 Les noms de commandes, modules et structures proposés ci-dessous sont des **contrats à implémenter**, pas des capacités déjà disponibles. Les méthodes MSP doivent être confirmées dans le schéma installé et sur le binaire servi ; ne jamais inventer une RPC pour satisfaire une maquette. Les fonctionnalités dépendantes d'un service distant commencent par une décision d'architecture et une preuve de faisabilité.
 
