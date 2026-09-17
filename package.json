@@ -10,7 +10,8 @@
     "smoke:native": "node scripts/native-smoke.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
-    "dev:clean": "sh scripts/dev-clean.sh"
+    "dev:clean": "sh scripts/dev-clean.sh",
+    "dev:clean:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-clean.ps1"
   },
   "dependencies": {
     "@muse-code/sdk": "0.1.1",
