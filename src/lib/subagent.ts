@@ -8,12 +8,16 @@
 
 export interface ParsedSubagent {
   agentId: string;
+  itemId?: string;
   text: string;
   childSessionId?: string;
   objective?: string;
   role?: string;
   depth?: number;
   status?: SubagentStatus;
+  /** A host item update is a full replacement rather than a delta. */
+  replace?: boolean;
+  revision?: number;
 }
 
 /** Host-confirmed lifecycle states that can be rendered safely in the UI. */
@@ -70,6 +74,12 @@ function optionalStatus(value: unknown): SubagentStatus | undefined {
   return STATUS_ALIASES[normalized] ?? "unknown";
 }
 
+function optionalRevision(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : undefined;
+}
+
 export function isTerminalSubagentStatus(
   status: SubagentStatus | undefined,
 ): boolean {
@@ -124,6 +134,8 @@ export function parseSubagentPayload(payload: string): ParsedSubagent {
           ? payload
           : "");
       const out: ParsedSubagent = { agentId, text };
+      const itemId = nonEmptyString(obj.itemId) ?? nonEmptyString(obj.item_id);
+      if (itemId !== undefined) out.itemId = itemId;
       const child =
         nonEmptyString(obj.childSessionId) ||
         nonEmptyString(obj.child_session_id) ||
@@ -137,6 +149,9 @@ export function parseSubagentPayload(payload: string): ParsedSubagent {
       if (depth !== undefined) out.depth = depth;
       const status = optionalStatus(obj.status ?? obj.state ?? obj.phase ?? obj.event);
       if (status !== undefined) out.status = status;
+      if (obj.replace === true) out.replace = true;
+      const revision = optionalRevision(obj.revision);
+      if (revision !== undefined) out.revision = revision;
       return out;
     } catch {
       // fall through to plain text

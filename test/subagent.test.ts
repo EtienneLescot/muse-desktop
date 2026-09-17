@@ -20,6 +20,7 @@ describe("parseSubagentPayload", () => {
     const p = parseSubagentPayload(
       JSON.stringify({
         agent_id: "item-9",
+        itemId: "item-9",
         text: "hello",
         childSessionId: "child-42",
         objective: "explore",
@@ -28,6 +29,7 @@ describe("parseSubagentPayload", () => {
       }),
     );
     assert.equal(p.agentId, "item-9");
+    assert.equal(p.itemId, "item-9");
     assert.equal(p.text, "hello");
     assert.equal(p.childSessionId, "child-42");
     assert.equal(p.objective, "explore");
@@ -76,6 +78,15 @@ describe("parseSubagentPayload", () => {
     assert.equal(completed.status, "completed");
     assert.equal(completed.text, "");
     assert.equal(isTerminalSubagentStatus(completed.status), true);
+  });
+
+  it("preserves replacement and revision metadata for full item snapshots", () => {
+    const p = parseSubagentPayload(
+      JSON.stringify({ agent_id: "a", item_id: "item-2", text: "snapshot", replace: true, revision: 3 }),
+    );
+    assert.equal(p.itemId, "item-2");
+    assert.equal(p.replace, true);
+    assert.equal(p.revision, 3);
   });
 
   it("keeps unknown host statuses visible without treating them as terminal", () => {
