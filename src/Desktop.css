@@ -740,6 +740,63 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.file-structured-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  margin-top: 10px;
+  gap: 8px;
+}
+.file-structured-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.file-structured-scroll {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 58%, var(--bg));
+}
+.file-structured-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.file-structured-scroll th,
+.file-structured-scroll td {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid var(--line);
+  padding: 7px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+.file-structured-scroll th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--text);
+  background: color-mix(in srgb, var(--blue) 11%, var(--panel));
+  font-weight: 600;
+}
+.file-structured-scroll td {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.file-structured-scroll tr:last-child td {
+  border-bottom: 0;
+}
+.file-structured-scroll tbody tr:hover td {
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+}
 .file-image-preview {
   display: grid;
   justify-items: start;

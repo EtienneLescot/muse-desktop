@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { userFacingError } from "../lib/errorCopy";
+import { structuredPreviewForFile } from "../lib/filePreview";
 import type {
   FilesBrowserState,
   WorkspaceFileEntry,
@@ -72,6 +73,9 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
 
   const currentPath = state.path || ".";
   const preview = state.preview;
+  const structuredPreview = preview && !preview.mediaType && !preview.binary && preview.content !== null
+    ? structuredPreviewForFile(preview.path, preview.content)
+    : null;
 
   return (
     <section className="files-panel" aria-label="Workspace files">
@@ -220,7 +224,35 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
                   </button>
                 </span>
               </div>
-              <pre className="file-preview-code">{preview.content}</pre>
+              {structuredPreview ? (
+                <div className="file-structured-preview" role="region" aria-label={`${structuredPreview.format.toUpperCase()} table preview`}>
+                  <div className="file-structured-meta">
+                    <span>{structuredPreview.format.toUpperCase()} · {structuredPreview.rows.length} rows</span>
+                    {structuredPreview.truncated && <span>Preview limited for safety</span>}
+                  </div>
+                  <div className="file-structured-scroll">
+                    <table>
+                      <caption className="sr-only">Structured preview of {preview.path}</caption>
+                      <thead>
+                        <tr>
+                          {structuredPreview.columns.map((column) => <th scope="col" key={column}>{column}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {structuredPreview.rows.map((row, rowIndex) => (
+                          <tr key={`row-${rowIndex}`}>
+                            {structuredPreview.columns.map((_, columnIndex) => (
+                              <td key={`cell-${rowIndex}-${columnIndex}`}>{row[columnIndex] ?? ""}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <pre className="file-preview-code">{preview.content}</pre>
+              )}
             </>
           )}
         </article>
