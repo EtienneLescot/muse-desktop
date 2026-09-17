@@ -92,6 +92,7 @@ export interface GitPrResult {
   url: string;
   base: string;
   head: string;
+  existing: boolean;
 }
 
 export const EMPTY_GIT_REVIEW: GitReviewState = {
