@@ -39,6 +39,18 @@ export interface RemoteMcpSession {
   nextRequestId: number;
 }
 
+/** Stable, metadata-safe key used by the native credential boundary. */
+export function remoteMcpCredentialKey(connectorId: string): string {
+  const safe = connectorId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 140);
+  return `remote-mcp-${safe || "connector"}`;
+}
+
 /** Authentication/session failures are safe to retry after a fresh initialize. */
 export function isRemoteMcpAuthenticationError(message: string): boolean {
   return /remote MCP authentication was rejected or expired/i.test(message);

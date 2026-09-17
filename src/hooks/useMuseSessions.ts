@@ -356,6 +356,7 @@ import {
   callRemoteMcp as callRemoteMcpTransport,
   isRemoteMcpAuthenticationError,
   probeRemoteMcp as probeRemoteMcpTransport,
+  remoteMcpCredentialKey,
   type RemoteMcpCallResult,
   type RemoteMcpProbeResult,
   type RemoteMcpSession,
@@ -1466,8 +1467,10 @@ export function useMuseSessions(): UseMuseSessions {
   // Start/Refresh, never during hydration.
   const [mcpRunningIds, setMcpRunningIds] = useState<string[]>([]);
   const mcpPollBusyRef = useRef(false);
-  // Remote bearer tokens and MCP session ids are process memory only. They
-  // intentionally never enter the connector registry or localStorage.
+  // Remote MCP session ids remain process memory only. Bearers live in this
+  // ref while connected and, on desktop, are also kept in the native secure
+  // store for an explicit reconnect; they never enter the registry or
+  // localStorage.
   const remoteSessionsRef = useRef<Record<string, RemoteMcpSession>>({});
   const [remoteConnectedIds, setRemoteConnectedIds] = useState<string[]>([]);
   const [remoteNotice, setRemoteNotice] = useState<string | null>(null);
@@ -3837,6 +3840,9 @@ export function useMuseSessions(): UseMuseSessions {
         version: entry.package.version,
       }).catch(() => undefined);
     }
+    if (entry?.kind === "remote" && isTauriRuntime()) {
+      await invoke("secure_store_remove", { key: remoteMcpCredentialKey(id) }).catch(() => undefined);
+    }
   }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
 
   const setConnectorEnabledById = useCallback((id: string, enabled: boolean): void => {
@@ -3883,7 +3889,22 @@ export function useMuseSessions(): UseMuseSessions {
       }
       setRemoteNotice(null);
       try {
-        const result = await probeRemoteMcpTransport(endpoint, token);
+        let effectiveToken = token;
+        // Reconnects may be initiated from a persisted connector row, where
+        // the token input is intentionally empty. Retrieve it only through
+        // the native credential boundary; it never enters localStorage.
+        if (!effectiveToken.trim() && existing?.kind === "remote" && isTauriRuntime()) {
+          try {
+            effectiveToken = (await invoke<string | null>("secure_store_get", {
+              key: remoteMcpCredentialKey(id),
+            })) ?? "";
+          } catch {
+            // A missing/unavailable store leaves the explicit reconnect path
+            // usable; the result below remains a normal auth failure.
+            effectiveToken = "";
+          }
+        }
+        const result = await probeRemoteMcpTransport(endpoint, effectiveToken);
         const registered = registerRemoteConnector(connectorsRef.current, {
           id,
           name: trimmedName,
@@ -3898,13 +3919,23 @@ export function useMuseSessions(): UseMuseSessions {
         }
         remoteSessionsRef.current[id] = {
           url: endpoint,
-          token,
+          token: effectiveToken,
           sessionId: result.sessionId,
           protocolVersion: result.protocolVersion,
           nextRequestId: 3,
         };
         setConnectors(registered.registry);
         setRemoteConnectedIds((current) => [...new Set([...current, id])]);
+        if (effectiveToken.trim() && isTauriRuntime()) {
+          try {
+            await invoke("secure_store_set", {
+              key: remoteMcpCredentialKey(id),
+              secret: effectiveToken,
+            });
+          } catch {
+            setRemoteNotice("Connected, but the native secure store is unavailable; reconnect after restart will require the token again.");
+          }
+        }
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

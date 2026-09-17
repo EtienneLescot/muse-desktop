@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { callRemoteMcp, isRemoteMcpAuthenticationError, probeRemoteMcp, type RemoteRequest } from "../src/lib/remoteMcp.ts";
+import { callRemoteMcp, isRemoteMcpAuthenticationError, probeRemoteMcp, remoteMcpCredentialKey, type RemoteRequest } from "../src/lib/remoteMcp.ts";
 
 function response(body: unknown, headers: Record<string, string> = {}, status = 200): Response {
   return new Response(typeof body === "string" ? body : JSON.stringify(body), {
@@ -93,4 +93,10 @@ test("remote MCP identifies only the retryable authentication/session failure", 
   assert.equal(isRemoteMcpAuthenticationError("remote MCP authentication was rejected or expired"), true);
   assert.equal(isRemoteMcpAuthenticationError("remote MCP request timed out"), false);
   assert.equal(isRemoteMcpAuthenticationError("remote MCP returned HTTP 500"), false);
+});
+
+test("remote MCP credential keys stay stable and safe for native storage", () => {
+  assert.equal(remoteMcpCredentialKey("remote-GitHub MCP"), "remote-mcp-remote-github-mcp");
+  assert.equal(remoteMcpCredentialKey("remote/a\\b"), "remote-mcp-remote-a-b");
+  assert.match(remoteMcpCredentialKey("   "), /^remote-mcp-connector$/);
 });
