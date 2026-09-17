@@ -153,6 +153,7 @@ import {
   parseTurnCompletion,
   type EngineErrorDetails,
 } from "../lib/engineError";
+import { statusLogText } from "../lib/statusLog";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
 // endpoint exists); children surface as `subagent` entries as usual.
 import {
@@ -2913,10 +2914,14 @@ export function useMuseSessions(): UseMuseSessions {
           text: engineErrorSummary(failure),
           engineError: failure,
         }]);
-      } else if (completion === null && payload) {
-        // Preserve diagnostics for legacy/non-terminal status events while
-        // keeping ordinary completed/cancelled turns quiet in the transcript.
-        pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text: `[${kind}] ${payload}` }]);
+      } else if (completion === null) {
+        // Only lifecycle events with an explicit user-facing consequence enter
+        // the transcript. Protocol housekeeping and unknown future statuses
+        // remain in the live stream/diagnostics instead of leaking raw JSON.
+        const text = statusLogText(kind, payload);
+        if (text !== null) {
+          pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text }]);
+        }
       }
     }
     // Closing a (re)start would kill the just-painted placeholder; only
