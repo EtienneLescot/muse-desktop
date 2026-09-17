@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   browserCaptureAttachment,
+  browserDownloadFilename,
   describeBrowserElement,
   IMAGE_GENERATION_NOTE,
   formatBrowserContext,
@@ -11,6 +12,7 @@ import {
   createBrowserTab,
   loadBrowserTabs,
   MAX_BROWSER_TABS,
+  MAX_BROWSER_DOWNLOAD_BYTES,
   saveBrowserTabs,
   type BrowserTab,
   type BrowserAnnotation,
@@ -75,6 +77,7 @@ export function BrowserPanel({
   const [capture, setCapture] = useState<BrowserCapture | null>(null);
   const [captureRegion, setCaptureRegion] = useState<BrowserCaptureRegion | null>(null);
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
   const [pageObservation, setPageObservation] = useState<ReturnType<typeof normalizeBrowserObservation>>(null);
   const [controlStatus, setControlStatus] = useState<string | null>(null);
   const [typeText, setTypeText] = useState("");
@@ -239,6 +242,68 @@ export function BrowserPanel({
       setControlStatus(`Text entered in ${elementAnchor?.selector ?? "selected field"}.`);
     } catch {
       setControlStatus("The selected field could not be updated.");
+    }
+  };
+
+  const downloadSelectedLink = async (): Promise<void> => {
+    const link = elementAnchor?.href;
+    if (!link || normalized === null) {
+      setDownloadStatus("Select a link in the same-origin page before downloading it.");
+      return;
+    }
+    try {
+      const page = new URL(normalized);
+      const target = new URL(link);
+      if (target.origin !== page.origin) {
+        setDownloadStatus("For safety, downloads are limited to the current page origin.");
+        return;
+      }
+      setDownloadStatus("Fetching the selected link…");
+      const response = await fetch(target.toString(), { credentials: "omit", redirect: "error" });
+      if (!response.ok) throw new Error(`server returned ${response.status}`);
+      const declaredLength = Number(response.headers.get("content-length") ?? "");
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_BROWSER_DOWNLOAD_BYTES) {
+        throw new Error("the selected file exceeds the 10 MB download limit");
+      }
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength < 1 || bytes.byteLength > MAX_BROWSER_DOWNLOAD_BYTES) {
+        throw new Error("the selected file exceeds the 10 MB download limit");
+      }
+      const filename = browserDownloadFilename(target.toString(), elementAnchor?.downloadName);
+      if (isTauriRuntime()) {
+        const binary = new Uint8Array(bytes);
+        let text = "";
+        for (let offset = 0; offset < binary.length; offset += 0x8000) {
+          text += String.fromCharCode(...binary.subarray(offset, offset + 0x8000));
+        }
+        const encoded = btoa(text);
+        const [{ save }, { invoke }] = await Promise.all([
+          import("@tauri-apps/plugin-dialog"),
+          import("@tauri-apps/api/core"),
+        ]);
+        const path = await save({
+          title: "Save browser download",
+          defaultPath: filename,
+        });
+        if (!path) {
+          setDownloadStatus("Download cancelled.");
+          return;
+        }
+        await invoke("browser_download_write", { path, data: encoded });
+      } else {
+        const objectUrl = URL.createObjectURL(new Blob([bytes], {
+          type: response.headers.get("content-type")?.split(";", 1)[0] || "application/octet-stream",
+        }));
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = filename;
+        anchor.click();
+        URL.revokeObjectURL(objectUrl);
+      }
+      setDownloadStatus(`Saved ${filename}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setDownloadStatus(`Download failed: ${userFacingError(message)}`);
     }
   };
 
@@ -598,6 +663,14 @@ export function BrowserPanel({
             <button type="button" disabled={elementAnchor === null} onClick={clickSelectedElement}>
               Click selected element
             </button>
+            <button
+              type="button"
+              disabled={elementAnchor?.href === undefined}
+              onClick={() => void downloadSelectedLink()}
+              title="Fetch and save the selected same-origin link"
+            >
+              Save selected link
+            </button>
             <input
               type="text"
               aria-label="Text to enter into selected field"
@@ -611,6 +684,7 @@ export function BrowserPanel({
             </button>
           </div>
           {controlStatus && <div className="muted browser-control-status" role="status" aria-live="polite">{controlStatus}</div>}
+          {downloadStatus && <div className="muted browser-control-status" role="status" aria-live="polite">{downloadStatus}</div>}
           {pageObservation && normalized && (
             <details className="browser-observation" open>
               <summary>Observed page: {pageObservation.title}</summary>

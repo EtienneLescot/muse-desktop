@@ -18,6 +18,7 @@ import {
   BROWSER_PERMS_KEY,
   BROWSER_TABS_KEY,
   browserCaptureAttachment,
+  browserDownloadFilename,
   createBrowserAnnotation,
   normalizeBrowserElementAnchor,
   formatBrowserObservation,
@@ -109,6 +110,13 @@ describe("anchored comments", () => {
     assert.deepEqual(annotationsForUrl(list, "javascript:x"), []);
   });
 
+  it("chooses safe download basenames from an anchor or URL", () => {
+    assert.equal(browserDownloadFilename("https://example.com/files/report.csv", "report.csv"), "report.csv");
+    assert.equal(browserDownloadFilename("https://example.com/files/report.csv", "..\\secret.txt"), "secret.txt");
+    assert.equal(browserDownloadFilename("https://example.com/files/report.csv"), "report.csv");
+    assert.equal(browserDownloadFilename("https://example.com/"), "muse-download");
+  });
+
   it("formats bounded page context with provenance", () => {
     assert.equal(
       formatBrowserContext("example.com/docs", "quoted line", "review this"),
@@ -137,6 +145,25 @@ describe("anchored comments", () => {
       /Element: <button> · main > button:nth-of-type\(2\)/,
     );
     assert.equal(normalizeBrowserElementAnchor({ selector: "", tag: "button" }), null);
+  });
+
+  it("keeps only safe link metadata on an element anchor", () => {
+    const element = normalizeBrowserElementAnchor({
+      selector: "main > a",
+      tag: "a",
+      href: "https://example.com/downloads/report.csv",
+      downloadName: "reports\\report.csv",
+    });
+    assert.equal(element?.href, "https://example.com/downloads/report.csv");
+    assert.equal(element?.downloadName, "report.csv");
+    assert.equal(
+      normalizeBrowserElementAnchor({
+        selector: "main > a",
+        tag: "a",
+        href: "javascript:alert(1)",
+      })?.href,
+      undefined,
+    );
   });
 
   it("bounds page observation and labels page content as untrusted", () => {

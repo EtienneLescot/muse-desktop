@@ -33,6 +33,10 @@ export interface BrowserElementAnchor {
   role?: string;
   label?: string;
   text?: string;
+  /** Resolved http(s) link when the selected element is an anchor. */
+  href?: string;
+  /** Safe basename from an anchor's optional download attribute. */
+  downloadName?: string;
 }
 
 /** Bounded, read-only facts collected by an explicit page observation. */
@@ -81,6 +85,8 @@ export const MAX_BROWSER_CONTEXT_CHARS = 8_000;
 
 /** Maximum encoded image size accepted for a browser capture. */
 export const MAX_BROWSER_CAPTURE_BYTES = 5 * 1024 * 1024;
+/** Maximum bytes an explicit browser link download may write to disk. */
+export const MAX_BROWSER_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 
 /** One explicit visual capture from a browser surface. */
 export interface BrowserCaptureRegion {
@@ -119,6 +125,33 @@ function boundedElementField(value: unknown, max = MAX_BROWSER_ELEMENT_FIELD): s
   return text.length > 0 ? Array.from(text).slice(0, max).join("") : undefined;
 }
 
+function safeDownloadName(value: unknown): string | undefined {
+  const text = boundedElementField(value, 180);
+  if (!text) return undefined;
+  const name = text
+    .split(/[\\/]/)
+    .pop()
+    ?.replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, 120);
+  return name && name !== "." && name !== ".." ? name : undefined;
+}
+
+/** Choose a safe basename for an explicit browser download. */
+export function browserDownloadFilename(url: string, suggested?: string): string {
+  const fromAttribute = safeDownloadName(suggested);
+  if (fromAttribute) return fromAttribute;
+  try {
+    const pathname = new URL(url).pathname;
+    const fromUrl = safeDownloadName(pathname.split("/").pop() ?? "");
+    if (fromUrl) return fromUrl;
+  } catch {
+    // The caller validates the URL before downloading; keep a safe fallback
+    // here for previews and tests that only need a stable filename.
+  }
+  return "muse-download";
+}
+
 /** Validate and bound element metadata before it is persisted or sent. */
 export function normalizeBrowserElementAnchor(raw: unknown): BrowserElementAnchor | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -130,9 +163,13 @@ export function normalizeBrowserElementAnchor(raw: unknown): BrowserElementAncho
   const role = boundedElementField(value.role, 120);
   const label = boundedElementField(value.label, 240);
   const text = boundedElementField(value.text, MAX_BROWSER_ELEMENT_TEXT);
+  const href = normalizeBrowserUrl(typeof value.href === "string" ? value.href : "");
+  const downloadName = safeDownloadName(value.downloadName);
   if (role) next.role = role;
   if (label) next.label = label;
   if (text) next.text = text;
+  if (href) next.href = href;
+  if (downloadName) next.downloadName = downloadName;
   return next;
 }
 
@@ -165,12 +202,23 @@ export function describeBrowserElement(element: Element | null): BrowserElementA
   }
   const selector = segments.join(" > ").slice(0, MAX_BROWSER_ELEMENT_FIELD);
   if (selector.length === 0) return null;
+  let href: string | undefined;
+  const rawHref = element.getAttribute("href");
+  if (rawHref) {
+    try {
+      href = new URL(rawHref, element.ownerDocument.baseURI).toString();
+    } catch {
+      href = undefined;
+    }
+  }
   return normalizeBrowserElementAnchor({
     selector,
     tag,
     role: element.getAttribute("role") ?? undefined,
     label: element.getAttribute("aria-label") ?? element.getAttribute("title") ?? undefined,
     text: element.textContent ?? undefined,
+    href,
+    downloadName: element.getAttribute("download") ?? undefined,
   });
 }
 
@@ -181,6 +229,8 @@ function formatElementAnchor(anchor: BrowserElementAnchor): string[] {
   if (normalized.role) lines.push(`Element role: ${normalized.role}`);
   if (normalized.label) lines.push(`Element label: ${normalized.label}`);
   if (normalized.text) lines.push(`Element text: ${normalized.text}`);
+  if (normalized.href) lines.push(`Element link: ${normalized.href}`);
+  if (normalized.downloadName) lines.push(`Suggested filename: ${normalized.downloadName}`);
   return lines;
 }
 
