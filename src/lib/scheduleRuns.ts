@@ -6,6 +6,7 @@
  */
 import { isValidTimeZone, type ScheduleAuthorizationMode, type ThreadReuse } from "./schedules.ts";
 import { readStorageJson, writeStorageJson } from "./storage.ts";
+import type { ScheduleRunSummary } from "./runSummary.ts";
 
 export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 /**
@@ -47,6 +48,8 @@ export interface ScheduleRun {
   nextRetryAt?: number;
   /** Result excerpt captured when the host turn finishes. */
   resultPreview?: string;
+  /** Bounded extractive facts captured with the result, never a model claim. */
+  resultSummary?: ScheduleRunSummary;
   /** Inbox unread marker, independent of the business status. */
   unread?: boolean;
   /** Archived rows stay durable but are hidden from the default inbox view. */
@@ -111,6 +114,7 @@ export function completeRun(
   idValue: string,
   now: number,
   resultPreview?: string,
+  resultSummary?: ScheduleRunSummary,
 ): ScheduleRun[] {
   return runs.map((run) => run.id === idValue
     ? {
@@ -121,6 +125,7 @@ export function completeRun(
         error: undefined,
         nextRetryAt: undefined,
         ...(resultPreview ? { resultPreview } : {}),
+        ...(resultSummary ? { resultSummary } : {}),
       }
     : run);
 }
@@ -131,6 +136,7 @@ export interface ScheduledTurnOutcome {
   error?: string;
   retryable?: boolean;
   resultPreview?: string;
+  resultSummary?: ScheduleRunSummary;
 }
 
 /**
@@ -148,7 +154,7 @@ export function settleRunsForSession(
   for (const run of runs) {
     if (run.sessionId !== sessionId || run.status !== "running") continue;
     if (outcome.status === "completed") {
-      next = completeRun(next, run.id, now, outcome.resultPreview);
+      next = completeRun(next, run.id, now, outcome.resultPreview, outcome.resultSummary);
       continue;
     }
     const reason = outcome.error?.trim() || "scheduled turn failed";
@@ -283,11 +289,23 @@ function validRun(value: unknown): value is ScheduleRun {
     (row.attempt === undefined || (typeof row.attempt === "number" && Number.isInteger(row.attempt) && row.attempt >= 1 && row.attempt <= MAX_RUN_ATTEMPTS)) &&
     (row.nextRetryAt === undefined || typeof row.nextRetryAt === "number") &&
     (row.resultPreview === undefined || typeof row.resultPreview === "string") &&
+    (row.resultSummary === undefined || validRunSummary(row.resultSummary)) &&
     (row.unread === undefined || typeof row.unread === "boolean") &&
     (row.archived === undefined || typeof row.archived === "boolean") &&
     (row.recovery === undefined || row.recovery === "after-restart") &&
     (row.recoveryDetectedAt === undefined || typeof row.recoveryDetectedAt === "number") &&
     (row.error === undefined || typeof row.error === "string");
+}
+
+function validRunSummary(value: unknown): value is ScheduleRunSummary {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.headline === "string" && row.headline.length <= 300 &&
+    typeof row.totalItems === "number" && Number.isInteger(row.totalItems) && row.totalItems >= 0 &&
+    typeof row.assistantMessages === "number" && Number.isInteger(row.assistantMessages) && row.assistantMessages >= 0 &&
+    typeof row.toolEvents === "number" && Number.isInteger(row.toolEvents) && row.toolEvents >= 0 &&
+    Array.isArray(row.filesMentioned) && row.filesMentioned.every((item) => typeof item === "string" && item.length <= 200) && row.filesMentioned.length <= 12 &&
+    Array.isArray(row.decisions) && row.decisions.every((item) => typeof item === "string" && item.length <= 200) && row.decisions.length <= 12;
 }
 
 export function loadScheduleRuns(): ScheduleRun[] {

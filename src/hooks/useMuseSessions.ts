@@ -259,6 +259,8 @@ import {
   type ScheduleRun,
 } from "../lib/scheduleRuns";
 export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
+import { buildScheduleRunSummary } from "../lib/runSummary";
+export type { ScheduleRunSummary } from "../lib/runSummary";
 import {
   releaseSchedulerLease,
   renewSchedulerLease,
@@ -2525,10 +2527,14 @@ export function useMuseSessions(): UseMuseSessions {
       entry.role === "assistant" && entry.text.trim().length > 0,
     );
     const preview = lastAssistant?.text.trim().replace(/\s+/g, " ").slice(0, 320);
+    const resultSummary = outcome.status === "completed"
+      ? buildScheduleRunSummary(sessionId, log)
+      : undefined;
     setScheduleRuns((cur) => {
       return settleRunsForSession(cur, sessionId, {
         ...outcome,
         ...(outcome.status === "completed" && preview ? { resultPreview: preview } : {}),
+        ...(resultSummary ? { resultSummary } : {}),
       }, Date.now());
     });
   }

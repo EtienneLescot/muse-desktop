@@ -366,6 +366,16 @@ export function SchedulesPanel({
                   </small>
                 )}
                 {run.resultPreview && <span className="run-preview">{run.resultPreview}</span>}
+                {run.resultSummary && (
+                  <div className="run-summary" aria-label="Run result summary">
+                    <strong>{run.resultSummary.headline}</strong>
+                    <span className="run-summary-facts">
+                      {run.resultSummary.assistantMessages} response{run.resultSummary.assistantMessages === 1 ? "" : "s"}
+                      {run.resultSummary.toolEvents > 0 ? ` · ${run.resultSummary.toolEvents} tool event${run.resultSummary.toolEvents === 1 ? "" : "s"}` : ""}
+                      {run.resultSummary.filesMentioned.length > 0 ? ` · ${run.resultSummary.filesMentioned.length} file${run.resultSummary.filesMentioned.length === 1 ? "" : "s"}` : ""}
+                    </span>
+                  </div>
+                )}
                 {run.error && <small className="error">{userFacingError(run.error)}</small>}
                 <details className="run-details">
                   <summary>Inspect run</summary>
@@ -391,6 +401,26 @@ export function SchedulesPanel({
                     <div className="run-output">
                       <span className="run-detail-label">Result preview</span>
                       <p>{run.resultPreview}</p>
+                    </div>
+                  )}
+                  {run.resultSummary && (
+                    <div className="run-output run-output-summary">
+                      <span className="run-detail-label">Result summary</span>
+                      <p>{run.resultSummary.headline}</p>
+                      <div className="run-summary-grid">
+                        <span>{run.resultSummary.totalItems} items</span>
+                        <span>{run.resultSummary.assistantMessages} assistant responses</span>
+                        <span>{run.resultSummary.toolEvents} tool events</span>
+                      </div>
+                      {run.resultSummary.filesMentioned.length > 0 && (
+                        <p><span className="run-detail-label">Files</span>{" "}{run.resultSummary.filesMentioned.join(", ")}</p>
+                      )}
+                      {run.resultSummary.decisions.length > 0 && (
+                        <div className="run-summary-decisions">
+                          <span className="run-detail-label">Recorded outcomes</span>
+                          <ul>{run.resultSummary.decisions.slice(0, 4).map((decision) => <li key={decision}>{decision}</li>)}</ul>
+                        </div>
+                      )}
                     </div>
                   )}
                   {run.error && (

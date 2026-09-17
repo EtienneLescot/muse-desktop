@@ -91,10 +91,10 @@ const DOC_LANGS = new Set(["", "md", "markdown", "txt", "text", "rst"]);
 
 /** File extensions recognized when scanning for mentioned files. */
 const FILE_EXT =
-  "ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|rb|php|css|scss|html|json|yaml|yml|toml|md|txt|sh|sql|xml|vue|svelte";
+  "tsx|ts|jsx|js|mjs|cjs|py|rs|go|java|rb|php|css|scss|html|json|yaml|yml|toml|md|txt|sh|sql|xml|vue|svelte";
 
 const FILE_RE = new RegExp(
-  `(?:^|[\\s"'\\\`\\(\\[])([\\w.\\-~][\\w.\\-/]*\\.(${FILE_EXT})|(?:[\\w.\\-]+(?:\\/[\\w.\\-]+)+\\.\\w+))`,
+  `(?:^|[\\s"'\\\`\\(\\[])([\\w.\\-~][\\w.\\-/]*\\.(${FILE_EXT})(?![\\w-])|(?:[\\w.\\-]+(?:\\/[\\w.\\-]+)+\\.\\w+))`,
   "g",
 );
 
