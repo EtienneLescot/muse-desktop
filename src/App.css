@@ -4966,12 +4966,36 @@ body.dark .composer textarea::placeholder {
 }
 
 .browser-capture-preview {
-  width: 128px;
-  height: 72px;
-  object-fit: cover;
+  display: block;
+  width: min(100%, 560px);
+  max-height: 320px;
+  object-fit: contain;
   border: 1px solid color-mix(in srgb, var(--blue) 55%, var(--line));
   border-radius: var(--radius-sm);
   background: var(--code-bg);
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+
+.browser-capture-canvas {
+  position: relative;
+  flex-basis: 100%;
+  width: min(100%, 560px);
+}
+
+.browser-capture-region {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid var(--blue);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--blue) 18%, transparent);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, #000 32%, transparent);
+}
+
+.browser-capture-help {
+  flex-basis: 100%;
+  font-size: 0.72rem;
 }
 
 .browser-capture-status,

@@ -121,6 +121,9 @@ describe("anchored comments", () => {
       width: 1280,
       height: 720,
       devicePixelRatio: 1.5,
+      region: { x: 40, y: 20, width: 640, height: 360 },
+      sourceWidth: 1280,
+      sourceHeight: 720,
     };
     const attachment = browserCaptureAttachment(capture);
     assert.ok(attachment !== null);
@@ -130,6 +133,7 @@ describe("anchored comments", () => {
     assert.equal(attachment.height, 720);
     assert.match(attachment.name, /^muse-browser-2026-09-17T01-00-00-000Z\.jpg$/);
     assert.match(formatBrowserCaptureContext(capture), /Viewport: 1280×720/);
+    assert.match(formatBrowserCaptureContext(capture), /Region: 40,20 640×360 of 1280×720/);
     assert.match(formatBrowserCaptureContext(capture), /Image: attached below/);
   });
 
@@ -145,6 +149,10 @@ describe("anchored comments", () => {
     assert.equal(browserCaptureAttachment({ ...base, url: "javascript:alert(1)" }), null);
     assert.equal(browserCaptureAttachment({ ...base, dataUrl: "data:text/plain;base64,AQID" }), null);
     assert.equal(browserCaptureAttachment({ ...base, width: 0 }), null);
+    assert.equal(
+      browserCaptureAttachment({ ...base, region: { x: 9, y: 9, width: 3, height: 3 }, sourceWidth: 10, sourceHeight: 10 }),
+      null,
+    );
   });
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   browserCaptureAttachment,
   IMAGE_GENERATION_NOTE,
@@ -8,6 +8,7 @@ import {
   type BrowserAnnotation,
   type BrowserAppPermission,
   type BrowserCapture,
+  type BrowserCaptureRegion,
 } from "../lib/browserAnnotate";
 import { isTauriRuntime } from "../lib/env";
 import { userFacingError } from "../lib/errorCopy";
@@ -53,8 +54,11 @@ export function BrowserPanel({
   const [comment, setComment] = useState("");
   const [appName, setAppName] = useState("");
   const [capture, setCapture] = useState<BrowserCapture | null>(null);
+  const [captureRegion, setCaptureRegion] = useState<BrowserCaptureRegion | null>(null);
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const captureImageRef = useRef<HTMLImageElement>(null);
+  const captureDragRef = useRef<{ x: number; y: number } | null>(null);
   const selectionCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => () => {
@@ -157,6 +161,7 @@ export function BrowserPanel({
         throw new Error("the captured image exceeds the 5 MB attachment limit");
       }
       setCapture(next);
+      setCaptureRegion(null);
       setCaptureStatus("Capture ready. Review it, then add it to the composer.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -174,6 +179,59 @@ export function BrowserPanel({
     if (capture === null) return;
     if (onInsertCapture(capture)) {
       setCaptureStatus("Screenshot attached to the composer.");
+    }
+  };
+
+  const capturePoint = (event: ReactPointerEvent<HTMLImageElement>): { x: number; y: number } | null => {
+    if (capture === null) return null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return {
+      x: Math.max(0, Math.min(capture.width, Math.round(((event.clientX - rect.left) / rect.width) * capture.width))),
+      y: Math.max(0, Math.min(capture.height, Math.round(((event.clientY - rect.top) / rect.height) * capture.height))),
+    };
+  };
+
+  const cropCapture = async (): Promise<void> => {
+    if (capture === null || captureRegion === null || captureRegion.width < 2 || captureRegion.height < 2) return;
+    try {
+      const image = new Image();
+      image.src = capture.dataUrl;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = captureRegion.width;
+      canvas.height = captureRegion.height;
+      const context = canvas.getContext("2d");
+      if (context === null) throw new Error("the capture surface is unavailable");
+      context.drawImage(
+        image,
+        captureRegion.x,
+        captureRegion.y,
+        captureRegion.width,
+        captureRegion.height,
+        0,
+        0,
+        captureRegion.width,
+        captureRegion.height,
+      );
+      const next: BrowserCapture = {
+        ...capture,
+        dataUrl: canvas.toDataURL("image/jpeg", 0.84),
+        width: captureRegion.width,
+        height: captureRegion.height,
+        region: captureRegion,
+        sourceWidth: capture.width,
+        sourceHeight: capture.height,
+      };
+      if (browserCaptureAttachment(next) === null) {
+        throw new Error("the cropped image exceeds the 5 MB attachment limit");
+      }
+      setCapture(next);
+      setCaptureRegion(null);
+      setCaptureStatus("Region cropped. Review it, then add it to the composer.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCaptureStatus(`Region crop failed: ${userFacingError(message)}`);
     }
   };
 
@@ -347,15 +405,60 @@ export function BrowserPanel({
             </button>
             {capture !== null && (
               <>
-                <img
-                  className="browser-capture-preview"
-                  src={capture.dataUrl}
-                  alt="Captured browser page preview"
-                />
+                <div className="browser-capture-canvas">
+                  <img
+                    ref={captureImageRef}
+                    className="browser-capture-preview"
+                    src={capture.dataUrl}
+                    alt="Captured browser page preview; drag to select a region"
+                    onPointerDown={(event) => {
+                      const point = capturePoint(event);
+                      if (point === null) return;
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      captureDragRef.current = point;
+                      setCaptureRegion({ ...point, width: 0, height: 0 });
+                    }}
+                    onPointerMove={(event) => {
+                      const start = captureDragRef.current;
+                      const point = capturePoint(event);
+                      if (start === null || point === null) return;
+                      setCaptureRegion({
+                        x: Math.min(start.x, point.x),
+                        y: Math.min(start.y, point.y),
+                        width: Math.abs(point.x - start.x),
+                        height: Math.abs(point.y - start.y),
+                      });
+                    }}
+                    onPointerUp={(event) => {
+                      captureDragRef.current = null;
+                      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                        event.currentTarget.releasePointerCapture(event.pointerId);
+                      }
+                    }}
+                  />
+                  {captureRegion !== null && captureRegion.width > 1 && captureRegion.height > 1 && (
+                    <span
+                      className="browser-capture-region"
+                      aria-hidden="true"
+                      style={{
+                        left: `${(captureRegion.x / capture.width) * 100}%`,
+                        top: `${(captureRegion.y / capture.height) * 100}%`,
+                        width: `${(captureRegion.width / capture.width) * 100}%`,
+                        height: `${(captureRegion.height / capture.height) * 100}%`,
+                      }}
+                    />
+                  )}
+                </div>
+                <span className="muted browser-capture-help">Drag on the preview to crop a region.</span>
+                {captureRegion !== null && captureRegion.width > 1 && captureRegion.height > 1 && (
+                  <button type="button" onClick={() => void cropCapture()}>
+                    Crop to region
+                  </button>
+                )}
                 <button type="button" onClick={addCaptureToPrompt}>
                   Add screenshot to prompt
                 </button>
-                <button type="button" className="quiet" onClick={() => setCapture(null)}>
+                <button type="button" className="quiet" onClick={() => { setCapture(null); setCaptureRegion(null); }}>
                   Remove capture
                 </button>
               </>
