@@ -23,6 +23,7 @@ import { SharePanel } from "./components/SharePanel";
 import { ChannelPanel } from "./components/ChannelPanel";
 import { ImportPanel } from "./components/ImportPanel";
 import { ReviewPanel } from "./components/ReviewPanel";
+import { TerminalPanel } from "./components/TerminalPanel";
 import type { ShareBundle } from "./lib/sharing";
 import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 // US-32: polite live-region announcements for stream/approval/input changes.
@@ -161,6 +162,12 @@ export default function App() {
     commitGit,
     pushGit,
     createGitPr,
+    terminalForSession,
+    openTerminal,
+    readTerminal,
+    writeTerminal,
+    resizeTerminal,
+    closeTerminal,
     browserAnnotations,
     addBrowserAnnotation,
     removeBrowserAnnotation,
@@ -185,7 +192,7 @@ export default function App() {
   >("task");
   const [collapsed, setCollapsed] = useState(false);
   const [workPanel, setWorkPanel] = useState<
-    "artifacts" | "browser" | "memory" | "tools" | "review" | null
+    "artifacts" | "browser" | "memory" | "tools" | "review" | "terminal" | null
   >(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -925,6 +932,7 @@ export default function App() {
                         [
                           ["artifacts", "Content"],
                           ["review", "Review"],
+                          ["terminal", "Terminal"],
                           ["browser", "Browser"],
                           ["memory", "Memory"],
                           ["tools", "Activity"],
@@ -977,6 +985,17 @@ export default function App() {
                             );
                             return result.ok;
                           }}
+                        />
+                      )}
+                      {workPanel === "terminal" && (
+                        <TerminalPanel
+                          sessionId={active.session_id}
+                          terminal={terminalForSession(active.session_id)}
+                          onOpen={openTerminal}
+                          onRead={readTerminal}
+                          onWrite={writeTerminal}
+                          onResize={resizeTerminal}
+                          onClose={closeTerminal}
                         />
                       )}
                       {workPanel === "browser" && (

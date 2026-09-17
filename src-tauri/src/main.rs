@@ -22,6 +22,7 @@ mod msp;
 mod hosts;
 mod resume;
 mod git;
+mod terminal;
 use hosts::Hosts;
 
 use std::collections::HashMap;
@@ -215,6 +216,7 @@ struct AppState {
     host_mutex: tokio::sync::Mutex<()>,
     event_seq: Mutex<u64>,
     event_buffer: Mutex<std::collections::VecDeque<DrainedEvent>>,
+    terminals: terminal::TerminalRegistry,
 }
 
 const DIAGNOSTIC_MAX_LINES: usize = 20;
@@ -1150,6 +1152,56 @@ async fn git_create_pr(
     tokio::task::spawn_blocking(move || git::create_pr(&root, &title, &body, &base, &head))
         .await
         .map_err(|e| format!("pull request task failed: {e}"))?
+}
+
+/// Open (or reuse) the persistent PTY owned by a conversation workspace.
+#[tauri::command]
+fn terminal_open(
+    state: State<'_, AppState>,
+    session_id: String,
+    cols: Option<u16>,
+    rows: Option<u16>,
+) -> Result<terminal::TerminalInfo, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    state.terminals.open(&session_id, &root, cols, rows)
+}
+
+/// Write raw terminal input. The caller controls line endings so paste and
+/// interactive key sequences (for example Ctrl-C) remain lossless.
+#[tauri::command]
+fn terminal_write(
+    state: State<'_, AppState>,
+    terminal_id: String,
+    input: String,
+) -> Result<(), String> {
+    state.terminals.write(&terminal_id, &input)
+}
+
+/// Resize the PTY and return the clamped size used by the backend.
+#[tauri::command]
+fn terminal_resize(
+    state: State<'_, AppState>,
+    terminal_id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<terminal::TerminalInfo, String> {
+    state.terminals.resize(&terminal_id, cols, rows)
+}
+
+/// Drain output accumulated since the previous read. Output is bounded in the
+/// registry; an inactive panel therefore cannot cause unbounded memory use.
+#[tauri::command]
+fn terminal_read(
+    state: State<'_, AppState>,
+    terminal_id: String,
+) -> Result<terminal::TerminalRead, String> {
+    state.terminals.read(&terminal_id)
+}
+
+/// Explicitly close one PTY and its child process.
+#[tauri::command]
+fn terminal_close(state: State<'_, AppState>, terminal_id: String) -> Result<(), String> {
+    state.terminals.close(&terminal_id)
 }
 
 /// Build the frontend `input_request` payload from a `userInput/requested`
@@ -2432,6 +2484,7 @@ fn main() {
             host_mutex: tokio::sync::Mutex::new(()),
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
+            terminals: terminal::TerminalRegistry::default(),
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
@@ -2453,6 +2506,11 @@ fn main() {
             git_commit,
             git_push,
             git_create_pr,
+            terminal_open,
+            terminal_write,
+            terminal_resize,
+            terminal_read,
+            terminal_close,
             list_models,
             set_model,
             compact_session,
@@ -2472,6 +2530,7 @@ fn main() {
             // process survives app exit.
             if let RunEvent::Exit = event {
                 let state: State<AppState> = app.state();
+                state.terminals.close_all();
                 let clients = state.hosts.lock().map(|mut h| h.drain()).unwrap_or_default();
                 for client in clients { tauri::async_runtime::block_on(client.shutdown()); }
             }

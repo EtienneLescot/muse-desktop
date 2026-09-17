@@ -144,7 +144,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-02 | Commenter une ligne de diff et demander sa correction | Adapté | Présente | Câblée | Unitaire | Socle livré ; restent la qualification native avec un moteur live et la persistance/triage multi-commentaires |
 | M1-03 | Indexer ou annuler une modification | Adapté | Présente | Câblée | Intégration | Stage, unstage et discard fichier livrés avec garde HEAD/statut/diff ; actions hunk, sélection multiple et qualification native restent à faire |
 | M1-04 | Commit, push et création de PR depuis l'app | Adapté | Présente | Câblée | Intégration | Commit, push et PR GitHub CLI livrés avec destinations explicites ; restent qualification hooks/auth live, PR existante/rejet distant et revue native |
-| M1-05 | Ouvrir et utiliser un terminal du projet | Maquette | Absente | Absente | À faire | PTY natif, entrée/sortie, resize et fermeture ; cwd lié à la conversation ; processus long conservé lors des changements de vue |
+| M1-05 | Ouvrir et utiliser un terminal du projet | Adapté | Présente | Câblée | Unitaire | Socle PTY persistant livré : shell lié au cwd de la conversation, entrée/sortie bornées, resize et fermeture contrôlée. Reste : validation native Windows/macOS/Linux, rendu ANSI riche et raccourcis interactifs |
 | M1-06 | Faire lire au moteur la sortie du terminal | À définir | Absente | Absente | À faire | Exposer un contexte borné et attribué au bon terminal ; le moteur peut diagnostiquer un build échoué sans copier-coller |
 | M1-07 | Consulter les vrais fichiers du projet | Maquette | Partielle | Locale | Unitaire | Remplacer la seule liste de fichiers cités par accès disque contrôlé et ouverture pertinente ; contenu actuel, pas extrait de réponse |
 | M1-08 | Ajouter fichiers et images à une demande | À définir | Partielle | Partielle | Unitaire | Les mentions actuelles enrichissent du texte ; concevoir pièces jointes, drag/drop et limites ; preuve que le moteur reçoit le contenu/type attendu |
@@ -188,6 +188,15 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **UX :** la section **Ship changes** du panneau Review regroupe commit, remote/branche de push et création de PR. Les résultats affichent le hash, la destination et le lien de PR ; les erreurs restent dans le même contexte de revue.
 - **Validation :** tests Rust sur dépôt temporaire pour commit, garde d’empreinte et remote absent ; tests de sécurité sur refs ; suite 51 Rust, 384 Node, TypeScript/Vite build réussi.
 - **Limites assumées :** la qualification avec hooks/auth/rejet réseau, la détection d’une PR existante et les scénarios live GitHub restent à exécuter avec un compte de test ; aucun credential n’est requis pour la CI.
+
+### Livraison M1-05 — terminal PTY persistant
+
+- **Contrat backend :** `terminal_open(sessionId, cols?, rows?)`, `terminal_write(terminalId, input)`, `terminal_resize(terminalId, cols, rows)`, `terminal_read(terminalId)` et `terminal_close(terminalId)` sont exposés par un registre Rust sessionné. Le shell est lancé dans le workspace propre à la conversation, avec un `terminalId` et une génération explicites.
+- **Durabilité de vue :** le processus PTY est détenu par le superviseur, pas par le composant React. Changer d’onglet ou fermer le panneau ne tue donc pas un serveur long ; seul Close termine explicitement le child process. La fermeture de l’application vide le registre et tue tous les shells.
+- **Sortie bornée :** le lecteur conserve au plus 200 000 caractères et `terminal_read` draine uniquement les nouveaux octets. Une sortie terminée est signalée par `done`, sans faire grossir l’état ou le localStorage de l’app.
+- **UX :** l’onglet **Terminal** apparaît dans la barre de travail. Il présente le cwd/shell, une sortie monospace, une commande à envoyer, l’état de fin et un contrôle de largeur ; le panneau reprend automatiquement le terminal de la conversation à sa réouverture.
+- **Validation :** `cargo test --bin muse-desktop` (53 tests, dont bornage de taille et de sortie), `npm test`, `npx tsc --noEmit` et build Vite. La validation native interactive et le rendu ANSI/clipboard restent des critères séparés.
+- **Limites assumées :** cette tranche ne transmet pas encore la sortie au moteur comme contexte (M1-06), ne remplace pas encore le rendu brut par xterm, et ne prétend pas couvrir les shells non présents sur la machine.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 

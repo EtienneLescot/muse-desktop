@@ -360,6 +360,23 @@ export interface IndexApi {
 
 export type { GitDiffScope, GitDiffSnapshot, GitReviewState, GitStatusSnapshot } from "../lib/git";
 
+/** M1-05: persistent terminal session owned by a conversation workspace. */
+export interface TerminalInfo {
+  terminalId: string;
+  sessionId: string;
+  cwd: string;
+  shell: string;
+  generation: number;
+  cols: number;
+  rows: number;
+}
+
+export interface TerminalState {
+  info: TerminalInfo;
+  output: string;
+  done: boolean;
+}
+
 type FileWithRelPath = File & { webkitRelativePath?: string };
 
 /**
@@ -580,6 +597,13 @@ interface UseMuseSessions {
     base: string,
     head: string,
   ) => Promise<GitPrResult | null>;
+  /** M1-05: persistent PTY controls; closing the panel leaves it alive. */
+  terminalForSession: (sessionId: string) => TerminalState | null;
+  openTerminal: (sessionId: string, cols?: number, rows?: number) => Promise<TerminalInfo | null>;
+  readTerminal: (terminalId: string) => Promise<void>;
+  writeTerminal: (terminalId: string, input: string) => Promise<void>;
+  resizeTerminal: (terminalId: string, cols: number, rows: number) => Promise<void>;
+  closeTerminal: (sessionId: string) => Promise<void>;
   /** US-5: move a thread to the archived list (persisted flag). */
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -1021,6 +1045,11 @@ export function useMuseSessions(): UseMuseSessions {
     Record<string, GitReviewState>
   >({});
   const gitRequestSeq = useRef<Record<string, number>>({});
+  // M1-05: PTYs are backend-owned and survive work-panel unmounts. The hook
+  // mirrors only the UI metadata and bounded output tail for the active window.
+  const [terminalsBySession, setTerminalsBySession] = useState<
+    Record<string, TerminalState>
+  >({});
   // Mirror of "any session running", read by the poll loop to pick cadence.
   // Plain ref (not state): the loop lives outside render, StrictMode-safe.
   const runningRef = useRef(false);
@@ -3498,6 +3527,96 @@ export function useMuseSessions(): UseMuseSessions {
     [beginGitRequest],
   );
 
+  const terminalForSession = useCallback(
+    (sessionId: string): TerminalState | null => terminalsBySession[sessionId] ?? null,
+    [terminalsBySession],
+  );
+
+  const openTerminal = useCallback(
+    async (sessionId: string, cols = 100, rows = 28): Promise<TerminalInfo | null> => {
+      const existing = terminalsBySession[sessionId];
+      if (existing) return existing.info;
+      try {
+        const info = await invoke<TerminalInfo>("terminal_open", {
+          sessionId,
+          cols,
+          rows,
+        });
+        setTerminalsBySession((cur) => ({
+          ...cur,
+          [sessionId]: { info, output: cur[sessionId]?.output ?? "", done: false },
+        }));
+        return info;
+      } catch (e) {
+        setError(`terminal_open failed: ${String(e)}`);
+        return null;
+      }
+    },
+    [terminalsBySession],
+  );
+
+  const readTerminal = useCallback(async (terminalId: string): Promise<void> => {
+    try {
+      const result = await invoke<{ terminalId: string; output: string; done: boolean }>(
+        "terminal_read",
+        { terminalId },
+      );
+      setTerminalsBySession((cur) => {
+        const entry = Object.entries(cur).find(([, state]) => state.info.terminalId === terminalId);
+        if (!entry) return cur;
+        const [sessionId, state] = entry;
+        const output = result.output
+          ? `${state.output}${result.output}`.slice(-200_000)
+          : state.output;
+        return { ...cur, [sessionId]: { ...state, output, done: result.done } };
+      });
+    } catch (e) {
+      // A panel can poll during an explicit close; that race is expected and
+      // should not replace the conversation with a global error banner.
+      if (!String(e).toLowerCase().includes("unknown terminal")) {
+        setError(`terminal_read failed: ${String(e)}`);
+      }
+    }
+  }, []);
+
+  const writeTerminal = useCallback(async (terminalId: string, input: string): Promise<void> => {
+    try {
+      await invoke("terminal_write", { terminalId, input });
+    } catch (e) {
+      setError(`terminal_write failed: ${String(e)}`);
+    }
+  }, []);
+
+  const resizeTerminal = useCallback(async (terminalId: string, cols: number, rows: number): Promise<void> => {
+    try {
+      const info = await invoke<TerminalInfo>("terminal_resize", { terminalId, cols, rows });
+      setTerminalsBySession((cur) => {
+        const entry = Object.entries(cur).find(([, state]) => state.info.terminalId === terminalId);
+        if (!entry) return cur;
+        const [sessionId, state] = entry;
+        return { ...cur, [sessionId]: { ...state, info } };
+      });
+    } catch (e) {
+      setError(`terminal_resize failed: ${String(e)}`);
+    }
+  }, []);
+
+  const closeTerminal = useCallback(async (sessionId: string): Promise<void> => {
+    const terminal = terminalsBySession[sessionId];
+    if (!terminal) return;
+    try {
+      await invoke("terminal_close", { terminalId: terminal.info.terminalId });
+    } catch (e) {
+      setError(`terminal_close failed: ${String(e)}`);
+    } finally {
+      setTerminalsBySession((cur) => {
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
+    }
+  }, [terminalsBySession]);
+
   // US-23 search over the stored index (empty unless opted in). Search
   // keeps working while paused — pause only suspends indexing updates.
   const indexResults = searchIndex(indexStore, indexEnabled ? indexQuery : "");
@@ -3647,6 +3766,12 @@ export function useMuseSessions(): UseMuseSessions {
     commitGit,
     pushGit,
     createGitPr,
+    terminalForSession,
+    openTerminal,
+    readTerminal,
+    writeTerminal,
+    resizeTerminal,
+    closeTerminal,
     error,
     evtCount,
   };
