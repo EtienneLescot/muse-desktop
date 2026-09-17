@@ -223,6 +223,9 @@ fn preview_media_type(path: &Path) -> Option<&'static str> {
         "bmp" => Some("image/bmp"),
         "svg" => Some("image/svg+xml"),
         "pdf" => Some("application/pdf"),
+        "docx" => Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        "xlsx" => Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        "pptx" => Some("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
         _ => None,
     }
 }
@@ -358,6 +361,14 @@ mod tests {
         let pdf = read(&root, "guide.pdf", None).unwrap();
         assert_eq!(pdf.media_type.as_deref(), Some("application/pdf"));
         assert!(pdf.base64_data.is_some());
+        fs::write(root.join("notes.docx"), [80u8, 75, 3, 4, 0]).unwrap();
+        let office = read(&root, "notes.docx", None).unwrap();
+        assert_eq!(
+            office.media_type.as_deref(),
+            Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        );
+        assert!(office.binary);
+        assert!(office.base64_data.is_some());
         let _ = fs::remove_dir_all(root);
     }
 

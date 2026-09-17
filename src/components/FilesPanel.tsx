@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { userFacingError } from "../lib/errorCopy";
 import { structuredPreviewForFile } from "../lib/filePreview";
+import { officePreviewForFile, type OfficePreview } from "../lib/officePreview";
 import type {
   FilesBrowserState,
   WorkspaceFileEntry,
@@ -45,7 +46,42 @@ function formatObservedAt(observedAt: number | null): string {
 function mediaLabel(mediaType: string): string {
   if (mediaType === "application/pdf") return "PDF preview";
   if (mediaType === "image/svg+xml") return "SVG preview";
+  if (mediaType.includes("wordprocessingml.document")) return "DOCX preview";
+  if (mediaType.includes("spreadsheetml.sheet")) return "XLSX preview";
+  if (mediaType.includes("presentationml.presentation")) return "PPTX preview";
   return "Image preview";
+}
+
+type TablePreview = Pick<OfficePreview, "columns" | "rows" | "truncated"> & { format: string };
+
+function StructuredTable({ path, preview }: { path: string; preview: TablePreview }) {
+  return (
+    <div className="file-structured-preview" role="region" aria-label={`${preview.format.toUpperCase()} table preview`}>
+      <div className="file-structured-meta">
+        <span>{preview.format.toUpperCase()} · {preview.rows.length} rows</span>
+        {preview.truncated && <span>Preview limited for safety</span>}
+      </div>
+      <div className="file-structured-scroll">
+        <table>
+          <caption className="sr-only">Structured preview of {path}</caption>
+          <thead>
+            <tr>
+              {preview.columns.map((column, columnIndex) => <th scope="col" key={`${column}-${columnIndex}`}>{column}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {preview.rows.map((row, rowIndex) => (
+              <tr key={`row-${rowIndex}`}>
+                {preview.columns.map((_, columnIndex) => (
+                  <td key={`cell-${rowIndex}-${columnIndex}`}>{row[columnIndex] ?? ""}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 /** M1-07 real disk browser. Every row comes from the Rust Files service. */
@@ -75,6 +111,9 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
   const preview = state.preview;
   const structuredPreview = preview && !preview.mediaType && !preview.binary && preview.content !== null
     ? structuredPreviewForFile(preview.path, preview.content)
+    : null;
+  const officePreview = preview?.mediaType && preview.base64Data
+    ? officePreviewForFile(preview.path, preview.base64Data)
     : null;
 
   return (
@@ -162,7 +201,13 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
                   </button>
                 </span>
               </div>
-              {preview.mediaType === "application/pdf" ? (
+              {preview.mediaType.startsWith("application/vnd.openxmlformats") ? (
+                officePreview ? (
+                  <StructuredTable path={preview.path} preview={officePreview} />
+                ) : (
+                  <p className="muted">This Office file could not be safely previewed. Use Open in app to view it.</p>
+                )
+              ) : preview.mediaType === "application/pdf" ? (
                 <div className="file-document-preview">
                   <object
                     data={`data:${preview.mediaType};base64,${preview.base64Data}`}
@@ -225,31 +270,7 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
                 </span>
               </div>
               {structuredPreview ? (
-                <div className="file-structured-preview" role="region" aria-label={`${structuredPreview.format.toUpperCase()} table preview`}>
-                  <div className="file-structured-meta">
-                    <span>{structuredPreview.format.toUpperCase()} · {structuredPreview.rows.length} rows</span>
-                    {structuredPreview.truncated && <span>Preview limited for safety</span>}
-                  </div>
-                  <div className="file-structured-scroll">
-                    <table>
-                      <caption className="sr-only">Structured preview of {preview.path}</caption>
-                      <thead>
-                        <tr>
-                          {structuredPreview.columns.map((column, columnIndex) => <th scope="col" key={`${column}-${columnIndex}`}>{column}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {structuredPreview.rows.map((row, rowIndex) => (
-                          <tr key={`row-${rowIndex}`}>
-                            {structuredPreview.columns.map((_, columnIndex) => (
-                              <td key={`cell-${rowIndex}-${columnIndex}`}>{row[columnIndex] ?? ""}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <StructuredTable path={preview.path} preview={structuredPreview} />
               ) : (
                 <pre className="file-preview-code">{preview.content}</pre>
               )}
