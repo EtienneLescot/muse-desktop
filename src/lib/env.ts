@@ -7,4 +7,4 @@ export function isTauriRuntime(): boolean {
 }
 
 /** Frontend build marker: bump on every shipped frontend fix so stale webviews are identifiable. */
-export const BUILD_ID = "2026-09-17-native-artifact-export";
+export const BUILD_ID = "2026-09-17-persistent-queue";

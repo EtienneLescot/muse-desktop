@@ -291,6 +291,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** deux messages en attente, suppression du second, fin simultanée du tour, refus serveur et reboot ; ordre vérifié dans le moteur.
 
+**État au 17/09/2026 :** l'ordre des tours admis est persisté sous `muse-desktop.queued-turns.v1`. Une restauration les marque à vérifier et permet de retirer le rappel local sans les rejouer ; l'admission host reste la seule source de vérité jusqu'à l'arrivée d'un snapshot MSP de queue.
+
 ### M1-11 — Modèles et compaction
 
 **Code :** SettingsPanel, CompactBar, RPC existantes. Dépend M0-08.

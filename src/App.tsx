@@ -77,6 +77,7 @@ export default function App() {
     stoppingBySession,
     activeConnectionState,
     queuedTurns,
+    dismissQueuedTurn,
     inputRequests,
     activeInputRequests,
     workspace,
@@ -1102,16 +1103,24 @@ export default function App() {
                         <span className="muted">They will run in order</span>
                       </div>
                       {queuedTurns.map((turn) => (
-                        <div className="queued-turn" key={turn.turn_id}>
+                        <div className={`queued-turn${turn.recovered ? " queued-turn-recovered" : ""}`} key={turn.turn_id}>
                           <span className="queued-turn-text" title={turn.text}>
                             {turn.text.length > 120 ? `${turn.text.slice(0, 120)}…` : turn.text}
                           </span>
+                          {turn.recovered && (
+                            <span className="queued-turn-note">
+                              Saved before restart — verify the host queue
+                            </span>
+                          )}
                           <button
                             type="button"
-                            onClick={() => void unqueueTurn(active.session_id, turn.turn_id)}
-                            title="Remove this message from the host queue"
+                            onClick={() => {
+                              if (turn.recovered) dismissQueuedTurn(active.session_id, turn.turn_id);
+                              else void unqueueTurn(active.session_id, turn.turn_id);
+                            }}
+                            title={turn.recovered ? "Dismiss this local queue reminder" : "Remove this message from the host queue"}
                           >
-                            Remove from queue
+                            {turn.recovered ? "Dismiss" : "Remove from queue"}
                           </button>
                         </div>
                       ))}

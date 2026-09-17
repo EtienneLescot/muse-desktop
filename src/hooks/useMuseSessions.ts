@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/env";
+import { loadQueuedTurns, saveQueuedTurns } from "../lib/queuedTurns";
 import {
   appendLog,
   dropLog,
@@ -677,6 +678,8 @@ export interface QueuedTurn {
   turn_id: string;
   text: string;
   createdAt: number;
+  /** Present only after hydration; the host queue was not snapshotted. */
+  recovered?: boolean;
 }
 
 interface UseMuseSessions {
@@ -699,6 +702,8 @@ interface UseMuseSessions {
   activeConnectionState: SessionConnectionState;
   /** M1-10: queued turns that can still be reclaimed before launch. */
   queuedTurns: QueuedTurn[];
+  /** Remove a restored queue reminder locally without claiming host state. */
+  dismissQueuedTurn: (sessionId: string, turnId: string) => void;
   /** Default folder for new threads (persisted); each thread keeps its own. */
   workspace: string | null;
   /** Change the default folder for new threads (not a global lock). */
@@ -1310,7 +1315,15 @@ export function useMuseSessions(): UseMuseSessions {
   // a slow host cannot make a turn look finished or lose its open transcript.
   const [stoppingBySession, setStoppingBySession] = useState<Record<string, boolean>>({});
   const stoppingBySessionRef = useRef<Record<string, boolean>>({});
-  const [queuedTurnsBySession, setQueuedTurnsBySession] = useState<Record<string, QueuedTurn[]>>({});
+  const [queuedTurnsBySession, setQueuedTurnsBySession] = useState<Record<string, QueuedTurn[]>>(() => {
+    const stored = loadQueuedTurns();
+    return Object.fromEntries(
+      Object.entries(stored).map(([sessionId, rows]) => [
+        sessionId,
+        rows.map((row) => ({ ...row, recovered: true })),
+      ]),
+    );
+  });
   // Global authorization posture. This is intentionally kept separate from
   // sandbox settings: changing the posture must not mutate host capabilities.
   const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
@@ -1763,6 +1776,11 @@ export function useMuseSessions(): UseMuseSessions {
     if (!historyReady) return;
     saveSessions(sessions.map(({ running: _r, ...rest }) => rest));
   }, [sessions, historyReady]);
+
+  useEffect(() => {
+    if (!historyReady) return;
+    saveQueuedTurns(queuedTurnsBySession);
+  }, [queuedTurnsBySession, historyReady]);
 
   useEffect(() => {
     if (!historyReady) return;
@@ -3688,6 +3706,7 @@ export function useMuseSessions(): UseMuseSessions {
                   turn_id: admission.turnId,
                   text: originalText,
                   createdAt: Date.now(),
+                  recovered: false,
                 };
                 setQueuedTurnsBySession((cur) => ({
                   ...cur,
@@ -4259,6 +4278,15 @@ export function useMuseSessions(): UseMuseSessions {
       return false;
     }
   }, [kickPoll]);
+
+  const dismissQueuedTurn = useCallback((sessionId: string, turnId: string): void => {
+    setQueuedTurnsBySession((cur) => {
+      const queued = cur[sessionId] ?? [];
+      const next = { ...cur, [sessionId]: queued.filter((turn) => turn.turn_id !== turnId) };
+      if (next[sessionId].length === 0) delete next[sessionId];
+      return next;
+    });
+  }, []);
 
   const killSession = useCallback(
     async (sessionId: string) => {
@@ -5928,6 +5956,7 @@ export function useMuseSessions(): UseMuseSessions {
     openWorkspacePath,
     error,
     evtCount,
+    dismissQueuedTurn,
     startupProbe,
     probeStartup,
   };
