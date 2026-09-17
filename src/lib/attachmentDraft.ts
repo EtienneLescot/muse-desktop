@@ -1,8 +1,8 @@
 /**
  * Ephemeral composer attachment recovery (M1-08).
  *
- * The text draft already lives in sessionStorage. This companion keeps the
- * same lifecycle for selected attachments while bounding the serialized
+ * The text draft already lives in the defensive sessionStorage facade. This
+ * companion keeps the same lifecycle for selected attachments while bounding the serialized
  * payload. Text and small images retain their content; larger images retain
  * metadata only and are surfaced as "Reselect" rows after a reload. Nothing
  * here is sent to the host or written to localStorage.
