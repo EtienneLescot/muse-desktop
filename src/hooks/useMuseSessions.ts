@@ -320,6 +320,7 @@ import {
 } from "../lib/approvalResolution";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
+import { reconnectErrorMessage } from "../lib/errorCopy";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
 import {
@@ -3436,7 +3437,7 @@ export function useMuseSessions(): UseMuseSessions {
       }
     } catch (e) {
       setConnectionState(id, "error");
-      setError(`Reconnect failed: ${String(e)}. Your saved messages are still available.`);
+      setError(reconnectErrorMessage(e));
     } finally {
       setReconnectingId(null);
     }
