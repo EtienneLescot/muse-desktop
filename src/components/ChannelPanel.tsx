@@ -1,4 +1,5 @@
 import { describeChannel } from "../lib/sharing";
+import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
   experimental: boolean;
@@ -15,8 +16,12 @@ export function ChannelPanel({ experimental }: Props) {
     <section className="collab-panel" aria-label="Co-editing channels (experimental)">
       <header className="collab-head">
         <strong>Channels</strong>
-        <span className="collab-flag" title="Transport unspecified: no real-time relay implemented">
-          experimental
+        <span className="capability-line">
+          <CapabilityBadge
+            status="unavailable"
+            reason="Real-time co-editing transport is not connected."
+          />
+          <span className="collab-flag">experimental</span>
         </span>
       </header>
       <p className="muted" role="status">

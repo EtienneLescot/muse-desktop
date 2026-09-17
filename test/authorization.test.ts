@@ -6,7 +6,9 @@ import {
   automaticApprovalChoice,
   authorizationModeDescription,
   authorizationModeLabel,
+  hostApprovalMode,
   parseAuthorizationMode,
+  productAuthorizationMode,
 } from "../src/lib/authorization.ts";
 
 const local = { choiceId: "allow-local", decision: "allow", scope: "localPersistent" };
@@ -37,5 +39,18 @@ describe("global authorization posture", () => {
   it("YOLO chooses the first non-denied host choice", () => {
     assert.deepEqual(automaticApprovalChoice("yolo", [denied, network]), network);
     assert.equal(automaticApprovalChoice("yolo", [denied]), null);
+  });
+
+  it("maps product postures to the closed MSP modes", () => {
+    assert.equal(hostApprovalMode("ask"), "onRequest");
+    assert.equal(hostApprovalMode("workspace"), "promptUnmatched");
+    assert.equal(hostApprovalMode("yolo"), "allowAll");
+  });
+
+  it("maps the host projection back without inventing a product mode", () => {
+    assert.equal(productAuthorizationMode("onRequest"), "ask");
+    assert.equal(productAuthorizationMode("promptUnmatched"), "workspace");
+    assert.equal(productAuthorizationMode("allowAll"), "yolo");
+    assert.equal(productAuthorizationMode("denyUnmatched"), null);
   });
 });

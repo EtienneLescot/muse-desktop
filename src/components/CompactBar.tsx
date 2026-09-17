@@ -57,7 +57,7 @@ export function CompactBar({
           className="compact-text"
           title="Live engine context usage"
         >
-          Context : {formatUsage(usage)}
+          Context: {formatUsage(usage)}
         </span>
       )}
       {suggestServer && (
@@ -81,25 +81,25 @@ export function CompactBar({
             onClick={onCompact}
             title="Summarize this conversation locally"
           >
-            Compacter
+            Summarize
           </button>
         </>
       ) : (
         <>
           <span
             className="compact-flag"
-            title={`Summary du ${new Date(summary.createdAt).toLocaleString()}`}
+            title={`Summary from ${new Date(summary.createdAt).toLocaleString()}`}
           >
             summarized
           </span>
           <span className="compact-text">
             {auto ? "Automatic summary" : "Summary ready"} — {summary.entryCount}{" "}
-            entries : {summary.decisions.length} decision(s),{" "}
+            entries: {summary.decisions.length} decision(s),{" "}
             {summary.context.length} context, {summary.todos.length} to do.
             {entryCount >= COMPACT_WARN_ENTRIES && (
               <>
                 {" "}
-                (log actuel : {entryCount} / {COMPACT_AUTO_ENTRIES})
+                (current log: {entryCount} / {COMPACT_AUTO_ENTRIES})
               </>
             )}
           </span>
@@ -108,7 +108,7 @@ export function CompactBar({
             onClick={onCompact}
             title="Rebuild local summary"
           >
-            Recompacter
+            Rebuild summary
           </button>
           <button
             type="button"

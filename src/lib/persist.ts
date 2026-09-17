@@ -17,6 +17,11 @@ import type {
   ProjectSettings,
   ThreadProjectMap,
 } from "./projects.ts";
+import {
+  readStorageJson,
+  removeStorageKey,
+  writeStorageJson,
+} from "./storage.ts";
 
 export interface StoredSession {
   session_id: string;
@@ -68,22 +73,13 @@ const logKey = (sessionId: string) => `muse-desktop.log.v1.${sessionId}`;
 export const MAX_LOG_ENTRIES = 2000;
 
 function read<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return readStorageJson(key, fallback);
 }
 
 function write(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Quota or privacy mode: persistence is best-effort, the live
-    // session keeps working in memory.
-  }
+  // Quota or privacy mode remains best-effort; the facade records the issue
+  // for an optional recovery banner while the live session keeps working.
+  writeStorageJson(key, value);
 }
 
 function isValidSession(s: unknown): s is StoredSession {
@@ -167,11 +163,7 @@ export function saveLog(sessionId: string, entries: LogEntry[]): void {
 }
 
 export function dropLog(sessionId: string): void {
-  try {
-    localStorage.removeItem(logKey(sessionId));
-  } catch {
-    // best-effort
-  }
+  removeStorageKey(logKey(sessionId));
 }
 
 export function loadWorkspace(): string | null {
@@ -190,11 +182,7 @@ export function loadActiveId(): string | null {
 
 export function saveActiveId(id: string | null): void {
   if (id === null) {
-    try {
-      localStorage.removeItem(ACTIVE_KEY);
-    } catch {
-      // best-effort
-    }
+    removeStorageKey(ACTIVE_KEY);
   } else {
     write(ACTIVE_KEY, id);
   }
@@ -365,9 +353,5 @@ export function saveOutbox(sessionId: string, entries: OutboxEntry[]): void {
 }
 
 export function dropOutbox(sessionId: string): void {
-  try {
-    localStorage.removeItem(outboxKey(sessionId));
-  } catch {
-    // best-effort
-  }
+  removeStorageKey(outboxKey(sessionId));
 }

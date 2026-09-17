@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "**"]
+  pull_request:
+
+concurrency:
+  group: muse-desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # The test runner uses Node's native TypeScript stripping support,
+          # which is available in Node 22+.
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests
+        run: npm test
+      - name: Build frontend
+        run: npm run build
+
+  rust:
+    name: Rust supervisor tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            patchelf
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Provide CI frontend placeholder
+        shell: bash
+        run: |
+          # The Rust supervisor tests do not exercise the webview, but the
+          # Tauri context macro still validates that frontendDist exists.
+          mkdir -p dist
+          printf '<!doctype html><title>CI</title>\n' > dist/index.html
+      - name: Provide CI sidecar placeholder
+        shell: bash
+        run: |
+          # Tauri validates every configured externalBin during compilation.
+          # The real Muse sidecar is target-specific and is intentionally not
+          # committed for Linux CI, so provide an executable placeholder for
+          # supervisor unit tests (no test launches it).
+          printf '#!/bin/sh\nexit 0\n' > src-tauri/binaries/muse-x86_64-unknown-linux-gnu
+          chmod +x src-tauri/binaries/muse-x86_64-unknown-linux-gnu
+      - name: Run supervisor tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml

@@ -29,7 +29,7 @@ export function ImportPanel({ imported, notes, onImportText, onDismiss }: Props)
         <strong>Import config</strong>
       </header>
       <label className="collab-mode">
-        Source connue{" "}
+        Known source{" "}
         <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="Known config path">
           {KNOWN_CONFIG_PATHS.map((p) => (
             <option key={p} value={p}>
@@ -48,7 +48,7 @@ export function ImportPanel({ imported, notes, onImportText, onDismiss }: Props)
       />
       <div className="collab-actions">
         <button type="button" onClick={() => { onImportText(source, pasted); setPasted(""); }} disabled={pasted.trim().length === 0}>
-          Importer le texte
+          Import text
         </button>
         <button type="button" onClick={() => fileRef.current?.click()}>
           Choose a file…

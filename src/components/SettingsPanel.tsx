@@ -14,7 +14,7 @@
  *   providers" (never a live list). Provider selection persists per
  *   project either way.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
 import type { ScopeVerdict } from "../lib/scope";
 import {
@@ -33,6 +33,12 @@ import {
   authorizationModeLabel,
   type AuthorizationMode,
 } from "../lib/authorization";
+import {
+  consumeStorageIssues,
+  exportStorageSnapshot,
+  subscribeStorageIssues,
+  type StorageIssue,
+} from "../lib/storage";
 
 interface Props {
   /** Absolute workspace root; null while none is picked. */
@@ -84,6 +90,27 @@ export function SettingsPanel({
   const [probe, setProbe] = useState("");
   const [probeResult, setProbeResult] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [storageIssues, setStorageIssues] = useState<StorageIssue[]>(() =>
+    consumeStorageIssues(),
+  );
+
+  useEffect(() => {
+    const unsubscribe = subscribeStorageIssues(() => {
+      const next = consumeStorageIssues();
+      if (next.length === 0) return;
+      setStorageIssues((previous) => {
+        const merged = [...previous, ...next];
+        return merged.filter(
+          (issue, index) =>
+            merged.findIndex(
+              (candidate) => candidate.key === issue.key && candidate.kind === issue.kind,
+            ) === index,
+        );
+      });
+    });
+    return unsubscribe;
+  }, []);
 
   const effective = effectiveSandboxMode(sandbox);
 
@@ -110,6 +137,38 @@ export function SettingsPanel({
 
   function pickMode(mode: SandboxMode): void {
     onSandboxChange({ ...sandbox, mode });
+  }
+
+  function exportLocalData(): void {
+    try {
+      const blob = new Blob([exportStorageSnapshot()], { type: "application/json" });
+      const issues = consumeStorageIssues();
+      if (issues.length > 0) {
+        setStorageIssues((previous) => {
+          const merged = [...previous, ...issues];
+          return merged.filter(
+            (issue, index) =>
+              merged.findIndex(
+                (candidate) =>
+                  candidate.key === issue.key && candidate.kind === issue.kind,
+              ) === index,
+          );
+        });
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `muse-desktop-recovery-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setExportStatus(
+        issues.length > 0
+          ? "Recovery snapshot downloaded with storage warnings."
+          : "Recovery snapshot downloaded.",
+      );
+    } catch (error) {
+      setExportStatus(`Recovery export failed: ${String(error)}`);
+    }
   }
 
   return (
@@ -266,6 +325,44 @@ export function SettingsPanel({
       <div className="settings-group">
         <h3>Web search</h3>
         <p className="settings-note">{WEB_SEARCH_DEFAULT_NOTE}</p>
+      </div>
+
+      <div className="settings-group">
+        <h3>Local data</h3>
+        <p className="settings-note">
+          Export conversations and local settings for recovery or support. The
+          snapshot stays on this device until you choose where to share it.
+        </p>
+        <div className="settings-row">
+          <button type="button" onClick={exportLocalData}>
+            Export recovery snapshot
+          </button>
+        </div>
+        {exportStatus !== null && (
+          <p className="settings-note" role="status">{exportStatus}</p>
+        )}
+        {storageIssues.length > 0 && (
+          <div className="settings-storage-warning" role="status">
+            <strong>Local data needs attention</strong>
+            <p>
+              Muse kept the active session in memory, but some local data could
+              not be read or saved. Export a recovery snapshot before clearing
+              browser data.
+            </p>
+            <ul>
+              {storageIssues.map((issue) => (
+                <li key={`${issue.kind}:${issue.key}`}>
+                  {issue.kind === "corrupt"
+                    ? "Corrupted data"
+                    : issue.kind === "quota"
+                      ? "Storage quota reached"
+                      : "Storage unavailable"}{" "}
+                  (<code>{issue.key}</code>)
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="settings-group">

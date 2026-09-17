@@ -5,6 +5,7 @@ import {
   planWorktrees,
   worktreeShellSnippet,
 } from "../lib/worktrees";
+import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
   /** Agent ids seen as `subagent` entries in the active thread log. */
@@ -44,6 +45,10 @@ export function OrchestrationPanel({ agents }: Props) {
     <section className="orchestration" aria-label="Agent worktrees">
       <header className="orchestration-head">
         <strong>Worktrees ({plans.length})</strong>
+        <CapabilityBadge
+          status="manual"
+          reason="The plan and setup commands are prepared locally; worktrees are created when you run the commands."
+        />
         <button type="button" onClick={onCopy} title="Copy setup snippet">
           {copied ? "Copied" : "Copy"}
         </button>
