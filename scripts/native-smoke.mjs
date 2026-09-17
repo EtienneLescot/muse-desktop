@@ -28,8 +28,9 @@
  *   node scripts/native-smoke.mjs --exercise-approval
  *   node scripts/native-smoke.mjs --exercise-isolation
  *   node scripts/native-smoke.mjs --exercise-user-shell
+ *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -53,6 +54,15 @@ function binaryArgument() {
   return index >= 0 && process.argv[index + 1]
     ? resolve(process.argv[index + 1])
     : DEFAULT_BINARY;
+}
+
+function reportArgument() {
+  const index = process.argv.indexOf("--report");
+  if (index < 0) return null;
+  if (!process.argv[index + 1] || process.argv[index + 1].startsWith("--")) {
+    fail("--report requires a destination file");
+  }
+  return resolve(process.argv[index + 1]);
 }
 
 function exercisesControlPath() {
@@ -290,6 +300,7 @@ async function main() {
   const exerciseApproval = exercisesApprovalPath();
   const exerciseIsolation = exercisesIsolationPath();
   const exerciseUserShell = exercisesUserShellPath();
+  const reportPath = reportArgument();
   const roots = await Promise.all([
     mkdtemp(join(tmpdir(), "muse-native-smoke-a-")),
     mkdtemp(join(tmpdir(), "muse-native-smoke-b-")),
@@ -475,7 +486,7 @@ async function main() {
         survivingModelCatalogue: "available",
       };
     }
-    process.stdout.write(`${JSON.stringify({
+    const report = {
       schema: "muse-desktop.native-smoke.v1",
       hosts: sessions.map((sessionId, index) => ({
         host: String.fromCharCode(65 + index),
@@ -490,7 +501,11 @@ async function main() {
       ...(exerciseApproval ? { approvalModes } : {}),
       ...(exerciseIsolation ? { isolation } : {}),
       ...(exerciseUserShell ? { userShell: userShellChecks } : {}),
-    })}\n`);
+    };
+    if (reportPath !== null) {
+      await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    }
+    process.stdout.write(`${JSON.stringify(report)}\n`);
   } finally {
     await Promise.all(hosts.map((host) => host.close()));
     await Promise.all(roots.map(removeTemporaryDirectory));
