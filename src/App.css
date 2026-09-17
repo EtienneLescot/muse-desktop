@@ -4630,6 +4630,23 @@ body.dark .composer textarea::placeholder {
   cursor: not-allowed;
 }
 
+.artifact-preview-toggle {
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+}
+
+.artifact-document-preview {
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.artifact-document-preview .message-content {
+  color: var(--text);
+}
+
 .artifact-export-message {
   margin: 0 0 8px;
   padding: 7px 9px;
