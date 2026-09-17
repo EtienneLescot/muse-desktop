@@ -4889,6 +4889,90 @@ body.dark .composer textarea::placeholder {
   overflow: hidden;
 }
 
+.skill-invocation-progress {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--blue) 8%, var(--bg));
+  color: var(--text);
+}
+
+.skill-invocation-progress.is-completed {
+  border-color: color-mix(in srgb, var(--success, #2aa876) 45%, var(--line));
+  background: color-mix(in srgb, var(--success, #2aa876) 8%, var(--bg));
+}
+
+.skill-invocation-progress.is-failed,
+.skill-invocation-progress.is-unknown {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg));
+}
+
+.skill-progress-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 15%, transparent);
+}
+
+.skill-invocation-progress.is-running .skill-progress-dot,
+.skill-invocation-progress.is-sending .skill-progress-dot,
+.skill-invocation-progress.is-loading-resources .skill-progress-dot {
+  animation: skill-progress-pulse 1.25s ease-in-out infinite;
+}
+
+.skill-invocation-progress.is-completed .skill-progress-dot {
+  background: var(--success, #2aa876);
+  box-shadow: none;
+}
+
+.skill-invocation-progress.is-failed .skill-progress-dot,
+.skill-invocation-progress.is-unknown .skill-progress-dot {
+  background: var(--danger);
+  box-shadow: none;
+}
+
+.skill-progress-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: 0.76rem;
+}
+
+.skill-progress-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-progress-copy span {
+  color: var(--muted);
+}
+
+.skill-progress-copy small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+@keyframes skill-progress-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.86);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .skill-scan-result > small {
   display: block;
   overflow: hidden;

@@ -64,6 +64,55 @@ export interface SkillResourceContext {
   truncated: boolean;
 }
 
+/**
+ * Renderer-only progress for a skill invocation.
+ *
+ * The host remains authoritative for the turn itself. These stages only
+ * describe the client pipeline so a user can tell whether Muse is loading a
+ * local resource, waiting for admission, or already running the turn.
+ */
+export type SkillInvocationStage =
+  | "preparing"
+  | "loading-resources"
+  | "sending"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "unknown";
+
+export interface SkillInvocationProgress {
+  name: string;
+  source: "host" | "local";
+  stage: SkillInvocationStage;
+  startedAt: number;
+  updatedAt: number;
+  detail?: string;
+  turnId?: string;
+}
+
+/** Stable copy for the compact progress indicator in the Extensions panel. */
+export function skillInvocationStageLabel(stage: SkillInvocationStage): string {
+  switch (stage) {
+    case "preparing":
+      return "Preparing invocation";
+    case "loading-resources":
+      return "Loading skill resources";
+    case "sending":
+      return "Sending to Muse";
+    case "queued":
+      return "Queued by Muse";
+    case "running":
+      return "Running";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return "Failed";
+    case "unknown":
+      return "Needs attention";
+  }
+}
+
 /** Storage key (all writes confined to `muse-desktop.*`). */
 export const SKILLS_KEY = "muse-desktop.skills.v1";
 

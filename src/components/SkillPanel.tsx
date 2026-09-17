@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
   getSkillDetail,
+  skillInvocationStageLabel,
   type Skill,
+  type SkillInvocationProgress,
   type SkillSuggestion,
 } from "../lib/skills";
 import type { SkillScanSummary } from "../lib/skillDiscovery";
@@ -11,6 +13,7 @@ import { userFacingError } from "../lib/errorCopy";
 interface Props {
   skills: Skill[];
   hostSkills: HostSkill[];
+  skillProgress?: SkillInvocationProgress;
   workspace: string | null;
   onRefreshHost: () => Promise<HostSkill[] | null>;
   onScan: () => Promise<SkillScanSummary | null>;
@@ -28,7 +31,7 @@ interface Props {
  * US-25 skills panel: slash-invokable skills, auto-suggest traced to the
  * log, progressive disclosure (view-only shows description only).
  */
-export function SkillPanel({ skills, hostSkills, workspace, onRefreshHost, onScan, onToggle, onInvoke, onTraceSuggest }: Props) {
+export function SkillPanel({ skills, hostSkills, skillProgress, workspace, onRefreshHost, onScan, onToggle, onInvoke, onTraceSuggest }: Props) {
   const [draft, setDraft] = useState("");
   const [suggestions, setSuggestions] = useState<SkillSuggestion[]>([]);
   const [scanBusy, setScanBusy] = useState(false);
@@ -59,6 +62,20 @@ export function SkillPanel({ skills, hostSkills, workspace, onRefreshHost, onSca
           {scanBusy ? "Scanning…" : "Scan workspace"}
         </button>
       </div>
+      {skillProgress && (
+        <div
+          className={`skill-invocation-progress is-${skillProgress.stage}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="skill-progress-dot" aria-hidden="true" />
+          <span className="skill-progress-copy">
+            <strong>/{skillProgress.name}</strong>
+            <span>{skillInvocationStageLabel(skillProgress.stage)}</span>
+            {skillProgress.detail && <small>{skillProgress.detail}</small>}
+          </span>
+        </div>
+      )}
       {scan !== null && (
         <div className="skill-scan-result" role="status">
           <small>{scan.skills.length} discovered · {scan.root}</small>

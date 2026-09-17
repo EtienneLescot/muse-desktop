@@ -213,6 +213,7 @@ export default function App() {
     setConnectorUseInMuseById,
     skills,
     hostSkillsBySession,
+    skillInvocationsBySession,
     refreshHostSkills,
     setSkillEnabledByName,
     traceSkillSuggestions,
@@ -957,6 +958,7 @@ export default function App() {
                 <SkillPanel
                   skills={skills}
                   hostSkills={activeId !== null ? (hostSkillsBySession[activeId] ?? []) : []}
+                  skillProgress={activeId !== null ? skillInvocationsBySession[activeId] : undefined}
                   workspace={workspace}
                   onRefreshHost={() => activeId !== null ? refreshHostSkills(activeId) : Promise.resolve(null)}
                   onScan={() => scanSkills(workspace)}
