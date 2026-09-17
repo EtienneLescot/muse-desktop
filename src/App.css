@@ -2303,6 +2303,48 @@ body.dark .composer textarea::placeholder {
   color: var(--text);
 }
 
+.review-file-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px 0 2px;
+  font-size: 0.72rem;
+}
+
+.review-action {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 5px 9px;
+  font-size: 0.72rem;
+}
+
+.review-action:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+
+.review-action-danger {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  color: var(--danger);
+}
+
+.review-action-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+
+.review-confirm-label,
+.review-action-note,
+.review-action-error {
+  font-size: 0.72rem;
+}
+
+.review-action-error {
+  color: var(--danger);
+}
+
 .review-patch {
   flex: 1;
   min-height: 140px;

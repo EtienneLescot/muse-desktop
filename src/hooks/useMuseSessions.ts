@@ -321,6 +321,7 @@ import {
 } from "../lib/memory";
 import {
   EMPTY_GIT_REVIEW,
+  type GitMutationExpectation,
   type GitDiffScope,
   type GitDiffSnapshot,
   type GitReviewState,
@@ -547,6 +548,17 @@ interface UseMuseSessions {
     scope: GitDiffScope,
     baseRef?: string,
   ) => Promise<GitDiffSnapshot | null>;
+  stageGitFiles: (
+    sessionId: string,
+    paths: string[],
+    expected: GitMutationExpectation,
+  ) => Promise<GitStatusSnapshot | null>;
+  restoreGitFiles: (
+    sessionId: string,
+    paths: string[],
+    scope: "staged" | "unstaged",
+    expected: GitMutationExpectation,
+  ) => Promise<GitStatusSnapshot | null>;
   /** US-5: move a thread to the archived list (persisted flag). */
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -3244,6 +3256,94 @@ export function useMuseSessions(): UseMuseSessions {
     [gitReviewBySession],
   );
 
+  const stageGitFiles = useCallback(
+    async (
+      sessionId: string,
+      paths: string[],
+      expected: GitMutationExpectation,
+    ): Promise<GitStatusSnapshot | null> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const status = await invoke<GitStatusSnapshot>("git_stage", {
+          sessionId,
+          paths,
+          expectedHead: expected.head,
+          expectedStatus: expected.statusFingerprint,
+          expectedPatch: expected.patch,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            status,
+            diff: null,
+            loading: false,
+            error: null,
+          },
+        }));
+        return status;
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+        return null;
+      }
+    },
+    [beginGitRequest],
+  );
+
+  const restoreGitFiles = useCallback(
+    async (
+      sessionId: string,
+      paths: string[],
+      scope: "staged" | "unstaged",
+      expected: GitMutationExpectation,
+    ): Promise<GitStatusSnapshot | null> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const status = await invoke<GitStatusSnapshot>("git_restore", {
+          sessionId,
+          paths,
+          scope,
+          expectedHead: expected.head,
+          expectedStatus: expected.statusFingerprint,
+          expectedPatch: expected.patch,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            status,
+            diff: null,
+            loading: false,
+            error: null,
+          },
+        }));
+        return status;
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+        return null;
+      }
+    },
+    [beginGitRequest],
+  );
+
   // US-23 search over the stored index (empty unless opted in). Search
   // keeps working while paused — pause only suspends indexing updates.
   const indexResults = searchIndex(indexStore, indexEnabled ? indexQuery : "");
@@ -3388,6 +3488,8 @@ export function useMuseSessions(): UseMuseSessions {
     gitReview,
     refreshGitStatus,
     loadGitDiff,
+    stageGitFiles,
+    restoreGitFiles,
     error,
     evtCount,
   };

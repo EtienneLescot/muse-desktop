@@ -189,6 +189,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** actions fichier puis hunk, avec version attendue du diff. Refuser si état disque/index a changé ; confirmation proportionnée pour discard. Ne pas utiliser reset --hard comme raccourci.
 
+**État au 16/09/2026 :** stage, unstage et discard fichier sont livrés dans le service Git sessionné. Les commandes exigent l’observation HEAD/statut/patch du panneau et renvoient l’état actualisé ; les fichiers non suivis ne sont pas supprimés. Les actions hunk et multi-sélection restent à compléter.
+
 **Acceptation :** staging partiel, hunk périmé, fichier utilisateur modifié entre deux clics, binaire et échec Git. Les modifications non ciblées restent intactes.
 
 ### M1-04 — Commit, push, PR

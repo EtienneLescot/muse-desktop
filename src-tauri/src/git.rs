@@ -5,7 +5,7 @@
 //! in later roadmap slices, so a review can never imply that a file changed
 //! merely because a response mentioned it.
 
-use std::path::Path;
+use std::path::{Component, Path};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -39,6 +39,7 @@ pub struct GitStatusSnapshot {
     pub upstream: Option<String>,
     pub ahead: u64,
     pub behind: u64,
+    pub fingerprint: String,
     pub files: Vec<GitStatusFile>,
     pub observed_at: u64,
 }
@@ -86,6 +87,27 @@ fn now_ms() -> u64 {
 
 fn decode(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
+}
+
+/// Stable, local fingerprint for the exact porcelain status payload. It is
+/// sent back with mutations so a concurrent edit cannot be overwritten by a
+/// stale Review action. This is intentionally not a cryptographic claim: it
+/// only guards the short-lived UI observation window.
+fn status_fingerprint(bytes: &[u8]) -> String {
+    status_fingerprint_parts(&[bytes])
+}
+
+fn status_fingerprint_parts(parts: &[&[u8]]) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for part in parts {
+        for byte in *part {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        hash ^= 0xff;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
 }
 
 fn git_command(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
@@ -190,6 +212,7 @@ pub fn parse_status(bytes: &[u8], repo_root: &str) -> GitStatusSnapshot {
         upstream,
         ahead,
         behind,
+        fingerprint: status_fingerprint(bytes),
         files,
         observed_at: now_ms(),
     }
@@ -329,6 +352,27 @@ pub fn status(root: &Path) -> Result<GitStatusSnapshot, String> {
     )?;
     let root_string = canonical.display().to_string();
     let mut snapshot = parse_status(&bytes, &root_string);
+    // Status codes alone do not distinguish two edits to the same file. Add
+    // both bounded unified diffs so mutating actions can reject a stale
+    // observation even when the path/status pair is unchanged.
+    let unstaged = git_command(
+        &canonical,
+        &["diff", "--no-ext-diff", "--binary", "--full-index", "--no-color"],
+    )
+    .unwrap_or_default();
+    let staged = git_command(
+        &canonical,
+        &[
+            "diff",
+            "--cached",
+            "--no-ext-diff",
+            "--binary",
+            "--full-index",
+            "--no-color",
+        ],
+    )
+    .unwrap_or_default();
+    snapshot.fingerprint = status_fingerprint_parts(&[&bytes, &unstaged, &staged]);
     snapshot.head = head(&canonical);
     Ok(snapshot)
 }
@@ -369,9 +413,169 @@ pub fn diff(root: &Path, scope: &str, base_ref: Option<String>) -> Result<GitDif
     ))
 }
 
+fn validate_paths(paths: &[String]) -> Result<(), String> {
+    if paths.is_empty() {
+        return Err("at least one repository-relative path is required".to_string());
+    }
+    for raw in paths {
+        let path = raw.trim();
+        if path.is_empty() {
+            return Err("repository path must not be empty".to_string());
+        }
+        let candidate = Path::new(path);
+        // `Path` only understands the host OS syntax. Git paths cross the
+        // Tauri boundary as strings, so reject Windows drive/UNC forms even
+        // when the supervisor itself is running on Linux (CI and WSL).
+        let windows_absolute = path.starts_with("\\\\")
+            || path.starts_with("//")
+            || (path.len() >= 2
+                && path.as_bytes()[0].is_ascii_alphabetic()
+                && path.as_bytes()[1] == b':');
+        let normalized = path.replace('\\', "/");
+        if candidate.is_absolute()
+            || windows_absolute
+            || normalized.split('/').any(|segment| segment == "..")
+            || candidate.components().any(|component| {
+                matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))
+            })
+        {
+            return Err(format!("repository path is outside the workspace: {path}"));
+        }
+    }
+    Ok(())
+}
+
+fn verify_mutation_observation(
+    root: &Path,
+    scope: &str,
+    expected_head: Option<&str>,
+    expected_status: Option<&str>,
+    expected_patch: Option<&str>,
+) -> Result<GitStatusSnapshot, String> {
+    let current = status(root)?;
+    if let Some(expected) = expected_head.filter(|value| !value.trim().is_empty()) {
+        if current.head.as_deref() != Some(expected) {
+            return Err("repository HEAD changed; refresh Review before applying this action".to_string());
+        }
+    }
+    if let Some(expected) = expected_status.filter(|value| !value.trim().is_empty()) {
+        if current.fingerprint != expected {
+            return Err("repository status changed; refresh Review before applying this action".to_string());
+        }
+    }
+    if let Some(expected) = expected_patch {
+        let actual = diff(root, scope, None)?.patch;
+        if actual != expected {
+            return Err("the selected diff changed; refresh Review before applying this action".to_string());
+        }
+    }
+    Ok(current)
+}
+
+/// Stage one or more repository-relative files after checking the exact
+/// observation that produced the UI action.
+pub fn stage(
+    root: &Path,
+    paths: &[String],
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+    expected_patch: Option<String>,
+) -> Result<GitStatusSnapshot, String> {
+    validate_paths(paths)?;
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    verify_mutation_observation(
+        &canonical,
+        "unstaged",
+        expected_head.as_deref(),
+        expected_status.as_deref(),
+        expected_patch.as_deref(),
+    )?;
+    let mut args = vec!["add", "--"];
+    args.extend(paths.iter().map(String::as_str));
+    git_command(&canonical, &args)?;
+    status(&canonical)
+}
+
+/// Restore one or more files from either the index (`staged`) or worktree
+/// (`unstaged`). Untracked files are never deleted by this action.
+pub fn restore(
+    root: &Path,
+    paths: &[String],
+    scope: &str,
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+    expected_patch: Option<String>,
+) -> Result<GitStatusSnapshot, String> {
+    validate_paths(paths)?;
+    if scope != "staged" && scope != "unstaged" {
+        return Err(format!("unknown restore scope: {scope}"));
+    }
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    let current = verify_mutation_observation(
+        &canonical,
+        scope,
+        expected_head.as_deref(),
+        expected_status.as_deref(),
+        expected_patch.as_deref(),
+    )?;
+    if scope == "unstaged"
+        && current
+            .files
+            .iter()
+            .any(|file| paths.iter().any(|path| path == &file.path) && file.untracked)
+    {
+        return Err("untracked files are not deleted by Review; remove them explicitly in the project".to_string());
+    }
+    let flag = if scope == "staged" { "--staged" } else { "--worktree" };
+    let mut args = vec!["restore", flag, "--"];
+    args.extend(paths.iter().map(String::as_str));
+    git_command(&canonical, &args)?;
+    status(&canonical)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
+
+    fn fixture_repo() -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "muse-git-test-{}-{}",
+            std::process::id(),
+            NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let run = |args: &[&str]| {
+            let output = Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "git {:?}: {}", args, decode(&output.stderr));
+        };
+        run(&["init", "--quiet"]);
+        fs::write(root.join("main.txt"), "one\n").unwrap();
+        run(&["add", "--", "main.txt"]);
+        run(&[
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=Muse test",
+            "commit",
+            "--quiet",
+            "-m",
+            "initial",
+        ]);
+        root
+    }
 
     #[test]
     fn status_uses_nul_delimiters_for_unicode_and_renames() {
@@ -411,5 +615,78 @@ mod tests {
     fn branch_diff_rejects_option_like_base() {
         let error = diff(Path::new("."), "branch", Some("--cached".to_string())).unwrap_err();
         assert!(error.contains("cannot start with"));
+    }
+
+    #[test]
+    fn status_fingerprint_changes_with_raw_payload() {
+        let one = parse_status(b"## main\0", "/tmp/repo");
+        let two = parse_status(b"## main\0 M src/main.rs\0", "/tmp/repo");
+        assert_ne!(one.fingerprint, two.fingerprint);
+    }
+
+    #[test]
+    fn mutation_paths_reject_absolute_and_parent_segments() {
+        assert!(validate_paths(&["C:\\\\secret.txt".to_string()]).is_err());
+        assert!(validate_paths(&["../outside.txt".to_string()]).is_err());
+        assert!(validate_paths(&["src/main.rs".to_string()]).is_ok());
+    }
+
+    #[test]
+    fn stage_and_restore_require_the_observed_snapshot() {
+        let root = fixture_repo();
+        fs::write(root.join("main.txt"), "one\ntwo\n").unwrap();
+        let before = status(&root).unwrap();
+        let unstaged = diff(&root, "unstaged", None).unwrap();
+        let path = vec!["main.txt".to_string()];
+        let staged = stage(
+            &root,
+            &path,
+            before.head.clone(),
+            Some(before.fingerprint.clone()),
+            Some(unstaged.patch.clone()),
+        )
+        .unwrap();
+        assert!(staged.files[0].staged);
+        let staged_diff = diff(&root, "staged", None).unwrap();
+        let unstaged_again = restore(
+            &root,
+            &path,
+            "staged",
+            staged.head.clone(),
+            Some(staged.fingerprint.clone()),
+            Some(staged_diff.patch),
+        )
+        .unwrap();
+        assert!(unstaged_again.files[0].unstaged);
+        let unstaged_diff = diff(&root, "unstaged", None).unwrap();
+        let clean = restore(
+            &root,
+            &path,
+            "unstaged",
+            unstaged_again.head.clone(),
+            Some(unstaged_again.fingerprint.clone()),
+            Some(unstaged_diff.patch),
+        )
+        .unwrap();
+        assert!(clean.files.is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stale_status_rejects_a_mutation_before_git_runs() {
+        let root = fixture_repo();
+        fs::write(root.join("main.txt"), "one\ntwo\n").unwrap();
+        let before = status(&root).unwrap();
+        fs::write(root.join("main.txt"), "one\nthree\n").unwrap();
+        let error = stage(
+            &root,
+            &["main.txt".to_string()],
+            before.head,
+            Some(before.fingerprint),
+            None,
+        )
+        .unwrap_err();
+        assert!(error.contains("status changed"));
+        let _ = fs::remove_dir_all(root);
     }
 }

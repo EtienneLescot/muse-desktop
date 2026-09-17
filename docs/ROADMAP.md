@@ -142,7 +142,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 |---|---|---|---|---|---|---|
 | M1-01 | Voir les fichiers réellement modifiés | Adapté | Présente | Câblée | Unitaire | Socle livré en lecture seule ; restent les scénarios E2E webview/live, le snapshot « dernier tour » et la vérification runtime des cas hors Git/modifications externes |
 | M1-02 | Commenter une ligne de diff et demander sa correction | Adapté | Présente | Câblée | Unitaire | Socle livré ; restent la qualification native avec un moteur live et la persistance/triage multi-commentaires |
-| M1-03 | Indexer ou annuler une modification | À définir | Absente | Absente | À faire | Actions fichier puis hunk ; protections contre changement concurrent ; annulation explicite et aucune perte silencieuse |
+| M1-03 | Indexer ou annuler une modification | Adapté | Présente | Câblée | Intégration | Stage, unstage et discard fichier livrés avec garde HEAD/statut/diff ; actions hunk, sélection multiple et qualification native restent à faire |
 | M1-04 | Commit, push et création de PR depuis l'app | Maquette | Absente | Absente | À faire | Relier identité/remote/branche ; gérer auth, hooks, rejet et conflits ; vérifier le commit et la PR réellement créés |
 | M1-05 | Ouvrir et utiliser un terminal du projet | Maquette | Absente | Absente | À faire | PTY natif, entrée/sortie, resize et fermeture ; cwd lié à la conversation ; processus long conservé lors des changements de vue |
 | M1-06 | Faire lire au moteur la sortie du terminal | À définir | Absente | Absente | À faire | Exposer un contexte borné et attribué au bon terminal ; le moteur peut diagnostiquer un build échoué sans copier-coller |
@@ -171,6 +171,14 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Garde de fraîcheur :** avant l’envoi, Muse relit le statut puis le diff exacts. Si HEAD, le fichier, le hunk, le côté ou la ligne ont bougé, le commentaire est refusé avec une invitation à resélectionner ; aucune ancre n’est déplacée silencieusement.
 - **Validation :** suite Node 384 tests, dont les coordonnées old/new, le format de contexte et le rejet d’une ancre périmée ; build TypeScript/Vite réussi.
 - **Limites assumées :** les commentaires sont envoyés comme contexte d’un tour et ne forment pas encore une boîte de triage persistante. La qualification native avec un vrai moteur et les actions de modification du dépôt restent M1-03/M1-04.
+
+### Livraison M1-03 — stage, unstage et discard protégés
+
+- **Contrat backend :** `git_stage(sessionId, paths, expectedHead, expectedStatus, expectedPatch)` et `git_restore(sessionId, paths, scope, ...)` résolvent le workspace sessionné, valident les chemins relatifs et exécutent Git hors thread UI.
+- **Garde de concurrence :** l’empreinte du statut inclut les sorties staged/unstaged et le patch présenté. HEAD, statut ou patch divergents refusent l’action avant toute écriture ; l’état courant est renvoyé après succès.
+- **UX :** la sélection d’un fichier expose Stage file, Unstage file et Discard changes avec confirmation dédiée. Le discard ne supprime jamais un fichier non suivi ; celui-ci est signalé comme nécessitant une suppression explicite dans le projet.
+- **Validation :** tests Rust d’intégration sur un dépôt temporaire pour stage → unstage → discard, rejet d’une observation périmée et validation des chemins ; suite complète 48 tests Rust, 384 tests Node, TypeScript/Vite build réussi.
+- **Limites assumées :** les actions hunk, multi-sélection et commit/push/PR restent M1-04 et les itérations suivantes.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 

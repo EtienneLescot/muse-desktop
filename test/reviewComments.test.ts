@@ -34,6 +34,7 @@ const status: GitStatusSnapshot = {
   upstream: null,
   ahead: 0,
   behind: 0,
+  fingerprint: "status-1",
   files: [],
   observedAt: 1,
 };
