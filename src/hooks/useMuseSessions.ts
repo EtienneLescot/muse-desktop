@@ -321,9 +321,12 @@ import {
 } from "../lib/memory";
 import {
   EMPTY_GIT_REVIEW,
+  type GitCommitResult,
   type GitMutationExpectation,
   type GitDiffScope,
   type GitDiffSnapshot,
+  type GitPrResult,
+  type GitPushResult,
   type GitReviewState,
   type GitStatusSnapshot,
 } from "../lib/git";
@@ -559,6 +562,24 @@ interface UseMuseSessions {
     scope: "staged" | "unstaged",
     expected: GitMutationExpectation,
   ) => Promise<GitStatusSnapshot | null>;
+  commitGit: (
+    sessionId: string,
+    message: string,
+    expected: GitMutationExpectation,
+  ) => Promise<GitCommitResult | null>;
+  pushGit: (
+    sessionId: string,
+    remote: string,
+    branch: string,
+    expectedHead: string | null,
+  ) => Promise<GitPushResult | null>;
+  createGitPr: (
+    sessionId: string,
+    title: string,
+    body: string,
+    base: string,
+    head: string,
+  ) => Promise<GitPrResult | null>;
   /** US-5: move a thread to the archived list (persisted flag). */
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -3344,6 +3365,139 @@ export function useMuseSessions(): UseMuseSessions {
     [beginGitRequest],
   );
 
+  const commitGit = useCallback(
+    async (
+      sessionId: string,
+      message: string,
+      expected: GitMutationExpectation,
+    ): Promise<GitCommitResult | null> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const result = await invoke<GitCommitResult>("git_commit", {
+          sessionId,
+          message,
+          expectedHead: expected.head,
+          expectedStatus: expected.statusFingerprint,
+          expectedPatch: expected.patch,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        let status: GitStatusSnapshot | null = null;
+        try {
+          status = await invoke<GitStatusSnapshot>("git_status", { sessionId });
+        } catch {
+          // Commit succeeded; the next explicit refresh will recover status.
+        }
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            status: status ?? cur[sessionId]?.status ?? null,
+            diff: null,
+            loading: false,
+            error: null,
+          },
+        }));
+        return result;
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+        return null;
+      }
+    },
+    [beginGitRequest],
+  );
+
+  const pushGit = useCallback(
+    async (
+      sessionId: string,
+      remote: string,
+      branch: string,
+      expectedHead: string | null,
+    ): Promise<GitPushResult | null> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const result = await invoke<GitPushResult>("git_push", {
+          sessionId,
+          remote,
+          branch,
+          expectedHead,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: null,
+          },
+        }));
+        return result;
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+        return null;
+      }
+    },
+    [beginGitRequest],
+  );
+
+  const createGitPr = useCallback(
+    async (
+      sessionId: string,
+      title: string,
+      body: string,
+      base: string,
+      head: string,
+    ): Promise<GitPrResult | null> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const result = await invoke<GitPrResult>("git_create_pr", {
+          sessionId,
+          title,
+          body,
+          base,
+          head,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: null,
+          },
+        }));
+        return result;
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return null;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+        return null;
+      }
+    },
+    [beginGitRequest],
+  );
+
   // US-23 search over the stored index (empty unless opted in). Search
   // keeps working while paused — pause only suspends indexing updates.
   const indexResults = searchIndex(indexStore, indexEnabled ? indexQuery : "");
@@ -3490,6 +3644,9 @@ export function useMuseSessions(): UseMuseSessions {
     loadGitDiff,
     stageGitFiles,
     restoreGitFiles,
+    commitGit,
+    pushGit,
+    createGitPr,
     error,
     evtCount,
   };

@@ -158,6 +158,9 @@ export default function App() {
     loadGitDiff,
     stageGitFiles,
     restoreGitFiles,
+    commitGit,
+    pushGit,
+    createGitPr,
     browserAnnotations,
     addBrowserAnnotation,
     removeBrowserAnnotation,
@@ -964,6 +967,9 @@ export default function App() {
                           onLoadDiff={loadGitDiff}
                           onStageFiles={stageGitFiles}
                           onRestoreFiles={restoreGitFiles}
+                          onCommit={commitGit}
+                          onPush={pushGit}
+                          onCreatePr={createGitPr}
                           onSendComment={async (anchor: ReviewAnchor, body: string) => {
                             const result = await sendInput(
                               active.session_id,

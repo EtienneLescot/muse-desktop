@@ -2,6 +2,11 @@
 
 export type GitDiffScope = "unstaged" | "staged" | "branch";
 
+export interface GitRemote {
+  name: string;
+  url: string;
+}
+
 export interface GitStatusFile {
   path: string;
   originalPath: string | null;
@@ -23,6 +28,7 @@ export interface GitStatusSnapshot {
   ahead: number;
   behind: number;
   fingerprint: string;
+  remotes: GitRemote[];
   files: GitStatusFile[];
   observedAt: number;
 }
@@ -68,6 +74,24 @@ export interface GitMutationExpectation {
   statusFingerprint: string;
   /** Null when the displayed patch was bounded and cannot be compared safely. */
   patch: string | null;
+}
+
+export interface GitCommitResult {
+  hash: string;
+  branch: string | null;
+  subject: string;
+}
+
+export interface GitPushResult {
+  remote: string;
+  branch: string;
+  head: string;
+}
+
+export interface GitPrResult {
+  url: string;
+  base: string;
+  head: string;
 }
 
 export const EMPTY_GIT_REVIEW: GitReviewState = {

@@ -143,7 +143,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-01 | Voir les fichiers réellement modifiés | Adapté | Présente | Câblée | Unitaire | Socle livré en lecture seule ; restent les scénarios E2E webview/live, le snapshot « dernier tour » et la vérification runtime des cas hors Git/modifications externes |
 | M1-02 | Commenter une ligne de diff et demander sa correction | Adapté | Présente | Câblée | Unitaire | Socle livré ; restent la qualification native avec un moteur live et la persistance/triage multi-commentaires |
 | M1-03 | Indexer ou annuler une modification | Adapté | Présente | Câblée | Intégration | Stage, unstage et discard fichier livrés avec garde HEAD/statut/diff ; actions hunk, sélection multiple et qualification native restent à faire |
-| M1-04 | Commit, push et création de PR depuis l'app | Maquette | Absente | Absente | À faire | Relier identité/remote/branche ; gérer auth, hooks, rejet et conflits ; vérifier le commit et la PR réellement créés |
+| M1-04 | Commit, push et création de PR depuis l'app | Adapté | Présente | Câblée | Intégration | Commit, push et PR GitHub CLI livrés avec destinations explicites ; restent qualification hooks/auth live, PR existante/rejet distant et revue native |
 | M1-05 | Ouvrir et utiliser un terminal du projet | Maquette | Absente | Absente | À faire | PTY natif, entrée/sortie, resize et fermeture ; cwd lié à la conversation ; processus long conservé lors des changements de vue |
 | M1-06 | Faire lire au moteur la sortie du terminal | À définir | Absente | Absente | À faire | Exposer un contexte borné et attribué au bon terminal ; le moteur peut diagnostiquer un build échoué sans copier-coller |
 | M1-07 | Consulter les vrais fichiers du projet | Maquette | Partielle | Locale | Unitaire | Remplacer la seule liste de fichiers cités par accès disque contrôlé et ouverture pertinente ; contenu actuel, pas extrait de réponse |
@@ -179,6 +179,15 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **UX :** la sélection d’un fichier expose Stage file, Unstage file et Discard changes avec confirmation dédiée. Le discard ne supprime jamais un fichier non suivi ; celui-ci est signalé comme nécessitant une suppression explicite dans le projet.
 - **Validation :** tests Rust d’intégration sur un dépôt temporaire pour stage → unstage → discard, rejet d’une observation périmée et validation des chemins ; suite complète 48 tests Rust, 384 tests Node, TypeScript/Vite build réussi.
 - **Limites assumées :** les actions hunk, multi-sélection et commit/push/PR restent M1-04 et les itérations suivantes.
+
+### Livraison M1-04 — commit, push et pull request explicites
+
+- **Commit :** `git_commit` travaille sur l’index réel, exige un message et l’observation HEAD/statut/diff, renvoie le hash, la branche et le sujet. Les index vides et les hooks échoués remontent leur erreur Git.
+- **Push :** `git_push` exige un remote et une branche saisis par l’utilisateur, vérifie HEAD puis pousse `HEAD:refs/heads/<branch>`. Aucun upstream implicite ni redirection vers la branche courante n’est utilisé.
+- **Pull request :** `git_create_pr` utilise le `gh` déjà authentifié sur la machine, sans stocker de credential dans le webview. Base, head, titre et description sont explicites ; l’URL retournée est vérifiée et aucun merge automatique n’est déclenché. Décision détaillée dans [ADR 0001](adr/0001-github-cli-for-pull-requests.md).
+- **UX :** la section **Ship changes** du panneau Review regroupe commit, remote/branche de push et création de PR. Les résultats affichent le hash, la destination et le lien de PR ; les erreurs restent dans le même contexte de revue.
+- **Validation :** tests Rust sur dépôt temporaire pour commit, garde d’empreinte et remote absent ; tests de sécurité sur refs ; suite 51 Rust, 384 Node, TypeScript/Vite build réussi.
+- **Limites assumées :** la qualification avec hooks/auth/rejet réseau, la détection d’une PR existante et les scénarios live GitHub restent à exécuter avec un compte de test ; aucun credential n’est requis pour la CI.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 
