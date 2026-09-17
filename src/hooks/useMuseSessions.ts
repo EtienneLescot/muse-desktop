@@ -458,6 +458,10 @@ export interface MuseSession extends StoredSession {
   running: boolean;
 }
 
+function isEphemeralSession(session: MuseSession | null | undefined): boolean {
+  return session?.session_durability?.toLowerCase() === "ephemeral";
+}
+
 /** M0-02: renderer-owned connection state for a session identity. */
 export type SessionConnectionState =
   | "disconnected"
@@ -1140,6 +1144,7 @@ interface BackendSessionMeta {
   session_id: string;
   workspace: string;
   running: boolean;
+  session_durability?: string;
   /** Host projection, when this sidecar exposes one. */
   approval_mode?: string;
 }
@@ -1768,7 +1773,12 @@ export function useMuseSessions(): UseMuseSessions {
             if (tombstoned.current?.has(meta.session_id)) continue;
             const i = next.findIndex((s) => s.session_id === meta.session_id);
             if (i >= 0) {
-              next[i] = { ...next[i], workspace: meta.workspace, running: meta.running };
+              next[i] = {
+                ...next[i],
+                workspace: meta.workspace,
+                running: meta.running,
+                ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+              };
             } else {
               next.push({
                 session_id: meta.session_id,
@@ -1776,6 +1786,7 @@ export function useMuseSessions(): UseMuseSessions {
                 title: `Session ${meta.session_id.slice(0, 8)}`,
                 createdAt: Date.now(),
                 running: meta.running,
+                ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
               });
             }
           }
@@ -3241,6 +3252,7 @@ export function useMuseSessions(): UseMuseSessions {
         title: `Session ${meta.session_id.slice(0, 8)}`,
         createdAt: Date.now(),
         running: meta.running,
+        ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
       };
       setConnectedIds((cur) => [...new Set([...cur, meta.session_id])]);
       setConnectionState(meta.session_id, "connected");
@@ -3333,6 +3345,11 @@ export function useMuseSessions(): UseMuseSessions {
   const reconnectSession = useCallback(async (id: string) => {
     const session = sessions.find((s) => s.session_id === id);
     if (!session || !isTauriRuntime()) return;
+    if (isEphemeralSession(session)) {
+      setConnectionState(id, "error");
+      setError("This Muse host uses ephemeral sessions. Your saved messages remain available, but this conversation cannot be resumed after the host restarts.");
+      return;
+    }
     setReconnectingId(id);
     setConnectionState(id, "connecting");
     setError(null);
@@ -3465,6 +3482,7 @@ export function useMuseSessions(): UseMuseSessions {
           title: `Session ${meta.session_id.slice(0, 8)}`,
           createdAt: Date.now(),
           running: meta.running,
+          ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
         if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
@@ -3520,6 +3538,7 @@ export function useMuseSessions(): UseMuseSessions {
           title: `Branch of ${source.title || source.session_id.slice(0, 8)}`,
           createdAt: Date.now(),
           running: meta.running,
+          ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
         if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {

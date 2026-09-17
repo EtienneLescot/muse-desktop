@@ -30,6 +30,8 @@ export interface StoredSession {
   workspace: string;
   title: string;
   createdAt: number;
+  /** Host-reported persistence posture; absent in older local rows. */
+  session_durability?: string;
   /**
    * US-5: archived threads leave the main sidebar list for the collapsible
    * archived section. Persisted like the rest; absent = active (V1 data).
@@ -103,6 +105,8 @@ function isValidSession(s: unknown): s is StoredSession {
     typeof r.workspace === "string" &&
     typeof r.title === "string" &&
     typeof r.createdAt === "number" &&
+    (r.session_durability === undefined ||
+      (typeof r.session_durability === "string" && r.session_durability.trim().length > 0)) &&
     (r.archived === undefined || typeof r.archived === "boolean") &&
     (r.pinned === undefined || typeof r.pinned === "boolean") &&
     (r.unread === undefined || typeof r.unread === "boolean") &&

@@ -54,6 +54,11 @@ pub struct SessionMeta {
     pub session_id: String,
     pub workspace: String,
     pub running: bool,
+    /// Durability reported by `initialize` (for example `ephemeral`).
+    /// Renderer copy must not offer resume when the host cannot persist a
+    /// session beyond its process lifetime.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_durability: Option<String>,
     /// The host's effective approval projection when the session API returns
     /// one. This is advisory renderer metadata; automatic decisions still
     /// require an explicit per-session confirmation in the hook.
@@ -222,6 +227,8 @@ struct AppState {
     hosts: Mutex<Hosts<MspClient>>,
     workspace: Mutex<Option<PathBuf>>,
     sessions: Mutex<HashMap<String, SessionMeta>>,
+    /// Host-level initialize facts, keyed by canonical workspace root.
+    host_durability: Mutex<HashMap<PathBuf, String>>,
     approvals: Mutex<HashMap<(String, String), PendingApproval>>,
     /// (session_id, item_id) -> MSP item kind (`agentMessage`, `subagent`,
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
@@ -568,6 +575,15 @@ fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: St
     push_event(&state, session_id, kind, payload);
 }
 
+fn initialize_session_durability(result: &Value) -> Option<String> {
+    result
+        .get("sessionDurability")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
 /// Read the host's effective approval projection from any session-shaped
 /// response. Older hosts omit it, so absence remains `None` and the renderer
 /// keeps its compatibility path instead of inventing a posture.
@@ -650,15 +666,31 @@ async fn ensure_host(
             )
             .await?;
         validate_initialize_result(&initialized)?;
-        client.notify("initialized", Value::Null).await
+        client.notify("initialized", Value::Null).await?;
+        Ok::<Value, String>(initialized)
     };
-    if let Err(e) = handshake.await {
-        state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.remove(&client);
-        client.shutdown().await;
-        return Err(format!(
-            "MSP handshake failed ({e}). Host stderr: {}",
-            tail_of(&stderr_tail)
-        ));
+    let initialized = match handshake.await {
+        Ok(value) => value,
+        Err(e) => {
+            state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.remove(&client);
+            client.shutdown().await;
+            return Err(format!(
+                "MSP handshake failed ({e}). Host stderr: {}",
+                tail_of(&stderr_tail)
+            ));
+        }
+    };
+
+    // Keep the initialize capability beside the workspace-owned client. It
+    // is intentionally advisory: unknown/missing values preserve the legacy
+    // reconnect path, while an explicit `ephemeral` value is enforced by the
+    // resume command and exposed to the renderer.
+    if let Some(durability) = initialize_session_durability(&initialized) {
+        state
+            .host_durability
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .insert(root.clone(), durability);
     }
 
     Ok(client)
@@ -2234,10 +2266,17 @@ async fn start_session_at_workspace(
         .to_string();
     state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.bind(&session_id, &root, &client)?;
     let running = session.get("status").and_then(Value::as_str).map(|s| s == "running").unwrap_or(false);
+    let session_durability = state
+        .host_durability
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&root)
+        .cloned();
     let meta = SessionMeta {
         session_id: session_id.clone(),
         workspace: root.display().to_string(),
         running,
+        session_durability,
         approval_mode: session_approval_mode(session),
     };
     state
@@ -2354,6 +2393,12 @@ async fn fork_session(
         session_id: fork_id.clone(),
         workspace: root.display().to_string(),
         running,
+        session_durability: state
+            .host_durability
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(&root)
+            .cloned(),
         approval_mode: session_approval_mode(session),
     };
     state
@@ -2405,6 +2450,17 @@ async fn resume_session(
             .ok_or_else(|| "conversation metadata is unavailable".into());
     }
     let client = ensure_host(&app, &state, &root).await?;
+    if state
+        .host_durability
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&root)
+        .is_some_and(|value| value.eq_ignore_ascii_case("ephemeral"))
+    {
+        return Err(
+            "this Muse host uses ephemeral sessions; the saved conversation cannot be resumed after the host restarts".into(),
+        );
+    }
     let read = client.request("session/read", json!({"sessionId":session_id,"excludeItems":true})).await?;
     resume::validate(read.get("session").ok_or("session/read returned no conversation")?, &session_id, &root)?;
     // Register before resume: pending approval/input events may immediately
@@ -2413,6 +2469,12 @@ async fn resume_session(
         session_id: session_id.clone(),
         workspace: root.display().to_string(),
         running: false,
+        session_durability: state
+            .host_durability
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(&root)
+            .cloned(),
         approval_mode: read
             .get("session")
             .and_then(session_approval_mode),
@@ -3351,6 +3413,7 @@ mod tests {
                 session_id: session_id.to_string(),
                 workspace: workspace.to_string(),
                 running: false,
+                session_durability: None,
                 approval_mode: None,
             },
         );
@@ -3362,6 +3425,7 @@ mod tests {
             hosts: Mutex::new(Hosts::default()),
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
+            host_durability: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             subagent_meta: Mutex::new(HashMap::new()),
@@ -3580,6 +3644,7 @@ mod tests {
                 session_id: "session-a".to_string(),
                 workspace: "C:/fixture".to_string(),
                 running: true,
+                session_durability: None,
                 approval_mode: None,
             },
         );
@@ -3821,6 +3886,19 @@ mod tests {
         assert!(validate_initialize_result(&wrong_name)
             .unwrap_err()
             .contains("expected serverInfo.name"));
+    }
+
+    #[test]
+    fn initialize_durability_is_optional_but_preserves_explicit_host_fact() {
+        assert_eq!(
+            initialize_session_durability(&json!({"sessionDurability":"ephemeral"})),
+            Some("ephemeral".to_string())
+        );
+        assert_eq!(
+            initialize_session_durability(&json!({"sessionDurability":"  "})),
+            None
+        );
+        assert_eq!(initialize_session_durability(&json!({})), None);
     }
 
     #[test]
@@ -4235,6 +4313,7 @@ fn main() {
             hosts: Mutex::new(Hosts::default()),
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
+            host_durability: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             subagent_meta: Mutex::new(HashMap::new()),
