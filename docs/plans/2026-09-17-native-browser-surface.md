@@ -16,7 +16,11 @@ native window cannot be created.
 - Input is limited to 4,096 Unicode characters.
 - The native window has no Muse IPC surface and does not receive workspace or
   conversation data.
-- Cookies, downloads and browser automation remain outside this increment.
+- Explicit same-origin downloads are handled by a native, no-credentials
+  request in desktop builds. Redirects are rejected, responses are capped at
+  10 MiB, and the renderer only receives bounded base64 for the native save
+  dialog. Page-triggered downloads, cookies and browser automation remain
+  outside this increment.
 - Visual capture is available only as an explicit `getDisplayMedia` gesture in
   the renderer: the user chooses the browser surface, Muse bounds the JPEG,
   shows a preview, allows a pointer-drawn crop and keeps URL/time/viewport/DPR

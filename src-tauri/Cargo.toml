@@ -20,6 +20,8 @@ notify = "6.1"
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
 portable-pty = "0.9"
+futures-util = "0.3"
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "stream"] }
 
 [features]
 default = ["custom-protocol"]

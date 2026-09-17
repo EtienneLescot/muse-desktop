@@ -1951,6 +1951,17 @@ async fn browser_download_write(path: String, data: String) -> Result<(), String
         .map_err(|e| format!("browser download task failed: {e}"))?
 }
 
+/// Fetch an explicitly selected same-origin browser link in the native
+/// runtime. The module validates both origins and returns bounded base64;
+/// cookies, credentials and redirects never leave the renderer boundary.
+#[tauri::command]
+async fn browser_download_fetch(
+    page_url: String,
+    target_url: String,
+) -> Result<browser_download::FetchResult, String> {
+    browser_download::fetch_same_origin(&page_url, &target_url).await
+}
+
 /// Probe local prerequisites for the first-launch recovery screen. This is a
 /// read-only, bounded check: it never starts a sidecar or changes WSL/Muse.
 #[tauri::command]
@@ -3736,6 +3747,7 @@ fn main() {
             file_open,
             artifact_export,
             browser_download_write,
+            browser_download_fetch,
             probe_startup,
             list_models,
             set_model,
