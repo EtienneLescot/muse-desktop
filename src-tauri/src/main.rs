@@ -475,6 +475,16 @@ fn is_thinking_item_kind(kind: &str) -> bool {
     )
 }
 
+/// Item kinds whose deltas and snapshots belong in the dedicated sub-agent
+/// lane. Keep the aliases aligned with the renderer so an additive host kind
+/// cannot silently become an assistant response.
+fn is_subagent_item_kind(kind: &str) -> bool {
+    matches!(
+        kind.to_ascii_lowercase().as_str(),
+        "subagent" | "workflow" | "reminderchild"
+    )
+}
+
 /// The host reuses one approval id while walking a compound command. Every
 /// `approval/updated` notification advances the opaque requirement token and
 /// replaces the available choices for the next stage. Keep the normalization
@@ -654,7 +664,7 @@ fn completed_item_text(item: &Value, kind: &str) -> Option<String> {
             .or_else(|| text("message"))
             .or_else(|| text("fallbackText"));
     }
-    if kind.eq_ignore_ascii_case("agentMessage") {
+    if kind.eq_ignore_ascii_case("agentMessage") || is_subagent_item_kind(kind) {
         return text("text")
             .or_else(|| text("displayText"))
             .or_else(|| text("message"))
@@ -1121,7 +1131,7 @@ where
                 // Sub-agent lanes need identity up front (objective/role for
                 // the header, childSessionId for drill-down): announce the
                 // block now so the UI owns the entry before deltas land.
-                if matches!(kind.as_str(), "subagent" | "workflow" | "reminderChild") {
+                if is_subagent_item_kind(&kind) {
                     let meta = extract_subagent_meta(item);
                     if let Ok(mut metas) = state.subagent_meta.lock() {
                         if let Some(m) = meta.clone() {
@@ -1130,7 +1140,9 @@ where
                     }
                     let mut announce = serde_json::Map::new();
                     announce.insert("agent_id".to_string(), json!(item_id));
+                    announce.insert("itemId".to_string(), json!(item_id));
                     announce.insert("text".to_string(), json!(""));
+                    announce.insert("status".to_string(), json!("running"));
                     if let Some(m) = meta {
                         if let Some(c) = m.child_session_id {
                             announce.insert("childSessionId".to_string(), json!(c));
@@ -1201,7 +1213,9 @@ where
                         .unwrap_or(None);
                     let mut obj = serde_json::Map::new();
                     obj.insert("agent_id".to_string(), json!(item_id));
+                    obj.insert("itemId".to_string(), json!(item_id));
                     obj.insert("text".to_string(), json!(delta));
+                    obj.insert("status".to_string(), json!("running"));
                     if let Some(m) = meta {
                         if let Some(c) = m.child_session_id {
                             obj.insert("childSessionId".to_string(), json!(c));
@@ -1291,7 +1305,39 @@ where
                         // delta. Forward only the bounded, kind-owned text so
                         // the renderer can replace the existing lane without
                         // leaking the raw host item or duplicating output.
-                        if let Some(text) = fallback_text.as_deref() {
+                        if is_subagent_item_kind(kind) {
+                            let mut update = serde_json::Map::new();
+                            update.insert("agent_id".to_string(), json!(item_id));
+                            update.insert("itemId".to_string(), json!(item_id));
+                            update.insert(
+                                "text".to_string(),
+                                json!(fallback_text.as_deref().unwrap_or("")),
+                            );
+                            update.insert("replace".to_string(), json!(true));
+                            update.insert(
+                                "status".to_string(),
+                                item
+                                    .and_then(|i| i.get("status"))
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("running")
+                                    .into(),
+                            );
+                            if let Some(revision) = item.and_then(|i| i.get("revision")) {
+                                update.insert("revision".to_string(), revision.clone());
+                            }
+                            if let Some(m) = state
+                                .subagent_meta
+                                .lock()
+                                .ok()
+                                .and_then(|metas| metas.get(&(sid.to_string(), item_id.to_string())).cloned())
+                            {
+                                if let Some(c) = m.child_session_id { update.insert("childSessionId".to_string(), json!(c)); }
+                                if let Some(o) = m.objective { update.insert("objective".to_string(), json!(o)); }
+                                if let Some(r) = m.role { update.insert("role".to_string(), json!(r)); }
+                                if let Some(d) = m.depth { update.insert("depth".to_string(), json!(d)); }
+                            }
+                            emit_fn("subagent_event", sid, "subagent_event", Value::Object(update).to_string());
+                        } else if let Some(text) = fallback_text.as_deref() {
                             let lane = if is_thinking_item_kind(kind) {
                                 "thinking"
                             } else if kind.eq_ignore_ascii_case("usershell") {
@@ -1333,7 +1379,29 @@ where
                             })
                             .to_string(),
                         );
-                        if let Some(text) = fallback_text {
+                        if is_subagent_item_kind(kind) {
+                            let mut completed = serde_json::Map::new();
+                            completed.insert("agent_id".to_string(), json!(item_id));
+                            completed.insert("itemId".to_string(), json!(item_id));
+                            completed.insert(
+                                "text".to_string(),
+                                json!(fallback_text.as_deref().unwrap_or("")),
+                            );
+                            completed.insert("status".to_string(), json!("completed"));
+                            completed.insert("replace".to_string(), json!(true));
+                            if let Some(m) = state
+                                .subagent_meta
+                                .lock()
+                                .ok()
+                                .and_then(|metas| metas.get(&(sid.to_string(), item_id.to_string())).cloned())
+                            {
+                                if let Some(c) = m.child_session_id { completed.insert("childSessionId".to_string(), json!(c)); }
+                                if let Some(o) = m.objective { completed.insert("objective".to_string(), json!(o)); }
+                                if let Some(r) = m.role { completed.insert("role".to_string(), json!(r)); }
+                                if let Some(d) = m.depth { completed.insert("depth".to_string(), json!(d)); }
+                            }
+                            emit_fn("subagent_event", sid, "subagent_event", Value::Object(completed).to_string());
+                        } else if let Some(text) = fallback_text {
                             let lane = if is_thinking_item_kind(kind) {
                                 "thinking"
                             } else if kind.eq_ignore_ascii_case("usershell") {
@@ -5044,6 +5112,83 @@ mod tests {
         let thinking = events.iter().find(|(_, _, kind, _)| kind == "thinking").unwrap();
         let thinking_payload: Value = serde_json::from_str(&thinking.3).unwrap();
         assert_eq!(thinking_payload["text"], "inspect\n\nrespond");
+        assert!(events.iter().all(|(_, _, kind, _)| kind != "output"));
+    }
+
+    #[test]
+    fn subagent_item_snapshots_stay_in_the_subagent_lane() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        route_notification_with_emit(
+            &state,
+            "item/started",
+            &json!({
+                "sessionId": "session-a",
+                "item": {"itemId":"agent-live", "kind":"subagent", "objective":"inspect"}
+            }),
+            &mut |event: &str, sid: &str, kind: &str, payload: String| {
+                events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+            },
+        );
+        let before = events.len();
+        route_notification_with_emit(
+            &state,
+            "item/updated",
+            &json!({
+                "sessionId": "session-a",
+                "item": {
+                    "itemId": "agent-live",
+                    "kind": "subagent",
+                    "status": "inProgress",
+                    "text": "snapshot",
+                    "revision": 2
+                }
+            }),
+            &mut |event: &str, sid: &str, kind: &str, payload: String| {
+                events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+            },
+        );
+        let update = events[before..]
+            .iter()
+            .find(|(_, _, kind, _)| kind == "subagent_event")
+            .expect("sub-agent update is kept in its own lane");
+        let payload: Value = serde_json::from_str(&update.3).unwrap();
+        assert_eq!(payload["itemId"], "agent-live");
+        assert_eq!(payload["status"], "inProgress");
+        assert_eq!(payload["replace"], true);
+        assert_eq!(payload["revision"], 2);
+        assert_eq!(payload["text"], "snapshot");
+        assert!(events[before..].iter().all(|(_, _, kind, _)| kind != "output"));
+        assert!(events[before..].iter().all(|(_, _, kind, _)| kind != "item_done"));
+    }
+
+    #[test]
+    fn completed_subagent_without_delta_emits_terminal_state() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        route_notification_with_emit(
+            &state,
+            "item/completed",
+            &json!({
+                "sessionId": "session-a",
+                "item": {
+                    "itemId": "agent-complete",
+                    "kind": "workflow",
+                    "status": "completed",
+                    "text": "finished"
+                }
+            }),
+            &mut |event: &str, sid: &str, kind: &str, payload: String| {
+                events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+            },
+        );
+        let subagent = events
+            .iter()
+            .find(|(_, _, kind, _)| kind == "subagent_event")
+            .expect("completed sub-agent is not rendered as assistant output");
+        let payload: Value = serde_json::from_str(&subagent.3).unwrap();
+        assert_eq!(payload["status"], "completed");
+        assert_eq!(payload["text"], "finished");
         assert!(events.iter().all(|(_, _, kind, _)| kind != "output"));
     }
 

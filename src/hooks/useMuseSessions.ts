@@ -2847,22 +2847,35 @@ export function useMuseSessions(): UseMuseSessions {
       const terminalStatus = isTerminalSubagentStatus(parsed.status);
       setLogs((cur) => {
         const log = cur[sid] ?? [];
-        const i = lastOpenIndex(log, "subagent", parsed.agentId);
+        const i = lastOpenIndex(log, "subagent", parsed.agentId, parsed.itemId);
         let next: LogEntry[];
         if (i >= 0) {
           // Keep drill-down identity learned earlier: a bare delta must not
           // wipe the childSessionId announced at `item/started`.
           const prev = log[i];
+          if (
+            parsed.replace === true &&
+            parsed.revision !== undefined &&
+            prev.itemRevision !== undefined &&
+            parsed.revision <= prev.itemRevision
+          ) {
+            return cur;
+          }
+          const nextText = parsed.replace === true
+            ? (parsed.text.length > 0 ? parsed.text : prev.text)
+            : prev.text + parsed.text;
           next = [
             ...log.slice(0, i),
             {
               ...prev,
-              text: prev.text + parsed.text,
+              text: nextText,
+              itemId: parsed.itemId ?? prev.itemId,
               childSessionId: parsed.childSessionId ?? prev.childSessionId,
               objective: parsed.objective ?? prev.objective,
               subagentRole: parsed.role ?? prev.subagentRole,
               depth: parsed.depth ?? prev.depth,
               subagentStatus: parsed.status ?? prev.subagentStatus,
+              ...(parsed.revision === undefined ? {} : { itemRevision: parsed.revision }),
               ...(terminalStatus ? { open: false } : {}),
             },
             ...log.slice(i + 1),
@@ -2876,11 +2889,13 @@ export function useMuseSessions(): UseMuseSessions {
               role: "subagent" as LogRole,
               text: parsed.text,
               agentId: parsed.agentId,
+              itemId: parsed.itemId,
               childSessionId: parsed.childSessionId,
               objective: parsed.objective,
               subagentRole: parsed.role,
               depth: parsed.depth,
               subagentStatus: parsed.status,
+              ...(parsed.revision === undefined ? {} : { itemRevision: parsed.revision }),
               open: !terminalStatus,
             },
           ];
