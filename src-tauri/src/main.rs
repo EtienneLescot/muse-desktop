@@ -1055,7 +1055,11 @@ where
                         .and_then(|r| r.get("decision"))
                         .and_then(Value::as_str)
                 })
-                .unwrap_or("resolved");
+                // A terminal resolution without a decision is still useful
+                // for retiring the card, but it must never be interpreted as
+                // permission to resume. The renderer's parser fails closed
+                // for this explicit sentinel.
+                .unwrap_or("unknown");
             emit_fn("status",
                 sid,
                 method,
@@ -3596,6 +3600,27 @@ mod tests {
         assert_eq!(kind, "cancelled");
         assert!(payload.contains("\"terminal\":\"cancelled\""));
         assert!(payload.contains("\"turnId\":\"turn-a\""));
+    }
+
+    #[test]
+    fn approval_resolution_without_decision_fails_closed() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "approval/resolved",
+            &json!({"sessionId":"session-a","approvalId":"approval-a"}),
+            &mut emit,
+        );
+
+        let (_, sid, kind, payload) = events.last().expect("approval resolution event");
+        assert_eq!(sid, "session-a");
+        assert_eq!(kind, "approval/resolved");
+        assert!(payload.contains("\"decision\":\"unknown\""));
+        assert!(payload.contains("\"terminal\":true"));
     }
 
     #[tokio::test]
