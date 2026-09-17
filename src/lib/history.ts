@@ -22,6 +22,8 @@ export interface SessionHistoryItem {
   recordedAt?: unknown;
   result?: { summary?: unknown; text?: unknown };
   commandId?: unknown;
+  /** `userShell`: command text is part of the durable item, alongside output. */
+  commandText?: unknown;
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -66,6 +68,11 @@ function itemText(item: SessionHistoryItem, kind: string): string {
       stringValue(item.visibleOutput) ??
       stringValue(item.message) ??
       stringValue(item.fallbackText);
+    if (kind === "userShell") {
+      const command = stringValue(item.commandText);
+      if (command !== undefined && output !== undefined) return `$ ${command}\n${output}`;
+      if (command !== undefined) return `$ ${command}`;
+    }
     if (output !== undefined) return output;
     const tool = stringValue(item.tool);
     const args = stringValue(item.args);

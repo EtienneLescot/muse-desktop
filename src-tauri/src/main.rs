@@ -34,7 +34,7 @@ mod workspace_watch;
 use hosts::Hosts;
 
 use base64::Engine as _;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -247,6 +247,14 @@ struct AppState {
     /// (session_id, item_id) -> sub-agent identity from `item/started`.
     /// Scoped by session like `item_kinds`; purged with it on kill.
     subagent_meta: Mutex<HashMap<(String, String), SubagentMeta>>,
+    /// Items that have already emitted a streaming delta. Hosts are allowed
+    /// to send a complete `item/updated` or `item/completed` without any
+    /// delta (for example after a reconnect); the completed-item fallback
+    /// uses this set to avoid duplicating text that already streamed.
+    item_deltas_seen: Mutex<HashSet<(String, String)>>,
+    /// Completed-item fallback emissions are idempotent across repeated
+    /// `item/updated` notifications. Scoped by session and item identity.
+    item_fallback_emitted: Mutex<HashSet<(String, String)>>,
     /// Serializes host creation: check-spawn-insert must be atomic or two
     /// concurrent `start_session` calls spawn two hosts.
     host_mutex: tokio::sync::Mutex<()>,
@@ -583,6 +591,46 @@ fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: St
     // via `poll_events`. (`event` is kept for log readability.)
     let state: State<AppState> = app.state();
     push_event(&state, session_id, kind, payload);
+}
+
+/// Extract the bounded, transcript-visible text from a complete MSP item.
+/// `item/delta` is the normal path, but a reconnect or a host that coalesces
+/// its stream may deliver only the full item. Keep this helper conservative:
+/// it reads only the fields owned by the item's kind and never serializes the
+/// raw item into the user transcript.
+fn completed_item_text(item: &Value, kind: &str) -> Option<String> {
+    let text = |key: &str| {
+        item.get(key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    if is_thinking_item_kind(kind) {
+        if let Some(summary) = item.get("summary").and_then(Value::as_array) {
+            let joined = summary
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            if !joined.is_empty() {
+                return Some(joined);
+            }
+        }
+        return text("text").or_else(|| text("fallbackText"));
+    }
+    if kind.eq_ignore_ascii_case("usershell") {
+        return text("visibleOutput")
+            .or_else(|| text("message"))
+            .or_else(|| text("fallbackText"));
+    }
+    if kind.eq_ignore_ascii_case("agentMessage") {
+        return text("text")
+            .or_else(|| text("displayText"))
+            .or_else(|| text("message"))
+            .or_else(|| text("fallbackText"));
+    }
+    None
 }
 
 fn initialize_session_durability(result: &Value) -> Option<String> {
@@ -1095,6 +1143,9 @@ where
             ) else {
                 return;
             };
+            if let Ok(mut seen) = state.item_deltas_seen.lock() {
+                seen.insert((sid.to_string(), item_id.to_string()));
+            }
             let kind = state
                 .item_kinds
                 .lock()
@@ -1157,18 +1208,91 @@ where
         }
         "item/completed" | "item/updated" => {
             // Carries the item id: the UI closes only this block, so a
-            // concurrent item keeps streaming into its own entry.
-            let item_id = p
-                .get("item")
+            // concurrent item keeps streaming into its own entry. A complete
+            // item can also be the first event observed after a reconnect;
+            // emit its transcript lane once when no delta was seen.
+            let item = p.get("item");
+            let item_id = item
                 .and_then(|i| i.get("itemId").or_else(|| i.get("id")))
                 .and_then(Value::as_str)
                 .or_else(|| p.get("itemId").and_then(Value::as_str))
                 .unwrap_or("");
-            let turn_id = p
-                .get("item")
+            let turn_id = item
                 .and_then(|i| i.get("turnId"))
                 .or_else(|| p.get("turnId"));
-            emit_fn("status",
+            let kind = item
+                .and_then(|i| i.get("kind"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| {
+                    state
+                        .item_kinds
+                        .lock()
+                        .ok()
+                        .and_then(|kinds| kinds.get(&(sid.to_string(), item_id.to_string())).cloned())
+                });
+            if !item_id.is_empty() {
+                if let Some(kind) = kind.as_deref() {
+                    if let Ok(mut kinds) = state.item_kinds.lock() {
+                        kinds.insert((sid.to_string(), item_id.to_string()), kind.to_string());
+                    }
+                    let delta_seen = state
+                        .item_deltas_seen
+                        .lock()
+                        .map(|seen| seen.contains(&(sid.to_string(), item_id.to_string())))
+                        .unwrap_or(true);
+                    let already_emitted = state
+                        .item_fallback_emitted
+                        .lock()
+                        .map(|seen| seen.contains(&(sid.to_string(), item_id.to_string())))
+                        .unwrap_or(true);
+                    if !delta_seen && !already_emitted {
+                        // If the start event was lost, recreate the reflexive
+                        // block before appending the completed text. The
+                        // renderer de-duplicates this by itemId.
+                        emit_fn(
+                            "status",
+                            sid,
+                            "item_started",
+                            json!({
+                                "itemId": item_id,
+                                "itemKind": kind,
+                                "commandText": item.and_then(|i| i.get("commandText")),
+                                "turnId": turn_id,
+                            })
+                            .to_string(),
+                        );
+                        let fallback_text = item.and_then(|i| completed_item_text(i, kind));
+                        let has_fallback_text = fallback_text.is_some();
+                        if let Some(text) = fallback_text {
+                            let lane = if is_thinking_item_kind(kind) {
+                                "thinking"
+                            } else if kind.eq_ignore_ascii_case("usershell") {
+                                "shell_output"
+                            } else {
+                                "output"
+                            };
+                            emit_fn(
+                                lane,
+                                sid,
+                                lane,
+                                json!({"itemId": item_id, "text": text}).to_string(),
+                            );
+                        }
+                        // A metadata-only update may precede the terminal
+                        // item carrying output. Keep it eligible for that
+                        // later completed event; once text was emitted, both
+                        // update and completed notifications are idempotent.
+                        if has_fallback_text || method == "item/completed" {
+                            if let Ok(mut emitted) = state.item_fallback_emitted.lock() {
+                                emitted.insert((sid.to_string(), item_id.to_string()));
+                            }
+                        }
+                    }
+                }
+            }
+            emit_fn(
+                "status",
                 sid,
                 "item_done",
                 json!({"itemId": item_id, "turnId": turn_id}).to_string(),
@@ -3559,6 +3683,12 @@ async fn kill_session(
     if let Ok(mut metas) = state.subagent_meta.lock() {
         metas.retain(|(sid, _), _| *sid != session_id);
     }
+    if let Ok(mut seen) = state.item_deltas_seen.lock() {
+        seen.retain(|(sid, _)| *sid != session_id);
+    }
+    if let Ok(mut emitted) = state.item_fallback_emitted.lock() {
+        emitted.retain(|(sid, _)| *sid != session_id);
+    }
     if let Ok(mut watchers) = state.workspace_watchers.lock() {
         watchers.remove(&session_id);
     }
@@ -3647,6 +3777,8 @@ mod tests {
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             subagent_meta: Mutex::new(HashMap::new()),
+            item_deltas_seen: Mutex::new(HashSet::new()),
+            item_fallback_emitted: Mutex::new(HashSet::new()),
             host_mutex: tokio::sync::Mutex::new(()),
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
@@ -4462,6 +4594,60 @@ mod tests {
     }
 
     #[test]
+    fn completed_user_shell_without_delta_is_replayed_once_and_closed() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        let completed = json!({
+            "sessionId": "session-a",
+            "item": {
+                "itemId": "shell-complete",
+                "kind": "userShell",
+                "commandText": "echo ready",
+                "visibleOutput": "ready\n",
+                "status": "completed"
+            }
+        });
+        route_notification_with_emit(&state, "item/completed", &completed, &mut emit);
+        route_notification_with_emit(&state, "item/updated", &completed, &mut emit);
+        let shells = events.iter().filter(|(_, _, kind, _)| kind == "shell_output").collect::<Vec<_>>();
+        assert_eq!(shells.len(), 1, "a repeated completed item must not duplicate output");
+        assert!(shells[0].3.contains("ready"));
+        assert!(events.iter().any(|(_, _, kind, payload)| {
+            kind == "item_done" && payload.contains("shell-complete")
+        }));
+    }
+
+    #[test]
+    fn completed_reasoning_without_delta_uses_the_thinking_lane() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "item/completed",
+            &json!({
+                "sessionId": "session-a",
+                "item": {
+                    "itemId": "reasoning-complete",
+                    "kind": "reasoning",
+                    "summary": ["inspect", "respond"],
+                    "status": "completed"
+                }
+            }),
+            &mut emit,
+        );
+        let thinking = events.iter().find(|(_, _, kind, _)| kind == "thinking").unwrap();
+        let thinking_payload: Value = serde_json::from_str(&thinking.3).unwrap();
+        assert_eq!(thinking_payload["text"], "inspect\n\nrespond");
+        assert!(events.iter().all(|(_, _, kind, _)| kind != "output"));
+    }
+
+    #[test]
     fn fork_params_name_an_explicit_completed_turn() {
         let params = fork_request_params("cmd-1", "session-1", Some("turn-7"));
         assert_eq!(params["commandId"], "cmd-1");
@@ -5014,6 +5200,8 @@ fn main() {
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             subagent_meta: Mutex::new(HashMap::new()),
+            item_deltas_seen: Mutex::new(HashSet::new()),
+            item_fallback_emitted: Mutex::new(HashSet::new()),
             host_mutex: tokio::sync::Mutex::new(()),
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),

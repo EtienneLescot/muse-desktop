@@ -32,6 +32,21 @@ describe("session history hydration", () => {
     ]);
   });
 
+  it("keeps a durable user-shell command paired with its completed output", () => {
+    const entries = historyItemsToLogEntries([
+      {
+        itemId: "shell-1",
+        kind: "userShell",
+        commandText: "git status",
+        visibleOutput: "clean",
+        status: "completed",
+      },
+    ], 1000);
+    assert.deepEqual(entries.map((entry) => [entry.role, entry.text]), [
+      ["tool", "$ git status\nclean"],
+    ]);
+  });
+
   it("reconciles by item id and keeps local notes without duplicating user text", () => {
     const local = [
       { id: "local-user", ts: 1, role: "user" as const, text: "Hello" },
