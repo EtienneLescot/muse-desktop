@@ -4076,6 +4076,69 @@ mod tests {
         assert!(approvals.contains_key(&("session-b".to_string(), "same-approval".to_string())));
     }
 
+    #[test]
+    fn generated_tauri_invoke_answers_user_input_on_the_target_session() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![answer_input])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client.clone());
+
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames).await;
+                assert_eq!(frame["method"], "userInput/answer");
+                assert_eq!(frame["params"]["sessionId"], "session-a");
+                assert_eq!(frame["params"]["userInputId"], "input-a");
+                assert_eq!(frame["params"]["answers"][0]["questionId"], "q1");
+                assert_eq!(frame["params"]["answers"][0]["selectedLabel"], "Yes");
+                client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": frame["id"],
+                        "result": {"status": "accepted"}
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "answer_input".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({
+                    "sessionId": "session-a",
+                    "userInputId": "input-a",
+                    "answers": [{"questionId": "q1", "selectedLabel": "Yes"}]
+                })),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("answer_input invoke should succeed")
+        .deserialize::<Value>()
+        .expect("answer_input response should be JSON");
+
+        responder.join().expect("input responder should finish");
+        assert!(response.is_null());
+    }
+
     #[tokio::test]
     async fn session_start_retries_without_posture_only_on_host_ceiling() {
         let (client, mut frames) = fixture_client(false);
