@@ -1,6 +1,6 @@
 # Roadmap opérationnelle — Muse-Desktop
 
-État de référence : **17 septembre 2026**, après fusion de la chaîne de PRs #18–#80 et correction des remarques CodeRabbit actionnables. Ordre M0 → M4 validé par Étienne. Objectif : finir les parcours existants, puis atteindre la parité des workflows desktop de Codex en conservant le branding Muse.
+État de référence : **17 septembre 2026**, après fusion de la chaîne de PRs #18–#90 et correction des remarques CodeRabbit actionnables. Ordre M0 → M4 validé par Étienne. Objectif : finir les parcours existants, puis atteindre la parité des workflows desktop de Codex en conservant le branding Muse.
 
 Ce document est la source de vérité de l'avancement produit. La [SPEC](SPEC.md) conserve les intentions initiales ; le [bilan du 13 septembre](plans/2026-09-13-roadmap-progress.md) est historique. L'[audit de parité](plans/2026-09-15-codex-parity-audit.md) contient les constats techniques et références officielles. Les chiffres de stories fusionnées ne sont pas un taux de parité.
 
@@ -8,9 +8,9 @@ Ce document est la source de vérité de l'avancement produit. La [SPEC](SPEC.md
 
 ## Point d'étape — 17 septembre 2026
 
-- **Chaîne livrée :** les PRs #18 à #89 ont été fusionnées dans l'ordre de leurs branches de base. La branche finale contient les parcours M0 à M4 déjà câblés dans le client, ainsi que les correctifs de reprise, transcript, terminal Muse, observations Git, l'injection MCP opt-in des sessions locales/distantes et le fallback de démarrage natif.
+- **Chaîne livrée :** les PRs #18 à #90 ont été fusionnées dans l'ordre de leurs branches de base. La branche finale contient les parcours M0 à M4 déjà câblés dans le client, ainsi que les correctifs de reprise, transcript, terminal Muse, observations Git, l'injection MCP opt-in des sessions locales/distantes, le cycle de vie des bundles MCPB et le fallback de démarrage natif.
 - **Revue qualité :** CodeRabbit a signalé huit points actionnables sur la PR #18 (credentials CI, inventaire IPC, masquage Bearer, accessibilité des capacités, stockage et course de posture) et trois sur la PR #80 (sorties PowerShell, double exécution `Run in Muse`, état `running` des items shell). Ils sont corrigés et couverts par les tests existants ou dédiés. Les nouvelles demandes de revue ont ensuite été limitées par le quota CodeRabbit ; aucun commentaire actionnable supplémentaire n'est disponible sur les PRs empilées.
-- **Preuves reproductibles :** `npm test` — **592 tests passés** ; `npm run build` — **vert** ; `cargo test --manifest-path src-tauri/Cargo.toml` — **131 tests passés**. Les builds Windows NSIS/MSI et le smoke natif restent des preuves séparées, documentées dans les livraisons M0/M4.
+- **Preuves reproductibles :** `npm test` — **593 tests passés** ; `npm run build` — **vert** ; `cargo test --manifest-path src-tauri/Cargo.toml` — **132 tests passés**. Les builds Windows NSIS/MSI et le smoke natif restent des preuves séparées, documentées dans les livraisons M0/M4.
 - **Lecture des 53 résultats :** Design — 47 adaptés, 4 à définir, 2 sans écran ; UI — 48 présentes, 2 partielles, 2 absentes, 1 sans écran ; Fonction — 21 câblées, 25 partielles, 5 locales, 2 absentes ; Validation — 26 unitaires, 5 UI, 20 intégration, 2 à faire.
 - **Prochaine reprise :** fermer les preuves natives M0 (deux workspaces, reprise après autorisation, arrêt/reconnexion et premier lancement Windows), puis qualifier le cycle de vie package/source des extensions, le catalogue d'outils côté host, le scheduler/les notifications, le navigateur vers le moteur et la distribution signée. Aucun de ces écarts ne doit être présenté comme une parité Codex acquise tant que le scénario réel n'est pas validé.
 
@@ -425,10 +425,11 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 
 ### Livraison M3-02 — injection distante opt-in
 
-- **Session en mémoire :** un connecteur distant peut être marqué **Use in Muse** après une connexion réussie. La configuration `streamableHttp` est reconstruite uniquement si sa session courante existe ; le bearer reste en mémoire et n'est jamais ajouté au registre persistant.
+- **Session et secret-store :** un connecteur distant peut être marqué **Use in Muse** après une connexion réussie. La configuration `streamableHttp` est reconstruite uniquement si sa session courante existe ; le bearer reste en mémoire pendant la session et, dans l'application desktop, est aussi conservé via le gestionnaire de credentials natif (Windows Credential Manager, macOS Keychain ou Secret Service/keyutils). Il n'entre jamais dans le registre persistant ni dans `localStorage`.
 - **Démarrage facultatif :** `session/start`, `session/resume` et les sessions de worktree reçoivent l'URL et un header Authorization bornés. Le mode `optional` conserve l'ouverture de la conversation si le endpoint distant n'est pas joignable.
-- **Limites :** après relance de l'app, le token doit être saisi à nouveau avant toute injection ; OAuth, secret-store natif, renouvellement côté host et reconfiguration d'une session déjà connectée restent ouverts.
-- **Validation :** tests Node couvrent l'injection d'un distant connecté et l'exclusion d'un distant sans session ; TypeScript, Vite et Cargo restent verts.
+- **Reconnexion explicite :** après relance, le token est relu uniquement lorsque l'utilisateur clique **Reconnect** ; aucune connexion réseau n'est déclenchée au démarrage. La suppression du connecteur révoque aussi la copie native.
+- **Limites :** OAuth/refresh côté fournisseur, catalogue d'outils distant côté host Muse, qualification réseau macOS/Linux et reconfiguration d'une session déjà connectée restent ouverts.
+- **Validation :** tests Node couvrent l'injection d'un distant connecté, l'exclusion d'un distant sans session et les clés de credentials stables ; tests Rust couvrent la garde de stockage native ; TypeScript, Vite et Cargo restent verts.
 
 ### Livraison M3-03 — cycle de vie d'un connecteur MCP local
 
@@ -471,7 +472,7 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
 | M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; processus persistant par connecteur, Start/Stop, rafraîchissement manuel, hot-reload `list_changed` et injection opt-in `config.mcpServers` sur start/resume/worktree livrés ; restent secrets natifs et reconfiguration d'une session déjà connectée |
-| M3-02 | Connecter un serveur MCP distant | Adapté | Présente | Partielle | Intégration | Transport streamable HTTP/SSE, bearer token en mémoire, session, reconnexion explicite, renouvellement automatique d'une session expirée et injection opt-in `streamableHttp` sur start/resume/worktree livrés ; restent OAuth/secret-store natif, qualification réseau multiplateforme et reconfiguration d'une session déjà connectée |
+| M3-02 | Connecter un serveur MCP distant | Adapté | Présente | Partielle | Intégration | Transport streamable HTTP/SSE, bearer en mémoire, secret-store natif, session, reconnexion explicite, renouvellement automatique d'une session expirée et injection opt-in `streamableHttp` sur start/resume/worktree livrés ; restent OAuth/refresh fournisseur, catalogue distant côté host, qualification réseau multiplateforme et reconfiguration d'une session déjà connectée |
 | M3-03 | Installer/désactiver une extension réellement utilisable | Adapté | Présente | Partielle | Intégration | Enregistrement post-probe, runtime persistant explicite, hot-list, hot-reload, rollback du catalogue et des révisions `.mcpb`, provenance/version/source et injection opt-in livrés ; restent catalogue d'outils réellement visible par le host et autorité de permission native |
 | M3-04 | Découvrir les skills du disque et du projet | Adapté | Présente | Partielle | Intégration | Scanner borné `SKILL.md`, ressources relatives, priorité projet/repo/équipe et rechargement explicite livrés ; le catalogue hôte est désormais séparé et rafraîchi par session |
 | M3-05 | Invoquer une skill avec son vrai contexte | Adapté | Présente | Partielle | Intégration | Lecture fraîche des ressources relatives, provenance balisée, refus explicite si ressource disparue, retry sans double insertion et part `skill` native livrés ; restent la progression détaillée d'une invocation et les ressources natives éventuelles selon le host |
@@ -487,12 +488,12 @@ Preuves : [connecteurs](../src/lib/connectors.ts), [configuration MCP hôte](../
 ### Livraison M3-02 — MCP distant (première passe)
 
 - **Transport réel** : `src/lib/remoteMcp.ts` effectue `initialize`, `notifications/initialized`, `tools/list` et `tools/call` sur un endpoint public HTTPS. Les réponses JSON et SSE sont corrélées par identifiant JSON-RPC ; les réponses HTTP 202/204 des notifications sont acceptées.
-- **Session et secrets** : `Mcp-Session-Id` est repris sur les requêtes suivantes. Le bearer token et l'identifiant de session vivent uniquement dans une référence mémoire du hook ; le registre persiste l'URL, la version et le catalogue vérifié, jamais le secret.
+- **Session et secrets** : `Mcp-Session-Id` est repris sur les requêtes suivantes. L'identifiant de session vit uniquement dans une référence mémoire du hook ; le bearer est conservé en mémoire pendant la connexion et dans le secret-store natif pour une reconnexion explicite. Le registre persiste l'URL, la version et le catalogue vérifié, jamais le secret.
 - **UX** : Extensions propose **Connect and list tools**, un champ de token masqué, un appel de test et **Reconnect** après une perte de session. Le catalogue ne passe à `installed` qu'après l'échange réel ; les erreurs réseau/auth restent visibles et une connexion perdue devient **Disconnected**.
-- **Garde-fous** : l'endpoint doit être public et HTTPS, le plan conserve une seule entrée distante et les descriptions/outils sont bornés. Une reconnexion après relance exige une nouvelle saisie du token.
+- **Garde-fous** : l'endpoint doit être public et HTTPS, le plan conserve une seule entrée distante et les descriptions/outils sont bornés. Une reconnexion après relance reste un geste explicite ; la lecture du token passe alors par le bridge natif sans l'exposer au stockage web.
 - **Reconnexion automatique bornée** : une réponse 401/403 relance une seule fois `initialize` + `tools/list` avec le bearer conservé en mémoire, puis rejoue l'appel seulement après un nouveau handshake. Les timeouts, erreurs réseau et réponses ambiguës ne sont jamais rejoués automatiquement.
-- **Limites** : OAuth, stockage sécurisé natif et test réseau macOS/Linux restent à concevoir ; le host reçoit désormais la configuration distante uniquement pour les sessions explicitement optées, sans catalogue d'outils distant copié dans l'état renderer.
-- **Validation** : quatre tests Node couvrent la continuité de session, bearer token, SSE, refus privé/HTTP et réponse mal corrélée ; TypeScript et build Vite restent verts.
+- **Limites** : OAuth/refresh fournisseur, test réseau macOS/Linux, catalogue d'outils distant côté host et reconfiguration d'une session déjà connectée restent à concevoir ; le host reçoit désormais la configuration distante uniquement pour les sessions explicitement optées, sans catalogue d'outils distant copié dans l'état renderer.
+- **Validation** : cinq tests Node couvrent la continuité de session, bearer token, SSE, refus privé/HTTP, réponse mal corrélée et clés de credentials ; tests Rust, TypeScript et build Vite restent verts.
 
 ### Livraison M3-07 — fuseau explicite et DST
 

@@ -29,6 +29,7 @@ mod browser_download;
 mod setup;
 mod mcp;
 mod mcp_package;
+mod secret_store;
 mod skills;
 mod startup;
 mod workspace_watch;
@@ -2012,6 +2013,26 @@ fn mcp_package_remove(
     version: String,
 ) -> Result<bool, String> {
     mcp_package::remove(&app, &package_id, &version)
+}
+
+/// Store a remote MCP bearer in the operating system's credential manager.
+/// The secret is intentionally handled as an opaque value and never logged.
+#[tauri::command]
+fn secure_store_set(key: String, secret: String) -> Result<(), String> {
+    secret_store::set(&key, &secret)
+}
+
+/// Read a previously stored remote MCP credential. Missing entries are a
+/// normal disconnected state and return `null` to the renderer.
+#[tauri::command]
+fn secure_store_get(key: String) -> Result<Option<String>, String> {
+    secret_store::get(&key)
+}
+
+/// Remove a remote MCP credential from the operating system store.
+#[tauri::command]
+fn secure_store_remove(key: String) -> Result<(), String> {
+    secret_store::remove(&key)
 }
 
 /// Call one tool on an explicitly configured local MCP server.
@@ -5623,6 +5644,9 @@ fn main() {
             mcp_local_call,
             mcp_package_install,
             mcp_package_remove,
+            secure_store_set,
+            secure_store_get,
+            secure_store_remove,
             mcp_local_start,
             mcp_local_refresh,
             mcp_local_poll,
