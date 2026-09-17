@@ -17,7 +17,10 @@ import {
   queueRunRetry,
   retryDelayMs,
   MAX_SCHEDULE_RUNS,
+  markRecoveredRunFailed,
+  recoverScheduleRuns,
   saveScheduleRuns,
+  SCHEDULE_RUN_RECOVERY_ERROR,
   settleRun,
   settleRunsForSession,
   type ScheduleRun,
@@ -172,6 +175,34 @@ describe("M3-06 schedule run ledger", () => {
     assert.equal(retried.finishedAt, undefined);
     const exhausted = retryRunNow([{ ...failed[0], attempt: MAX_RUN_ATTEMPTS }], initial.id, 2300)[0];
     assert.equal(exhausted.status, "failed");
+  });
+
+  it("holds non-terminal rows after restart instead of replaying an ambiguous turn", () => {
+    const queued = run();
+    const runningSeed = run(1100);
+    const running = markRunStarted([runningSeed], runningSeed.id, 2000, "session-1")[0];
+    const delayedRetry = { ...run(1200), status: "queued" as const, nextRetryAt: 20_000 };
+    const recovered = recoverScheduleRuns([queued, running, delayedRetry], 5000);
+    assert.equal(recovered[0].recovery, "after-restart");
+    assert.equal(recovered[0].unread, true);
+    assert.equal(recovered[1].recovery, "after-restart");
+    assert.equal(recovered[2].recovery, undefined);
+    assert.equal(recovered[2].nextRetryAt, 20_000);
+    assert.deepEqual(recoverScheduleRuns(recovered, 6000), recovered);
+  });
+
+  it("requires an explicit reconciliation before a recovered run can be retried", () => {
+    const initial = recoverScheduleRuns([run()], 5000)[0];
+    const untouched = markRecoveredRunFailed([initial], "missing", 6000);
+    assert.deepEqual(untouched, [initial]);
+    const failed = markRecoveredRunFailed([initial], initial.id, 6000)[0];
+    assert.equal(failed.status, "failed");
+    assert.equal(failed.recovery, undefined);
+    assert.equal(failed.error, SCHEDULE_RUN_RECOVERY_ERROR);
+    assert.equal(failed.finishedAt, 6000);
+    const retried = retryRunNow([failed], failed.id, 7000)[0];
+    assert.equal(retried.status, "queued");
+    assert.equal(retried.nextRetryAt, 7000);
   });
 });
 

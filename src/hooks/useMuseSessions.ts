@@ -243,9 +243,11 @@ import {
   createScheduleRun,
   isRetryableScheduleError,
   loadScheduleRuns,
+  markRecoveredRunFailed,
   markRunStarted,
   markRunRead,
   queueRunRetry,
+  recoverScheduleRuns,
   restoreRun,
   retryRunNow,
   saveScheduleRuns,
@@ -975,6 +977,8 @@ interface UseMuseSessions {
   runScheduleNow: (id: string) => void;
   /** M3-07: cancel a queued retry without touching an in-flight host turn. */
   cancelScheduleRun: (id: string) => void;
+  /** M3-07: explicitly reconcile a row recovered after an app restart. */
+  markScheduleRunRecoveryFailed: (id: string) => void;
   /** M3-08: clear the independent inbox unread marker. */
   markScheduleRunRead: (id: string) => void;
   /** M3-08: archive or restore a run in the inbox. */
@@ -1401,7 +1405,9 @@ export function useMuseSessions(): UseMuseSessions {
   // written through on every change (effect below).
   const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
-  const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() => loadScheduleRuns());
+  const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() =>
+    recoverScheduleRuns(loadScheduleRuns(), Date.now()),
+  );
   const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
   const [notificationPreferences, setNotificationPreferences] = useState(() => loadNotificationPreferences());
   const [notificationPermissionState, setNotificationPermissionState] = useState<NotificationPermission>(
@@ -5235,6 +5241,10 @@ export function useMuseSessions(): UseMuseSessions {
     setScheduleRuns((cur) => cancelRun(cur, id));
   }, []);
 
+  const markScheduleRunRecoveryFailed = useCallback((id: string): void => {
+    setScheduleRuns((cur) => markRecoveredRunFailed(cur, id, Date.now()));
+  }, []);
+
   const markScheduleRunRead = useCallback((id: string): void => {
     setScheduleRuns((cur) => markRunRead(cur, id));
   }, []);
@@ -6267,6 +6277,7 @@ export function useMuseSessions(): UseMuseSessions {
     deleteSchedule: deleteScheduleCb,
     runScheduleNow,
     cancelScheduleRun,
+    markScheduleRunRecoveryFailed,
     markScheduleRunRead,
     setScheduleRunArchived,
     retryScheduleRunNow,

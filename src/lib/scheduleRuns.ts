@@ -8,6 +8,16 @@ import { isValidTimeZone, type ScheduleAuthorizationMode, type ThreadReuse } fro
 import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+/**
+ * A run that was still non-terminal when the renderer went away cannot be
+ * replayed safely: the host may have accepted the turn just before the
+ * durable row was flushed. Keep this marker until the user explicitly
+ * reconciles the run.
+ */
+export type ScheduleRunRecovery = "after-restart";
+
+export const SCHEDULE_RUN_RECOVERY_ERROR =
+  "The app restarted before the host confirmed this run. Verify the target conversation before retrying.";
 
 export const MAX_RUN_ATTEMPTS = 3;
 export const RETRY_BASE_DELAY_MS = 15_000;
@@ -41,6 +51,9 @@ export interface ScheduleRun {
   unread?: boolean;
   /** Archived rows stay durable but are hidden from the default inbox view. */
   archived?: boolean;
+  /** Set on a non-terminal row recovered after an app restart. */
+  recovery?: ScheduleRunRecovery;
+  recoveryDetectedAt?: number;
   status: ScheduleRunStatus;
   error?: string;
 }
@@ -84,6 +97,9 @@ export function settleRun(
         finishedAt: now,
         ...(status === "completed" || status === "failed" ? { unread: true } : {}),
         ...(status === "completed" ? { error: undefined, nextRetryAt: undefined } : {}),
+        ...(status === "completed" || status === "failed"
+          ? { recovery: undefined, recoveryDetectedAt: undefined }
+          : {}),
         ...(error ? { error } : {}),
       }
     : run);
@@ -216,6 +232,22 @@ export function cancelRun(runs: ScheduleRun[], idValue: string, now = Date.now()
     : run);
 }
 
+/**
+ * Mark a recovered in-flight row as failed after the user has checked the
+ * target conversation. This is deliberately a separate gesture from retry:
+ * it makes the ambiguous host outcome visible and only then enables the
+ * existing bounded manual retry path.
+ */
+export function markRecoveredRunFailed(
+  runs: ScheduleRun[],
+  idValue: string,
+  now = Date.now(),
+): ScheduleRun[] {
+  const target = runs.find((run) => run.id === idValue);
+  if (!target?.recovery) return runs;
+  return settleRun(runs, idValue, "failed", now, SCHEDULE_RUN_RECOVERY_ERROR);
+}
+
 export function appendRun(runs: ScheduleRun[], run: ScheduleRun): ScheduleRun[] {
   const key = run.occurrenceKey ?? `${run.scheduleId}:${run.occurrenceAt}`;
   if (runs.some((row) => (row.occurrenceKey ?? `${row.scheduleId}:${row.occurrenceAt}`) === key)) return runs;
@@ -253,12 +285,32 @@ function validRun(value: unknown): value is ScheduleRun {
     (row.resultPreview === undefined || typeof row.resultPreview === "string") &&
     (row.unread === undefined || typeof row.unread === "boolean") &&
     (row.archived === undefined || typeof row.archived === "boolean") &&
+    (row.recovery === undefined || row.recovery === "after-restart") &&
+    (row.recoveryDetectedAt === undefined || typeof row.recoveryDetectedAt === "number") &&
     (row.error === undefined || typeof row.error === "string");
 }
 
 export function loadScheduleRuns(): ScheduleRun[] {
   const parsed = readStorageJson<unknown>(SCHEDULE_RUNS_KEY, []);
   return Array.isArray(parsed) ? parsed.filter(validRun).slice(-MAX_SCHEDULE_RUNS) : [];
+}
+
+/**
+ * Reconcile rows once at renderer boot. Known delayed retries remain safe to
+ * run automatically; rows without a terminal result or retry deadline are
+ * held for an explicit user decision instead of being replayed blindly.
+ */
+export function recoverScheduleRuns(runs: ScheduleRun[], now = Date.now()): ScheduleRun[] {
+  return runs.map((run) => {
+    if (run.status === "completed" || run.status === "failed" || run.status === "cancelled") return run;
+    if (run.recovery || (run.status === "queued" && run.nextRetryAt !== undefined)) return run;
+    return {
+      ...run,
+      recovery: "after-restart",
+      recoveryDetectedAt: now,
+      unread: true,
+    };
+  });
 }
 
 export function saveScheduleRuns(runs: ScheduleRun[]): void {

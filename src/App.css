@@ -3994,6 +3994,21 @@ body.dark .composer textarea::placeholder {
   text-transform: uppercase;
 }
 
+.run-recovery {
+  color: var(--amber, #e6a23c);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.run-recovery-copy {
+  color: var(--amber, #e6a23c);
+  line-height: 1.35;
+}
+
 .run-preview {
   display: block;
   color: var(--text);

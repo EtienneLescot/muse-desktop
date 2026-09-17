@@ -166,6 +166,7 @@ export default function App() {
     deleteSchedule,
     runScheduleNow,
     cancelScheduleRun,
+    markScheduleRunRecoveryFailed,
     markScheduleRunRead,
     setScheduleRunArchived,
     retryScheduleRunNow,
@@ -883,6 +884,7 @@ export default function App() {
                   onDelete={(id) => deleteSchedule(id)}
                   onRunNow={(id) => runScheduleNow(id)}
                   onCancelRun={(id) => cancelScheduleRun(id)}
+                  onMarkRunRecoveryFailed={(id) => markScheduleRunRecoveryFailed(id)}
                   onMarkRunRead={(id) => markScheduleRunRead(id)}
                   onSetRunArchived={(id, archived) => setScheduleRunArchived(id, archived)}
                   onRetryRunNow={(id) => retryScheduleRunNow(id)}

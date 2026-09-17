@@ -34,6 +34,7 @@ interface Props {
   onDelete: (id: string) => void;
   onRunNow: (id: string) => void;
   onCancelRun: (id: string) => void;
+  onMarkRunRecoveryFailed: (id: string) => void;
   onOpenRun: (run: ScheduleRun) => void;
   onMarkRunRead: (id: string) => void;
   onSetRunArchived: (id: string, archived: boolean) => void;
@@ -116,6 +117,7 @@ export function SchedulesPanel({
   onDelete,
   onRunNow,
   onCancelRun,
+  onMarkRunRecoveryFailed,
   onOpenRun,
   onMarkRunRead,
   onSetRunArchived,
@@ -349,12 +351,20 @@ export function SchedulesPanel({
                 <div className="sched-head">
                   <strong>{run.scheduleName}</strong>
                   {run.unread && <span className="run-unread">New</span>}
+                  {run.recovery && <span className="run-recovery">Review needed</span>}
                   <span className="run-status">{describeRunStatus(run.status)}</span>
                 </div>
                 <span className="muted">
-                  {new Date(run.createdAt).toLocaleString()} · {run.sessionId ? "conversation started" : "dispatching"}
+                  {new Date(run.createdAt).toLocaleString()} · {run.recovery
+                    ? "app restarted · host outcome unconfirmed"
+                    : run.sessionId ? "conversation started" : "dispatching"}
                   {run.nextRetryAt ? ` · retry at ${new Date(run.nextRetryAt).toLocaleTimeString()}` : ""}
                 </span>
+                {run.recovery && (
+                  <small className="run-recovery-copy">
+                    Muse paused this run after restart to avoid sending the same request twice. Open the conversation and verify its state before reconciling it.
+                  </small>
+                )}
                 {run.resultPreview && <span className="run-preview">{run.resultPreview}</span>}
                 {run.error && <small className="error">{userFacingError(run.error)}</small>}
                 <details className="run-details">
@@ -370,6 +380,7 @@ export function SchedulesPanel({
                     <div><dt>Occurrence</dt><dd>{new Date(run.occurrenceAt).toLocaleString()}</dd></div>
                     {run.startedAt && <div><dt>Started</dt><dd>{new Date(run.startedAt).toLocaleString()}</dd></div>}
                     {run.finishedAt && <div><dt>Finished</dt><dd>{new Date(run.finishedAt).toLocaleString()}</dd></div>}
+                    {run.recoveryDetectedAt && <div><dt>Recovery check</dt><dd>{new Date(run.recoveryDetectedAt).toLocaleString()}</dd></div>}
                     {describeRunDuration(run) && <div><dt>Duration</dt><dd>{describeRunDuration(run)}</dd></div>}
                   </dl>
                   <div className="run-instructions">
@@ -413,6 +424,16 @@ export function SchedulesPanel({
                   {run.status === "failed" && (run.attempt ?? 1) < 3 && (
                     <button type="button" onClick={() => onRetryRunNow(run.id)} title="Retry this run now">
                       Retry now
+                    </button>
+                  )}
+                  {run.recovery && (
+                    <button
+                      type="button"
+                      className="sched-danger"
+                      onClick={() => onMarkRunRecoveryFailed(run.id)}
+                      title="Mark this ambiguous run as failed after checking the conversation"
+                    >
+                      Mark failed
                     </button>
                   )}
                   {run.archived === true ? (
