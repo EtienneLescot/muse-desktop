@@ -12,7 +12,7 @@
 //!
 //! IPC surface (frontend calls via `invoke`, receives via `listen`):
 //!   commands: start_session, fork_session, set_approval_mode, restore_sessions, send_input, steer_input, approve,
-//!             cancel_session, kill_session,
+//!             cancel_session, kill_session, user_shell,
 //!             subagent_interrupt, subagent_stop, subagent_resume,
 //!             subagent_followup, subagent_read_result, subagent_drilldown
 //!   events:   output, subagent_event, tool_request, status
@@ -34,7 +34,7 @@ mod workspace_watch;
 use hosts::Hosts;
 
 use base64::Engine as _;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -64,6 +64,12 @@ pub struct SessionMeta {
     /// require an explicit per-session confirmation in the hook.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_mode: Option<String>,
+    /// Capabilities granted by the workspace-owned host at initialize time.
+    /// This is live connection metadata; an absent value means an older host
+    /// did not expose the capability registry, so the renderer must keep the
+    /// native user-shell action disabled until a fresh handshake proves it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub granted_capabilities: Option<Vec<String>>,
 }
 
 /// One buffered backend event with its sequence number (poll transport).
@@ -229,6 +235,10 @@ struct AppState {
     sessions: Mutex<HashMap<String, SessionMeta>>,
     /// Host-level initialize facts, keyed by canonical workspace root.
     host_durability: Mutex<HashMap<PathBuf, String>>,
+    /// Host-level capability grants, keyed by canonical workspace root.
+    /// Capabilities are fixed for a connection lifetime and never inferred
+    /// from the renderer's authorization posture.
+    host_capabilities: Mutex<HashMap<PathBuf, Vec<String>>>,
     approvals: Mutex<HashMap<(String, String), PendingApproval>>,
     /// (session_id, item_id) -> MSP item kind (`agentMessage`, `subagent`,
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
@@ -237,6 +247,14 @@ struct AppState {
     /// (session_id, item_id) -> sub-agent identity from `item/started`.
     /// Scoped by session like `item_kinds`; purged with it on kill.
     subagent_meta: Mutex<HashMap<(String, String), SubagentMeta>>,
+    /// Items that have already emitted a streaming delta. Hosts are allowed
+    /// to send a complete `item/updated` or `item/completed` without any
+    /// delta (for example after a reconnect); the completed-item fallback
+    /// uses this set to avoid duplicating text that already streamed.
+    item_deltas_seen: Mutex<HashSet<(String, String)>>,
+    /// Completed-item fallback emissions are idempotent across repeated
+    /// `item/updated` notifications. Scoped by session and item identity.
+    item_fallback_emitted: Mutex<HashSet<(String, String)>>,
     /// Serializes host creation: check-spawn-insert must be atomic or two
     /// concurrent `start_session` calls spawn two hosts.
     host_mutex: tokio::sync::Mutex<()>,
@@ -575,6 +593,46 @@ fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: St
     push_event(&state, session_id, kind, payload);
 }
 
+/// Extract the bounded, transcript-visible text from a complete MSP item.
+/// `item/delta` is the normal path, but a reconnect or a host that coalesces
+/// its stream may deliver only the full item. Keep this helper conservative:
+/// it reads only the fields owned by the item's kind and never serializes the
+/// raw item into the user transcript.
+fn completed_item_text(item: &Value, kind: &str) -> Option<String> {
+    let text = |key: &str| {
+        item.get(key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    if is_thinking_item_kind(kind) {
+        if let Some(summary) = item.get("summary").and_then(Value::as_array) {
+            let joined = summary
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            if !joined.is_empty() {
+                return Some(joined);
+            }
+        }
+        return text("text").or_else(|| text("fallbackText"));
+    }
+    if kind.eq_ignore_ascii_case("usershell") {
+        return text("visibleOutput")
+            .or_else(|| text("message"))
+            .or_else(|| text("fallbackText"));
+    }
+    if kind.eq_ignore_ascii_case("agentMessage") {
+        return text("text")
+            .or_else(|| text("displayText"))
+            .or_else(|| text("message"))
+            .or_else(|| text("fallbackText"));
+    }
+    None
+}
+
 fn initialize_session_durability(result: &Value) -> Option<String> {
     result
         .get("sessionDurability")
@@ -597,6 +655,51 @@ fn cache_initialize_session_durability(
         // a newly started host for the same workspace.
         host_durability.remove(root);
     }
+}
+
+/// Read the fixed capability grant returned by `initialize`. Unknown
+/// additive names are retained for diagnostics, while malformed entries are
+/// ignored; an explicitly empty array remains an explicit denial of all
+/// optional capabilities for this connection.
+fn initialize_granted_capabilities(result: &Value) -> Option<Vec<String>> {
+    result
+        .get("grantedCapabilities")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(str::to_string)
+                .take(64)
+                .collect()
+        })
+}
+
+fn cache_initialize_granted_capabilities(
+    host_capabilities: &mut HashMap<PathBuf, Vec<String>>,
+    root: &Path,
+    result: &Value,
+) {
+    if let Some(capabilities) = initialize_granted_capabilities(result) {
+        host_capabilities.insert(root.to_path_buf(), capabilities);
+    } else {
+        // Never leak a previous host's capability posture into a new process.
+        host_capabilities.remove(root);
+    }
+}
+
+fn session_granted_capabilities(
+    state: &State<'_, AppState>,
+    root: &Path,
+) -> Result<Option<Vec<String>>, String> {
+    Ok(state
+        .host_capabilities
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(root)
+        .cloned())
 }
 
 /// Read the host's effective approval projection from any session-shaped
@@ -677,7 +780,10 @@ async fn ensure_host(
         let initialized = client
             .request(
                 "initialize",
-                json!({"clientInfo": {"name": "muse_desktop", "version": "0.1.0"}}),
+                json!({
+                    "clientInfo": {"name": "muse_desktop", "version": "0.1.0"},
+                    "capabilities": {"requestedCapabilities": ["userShell"]},
+                }),
             )
             .await?;
         validate_initialize_result(&initialized)?;
@@ -705,6 +811,12 @@ async fn ensure_host(
         .lock()
         .map_err(|e| format!("state lock: {e}"))?;
     cache_initialize_session_durability(&mut host_durability, &root, &initialized);
+
+    let mut host_capabilities = state
+        .host_capabilities
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?;
+    cache_initialize_granted_capabilities(&mut host_capabilities, &root, &initialized);
 
     Ok(client)
 }
@@ -956,10 +1068,18 @@ where
     let sid = p.get("sessionId").and_then(Value::as_str).unwrap_or("");
     match method {
         "item/started" => {
-            if let (Some(item_id), Some(item)) = (
-                p.get("itemId").and_then(Value::as_str),
-                p.get("item"),
-            ) {
+            // The official MSP envelope keeps the identity on the full item
+            // object. Accept the earlier flat shape as a compatibility path
+            // because older sidecars emitted `itemId` beside `item`.
+            let item_id = p
+                .get("itemId")
+                .and_then(Value::as_str)
+                .or_else(|| {
+                    p.get("item")
+                        .and_then(|item| item.get("itemId").or_else(|| item.get("id")))
+                        .and_then(Value::as_str)
+                });
+            if let (Some(item_id), Some(item)) = (item_id, p.get("item")) {
                 let kind = item
                     .get("kind")
                     .and_then(Value::as_str)
@@ -1010,6 +1130,7 @@ where
                     json!({
                         "itemId": item_id,
                         "itemKind": kind,
+                        "commandText": item.get("commandText"),
                         "turnId": item.get("turnId"),
                     }).to_string(),
                 );
@@ -1022,6 +1143,9 @@ where
             ) else {
                 return;
             };
+            if let Ok(mut seen) = state.item_deltas_seen.lock() {
+                seen.insert((sid.to_string(), item_id.to_string()));
+            }
             let kind = state
                 .item_kinds
                 .lock()
@@ -1073,27 +1197,145 @@ where
                     // the UI can expose them behind a disclosure control.
                     emit_fn("thinking", sid, "thinking", item_ref);
                 }
+                "userShell" | "usershell" => {
+                    // User-shell output is a tool lane item and never an
+                    // assistant response. Keep the command/result pairing in
+                    // the transcript without copying raw host frames.
+                    emit_fn("shell_output", sid, "shell_output", item_ref);
+                }
                 _ => emit_fn("output", sid, "output", item_ref),
             }
         }
         "item/completed" | "item/updated" => {
             // Carries the item id: the UI closes only this block, so a
-            // concurrent item keeps streaming into its own entry.
-            let item_id = p
-                .get("item")
+            // concurrent item keeps streaming into its own entry. A complete
+            // item can also be the first event observed after a reconnect;
+            // emit its transcript lane once when no delta was seen.
+            let item = p.get("item");
+            let item_id = item
                 .and_then(|i| i.get("itemId").or_else(|| i.get("id")))
                 .and_then(Value::as_str)
                 .or_else(|| p.get("itemId").and_then(Value::as_str))
                 .unwrap_or("");
-            let turn_id = p
-                .get("item")
+            let turn_id = item
                 .and_then(|i| i.get("turnId"))
                 .or_else(|| p.get("turnId"));
-            emit_fn("status",
-                sid,
-                "item_done",
-                json!({"itemId": item_id, "turnId": turn_id}).to_string(),
-            );
+            // MSP `item/updated` is a non-terminal replacement while the
+            // item status remains `inProgress`. Only a completed notification
+            // or an explicitly terminal status may close the UI lane.
+            let item_terminal = method == "item/completed"
+                || item
+                    .and_then(|i| i.get("status"))
+                    .and_then(Value::as_str)
+                    .map(|status| status != "inProgress")
+                    .unwrap_or(false);
+            let kind = item
+                .and_then(|i| i.get("kind"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| {
+                    state
+                        .item_kinds
+                        .lock()
+                        .ok()
+                        .and_then(|kinds| kinds.get(&(sid.to_string(), item_id.to_string())).cloned())
+                });
+            if !item_id.is_empty() {
+                if let Some(kind) = kind.as_deref() {
+                    if let Ok(mut kinds) = state.item_kinds.lock() {
+                        kinds.insert((sid.to_string(), item_id.to_string()), kind.to_string());
+                    }
+                    let delta_seen = state
+                        .item_deltas_seen
+                        .lock()
+                        .map(|seen| seen.contains(&(sid.to_string(), item_id.to_string())))
+                        .unwrap_or(true);
+                    let already_emitted = state
+                        .item_fallback_emitted
+                        .lock()
+                        .map(|seen| seen.contains(&(sid.to_string(), item_id.to_string())))
+                        .unwrap_or(true);
+                    let fallback_text = item.and_then(|i| completed_item_text(i, kind));
+                    if method == "item/updated" && !item_terminal {
+                        // The official update is a full replacement, not a
+                        // delta. Forward only the bounded, kind-owned text so
+                        // the renderer can replace the existing lane without
+                        // leaking the raw host item or duplicating output.
+                        if let Some(text) = fallback_text.as_deref() {
+                            let lane = if is_thinking_item_kind(kind) {
+                                "thinking"
+                            } else if kind.eq_ignore_ascii_case("usershell") {
+                                "shell_output"
+                            } else {
+                                "output"
+                            };
+                            emit_fn(
+                                "item_updated",
+                                sid,
+                                "item_updated",
+                                json!({
+                                    "itemId": item_id,
+                                    "itemKind": kind,
+                                    "lane": lane,
+                                    "text": text,
+                                    "commandText": item.and_then(|i| i.get("commandText")),
+                                    "turnId": turn_id,
+                                    "revision": item.and_then(|i| i.get("revision")),
+                                    "status": item.and_then(|i| i.get("status")),
+                                })
+                                .to_string(),
+                            );
+                        }
+                    }
+                    if !delta_seen && !already_emitted && item_terminal {
+                        // If the start event was lost, recreate the reflexive
+                        // block before appending the completed text. The
+                        // renderer de-duplicates this by itemId.
+                        emit_fn(
+                            "status",
+                            sid,
+                            "item_started",
+                            json!({
+                                "itemId": item_id,
+                                "itemKind": kind,
+                                "commandText": item.and_then(|i| i.get("commandText")),
+                                "turnId": turn_id,
+                            })
+                            .to_string(),
+                        );
+                        if let Some(text) = fallback_text {
+                            let lane = if is_thinking_item_kind(kind) {
+                                "thinking"
+                            } else if kind.eq_ignore_ascii_case("usershell") {
+                                "shell_output"
+                            } else {
+                                "output"
+                            };
+                            emit_fn(
+                                lane,
+                                sid,
+                                lane,
+                                json!({"itemId": item_id, "text": text}).to_string(),
+                            );
+                        }
+                        // A metadata-only, non-terminal update never emits a
+                        // lane. It remains eligible for the later terminal
+                        // item carrying output; once text was emitted, both
+                        // update and completed notifications are idempotent.
+                        if let Ok(mut emitted) = state.item_fallback_emitted.lock() {
+                            emitted.insert((sid.to_string(), item_id.to_string()));
+                        }
+                    }
+                }
+            }
+            if item_terminal {
+                emit_fn(
+                    "status",
+                    sid,
+                    "item_done",
+                    json!({"itemId": item_id, "turnId": turn_id}).to_string(),
+                );
+            }
         }
         "approval/requested" | "approval/updated" => {
             let approval_id = match p.get("approvalId").and_then(Value::as_str) {
@@ -1245,6 +1487,37 @@ where
                     sid,
                     "approval_mode_changed",
                     json!({"mode": mode}).to_string(),
+                );
+            }
+        }
+        "session/branchChanged" => {
+            // Branch observations are durable host facts. Forward only the
+            // bounded fields used by the renderer; cursors and other
+            // protocol metadata remain transport-only.
+            if !sid.is_empty() {
+                let branch = p
+                    .get("branch")
+                    .and_then(Value::as_str)
+                    .map(|value| truncate(value, 200));
+                let vcs = p
+                    .get("vcs")
+                    .and_then(Value::as_str)
+                    .map(|value| truncate(value, 40));
+                let workspace_root = p
+                    .get("workspaceRoot")
+                    .or_else(|| p.get("workspace_root"))
+                    .and_then(Value::as_str)
+                    .map(|value| truncate(value, 1_000));
+                emit_fn(
+                    "status",
+                    sid,
+                    "branch_changed",
+                    json!({
+                        "branch": branch,
+                        "vcs": vcs,
+                        "workspaceRoot": workspace_root,
+                    })
+                    .to_string(),
                 );
             }
         }
@@ -2338,12 +2611,14 @@ async fn start_session_at_workspace(
         .map_err(|e| format!("state lock: {e}"))?
         .get(&root)
         .cloned();
+    let granted_capabilities = session_granted_capabilities(&state, &root)?;
     let meta = SessionMeta {
         session_id: session_id.clone(),
         workspace: root.display().to_string(),
         running,
         session_durability,
         approval_mode: session_approval_mode(session),
+        granted_capabilities,
     };
     state
         .sessions
@@ -2466,6 +2741,7 @@ async fn fork_session(
             .get(&root)
             .cloned(),
         approval_mode: session_approval_mode(session),
+        granted_capabilities: session_granted_capabilities(&state, &root)?,
     };
     state
         .sessions
@@ -2544,6 +2820,7 @@ async fn resume_session(
         approval_mode: read
             .get("session")
             .and_then(session_approval_mode),
+        granted_capabilities: session_granted_capabilities(&state, &root)?,
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client)?;
@@ -2866,6 +3143,73 @@ async fn send_input_for_state(
         .await?;
     mark_running(&state, &session_id, true);
     Ok(result)
+}
+
+const MAX_USER_SHELL_COMMAND_CHARS: usize = 16_000;
+
+/// Build the capability-gated `session/userShell` request. The command is a
+/// user-initiated shell escape hatch in the session workspace, so it carries
+/// the same UUIDv7 idempotency handle as a normal turn but never pretends to
+/// be model input. Pure validation keeps malformed renderer calls fail-closed.
+fn user_shell_payload(
+    session_id: &str,
+    command_id: &str,
+    command_text: &str,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(session_id, "sessionId")?;
+    let command_id = require_non_empty(command_id, "commandId")?;
+    let command_text = require_non_empty(command_text, "commandText")?;
+    if command_text.chars().count() > MAX_USER_SHELL_COMMAND_CHARS {
+        return Err(format!(
+            "commandText exceeds {MAX_USER_SHELL_COMMAND_CHARS} characters"
+        ));
+    }
+    Ok(json!({
+        "commandId": command_id,
+        "sessionId": session_id,
+        "commandText": command_text,
+    }))
+}
+
+/// Send one explicit terminal command through the host's user-shell lane.
+/// The capability is checked only when the handshake gave an explicit grant
+/// list; an absent list is left to the host's canonical capability error so
+/// older hosts remain diagnosable instead of being silently emulated.
+async fn user_shell_for_state(
+    state: &AppState,
+    session_id: String,
+    command_id: String,
+    command_text: String,
+) -> Result<Value, String> {
+    let payload = user_shell_payload(&session_id, &command_id, &command_text)?;
+    let client = session_client(state, &session_id)?;
+    let root = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(&session_id)?;
+    if let Some(granted) = state
+        .host_capabilities
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&root)
+        .cloned()
+    {
+        if !granted.iter().any(|capability| capability == "userShell") {
+            return Err("Muse host did not grant the userShell capability".to_string());
+        }
+    }
+    client.request("session/userShell", payload).await
+}
+
+#[tauri::command]
+async fn user_shell(
+    state: State<'_, AppState>,
+    session_id: String,
+    command_id: String,
+    command_text: String,
+) -> Result<Value, String> {
+    user_shell_for_state(&state, session_id, command_id, command_text).await
 }
 
 #[tauri::command]
@@ -3409,6 +3753,12 @@ async fn kill_session(
     if let Ok(mut metas) = state.subagent_meta.lock() {
         metas.retain(|(sid, _), _| *sid != session_id);
     }
+    if let Ok(mut seen) = state.item_deltas_seen.lock() {
+        seen.retain(|(sid, _)| *sid != session_id);
+    }
+    if let Ok(mut emitted) = state.item_fallback_emitted.lock() {
+        emitted.retain(|(sid, _)| *sid != session_id);
+    }
     if let Ok(mut watchers) = state.workspace_watchers.lock() {
         watchers.remove(&session_id);
     }
@@ -3481,6 +3831,7 @@ mod tests {
                 running: false,
                 session_durability: None,
                 approval_mode: None,
+                granted_capabilities: None,
             },
         );
     }
@@ -3492,9 +3843,12 @@ mod tests {
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
             host_durability: Mutex::new(HashMap::new()),
+            host_capabilities: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             subagent_meta: Mutex::new(HashMap::new()),
+            item_deltas_seen: Mutex::new(HashSet::new()),
+            item_fallback_emitted: Mutex::new(HashSet::new()),
             host_mutex: tokio::sync::Mutex::new(()),
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
@@ -3545,6 +3899,35 @@ mod tests {
         assert_eq!(deltas[0].1, "session-a");
         assert_eq!(deltas[1].0, "output");
         assert_eq!(deltas[1].1, "session-b");
+    }
+
+    #[test]
+    fn branch_observations_are_forwarded_as_bounded_status_facts() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "session/branchChanged",
+            &json!({
+                "sessionId": "session-a",
+                "branch": "feature/muse",
+                "vcs": "git",
+                "workspaceRoot": "C:/repo",
+                "viewCursor": "opaque",
+            }),
+            &mut emit,
+        );
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, "status");
+        assert_eq!(events[0].1, "session-a");
+        assert_eq!(events[0].2, "branch_changed");
+        let payload: Value = serde_json::from_str(&events[0].3).unwrap();
+        assert_eq!(payload["branch"], "feature/muse");
+        assert_eq!(payload["vcs"], "git");
+        assert_eq!(payload["workspaceRoot"], "C:/repo");
     }
 
     #[test]
@@ -3712,6 +4095,7 @@ mod tests {
                 running: true,
                 session_durability: None,
                 approval_mode: None,
+                granted_capabilities: None,
             },
         );
         let mut events = Vec::new();
@@ -3992,6 +4376,74 @@ mod tests {
     }
 
     #[test]
+    fn generated_tauri_invoke_routes_user_shell_through_granted_host_capability() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![user_shell])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-shell", "fixture-shell", client.clone());
+        state
+            .inner()
+            .host_capabilities
+            .lock()
+            .unwrap()
+            .insert(PathBuf::from("fixture-shell"), vec!["userShell".to_string()]);
+
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames).await;
+                assert_eq!(frame["method"], "session/userShell");
+                assert_eq!(frame["params"]["sessionId"], "session-shell");
+                assert_eq!(frame["params"]["commandId"], "command-shell");
+                assert_eq!(frame["params"]["commandText"], "git status --short");
+                client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": frame["id"],
+                        "result": {"status": "accepted", "commandId": "command-shell"}
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "user_shell".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({
+                    "sessionId": "session-shell",
+                    "commandId": "command-shell",
+                    "commandText": "git status --short"
+                })),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("user_shell invoke should succeed")
+        .deserialize::<Value>()
+        .expect("user_shell response should be JSON");
+
+        responder.join().expect("fixture responder should finish");
+        assert_eq!(response["status"], "accepted");
+    }
+
+    #[test]
     fn generated_tauri_invoke_approves_only_the_target_session() {
         let app = tauri::test::mock_builder()
             .manage(empty_state())
@@ -4179,6 +4631,168 @@ mod tests {
             .await;
         let result = request.await.unwrap().unwrap();
         assert_eq!(result["session"]["sessionId"], "session-a");
+    }
+
+    #[test]
+    fn initialize_capability_grants_are_bounded_and_cached_per_workspace() {
+        let mut grants = HashMap::new();
+        let root = PathBuf::from("C:/fixture");
+        let result = json!({
+            "grantedCapabilities": ["userShell", "", 42, "mcp", "userShell"]
+        });
+        assert_eq!(
+            initialize_granted_capabilities(&result),
+            Some(vec!["userShell".to_string(), "mcp".to_string(), "userShell".to_string()])
+        );
+        cache_initialize_granted_capabilities(&mut grants, &root, &result);
+        assert_eq!(grants.get(&root).unwrap().len(), 3);
+        cache_initialize_granted_capabilities(&mut grants, &root, &json!({}));
+        assert!(!grants.contains_key(&root));
+    }
+
+    #[test]
+    fn user_shell_payload_validates_identity_and_bounds_command_text() {
+        let payload = user_shell_payload("session-a", "command-a", "echo ready").unwrap();
+        assert_eq!(payload["sessionId"], "session-a");
+        assert_eq!(payload["commandId"], "command-a");
+        assert_eq!(payload["commandText"], "echo ready");
+        assert!(user_shell_payload("", "command-a", "echo ready").is_err());
+        assert!(user_shell_payload("session-a", "command-a", " ").is_err());
+        let too_long = "x".repeat(MAX_USER_SHELL_COMMAND_CHARS + 1);
+        assert!(user_shell_payload("session-a", "command-a", &too_long).is_err());
+    }
+
+    #[test]
+    fn user_shell_deltas_use_the_tool_lane_and_keep_item_identity() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "item/started",
+            &json!({
+                "sessionId": "session-a",
+                "item": {"itemId":"shell-1", "kind":"userShell", "commandText":"git status"}
+            }),
+            &mut emit,
+        );
+        route_notification_with_emit(
+            &state,
+            "item/delta",
+            &json!({"sessionId":"session-a","itemId":"shell-1","field":"output","delta":"clean"}),
+            &mut emit,
+        );
+        let started = events.iter().find(|(_, _, kind, _)| kind == "item_started").unwrap();
+        assert!(started.3.contains("git status"));
+        let shell = events.iter().find(|(_, _, kind, _)| kind == "shell_output").unwrap();
+        assert_eq!(shell.1, "session-a");
+        assert!(shell.3.contains("shell-1"));
+        assert!(events.iter().all(|(_, _, kind, _)| kind != "output"));
+    }
+
+    #[test]
+    fn completed_user_shell_without_delta_is_replayed_once_and_closed() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        let completed = json!({
+            "sessionId": "session-a",
+            "item": {
+                "itemId": "shell-complete",
+                "kind": "userShell",
+                "commandText": "echo ready",
+                "visibleOutput": "ready\n",
+                "status": "completed"
+            }
+        });
+        route_notification_with_emit(&state, "item/completed", &completed, &mut emit);
+        route_notification_with_emit(&state, "item/updated", &completed, &mut emit);
+        let shells = events.iter().filter(|(_, _, kind, _)| kind == "shell_output").collect::<Vec<_>>();
+        assert_eq!(shells.len(), 1, "a repeated completed item must not duplicate output");
+        assert!(shells[0].3.contains("ready"));
+        assert!(events.iter().any(|(_, _, kind, payload)| {
+            kind == "item_done" && payload.contains("shell-complete")
+        }));
+    }
+
+    #[test]
+    fn completed_reasoning_without_delta_uses_the_thinking_lane() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "item/completed",
+            &json!({
+                "sessionId": "session-a",
+                "item": {
+                    "itemId": "reasoning-complete",
+                    "kind": "reasoning",
+                    "summary": ["inspect", "respond"],
+                    "status": "completed"
+                }
+            }),
+            &mut emit,
+        );
+        let thinking = events.iter().find(|(_, _, kind, _)| kind == "thinking").unwrap();
+        let thinking_payload: Value = serde_json::from_str(&thinking.3).unwrap();
+        assert_eq!(thinking_payload["text"], "inspect\n\nrespond");
+        assert!(events.iter().all(|(_, _, kind, _)| kind != "output"));
+    }
+
+    #[test]
+    fn non_terminal_item_update_does_not_close_a_live_lane() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        route_notification_with_emit(
+            &state,
+            "item/started",
+            &json!({
+                "sessionId": "session-a",
+                "item": {"itemId": "shell-live", "kind": "userShell", "commandText": "long task"}
+            }),
+            &mut |event: &str, sid: &str, kind: &str, payload: String| {
+                events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+            },
+        );
+        let before = events.len();
+        route_notification_with_emit(
+            &state,
+            "item/updated",
+            &json!({
+                "sessionId": "session-a",
+                "item": {
+                    "itemId": "shell-live",
+                    "kind": "userShell",
+                    "status": "inProgress",
+                    "visibleOutput": "still running"
+                }
+            }),
+            &mut |event: &str, sid: &str, kind: &str, payload: String| {
+                events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+            },
+        );
+        assert_eq!(
+            events[before..].iter().filter(|(_, _, kind, _)| kind == "item_done").count(),
+            0,
+            "an in-progress item update must leave the lane open",
+        );
+        assert_eq!(
+            events[before..].iter().filter(|(_, _, kind, _)| kind == "shell_output").count(),
+            0,
+            "metadata-only updates must not replay a full output as a delta",
+        );
+        let update = events[before..]
+            .iter()
+            .find(|(_, _, kind, _)| kind == "item_updated")
+            .expect("full in-progress item update is forwarded as a replacement");
+        assert!(update.3.contains("still running"));
     }
 
     #[test]
@@ -4730,9 +5344,12 @@ fn main() {
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
             host_durability: Mutex::new(HashMap::new()),
+            host_capabilities: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             subagent_meta: Mutex::new(HashMap::new()),
+            item_deltas_seen: Mutex::new(HashSet::new()),
+            item_fallback_emitted: Mutex::new(HashSet::new()),
             host_mutex: tokio::sync::Mutex::new(()),
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
@@ -4751,6 +5368,7 @@ fn main() {
             list_pending_requests,
             restore_sessions,
             send_input,
+            user_shell,
             unqueue_turn,
             steer_input,
             approve,

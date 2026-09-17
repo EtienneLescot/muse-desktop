@@ -117,6 +117,7 @@ import { createPollChain, enqueuePoll } from "../lib/poll";
 // stream shows "thinking…" synchronously on send and on `item/started`
 // even before the first delta lands.
 import {
+  applyItemSnapshotUpdate,
   dropEmptyPlaceholders,
   isItemStartKind,
   isRunningKind,
@@ -179,6 +180,7 @@ import {
   resolveProjectSettings,
   setProjectOverride as setProjectOverrideRow,
   updateProject as updateProjectRow,
+  settingsForThread,
   type Project,
   type ProjectSettings,
   type ThreadProjectMap,
@@ -209,6 +211,7 @@ export {
   DEFAULT_PROJECT_SETTINGS,
   diffProjectSettings,
   resolveProjectSettings,
+  settingsForThread,
 } from "../lib/projects";
 // US-9 automations/scheduled + review queue: pure schedule logic (cron,
 // due → review enqueue, approve/discard, target resolution). No workflow/*
@@ -452,6 +455,7 @@ import {
   historyItemsToLogEntries,
   mergeHistoryLog,
 } from "../lib/history";
+import { parseBranchObservation } from "../lib/branch";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -806,6 +810,8 @@ interface UseMuseSessions {
   reconcileSession: (id: string) => Promise<void>;
   reconcilingId: string | null;
   connectedIds: string[];
+  /** M1-06: capability negotiated with each workspace host. */
+  userShellAvailableForSession: (sessionId: string) => boolean;
   /**
    * M0-03: send one turn and get an explicit result. `retryKey` re-sends
    * an existing outbox entry (same clientMessageId, byte-identical
@@ -923,6 +929,8 @@ interface UseMuseSessions {
   openTerminal: (sessionId: string, cols?: number, rows?: number) => Promise<TerminalInfo | null>;
   readTerminal: (terminalId: string) => Promise<void>;
   writeTerminal: (terminalId: string, input: string) => Promise<void>;
+  /** M1-06: run one explicit command through MSP's user-shell lane. */
+  runUserShell: (sessionId: string, command: string) => Promise<boolean>;
   resizeTerminal: (terminalId: string, cols: number, rows: number) => Promise<void>;
   closeTerminal: (sessionId: string) => Promise<void>;
   /** Add a bounded, attributed terminal snapshot to the next prompt. */
@@ -1148,6 +1156,7 @@ interface BackendSessionMeta {
   session_durability?: string;
   /** Host projection, when this sidecar exposes one. */
   approval_mode?: string;
+  granted_capabilities?: string[];
 }
 
 interface BackendWorktreeSessionResult {
@@ -1539,6 +1548,11 @@ export function useMuseSessions(): UseMuseSessions {
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
   const [connectedIds, setConnectedIds] = useState<string[]>([]);
+  // M1-06: initialize grants are host facts. Keep them separate from the
+  // authorization posture and from persisted session metadata.
+  const [grantedCapabilitiesBySession, setGrantedCapabilitiesBySession] = useState<
+    Record<string, string[] | undefined>
+  >({});
   const [connectionBySession, setConnectionBySession] = useState<
     Record<string, SessionConnectionState>
   >({});
@@ -1766,6 +1780,13 @@ export function useMuseSessions(): UseMuseSessions {
         const restored = await invoke<BackendSessionMeta[]>("restore_sessions");
         if (cancelled) return;
         setConnectedIds(restored.map((s) => s.session_id));
+        setGrantedCapabilitiesBySession((cur) => {
+          const next = { ...cur };
+          for (const meta of restored) {
+            next[meta.session_id] = meta.granted_capabilities;
+          }
+          return next;
+        });
         setSessions((cur) => {
           const next = [...cur];
           for (const meta of restored) {
@@ -2214,11 +2235,16 @@ export function useMuseSessions(): UseMuseSessions {
   // loadSummary guard stops the loop on the re-render the note triggers.
   useEffect(() => {
     for (const [sid, log] of Object.entries(logs)) {
-      if (log.length >= COMPACT_AUTO_ENTRIES && loadSummary(sid) === null) {
+      const effective = settingsForThread(globalSettings, projects, threadProjects, sid);
+      if (
+        effective.autoCompact &&
+        log.length >= COMPACT_AUTO_ENTRIES &&
+        loadSummary(sid) === null
+      ) {
         doCompact(sid);
       }
     }
-  }, [logs, doCompact]);
+  }, [logs, doCompact, globalSettings, projects, threadProjects]);
 
   // US-4 server half: host occupancy per session (latest triple wins; the
   // host only emits on change). Never persisted — it is live host state.
@@ -2359,8 +2385,9 @@ export function useMuseSessions(): UseMuseSessions {
     sessionId: string,
     itemId?: string,
     agentId?: string,
-    role: "assistant" | "thinking" = "assistant",
+    role: "assistant" | "thinking" | "tool" = "assistant",
     turnId?: string,
+    initialText = "",
   ): void {
     const stamp = { id: newId(), ts: Date.now() };
     setLogs((cur) => {
@@ -2369,6 +2396,7 @@ export function useMuseSessions(): UseMuseSessions {
         agentId,
         role,
         turnId,
+        initialText,
         stamp,
       });
       if (next === (cur[sessionId] ?? [])) return cur;
@@ -2483,6 +2511,30 @@ export function useMuseSessions(): UseMuseSessions {
       }));
       return;
     }
+    // The host owns branch identity. Keep only its bounded observation on the
+    // conversation row; never derive it from the selected workspace or from
+    // a renderer-side Git refresh. A detached HEAD is represented by the
+    // absence of the optional local branch field.
+    if (kind === "branch_changed") {
+      let parsed: ReturnType<typeof parseBranchObservation> = null;
+      try {
+        parsed = parseBranchObservation(JSON.parse(payload));
+      } catch {
+        parsed = null;
+      }
+      if (parsed === null) return;
+      const observation = parsed;
+      touchStreamActivity(sid, kind);
+      setConnectionState(sid, "connected");
+      setSessions((cur) => cur.map((session) => {
+        if (session.session_id !== sid) return session;
+        const next = { ...session };
+        if (observation.branch === null) delete next.branch;
+        else next.branch = observation.branch;
+        return next;
+      }));
+      return;
+    }
     // Keep this heartbeat independent from log timestamps: a host status
     // event can prove progress even when it has no user-facing log line.
     touchStreamActivity(sid, kind);
@@ -2493,6 +2545,7 @@ export function useMuseSessions(): UseMuseSessions {
     if (
       kind === "output" ||
       kind === "thinking" ||
+      kind === "item_updated" ||
       kind === "subagent_event" ||
       kind === "item_done" ||
       isItemStartKind(kind) ||
@@ -2507,6 +2560,7 @@ export function useMuseSessions(): UseMuseSessions {
       activeId !== sid &&
       (kind === "output" ||
         kind === "thinking" ||
+        kind === "item_updated" ||
         kind === "subagent_event" ||
         kind === "tool_request" ||
         kind === "input_request" ||
@@ -2517,6 +2571,12 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "host_exited") {
       setConnectedIds((cur) => cur.filter((id) => id !== sid));
+      setGrantedCapabilitiesBySession((cur) => {
+        if (!(sid in cur)) return cur;
+        const next = { ...cur };
+        delete next[sid];
+        return next;
+      });
       setConnectionState(sid, "disconnected");
       setHostApprovalModeBySession((cur) => {
         if (!(sid in cur)) return cur;
@@ -2589,6 +2649,32 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) =>
         cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
       );
+      return;
+    }
+    if (kind === "shell_output") {
+      ensureSessionRow(sid, null);
+      const { itemId, text } = parseChunk(payload);
+      setLogs((cur) => {
+        const log = cur[sid] ?? [];
+        const i = lastOpenIndex(log, "tool", undefined, itemId);
+        let next: LogEntry[];
+        if (i >= 0) {
+          const previous = log[i];
+          const separator = previous.text.length > 0 && text.length > 0 ? "\n" : "";
+          next = [
+            ...log.slice(0, i),
+            { ...previous, text: `${previous.text}${separator}${text}`, itemId: itemId ?? previous.itemId },
+            ...log.slice(i + 1),
+          ];
+        } else {
+          next = [
+            ...log,
+            { id: newId(), ts: Date.now(), role: "tool", text, itemId, open: true },
+          ];
+        }
+        saveLog(sid, next);
+        return { ...cur, [sid]: next };
+      });
       return;
     }
     if (kind === "subagent_event") {
@@ -2680,6 +2766,51 @@ export function useMuseSessions(): UseMuseSessions {
       pushLog(sid, [
         { id: newId(), ts: Date.now(), role: "system", text: `Input ${outcome}` },
       ]);
+      return;
+    }
+    if (kind === "item_updated") {
+      let parsed: Record<string, unknown> | null = null;
+      try {
+        const value: unknown = JSON.parse(payload);
+        if (typeof value === "object" && value !== null) {
+          parsed = value as Record<string, unknown>;
+        }
+      } catch {
+        return;
+      }
+      const itemId = typeof parsed?.itemId === "string" ? parsed.itemId : "";
+      const text = typeof parsed?.text === "string" ? parsed.text : "";
+      if (itemId.length === 0 || text.length === 0) return;
+      const lane: "assistant" | "thinking" | "tool" = parsed?.lane === "thinking"
+        ? "thinking"
+        : parsed?.lane === "shell_output"
+          ? "tool"
+          : "assistant";
+      const revision = typeof parsed?.revision === "number" && Number.isFinite(parsed.revision)
+        ? parsed.revision
+        : undefined;
+      const turnId = typeof parsed?.turnId === "string" && parsed.turnId.length > 0
+        ? parsed.turnId
+        : undefined;
+      const commandText = typeof parsed?.commandText === "string" ? parsed.commandText : undefined;
+      setLogs((cur) => {
+        const next = applyItemSnapshotUpdate(cur[sid] ?? [], {
+          itemId,
+          role: lane,
+          text,
+          ...(turnId === undefined ? {} : { turnId }),
+          ...(commandText === undefined ? {} : { commandText }),
+          ...(revision === undefined ? {} : { revision }),
+          open: true,
+          stamp: { id: newId(), ts: Date.now() },
+        });
+        if (next === cur[sid]) return cur;
+        saveLog(sid, next);
+        return { ...cur, [sid]: next };
+      });
+      setSessions((cur) => cur.map((session) =>
+        session.session_id === sid ? { ...session, running: true } : session,
+      ));
       return;
     }
     if (kind === "item_done") {
@@ -2815,7 +2946,8 @@ export function useMuseSessions(): UseMuseSessions {
       let itemId: string | undefined;
       let turnId: string | undefined;
       let agentId: string | undefined;
-      let itemRole: "assistant" | "thinking" = "assistant";
+      let itemRole: "assistant" | "thinking" | "tool" = "assistant";
+      let initialText = "";
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const rawId = obj.itemId ?? obj.id;
@@ -2827,15 +2959,23 @@ export function useMuseSessions(): UseMuseSessions {
             agentId = itemId ?? "agent";
           } else if (isThinkingItemKind(rawKind)) {
             itemRole = "thinking";
+          } else if (rawKind.toLowerCase().replace(/[\s_-]+/g, "") === "usershell") {
+            itemRole = "tool";
+            const commandText = obj.commandText;
+            if (typeof commandText === "string" && commandText.trim().length > 0) {
+              initialText = `$ ${commandText.trim()}`;
+            }
           }
         }
       } catch {
         // unparseable payload: still show the reflexive phase
       }
-      setSessions((cur) =>
-        cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
-      );
-      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId);
+      if (itemRole !== "tool") {
+        setSessions((cur) =>
+          cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
+        );
+      }
+      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId, initialText);
       return;
     }
     // status (and any future kinds): record + reflect liveness.
@@ -3255,6 +3395,10 @@ export function useMuseSessions(): UseMuseSessions {
         running: meta.running,
         ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
       };
+      setGrantedCapabilitiesBySession((cur) => ({
+        ...cur,
+        [meta.session_id]: meta.granted_capabilities,
+      }));
       setConnectedIds((cur) => [...new Set([...cur, meta.session_id])]);
       setConnectionState(meta.session_id, "connected");
       if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
@@ -3359,6 +3503,10 @@ export function useMuseSessions(): UseMuseSessions {
         sessionId: id, workspacePath: session.workspace,
       });
       if (tombstoned.current?.has(id)) return;
+      setGrantedCapabilitiesBySession((cur) => ({
+        ...cur,
+        [id]: meta.granted_capabilities,
+      }));
       // Resume restores the host's persisted posture. Reconcile it with the
       // current global selector before enabling the composer again. A host
       // ceiling must not make the saved conversation unusable: preserve the
@@ -3485,6 +3633,10 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
           ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
         };
+        setGrantedCapabilitiesBySession((cur) => ({
+          ...cur,
+          [meta.session_id]: meta.granted_capabilities,
+        }));
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
         if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
           setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
@@ -4931,21 +5083,40 @@ export function useMuseSessions(): UseMuseSessions {
         failRun(message, false);
         return false;
       }
+      if (item.projectId && targetSession && threadProjectsRef.current[target] !== item.projectId) {
+        const message = "the recorded project no longer matches the target conversation";
+        setError(`schedule run failed: ${message}`);
+        failRun(message, false);
+        return false;
+      }
+      const capturedProject = item.projectId
+        ? projectsRef.current.find((project) => project.id === item.projectId)
+        : undefined;
+      const capturedSettings = capturedProject
+        ? resolveProjectSettings(globalSettings, capturedProject.settings)
+        : globalSettings;
       const applyCapturedContext = async (sessionId: string): Promise<void> => {
         if (item.authorizationMode && item.authorizationMode !== authorizationMode) {
           await invoke("set_approval_mode", { sessionId, mode: item.authorizationMode });
         }
-        if (item.model && item.model !== "default") await setSessionModel(sessionId, item.model);
+        const model = item.model?.trim() || capturedSettings.model.trim();
+        if (model && model !== "default") await setSessionModel(sessionId, model);
       };
       let sessionId: string;
       if (target === "new") {
-        const settings = item.model ? { ...globalSettings, model: item.model } : undefined;
+        const settings = {
+          ...capturedSettings,
+          ...(item.model?.trim() ? { model: item.model.trim() } : {}),
+        };
         const fresh = await startSessionRow(item.workspace, settings);
         if (fresh === null) {
           failRun("could not start target conversation", false);
           return false;
         }
         sessionId = fresh;
+        if (item.projectId && capturedProject) {
+          setThreadProjects((current) => attachThreadRow(current, projects, sessionId, item.projectId!));
+        }
       } else {
         sessionId = target;
       }
@@ -4972,7 +5143,7 @@ export function useMuseSessions(): UseMuseSessions {
         return false;
       }
     },
-    [activeId, authorizationMode, globalSettings, sendInput, sessions, setSessionModel, startSessionRow],
+    [activeId, authorizationMode, globalSettings, projects, sendInput, sessions, setSessionModel, startSessionRow, threadProjects],
   );
 
   const prepareBrowserContext = useCallback(
@@ -5989,6 +6160,45 @@ export function useMuseSessions(): UseMuseSessions {
     [terminalsBySession],
   );
 
+  const userShellAvailableForSession = useCallback(
+    (sessionId: string): boolean =>
+      grantedCapabilitiesBySession[sessionId]?.some((capability) => capability === "userShell") === true,
+    [grantedCapabilitiesBySession],
+  );
+
+  /** M1-06: explicit `!`-style host shell action from the terminal panel. */
+  const runUserShell = useCallback(
+    async (sessionId: string, command: string): Promise<boolean> => {
+      const commandText = command.trim();
+      if (!commandText) return false;
+      if (!userShellAvailableForSession(sessionId)) {
+        setError("The Muse host did not grant the userShell capability for this conversation.");
+        return false;
+      }
+      // `session/userShell` uses the same UUIDv7 idempotency contract as a
+      // normal turn. Derive it from a fresh client id so retries and host
+      // deduplication keep the protocol-level ordering guarantees.
+      const commandId = commandIdFromClientMessageId(newId(), Date.now());
+      if (!commandId) {
+        setError("user_shell failed: could not allocate a valid command id");
+        return false;
+      }
+      try {
+        await invoke("user_shell", { sessionId, commandId, commandText });
+        // The host's item/started event supplies the authoritative item id;
+        // this local seed makes the command visible immediately after the
+        // admission ack and is rebound to that id when the event arrives.
+        ensurePlaceholder(sessionId, undefined, undefined, "tool", undefined, `$ ${commandText}`);
+        touchStreamActivity(sessionId, "client/userShell");
+        return true;
+      } catch (e) {
+        setError(`user_shell failed: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
+      }
+    },
+    [touchStreamActivity, userShellAvailableForSession],
+  );
+
   const filesForSession = useCallback(
     (sessionId: string): FilesBrowserState => filesBySession[sessionId] ?? emptyFilesBrowserState(),
     [filesBySession],
@@ -6241,6 +6451,7 @@ export function useMuseSessions(): UseMuseSessions {
     reconcileSession,
     reconcilingId,
     connectedIds,
+    userShellAvailableForSession,
     sendInput,
     steerInput,
     unqueueTurn,
@@ -6375,6 +6586,7 @@ export function useMuseSessions(): UseMuseSessions {
     openTerminal,
     readTerminal,
     writeTerminal,
+    runUserShell,
     resizeTerminal,
     closeTerminal,
     prepareTerminalContext,

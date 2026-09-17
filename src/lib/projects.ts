@@ -204,6 +204,24 @@ export function resolveProjectSettings(
   return { ...global, ...(override ?? {}) };
 }
 
+/**
+ * Resolve the effective settings for one attached conversation. Keeping the
+ * project lookup beside the merge rule prevents individual UI surfaces from
+ * inventing a second inheritance policy.
+ */
+export function settingsForThread(
+  global: ProjectSettings,
+  projects: Project[],
+  attached: ThreadProjectMap,
+  sessionId: string,
+): ProjectSettings {
+  const projectId = attached[sessionId];
+  const project = projectId === undefined
+    ? undefined
+    : projects.find((candidate) => candidate.id === projectId);
+  return resolveProjectSettings(global, project?.settings);
+}
+
 export interface SettingsDiffEntry {
   key: keyof ProjectSettings;
   global: string | boolean;

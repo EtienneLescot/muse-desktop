@@ -86,6 +86,8 @@ export function streamEventLabel(kind: string | null | undefined): string | null
     "client/steer": "steering accepted",
     "client/approval": "authorization sent",
     "client/input": "answer sent",
+    "client/usershell": "command sent",
+    shell_output: "shell output",
     "history/reconciled": "conversation synchronized",
     output: "response update",
     thinking: "reasoning update",

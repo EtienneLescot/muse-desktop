@@ -16,6 +16,9 @@
  * or the host's explicit ceiling rejection.
  * The explicit `--exercise-isolation` path kills host B after setup and
  * verifies that host A still answers a read-only request.
+ * The explicit `--exercise-user-shell` path negotiates the `userShell`
+ * capability, admits a harmless command in each workspace and observes the
+ * corresponding shell item without sending a model turn.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
@@ -24,15 +27,20 @@
  *   node scripts/native-smoke.mjs --exercise-errors
  *   node scripts/native-smoke.mjs --exercise-approval
  *   node scripts/native-smoke.mjs --exercise-isolation
+ *   node scripts/native-smoke.mjs --exercise-user-shell
+ *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
-import { mkdtemp, rm } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const PROCESS_EXIT_TIMEOUT_MS = 2_000;
+const execFileAsync = promisify(execFile);
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_BINARY = join(
   REPO_ROOT,
@@ -46,6 +54,15 @@ function binaryArgument() {
   return index >= 0 && process.argv[index + 1]
     ? resolve(process.argv[index + 1])
     : DEFAULT_BINARY;
+}
+
+function reportArgument() {
+  const index = process.argv.indexOf("--report");
+  if (index < 0) return null;
+  if (!process.argv[index + 1] || process.argv[index + 1].startsWith("--")) {
+    fail("--report requires a destination file");
+  }
+  return resolve(process.argv[index + 1]);
 }
 
 function exercisesControlPath() {
@@ -62,6 +79,10 @@ function exercisesApprovalPath() {
 
 function exercisesIsolationPath() {
   return process.argv.includes("--exercise-isolation");
+}
+
+function exercisesUserShellPath() {
+  return process.argv.includes("--exercise-user-shell");
 }
 
 function fail(message) {
@@ -94,6 +115,9 @@ function createHost(binary, workspace, label) {
   const pending = new Map();
   let resolveExit;
   const exited = new Promise((resolve) => { resolveExit = resolve; });
+  const notifications = [];
+  const notificationMethods = new Set();
+  const notificationWaiters = [];
 
   const closePending = (error) => {
     for (const entry of pending.values()) {
@@ -118,6 +142,20 @@ function createHost(binary, workspace, label) {
       } catch {
         closePending(new Error(`${label} returned an invalid JSON frame`));
         return;
+      }
+      if (typeof frame.method === "string") {
+        const notification = { method: frame.method, params: frame.params };
+        notificationMethods.add(frame.method);
+        notifications.push(notification);
+        if (notifications.length > 100) notifications.shift();
+        for (let index = notificationWaiters.length - 1; index >= 0; index -= 1) {
+          const waiter = notificationWaiters[index];
+          if (waiter.method !== notification.method || !waiter.predicate(notification.params)) continue;
+          notificationWaiters.splice(index, 1);
+          clearTimeout(waiter.timer);
+          waiter.resolve(notification.params);
+        }
+        continue;
       }
       if (frame.id !== undefined) {
         const request = pending.get(String(frame.id));
@@ -148,7 +186,7 @@ function createHost(binary, workspace, label) {
   });
   child.once("exit", (code, signal) => {
     closed = true;
-    resolveExit();
+    resolveExit(true);
     const detail = stderr.trim() ? ` (${stderr.trim().replace(/\s+/g, " ")})` : "";
     closePending(new Error(`${label} exited before the response (code ${code ?? "?"}, signal ${signal ?? "?"})${detail}`));
   });
@@ -170,31 +208,86 @@ function createHost(binary, workspace, label) {
     if (!closed) child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method, params })}\n`);
   }
 
+  function waitForNotification(method, predicate = () => true, timeoutMs = REQUEST_TIMEOUT_MS) {
+    const existing = notifications.find(
+      (notification) => notification.method === method && predicate(notification.params),
+    );
+    if (existing) return Promise.resolve(existing.params);
+    if (closed) return Promise.reject(new Error(`${label} is already closed`));
+    return new Promise((resolveNotification, reject) => {
+      const timer = setTimeout(() => {
+        const index = notificationWaiters.findIndex((waiter) => waiter.timer === timer);
+        if (index >= 0) notificationWaiters.splice(index, 1);
+        const seen = [...notificationMethods].sort().join(", ") || "none";
+        reject(new Error(`${label} timed out waiting for ${method} (notifications: ${seen})`));
+      }, timeoutMs);
+      notificationWaiters.push({ method, predicate, resolve: resolveNotification, reject, timer });
+    });
+  }
+
   async function close() {
     if (!closed) {
       closed = true;
       closePending(new Error(`${label} closed`));
-      child.kill();
+      for (const waiter of notificationWaiters.splice(0)) {
+        clearTimeout(waiter.timer);
+        waiter.reject(new Error(`${label} closed`));
+      }
+      if (process.platform === "win32") {
+        // Kill the complete sidecar tree before the parent can exit and lose
+        // the PID that taskkill needs to reach WSL descendants.
+        await forceTerminate(child);
+      } else {
+        child.kill();
+      }
     }
-    await Promise.race([
+    const exitedInTime = await Promise.race([
       exited,
-      new Promise((resolve) => setTimeout(resolve, 2_000)),
+      new Promise((resolve) => setTimeout(() => resolve(false), PROCESS_EXIT_TIMEOUT_MS)),
     ]);
+    if (exitedInTime !== true) {
+      await forceTerminate(child);
+      await Promise.race([
+        exited,
+        new Promise((resolve) => setTimeout(resolve, PROCESS_EXIT_TIMEOUT_MS)),
+      ]);
+    }
   }
 
-  return { request, notify, close };
+  return { request, notify, waitForNotification, close };
 }
 
 async function removeTemporaryDirectory(path) {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
       await rm(path, { recursive: true, force: true });
       return;
     } catch (error) {
-      if (attempt === 7) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (attempt === 19) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 150));
     }
   }
+}
+
+/**
+ * Windows can leave a native sidecar (or one of its descendants) alive after
+ * ChildProcess.kill(). Use taskkill only as a bounded fallback so temporary
+ * workspaces are never removed while the process still owns a file handle.
+ */
+async function forceTerminate(child) {
+  if (child.pid === undefined) return;
+  if (process.platform === "win32") {
+    try {
+      await execFileAsync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+        windowsHide: true,
+        timeout: PROCESS_EXIT_TIMEOUT_MS,
+      });
+    } catch {
+      // The process may have exited between the initial kill and taskkill.
+    }
+    return;
+  }
+  if (!child.killed) child.kill("SIGKILL");
 }
 
 async function main() {
@@ -206,6 +299,8 @@ async function main() {
   const exerciseErrors = exercisesErrorPath();
   const exerciseApproval = exercisesApprovalPath();
   const exerciseIsolation = exercisesIsolationPath();
+  const exerciseUserShell = exercisesUserShellPath();
+  const reportPath = reportArgument();
   const roots = await Promise.all([
     mkdtemp(join(tmpdir(), "muse-native-smoke-a-")),
     mkdtemp(join(tmpdir(), "muse-native-smoke-b-")),
@@ -219,14 +314,22 @@ async function main() {
     const controls = [];
     const errors = [];
     const approvalModes = [];
+    const userShellChecks = [];
     let isolation = null;
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
         clientInfo: { name: "muse_desktop_native_smoke", version: "0.1.0" },
+        ...(exerciseUserShell ? { capabilities: { requestedCapabilities: ["userShell"] } } : {}),
       });
       if (initialized?.serverInfo?.name !== "muse") fail(`host-${index === 0 ? "A" : "B"} returned an unexpected server name`);
       if (initialized?.schema?.version !== 1 || typeof initialized?.schema?.fingerprint !== "string") {
         fail(`host-${index === 0 ? "A" : "B"} returned an incompatible schema`);
+      }
+      if (exerciseUserShell && !Array.isArray(initialized?.grantedCapabilities)) {
+        fail(`host-${index === 0 ? "A" : "B"} returned no capability grant list`);
+      }
+      if (exerciseUserShell && !initialized.grantedCapabilities.includes("userShell")) {
+        fail(`host-${index === 0 ? "A" : "B"} did not grant userShell`);
       }
       const sessionDurability = typeof initialized?.sessionDurability === "string" && initialized.sessionDurability.trim().length > 0
         ? initialized.sessionDurability.trim()
@@ -269,6 +372,48 @@ async function main() {
       }
       const catalogue = await host.request("model/list");
       if (catalogue === null || typeof catalogue !== "object") fail(`host-${index === 0 ? "A" : "B"} returned no model catalogue`);
+      if (exerciseUserShell) {
+        const commandId = uuidv7();
+        const shellResult = await host.request("session/userShell", {
+          commandId,
+          commandText: "echo muse-native-smoke",
+          sessionId,
+        });
+        if (shellResult?.status !== "accepted" || shellResult?.commandId !== commandId) {
+          fail(`host-${index === 0 ? "A" : "B"} did not accept the userShell probe`);
+        }
+        let itemStarted = false;
+        try {
+          const item = await host.waitForNotification(
+            "item/started",
+            (params) => params?.sessionId === sessionId && params?.item?.kind === "userShell",
+            2_000,
+          );
+          const itemId = item?.item?.itemId ?? item?.item?.id;
+          itemStarted = typeof itemId === "string" && itemId.length > 0;
+        } catch {
+          // Some compatible hosts acknowledge userShell but do not expose its
+          // item stream to this bare connection. Keep that distinction visible
+          // instead of treating admission as transcript proof.
+        }
+        let historyItem = false;
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const read = await host.request("session/read", { excludeItems: false, sessionId });
+          const items = read?.history?.items;
+          historyItem = Array.isArray(items) && items.some(
+            (item) => item?.kind === "userShell" && item?.commandId === commandId,
+          );
+        } catch {
+          // An ephemeral or older host may not serve inline history here.
+        }
+        userShellChecks.push({
+          host: String.fromCharCode(65 + index),
+          status: "accepted",
+          itemStarted,
+          historyItem,
+        });
+      }
     }
     if (new Set(sessions).size !== sessions.length) fail("the two native hosts returned the same session id");
     if (exerciseErrors) {
@@ -341,7 +486,7 @@ async function main() {
         survivingModelCatalogue: "available",
       };
     }
-    process.stdout.write(`${JSON.stringify({
+    const report = {
       schema: "muse-desktop.native-smoke.v1",
       hosts: sessions.map((sessionId, index) => ({
         host: String.fromCharCode(65 + index),
@@ -355,7 +500,12 @@ async function main() {
       ...(exerciseErrors ? { errorsChecked: errors.length, errors } : {}),
       ...(exerciseApproval ? { approvalModes } : {}),
       ...(exerciseIsolation ? { isolation } : {}),
-    })}\n`);
+      ...(exerciseUserShell ? { userShell: userShellChecks } : {}),
+    };
+    if (reportPath !== null) {
+      await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    }
+    process.stdout.write(`${JSON.stringify(report)}\n`);
   } finally {
     await Promise.all(hosts.map((host) => host.close()));
     await Promise.all(roots.map(removeTemporaryDirectory));

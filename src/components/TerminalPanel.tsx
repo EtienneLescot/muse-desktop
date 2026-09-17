@@ -11,6 +11,8 @@ interface Props {
   onWrite: (terminalId: string, input: string) => Promise<void>;
   onResize: (terminalId: string, cols: number, rows: number) => Promise<void>;
   onClose: (sessionId: string) => Promise<void>;
+  canRunThroughMuse: boolean;
+  onRunThroughMuse: (sessionId: string, command: string) => Promise<boolean>;
   onInsertContext: (sessionId: string) => boolean;
 }
 
@@ -28,6 +30,8 @@ export function TerminalPanel({
   onWrite,
   onResize,
   onClose,
+  canRunThroughMuse,
+  onRunThroughMuse,
   onInsertContext,
 }: Props) {
   const [command, setCommand] = useState("");
@@ -73,6 +77,13 @@ export function TerminalPanel({
     setCommand("");
   };
 
+  const runThroughMuse = () => {
+    if (!canRunThroughMuse || command.trim().length === 0) return;
+    void onRunThroughMuse(sessionId, command).then((accepted) => {
+      if (accepted) setCommand("");
+    });
+  };
+
   if (!terminal) {
     return (
       <section className="terminal-panel" aria-live="polite">
@@ -99,7 +110,11 @@ export function TerminalPanel({
           <span className="terminal-size">{terminal.info.cols}×{terminal.info.rows}</span>
           <button type="button" onClick={() => adjust(10)} aria-label="Increase terminal width">+</button>
           <button type="button" className="terminal-close" onClick={() => void onClose(sessionId)}>Close</button>
-          <button type="button" className="terminal-context" onClick={() => onInsertContext(sessionId)}>
+          <button
+            type="button"
+            className="terminal-context"
+            onClick={() => onInsertContext(sessionId)}
+          >
             Add output to prompt
           </button>
         </div>
@@ -129,6 +144,17 @@ export function TerminalPanel({
           autoComplete="off"
         />
         <button type="submit" disabled={!command}>Send</button>
+        <button
+          type="button"
+          className="terminal-muse"
+          onClick={runThroughMuse}
+          disabled={!canRunThroughMuse || !command.trim()}
+          title={canRunThroughMuse
+            ? "Run this command through the Muse host (userShell)"
+            : "This Muse host did not grant the userShell capability"}
+        >
+          Run in Muse
+        </button>
       </form>
     </section>
   );

@@ -32,6 +32,7 @@ export const MSP_METHODS_SENT: MspMethod[] = [
   "model/list",
   "session/compact",
   "session/setModel",
+  "session/userShell",
   "session/fork",
   "turn/start",
   "turn/unqueue",
@@ -71,6 +72,7 @@ export const MSP_NOTIFICATIONS_HANDLED: MspNotification[] = [
   "session/contextUsage",
   "session/tokenUsage",
   "session/approvalModeChanged",
+  "session/branchChanged",
 ];
 
 /** Host error codes our UI interprets (kinds per the SDK error registry). */

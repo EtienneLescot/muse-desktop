@@ -30,6 +30,8 @@ export interface StoredSession {
   workspace: string;
   title: string;
   createdAt: number;
+  /** Latest branch observation supplied by the session host, when known. */
+  branch?: string;
   /** Host-reported persistence posture; absent in older local rows. */
   session_durability?: string;
   /**
@@ -59,6 +61,8 @@ export interface LogEntry {
   itemId?: string;
   /** MSP turn id owning this item; enables an exact conversation fork anchor. */
   turnId?: string;
+  /** Host item revision used to apply idempotent `item/updated` snapshots. */
+  itemRevision?: number;
   /** True while further stream chunks may still be appended. */
   open?: boolean;
   /** Drill-down into the child's own transcript (`session/read`). */
@@ -105,6 +109,7 @@ function isValidSession(s: unknown): s is StoredSession {
     typeof r.workspace === "string" &&
     typeof r.title === "string" &&
     typeof r.createdAt === "number" &&
+    (r.branch === undefined || (typeof r.branch === "string" && r.branch.trim().length > 0)) &&
     (r.session_durability === undefined ||
       (typeof r.session_durability === "string" && r.session_durability.trim().length > 0)) &&
     (r.archived === undefined || typeof r.archived === "boolean") &&

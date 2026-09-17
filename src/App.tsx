@@ -116,6 +116,7 @@ export default function App() {
     reconcileSession,
     reconcilingId,
     connectedIds,
+    userShellAvailableForSession,
     evtCount,
     sendInput,
     steerInput,
@@ -239,6 +240,7 @@ export default function App() {
     openTerminal,
     readTerminal,
     writeTerminal,
+    runUserShell,
     resizeTerminal,
     closeTerminal,
     prepareTerminalContext,
@@ -1063,6 +1065,12 @@ export default function App() {
                       {active.running ? "Working" : "Ready"}
                       <span>·</span>
                       <span title={active.workspace}>{active.workspace}</span>
+                      {active.branch !== undefined && (
+                        <>
+                          <span>·</span>
+                          <span title="Host-reported Git branch">{active.branch}</span>
+                        </>
+                      )}
                       <span className={`connection-state connection-${activeConnectionState}`}>
                         <span className="connection-state-dot" aria-hidden="true" />
                         {activeConnectionState === "connected"
@@ -1328,6 +1336,8 @@ export default function App() {
                           onWrite={writeTerminal}
                           onResize={resizeTerminal}
                           onClose={closeTerminal}
+                          canRunThroughMuse={userShellAvailableForSession(active.session_id)}
+                          onRunThroughMuse={runUserShell}
                           onInsertContext={prepareTerminalContext}
                         />
                       )}
