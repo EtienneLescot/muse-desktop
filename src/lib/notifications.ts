@@ -19,6 +19,73 @@ export interface MuseNotification {
 export const NOTIFICATIONS_KEY = "muse-desktop.notifications.v1";
 export const NOTIFICATION_PREFERENCES_KEY = "muse-desktop.notifications.preferences.v1";
 export const MAX_NOTIFICATIONS = 200;
+export const NOTIFICATION_ACTION_EVENT = "muse-desktop:notification-action";
+const NOTIFICATION_ACTION_TYPE = "muse-open-conversation";
+
+export interface NotificationActionPayload extends Record<string, unknown> {
+  notificationId?: string;
+  sessionId?: string;
+  runId?: string;
+}
+
+let actionTypeSetup: Promise<boolean> | null = null;
+
+export function notificationActionPayload(notification: MuseNotification): NotificationActionPayload {
+  return {
+    notificationId: notification.id,
+    ...(notification.sessionId ? { sessionId: notification.sessionId } : {}),
+    ...(notification.runId ? { runId: notification.runId } : {}),
+  };
+}
+
+function emitNotificationAction(payload: NotificationActionPayload): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<NotificationActionPayload>(NOTIFICATION_ACTION_EVENT, {
+    detail: payload,
+  }));
+}
+
+/** Register the native action type once; sending still degrades to a plain
+ * toast when an older Tauri notification plugin does not support actions. */
+async function ensureNativeActionType(): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  if (actionTypeSetup !== null) return actionTypeSetup;
+  actionTypeSetup = import("@tauri-apps/plugin-notification")
+    .then(async ({ registerActionTypes }) => {
+      await registerActionTypes([{
+        id: NOTIFICATION_ACTION_TYPE,
+        actions: [{ id: "open", title: "Open conversation", foreground: true }],
+      }]);
+      return true;
+    })
+    .catch(() => false);
+  return actionTypeSetup;
+}
+
+/** Subscribe to native notification clicks and route only validated ids. */
+export async function subscribeNotificationActions(
+  onOpen: (payload: NotificationActionPayload) => void,
+): Promise<() => void> {
+  if (!isTauriRuntime()) return () => {};
+  const ready = await ensureNativeActionType();
+  if (!ready) return () => {};
+  try {
+    const { onAction } = await import("@tauri-apps/plugin-notification");
+    const listener = await onAction((notification) => {
+      const extra = notification.extra;
+      if (!extra || typeof extra !== "object") return;
+      const payload: NotificationActionPayload = {
+        ...(typeof extra.notificationId === "string" ? { notificationId: extra.notificationId } : {}),
+        ...(typeof extra.sessionId === "string" ? { sessionId: extra.sessionId } : {}),
+        ...(typeof extra.runId === "string" ? { runId: extra.runId } : {}),
+      };
+      if (payload.sessionId || payload.runId) onOpen(payload);
+    });
+    return () => listener.unregister();
+  } catch {
+    return () => {};
+  }
+}
 
 function makeId(): string {
   return `notification-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
@@ -181,7 +248,18 @@ export async function deliverDesktopNotification(notification: MuseNotification)
     try {
       const { isPermissionGranted, sendNotification } = await import("@tauri-apps/plugin-notification");
       if (await isPermissionGranted()) {
-        sendNotification({ title: notification.title, body: notification.body });
+        const actionReady = await ensureNativeActionType();
+        sendNotification({
+          title: notification.title,
+          body: notification.body,
+          ...(actionReady
+            ? {
+                actionTypeId: NOTIFICATION_ACTION_TYPE,
+                extra: notificationActionPayload(notification),
+                autoCancel: true,
+              }
+            : {}),
+        });
         return true;
       }
     } catch {
@@ -191,10 +269,10 @@ export async function deliverDesktopNotification(notification: MuseNotification)
   if (notificationPermission() !== "granted") return false;
   try {
     const toast = new window.Notification(notification.title, { body: notification.body });
-    // The webview notification API has no routing contract. A click still
-    // returns the user to the running Muse window; the in-app inbox then
-    // provides the session-specific "Open conversation" action.
+    // The webview fallback has no native action type, but it can still route
+    // the same bounded payload through the app event bus.
     toast.onclick = () => {
+      emitNotificationAction(notificationActionPayload(notification));
       void import("@tauri-apps/api/window")
         .then(({ getCurrentWindow }) => {
           const appWindow = getCurrentWindow();
