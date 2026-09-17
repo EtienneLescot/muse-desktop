@@ -34,6 +34,7 @@ mod skills;
 mod startup;
 mod scheduler;
 mod scheduler_runs;
+mod notification_ledger;
 mod workspace_watch;
 use hosts::Hosts;
 
@@ -1874,6 +1875,13 @@ fn scheduler_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|error| format!("cannot resolve scheduler data directory: {error}"))
 }
 
+fn notification_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join("notifications"))
+        .map_err(|error| format!("cannot resolve notification data directory: {error}"))
+}
+
 /// Claim the native scheduler lease for this app process. The renderer keeps
 /// the schedule/run ledger as its SSOT; this command only arbitrates which
 /// process may perform the due-occurrence check.
@@ -2003,6 +2011,21 @@ fn scheduler_runs_read(app: AppHandle) -> Result<Value, String> {
 fn scheduler_runs_write(app: AppHandle, payload: String) -> Result<(), String> {
     let data_dir = scheduler_data_dir(&app)?;
     scheduler_runs::write(&data_dir, &payload)
+}
+
+/// Read the renderer-owned notification inbox from app data.
+#[tauri::command]
+fn notifications_read(app: AppHandle) -> Result<Value, String> {
+    let data_dir = notification_data_dir(&app)?;
+    let bytes = notification_ledger::read(&data_dir)?;
+    serde_json::from_slice(&bytes).map_err(|_| "notification ledger is not valid JSON".to_string())
+}
+
+/// Atomically mirror a bounded notification snapshot under app data.
+#[tauri::command]
+fn notifications_write(app: AppHandle, payload: String) -> Result<(), String> {
+    let data_dir = notification_data_dir(&app)?;
+    notification_ledger::write(&data_dir, &payload)
 }
 
 /// Apply one selected hunk after checking the exact Review observation.
@@ -6092,6 +6115,8 @@ fn main() {
             scheduler_release,
             scheduler_runs_read,
             scheduler_runs_write,
+            notifications_read,
+            notifications_write,
             open_native_browser,
         ])
         .build(tauri::generate_context!())

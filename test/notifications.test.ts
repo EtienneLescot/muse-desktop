@@ -8,6 +8,7 @@ import {
   buildRunNotification,
   loadNotifications,
   loadNotificationPreferences,
+  mergeNotifications,
   markNotificationRead,
   notificationActionPayload,
   NOTIFICATION_PREFERENCES_KEY,
@@ -101,6 +102,13 @@ describe("M3-09 notification records", () => {
       { nope: true },
     ]));
     assert.deepEqual(loadNotifications(), [notification]);
+  });
+
+  it("merges native and web inbox copies by dedupe key", () => {
+    const original = buildRunNotification(run(), 3000) as MuseNotification;
+    const newer = { ...original, id: "newer", body: "Updated", createdAt: 4000, unread: false };
+    const other = buildInputNotification({ sessionId: "session-1", inputId: "input-1" }, 3500);
+    assert.deepEqual(mergeNotifications([original, other], [newer]), [other, newer]);
   });
 
   it("persists the desktop mute preference defensively", () => {
