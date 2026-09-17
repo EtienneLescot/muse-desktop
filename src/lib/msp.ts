@@ -67,6 +67,7 @@ export const MSP_NOTIFICATIONS_HANDLED: MspNotification[] = [
   "userInput/requested",
   "userInput/settled",
   "session/contextUsage",
+  "session/tokenUsage",
   "session/approvalModeChanged",
 ];
 

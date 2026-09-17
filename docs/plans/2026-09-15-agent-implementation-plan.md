@@ -301,6 +301,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** modèle indisponible, changement entre sessions, compaction no-op/run-active/échec ; contexte et choix reflètent le serveur.
 
+**État au 17/09/2026 :** `model/list`, `session/setModel` et `session/compact` sont déjà raccordés au host avec un fallback non live clairement séparé. La barre de contexte reçoit désormais aussi `session/tokenUsage` et affiche les compteurs par tour fournis par le moteur, sans les dériver. La confirmation native du modèle effectif, les modèles indisponibles et les scénarios de compaction live restent à qualifier.
+
 ### M1-12 — Recherche et organisation
 
 **Code :** sidebar, recherche App, `threads.ts`, stockage. Dépend M0-09/12.

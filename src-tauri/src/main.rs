@@ -1120,6 +1120,13 @@ fn route_notification(app: &AppHandle, state: &State<AppState>, method: &str, p:
                 emit(app, "context_usage", sid, "context_usage", usage.to_string());
             }
         }
+        // US-31/M1-11: preserve the host's token counters verbatim. The
+        // renderer displays these projections but never recomputes totals.
+        "session/tokenUsage" => {
+            if !sid.is_empty() {
+                emit(app, "token_usage", sid, "token_usage", p.to_string());
+            }
+        }
         _ => {}
     }
 }

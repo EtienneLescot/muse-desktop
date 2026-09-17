@@ -174,7 +174,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-08 | Ajouter fichiers et images à une demande | Adapté | Présente | Câblée | Intégration | Texte borné et images base64 sont envoyés comme parts MSP réelles ; dimensions détectées et aperçu miniature livrés ; brouillons restaurés en session avec re-sélection guidée si le payload est trop volumineux ; reste la validation live sur les modèles image |
 | M1-09 | Créer une branche de conversation fidèle | Adapté | Présente | Câblée | Intégration | Fork serveur depuis le dernier tour terminé livré ; **Fork from here** transmet maintenant une ancre MSP `lastTurnId` précise ; restent qualification du point invalide et reprise live |
 | M1-10 | Réorienter une exécution ou mettre un message en attente | Adapté | Présente | Câblée | Unitaire | Queue MSP par défaut et disposition `queued`/`steered` visibles ; les tours admis en queue restent listés, leur ordre est persisté et peut être retiré avant lancement via `turn/unqueue`. Après relance, un `history.snapshot.queuedTurns` réellement servi par le host réconcilie la file ; sans snapshot, les rappels restent marqués à vérifier et ne sont jamais rejoués automatiquement ; qualification live restante |
-| M1-11 | Choisir un modèle disponible et suivre le contexte | Adapté | Présente | Câblée | Unitaire | Consolider tests live list/setModel/compact, erreurs et persistance ; fallback explicitement non live ; état confirmé par le moteur |
+| M1-11 | Choisir un modèle disponible et suivre le contexte | Adapté | Présente | Câblée | Unitaire | Catalogue live, changement `session/setModel`, compaction et occupation sont câblés ; les compteurs `session/tokenUsage` sont maintenant affichés quand fournis par le host ; fallback explicitement non live ; qualification E2E du modèle effectif reste à faire |
 | M1-12 | Retrouver et organiser les conversations | Adapté | Présente | Câblée | Unitaire | Recherche, épinglage, ordre manuel et indicateurs non lus persistants livrés ; la virtualisation des listes reste conditionnée aux mesures de performance |
 | M1-13 | Lire une longue conversation confortablement | Adapté | Présente | Partielle | UI | Fenêtre DOM bornée au-delà de 600 entrées (160 visibles, chargement de 120 anciens), scroll compensé, restauration de position et recherche complète avec saut vers un résultat hors fenêtre livrés ; restent mesure native à 2 000 entrées et qualification assistive |
 
@@ -272,6 +272,13 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Reste :** snapshot de queue MSP et qualification live du reclaim après course lancement/retrait.
 - **Snapshot host :** lorsque `session/read` sert un `history.snapshot`, le backend expose ses `queuedTurns` et le hook remplace la file locale par cette observation. Les textes connus restent ceux du journal local ; un tour nouveau est affiché avec son identifiant et une demande de vérification, sans inventer ni rejouer son prompt. Une réponse inline, `null` ou une erreur conserve les rappels locaux.
 - **Validation complémentaire :** le parseur de réconciliation déduplique les identifiants, retire les tours absents d’un snapshot vide et couvre le cas où aucun snapshot n’est servi.
+
+### Livraison M1-11 — catalogue, modèle et compteurs d'usage
+
+- **Catalogue effectif :** `model/list` reste la source de vérité du sélecteur, et `session/setModel` est appliqué à la session ciblée ; l’absence de host conserve un fallback explicitement marqué comme non live.
+- **Compaction :** `session/compact` reste un geste utilisateur séparé du résumé local. Les réponses `accepted` et `noop` sont distinguées, tandis que les erreurs `missing_run` et `run_active` restent explicables.
+- **Usage host :** `session/contextUsage` et `session/tokenUsage` sont relayés par le superviseur. La barre affiche l’occupation et, lorsque fourni, le compteur de tokens du tour ; les totaux sont ceux du host et ne sont jamais recalculés par Muse.
+- **Validation :** le parseur de compteurs couvre les formes cumulées et par tour, les valeurs invalides et les identifiants de tour ; TypeScript, Vite et Cargo restent verts. La confirmation native du modèle effectif après changement reste ouverte.
 
 ### Livraison M1-12 — recherche et épinglage des conversations
 

@@ -136,6 +136,7 @@ import {
   isCompactCommand,
   loadSummary,
   parseContextUsage,
+  parseTokenUsage,
   saveSummary,
   type ContextUsage,
   type ThreadSummary,
@@ -2693,8 +2694,35 @@ export function useMuseSessions(): UseMuseSessions {
         cur[sid].usedTokens === usage.usedTokens &&
         cur[sid].windowTokens === usage.windowTokens
           ? cur
-          : { ...cur, [sid]: usage },
+          : {
+              ...cur,
+              [sid]: {
+                ...usage,
+                ...(cur[sid]?.tokenUsage ? { tokenUsage: cur[sid].tokenUsage } : {}),
+              },
+            },
       );
+      return;
+    }
+    // US-4 server half: host-reported token counters. Keep these separate
+    // from the context occupancy triple: the host is the source of truth and
+    // Muse never derives or persists provider totals locally.
+    if (kind === "token_usage") {
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(payload);
+      } catch {
+        return;
+      }
+      const tokenUsage = parseTokenUsage(parsed);
+      if (tokenUsage === null) return;
+      setUsageBySession((cur) => ({
+        ...cur,
+        [sid]: {
+          ...(cur[sid] ?? { pressure: "unknown", usedTokens: null, windowTokens: null }),
+          tokenUsage,
+        },
+      }));
       return;
     }
     if (kind === "approval_mode_changed") {
