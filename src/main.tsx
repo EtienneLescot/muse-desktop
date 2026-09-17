@@ -7,3 +7,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <App />
   </React.StrictMode>,
 );
+
+// Keep the inline boot surface available when the bundle cannot mount, but
+// remove it after the first committed React frame so it never overlays the
+// real application or becomes a second state source.
+requestAnimationFrame(() => {
+  document.getElementById("boot-screen")?.remove();
+});
