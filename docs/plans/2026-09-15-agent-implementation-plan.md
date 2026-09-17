@@ -158,6 +158,8 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **État au 17/09/2026 :** `probe_startup` exécute une sonde native read-only et bornée (sidecar, WSL, `~/.local/bin/muse`, workspace), réutilisée par le panneau de récupération après un échec ou un changement de dossier. Le résultat reste structuré par check et ne lit aucune credential ; la guidance existante conserve la correction manuelle.
 
+**Complément livré :** sur Windows, `npm run dev:clean:windows` appelle `scripts/dev-clean.ps1`. Il ne termine que les arbres dont l'exécutable ou la ligne de commande appartient à ce checkout, purge le cache Vite local et exécute `tauri dev` avec le renderer attaché. Cela rend le chemin de relance reproductible sans transformer le binaire packagé en serveur de développement.
+
 **Acceptation :** machine propre, Muse absent, auth absente, chemin avec espaces/Unicode, bridge incompatible. Le premier tour est atteignable avec instructions exactes. Dépend M0-08.
 
 ### M0-11 — Finition anglais/navigation

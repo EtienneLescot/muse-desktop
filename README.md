@@ -21,6 +21,18 @@ The browser preview displays the interface. Working with the engine requires the
 npm run tauri -- dev
 ```
 
+On Windows, use the clean launcher when a previous WebView or Vite process
+could be serving stale code:
+
+```powershell
+npm run dev:clean:windows
+```
+
+It only stops development processes tied to this checkout, clears the local
+Vite transform cache, and starts `tauri dev` with the renderer attached. The
+standalone `muse-desktop.exe` is not a development launch path because it
+expects the packaged renderer rather than a Vite server.
+
 To build the Windows x64 installer locally (the matching `muse` sidecar must be present in `src-tauri/binaries/`):
 
 ```sh
