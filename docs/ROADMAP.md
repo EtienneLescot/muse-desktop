@@ -1,10 +1,18 @@
 # Roadmap opérationnelle — Muse-Desktop
 
-État de référence : **15 septembre 2026, main `589022e`**, après fusion de la PR #12. Ordre M0 → M4 validé par Étienne. Objectif : finir les parcours existants, puis atteindre la parité des workflows desktop de Codex en conservant le branding Muse.
+État de référence : **17 septembre 2026**, après fusion de la chaîne de PRs #18–#80 et correction des remarques CodeRabbit actionnables. Ordre M0 → M4 validé par Étienne. Objectif : finir les parcours existants, puis atteindre la parité des workflows desktop de Codex en conservant le branding Muse.
 
 Ce document est la source de vérité de l'avancement produit. La [SPEC](SPEC.md) conserve les intentions initiales ; le [bilan du 13 septembre](plans/2026-09-13-roadmap-progress.md) est historique. L'[audit de parité](plans/2026-09-15-codex-parity-audit.md) contient les constats techniques et références officielles. Les chiffres de stories fusionnées ne sont pas un taux de parité.
 
 **Pour les agents de codage :** le [plan d'implémentation détaillé](plans/2026-09-15-agent-implementation-plan.md) couvre les 53 IDs ci-dessous : code à lire, contrats proposés, étapes, dépendances, tests d'acceptation et format de livraison. Ce plan complète les statuts ; il ne constitue pas une preuve d'implémentation.
+
+## Point d'étape — 17 septembre 2026
+
+- **Chaîne livrée :** les PRs #18 à #80 ont été fusionnées dans l'ordre de leurs branches de base. La branche finale contient les parcours M0 à M4 déjà câblés dans le client, ainsi que les correctifs de reprise, transcript, terminal Muse et observations Git.
+- **Revue qualité :** CodeRabbit a signalé huit points actionnables sur la PR #18 (credentials CI, inventaire IPC, masquage Bearer, accessibilité des capacités, stockage et course de posture) et trois sur la PR #80 (sorties PowerShell, double exécution `Run in Muse`, état `running` des items shell). Ils sont corrigés et couverts par les tests existants ou dédiés. Les nouvelles demandes de revue ont ensuite été limitées par le quota CodeRabbit ; aucun commentaire actionnable supplémentaire n'est disponible sur les PRs empilées.
+- **Preuves reproductibles :** `npm test -- --run` — **577 tests passés** ; `npm run build` — **vert** ; `cargo test --manifest-path src-tauri/Cargo.toml` — **126 tests passés**. Les builds Windows NSIS/MSI et le smoke natif restent des preuves séparées, documentées dans les livraisons M0/M4.
+- **Lecture des 53 résultats :** Design — 47 adaptés, 4 à définir, 2 sans écran ; UI — 48 présentes, 2 partielles, 2 absentes, 1 sans écran ; Fonction — 21 câblées, 25 partielles, 5 locales, 2 absentes ; Validation — 26 unitaires, 5 UI, 20 intégration, 2 à faire.
+- **Prochaine reprise :** fermer les preuves natives M0 (deux workspaces, reprise après autorisation, arrêt/reconnexion et premier lancement Windows), puis traiter les intégrations encore partielles de M2–M4 (exécution MCP, scheduler/notifications, navigateur vers le moteur et distribution signée). Aucun de ces écarts ne doit être présenté comme une parité Codex acquise tant que le scénario réel n'est pas validé.
 
 ## Lire les statuts
 
@@ -587,4 +595,4 @@ Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [exports locaux]
 4. Pour déclarer un ticket terminé : effet réel, erreurs/reprise traitées, permissions effectives, validation native du scénario et documentation des limites.
 5. Les décisions de faisabilité/produit sont consignées avant de transformer une hypothèse en engagement. Aucun pourcentage global tant que le périmètre et sa pondération ne sont pas fixés.
 
-Validation du socle audité : build frontend, 577 tests Node, 126 tests Rust verts. La dernière passe ajoute le repli des items MSP complets sans delta, applique les remplacements de snapshot pendant les `item/updated` encore `inProgress` et synchronise les observations `session/branchChanged` dans les conversations. Les preuves UI de la passe précédente sont détaillées dans [la passe conversations](plans/2026-09-14-conversation-polish.md). Elles ne couvrent pas l'ensemble des critères futurs ci-dessus.
+Validation du socle audité : build frontend, 577 tests Node, 126 tests Rust verts. La dernière passe ajoute le repli des items MSP complets sans delta, applique les remplacements de snapshot pendant les `item/updated` encore `inProgress`, synchronise les observations `session/branchChanged` dans les conversations et intègre les correctifs de revue CodeRabbit. Les preuves UI de la passe précédente sont détaillées dans [la passe conversations](plans/2026-09-14-conversation-polish.md). Elles ne couvrent pas l'ensemble des critères futurs ci-dessus.
