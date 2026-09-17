@@ -42,7 +42,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, RunEvent, State, Url, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+use tauri_plugin_shell::process::{CommandChild, CommandEvent, TerminatedPayload};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::mpsc;
 
@@ -820,45 +820,98 @@ async fn ingest_stdout_chunk(
     }
 }
 
+/// Result of draining the shell event stream. A closed receiver is treated as
+/// a host loss as well: the shell plugin can close stdout without delivering a
+/// `Terminated` event when the process disappears during teardown.
+#[derive(Debug, Clone)]
+enum PumpExit {
+    Terminated(TerminatedPayload),
+    ChannelClosed,
+}
+
+/// Consume the production shell events without depending on an `AppHandle`.
+/// Keeping this boundary separate lets tests exercise the actual receiver,
+/// chunking and shutdown behavior with a deterministic child client.
+async fn consume_command_events(
+    mut rx: tauri::async_runtime::Receiver<CommandEvent>,
+    client: std::sync::Arc<MspClient>,
+    stderr_tail: std::sync::Arc<Mutex<Vec<String>>>,
+) -> PumpExit {
+    let mut out_buf = Vec::new();
+    let mut err_buf = Vec::new();
+    while let Some(ev) = rx.recv().await {
+        match ev {
+            CommandEvent::Stdout(chunk) => {
+                ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &chunk).await;
+            }
+            CommandEvent::Stderr(chunk) => {
+                for line in split_lines(&mut err_buf, &chunk) {
+                    push_stderr(&stderr_tail, line);
+                }
+            }
+            CommandEvent::Error(message) => {
+                push_stderr(&stderr_tail, format!("shell command error: {message}"));
+            }
+            CommandEvent::Terminated(payload) => {
+                flush_command_buffers(&client, &mut out_buf, &mut err_buf, &stderr_tail).await;
+                client.shutdown().await;
+                return PumpExit::Terminated(payload);
+            }
+            _ => {}
+        }
+    }
+    flush_command_buffers(&client, &mut out_buf, &mut err_buf, &stderr_tail).await;
+    client.shutdown().await;
+    PumpExit::ChannelClosed
+}
+
+/// Drain the final unterminated stdout/stderr fragments before the host is
+/// torn down. The shell normally emits newline-delimited chunks, but a process
+/// can disappear between its last write and the line delimiter. Treating that
+/// fragment as one final line preserves a complete JSON response and keeps an
+/// incomplete one in the bounded diagnostics tail instead of leaving callers
+/// waiting for the request timeout.
+async fn flush_command_buffers(
+    client: &MspClient,
+    out_buf: &mut Vec<u8>,
+    err_buf: &mut Vec<u8>,
+    stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>,
+) {
+    if !out_buf.is_empty() {
+        ingest_stdout_chunk(client, out_buf, stderr_tail, b"\n").await;
+    }
+    for line in split_lines(err_buf, b"\n") {
+        push_stderr(stderr_tail, line);
+    }
+}
+
 /// Forward the host's stdout frames into the MSP client; stash stderr for
 /// diagnostics; announce host death only to sessions owned by this client.
 fn pump_stdout(
     app: AppHandle,
-    mut rx: tauri::async_runtime::Receiver<CommandEvent>,
+    rx: tauri::async_runtime::Receiver<CommandEvent>,
     client: std::sync::Arc<MspClient>,
     stderr_tail: std::sync::Arc<Mutex<Vec<String>>>,
 ) {
     tauri::async_runtime::spawn(async move {
-        let mut out_buf = Vec::new();
-        let mut err_buf = Vec::new();
-        while let Some(ev) = rx.recv().await {
-            match ev {
-                CommandEvent::Stdout(chunk) => {
-                    ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &chunk).await;
-                }
-                CommandEvent::Stderr(chunk) => {
-                    for line in split_lines(&mut err_buf, &chunk) {
-                        push_stderr(&stderr_tail, line);
-                    }
-                }
-                CommandEvent::Terminated(payload) => {
-                    let state: State<AppState> = app.state();
-                    let ids = state.hosts.lock().map(|mut hosts| hosts.remove(&client)).unwrap_or_default();
-                    client.shutdown().await;
-                    let why = format!(
-                        "sidecar host exited (code {:?}, signal {:?}). {}",
-                        payload.code,
-                        payload.signal,
-                        tail_of(&stderr_tail)
-                    );
-                    for sid in ids {
-                        mark_running(&state, &sid, false);
-                        emit(&app, "status", &sid, "host_exited", why.clone());
-                    }
-                    break;
-                }
-                _ => {}
-            }
+        let exit = consume_command_events(rx, client.clone(), stderr_tail.clone()).await;
+        let state: State<AppState> = app.state();
+        let ids = state.hosts.lock().map(|mut hosts| hosts.remove(&client)).unwrap_or_default();
+        let why = match exit {
+            PumpExit::Terminated(payload) => format!(
+                "sidecar host exited (code {:?}, signal {:?}). {}",
+                payload.code,
+                payload.signal,
+                tail_of(&stderr_tail)
+            ),
+            PumpExit::ChannelClosed => format!(
+                "sidecar event stream closed unexpectedly. {}",
+                tail_of(&stderr_tail)
+            ),
+        };
+        for sid in ids {
+            mark_running(&state, &sid, false);
+            emit(&app, "status", &sid, "host_exited", why.clone());
         }
     });
 }
@@ -3748,6 +3801,342 @@ mod tests {
 
         ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, b"not-json\n").await;
         assert!(stderr_tail.lock().unwrap()[0].contains("unparsable frame"));
+    }
+
+    #[tokio::test]
+    async fn command_event_pump_handles_shell_errors_and_closed_channel() {
+        let (tx, rx) = tauri::async_runtime::channel(16);
+        let (writes, mut frames) = mpsc::unbounded_channel();
+        let (notify_tx, mut notify_rx) = mpsc::unbounded_channel();
+        let child = RecordingChild { writes, fail_write: false };
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let pump = tokio::spawn(consume_command_events(rx, client.clone(), stderr_tail.clone()));
+
+        let request = tokio::spawn({
+            let client = client.clone();
+            async move { client.request("model/list", Value::Null).await }
+        });
+        let request_frame = fixture_frame(&mut frames).await;
+        let response = format!(
+            "{}\n",
+            serde_json::to_string(&json!({
+                "jsonrpc": "2.0",
+                "id": request_frame["id"],
+                "result": {"models": []}
+            })).unwrap()
+        );
+        let split_at = response.len() / 2;
+        tx.send(CommandEvent::Stdout(response.as_bytes()[..split_at].to_vec())).await.unwrap();
+        assert!(!request.is_finished(), "partial shell stdout must not complete a request");
+        tx.send(CommandEvent::Stdout(response.as_bytes()[split_at..].to_vec())).await.unwrap();
+        assert_eq!(request.await.unwrap().unwrap()["models"], json!([]));
+
+        tx.send(CommandEvent::Stderr(b"token=secret\n".to_vec())).await.unwrap();
+        tx.send(CommandEvent::Error("pipe lost".to_string())).await.unwrap();
+        tx.send(CommandEvent::Stdout(b"not-json\n".to_vec())).await.unwrap();
+        drop(tx);
+
+        assert!(matches!(pump.await.unwrap(), PumpExit::ChannelClosed));
+        let diagnostics = stderr_tail.lock().unwrap().join(" | ");
+        assert!(diagnostics.contains("[redacted]"));
+        assert!(diagnostics.contains("shell command error: pipe lost"));
+        assert!(diagnostics.contains("unparsable frame"));
+        assert!(notify_rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn command_event_pump_preserves_exit_payload_and_wakes_pending_request() {
+        let (tx, rx) = tauri::async_runtime::channel(4);
+        let (writes, mut frames) = mpsc::unbounded_channel();
+        let (notify_tx, _notify_rx) = mpsc::unbounded_channel();
+        let child = RecordingChild { writes, fail_write: false };
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let pump = tokio::spawn(consume_command_events(rx, client.clone(), stderr_tail));
+
+        let request = tokio::spawn({
+            let client = client.clone();
+            async move { client.request("model/list", Value::Null).await }
+        });
+        let request_frame = fixture_frame(&mut frames).await;
+        assert_eq!(request_frame["method"], "model/list");
+
+        tx.send(CommandEvent::Terminated(TerminatedPayload {
+            code: Some(17),
+            signal: None,
+        }))
+        .await
+        .unwrap();
+
+        let exit = pump.await.unwrap();
+        assert!(matches!(
+            exit,
+            PumpExit::Terminated(TerminatedPayload {
+                code: Some(17),
+                signal: None
+            })
+        ));
+        let request_error = tokio::time::timeout(std::time::Duration::from_secs(1), request)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(request_error, "sidecar dropped the response");
+    }
+
+    #[tokio::test]
+    async fn command_event_pump_flushes_unterminated_response_before_exit() {
+        let (tx, rx) = tauri::async_runtime::channel(4);
+        let (writes, mut frames) = mpsc::unbounded_channel();
+        let (notify_tx, _notify_rx) = mpsc::unbounded_channel();
+        let child = RecordingChild { writes, fail_write: false };
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let pump = tokio::spawn(consume_command_events(rx, client.clone(), stderr_tail));
+
+        let request = tokio::spawn({
+            let client = client.clone();
+            async move { client.request("model/list", Value::Null).await }
+        });
+        let request_frame = fixture_frame(&mut frames).await;
+        let response = serde_json::to_vec(&json!({
+            "jsonrpc": "2.0",
+            "id": request_frame["id"],
+            "result": {"models": []}
+        }))
+        .unwrap();
+        tx.send(CommandEvent::Stdout(response)).await.unwrap();
+        assert!(!request.is_finished(), "unterminated stdout must wait for flush");
+        tx.send(CommandEvent::Terminated(TerminatedPayload {
+            code: Some(0),
+            signal: None,
+        }))
+        .await
+        .unwrap();
+
+        assert!(matches!(pump.await.unwrap(), PumpExit::Terminated(_)));
+        assert_eq!(request.await.unwrap().unwrap()["models"], json!([]));
+    }
+
+    #[test]
+    fn generated_tauri_invoke_routes_send_input_through_session_state() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![send_input])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client.clone());
+
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames).await;
+                assert_eq!(frame["method"], "turn/start");
+                assert_eq!(frame["params"]["sessionId"], "session-a");
+                assert_eq!(frame["params"]["commandId"], "ipc-command");
+                client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": frame["id"],
+                        "result": {"status": "accepted", "turnId": "turn-ipc"}
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "send_input".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({
+                    "sessionId": "session-a",
+                    "commandId": "ipc-command",
+                    "text": "inspect through invoke",
+                    "inputParts": null
+                })),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("send_input invoke should succeed")
+        .deserialize::<Value>()
+        .expect("send_input response should be JSON");
+
+        responder.join().expect("fixture responder should finish");
+        assert_eq!(response["turnId"], "turn-ipc");
+        assert!(state.inner().sessions.lock().unwrap()["session-a"].running);
+    }
+
+    #[test]
+    fn generated_tauri_invoke_approves_only_the_target_session() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![approve])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client_a, mut frames_a) = fixture_client(false);
+        let (client_b, _frames_b) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client_a.clone());
+        register_fixture_session(state.inner(), "session-b", "fixture-b", client_b);
+        let mut emitted = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            emitted.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        for (sid, requirement) in [("session-a", "req-a"), ("session-b", "req-b")] {
+            route_notification_with_emit(
+                state.inner(),
+                "approval/requested",
+                &json!({
+                    "sessionId": sid,
+                    "approvalId": "same-approval",
+                    "currentRequirementId": requirement,
+                    "subject": {"kind":"shell","command":"echo safe"}
+                }),
+                &mut emit,
+            );
+        }
+        assert_eq!(emitted.len(), 2);
+
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames_a).await;
+                assert_eq!(frame["method"], "approval/decide");
+                assert_eq!(frame["params"]["sessionId"], "session-a");
+                assert_eq!(frame["params"]["approvalId"], "same-approval");
+                assert_eq!(frame["params"]["requirementId"], "req-a");
+                client_a
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": frame["id"],
+                        "result": {"terminal": true}
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "approve".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({
+                    "sessionId": "session-a",
+                    "approvalId": "same-approval",
+                    "choiceId": "allow-once"
+                })),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("approve invoke should succeed")
+        .deserialize::<bool>()
+        .expect("approve response should be a boolean");
+
+        responder.join().expect("approval responder should finish");
+        assert!(response);
+        let approvals = state.inner().approvals.lock().unwrap();
+        assert!(!approvals.contains_key(&("session-a".to_string(), "same-approval".to_string())));
+        assert!(approvals.contains_key(&("session-b".to_string(), "same-approval".to_string())));
+    }
+
+    #[test]
+    fn generated_tauri_invoke_answers_user_input_on_the_target_session() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![answer_input])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client.clone());
+
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames).await;
+                assert_eq!(frame["method"], "userInput/answer");
+                assert_eq!(frame["params"]["sessionId"], "session-a");
+                assert_eq!(frame["params"]["userInputId"], "input-a");
+                assert_eq!(frame["params"]["answers"][0]["questionId"], "q1");
+                assert_eq!(frame["params"]["answers"][0]["selectedLabel"], "Yes");
+                client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": frame["id"],
+                        "result": {"status": "accepted"}
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "answer_input".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({
+                    "sessionId": "session-a",
+                    "userInputId": "input-a",
+                    "answers": [{"questionId": "q1", "selectedLabel": "Yes"}]
+                })),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("answer_input invoke should succeed")
+        .deserialize::<Value>()
+        .expect("answer_input response should be JSON");
+
+        responder.join().expect("input responder should finish");
+        assert!(response.is_null());
     }
 
     #[tokio::test]

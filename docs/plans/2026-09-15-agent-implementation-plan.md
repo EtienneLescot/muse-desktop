@@ -134,7 +134,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Acceptation :** RPC manquante du registre fait échouer le contrôle ; schéma incompatible produit une erreur exploitable ; notification additive inconnue n'arrête pas le flux. Livrer fixtures anonymisées de versions connues.
 
-**Pré-vol natif au 17/09/2026 :** le binaire Muse 1.3.0 répond au handshake attendu et renvoie des erreurs JSON-RPC structurées pour une méthode inconnue et une interruption sans paramètres sur chacun des deux hosts du smoke. Cette preuve ne couvre pas encore la matrice de versions ni les erreurs produites pendant un tour modèle.
+**Pré-vol natif au 17/09/2026 :** le binaire Muse 1.3.0 répond au handshake attendu et renvoie des erreurs JSON-RPC structurées pour une méthode inconnue et une interruption sans paramètres sur chacun des deux hosts du smoke. Le contrôle combiné ajoute deux interruptions corrélées, six tentatives de posture avec le plafond `approval_mode_ceiling` observé et l'arrêt isolé de B pendant qu'A continue de répondre. Cette preuve ne couvre pas encore la matrice de versions ni les erreurs produites pendant un tour modèle.
 
 ### M0-09 — Persistance
 
@@ -200,7 +200,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Pilote superviseur livré au 17/09/2026 :** `send_input_for_state` est partagé par la commande Tauri et les tests. Deux clients injectés sur des workspaces distincts valident le payload `turn/start`, les réponses hors ordre et l'isolation de l'état `running`; une écriture enfant en erreur reste bornée et ne marque pas de tour comme démarré. Le pilote reste sans provider modèle.
 
-**Reste :** faire traverser la vraie fixture enfant par le pump stdout, puis qualifier l'appel `invoke` de la webview et le scénario A/B natif avec approbations. Ces tests restent séparés d'un tour modèle réel.
+**Reste :** l'injection couvre maintenant la boucle `CommandEvent` réelle, y compris les chunks stdout partiels, les fragments finaux sans saut de ligne, les erreurs du shell et la fermeture du receiver qui réveille le client. Les handlers Tauri `send_input`, `approve` et `answer_input` sont également exercés via l'invoke mocké avec un état de session réel, y compris deux sessions partageant un identifiant d'approbation. Il reste à qualifier l'appel depuis une webview empaquetée et le scénario A/B natif avec approbations. Ces tests restent séparés d'un tour modèle réel.
 **Pré-vol natif :** le smoke Windows partage désormais cette commande avec `--exercise-control` pour vérifier le contrôle `turn/start` → `turn/interrupt` sur deux hosts réels. Son option `--exercise-errors` vérifie aussi les catégories `methodNotFound` et `invalidParams` sur les deux transports, sans exposer les trames brutes ; il ne remplace pas l'injection de panne dans le superviseur Tauri.
 
 **Acceptation :** depuis un clone propre, `npm test` lance la fixture sans dépendance externe ; détecter volontairement une mauvaise route A/B et un envoi perdu dès que le pilote Tauri isolé est ajouté. Choisir le pilote Tauri selon support réel des plateformes, consigner toute limite dans l'ADR.
