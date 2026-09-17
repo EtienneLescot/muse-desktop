@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   REFLEXIVE_LABEL,
+  applyItemSnapshotUpdate,
   dropEmptyPlaceholders,
   isItemStartKind,
   isRunningKind,
@@ -209,6 +210,43 @@ describe("upsertReflexivePlaceholder", () => {
     assert.equal(bound.length, 1);
     assert.equal(bound[0].itemId, "shell-1");
     assert.equal(bound[0].text, "$ git status");
+  });
+});
+
+describe("applyItemSnapshotUpdate", () => {
+  it("replaces a live lane by item id and revision", () => {
+    const live = [entry({ role: "thinking", itemId: "r1", text: "first", open: true, itemRevision: 2 })];
+    const updated = applyItemSnapshotUpdate(live, {
+      itemId: "r1",
+      role: "thinking",
+      text: "first\nsecond",
+      revision: 3,
+      open: true,
+      stamp,
+    });
+    assert.equal(updated.length, 1);
+    assert.equal(updated[0].text, "first\nsecond");
+    assert.equal(updated[0].itemRevision, 3);
+    assert.equal(applyItemSnapshotUpdate(updated, {
+      itemId: "r1",
+      role: "thinking",
+      text: "stale",
+      revision: 2,
+      open: true,
+      stamp,
+    }), updated);
+  });
+
+  it("keeps a user-shell command paired with replaced output", () => {
+    const next = applyItemSnapshotUpdate([], {
+      itemId: "shell-1",
+      role: "tool",
+      commandText: "git status",
+      text: "clean",
+      revision: 1,
+      stamp,
+    });
+    assert.equal(next[0].text, "$ git status\nclean");
   });
 });
 

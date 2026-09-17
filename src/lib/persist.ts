@@ -59,6 +59,8 @@ export interface LogEntry {
   itemId?: string;
   /** MSP turn id owning this item; enables an exact conversation fork anchor. */
   turnId?: string;
+  /** Host item revision used to apply idempotent `item/updated` snapshots. */
+  itemRevision?: number;
   /** True while further stream chunks may still be appended. */
   open?: boolean;
   /** Drill-down into the child's own transcript (`session/read`). */

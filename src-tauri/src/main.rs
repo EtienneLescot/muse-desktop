@@ -1256,6 +1256,37 @@ where
                         .map(|seen| seen.contains(&(sid.to_string(), item_id.to_string())))
                         .unwrap_or(true);
                     let fallback_text = item.and_then(|i| completed_item_text(i, kind));
+                    if method == "item/updated" && !item_terminal {
+                        // The official update is a full replacement, not a
+                        // delta. Forward only the bounded, kind-owned text so
+                        // the renderer can replace the existing lane without
+                        // leaking the raw host item or duplicating output.
+                        if let Some(text) = fallback_text.as_deref() {
+                            let lane = if is_thinking_item_kind(kind) {
+                                "thinking"
+                            } else if kind.eq_ignore_ascii_case("usershell") {
+                                "shell_output"
+                            } else {
+                                "output"
+                            };
+                            emit_fn(
+                                "item_updated",
+                                sid,
+                                "item_updated",
+                                json!({
+                                    "itemId": item_id,
+                                    "itemKind": kind,
+                                    "lane": lane,
+                                    "text": text,
+                                    "commandText": item.and_then(|i| i.get("commandText")),
+                                    "turnId": turn_id,
+                                    "revision": item.and_then(|i| i.get("revision")),
+                                    "status": item.and_then(|i| i.get("status")),
+                                })
+                                .to_string(),
+                            );
+                        }
+                    }
                     if !delta_seen && !already_emitted && item_terminal {
                         // If the start event was lost, recreate the reflexive
                         // block before appending the completed text. The
@@ -4697,6 +4728,11 @@ mod tests {
             0,
             "metadata-only updates must not replay a full output as a delta",
         );
+        let update = events[before..]
+            .iter()
+            .find(|(_, _, kind, _)| kind == "item_updated")
+            .expect("full in-progress item update is forwarded as a replacement");
+        assert!(update.3.contains("still running"));
     }
 
     #[test]

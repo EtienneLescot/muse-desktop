@@ -94,6 +94,7 @@ export function phaseForKind(kind: string): StreamPhase {
   const base = normalizeKind(kind);
   if (
     base === "output" ||
+    base === "item_updated" ||
     isThinkingItemKind(kind) ||
     base === "subagent_event" ||
     base === "item_done"
@@ -116,6 +117,61 @@ export function isThinkingItemKind(itemKind: string): boolean {
 export interface PlaceholderStamp {
   id: string;
   ts: number;
+}
+
+export interface ItemSnapshotUpdate {
+  itemId: string;
+  role: "assistant" | "thinking" | "tool";
+  text: string;
+  turnId?: string;
+  commandText?: string;
+  revision?: number;
+  open?: boolean;
+  stamp: PlaceholderStamp;
+}
+
+/**
+ * Apply an MSP `item/updated` full snapshot to one transcript lane.
+ *
+ * Updates replace the text for the same item instead of appending it as a
+ * delta. A revision, when supplied by the host, makes the operation
+ * idempotent across polling/reconnect races. The helper is pure so the hook
+ * remains the single state owner while tests can exercise the reconciliation
+ * contract without a renderer.
+ */
+export function applyItemSnapshotUpdate(
+  log: LogEntry[],
+  update: ItemSnapshotUpdate,
+): LogEntry[] {
+  const itemId = update.itemId.trim();
+  if (itemId.length === 0 || update.text.length === 0) return log;
+  const index = lastIndex(log, (entry) => entry.itemId === itemId && entry.role === update.role);
+  const existing = index >= 0 ? log[index] : undefined;
+  if (
+    existing !== undefined &&
+    update.revision !== undefined &&
+    existing.itemRevision !== undefined &&
+    update.revision <= existing.itemRevision
+  ) {
+    return log;
+  }
+  const command = update.commandText?.trim();
+  const text = update.role === "tool" && command !== undefined && command.length > 0
+    ? `$ ${command}\n${update.text}`
+    : update.text;
+  const nextEntry: LogEntry = {
+    ...(existing ?? { id: update.stamp.id, ts: update.stamp.ts }),
+    role: update.role,
+    text,
+    itemId,
+    ...(update.turnId === undefined ? {} : { turnId: update.turnId }),
+    ...(update.revision === undefined ? {} : { itemRevision: update.revision }),
+    open: update.open ?? true,
+  };
+  if (index >= 0) {
+    return [...log.slice(0, index), nextEntry, ...log.slice(index + 1)];
+  }
+  return [...log, nextEntry];
 }
 
 function lastIndex(

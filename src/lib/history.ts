@@ -6,6 +6,7 @@ export interface SessionHistoryItem {
   turnId?: unknown;
   kind?: unknown;
   status?: unknown;
+  revision?: unknown;
   text?: unknown;
   displayText?: unknown;
   summary?: unknown;
@@ -152,6 +153,10 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
       ...(turnId === undefined ? {} : { turnId }),
       open: item.status === "inProgress",
     };
+    const revision = typeof item.revision === "number" && Number.isFinite(item.revision)
+      ? item.revision
+      : undefined;
+    if (revision !== undefined) entry.itemRevision = revision;
     const child = stringValue(item.childSessionId);
     const agent = stringValue(item.subagentId);
     const objective = stringValue(item.objective);

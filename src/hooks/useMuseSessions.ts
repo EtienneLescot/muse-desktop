@@ -117,6 +117,7 @@ import { createPollChain, enqueuePoll } from "../lib/poll";
 // stream shows "thinking…" synchronously on send and on `item/started`
 // even before the first delta lands.
 import {
+  applyItemSnapshotUpdate,
   dropEmptyPlaceholders,
   isItemStartKind,
   isRunningKind,
@@ -2519,6 +2520,7 @@ export function useMuseSessions(): UseMuseSessions {
     if (
       kind === "output" ||
       kind === "thinking" ||
+      kind === "item_updated" ||
       kind === "subagent_event" ||
       kind === "item_done" ||
       isItemStartKind(kind) ||
@@ -2533,6 +2535,7 @@ export function useMuseSessions(): UseMuseSessions {
       activeId !== sid &&
       (kind === "output" ||
         kind === "thinking" ||
+        kind === "item_updated" ||
         kind === "subagent_event" ||
         kind === "tool_request" ||
         kind === "input_request" ||
@@ -2738,6 +2741,51 @@ export function useMuseSessions(): UseMuseSessions {
       pushLog(sid, [
         { id: newId(), ts: Date.now(), role: "system", text: `Input ${outcome}` },
       ]);
+      return;
+    }
+    if (kind === "item_updated") {
+      let parsed: Record<string, unknown> | null = null;
+      try {
+        const value: unknown = JSON.parse(payload);
+        if (typeof value === "object" && value !== null) {
+          parsed = value as Record<string, unknown>;
+        }
+      } catch {
+        return;
+      }
+      const itemId = typeof parsed?.itemId === "string" ? parsed.itemId : "";
+      const text = typeof parsed?.text === "string" ? parsed.text : "";
+      if (itemId.length === 0 || text.length === 0) return;
+      const lane: "assistant" | "thinking" | "tool" = parsed?.lane === "thinking"
+        ? "thinking"
+        : parsed?.lane === "shell_output"
+          ? "tool"
+          : "assistant";
+      const revision = typeof parsed?.revision === "number" && Number.isFinite(parsed.revision)
+        ? parsed.revision
+        : undefined;
+      const turnId = typeof parsed?.turnId === "string" && parsed.turnId.length > 0
+        ? parsed.turnId
+        : undefined;
+      const commandText = typeof parsed?.commandText === "string" ? parsed.commandText : undefined;
+      setLogs((cur) => {
+        const next = applyItemSnapshotUpdate(cur[sid] ?? [], {
+          itemId,
+          role: lane,
+          text,
+          ...(turnId === undefined ? {} : { turnId }),
+          ...(commandText === undefined ? {} : { commandText }),
+          ...(revision === undefined ? {} : { revision }),
+          open: true,
+          stamp: { id: newId(), ts: Date.now() },
+        });
+        if (next === cur[sid]) return cur;
+        saveLog(sid, next);
+        return { ...cur, [sid]: next };
+      });
+      setSessions((cur) => cur.map((session) =>
+        session.session_id === sid ? { ...session, running: true } : session,
+      ));
       return;
     }
     if (kind === "item_done") {
