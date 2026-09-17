@@ -3141,6 +3141,7 @@ body.dark .composer textarea::placeholder {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--blue) 30%, transparent);
 }
 
+.review-sync,
 .review-ship {
   display: flex;
   flex-direction: column;
@@ -3149,6 +3150,15 @@ body.dark .composer textarea::placeholder {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface) 88%, var(--pale));
+}
+
+.review-sync {
+  background: color-mix(in srgb, var(--surface) 94%, var(--blue));
+}
+
+.review-sync-note {
+  margin: 0;
+  font-size: 0.72rem;
 }
 
 .review-ship-head,

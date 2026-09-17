@@ -247,7 +247,9 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Acceptation :** dépôt test, hook échoué, rien à commiter, branche sans upstream, push rejeté et PR existante. Aucun push vers une autre branche par défaut implicite.
 
-**État au 16/09/2026 :** commit, push et création de PR GitHub sont câblés dans le service Git sessionné. Le commit est protégé par l’observation de l’index ; le push utilise un refspec explicite et `gh pr create` réutilise l’authentification locale sans credential web. Les hooks/auth live, rejets distants, PR existantes et qualification native restent à couvrir avec un dépôt de test contrôlé.
+**État au 16/09/2026 :** commit, push et création de PR GitHub sont câblés dans le service Git sessionné. Le commit est protégé par l'observation de l'index ; le push utilise un refspec explicite et `gh pr create` réutilise l'authentification locale sans credential web. Les hooks/auth live, rejets distants, PR existantes et qualification native restent à couvrir avec un dépôt de test contrôlé.
+
+**Ajout au 17/09/2026 :** la synchronisation du dépôt est désormais disponible dans la même source de vérité Review. **Fetch** exécute un remote explicite sans pruning et remonte le statut actualisé. **Pull latest** exige un remote et une branche explicites, vérifie HEAD et l'empreinte complète du statut observé, refuse les worktrees sales et limite l'opération à `git pull --ff-only`; les divergences et conflits restent donc à résoudre explicitement. Les tests Rust couvrent remote absent, observation périmée, worktree sale et un fast-forward local réel.
 
 ### M1-05 — Terminal PTY
 

@@ -1812,6 +1812,38 @@ async fn git_push(
         .map_err(|e| format!("git push task failed: {e}"))?
 }
 
+/// Fetch one explicit remote and return the refreshed, session-scoped status.
+#[tauri::command]
+async fn git_fetch(
+    state: State<'_, AppState>,
+    session_id: String,
+    remote: String,
+) -> Result<git::GitStatusSnapshot, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || git::fetch(&root, &remote))
+        .await
+        .map_err(|e| format!("git fetch task failed: {e}"))?
+}
+
+/// Fast-forward the current branch from an explicit remote branch, guarded by
+/// the status observation held by the Review panel.
+#[tauri::command]
+async fn git_pull(
+    state: State<'_, AppState>,
+    session_id: String,
+    remote: String,
+    branch: String,
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+) -> Result<git::GitStatusSnapshot, String> {
+    let root = workspace_for_inspection(&state, &session_id)?;
+    tokio::task::spawn_blocking(move || {
+        git::pull(&root, &remote, &branch, expected_head, expected_status)
+    })
+    .await
+    .map_err(|e| format!("git pull task failed: {e}"))?
+}
+
 /// Create a GitHub pull request through the user's existing `gh` auth. Merge
 /// is intentionally outside this command.
 #[tauri::command]
@@ -5632,6 +5664,8 @@ fn main() {
             git_apply_hunk,
             git_commit,
             git_push,
+            git_fetch,
+            git_pull,
             git_create_pr,
             git_worktree_create,
             git_worktree_create_session,

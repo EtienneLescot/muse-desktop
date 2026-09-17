@@ -60,6 +60,14 @@ interface Props {
     message: string,
     expected: GitMutationExpectation,
   ) => Promise<GitCommitResult | null>;
+  onFetch: (sessionId: string, remote: string) => Promise<GitStatusSnapshot | null>;
+  onPull: (
+    sessionId: string,
+    remote: string,
+    branch: string,
+    expectedHead: string | null,
+    expectedStatus: string | null,
+  ) => Promise<GitStatusSnapshot | null>;
   onPush: (
     sessionId: string,
     remote: string,
@@ -95,6 +103,8 @@ export function ReviewPanel({
   onRestoreFiles,
   onApplyHunk,
   onCommit,
+  onFetch,
+  onPull,
   onPush,
   onCreatePr,
   onSendComment,
@@ -128,9 +138,11 @@ export function ReviewPanel({
   const [prBody, setPrBody] = useState("");
   const [prBase, setPrBase] = useState("main");
   const [shipBusy, setShipBusy] = useState<"commit" | "push" | "pr" | null>(null);
+  const [syncBusy, setSyncBusy] = useState<"fetch" | "pull" | null>(null);
   const [commitResult, setCommitResult] = useState<GitCommitResult | null>(null);
   const [pushResult, setPushResult] = useState<GitPushResult | null>(null);
   const [prResult, setPrResult] = useState<GitPrResult | null>(null);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedPath(null);
@@ -153,9 +165,11 @@ export function ReviewPanel({
     setPrBody("");
     setPrBase("main");
     setShipBusy(null);
+    setSyncBusy(null);
     setCommitResult(null);
     setPushResult(null);
     setPrResult(null);
+    setSyncResult(null);
     setScope("unstaged");
     setBaseRef("");
     const loadedComments = loadReviewComments(sessionId);
@@ -547,6 +561,51 @@ export function ReviewPanel({
     }
   }
 
+  async function fetchRemoteNow(): Promise<void> {
+    if (pushRemote.trim().length === 0) return;
+    setSyncBusy("fetch");
+    setSyncResult(null);
+    try {
+      const result = await onFetch(sessionId, pushRemote.trim());
+      if (result) {
+        setSyncResult(
+          `Fetched ${pushRemote.trim()} · ${result.ahead} ahead, ${result.behind} behind`,
+        );
+      }
+    } finally {
+      setSyncBusy(null);
+    }
+  }
+
+  async function pullLatestNow(): Promise<void> {
+    if (
+      !review.status ||
+      pushRemote.trim().length === 0 ||
+      pushBranch.trim().length === 0 ||
+      !review.status.head
+    ) {
+      return;
+    }
+    setSyncBusy("pull");
+    setSyncResult(null);
+    try {
+      const result = await onPull(
+        sessionId,
+        pushRemote.trim(),
+        pushBranch.trim(),
+        review.status.head,
+        review.status.fingerprint,
+      );
+      if (result) {
+        setSyncResult(
+          `Pulled ${pushRemote.trim()}/${pushBranch.trim()} · ${result.head?.slice(0, 8) ?? "updated"}`,
+        );
+      }
+    } finally {
+      setSyncBusy(null);
+    }
+  }
+
   async function pushBranchNow(): Promise<void> {
     if (!review.status || pushRemote.trim().length === 0 || pushBranch.trim().length === 0) return;
     setShipBusy("push");
@@ -922,6 +981,63 @@ export function ReviewPanel({
               </section>
             )}
 
+          <section className="review-sync" aria-label="Synchronize repository">
+            <div className="review-ship-head">
+              <div>
+                <span className="eyebrow">SYNC REPOSITORY</span>
+                <strong>Fetch updates or fast-forward safely</strong>
+              </div>
+              <span className="muted">Remote and branch are always explicit</span>
+            </div>
+            <div className="review-ship-row">
+              <select
+                value={pushRemote}
+                onChange={(event) => setPushRemote(event.target.value)}
+                aria-label="Sync remote"
+                disabled={syncBusy !== null || shipBusy !== null}
+              >
+                <option value="">Choose remote</option>
+                {(review.status?.remotes ?? []).map((remote) => (
+                  <option key={remote.name} value={remote.name}>{remote.name} · {remote.url}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="review-action"
+                disabled={syncBusy !== null || shipBusy !== null || pushRemote.trim().length === 0}
+                onClick={() => void fetchRemoteNow()}
+              >
+                {syncBusy === "fetch" ? "Fetching…" : "Fetch"}
+              </button>
+              <input
+                value={pushBranch}
+                onChange={(event) => setPushBranch(event.target.value)}
+                placeholder="Branch to pull"
+                aria-label="Pull branch"
+                disabled={syncBusy !== null || shipBusy !== null}
+              />
+              <button
+                type="button"
+                className="review-action"
+                disabled={
+                  syncBusy !== null ||
+                  shipBusy !== null ||
+                  pushRemote.trim().length === 0 ||
+                  pushBranch.trim().length === 0 ||
+                  !review.status?.head ||
+                  (review.status?.files.length ?? 0) > 0
+                }
+                onClick={() => void pullLatestNow()}
+              >
+                {syncBusy === "pull" ? "Pulling…" : "Pull latest"}
+              </button>
+            </div>
+            {(review.status?.files.length ?? 0) > 0 && (
+              <p className="muted review-sync-note">Commit or stash local changes before pulling.</p>
+            )}
+            {syncResult && <div className="review-ship-result">{syncResult}</div>}
+          </section>
+
           <section className="review-ship" aria-label="Ship changes">
             <div className="review-ship-head">
               <div>
@@ -940,7 +1056,7 @@ export function ReviewPanel({
               <button
                 type="button"
                 className="review-action"
-                disabled={shipBusy !== null || !review.status?.files.some((file) => file.staged) || commitMessage.trim().length === 0}
+                disabled={shipBusy !== null || syncBusy !== null || !review.status?.files.some((file) => file.staged) || commitMessage.trim().length === 0}
                 onClick={() => void commitStaged()}
               >
                 {shipBusy === "commit" ? "Committing…" : "Commit staged"}
@@ -960,7 +1076,7 @@ export function ReviewPanel({
               <button
                 type="button"
                 className="review-action"
-                disabled={shipBusy !== null || pushRemote.trim().length === 0 || pushBranch.trim().length === 0 || !review.status?.head}
+                disabled={shipBusy !== null || syncBusy !== null || pushRemote.trim().length === 0 || pushBranch.trim().length === 0 || !review.status?.head}
                 onClick={() => void pushBranchNow()}
               >
                 {shipBusy === "push" ? "Pushing…" : "Push branch"}
@@ -974,7 +1090,7 @@ export function ReviewPanel({
                 <button
                   type="button"
                   className="review-action"
-                  disabled={shipBusy !== null || prTitle.trim().length === 0 || prBase.trim().length === 0 || pushBranch.trim().length === 0}
+                  disabled={shipBusy !== null || syncBusy !== null || prTitle.trim().length === 0 || prBase.trim().length === 0 || pushBranch.trim().length === 0}
                   onClick={() => void createPullRequest()}
                 >
                   {shipBusy === "pr" ? "Opening…" : "Open pull request"}

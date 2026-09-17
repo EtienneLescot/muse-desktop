@@ -1088,6 +1088,86 @@ pub fn push(
     })
 }
 
+fn ensure_remote(canonical: &Path, remote: &str) -> Result<(), String> {
+    let remotes = git_command(canonical, &["remote"])?;
+    if !decode(&remotes)
+        .lines()
+        .any(|name| name.trim() == remote.trim())
+    {
+        return Err(format!("remote does not exist: {remote}"));
+    }
+    Ok(())
+}
+
+/// Fetch one explicitly selected remote without pruning unrelated refs.
+/// Fetch is deliberately separate from pull: it updates remote-tracking refs
+/// while leaving the checked-out worktree untouched.
+pub fn fetch(root: &Path, remote: &str) -> Result<GitStatusSnapshot, String> {
+    validate_ref(remote, "remote")?;
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    ensure_remote(&canonical, remote)?;
+    git_command(&canonical, &["fetch", "--no-prune", remote.trim()])?;
+    status(&canonical)
+}
+
+/// Fast-forward the current checkout from an explicit remote branch.
+///
+/// Pull is guarded by both the observed HEAD and the complete status
+/// fingerprint, and requires a clean worktree. `--ff-only` prevents an
+/// implicit merge commit or conflict resolution from being hidden behind one
+/// button; the user can inspect and resolve a divergent branch explicitly.
+pub fn pull(
+    root: &Path,
+    remote: &str,
+    branch: &str,
+    expected_head: Option<String>,
+    expected_status: Option<String>,
+) -> Result<GitStatusSnapshot, String> {
+    validate_ref(remote, "remote")?;
+    validate_ref(branch, "branch")?;
+    let expected = expected_head
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "pull requires an observed HEAD".to_string())?;
+    let expected_status = expected_status
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "pull requires an observed repository status".to_string())?;
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    let current = status(&canonical)?;
+    if current.head.as_deref() != Some(expected) {
+        return Err("repository HEAD changed; refresh Review before pulling".to_string());
+    }
+    if current.fingerprint != expected_status {
+        return Err("repository status changed; refresh Review before pulling".to_string());
+    }
+    if !current.files.is_empty() {
+        return Err(
+            "pull requires a clean worktree; commit or stash local changes before pulling"
+                .to_string(),
+        );
+    }
+    ensure_remote(&canonical, remote)?;
+    let current_branch = current
+        .branch
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "pull requires a checked-out branch".to_string())?;
+    git_command(
+        &canonical,
+        &["pull", "--ff-only", remote.trim(), branch.trim()],
+    )?;
+    let next = status(&canonical)?;
+    if next.branch.as_deref() != Some(current_branch) {
+        return Err("pull changed the checked-out branch unexpectedly".to_string());
+    }
+    Ok(next)
+}
+
 fn gh_command(root: &Path, args: &[&str]) -> Result<String, String> {
     let output = Command::new("gh")
         .args(args)
@@ -1173,6 +1253,9 @@ mod tests {
             std::process::id(),
             NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
         ));
+        // Keep reruns deterministic when an earlier assertion aborted before
+        // its cleanup path.
+        let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let run = |args: &[&str]| {
             let output = Command::new("git")
@@ -1513,6 +1596,164 @@ mod tests {
         let head_hash = status(&root).unwrap().head;
         let error = push(&root, "origin", "main", head_hash).unwrap_err();
         assert!(error.contains("remote does not exist"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn fetch_requires_an_existing_explicit_remote() {
+        let root = fixture_repo();
+        let error = fetch(&root, "origin").unwrap_err();
+        assert!(error.contains("remote does not exist"));
+        assert!(fetch(&root, "--all").is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn pull_rejects_dirty_or_stale_observations_before_git_runs() {
+        let root = fixture_repo();
+        let remote = root.with_file_name(format!(
+            "{}-remote.git",
+            root.file_name().unwrap().to_string_lossy()
+        ));
+        let remote_path = remote.to_string_lossy().to_string();
+        let _ = fs::remove_dir_all(&remote);
+        let init_remote = Command::new("git")
+            .args(["init", "--bare", "--quiet", &remote_path])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(init_remote.status.success());
+        let add_remote = Command::new("git")
+            .args(["remote", "add", "origin", &remote_path])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(add_remote.status.success());
+        let before = status(&root).unwrap();
+        fs::write(root.join("main.txt"), "dirty\n").unwrap();
+        let error = pull(
+            &root,
+            "origin",
+            "main",
+            before.head.clone(),
+            Some(before.fingerprint.clone()),
+        )
+        .unwrap_err();
+        assert!(error.contains("status changed"));
+        let after_dirty = status(&root).unwrap();
+        let error = pull(
+            &root,
+            "origin",
+            "main",
+            after_dirty.head,
+            Some(after_dirty.fingerprint),
+        )
+        .unwrap_err();
+        assert!(error.contains("clean worktree"));
+        let _ = fs::remove_dir_all(&remote);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn fetch_then_pull_fast_forwards_only_the_checked_out_branch() {
+        let root = fixture_repo();
+        let remote = root.with_file_name(format!(
+            "{}-remote.git",
+            root.file_name().unwrap().to_string_lossy()
+        ));
+        let remote_path = remote.to_string_lossy().to_string();
+        let _ = fs::remove_dir_all(&remote);
+        let clone = root.with_file_name(format!(
+            "{}-clone",
+            root.file_name().unwrap().to_string_lossy()
+        ));
+        let clone_path = clone.to_string_lossy().to_string();
+        let _ = fs::remove_dir_all(&clone);
+        let run_root = |args: &[&str]| {
+            let output = Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "git {:?}: {}",
+                args,
+                decode(&output.stderr)
+            );
+        };
+        run_root(&["branch", "-M", "main"]);
+        let init_remote = Command::new("git")
+            .args(["init", "--bare", "--quiet", &remote_path])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(init_remote.status.success());
+        run_root(&["remote", "add", "origin", &remote_path]);
+        run_root(&["push", "--quiet", "origin", "HEAD:refs/heads/main"]);
+        let set_remote_head = Command::new("git")
+            .args([
+                "--git-dir",
+                &remote_path,
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/main",
+            ])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(
+            set_remote_head.status.success(),
+            "symbolic-ref: {}",
+            decode(&set_remote_head.stderr)
+        );
+        run_root(&["branch", "--set-upstream-to=origin/main", "main"]);
+        let clone_result = Command::new("git")
+            .args(["clone", "--quiet", &remote_path, &clone_path])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(
+            clone_result.status.success(),
+            "clone: {}",
+            decode(&clone_result.stderr)
+        );
+        let run_clone = |args: &[&str]| {
+            let output = Command::new("git")
+                .args(args)
+                .current_dir(&clone)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "git clone {:?}: {}",
+                args,
+                decode(&output.stderr)
+            );
+        };
+        run_clone(&["config", "user.email", "test@example.com"]);
+        run_clone(&["config", "user.name", "Muse test"]);
+        fs::write(clone.join("remote.txt"), "remote update\n").unwrap();
+        run_clone(&["add", "--", "remote.txt"]);
+        run_clone(&["commit", "--quiet", "-m", "remote update"]);
+        run_clone(&["push", "--quiet", "origin", "HEAD:refs/heads/main"]);
+
+        let fetched = fetch(&root, "origin").unwrap();
+        assert_eq!(fetched.branch.as_deref(), Some("main"));
+        assert_eq!(fetched.behind, 1);
+        let pulled = pull(
+            &root,
+            "origin",
+            "main",
+            fetched.head.clone(),
+            Some(fetched.fingerprint.clone()),
+        )
+        .unwrap();
+        assert_eq!(pulled.behind, 0);
+        assert_eq!(pulled.ahead, 0);
+        assert!(root.join("remote.txt").is_file());
+        let _ = fs::remove_dir_all(&clone);
+        let _ = fs::remove_dir_all(&remote);
         let _ = fs::remove_dir_all(root);
     }
 
