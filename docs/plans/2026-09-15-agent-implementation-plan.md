@@ -114,7 +114,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** supprimer la capture brute en usage normal. Si diagnostic activé : événements structurés, métadonnées minimales, masquage, rotation et rétention bornées ; export explicite avec aperçu. Utiliser une troncature respectant les frontières UTF-8.
 
-**État au 17/09/2026 :** Settings propose un export JSON local borné (`muse-desktop.diagnostics.v1`) contenant plateforme, backend, compteurs de sessions/événements et dernière erreur rédigée. Le bridge Tauri expose aussi `collect_diagnostics` (`muse-desktop.native-diagnostics.v1`) pour ajouter les compteurs natifs de workspace, hosts, sessions, approbations et buffer d'événements ; le web preview conserve un fallback renderer. Les événements `turn/completed` conservent désormais l'erreur terminale MSP structurée (`kind`, `message`, `retryable`, durée/raison), persistée dans le journal et rendue dans une disclosure lisible ; une erreur réessayable propose **Retry turn** à partir du dernier prompt utilisateur précédent. Les hôtes sans enveloppe retombent sur une raison bornée et rédigée. Aucun chemin de workspace ni contenu de conversation n'est exporté ; les secrets courants sont masqués. La qualification native des erreurs détaillées du moteur reste ouverte.
+**État au 17/09/2026 :** Settings propose un export JSON local borné (`muse-desktop.diagnostics.v1`) contenant plateforme, backend, compteurs de sessions/événements et dernière erreur rédigée. Le bridge Tauri expose aussi `collect_diagnostics` (`muse-desktop.native-diagnostics.v1`) pour ajouter les compteurs natifs de workspace, hosts, sessions, approbations et buffer d'événements ; le web preview conserve un fallback renderer. Les événements `turn/completed` conservent désormais l'erreur terminale MSP structurée (`kind`, `message`, `retryable`, durée/raison), persistée dans le journal et rendue dans une disclosure lisible ; une erreur réessayable propose **Retry turn** à partir du dernier prompt utilisateur précédent. Les hôtes sans enveloppe retombent sur une raison bornée et rédigée. Aucun chemin de workspace ni contenu de conversation n'est exporté ; les secrets courants sont masqués. Le pré-vol natif `--exercise-errors` confirme maintenant que les catégories `methodNotFound` et `invalidParams` traversent le transport sur deux hôtes isolés ; la qualification des erreurs détaillées d'un tour réel reste ouverte.
 
 **Acceptation :** Unicode multioctet à la limite, erreur longue, secret synthétique, volume élevé. Aucun prompt ou secret brut écrit par défaut ; pas de panic. Livrable autonome, sans attendre les autres lots.
 
@@ -125,6 +125,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **Travail :** recenser les RPC réellement envoyées, y compris modèles/compaction/subagents/reprise. Contrôler le registre contre l'implémentation plutôt qu'un nombre constant. Stocker les capacités et version de handshake ; définir incompatible vs ajout compatible. Centraliser les codes d'erreur utiles et masquer les actions non supportées.
 
 **Acceptation :** RPC manquante du registre fait échouer le contrôle ; schéma incompatible produit une erreur exploitable ; notification additive inconnue n'arrête pas le flux. Livrer fixtures anonymisées de versions connues.
+
+**Pré-vol natif au 17/09/2026 :** le binaire Muse 1.3.0 répond au handshake attendu et renvoie des erreurs JSON-RPC structurées pour une méthode inconnue et une interruption sans paramètres sur chacun des deux hosts du smoke. Cette preuve ne couvre pas encore la matrice de versions ni les erreurs produites pendant un tour modèle.
 
 ### M0-09 — Persistance
 
@@ -187,7 +189,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **État au 17/09/2026 :** les jobs CI frontend et Rust conservent désormais, uniquement en cas d'échec, un rapport borné (250/300 dernières lignes), après masquage des chemins du runner et des formes de secrets courantes. Les artefacts sont rétentionnés sept jours et ne contiennent ni workspace utilisateur ni transcript.
 
 **Reste :** brancher la fixture au superviseur Tauri avec deux workspaces isolés et injecter une panne pendant `send_input`. Ces tests restent séparés d'un tour modèle réel.
-**Pré-vol natif :** le smoke Windows partage désormais cette commande avec `--exercise-control` pour vérifier le contrôle `turn/start` → `turn/interrupt` sur deux hosts réels ; il ne remplace pas l'injection de panne dans le superviseur Tauri.
+**Pré-vol natif :** le smoke Windows partage désormais cette commande avec `--exercise-control` pour vérifier le contrôle `turn/start` → `turn/interrupt` sur deux hosts réels. Son option `--exercise-errors` vérifie aussi les catégories `methodNotFound` et `invalidParams` sur les deux transports, sans exposer les trames brutes ; il ne remplace pas l'injection de panne dans le superviseur Tauri.
 
 **Acceptation :** depuis un clone propre, `npm test` lance la fixture sans dépendance externe ; détecter volontairement une mauvaise route A/B et un envoi perdu dès que le pilote Tauri isolé est ajouté. Choisir le pilote Tauri selon support réel des plateformes, consigner toute limite dans l'ADR.
 

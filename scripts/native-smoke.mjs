@@ -6,13 +6,17 @@
  * `muse serve` processes can handshake, own independent workspaces, create a
  * session and answer a read-only model catalogue request. The explicit
  * `--exercise-control` path admits and immediately interrupts one turn per
- * host to validate the native cancellation contract. It is a diagnostic
- * harness, not a substitute for the full Tauri E2E scenario in M0-01c.
+ * host to validate the native cancellation contract. The explicit
+ * `--exercise-errors` path asks each host for two malformed operations and
+ * checks that the structured JSON-RPC category is preserved without exposing
+ * a raw wire payload. It is a diagnostic harness, not a substitute for the
+ * full Tauri E2E scenario in M0-01c.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
  *   node scripts/native-smoke.mjs --binary C:\\path\\to\\muse.exe
  *   node scripts/native-smoke.mjs --exercise-control
+ *   node scripts/native-smoke.mjs --exercise-errors
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -39,6 +43,10 @@ function binaryArgument() {
 
 function exercisesControlPath() {
   return process.argv.includes("--exercise-control");
+}
+
+function exercisesErrorPath() {
+  return process.argv.includes("--exercise-errors");
 }
 
 function fail(message) {
@@ -101,7 +109,15 @@ function createHost(binary, workspace, label) {
         if (!request) continue;
         pending.delete(String(frame.id));
         clearTimeout(request.timer);
-        if (frame.error) request.reject(new Error(`${request.method} failed: ${frame.error.message || "MSP request failed"}`));
+        if (frame.error) {
+          const error = new Error(`${request.method} failed: ${frame.error.message || "MSP request failed"}`);
+          // Keep only the structured fields needed by the harness. The raw
+          // frame is deliberately never included in diagnostics or output.
+          error.code = Number.isInteger(frame.error.code) ? frame.error.code : -1;
+          error.kind = typeof frame.error.data?.kind === "string" ? frame.error.data.kind : "unknown";
+          error.retryable = typeof frame.error.data?.retryable === "boolean" ? frame.error.data.retryable : undefined;
+          request.reject(error);
+        }
         else request.resolve(frame.result);
       }
     }
@@ -171,6 +187,7 @@ async function main() {
   }
   const binary = binaryArgument();
   const exerciseControl = exercisesControlPath();
+  const exerciseErrors = exercisesErrorPath();
   const roots = await Promise.all([
     mkdtemp(join(tmpdir(), "muse-native-smoke-a-")),
     mkdtemp(join(tmpdir(), "muse-native-smoke-b-")),
@@ -181,6 +198,7 @@ async function main() {
   try {
     const sessions = [];
     const controls = [];
+    const errors = [];
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
         clientInfo: { name: "muse_desktop_native_smoke", version: "0.1.0" },
@@ -202,6 +220,29 @@ async function main() {
       if (catalogue === null || typeof catalogue !== "object") fail(`host-${index === 0 ? "A" : "B"} returned no model catalogue`);
     }
     if (new Set(sessions).size !== sessions.length) fail("the two native hosts returned the same session id");
+    if (exerciseErrors) {
+      // These requests never reach a model or touch a workspace. They prove
+      // that the host's actionable category survives the child-process
+      // transport for both isolated owners.
+      for (const [index, host] of hosts.entries()) {
+        const label = `host-${String.fromCharCode(65 + index)}`;
+        const cases = [
+          { method: "native-smoke/unknown", params: {}, code: -32601, kind: "methodNotFound" },
+          { method: "turn/interrupt", params: {}, code: -32602, kind: "invalidParams" },
+        ];
+        for (const testCase of cases) {
+          try {
+            await host.request(testCase.method, testCase.params);
+            fail(`${label} unexpectedly accepted ${testCase.method}`);
+          } catch (error) {
+            if (error?.code !== testCase.code || error?.kind !== testCase.kind) {
+              fail(`${label} returned an unexpected ${testCase.method} error (${error?.code ?? "?"}/${error?.kind ?? "unknown"})`);
+            }
+            errors.push({ host: String.fromCharCode(65 + index), method: testCase.method, code: error.code, kind: error.kind });
+          }
+        }
+      }
+    }
     if (exerciseControl) {
       // This path is deliberately opt-in: admit both real turns in parallel,
       // then interrupt each target independently. It proves the native
@@ -242,6 +283,7 @@ async function main() {
       modelCatalogue: "available",
       turnsSent: exerciseControl ? controls.length : 0,
       ...(exerciseControl ? { controls } : {}),
+      ...(exerciseErrors ? { errorsChecked: errors.length, errors } : {}),
     })}\n`);
   } finally {
     await Promise.all(hosts.map((host) => host.close()));
