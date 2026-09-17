@@ -308,9 +308,50 @@ function validRunSummary(value: unknown): value is ScheduleRunSummary {
     Array.isArray(row.decisions) && row.decisions.every((item) => typeof item === "string" && item.length <= 200) && row.decisions.length <= 12;
 }
 
+/** Parse a persisted ledger without trusting renderer or native storage. */
+export function normalizeScheduleRuns(raw: unknown): ScheduleRun[] {
+  return Array.isArray(raw) ? raw.filter(validRun).slice(-MAX_SCHEDULE_RUNS) : [];
+}
+
 export function loadScheduleRuns(): ScheduleRun[] {
-  const parsed = readStorageJson<unknown>(SCHEDULE_RUNS_KEY, []);
-  return Array.isArray(parsed) ? parsed.filter(validRun).slice(-MAX_SCHEDULE_RUNS) : [];
+  return normalizeScheduleRuns(readStorageJson<unknown>(SCHEDULE_RUNS_KEY, []));
+}
+
+function runLifecycleTimestamp(run: ScheduleRun): number {
+  return Math.max(
+    run.createdAt,
+    run.startedAt ?? 0,
+    run.finishedAt ?? 0,
+    run.recoveryDetectedAt ?? 0,
+    run.nextRetryAt ?? 0,
+  );
+}
+
+function runOccurrenceKey(run: ScheduleRun): string {
+  return run.occurrenceKey ?? `${run.scheduleId}:${run.occurrenceAt}`;
+}
+
+/**
+ * Merge the webview and native ledgers after a relaunch. Both stores can be
+ * ahead of the other when a renderer disappears during a write, so rows are
+ * deduplicated by occurrence and the newest lifecycle snapshot wins. This
+ * keeps the hook's state as the single source of truth while avoiding silent
+ * loss during migration from localStorage to the native ledger.
+ */
+export function mergeScheduleRuns(...ledgers: ScheduleRun[][]): ScheduleRun[] {
+  const merged = new Map<string, ScheduleRun>();
+  for (const ledger of ledgers) {
+    for (const run of normalizeScheduleRuns(ledger)) {
+      const key = runOccurrenceKey(run);
+      const existing = merged.get(key);
+      if (!existing || runLifecycleTimestamp(run) >= runLifecycleTimestamp(existing)) {
+        merged.set(key, run);
+      }
+    }
+  }
+  return Array.from(merged.values())
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .slice(-MAX_SCHEDULE_RUNS);
 }
 
 /**

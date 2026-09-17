@@ -33,6 +33,7 @@ mod secret_store;
 mod skills;
 mod startup;
 mod scheduler;
+mod scheduler_runs;
 mod workspace_watch;
 use hosts::Hosts;
 
@@ -1985,6 +1986,23 @@ fn scheduler_release(state: State<'_, AppState>, owner_id: String) -> Result<boo
         return Ok(true);
     }
     Ok(false)
+}
+
+/// Read the renderer-owned scheduled-run ledger from app data. The native
+/// copy is a durability mirror only; lifecycle validation and reconciliation
+/// remain in `src/lib/scheduleRuns.ts`.
+#[tauri::command]
+fn scheduler_runs_read(app: AppHandle) -> Result<Value, String> {
+    let data_dir = scheduler_data_dir(&app)?;
+    let bytes = scheduler_runs::read(&data_dir)?;
+    serde_json::from_slice(&bytes).map_err(|_| "scheduler ledger is not valid JSON".to_string())
+}
+
+/// Atomically mirror a bounded scheduled-run snapshot under app data.
+#[tauri::command]
+fn scheduler_runs_write(app: AppHandle, payload: String) -> Result<(), String> {
+    let data_dir = scheduler_data_dir(&app)?;
+    scheduler_runs::write(&data_dir, &payload)
 }
 
 /// Apply one selected hunk after checking the exact Review observation.
@@ -6072,6 +6090,8 @@ fn main() {
             scheduler_claim,
             scheduler_renew,
             scheduler_release,
+            scheduler_runs_read,
+            scheduler_runs_write,
             open_native_browser,
         ])
         .build(tauri::generate_context!())
