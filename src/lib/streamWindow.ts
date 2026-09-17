@@ -17,6 +17,17 @@ export function maxStreamWindowStart(length: number): number {
   return Math.max(0, length - STREAM_WINDOW_SIZE);
 }
 
+/** Inclusive/exclusive end for the DOM window at a given start. */
+export function streamWindowEnd(length: number, start: number): number {
+  if (!Number.isFinite(length) || length <= 0) return 0;
+  const boundedLength = Math.floor(length);
+  const boundedStart = Math.min(
+    Math.max(0, Number.isFinite(start) ? Math.floor(start) : 0),
+    boundedLength,
+  );
+  return Math.min(boundedLength, boundedStart + STREAM_WINDOW_SIZE);
+}
+
 /** Pick a saved start, or default to the newest window on first render. */
 export function initialStreamWindowStart(
   length: number,

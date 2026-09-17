@@ -8,6 +8,7 @@ import {
   nextStreamWindowStart,
   prependStreamWindowStart,
   shouldWindowStream,
+  streamWindowEnd,
 } from "../lib/streamWindow";
 import {
   classifyStreamHealth,
@@ -144,7 +145,12 @@ export function StreamView({
   const safeWindowStart = streamWindowed
     ? Math.min(Math.max(0, windowStart), maxWindowStart)
     : 0;
-  const visibleEntries = streamWindowed ? entries.slice(safeWindowStart) : entries;
+  const safeWindowEnd = streamWindowed
+    ? streamWindowEnd(entries.length, safeWindowStart)
+    : entries.length;
+  const visibleEntries = streamWindowed
+    ? entries.slice(safeWindowStart, safeWindowEnd)
+    : entries;
   const findHits = useMemo(
     () => searchTranscript(entries, findQuery),
     [entries, findQuery],
@@ -480,7 +486,7 @@ export function StreamView({
             Load older messages
           </button>
           <span>
-            Showing messages {safeWindowStart + 1}–{entries.length} of {entries.length}.
+            Showing messages {safeWindowStart + 1}–{safeWindowEnd} of {entries.length}.
             Scroll to the top to load more.
           </span>
         </div>
