@@ -17,6 +17,7 @@ import {
   MAX_PROJECTS,
   PROJECT_LIMIT_MESSAGE,
   projectOfThread,
+  projectWorkspaceOptions,
   projectsNeedingWorkspace,
   parseWorkspaceRootObservation,
   resolveProjectSettings,
@@ -247,6 +248,19 @@ describe("US-30 settings override + diff", () => {
       settingsForThread(DEFAULT_PROJECT_SETTINGS, projects, { s1: "missing" }, "s1"),
       DEFAULT_PROJECT_SETTINGS,
     );
+  });
+});
+
+describe("M2-01 new conversation environments", () => {
+  it("projects only rooted options and trims the selected workspace", () => {
+    const projects: Project[] = [
+      { id: "rooted", name: "Website", instructions: "", createdAt: 1, workspace: " C:\\work\\site " },
+      { id: "legacy", name: "Legacy", instructions: "", createdAt: 2 },
+      { id: "empty", name: "Empty", instructions: "", createdAt: 3, workspace: "   " },
+    ];
+    assert.deepEqual(projectWorkspaceOptions(projects), [
+      { projectId: "rooted", projectName: "Website", workspace: "C:\\work\\site" },
+    ]);
   });
 });
 

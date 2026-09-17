@@ -3,6 +3,7 @@ import { WorkspacePicker } from "./WorkspacePicker";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import type { AuthorizationMode } from "../lib/authorization";
+import type { ProjectWorkspaceOption } from "../lib/projects";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
 import { userFacingError } from "../lib/errorCopy";
 import {
@@ -23,8 +24,14 @@ interface Props {
   /** Default folder for the new thread; null until the user picks one. */
   workspace: string | null;
   onPickWorkspace: (path: string) => void;
+  /** Project roots available as explicit environments on the welcome screen. */
+  environmentOptions?: ProjectWorkspaceOption[];
   /** Creates the session and sends the first message right away. */
-  onStart: (draft: string, inputParts?: TurnInputPart[]) => Promise<boolean>;
+  onStart: (
+    draft: string,
+    inputParts?: TurnInputPart[],
+    environment?: NewConversationEnvironment,
+  ) => Promise<boolean>;
   backendMissing?: boolean;
   /** US-33: explicit sidecar failure rendered instead of the blank screen. */
   sidecarError?: ReactNode | null;
@@ -33,15 +40,23 @@ interface Props {
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
 }
 
+export interface NewConversationEnvironment {
+  /** Project id when this conversation should inherit a project. */
+  projectId: string | null;
+  /** Workspace that the new session must use. */
+  workspace: string | null;
+}
+
 /**
  * Empty session screen shown when no session is active. Codex-like: the
- * folder is chosen here, per thread, at creation time — there is no
- * global folder lock in the sidebar. Starting sends the typed message
+ * folder/environment is chosen here, per thread, at creation time — there is
+ * no global folder lock in the sidebar. Starting sends the typed message
  * immediately; nothing waits in the composer.
  */
 export function EmptySessionScreen({
   workspace,
   onPickWorkspace,
+  environmentOptions = [],
   onStart,
   backendMissing,
   sidecarError,
@@ -68,7 +83,22 @@ export function EmptySessionScreen({
   useEffect(() => {
     saveAttachmentDraft("welcome", attachments);
   }, [attachments]);
-  const canStart = workspace !== null && !backendMissing && !starting;
+  const [environmentId, setEnvironmentId] = useState("default");
+  const selectedEnvironment = environmentOptions.find(
+    (option) => option.projectId === environmentId,
+  );
+  const selectedWorkspace = selectedEnvironment?.workspace ?? workspace;
+  const workspaceLabel = (path: string | null): string => {
+    if (path === null) return "Choose a folder";
+    const parts = path.split(/[\\/]/).filter((part) => part.length > 0);
+    return parts[parts.length - 1] ?? path;
+  };
+  useEffect(() => {
+    if (environmentId !== "default" && selectedEnvironment === undefined) {
+      setEnvironmentId("default");
+    }
+  }, [environmentId, selectedEnvironment]);
+  const canStart = selectedWorkspace !== null && !backendMissing && !starting;
 
   async function addFiles(files: FileList | File[]): Promise<void> {
     const incoming = Array.from(files);
@@ -102,7 +132,14 @@ export function EmptySessionScreen({
     }
     setStarting(true);
     try {
-      const sent = await onStart(draft, buildTurnInputParts(draft, attachments));
+      const sent = await onStart(
+        draft,
+        buildTurnInputParts(draft, attachments),
+        {
+          projectId: selectedEnvironment?.projectId ?? null,
+          workspace: selectedWorkspace,
+        },
+      );
       if (sent) {
         removeSessionStorageKey(welcomeDraftKey);
         setAttachments([]);
@@ -138,7 +175,36 @@ export function EmptySessionScreen({
         A little further.
       </h2>
       <p>Build, explore, and ship with Muse.</p>
-      <WorkspacePicker workspace={workspace} onPick={onPickWorkspace} />
+      <WorkspacePicker
+        workspace={workspace}
+        onPick={(path) => {
+          setEnvironmentId("default");
+          onPickWorkspace(path);
+        }}
+      />
+      <div className="welcome-environment">
+        <label htmlFor="welcome-environment-select">Start in</label>
+        <select
+          id="welcome-environment-select"
+          value={environmentId}
+          onChange={(event) => setEnvironmentId(event.target.value)}
+          aria-label="Conversation environment"
+        >
+          <option value="default">
+            Default workspace · {workspaceLabel(workspace)}
+          </option>
+          {environmentOptions.map((option) => (
+            <option key={option.projectId} value={option.projectId}>
+              {option.projectName} · {workspaceLabel(option.workspace)}
+            </option>
+          ))}
+        </select>
+        <small>
+          {selectedEnvironment
+            ? `Uses ${selectedEnvironment.projectName} instructions and preferences.`
+            : "Choose a project root to inherit its instructions and preferences."}
+        </small>
+      </div>
       <div className="welcome-suggestions">
         {[
           [
@@ -254,7 +320,7 @@ export function EmptySessionScreen({
           <small>
             {backendMissing
               ? "Available in the desktop app"
-              : workspace
+              : selectedWorkspace
                 ? draft.trim() === ""
                   ? "Press start to open the conversation."
                   : "Your message is sent as soon as you start."

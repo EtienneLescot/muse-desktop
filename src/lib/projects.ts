@@ -126,6 +126,31 @@ export function projectsNeedingWorkspace(projects: Project[]): Project[] {
 }
 
 /**
+ * A project root that can be selected when starting a new conversation.
+ * Keep this projection in the project model so the welcome screen and any
+ * future environment switcher use the same filtering and trimming rules.
+ */
+export interface ProjectWorkspaceOption {
+  projectId: string;
+  projectName: string;
+  workspace: string;
+}
+
+export function projectWorkspaceOptions(
+  projects: Project[],
+): ProjectWorkspaceOption[] {
+  return projects.flatMap((project) => {
+    const workspace = project.workspace?.trim() ?? "";
+    if (workspace.length === 0) return [];
+    return [{
+      projectId: project.id,
+      projectName: project.name,
+      workspace,
+    }];
+  });
+}
+
+/**
  * Create a project. Refuses with PROJECT_LIMIT_MESSAGE at MAX_PROJECTS,
  * and with a blank-name message when the trimmed name is empty.
  */

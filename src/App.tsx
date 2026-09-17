@@ -7,7 +7,10 @@ import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { EmptySessionScreen } from "./components/EmptySessionScreen";
+import {
+  EmptySessionScreen,
+  type NewConversationEnvironment,
+} from "./components/EmptySessionScreen";
 import { SessionSidebar } from "./components/SessionSidebar";
 import { ProjectsPanel } from "./components/ProjectsPanel";
 import { StreamView } from "./components/StreamView";
@@ -33,7 +36,10 @@ import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnosti
 import { userFacingError } from "./lib/errorCopy";
 import { isTauriRuntime } from "./lib/env";
 import type { Artifact, ArtifactVersion } from "./lib/artifacts";
-import { parseWorkspaceRootObservation } from "./lib/projects";
+import {
+  parseWorkspaceRootObservation,
+  projectWorkspaceOptions,
+} from "./lib/projects";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -423,6 +429,10 @@ export default function App() {
     const parts = workspace.split(/[\\/]/).filter((p) => p.length > 0);
     return parts[parts.length - 1] ?? workspace;
   }, [workspace]);
+  const environmentOptions = useMemo(
+    () => projectWorkspaceOptions(projects),
+    [projects],
+  );
 
   // US-7/US-8: agent ids seen as `subagent` entries in the active thread
   // drive the worktree plan panel (null panel until the first child).
@@ -867,11 +877,11 @@ export default function App() {
                   onAttach={attachThread}
                   onStartConversation={async (project) => {
                     if (!project.workspace) return;
-                    const id = await startSessionInWorkspace(
+                    await startSessionInWorkspace(
                       project.workspace,
                       settingsFor(project.id),
+                      project.id,
                     );
-                    if (id !== null) attachThread(id, project.id);
                   }}
                   onSetGlobal={setGlobalSettings}
                   onSetOverride={setProjectOverride}
@@ -1062,8 +1072,14 @@ export default function App() {
               <EmptySessionScreen
                 workspace={workspace}
                 onPickWorkspace={setWorkspace}
-                onStart={async (draft, inputParts) => {
-                  const id = await startSession();
+                environmentOptions={environmentOptions}
+                onStart={async (draft, inputParts, environment?: NewConversationEnvironment) => {
+                  const project = environment?.projectId
+                    ? projects.find((candidate) => candidate.id === environment.projectId) ?? null
+                    : null;
+                  const id = project?.workspace
+                    ? await startSessionInWorkspace(project.workspace, settingsFor(project.id), project.id)
+                    : await startSession();
                   if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
                   // M0-03: honest result — when the first send fails the
                   // welcome draft must not be reported as sent; the text
