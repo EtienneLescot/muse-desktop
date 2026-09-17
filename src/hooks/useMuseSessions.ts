@@ -346,6 +346,11 @@ import {
   type LocalMcpProbeResult,
   type ConnectorTool,
 } from "../lib/connectors";
+import {
+  buildMcpPackageCommand,
+  parseMcpbArchive,
+  type ParsedMcpPackage,
+} from "../lib/mcpPackage.ts";
 import { buildHostMcpServers } from "../lib/hostMcp";
 import {
   callRemoteMcp as callRemoteMcpTransport,
@@ -1086,6 +1091,8 @@ interface UseMuseSessions {
     tools: ConnectorTool[],
     serverVersion?: string,
   ) => boolean;
+  /** M3-03: install and probe one local `.mcpb` package revision. */
+  installMcpPackage: (file: File) => Promise<boolean>;
   /** M3-01/M3-03: re-probe and persist tools for an existing local server. */
   refreshLocalMcp: (
     id: string,
@@ -1202,6 +1209,16 @@ function parseChunk(payload: string): { itemId?: string; text: string } {
     }
   }
   return { text: payload };
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  if (typeof btoa !== "function") throw new Error("MCP package installation requires a browser runtime");
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+  }
+  return btoa(binary);
 }
 
 /**
@@ -3802,6 +3819,7 @@ export function useMuseSessions(): UseMuseSessions {
   }, []);
 
   const uninstallConnectorById = useCallback(async (id: string): Promise<void> => {
+    const entry = findConnector(connectorsRef.current, id);
     if (mcpRunningIds.includes(id)) {
       try {
         await invoke<boolean>("mcp_local_stop", { connectorId: id });
@@ -3813,6 +3831,12 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (remoteConnectedIds.includes(id)) disconnectRemoteMcp(id);
     setConnectors((cur) => uninstallConnector(cur, id).registry);
+    if (entry?.source === "package" && entry.package && isTauriRuntime()) {
+      await invoke("mcp_package_remove", {
+        packageId: id,
+        version: entry.package.version,
+      }).catch(() => undefined);
+    }
   }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
 
   const setConnectorEnabledById = useCallback((id: string, enabled: boolean): void => {
@@ -5448,6 +5472,79 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [],
   );
+
+  const installMcpPackage = useCallback(
+    async (file: File): Promise<boolean> => {
+      if (!isTauriRuntime()) {
+        setError("MCP bundle installation is available in the desktop app.");
+        return false;
+      }
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const pkg: ParsedMcpPackage = parseMcpbArchive(bytes, file.name);
+        const installed = await invoke<{ installRoot: string }>("mcp_package_install", {
+          packageId: pkg.id,
+          version: pkg.manifest.version,
+          files: pkg.files.map((entry) => ({
+            path: entry.path,
+            base64Data: bytesToBase64(entry.bytes),
+          })),
+        });
+        const command = buildMcpPackageCommand(pkg, installed.installRoot);
+        const probe = await probeLocalMcp(command, workspace);
+        if (probe === null || probe.tools.length === 0) {
+          await invoke("mcp_package_remove", {
+            packageId: pkg.id,
+            version: pkg.manifest.version,
+          }).catch(() => undefined);
+          setError("MCP bundle installed but its server did not return any tools; nothing was registered.");
+          return false;
+        }
+        if (mcpRunningIds.includes(pkg.id)) {
+          const stopped = await stopLocalMcp(pkg.id);
+          if (!stopped) {
+            await invoke("mcp_package_remove", {
+              packageId: pkg.id,
+              version: pkg.manifest.version,
+            }).catch(() => undefined);
+            setError("MCP bundle update could not stop the previous server; the existing connector was kept.");
+            return false;
+          }
+        }
+        const registered = registerLocalConnector(connectorsRef.current, {
+          id: pkg.id,
+          name: pkg.manifest.name,
+          command,
+          tools: probe.tools.map((tool) => ({ name: tool.name, description: tool.description })),
+          serverVersion: probe.serverVersion,
+          source: "package",
+          package: {
+            format: "mcpb",
+            version: pkg.manifest.version,
+            sourceName: pkg.sourceName,
+            installRoot: installed.installRoot,
+            entryPoint: pkg.manifest.entryPoint,
+            runtime: pkg.manifest.runtime,
+            installedAt: Date.now(),
+          },
+        });
+        if (registered === null) {
+          await invoke("mcp_package_remove", {
+            packageId: pkg.id,
+            version: pkg.manifest.version,
+          }).catch(() => undefined);
+          setError("MCP bundle returned an invalid tool catalogue; the existing connector was kept.");
+          return false;
+        }
+        setConnectors(registered.registry);
+        return true;
+      } catch (error) {
+        setError(`MCP bundle installation failed: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      }
+    },
+    [mcpRunningIds, probeLocalMcp, stopLocalMcp, workspace],
+  );
   scheduledExecutorRef.current = async (item, run) => {
     await executeReviewItem(item, run);
   };
@@ -6640,6 +6737,7 @@ export function useMuseSessions(): UseMuseSessions {
     probeLocalMcp,
     callLocalMcp,
     registerLocalConnector: registerLocalConnectorByProbe,
+    installMcpPackage,
     refreshLocalMcp,
     rollbackLocalMcp,
     mcpRunningIds,

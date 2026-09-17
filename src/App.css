@@ -4784,6 +4784,38 @@ body.dark .composer textarea::placeholder {
   margin-top: 6px;
 }
 
+.package-picker {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: fit-content;
+  margin-top: 7px !important;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 45%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--blue) 10%, var(--bg));
+  color: var(--text) !important;
+  cursor: pointer;
+  font-size: 0.78rem !important;
+}
+
+.package-picker:hover {
+  border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 16%, var(--bg));
+}
+
+.package-picker input[type="file"] {
+  width: 1px;
+  height: 1px;
+  position: absolute;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 .local-mcp .integration-notice {
   color: var(--success, #2aa876);
   background: color-mix(in srgb, var(--surface) 92%, var(--success, #2aa876) 8%);
