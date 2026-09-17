@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { primaryModifier } from "../lib/a11y";
 import {
   buildAnswers,
   type InputAnswer,
@@ -187,7 +188,7 @@ function InputCard({
         <button
           type="button"
           className="approve"
-          title="Send answer (Ctrl+Enter)"
+          title={`Send answer (${primaryModifier()}+Enter)`}
           onClick={submit}
         >
           Send answer

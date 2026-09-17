@@ -13,10 +13,20 @@ import {
   COMPOSER_SHORTCUT_TITLES,
   inputAnnouncement,
   isChoiceConfirmKey,
+  primaryModifier,
   statusAnnouncement,
   streamStatusMessage,
   trapTabIndex,
 } from "../src/lib/a11y.ts";
+
+describe("platform shortcut labels", () => {
+  it("uses Cmd on Apple platforms and Ctrl elsewhere", () => {
+    assert.equal(primaryModifier("MacIntel"), "Cmd");
+    assert.equal(primaryModifier("iPhone"), "Cmd");
+    assert.equal(primaryModifier("Win32"), "Ctrl");
+    assert.equal(primaryModifier("Linux x86_64"), "Ctrl");
+  });
+});
 
 describe("choiceIndexForKey", () => {
   it("moves right/down forward with wrap-around", () => {

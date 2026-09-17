@@ -135,7 +135,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** composants, `App.tsx`, messages produits par le hook, `WindowControls`.
 
-**Travail :** inventaire des libellés et erreurs générées par l'app, cohérence conversation/projet/run, raccourcis Ctrl/Cmd et états focus. Centraliser les textes réutilisés si utile ; ne pas traduire les contenus utilisateur ou moteur.
+**Travail :** inventaire des libellés et erreurs générées par l'app, cohérence conversation/projet/run, raccourcis Ctrl/Cmd et états focus. `primaryModifier()` fournit maintenant le libellé OS des infobulles globales, sidebar et input. Centraliser les textes réutilisés si utile ; ne pas traduire les contenus utilisateur ou moteur.
 
 **Acceptation :** checklist accueil/conversation/archives/paramètres/extensions et erreurs ; aucune régression du profil fixe, des thèmes ou de la zone de drag. Captures light/dark et tailles desktop cibles.
 

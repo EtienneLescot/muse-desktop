@@ -31,6 +31,7 @@ import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 import {
   approvalAnnouncement,
   inputAnnouncement,
+  primaryModifier,
   streamStatusMessage,
 } from "./lib/a11y";
 import { IndexPanel } from "./components/IndexPanel";
@@ -57,6 +58,7 @@ function initialTheme(): Theme {
 }
 
 export default function App() {
+  const modifier = primaryModifier();
   const {
     sessions,
     activeId,
@@ -457,7 +459,7 @@ export default function App() {
           <button
             onClick={newTask}
             aria-label="New conversation"
-            title="New conversation · Ctrl+N"
+            title={`New conversation · ${modifier}+N`}
           >
             <Icon name="plus" />
             <span>New conversation</span>
@@ -466,7 +468,7 @@ export default function App() {
             ref={searchTrigger}
             onClick={() => setSearchOpen(true)}
             aria-label="Search"
-            title="Search · Ctrl+K"
+            title={`Search · ${modifier}+K`}
           >
             <Icon name="search" />
             <span>Search</span>
