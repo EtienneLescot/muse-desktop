@@ -626,6 +626,11 @@ body.dark .avatar {
   background: color-mix(in srgb, var(--blue) 10%, transparent);
 }
 
+.stream-find-hits button.is-active {
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--blue) 45%, transparent);
+}
+
 .stream-find-hits span {
   color: var(--blue);
   font-size: 0.68rem;

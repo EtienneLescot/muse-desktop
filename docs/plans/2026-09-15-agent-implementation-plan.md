@@ -317,6 +317,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** mesurer temps de rendu/mémoire/scroll sur fixture longue. Le transcript applique `content-visibility: auto`, une taille intrinsèque de secours et un scroll instantané pendant le streaming ; au-delà de 600 entrées, une fenêtre de 160 messages charge les 120 précédents à la demande avec compensation de hauteur. La position de lecture et l’index de fenêtre sont conservés par conversation afin qu'un changement de fil ne fasse pas perdre le contexte. Exposer un compteur d’entrées stable pour les mesures UI natives. Liens/code/outils accessibles, état « nouveaux messages » sans saut si l'utilisateur lit plus haut. **Find in conversation** fournit un finder local borné, accessible par bouton ou `Ctrl/Cmd+F`, recherche dans le journal complet et replace la fenêtre sur un résultat hors DOM. La recherche native du navigateur reste limitée à la fenêtre DOM chargée.
 
+**État au 17/09/2026 :** le finder accepte maintenant les flèches haut/bas pour parcourir les résultats, Entrée pour ouvrir le résultat actif et expose la sélection via `listbox/option` et `aria-activedescendant`. La sélection reste bornée et cyclique, y compris quand la fenêtre DOM ne contient pas le message ciblé.
+
 **Acceptation :** streaming entrelacé, sélection/copie, blocs volumineux, retour bas de page et thème ; fixer les budgets mesurés dans la PR.
 
 ## M2 — Environnements isolés

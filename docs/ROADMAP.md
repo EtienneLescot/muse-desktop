@@ -301,9 +301,9 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 - **Fenêtre :** **Load older messages** et le scroll en haut préchargent une page tout en compensant la hauteur précédente pour éviter un saut. Le retour au bas recale la fenêtre sur les messages récents ; la position et l’index de fenêtre restent séparés par conversation pendant la session.
 - **Position de lecture :** chaque conversation conserve le dernier `scrollTop` observé en mémoire de vue et le restaure au retour dans le fil ; un nouveau fil reste positionné sur ses derniers messages.
 - **Observabilité :** le journal porte `data-entry-count` afin de mesurer en UI native la taille complète de session, et `aria-label="Conversation messages"` garde une cible stable pour les essais assistifs. Les helpers de fenêtre sont purs et couverts par tests.
-- **Recherche complète :** **Find in conversation** (bouton ou `Ctrl/Cmd+F`) parcourt le journal durable complet, affiche des extraits bornés et replace la fenêtre sur le résultat choisi, y compris lorsqu'il était hors DOM. Le saut signale brièvement le message ciblé sans modifier la position conservée du fil après navigation.
+- **Recherche complète :** **Find in conversation** (bouton ou `Ctrl/Cmd+F`) parcourt le journal durable complet, affiche des extraits bornés et replace la fenêtre sur le résultat choisi, y compris lorsqu'il était hors DOM. Le saut signale brièvement le message ciblé sans modifier la position conservée du fil après navigation. Les flèches changent la sélection, Entrée ouvre le résultat et l'état actif est annoncé par `listbox/option`.
 - **Limites :** la recherche native du navigateur et la sélection multi-page ne portent que sur la fenêtre DOM chargée. Le finder Muse reste local et textuel ; une virtualisation à hauteur mesurée pourra remplacer cette pagination si les mesures natives l'exigent.
-- **Validation :** TypeScript, build Vite et suite Node complets restent verts ; la mesure native et la qualification lecteur d’écran sont encore à produire.
+- **Validation :** le cycle clavier du finder est couvert par un helper pur ; TypeScript, build Vite et suite Node complets restent verts. La mesure native et la qualification lecteur d’écran sont encore à produire.
 
 ### Livraison M2-01 — racines de projet
 

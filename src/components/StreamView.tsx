@@ -15,7 +15,11 @@ import {
   streamHealthLabel,
   type StreamHealth,
 } from "../lib/streamHealth";
-import { searchTranscript, type TranscriptHit } from "../lib/transcriptSearch";
+import {
+  cycleTranscriptHit,
+  searchTranscript,
+  type TranscriptHit,
+} from "../lib/transcriptSearch";
 import { MessageContent } from "./MessageContent";
 
 /** US-6 controls for one sub-agent block. Read-result and drill-down resolve
@@ -114,6 +118,7 @@ export function StreamView({
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
   const [findTarget, setFindTarget] = useState<number | null>(null);
+  const [findSelection, setFindSelection] = useState<number | null>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const [now, setNow] = useState(() => Date.now());
   const [windowStart, setWindowStart] = useState(() =>
@@ -159,11 +164,19 @@ export function StreamView({
     setFindOpen(false);
     setFindQuery("");
     setFindTarget(null);
+    setFindSelection(null);
   }, [sessionId]);
 
   useEffect(() => {
     if (findOpen) findInputRef.current?.focus();
   }, [findOpen]);
+
+  useEffect(() => {
+    setFindSelection((current) => {
+      if (findHits.length === 0) return null;
+      return current !== null && current < findHits.length ? current : 0;
+    });
+  }, [findQuery, findHits.length]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -375,10 +388,30 @@ export function StreamView({
               onChange={(event) => setFindQuery(event.target.value)}
               placeholder="Search messages…"
               aria-label="Search messages"
+              aria-controls="conversation-search-results"
+              aria-activedescendant={
+                findSelection === null ? undefined : `conversation-search-hit-${findSelection}`
+              }
               onKeyDown={(event) => {
                 if (event.key === "Escape") {
                   setFindOpen(false);
                   setFindQuery("");
+                  setFindSelection(null);
+                  return;
+                }
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setFindSelection((current) =>
+                    cycleTranscriptHit(current, event.key === "ArrowDown" ? 1 : -1, findHits.length),
+                  );
+                  return;
+                }
+                if (event.key === "Enter" && findSelection !== null) {
+                  const hit = findHits[findSelection];
+                  if (hit !== undefined) {
+                    event.preventDefault();
+                    revealHit(hit);
+                  }
                 }
               }}
             />
@@ -393,6 +426,7 @@ export function StreamView({
               onClick={() => {
                 setFindOpen(false);
                 setFindQuery("");
+                setFindSelection(null);
               }}
             >
               Close
@@ -400,12 +434,25 @@ export function StreamView({
           </>
         )}
         {findOpen && findHits.length > 0 && (
-          <div className="stream-find-hits" aria-label="Conversation matches">
-            {findHits.map((hit) => (
+          <div
+            id="conversation-search-results"
+            className="stream-find-hits"
+            role="listbox"
+            aria-label="Conversation matches"
+          >
+            {findHits.map((hit, index) => (
               <button
                 type="button"
                 key={`${hit.entryId}-${hit.index}`}
-                onClick={() => revealHit(hit)}
+                id={`conversation-search-hit-${index}`}
+                role="option"
+                aria-selected={findSelection === index}
+                className={findSelection === index ? "is-active" : undefined}
+                onMouseEnter={() => setFindSelection(index)}
+                onClick={() => {
+                  setFindSelection(index);
+                  revealHit(hit);
+                }}
               >
                 <span>{hit.role}</span>
                 <strong>{hit.excerpt}</strong>

@@ -12,6 +12,20 @@ export interface TranscriptHit {
   excerpt: string;
 }
 
+/** Pick the next or previous hit for keyboard navigation in the finder. */
+export function cycleTranscriptHit(
+  current: number | null,
+  direction: -1 | 1,
+  count: number,
+): number | null {
+  if (!Number.isFinite(count) || count <= 0) return null;
+  const size = Math.floor(count);
+  if (size <= 0) return null;
+  if (current === null || !Number.isFinite(current)) return direction > 0 ? 0 : size - 1;
+  const index = Math.floor(current);
+  return (index + direction + size) % size;
+}
+
 function excerpt(text: string, matchAt: number): string {
   if (text.length <= MAX_TRANSCRIPT_EXCERPT_CHARS) return text;
   const half = Math.floor(MAX_TRANSCRIPT_EXCERPT_CHARS / 2);

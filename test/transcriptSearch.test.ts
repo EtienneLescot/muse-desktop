@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { searchTranscript } from "../src/lib/transcriptSearch.ts";
+import { cycleTranscriptHit, searchTranscript } from "../src/lib/transcriptSearch.ts";
+
+test("cycleTranscriptHit wraps finder selection for keyboard users", () => {
+  assert.equal(cycleTranscriptHit(null, 1, 3), 0);
+  assert.equal(cycleTranscriptHit(null, -1, 3), 2);
+  assert.equal(cycleTranscriptHit(2, 1, 3), 0);
+  assert.equal(cycleTranscriptHit(0, -1, 3), 2);
+  assert.equal(cycleTranscriptHit(0, 1, 0), null);
+});
 
 test("searchTranscript finds matches outside the rendered window", () => {
   const hits = searchTranscript([
