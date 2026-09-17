@@ -55,6 +55,7 @@ function entry(overrides: Partial<OutboxEntry> = {}): OutboxEntry {
     sessionId: overrides.sessionId ?? "sess-1",
     text: overrides.text ?? "hello",
     outgoingText: overrides.outgoingText ?? "hello",
+    inputParts: overrides.inputParts,
     now: overrides.now ?? 1000,
   });
 }
@@ -66,6 +67,19 @@ describe("outbox state machine", () => {
     assert.equal(e.attempts, 1);
     assert.equal(e.error, null);
     assert.equal(e.ambiguous, false);
+  });
+
+  it("keeps structured attachment parts across an outbox entry", () => {
+    const e = entry({
+      inputParts: [
+        { type: "text", text: "look" },
+        { type: "image", mediaType: "image/png", base64Data: "AQID" },
+      ],
+    });
+    assert.deepEqual(e.inputParts, [
+      { type: "text", text: "look" },
+      { type: "image", mediaType: "image/png", base64Data: "AQID" },
+    ]);
   });
 
   it("accepting clears ambiguity and error", () => {

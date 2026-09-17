@@ -782,13 +782,13 @@ export default function App() {
               <EmptySessionScreen
                 workspace={workspace}
                 onPickWorkspace={setWorkspace}
-                onStart={async (draft) => {
+                onStart={async (draft, inputParts) => {
                   const id = await startSession();
-                  if (id === null || draft.trim() === "") return id !== null;
+                  if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
                   // M0-03: honest result — when the first send fails the
                   // welcome draft must not be reported as sent; the text
                   // stays recoverable via the retryable pending-send notice.
-                  const res = await sendInput(id, draft);
+                  const res = await sendInput(id, draft, undefined, inputParts);
                   return res.ok;
                 }}
                 backendMissing={backendMissing}
@@ -919,7 +919,7 @@ export default function App() {
                     }
                     running={active.running}
                     workspace={active.workspace}
-                    onSend={(text) => sendInput(active.session_id, text)}
+                    onSend={(text, inputParts) => sendInput(active.session_id, text, undefined, inputParts)}
                     onCancel={() => void cancelSession(active.session_id)}
                     prefill={prefill}
                     onPrefillConsumed={clearPrefill}

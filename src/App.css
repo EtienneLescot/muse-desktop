@@ -1232,6 +1232,33 @@ body.dark .composer {
   color: #929ba4;
 }
 
+.composer-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 7px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.composer-attach:hover {
+  color: var(--text);
+  border-color: var(--blue);
+}
+
+.composer-attach input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 body.dark .composer textarea::placeholder {
   color: var(--muted);
 }
@@ -1344,6 +1371,67 @@ body.dark .composer textarea::placeholder {
 .mention-chip-remove:hover {
   color: var(--danger);
   background: none;
+}
+
+.attachment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(100%, 330px);
+  padding: 5px 6px 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--blue) 36%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--blue) 7%, var(--surface));
+  font-size: 11px;
+}
+
+.attachment-kind {
+  color: var(--blue);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-size {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.attachment-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 3px;
+}
+
+.attachment-remove:hover {
+  color: var(--danger);
+  background: transparent;
+}
+
+.attachment-error {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line));
+  border-radius: 8px;
+  color: var(--danger);
+  font-size: 11px;
+  padding: 6px 8px;
 }
 
 .mention-list {

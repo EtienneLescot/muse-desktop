@@ -43,9 +43,12 @@ import {
   sendFailed,
   upsertOutbox,
   type OutboxEntry,
+  type OutboxInputPart,
   type SendResult,
 } from "../lib/outbox";
 export type { OutboxEntry, SendResult } from "../lib/outbox";
+import type { TurnInputPart } from "../lib/attachments";
+export type { TurnInputPart } from "../lib/attachments";
 // Input-prompt helpers live in ../lib/input (dependency-free, unit-tested).
 // Only parseInputRequest + the locally used types are imported; the rest is
 // re-exported below for consumers (InputPanel).
@@ -422,6 +425,22 @@ function emptyFilesBrowserState(): FilesBrowserState {
   };
 }
 
+/** Keep attachment parts aligned with the expanded text sent to the host. */
+function inputPartsWithText(text: string, parts?: TurnInputPart[]): OutboxInputPart[] {
+  const source = parts ?? (text.trim().length > 0 ? [{ type: "text", text }] : []);
+  const next: OutboxInputPart[] = source.map((part) =>
+    part.type === "text" ? { ...part } : { ...part },
+  );
+  const firstText = next.findIndex((part) => part.type === "text");
+  if (firstText >= 0) {
+    const part = next[firstText];
+    if (part.type === "text") next[firstText] = { ...part, text };
+  } else if (text.trim().length > 0) {
+    next.unshift({ type: "text", text });
+  }
+  return next;
+}
+
 type FileWithRelPath = File & { webkitRelativePath?: string };
 
 /**
@@ -563,6 +582,7 @@ interface UseMuseSessions {
     sessionId: string,
     text: string,
     retryKey?: string,
+    inputParts?: TurnInputPart[],
   ) => Promise<SendResult>;
   /** Failed outgoing messages across sessions (retryable, durable). */
   pendingSends: OutboxEntry[];
@@ -2200,9 +2220,17 @@ export function useMuseSessions(): UseMuseSessions {
   }
 
   const sendInput = useCallback(
-    async (sessionId: string, text: string, retryKey?: string): Promise<SendResult> => {
+    async (
+      sessionId: string,
+      text: string,
+      retryKey?: string,
+      inputParts?: TurnInputPart[],
+    ): Promise<SendResult> => {
       const trimmed = text.trim();
-      if (!trimmed) return sendFailed(null, "the message is empty");
+      const hasInputParts = inputParts?.some(
+        (part) => part.type === "image" || (part.type === "text" && part.text.trim().length > 0),
+      ) ?? false;
+      if (!trimmed && !hasInputParts) return sendFailed(null, "the message is empty");
       // US-4: `/compact` is intercepted at send time and never reaches the
       // model — it builds the local extractive summary of this thread.
       // Local action, no server round trip: no outbox entry, nothing to ack.
@@ -2277,6 +2305,11 @@ export function useMuseSessions(): UseMuseSessions {
         outgoing = buildProjectInput(outgoing, project);
       }
       const originalText = prior !== null ? prior.text : trimmed;
+      // Attachments are part of the durable send payload. On a retry, always
+      // reuse the exact serialized parts from the outbox; on a first send,
+      // replace the leading text part after skill/project expansion.
+      const outgoingParts =
+        prior?.inputParts ?? inputPartsWithText(outgoing, inputParts);
       // A retry keeps the exact command id from the durable entry. Legacy
       // ambiguous entries have no server id and cannot be checked safely.
       const serverCommandId =
@@ -2320,6 +2353,7 @@ export function useMuseSessions(): UseMuseSessions {
                 sessionId,
                 text: originalText,
                 outgoingText: outgoing,
+                inputParts: outgoingParts,
                 now: Date.now(),
               });
         updateOutbox(sessionId, (cur) => upsertOutbox(cur, entry));
@@ -2350,6 +2384,7 @@ export function useMuseSessions(): UseMuseSessions {
             sessionId,
             commandId: serverCommandId,
             text: outgoing,
+            inputParts: outgoingParts,
           });
           requestPending = true;
           const release = (): void => {
@@ -2451,7 +2486,12 @@ export function useMuseSessions(): UseMuseSessions {
       }
       // Retries send the expanded bytes stored in the outbox. Re-expanding
       // the original composer text could change skill/fanout/project output.
-      await sendInput(entry.sessionId, entry.outgoingText, entry.clientMessageId);
+      await sendInput(
+        entry.sessionId,
+        entry.outgoingText,
+        entry.clientMessageId,
+        entry.inputParts,
+      );
     },
     [sendInput],
   );

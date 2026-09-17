@@ -15,6 +15,11 @@
 
 export type OutboxState = "sending" | "accepted" | "failed";
 
+/** Protocol-ready parts retained so an ambiguous send can be retried exactly. */
+export type OutboxInputPart =
+  | { type: "text"; text: string }
+  | { type: "image"; mediaType: string; base64Data: string; width?: number; height?: number };
+
 export interface OutboxEntry {
   /** Idempotency key: one logical send, stable across retries. */
   clientMessageId: string;
@@ -34,6 +39,8 @@ export interface OutboxEntry {
    * Retries resend this byte-identical expansion instead of re-expanding.
    */
   outgoingText: string;
+  /** Full `turn/start.input` payload when the turn carries attachments. */
+  inputParts?: OutboxInputPart[];
   state: OutboxState;
   /** Last failure reason; null while sending. */
   error: string | null;
@@ -75,6 +82,7 @@ export function createOutboxEntry(init: {
   sessionId: string;
   text: string;
   outgoingText: string;
+  inputParts?: OutboxInputPart[];
   now: number;
 }): OutboxEntry {
   return {
@@ -85,6 +93,7 @@ export function createOutboxEntry(init: {
     sessionId: init.sessionId,
     text: init.text,
     outgoingText: init.outgoingText,
+    ...(init.inputParts !== undefined ? { inputParts: init.inputParts } : {}),
     state: "sending",
     error: null,
     ambiguous: false,
