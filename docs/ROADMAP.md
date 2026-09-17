@@ -328,13 +328,20 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 - **Limites :** les outils découverts ne sont pas encore injectés dans le catalogue MSP de Muse et aucun processus persistant/hot-reload `list_changed` n'est maintenu. Cette tranche prouve le transport local et l'appel contrôlé, pas la parité MCP complète.
 - **Validation :** tests Rust de framing et parsing des outils, tests Node existants, TypeScript, Vite et Cargo verts.
 
+### Livraison M3-03 — cycle de vie d'un connecteur MCP local
+
+- **Enregistrement vérifié :** après un probe `tools/list` réussi, l'utilisateur peut enregistrer le nom, la commande et les outils réellement découverts dans le registre local persistant.
+- **Cohérence :** une mise à jour remplace les outils et la commande du même identifiant sans réactiver silencieusement un connecteur désactivé ; la liste hot-reloadée respecte toujours le statut `installed/disabled`.
+- **Limites :** l'enregistrement ne lance pas le serveur en arrière-plan et les outils restent un catalogue local tant que le host Muse ne fournit pas de bridge MCP. Mise à jour de package, rollback et permissions d'appel restent à traiter.
+- **Validation :** tests Node d'enregistrement, mise à jour et conservation du statut désactivé ; TypeScript et Vite verts.
+
 ## M3 — Extensions et automatisations opérationnelles
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
 | M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; restent injection dans le host Muse, processus persistant et hot-reload |
 | M3-02 | Connecter un serveur MCP distant | À définir | Partielle | Locale | Unitaire | Transport/auth/secrets, restrictions et reconnexion ; aucun statut « connecté » sans échange réel |
-| M3-03 | Installer/désactiver une extension réellement utilisable | Adapté | Présente | Locale | Unitaire | Relier registre et runtime, actualiser outils, désinstallation et permissions ; effet observable sur les outils du moteur |
+| M3-03 | Installer/désactiver une extension réellement utilisable | Adapté | Présente | Partielle | Intégration | Enregistrement post-probe et hot-list du registre livrés ; restent runtime persistant, package/update/rollback et injection dans le moteur |
 | M3-04 | Découvrir les skills du disque et du projet | À définir | Partielle | Locale | Unitaire | SKILL.md, ressources relatives, priorité de scopes et rechargement ; une skill installée est utilisable sans recopie manuelle |
 | M3-05 | Invoquer une skill avec son vrai contexte | Adapté | Présente | Partielle | Unitaire | Charger instructions/ressources au bon moment, afficher provenance ; résultat live reproductible et erreurs explicites |
 | M3-06 | Exécuter un travail planifié sans clic préalable | Adapté | Présente | Partielle | Unitaire | Remplacer file d'approbation avant exécution par scheduler réel ; cible fixe, politique effective et création de run durable |

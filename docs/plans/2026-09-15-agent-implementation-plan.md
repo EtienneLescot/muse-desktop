@@ -391,7 +391,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** ConnectorPanel/registry/runtime. Dépend M3-01/02.
 
-**Travail :** package/version/source, installation atomique, activation et permissions, mise à jour/rollback et désinstallation. Retirer les outils du moteur lorsqu'une extension est désactivée.
+**État :** un probe local réussi peut enregistrer la commande et les outils découverts dans le registre persistant. Une nouvelle liste remplace l'entrée existante sans réactiver une extension désactivée ; `listConnectorTools` retire immédiatement ses outils lorsque le statut passe à `disabled`.
+
+**Reste :** runtime persistant par connecteur, package/version/source, mise à jour/rollback, arrêt pendant appel et bridge vers les outils réellement visibles par le moteur Muse.
 
 **Acceptation :** installation ratée, mise à jour incompatible, désactivation pendant appel et suppression ; registre et runtime cohérents.
 

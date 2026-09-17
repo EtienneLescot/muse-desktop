@@ -150,6 +150,7 @@ export default function App() {
     connectorTools,
     probeLocalMcp,
     callLocalMcp,
+    registerLocalConnector,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
@@ -725,6 +726,7 @@ export default function App() {
                   onCallLocal={(command, toolName, argumentsText) =>
                     callLocalMcp(command, toolName, argumentsText, workspace)
                   }
+                  onRegisterLocal={registerLocalConnector}
                   remoteNotice={remoteNotice}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}
