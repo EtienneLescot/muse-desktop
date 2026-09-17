@@ -2,7 +2,7 @@
  * Skills: slash-invokable, auto-suggested, progressively disclosed
  * (US-25).
  *
- * Zero imports: safe to unit-test on the built-in node:test runner.
+ * Dependency-light and safe to unit-test on the built-in node:test runner.
  *
  * - A skill is invoked from the composer with `/skill-name optional args`.
  * - The composer also auto-suggests skills by keyword; every suggestion
@@ -19,8 +19,10 @@
  * degrade gracefully.
  */
 
-/** Where a skill comes from (shareable repo/team scopes). */
-export type SkillSource = "builtin" | "repo" | "team";
+import { readStorageJson, writeStorageJson } from "./storage.ts";
+
+/** Where a skill comes from (builtin plus shareable project/repo/team scopes). */
+export type SkillSource = "builtin" | "repo" | "team" | "project";
 
 /** One skill definition. */
 export interface Skill {
@@ -36,6 +38,12 @@ export interface Skill {
    */
   viewOnly: boolean;
   enabled: boolean;
+  /** Absolute/relative origin when loaded from a SKILL.md on disk. */
+  path?: string;
+  /** Relative resource references declared by a discovered skill. */
+  resources?: string[];
+  /** Discovery is session-scoped and is never persisted as an override. */
+  discovered?: boolean;
 }
 
 /** One auto-suggestion: which skill, and why it matched. */
@@ -48,6 +56,12 @@ export interface SkillSuggestion {
 export interface SkillCommand {
   name: string;
   args: string;
+}
+
+export interface SkillResourceContext {
+  path: string;
+  content: string;
+  truncated: boolean;
 }
 
 /** Storage key (all writes confined to `muse-desktop.*`). */
@@ -188,12 +202,21 @@ export function formatSkillInvokeTrace(name: string, args: string): string {
  * View-only metadata never leaks extra detail — invocation always runs
  * with the full instructions, explicitly granted here.
  */
-export function buildSkillInvocation(skill: Skill, args: string): string {
+export function buildSkillInvocation(
+  skill: Skill,
+  args: string,
+  resources: SkillResourceContext[] = [],
+): string {
   const detail = getSkillDetail(skill, true);
   const body = detail.instructions ?? "";
+  const resourceText = resources.length > 0
+    ? `\n\nResources (loaded from ${skill.path ?? "skill directory"}):\n${resources
+        .map((resource) => `<skill-resource path="${resource.path}"${resource.truncated ? " truncated" : ""}>\n${resource.content}\n</skill-resource>`)
+        .join("\n")}`
+    : "";
   return args.length > 0
-    ? `[${skill.name}] ${body}\n\nRequest: ${args}`
-    : `[${skill.name}] ${body}`;
+    ? `[${skill.name}] ${body}${resourceText}\n\nRequest: ${args}`
+    : `[${skill.name}] ${body}${resourceText}`;
 }
 
 /**
@@ -208,16 +231,23 @@ export function mergeBuiltinSkills(stored: Skill[]): Skill[] {
     if (typeof s.name !== "string" || s.name.trim().length === 0) continue;
     const key = normalizeSkillName(s.name);
     const prev = byName.get(key);
+    const priority = (source: SkillSource): number =>
+      source === "project" ? 3 : source === "repo" ? 2 : source === "team" ? 1 : 0;
+    const source =
+      s.source === "repo" || s.source === "team" || s.source === "builtin" || s.source === "project"
+        ? s.source
+        : "repo";
+    if (prev !== undefined && priority(source) < priority(prev.source)) continue;
     byName.set(key, {
       name: prev?.name ?? s.name.trim(),
       description: typeof s.description === "string" ? s.description : "",
       instructions: typeof s.instructions === "string" ? s.instructions : "",
-      source:
-        s.source === "repo" || s.source === "team" || s.source === "builtin"
-          ? s.source
-          : "repo",
+      source,
       viewOnly: typeof s.viewOnly === "boolean" ? s.viewOnly : true,
       enabled: typeof s.enabled === "boolean" ? s.enabled : true,
+      ...(typeof s.path === "string" ? { path: s.path } : {}),
+      ...(Array.isArray(s.resources) ? { resources: s.resources.filter((r): r is string => typeof r === "string") } : {}),
+      ...(s.discovered === true ? { discovered: true } : {}),
     });
   }
   return [...byName.values()];
@@ -239,42 +269,18 @@ export function setSkillEnabled(
   return { skills: next, changed };
 }
 
-function storage(): Storage | null {
-  try {
-    const g = globalThis as unknown as Record<string, unknown>;
-    const ls = g["localStorage"];
-    if (typeof ls !== "object" || ls === null) return null;
-    const get = (ls as Record<string, unknown>)["getItem"];
-    const set = (ls as Record<string, unknown>)["setItem"];
-    if (typeof get !== "function" || typeof set !== "function") return null;
-    return ls as unknown as Storage;
-  } catch {
-    return null;
-  }
-}
-
 /** Load persisted skill overrides; corrupt/missing data yields []. */
 export function loadSkills(): Skill[] {
-  try {
-    const ls = storage();
-    if (ls === null) return [];
-    const raw = ls.getItem(SKILLS_KEY);
-    if (raw === null) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return (parsed as unknown[]).filter(
-      (s): s is Skill => typeof s === "object" && s !== null,
-    ) as Skill[];
-  } catch {
-    return [];
-  }
+  const parsed = readStorageJson<unknown>(SKILLS_KEY, []);
+  if (!Array.isArray(parsed)) return [];
+  return (parsed as unknown[]).filter(
+    (s): s is Skill => typeof s === "object" && s !== null,
+  ) as Skill[];
 }
 
 /** Persist skill overrides (best-effort: quota/private mode never throws). */
 export function saveSkills(skills: Skill[]): void {
-  try {
-    storage()?.setItem(SKILLS_KEY, JSON.stringify(skills));
-  } catch {
-    // best-effort persistence only
-  }
+  // Disk discoveries are refreshed from their source and must not become
+  // stale persisted overrides when a SKILL.md is deleted or renamed.
+  writeStorageJson(SKILLS_KEY, skills.filter((skill) => skill.discovered !== true));
 }

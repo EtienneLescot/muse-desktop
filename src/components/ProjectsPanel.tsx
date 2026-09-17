@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   diffProjectSettings,
   MAX_PROJECTS,
@@ -7,6 +8,7 @@ import {
   type ProjectSettings,
   type ThreadProjectMap,
 } from "../lib/projects";
+import { userFacingError } from "../lib/errorCopy";
 
 interface ProjectsPanelProps {
   projects: Project[];
@@ -14,13 +16,14 @@ interface ProjectsPanelProps {
   projectError: string | null;
   activeSessionId: string | null;
   globalSettings: ProjectSettings;
-  onCreate: (name: string, instructions: string) => void;
+  onCreate: (name: string, instructions: string, workspace?: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (
     id: string,
-    patch: { name?: string; instructions?: string },
+    patch: { name?: string; instructions?: string; workspace?: string },
   ) => void;
   onAttach: (sessionId: string, projectId: string | null) => void;
+  onStartConversation: (project: Project) => Promise<void>;
   onSetGlobal: (patch: Partial<ProjectSettings>) => void;
   onSetOverride: (
     projectId: string,
@@ -66,6 +69,7 @@ export function ProjectsPanel({
   onDelete,
   onUpdate,
   onAttach,
+  onStartConversation,
   onSetGlobal,
   onSetOverride,
   settingsFor,
@@ -73,12 +77,29 @@ export function ProjectsPanel({
 }: ProjectsPanelProps) {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [workspacePath, setWorkspacePath] = useState("");
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+
+  async function pickWorkspace(): Promise<void> {
+    try {
+      setWorkspaceError(null);
+      if (!("__TAURI_INTERNALS__" in window)) {
+        setWorkspaceError("The folder picker is available in the desktop app.");
+        return;
+      }
+      const selected = await open({ directory: true, multiple: false });
+      if (typeof selected === "string" && selected.length > 0) setWorkspacePath(selected);
+    } catch (error) {
+      setWorkspaceError(userFacingError(`folder picker failed: ${String(error)}`));
+    }
+  }
 
   function submit(): void {
     if (name.trim().length === 0) return;
-    onCreate(name, instructions);
+    onCreate(name, instructions, workspacePath || undefined);
     setName("");
     setInstructions("");
+    setWorkspacePath("");
   }
 
   return (
@@ -104,6 +125,18 @@ export function ProjectsPanel({
           aria-label="Project instructions"
           rows={2}
         />
+        <div className="project-workspace-picker">
+          <button type="button" onClick={() => void pickWorkspace()}>
+            {workspacePath ? "Change folder" : "Choose project folder"}
+          </button>
+          <span title={workspacePath}>
+            {workspacePath || "No project folder (uses default)"}
+          </span>
+          {workspacePath && (
+            <button type="button" onClick={() => setWorkspacePath("")}>Clear</button>
+          )}
+        </div>
+        {workspaceError && <p className="project-error" role="alert">{workspaceError}</p>}
         <button
           onClick={submit}
           disabled={name.trim().length === 0 || projects.length >= MAX_PROJECTS}
@@ -118,7 +151,7 @@ export function ProjectsPanel({
       </div>
       {projectError !== null && (
         <p className="project-error" role="alert">
-          {projectError}
+          {userFacingError(projectError)}
         </p>
       )}
       {projects.length === 0 && (
@@ -141,6 +174,7 @@ export function ProjectsPanel({
             effective={settingsFor(p.id)}
             onDelete={() => onDelete(p.id)}
             onUpdate={(patch) => onUpdate(p.id, patch)}
+            onStartConversation={() => onStartConversation(p)}
             onAttachActive={() => {
               if (activeSessionId !== null) onAttach(activeSessionId, p.id);
             }}
@@ -221,7 +255,8 @@ interface ProjectRowProps {
   globalSettings: ProjectSettings;
   effective: ProjectSettings;
   onDelete: () => void;
-  onUpdate: (patch: { name?: string; instructions?: string }) => void;
+  onUpdate: (patch: { name?: string; instructions?: string; workspace?: string }) => void;
+  onStartConversation: () => Promise<void>;
   onAttachActive: () => void;
   onDetachActive: () => void;
   onSetOverride: (
@@ -239,6 +274,7 @@ function ProjectRow({
   effective,
   onDelete,
   onUpdate,
+  onStartConversation,
   onAttachActive,
   onDetachActive,
   onSetOverride,
@@ -247,10 +283,12 @@ function ProjectRow({
   const [draftInstructions, setDraftInstructions] = useState(
     project.instructions,
   );
+  const [draftWorkspace, setDraftWorkspace] = useState(project.workspace ?? "");
   const diff = diffProjectSettings(globalSettings, project.settings);
   const dirty =
     draftName.trim() !== project.name ||
-    draftInstructions.trim() !== project.instructions;
+    draftInstructions.trim() !== project.instructions ||
+    draftWorkspace.trim() !== (project.workspace ?? "");
 
   return (
     <li className="project-item">
@@ -286,16 +324,55 @@ function ProjectRow({
               rows={2}
             />
           </label>
+          <div className="project-setting project-workspace-setting">
+            <span>Folder</span>
+            <span className="workspace-path" title={draftWorkspace}>
+              {draftWorkspace || "No project folder (uses default)"}
+            </span>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  if (!("__TAURI_INTERNALS__" in window)) return;
+                  const selected = await open({ directory: true, multiple: false });
+                  if (typeof selected === "string" && selected.length > 0) {
+                    setDraftWorkspace(selected);
+                  }
+                } catch {
+                  // Keep the current value when the native picker is cancelled or unavailable.
+                }
+              }}
+            >
+              {draftWorkspace ? "Change" : "Choose"}
+            </button>
+            {draftWorkspace && (
+              <button type="button" onClick={() => setDraftWorkspace("")}>
+                Clear
+              </button>
+            )}
+          </div>
           <div className="project-actions">
             <button
               onClick={() =>
-                onUpdate({ name: draftName, instructions: draftInstructions })
+                onUpdate({
+                  name: draftName,
+                  instructions: draftInstructions,
+                  workspace: draftWorkspace,
+                })
               }
               disabled={!dirty}
-              title="Save name and instructions"
+              title="Save project details"
             >
               Save
             </button>
+            {project.workspace && (
+              <button
+                onClick={() => void onStartConversation()}
+                title="Start a conversation in this project folder"
+              >
+                New conversation here
+              </button>
+            )}
             {hasActiveThread &&
               (activeAttached ? (
                 <button

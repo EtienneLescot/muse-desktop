@@ -1,11 +1,9 @@
 /**
  * US-23 (w-index): opt-in local file index + search.
  *
- * Zero imports (no React, no Tauri): safe to unit-test on the built-in
- * node:test runner. The index is built from caller-supplied file snapshots
- * (the browser/Tauri webview has no direct fs access), so every function
- * below is pure except the small localStorage helpers at the bottom, which
- * are best-effort and guarded for non-DOM runtimes.
+ * No React or Tauri is required; the module is safe to unit-test on the
+ * built-in node:test runner. Persistence is routed through the shared
+ * defensive storage facade.
  *
  * - Opt-in: indexing only runs when the caller enables it (default off;
  *   see INDEX_ENABLED_KEY). Nothing here reads the disk on its own.
@@ -17,6 +15,13 @@
  * - Refresh is on-demand and mtime-based (rescanIndex): snapshots carry
  *   mtimeMs, unchanged entries are reused, no watcher dependency.
  */
+
+import {
+  readStorageJson,
+  readStorageString,
+  removeStorageKey,
+  writeStorageString,
+} from "./storage.ts";
 
 export interface FileSnapshot {
   /** Workspace-relative path with `/` separators, e.g. `src/lib/x.ts`. */
@@ -328,42 +333,14 @@ export function indexStats(store: IndexStore): { files: number; lines: number } 
   return { files: paths.length, lines };
 }
 
-function storageGet(key: string): string | null {
-  try {
-    if (typeof localStorage === "undefined") return null;
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function storageSet(key: string, value: string): void {
-  try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(key, value);
-  } catch {
-    // Quota or privacy mode: persistence is best-effort, the in-memory
-    // index keeps working.
-  }
-}
-
-function storageRemove(key: string): void {
-  try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.removeItem(key);
-  } catch {
-    // best-effort
-  }
-}
-
 /** Opt-in flag, default off: no index exists until the user enables it. */
 export function loadIndexEnabled(): boolean {
-  return storageGet(INDEX_ENABLED_KEY) === "1";
+  return readStorageString(INDEX_ENABLED_KEY) === "1";
 }
 
 export function saveIndexEnabled(enabled: boolean): void {
-  if (enabled) storageSet(INDEX_ENABLED_KEY, "1");
-  else storageRemove(INDEX_ENABLED_KEY);
+  if (enabled) writeStorageString(INDEX_ENABLED_KEY, "1");
+  else removeStorageKey(INDEX_ENABLED_KEY);
 }
 
 function isValidEntry(e: unknown): e is IndexedEntry {
@@ -378,36 +355,23 @@ function isValidEntry(e: unknown): e is IndexedEntry {
 }
 
 export function loadIndexData(): IndexStore {
-  try {
-    const raw = storageGet(INDEX_DATA_KEY);
-    if (raw === null) return emptyStore();
-    const obj = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
-      return emptyStore();
-    }
-    const filesRaw = obj.files;
-    if (typeof filesRaw !== "object" || filesRaw === null || Array.isArray(filesRaw)) {
-      return emptyStore();
-    }
-    const files: Record<string, IndexedEntry> = {};
-    for (const [k, v] of Object.entries(filesRaw as Record<string, unknown>)) {
-      if (isValidEntry(v)) files[k] = v;
-    }
-    const builtAt = typeof obj.builtAt === "number" ? obj.builtAt : null;
-    return { files, builtAt };
-  } catch {
-    return emptyStore();
+  const value = readStorageJson<unknown>(INDEX_DATA_KEY, null);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return emptyStore();
+  const obj = value as Record<string, unknown>;
+  const filesRaw = obj.files;
+  if (typeof filesRaw !== "object" || filesRaw === null || Array.isArray(filesRaw)) return emptyStore();
+  const files: Record<string, IndexedEntry> = {};
+  for (const [k, v] of Object.entries(filesRaw as Record<string, unknown>)) {
+    if (isValidEntry(v)) files[k] = v;
   }
+  const builtAt = typeof obj.builtAt === "number" ? obj.builtAt : null;
+  return { files, builtAt };
 }
 
 export function saveIndexData(store: IndexStore): void {
-  try {
-    storageSet(INDEX_DATA_KEY, JSON.stringify(store));
-  } catch {
-    // best-effort (quota): the in-memory index keeps working
-  }
+  writeStorageString(INDEX_DATA_KEY, JSON.stringify(store));
 }
 
 export function dropIndexData(): void {
-  storageRemove(INDEX_DATA_KEY);
+  removeStorageKey(INDEX_DATA_KEY);
 }

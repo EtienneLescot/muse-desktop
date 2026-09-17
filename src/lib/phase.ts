@@ -59,6 +59,7 @@ export function isStoppedKind(kind: string): boolean {
   const base = normalizeKind(kind);
   return (
     base === "cancelled" ||
+    base === "retracted" ||
     base === "completed" ||
     base === "stopped" ||
     base === "exited" ||
@@ -93,6 +94,7 @@ export function phaseForKind(kind: string): StreamPhase {
   const base = normalizeKind(kind);
   if (
     base === "output" ||
+    base === "item_updated" ||
     isThinkingItemKind(kind) ||
     base === "subagent_event" ||
     base === "item_done"
@@ -117,6 +119,72 @@ export interface PlaceholderStamp {
   ts: number;
 }
 
+export interface ItemSnapshotUpdate {
+  itemId: string;
+  role: "assistant" | "thinking" | "tool";
+  text: string;
+  turnId?: string;
+  commandText?: string;
+  revision?: number;
+  open?: boolean;
+  stamp: PlaceholderStamp;
+}
+
+/**
+ * Apply an MSP `item/updated` full snapshot to one transcript lane.
+ *
+ * Updates replace the text for the same item instead of appending it as a
+ * delta. A revision, when supplied by the host, makes the operation
+ * idempotent across polling/reconnect races. The helper is pure so the hook
+ * remains the single state owner while tests can exercise the reconciliation
+ * contract without a renderer.
+ */
+export function applyItemSnapshotUpdate(
+  log: LogEntry[],
+  update: ItemSnapshotUpdate,
+): LogEntry[] {
+  const itemId = update.itemId.trim();
+  if (itemId.length === 0 || update.text.length === 0) return log;
+  const matched = lastIndex(log, (entry) => entry.itemId === itemId && entry.role === update.role);
+  // An approval/input decision paints a send-time placeholder before the host
+  // can reveal its item id. Promote that empty lane instead of appending a
+  // second assistant entry when the first progress event is `item/updated`.
+  const index = matched >= 0
+    ? matched
+    : lastIndex(log, (entry) =>
+        entry.open === true &&
+        entry.role === update.role &&
+        entry.itemId === undefined &&
+        entry.text === "",
+      );
+  const existing = index >= 0 ? log[index] : undefined;
+  if (
+    existing !== undefined &&
+    update.revision !== undefined &&
+    existing.itemRevision !== undefined &&
+    update.revision <= existing.itemRevision
+  ) {
+    return log;
+  }
+  const command = update.commandText?.trim();
+  const text = update.role === "tool" && command !== undefined && command.length > 0
+    ? `$ ${command}\n${update.text}`
+    : update.text;
+  const nextEntry: LogEntry = {
+    ...(existing ?? { id: update.stamp.id, ts: update.stamp.ts }),
+    role: update.role,
+    text,
+    itemId,
+    ...(update.turnId === undefined ? {} : { turnId: update.turnId }),
+    ...(update.revision === undefined ? {} : { itemRevision: update.revision }),
+    open: update.open ?? true,
+  };
+  if (index >= 0) {
+    return [...log.slice(0, index), nextEntry, ...log.slice(index + 1)];
+  }
+  return [...log, nextEntry];
+}
+
 function lastIndex(
   log: LogEntry[],
   pred: (e: LogEntry) => boolean,
@@ -137,12 +205,15 @@ export function upsertReflexivePlaceholder(
   log: LogEntry[],
   opts: {
     itemId?: string;
+    turnId?: string;
     agentId?: string;
-    role?: "assistant" | "thinking";
+    role?: "assistant" | "thinking" | "tool";
+    /** Optional visible seed (for example `$ command` in a user-shell item). */
+    initialText?: string;
     stamp: PlaceholderStamp;
   },
 ): LogEntry[] {
-  const { itemId, agentId, role = "assistant", stamp } = opts;
+  const { itemId, turnId, agentId, role = "assistant", initialText = "", stamp } = opts;
   if (agentId !== undefined) {
     const i = lastIndex(
       log,
@@ -158,6 +229,7 @@ export function upsertReflexivePlaceholder(
         text: "",
         agentId,
         itemId,
+        ...(turnId ? { turnId } : {}),
         open: true,
       },
     ];
@@ -175,7 +247,7 @@ export function upsertReflexivePlaceholder(
     );
     if (unbound >= 0) {
       return log.map((e, j) =>
-        j === unbound ? { ...e, role: "thinking", itemId } : e,
+        j === unbound ? { ...e, role: "thinking", itemId, ...(turnId ? { turnId } : {}) } : e,
       );
     }
     const live = lastIndex(
@@ -188,19 +260,50 @@ export function upsertReflexivePlaceholder(
     if (live >= 0) return log;
     return [
       ...log,
-      { id: stamp.id, ts: stamp.ts, role: "thinking", text: "", itemId, open: true },
+      { id: stamp.id, ts: stamp.ts, role: "thinking", text: "", itemId, ...(turnId ? { turnId } : {}), open: true },
+    ];
+  }
+  if (role === "tool") {
+    // A user-shell request can paint its local command before the host emits
+    // item/started. Bind that open entry to the authoritative item id when it
+    // arrives instead of creating a duplicate tool bubble.
+    const unbound = lastIndex(
+      log,
+      (e) => e.open === true && e.role === "tool" && e.itemId === undefined,
+    );
+    if (unbound >= 0 && itemId !== undefined) {
+      return log.map((e, j) =>
+        j === unbound ? { ...e, itemId, ...(turnId ? { turnId } : {}) } : e,
+      );
+    }
+    const live = lastIndex(
+      log,
+      (e) => e.open === true && e.role === "tool" && (itemId === undefined || e.itemId === itemId),
+    );
+    if (live >= 0) return log;
+    return [
+      ...log,
+      {
+        id: stamp.id,
+        ts: stamp.ts,
+        role: "tool",
+        text: initialText,
+        itemId,
+        ...(turnId ? { turnId } : {}),
+        open: true,
+      },
     ];
   }
   const i = lastIndex(log, (e) => e.open === true && e.role === "assistant");
   if (i >= 0) {
     if (itemId !== undefined && log[i].itemId === undefined) {
-      return log.map((e, j) => (j === i ? { ...e, itemId } : e));
+      return log.map((e, j) => (j === i ? { ...e, itemId, ...(turnId ? { turnId } : {}) } : e));
     }
     return log;
   }
   return [
     ...log,
-    { id: stamp.id, ts: stamp.ts, role: "assistant", text: "", itemId, open: true },
+    { id: stamp.id, ts: stamp.ts, role: "assistant", text: initialText, itemId, ...(turnId ? { turnId } : {}), open: true },
   ];
 }
 
@@ -215,7 +318,7 @@ export function dropEmptyPlaceholders(log: LogEntry[]): LogEntry[] {
       !(
         e.open === true &&
         e.text === "" &&
-        (e.role === "assistant" || e.role === "thinking" || e.role === "subagent")
+        (e.role === "assistant" || e.role === "thinking" || e.role === "subagent" || e.role === "tool")
       ),
   );
 }

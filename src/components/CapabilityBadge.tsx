@@ -1,4 +1,5 @@
 import {
+  capabilityAccessibleLabel,
   capabilityDescription,
   capabilityLabel,
   type CapabilityStatus,
@@ -19,6 +20,7 @@ export function CapabilityBadge({ status, reason }: Props) {
       <span
         className={`capability-badge capability-${status}`}
         title={description}
+        aria-label={capabilityAccessibleLabel(status, reason)}
         aria-describedby={descriptionId}
       >
         {capabilityLabel(status)}

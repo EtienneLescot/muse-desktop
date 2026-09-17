@@ -55,7 +55,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** `hosts.rs`, `msp.rs`, `main.rs`, hook de sessions. Réutiliser le registre ajouté en PR #13.
 
-**Travail :** ajouter un scénario Tauri avec deux dossiers temporaires, deux sessions et flux entrelacés. Interrompre/faire mourir B pendant que A travaille ; vérifier routes send/model/approval/input/subagent, sessions supprimées et événements tardifs d'une ancienne génération. Traiter aussi fermeture du canal stdout sans événement Terminated et échec pendant initialize.
+**Travail :** ajouter un scénario Tauri avec deux dossiers temporaires, deux sessions et flux entrelacés. Interrompre/faire mourir B pendant que A travaille ; vérifier routes send/model/approval/input/subagent, sessions supprimées et événements tardifs d'une ancienne génération. Traiter aussi fermeture du canal stdout sans événement Terminated et échec pendant initialize. Le contrôle opt-in `npm run smoke:native` couvre désormais le pré-vol réel Windows (deux `muse serve`, handshake, sessions et `model/list`) avec nettoyage et sortie JSON bornée ; `--exercise-isolation` tue B et vérifie qu'une requête read-only sur A reste servie. Il ne remplace pas le scénario Tauri complet.
 
 **Acceptation :** A conserve son identité, ses requêtes et son flux ; B seul devient déconnecté ; aucun processus/consommateur ne reste après fermeture. Dépendance : harnais M0-14. Ne pas clore avec le seul smoke « deux model/list ».
 
@@ -65,7 +65,11 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** définir `ConnectionState = disconnected | connecting | connected | error` par session et génération. Persister le dernier curseur serveur observé quand le protocole le garantit ; utiliser resume/history/view-page pour récupérer le suffixe manquant. Dédupliquer par identité serveur des items, pas par leur texte. Réconcilier demandes d'approbation et questions réémises ; conserver les brouillons. Ne pas réattacher un profil éphémère non récupérable. Adapter explicitement les chemins Windows/WSL sans supposer tous les montages identiques.
 
-**Acceptation :** fermer après un message, rouvrir et envoyer dans la même session ; reprise après panne avec suffixe sans doublon ; demande en attente visible une fois ; refus de lease/dossier incorrect préserve les messages. Dépend de M0-01/08/09. La reconnexion de métadonnées seule reste partielle.
+**Tranche livrée :** `read_session_history` appelle `session/read` avec `excludeItems:false` après `session/resume`. `src/lib/history.ts` normalise les items inline ou snapshot dans les lanes du fil, remplace les blocs partiels par leur version durable via `itemId`, et garde les notes locales et les anciens échos utilisateur. Les réponses sans historique inline restent compatibles : la reconnexion réussit et le transcript local est conservé. Le hook expose aussi une activité live par session ; `StreamView` rend un état de santé discret, un compteur depuis le dernier événement et des actions de reconnexion/arrêt quand le host devient silencieux. Cette indication reste consultative : elle ne remplace pas `running` et ne ferme aucun tour. La réponse `initialize.sessionDurability` est maintenant propagée par workspace et persistée dans les métadonnées ; un host explicitement `ephemeral` affiche le transcript local mais retire l'action de reconnexion après redémarrage, tandis qu'une valeur absente conserve le chemin de compatibilité.
+
+**Acceptation :** fermer après un message, rouvrir et envoyer dans la même session ; reprise après panne avec suffixe sans doublon sur un host durable ; demande en attente visible une fois ; refus de lease/dossier incorrect préserve les messages ; host `ephemeral` signalé sans action de reconnexion trompeuse. Dépend de M0-01/08/09. La reconnexion de métadonnées seule et la reprise sur le sidecar 1.3.0 restent partielles.
+
+**Sous-ticket liveness/connexion (livré) :** définir un pur `classifyStreamHealth` avec seuil borné (15 s), priorité aux demandes d'action et états `waiting-host`/`stalled`. Toucher l'activité sur chaque événement et sur les actions qui relancent le tour (`send`, approbation, question, guidance). Afficher le signal inline dans `StreamView`, conserver les détails de réflexion repliables et vérifier la frontière du seuil, les états explicites et le rendu sans backend. Le hook expose en parallèle un `SessionConnectionState` par identité ; `host_exited`, reconnexion et échec de reprise mettent à jour ce cycle sans toucher à l'historique. Le fil affiche également la durée de la phase de réflexion et un libellé allowlisté du dernier événement observé ; aucun payload ou nom de transport arbitraire n'est injecté dans le texte utilisateur. **Sync now** relit de façon idempotente l'historique et les demandes en attente sans remplacer le host, et ne rétablit la liveness que lorsqu'un item durable prouve une progression. Une résolution d'autorisation observée après reconnexion recrée le placeholder et le pont de reprise uniquement pour une décision explicitement acceptée. Les décisions cliquées sont résolues depuis le snapshot courant borné à la session, afin qu'un refus connu ne soit jamais traité comme une reprise ; la qualification d'un vrai host qui reste silencieux doit rester une preuve native séparée.
 
 ### M0-03 — Envoi sans perte et retry
 
@@ -83,11 +87,16 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** arrêt avant premier token, pendant outil, après fin, réponse tardive et double-clic. L'arrêt de A n'affecte pas B ; l'état final correspond au moteur. Dépend M0-01/03.
 
+**État au 16/09/2026 :** demande de cancellation conservée dans un état renderer-only jusqu'à réception d'un statut `stopped` (ou déconnexion), avec badge `Stopping Muse`, bouton désactivé contre le double-clic et transcript non fermé prématurément. La qualification native des courses et réponses tardives reste à produire.
+**Pré-vol natif au 17/09/2026 :** `node scripts/native-smoke.mjs --exercise-control --exercise-errors --exercise-approval --exercise-isolation` admet en parallèle puis interrompt immédiatement un tour synthétique sur deux sidecars Windows distincts, vérifie l'accusé `accepted`, la conservation des `turnId`, les catégories d'erreur, le plafond d'autorisation et la survie de A après l'arrêt de B. La fermeture termine aussi l'arbre Windows avec un repli borné afin de libérer les workspaces temporaires. `--report <fichier>` permet de conserver exactement le JSON borné produit par le smoke pour l'attacher à une validation, sans chemin de workspace ni transcript. Le rapport de base expose `initialize.sessionDurability` pour éviter de présenter une reconnexion comme disponible sur un host éphémère. Cette preuve couvre le contrat de commande, pas la course UI entre un premier token, un outil, un terminal confirmé et une réponse tardive.
+
 ### M0-05 — Demandes en attente
 
 **Code :** `ApprovalPanel.tsx`, `InputPanel.tsx`, routage MSP, tables d'approbations.
 
 **Travail :** indexer par session + identifiant + génération, conserver le token opaque du serveur, retirer seulement sur règlement confirmé. Réconcilier snapshot et notifications de reprise ; les anciennes décisions ne doivent pas agir sur une nouvelle demande. Garder la réponse éditée si refus de validation.
+
+**Tranche livrée :** après `session/resume`, le hook appelle `list_pending_requests` (`approval/listPending`) et remplace uniquement les cartes de la session concernée. Les payloads approval et user input sont repassés par les parseurs existants ; les tokens opaques restent dans le registre Rust et les événements réémis par le host restent idempotents côté UI.
 
 **Acceptation :** même ID dans deux sessions, demande réémise, token périmé, erreur après clic, redémarrage et double réponse. Un choix n'est envoyé qu'à sa cible. Dépend M0-02/04/08.
 
@@ -99,11 +108,21 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** lecture/écriture hors racine, symlink, réseau et commande refusée ; verdict moteur conforme au texte UI. Dépend M0-01/08 ; profils testés sans élargir les permissions réelles de l'utilisateur.
 
+**Pré-vol natif au 17/09/2026 :** `--exercise-approval` crée une session sans préférence imposée, relève la projection `approvalMode` du host puis tente `onRequest`, `promptUnmatched` et `allowAll`. Le sidecar 1.3.0 observé accepte la posture courante `promptUnmatched` et refuse les deux autres avec `commandRejected/approval_mode_ceiling`. Cette limite est désormais explicite dans le rapport ; l'UI ne doit pas convertir une préférence locale refusée en permission effective.
+
+**Continuité sous plafond :** si une préférence locale persistée est refusée à `session/start` pour `approval_mode_ceiling`, le bridge retire uniquement ce champ et retente avec la posture par défaut du host. La réponse expose `approval_mode` lorsque disponible. `reconnectSession` garde ensuite l'historique et le compositeur utilisables si `session/setApprovalMode` est refusé, en conservant la projection observée et en suspendant l'auto-approbation jusqu'à confirmation.
+
+**Pump stdout :** `pump_stdout` délègue à `ingest_stdout_chunk`, frontière asynchrone testée avec un child injecté. Le test couvre une réponse coupée entre deux chunks, une notification et une ligne JSON illisible ; il vérifie que les réponses sont corrélées par identifiant et que les diagnostics restent bornés. Il reste à brancher une webview empaquetée et un `CommandEvent` réel dans le contrôle natif M0-14g.
+
+Le contrat de démarrage est également couvert sans webview : une erreur `approval_mode_ceiling` sur la première `session/start` provoque un second appel sans `approvalMode`, tandis qu'une erreur différente reste bloquante. La session reçoit ensuite la projection effective du host (`approval_mode`) pour que la SSOT renderer ne confonde pas préférence locale et permission appliquée.
+
 ### M0-07 — Diagnostics
 
 **Code :** `wire_log`, `push_stderr`, `msp.rs`, erreurs affichées.
 
 **Travail :** supprimer la capture brute en usage normal. Si diagnostic activé : événements structurés, métadonnées minimales, masquage, rotation et rétention bornées ; export explicite avec aperçu. Utiliser une troncature respectant les frontières UTF-8.
+
+**État au 17/09/2026 :** Settings propose un export JSON local borné (`muse-desktop.diagnostics.v1`) contenant plateforme, backend, compteurs de sessions/événements et dernière erreur rédigée. Le bridge Tauri expose aussi `collect_diagnostics` (`muse-desktop.native-diagnostics.v1`) pour ajouter les compteurs natifs de workspace, hosts, sessions, approbations et buffer d'événements ; le web preview conserve un fallback renderer. Les événements `turn/completed` conservent désormais l'erreur terminale MSP structurée (`kind`, `message`, `retryable`, durée/raison), persistée dans le journal et rendue dans une disclosure lisible ; une erreur réessayable propose **Retry turn** à partir du dernier prompt utilisateur précédent. Les hôtes sans enveloppe retombent sur une raison bornée et rédigée. Aucun chemin de workspace ni contenu de conversation n'est exporté ; les secrets courants sont masqués. Le pré-vol natif `--exercise-errors` confirme maintenant que les catégories `methodNotFound` et `invalidParams` traversent le transport sur deux hôtes isolés ; la qualification des erreurs détaillées d'un tour réel reste ouverte.
 
 **Acceptation :** Unicode multioctet à la limite, erreur longue, secret synthétique, volume élevé. Aucun prompt ou secret brut écrit par défaut ; pas de panic. Livrable autonome, sans attendre les autres lots.
 
@@ -115,13 +134,17 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** RPC manquante du registre fait échouer le contrôle ; schéma incompatible produit une erreur exploitable ; notification additive inconnue n'arrête pas le flux. Livrer fixtures anonymisées de versions connues.
 
+**Pré-vol natif au 17/09/2026 :** le binaire Muse 1.3.0 répond au handshake attendu et renvoie des erreurs JSON-RPC structurées pour une méthode inconnue et une interruption sans paramètres sur chacun des deux hosts du smoke. Le contrôle combiné ajoute deux interruptions corrélées, six tentatives de posture avec le plafond `approval_mode_ceiling` observé et l'arrêt isolé de B pendant qu'A continue de répondre. Cette preuve ne couvre pas encore la matrice de versions ni les erreurs produites pendant un tour modèle.
+
 ### M0-09 — Persistance
 
 **Code :** `persist.ts` et tous les modules utilisant localStorage/sessionStorage.
 
-**Travail :** inventaire des clés et politiques de conservation. Introduire une façade de stockage versionnée ; décider par ADR si stockage natif requis. Migrer avec copie de secours, validation et reprise après interruption ; distinguer données durables et état UI. Traiter suppression/tombstones et quotas sans résurrection.
+**Travail :** inventaire des clés et politiques de conservation. La façade versionnée `lib/storage.ts` est maintenant le point d'entrée de tous les lecteurs/écrivains `localStorage` connus, y compris les valeurs scalaires. Elle valide les lectures JSON, conserve les anciennes valeurs en cas d'échec d'écriture, borne les diagnostics et exporte un snapshot de récupération. Les formats `v1` restent inchangés ; **Migrate legacy data** copie désormais les alias `muse.*` et logs historiques lisibles vers les clés actuelles absentes, en gardant les sources et les erreurs visibles. Reste à distinguer données durables et état UI, et à traiter suppression/tombstones et quotas sans résurrection.
 
-**Acceptation :** schéma ancien, JSON corrompu, stockage indisponible/saturé, migration interrompue et réouverture. Aucun effacement silencieux ; export de secours accessible. Les migrations précèdent la modification de format M0-02/03 et M2.
+**Tranche livrée :** le snapshot exporté peut être réimporté depuis Settings. L'import vérifie le format/version et limite les clés au namespace `muse-desktop.*`. Un aperçu liste les clés récupérables, leur présence actuelle et les valeurs brutes endommagées ; seules les nouvelles entrées sont cochées par défaut. La confirmation restaure ensuite la liste de clés choisie, y compris le remplacement explicite d'une clé existante, puis le rechargement suit le boot normal pour éviter un état React partiellement restauré.
+
+**Acceptation :** schéma ancien, alias de logs, JSON corrompu, stockage indisponible/saturé, migration interrompue et réouverture. Aucun effacement silencieux ; export de secours accessible. Les migrations précèdent la modification de format M0-02/03 et M2.
 
 ### M0-10 — Premier lancement Windows
 
@@ -129,13 +152,17 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** diagnostic sans secrets de WSL/distribution, binaire, version, dossier accessible et authentification. Afficher étapes de correction et bouton Réessayer. Distinguer UI Windows native et moteur WSL ; pas d'installation implicite non maîtrisée.
 
+**État au 17/09/2026 :** `probe_startup` exécute une sonde native read-only et bornée (sidecar, WSL, `~/.local/bin/muse`, workspace), réutilisée par le panneau de récupération après un échec ou un changement de dossier. Le résultat reste structuré par check et ne lit aucune credential ; la guidance existante conserve la correction manuelle.
+
 **Acceptation :** machine propre, Muse absent, auth absente, chemin avec espaces/Unicode, bridge incompatible. Le premier tour est atteignable avec instructions exactes. Dépend M0-08.
 
 ### M0-11 — Finition anglais/navigation
 
 **Code :** composants, `App.tsx`, messages produits par le hook, `WindowControls`.
 
-**Travail :** inventaire des libellés et erreurs générées par l'app, cohérence conversation/projet/run, raccourcis Ctrl/Cmd et états focus. Centraliser les textes réutilisés si utile ; ne pas traduire les contenus utilisateur ou moteur.
+**Travail :** inventaire des libellés et erreurs générées par l'app, cohérence conversation/projet/run, raccourcis Ctrl/Cmd et états focus. `primaryModifier()` fournit maintenant le libellé OS des infobulles globales, sidebar et input. Centraliser les textes réutilisés si utile ; ne pas traduire les contenus utilisateur ou moteur.
+
+**État au 17/09/2026 :** `userFacingError` centralise la copie anglaise calme des erreurs techniques sur le bandeau global, les fichiers, les projets, les paramètres, les demandes d'entrée, les sélecteurs de dossier, le composer, la revue Git, le scan skills, le catalogue de modèles et les contrôles de fenêtre. Le scan skills gère maintenant aussi un rejet asynchrone ; les erreurs de pièces jointes restent nommées mais utilisent la même copie bornée. Les détails restent bornés et masqués, tandis que les textes utilisateur et moteur sont conservés tels quels. La checklist native finale des titres et erreurs doit encore être rejouée dans la webview empaquetée.
 
 **Acceptation :** checklist accueil/conversation/archives/paramètres/extensions et erreurs ; aucune régression du profil fixe, des thèmes ou de la zone de drag. Captures light/dark et tailles desktop cibles.
 
@@ -143,7 +170,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** `a11y.ts`, dialogues, panneaux de questions, sidebar, composer et stream.
 
-**Travail :** focus initial/retour, navigation des groupes, fermeture Échap, intitulés et annonces live non répétitives. Vérifier contraste et zoom ; annoncer fin/besoin d'action plutôt que chaque token.
+**Travail :** focus initial/retour, navigation des groupes, fermeture Échap, intitulés et annonces live non répétitives. Vérifier contraste et zoom ; annoncer fin/besoin d'action plutôt que chaque token. Les contrôles ajoutent aussi un chemin de contraste forcé Windows (`Highlight`, `ButtonText`, `LinkText`) sans changer le rendu normal.
+
+**État au 17/09/2026 :** les cartes d'approbation et de questions placent le focus à l'arrivée, proposent la navigation fléchée des choix, une boucle Tab confinée à la carte active, ainsi que Ctrl+Entrée pour répondre et Échap pour ignorer. Les tests purs de navigation et d'annonces restent verts ; la vérification avec lecteur d'écran réel, zoom 200 % et réduction des mouvements demeure à exécuter.
 
 **Acceptation :** parcours complet sans souris, lecteur d'écran réel, zoom 200 %, réduction des mouvements. Les tests automatisés complètent mais ne remplacent pas cette vérification.
 
@@ -151,7 +180,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** panneaux Settings/Connector/Browser/Share/Orchestration, composants communs.
 
-**Travail :** définir présentation commune `available/local/manual/unavailable` avec raison et action suivante. Remplacer promesses « installé/connecté/restauré » lorsque seul un registre ou un préremplissage change. Ne pas ajouter un badge permanent à chaque élément fonctionnel.
+**Travail :** définir présentation commune `available/local/manual/unavailable` avec raison et action suivante. Le composant partagé est maintenant appliqué aux connecteurs, channels, exports, worktrees, index local et import CLI/IDE ; les badges restent limités aux surfaces dont la capacité peut être confondue avec une connexion réelle. Remplacer promesses « installé/connecté/restauré » lorsque seul un registre ou un préremplissage change. Ne pas ajouter un badge permanent à chaque élément fonctionnel.
+
+**État au 17/09/2026 :** le badge partagé expose aussi un nom accessible complet (`état : raison`) afin que la portée d'une capacité ne dépende pas du survol ou de la couleur. Le vocabulaire visuel et le libellé d'assistance restent issus du même helper pur.
 
 **Acceptation :** audit clic → effet réel sur chaque action ; aucune confirmation fictive. Tester backend absent et capacités refusées. Dépend de l'inventaire M0-08.
 
@@ -161,7 +192,18 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** serveur MSP fixture à scénarios contrôlés et transport injectable ; démarrer l'app isolée avec stockage/dossiers temporaires. Séparer unitaires, UI simulée, intégration superviseur et live optionnel. CI sans credentials : build, Node, Rust, scénarios fixtures. Publier rapports/captures en cas d'échec, sans données utilisateur.
 
-**Acceptation :** depuis un clone propre, commandes documentées reproductibles ; détecter volontairement une mauvaise route A/B et un envoi perdu. Choisir le pilote Tauri selon support réel des plateformes, consigner toute limite dans l'ADR.
+**État au 16/09/2026 :** `scripts/msp-fixture.mjs` est un serveur JSON-RPC déterministe lancé comme processus enfant par `test/msp-fixture.test.ts`. Les scénarios couvrent l'initialisation/catalogue/appel réussi, une notification `notifications/tools/list_changed` entrelacée, un refus d'outil, une requête gardée ouverte pour simuler un timeout et la fermeture stdout simulant une panne. Le test vérifie les octets réellement échangés avec le framing `Content-Length` et ne lit aucun fichier utilisateur ; il est inclus dans `npm test` et donc dans le job CI Node.
+
+**État au 17/09/2026 :** les jobs CI frontend et Rust conservent désormais, uniquement en cas d'échec, un rapport borné (250/300 dernières lignes), après masquage des chemins du runner et des formes de secrets courantes. Les artefacts sont rétentionnés sept jours et ne contiennent ni workspace utilisateur ni transcript.
+
+**Fondation d'injection livrée :** le transport MSP dépend maintenant d'une interface enfant minimale, avec adaptateur `CommandChild` en production. Les tests Rust conduisent la corrélation de requêtes, l'isolation A/B, les lanes par session et le réveil des appels en attente avec un enfant déterministe sans démarrer de moteur modèle. Cette frontière prépare le pilote de fixture du superviseur ; elle ne constitue pas encore le scénario Tauri complet.
+
+**Pilote superviseur livré au 17/09/2026 :** `send_input_for_state` est partagé par la commande Tauri et les tests. Deux clients injectés sur des workspaces distincts valident le payload `turn/start`, les réponses hors ordre et l'isolation de l'état `running`; une écriture enfant en erreur reste bornée et ne marque pas de tour comme démarré. Le pilote reste sans provider modèle.
+
+**Reste :** l'injection couvre maintenant la boucle `CommandEvent` réelle, y compris les chunks stdout partiels, les fragments finaux sans saut de ligne, les erreurs du shell et la fermeture du receiver qui réveille le client. Les handlers Tauri `send_input`, `approve` et `answer_input` sont également exercés via l'invoke mocké avec un état de session réel, y compris deux sessions partageant un identifiant d'approbation. Il reste à qualifier l'appel depuis une webview empaquetée et le scénario A/B natif avec approbations. Ces tests restent séparés d'un tour modèle réel.
+**Pré-vol natif :** le smoke Windows partage désormais cette commande avec `--exercise-control` pour vérifier le contrôle `turn/start` → `turn/interrupt` sur deux hosts réels. Son option `--exercise-errors` vérifie aussi les catégories `methodNotFound` et `invalidParams` sur les deux transports, sans exposer les trames brutes ; il ne remplace pas l'injection de panne dans le superviseur Tauri.
+
+**Acceptation :** depuis un clone propre, `npm test` lance la fixture sans dépendance externe ; détecter volontairement une mauvaise route A/B et un envoi perdu dès que le pilote Tauri isolé est ajouté. Choisir le pilote Tauri selon support réel des plateformes, consigner toute limite dans l'ADR.
 
 ## M1 — Développement quotidien
 
@@ -181,11 +223,15 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** commentaire transmis sur bonne ligne/côté ; fichier renommé ou diff modifié entre sélection et envoi ; aucune confusion entre deux dépôts.
 
+**État au 16/09/2026 :** socle livré dans la PR M1. Le panneau Review rend les lignes old/new sélectionnables, vérifie à nouveau le statut et le diff avant envoi, puis transmet un contexte structuré à la conversation. La persistance d’une file de commentaires et le triage multi-commentaires restent à décider avant M1-04.
+
 ### M1-03 — Stage et revert
 
 **Code :** service Git et Review. Dépend M1-01.
 
 **Travail :** actions fichier puis hunk, avec version attendue du diff. Refuser si état disque/index a changé ; confirmation proportionnée pour discard. Ne pas utiliser reset --hard comme raccourci.
+
+**État au 16/09/2026 :** stage, unstage et discard fichier sont livrés dans le service Git sessionné. `git_apply_hunk` extrait un hunk du patch observé et applique Stage, Unstage ou Discard partiel avec la même garde HEAD/statut/diff ; les fichiers binaires, non suivis et les patches tronqués sont refusés. Le panneau accepte aussi la sélection multiple de fichiers et applique une mutation groupée avec ces mêmes attentes ; les actions exigent l’observation du panneau et renvoient l’état actualisé. La qualification native reste à compléter.
 
 **Acceptation :** staging partiel, hunk périmé, fichier utilisateur modifié entre deux clics, binaire et échec Git. Les modifications non ciblées restent intactes.
 
@@ -197,6 +243,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** dépôt test, hook échoué, rien à commiter, branche sans upstream, push rejeté et PR existante. Aucun push vers une autre branche par défaut implicite.
 
+**État au 16/09/2026 :** commit, push et création de PR GitHub sont câblés dans le service Git sessionné. Le commit est protégé par l’observation de l’index ; le push utilise un refspec explicite et `gh pr create` réutilise l’authentification locale sans credential web. Les hooks/auth live, rejets distants, PR existantes et qualification native restent à couvrir avec un dépôt de test contrôlé.
+
 ### M1-05 — Terminal PTY
 
 **Code :** nouveau service PTY Rust et panneau Terminal. Dépend M0-01/14.
@@ -204,6 +252,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **Travail :** contrats create/write/resize/close avec `terminalId`, session, cwd, shell et génération. Sortie bornée, fermeture contrôlée, processus indépendants de l'onglet. Choisir bibliothèque PTY compatible avec les OS annoncés ; ne pas confondre command runner et terminal interactif.
 
 **Acceptation :** saisie interactive, ANSI, resize, serveur long, changement de vue, fermeture/restart et Unicode ; pas de processus orphelin.
+
+**État au 16/09/2026 :** socle livré dans la PR M1-05. `portable-pty` fournit un shell natif Windows/Unix dans un registre Rust persistant ; le panneau Terminal ouvre/réutilise le terminal de la conversation, draine une sortie bornée, écrit l’entrée, redimensionne et ferme explicitement le processus. La vue traduit désormais les styles ANSI SGR usuels et avancés (16/256/24 bits, gras, atténué, italique, souligné, barré, inversion) sans interpréter le contenu comme HTML ; les raccourcis Ctrl+C/Ctrl+D/Ctrl+L/Tab/Échap sont transmis au PTY. La validation native interactive reste à exécuter séparément.
 
 ### M1-06 — Terminal comme contexte
 
@@ -213,21 +263,29 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** commande de build en échec, sortie disponible au bon agent ; terminal B inaccessible par confusion de cible ; capture non bloquante.
 
+**État au 17/09/2026 :** **Add output to prompt** reste le fallback manuel borné et attribué. Le handshake demande maintenant explicitement la capability `userShell`; lorsqu'elle est accordée, **Run in Muse** envoie `session/userShell` avec un `commandId` UUIDv7 et le host est prêt à restituer la commande et sa sortie dans une entrée tool du transcript. Le bridge accepte aussi un `item/completed`/`item/updated` complet sans delta : il recrée la lane appropriée, injecte une seule fois `visibleOutput`/`summary`/`text`, puis ferme l'item par son identifiant. La réconciliation d'historique conserve désormais `$ commande` avec la sortie pour les items `userShell`. Le smoke Windows `--exercise-user-shell` vérifie le grant et l'admission sur deux sessions, mais le sidecar 1.3.0 testé n'émet pas d'item transcript sur cette connexion minimale ; la restitution UI reste donc une preuve manquante. Un host sans grant garde l'action désactivée et l'insertion manuelle disponible. Reste la qualification native sur les trois OS, les sorties longues et l'interruption d'une commande.
+
 ### M1-07 — Fichiers réels
 
 **Code :** nouveau service fichiers, panneau Files, `ArtifactsPane`, scope. Dépend M0-06.
 
-**Travail :** listing paresseux, read borné, détection binaire, ouverture externe/preview ; symlinks et racines autorisées. Distinguer fichier du disque et extrait de réponse. Watcher ou rafraîchissement explicite avec état obsolète.
+**Travail :** listing paresseux, read borné, détection binaire, ouverture externe/preview et handoff explicite de l'aperçu texte vers le composer ; symlinks et racines autorisées. Distinguer fichier du disque et extrait de réponse. Watcher ou rafraîchissement explicite avec état obsolète.
 
 **Acceptation :** gros dépôt, fichier disparu/renommé, hors scope et fichier volumineux ; afficher le contenu réellement sur disque sans bloquer l'UI.
+
+**État au 17/09/2026 :** tranche locale livrée sur `feat/m1-real-files` : commandes sessionnées `files_list`/`file_read`, garde de racine et de symlink, bornage listing/lecture, détection binaire et aperçus image/PDF dans l’onglet **Files**. L'onglet relit périodiquement le dossier courant et affiche l'heure du snapshot. Le bouton **Open in app** appelle `file_open(sessionId, path)` ; Rust recanonicalise l'entrée et ne délègue au handler système par défaut qu'un fichier ou dossier prouvé dans le workspace. `workspace_watch` ajoute maintenant un watcher natif par session, limité aux chemins relatifs, qui marque la vue obsolète sans lire le contenu ni rafraîchir silencieusement le transcript ; l'utilisateur confirme le nouveau snapshot avec **Refresh**. **Add to prompt** réutilise ensuite l'aperçu texte borné avec son chemin, sa taille et son horodatage d'observation via la SSOT du hook. La qualification E2E multi-plateforme, les gros dépôts, renommages, racines supprimées et formats riches restent ouverts.
 
 ### M1-08 — Pièces jointes
 
 **Code :** Composer, `mentions.ts`, service fichiers, adaptation TurnInputPart. Dépend M1-07 et de la vérification des capacités moteur M0-08.
 
+**État au 17/09/2026 :** les images attachées détectent leurs dimensions via l'API `Image` quand elle est disponible, les affichent dans le chip du composer avec une miniature locale, puis les transmettent comme champs optionnels du part MSP. Le fallback sans DOM conserve le payload précédent. Les brouillons d'attachements sont restaurés dans la session de la webview : les payloads bornés restent réutilisables, tandis que les grosses pièces gardent leurs métadonnées et exposent **Reselect** avant l'envoi. La qualification live sur modèles image reste ouverte.
+
 **Travail :** définir référence structurée type/MIME/taille/nom/source, drag/drop/coller image, suppression avant envoi, limites et erreurs. Employer le format accepté par Muse ; si non supporté, afficher l'indisponibilité, pas un faux nom de fichier dans le prompt.
 
 **Acceptation :** image réellement reçue, fichier texte, limite dépassée, fichier supprimé, annulation et retry sans pièce jointe orpheline.
+
+**État au 16/09/2026 :** contrat stable vérifié depuis le binaire embarqué (`TurnInputPart` = `text|image|skill`). Le composeur envoie les fichiers texte et images via des parts structurées, avec ingestion sélecteur/glisser-déposer/coller, bornes et suppression avant envoi ; l’outbox conserve le payload exact pour les retries. La persistance de session des brouillons est livrée avec une borne et une re-sélection explicite des gros payloads. Les essais live par modèle image et la qualification native restent ouvertes.
 
 ### M1-09 — Fork serveur
 
@@ -237,6 +295,12 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** branche indépendante, source inchangée, point invalide, source active et échec ; ne jamais substituer un résumé au fork demandé.
 
+**État au 17/09/2026 :** `session/fork` est câblé dans le superviseur et l’action d’en-tête crée une nouvelle conversation serveur dans le même workspace, avec continuité locale des entrées terminées. Les items conservent maintenant leur `turnId` et les messages terminés proposent **Fork from here**, transmis comme `cutPoint.lastTurnId`; le bouton d’en-tête reste le raccourci vers le dernier tour terminé. Les erreurs de frontière et la qualification live restent ouvertes.
+
+### M1-12 — Recherche et organisation
+
+**État au 16/09/2026 :** la recherche parcourt les métadonnées et les journaux locaux avec extrait contextualisé ; les conversations peuvent être épinglées, réordonnées dans leur niveau et marquées non lues, avec conservation au redémarrage. La virtualisation des très longues listes reste ouverte après mesure.
+
 ### M1-10 — Steering et file de messages
 
 **Code :** Composer, `phase.ts`, sessions/MSP. Dépend M0-03/04/08.
@@ -244,6 +308,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **Travail :** mapper les possibilités réelles turn/steer, cancel et unqueue ; modèle de message en attente avec état/order/cible. Distinguer envoyer après le tour et guider le tour courant ; actions d'annulation stables.
 
 **Acceptation :** deux messages en attente, suppression du second, fin simultanée du tour, refus serveur et reboot ; ordre vérifié dans le moteur.
+
+**État au 17/09/2026 :** l'ordre des tours admis est persisté sous `muse-desktop.queued-turns.v1`. Une restauration les marque à vérifier et permet de retirer le rappel local sans les rejouer. Quand `session/read` sert réellement `history.snapshot.queuedTurns`, le hook réconcilie cette liste, conserve les textes locaux connus et signale les identifiants nouveaux à vérifier ; une réponse inline ou absente laisse la file locale intacte. L'admission host reste la seule source de vérité jusqu'à cette observation.
 
 ### M1-11 — Modèles et compaction
 
@@ -253,11 +319,13 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** modèle indisponible, changement entre sessions, compaction no-op/run-active/échec ; contexte et choix reflètent le serveur.
 
+**État au 17/09/2026 :** `model/list`, `session/setModel` et `session/compact` sont déjà raccordés au host avec un fallback non live clairement séparé. La barre de contexte reçoit désormais aussi `session/tokenUsage` et affiche les compteurs par tour fournis par le moteur, sans les dériver. La confirmation native du modèle effectif, les modèles indisponibles et les scénarios de compaction live restent à qualifier.
+
 ### M1-12 — Recherche et organisation
 
 **Code :** sidebar, recherche App, `threads.ts`, stockage. Dépend M0-09/12.
 
-**Travail :** index de recherche locale sur historique, pagination et extraits ; épinglage et ordre explicites ; non-lus distincts de running. Migration du tri existant sans perdre dates/titres.
+**Travail :** index de recherche locale sur historique, pagination et extraits ; épinglage et ordre explicites ; non-lus distincts de running. Migration du tri existant sans perdre dates/titres. La première tranche fournit recherche, épinglage, ordre et non-lus ; la virtualisation concerne le transcript M1-13, tandis que la sidebar reste conditionnée à une mesure.
 
 **Acceptation :** recherche accentuée/multilingue, archive, suppression, gros historique, clavier et restart ; aucune session supprimée réindexée.
 
@@ -265,7 +333,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** StreamView/MessageContent, blocs et CSS. Dépend M0-14.
 
-**Travail :** mesurer temps de rendu/mémoire/scroll sur fixture longue ; virtualiser seulement si nécessaire. Liens/code/outils accessibles, état « nouveaux messages » sans saut si l'utilisateur lit plus haut.
+**Travail :** mesurer temps de rendu/mémoire/scroll sur fixture longue. Le transcript applique `content-visibility: auto`, une taille intrinsèque de secours et un scroll instantané pendant le streaming ; au-delà de 600 entrées, une fenêtre de 160 messages charge les 120 précédents à la demande avec compensation de hauteur. La position de lecture et l’index de fenêtre sont conservés par conversation afin qu'un changement de fil ne fasse pas perdre le contexte. Exposer un compteur d’entrées stable pour les mesures UI natives. Liens/code/outils accessibles, état « nouveaux messages » sans saut si l'utilisateur lit plus haut. **Find in conversation** fournit un finder local borné, accessible par bouton ou `Ctrl/Cmd+F`, recherche dans le journal complet et replace la fenêtre sur un résultat hors DOM. La recherche native du navigateur reste limitée à la fenêtre DOM chargée.
+
+**État au 17/09/2026 :** le finder accepte maintenant les flèches haut/bas pour parcourir les résultats, Entrée pour ouvrir le résultat actif et expose la sélection via `listbox/option` et `aria-activedescendant`. La sélection reste bornée et cyclique, y compris quand la fenêtre DOM ne contient pas le message ciblé. La fenêtre expose aussi la position globale de chaque entrée (`article`, `aria-posinset`, `aria-setsize`) et une annonce live de sa plage visible, afin qu'un lecteur d'écran ne pense pas que les 160 nœuds montés constituent tout l'historique.
 
 **Acceptation :** streaming entrelacé, sélection/copie, blocs volumineux, retour bas de page et thème ; fixer les budgets mesurés dans la PR.
 
@@ -275,7 +345,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** `projects.ts`, ProjectsPanel, persistance et backend workspace. Dépend M0-09.
 
-**Travail :** Project avec racines identifiées, racine par défaut et environnement ; migrer groupes existants sans deviner de dossier si ambigu. La conversation garde sa racine même après modification du défaut.
+**État :** Câblé côté modèle et UI locale. `Project.workspace` est optionnel et persiste sous le schéma existant ; le panneau Projects fournit le sélecteur natif, l’édition et la remise à zéro du dossier. `New conversation here` réutilise le chemin `start_session` du hook, crée la session dans la racine choisie puis rattache la conversation au projet.
+
+**Reste :** migration guidée des anciens groupes sans racine, validation native d’un dossier déplacé ou supprimé, et choix explicite d’un environnement/worktree. Ne jamais déduire un dossier depuis le nom du projet.
 
 **Acceptation :** projet multi-dossiers, dossier déplacé, ancien groupe sans racine et nouvelle conversation dans le bon workspace.
 
@@ -283,7 +355,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** projets/settings/skills/connectors, configuration host. Dépend M2-01/M0-06.
 
-**Travail :** résolution déterministe global → projet → session, provenance des valeurs, diff d'override et politique effective. Les règles moteur plus restrictives priment ; erreurs de config empêchent une application silencieuse.
+**État :** héritage global → projet visible via le helper SSOT `settingsForThread`, avec diff d’override et contexte de la conversation. Le modèle effectif est appliqué à la nouvelle session après `session/start` via `session/setModel`; la valeur `default` conserve le choix du moteur. Le compactage automatique local respecte maintenant la valeur `autoCompact` effective par conversation.
+
+**Reste :** le schéma MSP vérifié n’expose pas de mutation sessionnelle pour sandbox ou réseau. Conserver ces préférences locales et afficher leur origine sans les annoncer comme appliquées au moteur jusqu’à preuve du contrat ; ajouter ensuite une application sessionnelle et des tests d’isolement pour deux projets.
 
 **Acceptation :** deux projets aux réglages différents, suppression override, redémarrage et host déjà actif ; afficher ce qui est effectivement appliqué.
 
@@ -291,7 +365,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** remplacer helper `worktrees.ts` par service Rust Git ; nouvelles actions de création. Dépend M2-01/M1-01/M0-01.
 
-**Travail :** record persistant id/repo/path/base/branch/session/status ; création avec chemins uniques et rollback si session/start échoue ; vérifier branche de départ et repo. Ne pas réutiliser les noms taskN sans contrôle de collision.
+**État :** le service Rust `git_worktree_create` crée un checkout réel sous `.muse/worktrees/` depuis une base et une branche explicites. Le panneau d’orchestration garde le plan manuel, ajoute une action par agent et reçoit le chemin canonique retourné ; les segments issus des identités sont nettoyés et dédoublonnés. Les records sont persistés sous `muse-desktop.worktrees.v1` et peuvent être supprimés après confirmation via `git_worktree_remove` avec garde de confinement. L'action **Create & open** appelle maintenant une commande native unique qui crée le checkout puis démarre la conversation enracinée dedans ; si l'admission échoue, le backend tente le rollback du checkout avant de rendre l'erreur.
+
+**Reste :** qualifier sur chaque plateforme les pannes après admission et les erreurs Git externes. Le host MSP actuel étant lié à un workspace à la fois, ne pas basculer automatiquement une conversation existante tant que ce cycle n’est pas conçu.
 
 **Acceptation :** deux créations simultanées, branche absente, espace disque, échec partiel ; checkout de départ inchangé.
 
@@ -299,7 +375,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** nouveau modèle LocalEnvironment, PTY/runner et worktrees. Dépend M2-03/M1-05.
 
-**Travail :** scripts configurés par projet, cwd et variables autorisées, états pending/running/failed/ready ; logs et retry. Ne pas lancer automatiquement du code de configuration nouvellement importé sans appliquer la politique de confiance.
+**État :** une commande saisie par l'utilisateur peut être lancée explicitement dans un worktree géré déjà créé. Le runner Rust valide le confinement, borne la commande et la sortie, neutralise stdin, expose les états `ready/failed/timedOut/cancelled`, conserve la durée, le code de sortie et les clés d'environnement retenues, puis permet une relance ou une annulation ciblée depuis le panneau d'orchestration. Les profils nommés sont persistés par workspace avec des noms d'environnement supplémentaires ; aucun setup importé n'est exécuté au démarrage. **Check readiness** ajoute une pré-vérification en lecture seule des manifests et des exécutables requis (`ready`, `blocked`, `needsSetup`) sans lancer de code projet.
+
+**Reste :** transaction atomique Git + création de session et rollback partagé en cas d'échec. Le panneau permet déjà d'ouvrir explicitement une conversation dans un worktree créé, mais cette action en deux temps ne doit pas être présentée comme une bascule atomique. L'allowlist ne persiste jamais de valeurs et conserve la commande explicite et la SSOT du hook de sessions.
 
 **Acceptation :** dépendances installées dans le bon worktree, setup échoué/cancelled et retry ; aucun premier tour annoncé prêt prématurément.
 
@@ -307,7 +385,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** services Git/hosts/projets, dialogue dédié. Dépend M2-03/04 et M1-03.
 
-**Travail :** produire d'abord un plan de transfert avec préconditions ; gérer branche déjà checkout, index/working tree dirty, fichiers ignorés et conflits. Transférer identité d'environnement et contexte seulement après réussite ; rollback explicite en cas d'échec.
+**État :** le panneau d'orchestration propose un plan de handoff local et en lecture seule pour chaque worktree créé. Les préconditions source/cible sont évaluées avec les statuts `pass/warn/blocked` : workspace et cible, conflits, changements non commités, état Git cible observé et branche déjà utilisée. Le plan propose ensuite les étapes d'observation, snapshot et transfert sans déclencher de bascule.
+
+**Reste :** transfert atomique du host MSP, déplacement du contexte, inspection de fichiers ignorés, verrou de processus et rollback explicite. Tant que le host reste mono-workspace, aucun bouton ne doit présenter une conversation comme transférée avant confirmation native.
 
 **Acceptation :** aller/retour Local ↔ Worktree avec fichiers suivis/non suivis ; conflit volontaire et échec intermédiaire sans perte.
 
@@ -315,7 +395,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** worktree store, archive, service Git. Dépend M2-03/05.
 
-**Travail :** distinguer archiver conversation et supprimer checkout ; détecter dirty, processus actif et références restantes. Politique de rétention configurable ; aperçu des cibles résolues avant suppression.
+**État :** le panneau expose **Inspect** pour relire le statut Git d'un checkout géré (branche, changements, conflits, horodatage). **Inspect all** relit en parallèle les worktrees créés et affiche un résumé borné des cibles inspectées, propres, modifiées ou en conflit, tout en conservant le détail par branche. Une politique durable par dépôt propose de conserver indéfiniment le checkout ou de le marquer éligible après 7, 14, 30 ou 90 jours ; seuls les worktrees inspectés et propres deviennent éligibles. La suppression reste distincte de l'archivage d'une conversation, exige une confirmation et le service Rust refuse tout worktree sale avant `git worktree remove`. Chaque tentative est conservée dans `muse-desktop.worktree-cleanup.v1` ; après échec ou fermeture, le record reste visible avec le nombre d'essais, l'erreur bornée et une action **Retry cleanup** explicite.
+
+**Reste :** qualification des processus externes non représentés par les marqueurs Git. Ne jamais transformer un record archivé en suppression implicite ni relancer automatiquement une intention persistée.
 
 **Acceptation :** worktree propre nettoyé, sale conservé, cible hors racine refusée, interruption du nettoyage récupérable.
 
@@ -331,7 +413,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** fanout.ts, orchestration, worktrees. Dépend M2-03/07.
 
-**Travail :** vérifier comment l'orchestration moteur reçoit les dossiers des writers ; ne pas promettre une isolation que le prompt seul ne garantit pas. Modéliser quota/file réelle, espace attribué et collecte des résultats ; intégration des changements séparée de l'exécution.
+**État :** le panneau d'orchestration expose un pré-vol par writer : chemins relatifs déclarés, normalisation bornée, refus des traversées et détection des recouvrements (fichier ou sous-dossier). Un writer sans worktree ou sans cible ne peut pas être marqué prêt. Les writers sans collision reçoivent des lanes déterministes (`cores - 2`, borné 4–8) et les suivants sont représentés en file FIFO dans `src/lib/writerQueue.ts` ; le calcul reste pur et partage l'ordre du fan-out.
+
+**Reste :** le protocole MSP n'expose pas encore de lancement, d'annulation ou de verrouillage de fichiers pour des writers réels. Ajouter un dispatch natif seulement après contrat vérifié, puis collecter les résultats et proposer une intégration séparée des changements.
 
 **Acceptation :** deux writers modifient le même nom de fichier dans deux checkouts ; aucun overwrite ; limites et annulation correspondent aux états réels.
 
@@ -341,7 +425,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** ConnectorPanel/connectors.ts, nouvel adaptateur runtime. Dépend M0-06/08/14.
 
-**Travail :** décider si le moteur charge les serveurs ou si un bridge est requis. Définir start/stop, handshake, découverte et invocation ; scope projet, timeout et retour d'erreur. Les métadonnées du catalogue ne deviennent outils disponibles qu'après succès réel.
+**État :** `mcp_local_probe` et `mcp_local_call` lancent une commande locale uniquement sur geste utilisateur, parlent le framing MCP stdio (`Content-Length` ou ligne JSON), exécutent `initialize` + `notifications/initialized`, puis `tools/list` ou `tools/call`. La réponse est bornée et l'UI expose les outils/arguments/résultat. Le runtime propose désormais `mcp_local_start`, `mcp_local_refresh`, `mcp_local_poll`, `mcp_local_call_persistent` et `mcp_local_stop` : un processus reste vivant par connecteur jusqu'à Stop ou fermeture de l'app, les réponses sont corrélées par id, et un `notifications/tools/list_changed` déclenche un `tools/list` automatique via le polling léger du hook.
+
+**Reste :** brancher les tools découverts au catalogue observé par Muse et faire confirmer cette garde par la politique d'autorisation du host à chaque appel. En attendant ce bridge, la UI applique la posture globale localement : Ask demande une approbation ponctuelle, Workspace garde les appels distants derrière une confirmation, et YOLO permet l'appel direct.
 
 **Acceptation :** serveur fixture expose puis exécute un outil, redémarre, change sa liste et échoue ; appel observé dans une session Muse.
 
@@ -351,13 +437,19 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** ADR transports supportés, OAuth/tokens et règles réseau. Connexion/refresh/révocation, expiration, reconnexion et isolation des comptes ; ne pas conserver secrets dans le registre frontend.
 
+**État au 16/09/2026 :** `src/lib/remoteMcp.ts` implémente le transport streamable HTTP/SSE avec `initialize`, `notifications/initialized`, `tools/list` et `tools/call`, corrélation JSON-RPC, `Mcp-Session-Id`, timeout borné et messages d'erreur pour les réponses 401/403, HTTP et JSON invalides. `ConnectorPanel` exige une action **Connect and list tools**, affiche le catalogue réellement reçu, propose **Reconnect** après une perte de session et garde le bearer token dans une référence mémoire du hook ; `connectors.ts` ne persiste que l'URL et la dernière révision vérifiée. Quatre tests injectent le transport pour couvrir JSON, SSE, session, refus réseau/auth et id incohérent.
+
+**Reste :** OAuth/refresh et secret-store Tauri natif, test réseau sur chaque OS et bridge des outils vers le host Muse. La reconnexion automatique est limitée aux 401/403 : elle refait un handshake avec le bearer conservé en mémoire et rejoue un seul appel ; une relance de l'application exige toujours une nouvelle connexion explicite.
+
 **Acceptation :** serveur réel de test, token expiré, refus réseau et déconnexion ; statut UI confirmé par échange effectif.
 
 ### M3-03 — Cycle de vie extension
 
 **Code :** ConnectorPanel/registry/runtime. Dépend M3-01/02.
 
-**Travail :** package/version/source, installation atomique, activation et permissions, mise à jour/rollback et désinstallation. Retirer les outils du moteur lorsqu'une extension est désactivée.
+**État :** un probe local réussi peut enregistrer la commande, la version serveur et les outils découverts dans le registre persistant. Une nouvelle liste remplace l'entrée existante sans réactiver une extension désactivée ; `listConnectorTools` retire immédiatement ses outils lorsque le statut passe à `disabled`. Les connecteurs locaux enregistrés peuvent être démarrés, arrêtés et rafraîchis explicitement depuis le panneau ; un échec ou une liste vide ne remplace pas la dernière version utilisable, et `tools/list_changed` déclenche le même rafraîchissement via le chemin SSOT. Une copie de la précédente révision est conservée pour un rollback explicite, une seule étape.
+
+**Reste :** package/version/source réel, mise à jour/rollback de distribution, arrêt pendant appel et bridge vers les outils réellement visibles par le moteur Muse ; l'autorité de permission par appel reste à confirmer côté host, la garde UI étant maintenant explicite.
 
 **Acceptation :** installation ratée, mise à jour incompatible, désactivation pendant appel et suppression ; registre et runtime cohérents.
 
@@ -367,6 +459,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** définir scopes et précédence, parseur des métadonnées, chemins des ressources, déduplication et rechargement. Une ressource relative reste liée au dossier de la skill ; lecture bornée et erreurs visibles.
 
+**État au 16/09/2026 :** `skills_scan` lit les racines conventionnelles du workspace avec bornage de profondeur, taille et nombre de documents. Le parseur frontmatter, la validation des ressources relatives, la priorité projet > repo > équipe > builtin et le rafraîchissement explicite sont livrés ; le panneau affiche provenance et erreurs. Les resources ne sont pas encore chargées dans le contexte moteur, ce qui reste M3-05.
+
 **Acceptation :** skills homonymes, fichier malformé, ressource manquante, scope projet et modification sur disque ; provenance exacte.
 
 ### M3-05 — Invocation skill
@@ -374,6 +468,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 **Code :** Composer, resolver skills et adaptateur moteur. Dépend M3-04/M0-08.
 
 **Travail :** invocation explicite, chargement des instructions et ressources via contrat moteur ; progression/découverte avec trace compréhensible. Les suggestions ne doivent pas prétendre exécuter une skill.
+
+**État au 16/09/2026 :** une invocation slash d'une skill découverte relit ses ressources relatives juste avant l'envoi via `skills_read_resources`. Les contenus sont bornés, balisés avec leur chemin, et un fichier disparu fait échouer l'envoi avec une entrée système explicite ; les retries réutilisent l'expansion de l'outbox. Le host reçoit encore du texte enrichi, faute de part `skill` documentée avec ressources.
 
 **Acceptation :** invocation réelle avec ressource, skill supprimée entre suggestion et envoi, permission refusée ; pas de double insertion au retry.
 
@@ -383,13 +479,19 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** séparer Schedule et Run ; capturer projet/workspace/modèle/skills/politique, jamais « session active au moment du tick ». Occurrence crée un run durable puis exécute ; l'inbox contient le résultat, pas une demande de cliquer avant chaque run.
 
-**Acceptation :** one-shot/récurrent, cible fixe malgré navigation, échec de démarrage et run terminé ; effet réel et historique.
+**État au 17/09/2026 :** `Schedule` et `ReviewItem` capturent désormais workspace, projet, modèle et politique d'autorisation au moment de la création. L'approbation vérifie le workspace et le projet de la conversation cible, résout les réglages projet capturés via la même fonction d'héritage que l'UI, puis réapplique le modèle/politique avant l'envoi ; un mismatch est refusé explicitement. Les modes workspace et YOLO dispatchent maintenant sans clic et alimentent un journal local borné `ScheduleRun`, visible dans Automations. Une fin de tour structurée marque le run `completed` ou `failed`, conserve l'aperçu assistant et envoie les erreurs réessayables dans le retry borné de M3-07 ; un arrêt du host reste un échec non réessayé car son issue est ambiguë. Le scheduler natif multi-instance, la reprise après crash/sommeil et la sortie métier riche restent à implémenter.
+
+**Acceptation :** one-shot/récurrent, cible fixe malgré navigation, échec de démarrage, dispatch automatique selon la politique et historique local ; le run reste explicitement borné à l'admission du tour tant que le host ne fournit pas d'événement de complétion exploitable.
 
 ### M3-07 — Reprise du scheduler
 
 **Code :** scheduler/store ; dépend M3-06.
 
 **Travail :** clé unique schedule + occurrence, transactions de claim, politique de rattrapage, fuseau/DST, retry borné avec backoff et annulation. Distinguer machine/app fermée et run interrompu ; ne jamais relancer aveuglément une opération externe au résultat ambigu.
+
+**État au 17/09/2026 :** les occurrences portent maintenant `occurrenceAt`/`occurrenceKey`, les cron manqués suivent `latest` ou `skip`, et le journal limite les échecs à trois tentatives avec backoff 15/30/60 secondes. Une retry en attente est annulable depuis Automations ; les timeouts ambigus ne sont jamais relancés automatiquement. Un bail partagé `muse-desktop.scheduler-lease.v1` est acquis, renouvelé et libéré par chaque renderer pour empêcher deux fenêtres de consommer le même tick ; son expiration permet la récupération après crash. Le scheduler réévalue immédiatement les occurrences au `focus`, `pageshow` et retour de visibilité, puis les fuseaux IANA sont résolus en heure murale, y compris les trous et doublons DST. Au boot, les runs non terminaux sans preuve de résultat sont désormais marqués `recovery: after-restart`, rendus visibles comme **Review needed** et bloqués jusqu'à une action explicite **Mark failed** ; aucune opération externe ambiguë n'est rejouée automatiquement.
+
+**Limite restante :** le bail local réduit les doublons entre fenêtres du même profil mais ne remplace pas un scheduler natif multi-instance ; la preuve native de l'état du host après crash et le démarrage d'un service lorsque l'application est fermée restent à qualifier.
 
 **Acceptation :** sommeil/réveil, changement d'heure, double instance, crash entre claim et démarrage, suppression schedule ; pas de doublon d'occurrence.
 
@@ -399,13 +501,19 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** statuts queued/running/succeeded/failed/cancelled, timestamps, résumé, cible et lien conversation. Actions ouvrir/retry/archiver ; non-lu séparé de statut métier.
 
+**État au 16/09/2026 :** Automations affiche les huit derniers runs avec statut, horodatage, aperçu borné, erreur, indicateur non-lu, ouverture de la conversation et marquage lu. Un run passe à `completed` au premier statut d'arrêt du host et conserve l'aperçu de la dernière réponse assistant ; avant cet événement, il reste `running` même si `send_input` a été acquitté. La liste propose désormais les filtres Active/Unread/Queued/Running/Completed/Failed/Archived, l'archivage durable et la restauration, ainsi que Retry now pour une erreur ou une retry différée. Chaque run peut aussi être déplié pour inspecter cible, autorisation, modèle, workspace, occurrence, tentative, durée, instructions, résultat et erreur.
+
+**Limite restante :** le résumé métier riche et un signal de fin de run fourni directement par le host restent à qualifier.
+
 **Acceptation :** aucun résultat présenté avant terminaison, historique durable et ouverture de la bonne session après restart.
 
 ### M3-09 — Notifications
 
-**Code :** nouveau service natif, préférences et liens internes ; dépend M3-08/M0-12.
+**Code :** `src/lib/notifications.ts`, `useMuseSessions` et `SchedulesPanel` ; dépend M3-08/M0-12.
 
-**Travail :** événements terminés/besoin utilisateur/échec, déduplication persistante et politique de notification ; permission OS et fallback dans l'app. Pas de notification par token ou tick.
+**État au 17/09/2026 :** l'inbox locale est livrée pour les runs terminés/échoués et pour les demandes d'autorisation ou de réponse utilisateur : chaque entrée conserve une clé d'idempotence, un aperçu, la session cible et un état non-lu ; Automations permet l'ouverture de la conversation et le marquage lu. Dans un build Tauri, la demande de permission et l'envoi utilisent désormais `tauri-plugin-notification`; le web preview conserve l'API `Notification` comme fallback explicite, sans rejouer les historiques au démarrage. La préférence de silence desktop est persistée séparément. Les notifications Tauri déclarent désormais l'action **Open conversation** et transportent uniquement les identifiants de routage bornés ; `App` valide la session puis ouvre directement le fil, et le fallback web émet le même événement. La persistance d'un scheduler/notification quand l'app est fermée et la qualification OS restent ouvertes.
+
+**Travail restant :** service natif OS/Tauri quand l'application est fermée et qualification du prompt d'action sur chaque plateforme. Pas de notification par token ou tick.
 
 **Acceptation :** notification unique, clic ouvre la cible, cible supprimée, OS refuse et mode muet respecté.
 
@@ -417,13 +525,19 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 **Code :** BrowserPanel et nouvelle surface native ; dépend M0-06/14. Comparer webview dédiée et moteur navigateur contrôlable, sessions/cookies, navigation, téléchargements et restrictions d'embed. **Acceptation :** vrais sites non iframe, erreurs réseau et isolation ; aucune URL dangereuse chargée via protocole non prévu.
 
+**État au 17/09/2026 :** première passe UI livrée dans `BrowserPanel` : URL normalisée, historique précédent/suivant, Reload, URL effectivement affichée, erreurs de chargement/protocole et jusqu'à huit onglets locaux restaurés sous `muse-desktop.browser.tabs.v1`. La persistance ne contient que des URL http(s) et un historique borné ; cookies, credentials et état de page restent dans le runtime navigateur. Un téléchargement explicite de lien same-origin est maintenant disponible : en desktop, `browser_download_fetch` fait la requête native sans credentials, refuse les redirections, borne le flux à 10 MiB et renvoie un payload base64 au dialogue de destination Tauri ; le preview web conserve un fetch sans credentials puis un Blob borné. Le nom de fichier est réduit à un basename sûr et l'écriture desktop est validée côté Rust. La sandbox iframe reste une prévisualisation bornée ; téléchargements déclenchés par une page, webview native, sessions/cookies et qualification multi-plateforme restent à qualifier.
+
 ### M4-02 — Annotation visuelle
 
 **Code :** browserAnnotate.ts, capture et composer ; dépend M4-01/M1-08. Définir URL/frame/viewport/région/élément/version avec capture réelle ; conserver provenance et signaler contexte périmé. **Acceptation :** sélection scrollée, iframe, zoom et envoi de l'image/ancre correcte.
 
+**État au 17/09/2026 :** l'ancre textuelle utilise l'URL normalisée réellement affichée et les notes sont filtrées par cette URL. Dans une iframe same-origin, un clic produit une ancre DOM bornée (sélecteur, balise, rôle, libellé et texte) qui reste de la métadonnée passive. **Add page context** et **Add to prompt** insèrent dans le composer actif un bloc borné avec provenance, URL, sélection, commentaire et ancre élément. **Capture visible page** demande explicitement une source via `getDisplayMedia`, affiche un aperçu, permet de sélectionner et recadrer une région, ajoute l'image capturée comme pièce jointe MSP et conserve URL, heure, viewport, DPR, coordonnées de région et ancre élément dans le contexte ; le hook de sessions centralise le pré-remplissage et l'attachement. Les pages cross-origin conservent le fallback manuel ; la capture automatique de la seule iframe, iframe/zoom et la qualification native restent à produire.
+
 ### M4-03 — Pilotage navigateur
 
 **Code :** adaptateur outils navigateur ; dépend M4-01/M3-01 et moteur compatible. Exposer observe/click/type/navigation avec surface et session explicites, arrêt et erreurs ; traiter le texte de page comme données non fiables. **Acceptation :** workflow web complet, navigation inattendue et stop sans agir sur un autre onglet.
+
+**État au 17/09/2026 :** première tranche locale livrée dans `BrowserPanel` : **Observe page** collecte titre, texte, liens et contrôles d'une iframe same-origin avec bornage et provenance ; **Click selected element** et **Type into field** sont des gestes explicites limités à l'élément sélectionné, aux champs texte visibles et à la frame courante. Le contexte d'observation est marqué comme contenu non fiable et ne déclenche aucun IPC. Reste : adaptateur `browser.observe/click/type/navigation` vers un host MSP vérifié, sessions/onglets explicites, arrêt d'actions longues, cross-origin/native WebView2 et qualification du workflow complet.
 
 ### M4-04 — Computer use
 
@@ -432,6 +546,8 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 ### M4-05 — Artefacts riches
 
 **Code :** artifacts.ts, previews et service fichiers ; dépend M1-07/08. Séparer génération image/document côté moteur, fichiers persistés et rendu sécurisé ; détecter formats supportés, version/source réelle et export. **Acceptation :** fichier ouvert hors app, preview défaillante avec fallback, version et provenance exactes ; ne pas assimiler bloc Markdown et fichier livré.
+
+**État au 17/09/2026 :** le panneau Content exporte maintenant une version précise d'un artefact et propose **Preview/Source** pour les documents Markdown. Le preview réutilise le renderer de contenu sûr, sans interprétation HTML ou script ; la source et la provenance restent inchangées. En desktop, `save` ouvre le sélecteur natif puis `artifact_export` écrit un fichier UTF-8 borné à 2 MiB ; le preview web conserve un téléchargement navigateur. Files décode également les images et PDF reconnus sous 5 MiB en aperçu base64 borné, y compris les SVG textuels, puis propose l'ouverture système comme repli. Les CSV, TSV et JSON valides disposent d'un tableau local borné (100 lignes, 20 colonnes, 400 caractères par cellule, 40 000 caractères inspectés), tandis que les entrées mal formées retombent sur le texte brut. Les conteneurs DOCX/XLSX/PPTX jusqu'à 5 MiB sont maintenant lus localement : paragraphes, première feuille bornée et texte de diapositives sont affichés comme tableau sans exécuter macros, formules, relations ou médias. L'extraction ZIP est filtrée avant inflation : seules les parties XML utiles sont retenues, à raison de 4 MiB par entrée, 8 MiB cumulés et 500 entrées examinées. La destination absolue, le dossier parent existant et l'absence de NUL sont vérifiés côté Rust. Reste à câbler les sorties image/document réelles du moteur, les formats bureautiques non OOXML, l'ouverture/écrasement natifs et la qualification sur chaque plateforme.
 
 ### M4-06 — Partage hébergé
 
@@ -445,9 +561,13 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 **Code :** module audio et intégration composer à créer. ADR transcription seule vs dialogue temps réel, fournisseurs et consentement micro. Gestion annulation, latence, erreurs et absence de conservation audio implicite. **Acceptation :** micro absent/refusé, interruption, transcription éditable avant envoi et destination inchangée.
 
+**État au 17/09/2026 :** première tranche livrée dans `src/lib/voice.ts` et `Composer` : détection standard/WebKit, transcription continue éditable, arrêt explicite et messages bornés pour refus, absence de micro, silence ou API indisponible. Le texte rejoint le brouillon uniquement ; aucun flux audio n'est persisté ou envoyé au host. Reste : décision fournisseur/temps réel, permissions micro natives par OS et qualification d'une interruption pendant l'envoi.
+
 ### M4-09 — Distribution
 
 **Code :** Tauri config, bridge, scripts build et CI. Dépend M0-10/14. Matrice OS/architecture, moteur supporté, provenance/checksum des binaires, signature selon canal, mises à jour signées et récupération. **Acceptation :** installer sur machine propre, mettre à jour depuis version précédente et désinstaller sans effacer les projets ; preuves propres à chaque plateforme.
+
+**État au 17/09/2026 :** `scripts/build-windows.ps1` génère maintenant, après chaque bundle demandé (`nsis`, `msi` ou `all`), un manifeste adjacent via `scripts/release-manifest.mjs`. Le schéma `muse-desktop.release-manifest.v1` est volontairement déterministe : nom de fichier, taille et SHA-256 de l'installateur et du sidecar, sans chemin local ni horodatage. Le build explicite `x86_64-pc-windows-msvc` a produit et vérifié le NSIS et le MSI le 17 septembre 2026 ; `scripts/verify-release-manifest.mjs` compare ces deux fichiers explicitement fournis et signale une modification de taille ou d'empreinte avant installation. Le scénario valide puis altéré est testé localement. Reste à brancher ce manifeste à une signature, à un canal de publication et à un updater avec rollback ; la qualification macOS/Linux reste ouverte.
 
 ## Format de passage de relais
 
@@ -466,4 +586,4 @@ Limites restantes et dépendances :
 Prochain sous-ticket concret :
 ```
 
-Ne déclarer un parent terminé que lorsque tous ses critères d'acceptation sont couverts. Le premier prochain lot conseillé est **M0-03 (envoi sans perte)**, tout en gardant ouverts M0-01c/M0-02c pour la validation native et la réconciliation complète.
+Ne déclarer un parent terminé que lorsque tous ses critères d'acceptation sont couverts. Le prochain lot conseillé est la **preuve native M0-01c/M0-02c** (deux workspaces, panne/reconnexion, approbation et reprise d'un tour), maintenant que les chemins renderer et liveness sont câblés. En parallèle, M2-08 reste conditionné à la découverte d'un contrat writer/spawn stable dans le moteur ; aucune commande native ne doit être inventée pour fermer ce point.

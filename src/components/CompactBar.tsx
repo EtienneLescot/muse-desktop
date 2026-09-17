@@ -60,6 +60,11 @@ export function CompactBar({
           Context: {formatUsage(usage)}
         </span>
       )}
+      {usage?.tokenUsage && (
+        <span className="compact-text" title="Host-reported token counters">
+          Turn usage: {usage.tokenUsage.totalTokens === null ? "?" : usage.tokenUsage.totalTokens.toLocaleString()} tokens
+        </span>
+      )}
       {suggestServer && (
         <button
           type="button"

@@ -10,6 +10,8 @@
 
 export type AuthorizationMode = "ask" | "workspace" | "yolo";
 
+export type ConnectorTransport = "local" | "remote";
+
 /** Closed values accepted by the MSP `session/*ApprovalMode` methods. */
 export type MuseHostApprovalMode =
   | "onRequest"
@@ -61,6 +63,18 @@ export function authorizationModeDescription(mode: AuthorizationMode): string {
   }
 }
 
+/**
+ * Connector calls are explicit user actions, but they still follow the same
+ * global posture as host tools. A remote call is always an external/network
+ * action, so the balanced workspace posture keeps it behind a one-time review.
+ */
+export function connectorCallRequiresApproval(
+  mode: AuthorizationMode,
+  transport: ConnectorTransport,
+): boolean {
+  return mode === "ask" || (mode === "workspace" && transport === "remote");
+}
+
 /** Translate product language to the host's stable, closed enum. */
 export function hostApprovalMode(mode: AuthorizationMode): MuseHostApprovalMode {
   switch (mode) {
@@ -71,6 +85,20 @@ export function hostApprovalMode(mode: AuthorizationMode): MuseHostApprovalMode 
     default:
       return "onRequest";
   }
+}
+
+/**
+ * A local posture can drive automatic decisions only after the host confirms
+ * the same closed mode. `undefined` keeps compatibility with older sessions
+ * that never reported a projection; `null` is an explicit failed/unknown
+ * update and therefore fails closed.
+ */
+export function hostModeMatches(
+  local: AuthorizationMode,
+  observed: MuseHostApprovalMode | string | null | undefined,
+): boolean {
+  if (observed === undefined) return true;
+  return observed !== null && observed === hostApprovalMode(local);
 }
 
 /** Translate a host projection back to the product selector language. */

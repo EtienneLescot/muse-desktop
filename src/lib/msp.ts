@@ -26,12 +26,17 @@ export const MSP_METHODS_SENT: MspMethod[] = [
   "initialize",
   "session/start",
   "session/read",
+  "approval/listPending",
   "session/resume",
   "session/list",
   "model/list",
   "session/compact",
   "session/setModel",
+  "session/userShell",
+  "session/fork",
   "turn/start",
+  "turn/unqueue",
+  "turn/steer",
   "turn/interrupt",
   "session/setApprovalMode",
   "approval/decide",
@@ -65,7 +70,9 @@ export const MSP_NOTIFICATIONS_HANDLED: MspNotification[] = [
   "userInput/requested",
   "userInput/settled",
   "session/contextUsage",
+  "session/tokenUsage",
   "session/approvalModeChanged",
+  "session/branchChanged",
 ];
 
 /** Host error codes our UI interprets (kinds per the SDK error registry). */

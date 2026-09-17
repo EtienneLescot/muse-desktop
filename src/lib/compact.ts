@@ -19,6 +19,7 @@
  * pre-filled with the formatted summary text.
  */
 import type { LogEntry } from "./persist";
+import { readStorageJson, removeStorageKey, writeStorageJson } from "./storage.ts";
 
 /** Composer command intercepted at send time (never sent to the model). */
 export const COMPACT_COMMAND = "/compact";
@@ -48,6 +49,15 @@ export interface ContextUsage {
   pressure: string;
   usedTokens: number | null;
   windowTokens: number | null;
+  /** Latest provider counters, when the host emits session/tokenUsage. */
+  tokenUsage?: TokenUsage;
+}
+
+export interface TokenUsage {
+  promptTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  turnId?: string;
 }
 
 /** Parse a `context_usage` poll payload; null when it is not an object. */
@@ -242,21 +252,33 @@ export function formatSummaryText(s: ThreadSummary): string {
 const summaryKey = (sessionId: string) => `muse-desktop.summary.v1.${sessionId}`;
 
 function read<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return readStorageJson(key, fallback);
+}
+
+/** Parse the host's session/tokenUsage projection without re-deriving totals. */
+export function parseTokenUsage(raw: unknown): TokenUsage | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const o = raw as Record<string, unknown>;
+  const cumulative = typeof o.cumulative === "object" && o.cumulative !== null
+    ? o.cumulative as Record<string, unknown>
+    : null;
+  const usage = typeof o.usage === "object" && o.usage !== null
+    ? o.usage as Record<string, unknown>
+    : null;
+  const num = (...values: unknown[]): number | null => {
+    const value = values.find((candidate) => typeof candidate === "number" && Number.isFinite(candidate));
+    return typeof value === "number" ? value : null;
+  };
+  const promptTokens = num(o.promptTokens, cumulative?.promptTokens);
+  const outputTokens = num(usage?.outputTokens, cumulative?.outputTokens);
+  const totalTokens = num(o.totalTokens, cumulative?.totalTokens);
+  if (promptTokens === null && outputTokens === null && totalTokens === null) return null;
+  const turnId = typeof o.turnId === "string" && o.turnId.trim().length > 0 ? o.turnId : undefined;
+  return { promptTokens, outputTokens, totalTokens, ...(turnId ? { turnId } : {}) };
 }
 
 function write(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // best-effort like persist.ts: the live session keeps working in memory
-  }
+  writeStorageJson(key, value);
 }
 
 function isValidSummary(s: unknown): s is ThreadSummary {
@@ -284,9 +306,5 @@ export function saveSummary(summary: ThreadSummary): void {
 }
 
 export function dropSummary(sessionId: string): void {
-  try {
-    localStorage.removeItem(summaryKey(sessionId));
-  } catch {
-    // best-effort
-  }
+  removeStorageKey(summaryKey(sessionId));
 }

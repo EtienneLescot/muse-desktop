@@ -17,22 +17,34 @@ import type {
   ProjectSettings,
   ThreadProjectMap,
 } from "./projects.ts";
+import type { WorktreeRecord } from "./worktrees.ts";
 import {
   readStorageJson,
   removeStorageKey,
   writeStorageJson,
 } from "./storage.ts";
+import type { EngineErrorDetails } from "./engineError.ts";
 
 export interface StoredSession {
   session_id: string;
   workspace: string;
   title: string;
   createdAt: number;
+  /** Latest branch observation supplied by the session host, when known. */
+  branch?: string;
+  /** Host-reported persistence posture; absent in older local rows. */
+  session_durability?: string;
   /**
    * US-5: archived threads leave the main sidebar list for the collapsible
    * archived section. Persisted like the rest; absent = active (V1 data).
    */
   archived?: boolean;
+  /** US-5/M1-12: pinned conversations stay at the top of the active list. */
+  pinned?: boolean;
+  /** US-5/M1-12: explicit unread marker for responses in another thread. */
+  unread?: boolean;
+  /** US-5/M1-12: manual order within the same pinned/running tier. */
+  sortOrder?: number;
 }
 
 /** Reasoning is persisted separately so it can be disclosed in the stream. */
@@ -47,6 +59,10 @@ export interface LogEntry {
   agentId?: string;
   /** MSP item id: coalescing and completion target concurrent items precisely. */
   itemId?: string;
+  /** MSP turn id owning this item; enables an exact conversation fork anchor. */
+  turnId?: string;
+  /** Host item revision used to apply idempotent `item/updated` snapshots. */
+  itemRevision?: number;
   /** True while further stream chunks may still be appended. */
   open?: boolean;
   /** Drill-down into the child's own transcript (`session/read`). */
@@ -61,6 +77,8 @@ export interface LogEntry {
    * a duplicate bubble.
    */
   clientMessageId?: string;
+  /** M0-07: structured terminal failure details, when a turn failed. */
+  engineError?: EngineErrorDetails;
 }
 
 const SESSIONS_KEY = "muse-desktop.sessions.v1";
@@ -91,13 +109,35 @@ function isValidSession(s: unknown): s is StoredSession {
     typeof r.workspace === "string" &&
     typeof r.title === "string" &&
     typeof r.createdAt === "number" &&
-    (r.archived === undefined || typeof r.archived === "boolean")
+    (r.branch === undefined || (typeof r.branch === "string" && r.branch.trim().length > 0)) &&
+    (r.session_durability === undefined ||
+      (typeof r.session_durability === "string" && r.session_durability.trim().length > 0)) &&
+    (r.archived === undefined || typeof r.archived === "boolean") &&
+    (r.pinned === undefined || typeof r.pinned === "boolean") &&
+    (r.unread === undefined || typeof r.unread === "boolean") &&
+    (r.sortOrder === undefined || (typeof r.sortOrder === "number" && Number.isFinite(r.sortOrder)))
   );
 }
 
 function isValidEntry(e: unknown): e is LogEntry {
   if (typeof e !== "object" || e === null) return false;
   const r = e as Record<string, unknown>;
+  const error = r.engineError;
+  const validEngineError =
+    error === undefined ||
+    (typeof error === "object" &&
+      error !== null &&
+      !Array.isArray(error) &&
+      typeof (error as Record<string, unknown>).kind === "string" &&
+      typeof (error as Record<string, unknown>).message === "string" &&
+      typeof (error as Record<string, unknown>).retryable === "boolean" &&
+      ((error as Record<string, unknown>).reason === undefined ||
+        typeof (error as Record<string, unknown>).reason === "string") &&
+      ((error as Record<string, unknown>).turnId === undefined ||
+        typeof (error as Record<string, unknown>).turnId === "string") &&
+      ((error as Record<string, unknown>).durationMs === undefined ||
+        (typeof (error as Record<string, unknown>).durationMs === "number" &&
+          Number.isFinite((error as Record<string, unknown>).durationMs))));
   return (
     typeof r.id === "string" &&
     typeof r.ts === "number" &&
@@ -107,7 +147,8 @@ function isValidEntry(e: unknown): e is LogEntry {
       r.role === "subagent" ||
       r.role === "system" ||
       r.role === "tool") &&
-    typeof r.text === "string"
+    typeof r.text === "string" &&
+    validEngineError
   );
 }
 
@@ -252,6 +293,7 @@ export function newId(): string {
 const PROJECTS_KEY = "muse-desktop.projects.v1";
 const THREAD_PROJECTS_KEY = "muse-desktop.thread-projects.v1";
 const GLOBAL_SETTINGS_KEY = "muse-desktop.settings.v1";
+const WORKTREES_KEY = "muse-desktop.worktrees.v1";
 
 function isValidProjectRow(p: unknown): p is Project {
   if (typeof p !== "object" || p === null) return false;
@@ -261,7 +303,9 @@ function isValidProjectRow(p: unknown): p is Project {
     r.id.length > 0 &&
     typeof r.name === "string" &&
     typeof r.instructions === "string" &&
-    typeof r.createdAt === "number"
+    typeof r.createdAt === "number" &&
+    (r.workspace === undefined || typeof r.workspace === "string") &&
+    (r.settings === undefined || (typeof r.settings === "object" && r.settings !== null))
   );
 }
 
@@ -273,6 +317,29 @@ export function loadProjects(): Project[] {
 
 export function saveProjects(projects: Project[]): void {
   write(PROJECTS_KEY, projects);
+}
+
+function isValidWorktreeRecord(value: unknown): value is WorktreeRecord {
+  if (typeof value !== "object" || value === null) return false;
+  const r = value as Record<string, unknown>;
+  return (
+    typeof r.repoRoot === "string" && r.repoRoot.length > 0 &&
+    typeof r.path === "string" && r.path.length > 0 &&
+    typeof r.branch === "string" && r.branch.length > 0 &&
+    typeof r.base === "string" && r.base.length > 0 &&
+    typeof r.createdAt === "number" && Number.isFinite(r.createdAt)
+  );
+}
+
+/** Load bounded worktree records; stale Git paths remain visible for cleanup. */
+export function loadWorktrees(): WorktreeRecord[] {
+  const raw = read<unknown>(WORKTREES_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isValidWorktreeRecord).slice(-100);
+}
+
+export function saveWorktrees(worktrees: WorktreeRecord[]): void {
+  write(WORKTREES_KEY, worktrees.slice(-100));
 }
 
 export function loadThreadProjects(): ThreadProjectMap {

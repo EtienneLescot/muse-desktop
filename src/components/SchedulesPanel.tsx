@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   validateScheduleInput,
   type Schedule,
   type ScheduleInput,
+  type ScheduleAuthorizationMode,
+  type ScheduleMissedPolicy,
   type ThreadReuse,
 } from "../lib/schedules";
+import { MAX_RUN_ATTEMPTS, type ScheduleRun } from "../lib/scheduleRuns";
+import type { MuseNotification, NotificationPermission } from "../lib/notifications";
+import { userFacingError } from "../lib/errorCopy";
 
 interface SessionRef {
   session_id: string;
@@ -13,22 +18,42 @@ interface SessionRef {
 
 interface Props {
   schedules: Schedule[];
+  runs: ScheduleRun[];
+  notifications: MuseNotification[];
+  notificationPermission: NotificationPermission;
+  notificationsMuted: boolean;
+  unreadNotifications: number;
   sessions: SessionRef[];
   activeId: string | null;
+  workspace: string | null;
+  projectId: string | null;
+  model: string;
+  authorizationMode: ScheduleAuthorizationMode;
   onCreate: (input: ScheduleInput) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onDelete: (id: string) => void;
   onRunNow: (id: string) => void;
+  onCancelRun: (id: string) => void;
+  onMarkRunRecoveryFailed: (id: string) => void;
+  onOpenRun: (run: ScheduleRun) => void;
+  onMarkRunRead: (id: string) => void;
+  onSetRunArchived: (id: string, archived: boolean) => void;
+  onRetryRunNow: (id: string) => void;
+  onEnableNotifications: () => Promise<NotificationPermission>;
+  onSetNotificationsMuted: (muted: boolean) => void;
+  onMarkNotificationRead: (id: string) => void;
+  onOpenNotification: (notification: MuseNotification) => void;
 }
 
 type TriggerKind = "once" | "cron";
 type ReuseKind = "active" | "new" | "session";
+type RunFilter = "all" | "unread" | "queued" | "running" | "completed" | "failed" | "archived";
 
 function describeSchedule(s: Schedule): string {
   if (s.trigger.kind === "once") {
-    return `At ${new Date(s.trigger.at).toLocaleString()}`;
+    return `At ${new Date(s.trigger.at).toLocaleString()}${s.timeZone ? ` · ${s.timeZone}` : ""}`;
   }
-  return `cron ${s.trigger.cron}`;
+  return `cron ${s.trigger.cron}${s.timeZone ? ` · ${s.timeZone}` : ""}`;
 }
 
 function describeReuse(r: ThreadReuse, sessions: SessionRef[]): string {
@@ -40,19 +65,67 @@ function describeReuse(r: ThreadReuse, sessions: SessionRef[]): string {
   );
 }
 
+function describeRunStatus(status: ScheduleRun["status"]): string {
+  if (status === "completed") return "Completed";
+  if (status === "running") return "Running";
+  if (status === "failed") return "Failed";
+  if (status === "cancelled") return "Cancelled";
+  return "Queued";
+}
+
+function describeNotificationTime(createdAt: number): string {
+  return new Date(createdAt).toLocaleString();
+}
+
+function describeRunDuration(run: ScheduleRun): string | null {
+  if (run.startedAt === undefined) return null;
+  const end = run.finishedAt ?? Date.now();
+  const duration = Math.max(0, end - run.startedAt);
+  if (duration < 1000) return "under 1s";
+  if (duration < 60_000) return `${Math.round(duration / 1000)}s`;
+  return `${Math.floor(duration / 60_000)}m ${Math.round((duration % 60_000) / 1000)}s`;
+}
+
+function describeRunTarget(run: ScheduleRun, sessions: SessionRef[]): string {
+  const reuse = run.threadReuse;
+  if (reuse.kind === "active") return "Active conversation";
+  if (reuse.kind === "new") return "New conversation";
+  return sessions.find((session) => session.session_id === reuse.sessionId)?.title
+    ?? `Conversation ${reuse.sessionId.slice(0, 8)}`;
+}
+
 /**
  * US-9 automations panel (sidebar): create/list/enable/disable/delete
- * schedules plus a run-now button that enqueues a review entry immediately.
- * Due schedules never auto-send — everything lands in the review queue.
+ * schedules plus a run-now button. Ask mode creates a review entry; workspace
+ * and YOLO modes dispatch automatically and surface the latest run records.
  */
 export function SchedulesPanel({
   schedules,
+  runs,
+  notifications,
+  notificationPermission,
+  notificationsMuted,
+  unreadNotifications,
   sessions,
   activeId,
+  workspace,
+  projectId,
+  model,
+  authorizationMode,
   onCreate,
   onToggle,
   onDelete,
   onRunNow,
+  onCancelRun,
+  onMarkRunRecoveryFailed,
+  onOpenRun,
+  onMarkRunRead,
+  onSetRunArchived,
+  onRetryRunNow,
+  onEnableNotifications,
+  onSetNotificationsMuted,
+  onMarkNotificationRead,
+  onOpenNotification,
 }: Props) {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -61,7 +134,24 @@ export function SchedulesPanel({
   const [cron, setCron] = useState("0 9 * * 1-5");
   const [reuseKind, setReuseKind] = useState<ReuseKind>("active");
   const [reuseSession, setReuseSession] = useState("");
+  const [missedPolicy, setMissedPolicy] = useState<ScheduleMissedPolicy>("latest");
   const [formError, setFormError] = useState<string | null>(null);
+  const [runFilter, setRunFilter] = useState<RunFilter>("all");
+  const localTimeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    [],
+  );
+
+  const visibleRuns = useMemo(() => runs
+    .filter((run) => {
+      if (runFilter === "archived") return run.archived === true;
+      if (run.archived === true) return false;
+      if (runFilter === "all") return true;
+      if (runFilter === "unread") return run.unread === true;
+      return run.status === runFilter;
+    })
+    .slice(-8)
+    .reverse(), [runFilter, runs]);
 
   function submit(): void {
     const input: ScheduleInput = {
@@ -75,6 +165,12 @@ export function SchedulesPanel({
         reuseKind === "session"
           ? { kind: "session", sessionId: reuseSession || activeId || "" }
           : { kind: reuseKind },
+      workspace: workspace ?? undefined,
+      projectId: projectId ?? undefined,
+      model,
+      authorizationMode,
+      missedPolicy,
+      timeZone: localTimeZone,
     };
     const err = validateScheduleInput(input);
     if (err !== null) {
@@ -110,7 +206,7 @@ export function SchedulesPanel({
           onChange={(e) => setName(e.target.value)}
         />
         <textarea
-          placeholder="Instructions to run after approval"
+          placeholder="Instructions for this automation"
           aria-label="Instructions"
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
@@ -143,6 +239,20 @@ export function SchedulesPanel({
             />
           )}
         </div>
+        {triggerKind === "cron" && (
+          <label className="sched-policy">
+            <span>When the app wakes late</span>
+            <select
+              aria-label="Missed run policy"
+              value={missedPolicy}
+              onChange={(e) => setMissedPolicy(e.target.value as ScheduleMissedPolicy)}
+            >
+              <option value="latest">Run the latest missed occurrence</option>
+              <option value="skip">Skip missed occurrences</option>
+            </select>
+            <small className="sched-timezone">Timezone: {localTimeZone} (captured at creation)</small>
+          </label>
+        )}
         <div className="sched-row">
           <select
             aria-label="Target conversation"
@@ -197,7 +307,7 @@ export function SchedulesPanel({
                 <button
                   type="button"
                   onClick={() => onRunNow(s.id)}
-                  title="Enqueue a review entry now"
+                  title="Run this automation now"
                 >
                   Run
                 </button>
@@ -214,6 +324,186 @@ export function SchedulesPanel({
           ))}
         </ul>
       )}
+      {runs.length > 0 && (
+        <div className="schedule-runs" aria-label="Recent automation runs">
+          <div className="schedule-notifications-head">
+            <h3>Recent runs</h3>
+            <select
+              className="run-filter"
+              aria-label="Filter automation runs"
+              value={runFilter}
+              onChange={(e) => setRunFilter(e.target.value as RunFilter)}
+            >
+              <option value="all">Active</option>
+              <option value="unread">Unread</option>
+              <option value="queued">Queued</option>
+              <option value="running">Running</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          {visibleRuns.length === 0 ? (
+            <p className="muted notification-empty">No runs match this filter.</p>
+          ) : <ul className="sched-list">
+            {visibleRuns.map((run) => (
+              <li key={run.id} className="sched-item schedule-run" data-status={run.status}>
+                <div className="sched-head">
+                  <strong>{run.scheduleName}</strong>
+                  {run.unread && <span className="run-unread">New</span>}
+                  {run.recovery && <span className="run-recovery">Review needed</span>}
+                  <span className="run-status">{describeRunStatus(run.status)}</span>
+                </div>
+                <span className="muted">
+                  {new Date(run.createdAt).toLocaleString()} · {run.recovery
+                    ? "app restarted · host outcome unconfirmed"
+                    : run.sessionId ? "conversation started" : "dispatching"}
+                  {run.nextRetryAt ? ` · retry at ${new Date(run.nextRetryAt).toLocaleTimeString()}` : ""}
+                </span>
+                {run.recovery && (
+                  <small className="run-recovery-copy">
+                    Muse paused this run after restart to avoid sending the same request twice. Open the conversation and verify its state before reconciling it.
+                  </small>
+                )}
+                {run.resultPreview && <span className="run-preview">{run.resultPreview}</span>}
+                {run.error && <small className="error">{userFacingError(run.error)}</small>}
+                <details className="run-details">
+                  <summary>Inspect run</summary>
+                  <dl className="run-details-grid">
+                    <div><dt>Target</dt><dd>{describeRunTarget(run, sessions)}</dd></div>
+                    <div><dt>Authorization</dt><dd>{run.authorizationMode === "yolo" ? "YOLO" : run.authorizationMode === "workspace" ? "Workspace" : "Ask"}</dd></div>
+                    <div><dt>Model</dt><dd>{run.model ?? "Default"}</dd></div>
+                    {run.timeZone && <div><dt>Timezone</dt><dd>{run.timeZone}</dd></div>}
+                    <div><dt>Attempt</dt><dd>{run.attempt ?? 1} / {MAX_RUN_ATTEMPTS}</dd></div>
+                    {run.workspace && <div><dt>Workspace</dt><dd className="run-value-mono">{run.workspace}</dd></div>}
+                    {run.projectId && <div><dt>Project</dt><dd className="run-value-mono">{run.projectId}</dd></div>}
+                    <div><dt>Occurrence</dt><dd>{new Date(run.occurrenceAt).toLocaleString()}</dd></div>
+                    {run.startedAt && <div><dt>Started</dt><dd>{new Date(run.startedAt).toLocaleString()}</dd></div>}
+                    {run.finishedAt && <div><dt>Finished</dt><dd>{new Date(run.finishedAt).toLocaleString()}</dd></div>}
+                    {run.recoveryDetectedAt && <div><dt>Recovery check</dt><dd>{new Date(run.recoveryDetectedAt).toLocaleString()}</dd></div>}
+                    {describeRunDuration(run) && <div><dt>Duration</dt><dd>{describeRunDuration(run)}</dd></div>}
+                  </dl>
+                  <div className="run-instructions">
+                    <span className="run-detail-label">Instructions</span>
+                    <p>{run.instructions}</p>
+                  </div>
+                  {run.resultPreview && (
+                    <div className="run-output">
+                      <span className="run-detail-label">Result preview</span>
+                      <p>{run.resultPreview}</p>
+                    </div>
+                  )}
+                  {run.error && (
+                    <div className="run-output run-output-error">
+                      <span className="run-detail-label">Failure</span>
+                      <p>{userFacingError(run.error)}</p>
+                    </div>
+                  )}
+                </details>
+                <div className="sched-actions">
+                  {run.sessionId && (
+                    <button type="button" onClick={() => onOpenRun(run)} title="Open conversation">
+                      Open conversation
+                    </button>
+                  )}
+                  {run.unread && (
+                    <button type="button" onClick={() => onMarkRunRead(run.id)} title="Mark run as read">
+                      Mark read
+                    </button>
+                  )}
+                  {run.status === "queued" && run.nextRetryAt !== undefined && (
+                    <>
+                      <button type="button" onClick={() => onRetryRunNow(run.id)} title="Retry this run now">
+                        Retry now
+                      </button>
+                      <button type="button" onClick={() => onCancelRun(run.id)} title="Cancel this retry">
+                        Cancel retry
+                      </button>
+                    </>
+                  )}
+                  {run.status === "failed" && (run.attempt ?? 1) < 3 && (
+                    <button type="button" onClick={() => onRetryRunNow(run.id)} title="Retry this run now">
+                      Retry now
+                    </button>
+                  )}
+                  {run.recovery && (
+                    <button
+                      type="button"
+                      className="sched-danger"
+                      onClick={() => onMarkRunRecoveryFailed(run.id)}
+                      title="Mark this ambiguous run as failed after checking the conversation"
+                    >
+                      Mark failed
+                    </button>
+                  )}
+                  {run.archived === true ? (
+                    <button type="button" onClick={() => onSetRunArchived(run.id, false)} title="Restore this run">
+                      Restore
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => onSetRunArchived(run.id, true)} title="Archive this run">
+                      Archive
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>}
+        </div>
+      )}
+      <div className="schedule-notifications" aria-label="Automation notifications">
+        <div className="schedule-notifications-head">
+          <h3>Notifications</h3>
+          {unreadNotifications > 0 && <span className="schedules-count">{unreadNotifications}</span>}
+        </div>
+        {notificationPermission === "granted" ? (
+          <div className="notification-permission-row">
+            <p className="muted notification-permission">Desktop notifications enabled.</p>
+            <button
+              type="button"
+              className="notification-mute"
+              aria-pressed={notificationsMuted}
+              onClick={() => onSetNotificationsMuted(!notificationsMuted)}
+            >
+              {notificationsMuted ? "Unmute desktop alerts" : "Mute desktop alerts"}
+            </button>
+          </div>
+        ) : notificationPermission === "unsupported" ? (
+          <p className="muted notification-permission">Desktop notifications are unavailable here. In-app alerts remain available.</p>
+        ) : (
+          <button type="button" className="notification-enable" onClick={() => void onEnableNotifications()}>
+            {notificationPermission === "denied" ? "Enable notifications in system settings" : "Enable desktop notifications"}
+          </button>
+        )}
+        {notifications.length === 0 ? (
+          <p className="muted notification-empty">Completed and failed automations will appear here.</p>
+        ) : (
+          <ul className="notification-list">
+            {notifications.slice(-6).reverse().map((notification) => (
+              <li key={notification.id} className="notification-item" data-unread={notification.unread === true}>
+                <div className="notification-item-head">
+                  <strong className="notification-title">{notification.title}</strong>
+                  {notification.unread && <span className="run-unread">New</span>}
+                </div>
+                <span className="notification-body">{notification.body}</span>
+                <span className="muted notification-meta">{describeNotificationTime(notification.createdAt)}</span>
+                <div className="sched-actions">
+                  {notification.sessionId && (
+                    <button type="button" onClick={() => onOpenNotification(notification)} title="Open conversation">
+                      Open conversation
+                    </button>
+                  )}
+                  {notification.unread && (
+                    <button type="button" onClick={() => onMarkNotificationRead(notification.id)} title="Mark notification as read">
+                      Mark read
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

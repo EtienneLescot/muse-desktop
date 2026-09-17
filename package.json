@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "node --experimental-strip-types --test \"test/**/*.test.ts\"",
+    "smoke:native": "node scripts/native-smoke.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "dev:clean": "sh scripts/dev-clean.sh"
@@ -15,7 +16,9 @@
     "@muse-code/sdk": "0.1.1",
     "@tauri-apps/api": "^2.1.0",
     "@tauri-apps/plugin-dialog": "^2.1.0",
+    "@tauri-apps/plugin-notification": "2.4.0",
     "@tauri-apps/plugin-shell": "^2.1.0",
+    "fflate": "^0.8.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

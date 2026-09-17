@@ -14,7 +14,7 @@
  *   providers" (never a live list). Provider selection persists per
  *   project either way.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
 import type { ScopeVerdict } from "../lib/scope";
 import {
@@ -33,11 +33,16 @@ import {
   authorizationModeLabel,
   type AuthorizationMode,
 } from "../lib/authorization";
+import { userFacingError } from "../lib/errorCopy";
 import {
   consumeStorageIssues,
   exportStorageSnapshot,
+  inspectStorageSnapshot,
+  importStorageSnapshot,
+  migrateLegacyStorage,
   subscribeStorageIssues,
   type StorageIssue,
+  type StorageSnapshotPreview,
 } from "../lib/storage";
 
 interface Props {
@@ -62,6 +67,8 @@ interface Props {
   onRefreshModels: () => void;
   /** Model-picker gesture on the active session (`session/setModel`). */
   onSelectModel: (modelId: string) => void;
+  /** Export bounded local diagnostics without transcript contents. */
+  onExportDiagnostics: () => void;
   /**
    * Existing scope-guard prompt path: out-of-scope attempts go here.
    * Surfaces the backend verdict (and the error-banner prompt) for the path.
@@ -84,6 +91,7 @@ export function SettingsPanel({
   activeSessionId,
   onRefreshModels,
   onSelectModel,
+  onExportDiagnostics,
   checkPathScope,
   onClose,
 }: Props) {
@@ -91,9 +99,32 @@ export function SettingsPanel({
   const [probeResult, setProbeResult] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const importInput = useRef<HTMLInputElement>(null);
   const [storageIssues, setStorageIssues] = useState<StorageIssue[]>(() =>
     consumeStorageIssues(),
   );
+
+  useEffect(() => {
+    const unsubscribe = subscribeStorageIssues(() => {
+      const next = consumeStorageIssues();
+      if (next.length === 0) return;
+      setStorageIssues((previous) => {
+        const merged = [...previous, ...next];
+        return merged.filter(
+          (issue, index) =>
+            merged.findIndex(
+              (candidate) => candidate.key === issue.key && candidate.kind === issue.kind,
+            ) === index,
+        );
+      });
+    });
+    return unsubscribe;
+  }, []);
+  const [recoveryPreview, setRecoveryPreview] = useState<{
+    serialized: string;
+    snapshot: StorageSnapshotPreview;
+  } | null>(null);
+  const [selectedRecoveryKeys, setSelectedRecoveryKeys] = useState<string[]>([]);
 
   useEffect(() => {
     const unsubscribe = subscribeStorageIssues(() => {
@@ -167,8 +198,78 @@ export function SettingsPanel({
           : "Recovery snapshot downloaded.",
       );
     } catch (error) {
-      setExportStatus(`Recovery export failed: ${String(error)}`);
+      setExportStatus(userFacingError(`Recovery export failed: ${String(error)}`));
     }
+  }
+
+  async function inspectLocalData(file: File): Promise<void> {
+    try {
+      const serialized = await file.text();
+      const snapshot = inspectStorageSnapshot(serialized);
+      if (snapshot.entries.length === 0) {
+        setRecoveryPreview(null);
+        setSelectedRecoveryKeys([]);
+        setExportStatus(snapshot.errors.join(" ") || "No recoverable Muse entries found.");
+        return;
+      }
+      setRecoveryPreview({ serialized, snapshot });
+      setSelectedRecoveryKeys(snapshot.entries.filter((entry) => !entry.existing).map((entry) => entry.key));
+      setExportStatus(
+        snapshot.errors.length > 0
+          ? `Recovery snapshot ready with ${snapshot.errors.length} warnings. Choose entries to restore.`
+          : "Recovery snapshot ready. Choose entries to restore.",
+      );
+    } catch (error) {
+      setExportStatus(userFacingError(`Recovery import failed: ${String(error)}`));
+    } finally {
+      if (importInput.current) importInput.current.value = "";
+    }
+  }
+
+  function restoreSelectedData(): void {
+    if (recoveryPreview === null) return;
+    if (selectedRecoveryKeys.length === 0) {
+      setExportStatus("Choose at least one entry to restore.");
+      return;
+    }
+    const imported = importStorageSnapshot(
+      recoveryPreview.serialized,
+      "muse-desktop.",
+      true,
+      selectedRecoveryKeys,
+    );
+    const issues = consumeStorageIssues();
+    if (issues.length > 0) setStorageIssues((previous) => [...previous, ...issues]);
+    setExportStatus(
+      imported.errors.length > 0
+        ? `Recovery restored ${imported.imported} entries with ${imported.errors.length} warnings.`
+        : `Recovery restored ${imported.imported} entries. Reloading Muse…`,
+    );
+    if (imported.imported > 0) {
+      setRecoveryPreview(null);
+      setSelectedRecoveryKeys([]);
+      window.setTimeout(() => window.location.reload(), 500);
+    }
+  }
+
+  function cancelRecovery(): void {
+    setRecoveryPreview(null);
+    setSelectedRecoveryKeys([]);
+    setExportStatus("Recovery restore cancelled.");
+  }
+
+  function migrateLocalData(): void {
+    const result = migrateLegacyStorage();
+    const issues = consumeStorageIssues();
+    if (issues.length > 0) setStorageIssues((previous) => [...previous, ...issues]);
+    setExportStatus(
+      result.migrated > 0
+        ? `Migrated ${result.migrated} legacy entr${result.migrated === 1 ? "y" : "ies"}. Reloading Muse…`
+        : result.errors.length > 0
+          ? `Legacy migration skipped with ${result.errors.length} warnings.`
+          : "No legacy Muse data found to migrate.",
+    );
+    if (result.migrated > 0) window.setTimeout(() => window.location.reload(), 500);
   }
 
   return (
@@ -337,9 +438,69 @@ export function SettingsPanel({
           <button type="button" onClick={exportLocalData}>
             Export recovery snapshot
           </button>
+          <button type="button" onClick={onExportDiagnostics}>
+            Export diagnostics
+          </button>
+          <button type="button" onClick={() => importInput.current?.click()}>
+            Import recovery snapshot
+          </button>
+          <button type="button" onClick={migrateLocalData}>
+            Migrate legacy data
+          </button>
+          <input
+            ref={importInput}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              if (file) void inspectLocalData(file);
+            }}
+          />
         </div>
         {exportStatus !== null && (
           <p className="settings-note" role="status">{exportStatus}</p>
+        )}
+        {recoveryPreview !== null && (
+          <div className="settings-recovery" role="group" aria-labelledby="settings-recovery-title">
+            <div className="settings-recovery-head">
+              <strong id="settings-recovery-title">Choose data to restore</strong>
+              <span className="muted">{recoveryPreview.snapshot.entries.length} entries</span>
+            </div>
+            <p className="settings-note">
+              New entries are selected by default. Existing entries stay unchecked until you explicitly choose to replace them.
+            </p>
+            <div className="settings-recovery-list">
+              {recoveryPreview.snapshot.entries.map((entry) => (
+                <label key={entry.key} className="settings-recovery-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedRecoveryKeys.includes(entry.key)}
+                    onChange={() => setSelectedRecoveryKeys((current) =>
+                      current.includes(entry.key)
+                        ? current.filter((key) => key !== entry.key)
+                        : [...current, entry.key])}
+                  />
+                  <span>
+                    <code>{entry.key}</code>
+                    <small>
+                      {entry.existing ? "Replace existing" : "Add new"}
+                      {entry.parseError ? " · raw value" : ""}
+                    </small>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="settings-recovery-actions">
+              <button type="button" className="primary" onClick={restoreSelectedData}>
+                Restore selected
+              </button>
+              <button type="button" onClick={cancelRecovery}>Cancel</button>
+            </div>
+            {recoveryPreview.snapshot.errors.length > 0 && (
+              <small className="muted">{recoveryPreview.snapshot.errors.join(" · ")}</small>
+            )}
+          </div>
         )}
         {storageIssues.length > 0 && (
           <div className="settings-storage-warning" role="status">
@@ -376,7 +537,7 @@ export function SettingsPanel({
             <p className="settings-note">
               Example configurations. Connect the engine to see the
               available models.
-              {modelsError !== null && ` (${modelsError})`}
+              {modelsError !== null && ` (${userFacingError(modelsError)})`}
             </p>
             <label className="settings-label" htmlFor="settings-provider">
               Provider / model (saved per project)

@@ -2,8 +2,8 @@
  * US-20 memory + anti-drift: dated/sourced memory entries with stale
  * warnings and a periodic SCAN nudge.
  *
- * Zero imports: runnable under the built-in node:test runner and reusable
- * from the Composer and the hook without side effects.
+ * Dependency-light and runnable under the built-in node:test runner and
+ * reusable from the Composer and the hook without side effects.
  *
  * - A memory entry is `{ id, text, source, createdAt }` (AC: dated/sourced).
  * - Entries older than STALE_AFTER_MS (30 days) are stale: callers must
@@ -17,6 +17,8 @@
  * Persistence lives under `muse-desktop.memory.*` localStorage keys,
  * best-effort like persist.ts / compact.ts.
  */
+
+import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 /** One remembered fact: free-form text + where it came from + when. */
 export interface MemoryEntry {
@@ -235,21 +237,11 @@ export function buildScanNudge(entries: MemoryEntry[], now: number): string {
 }
 
 function read<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return readStorageJson(key, fallback);
 }
 
 function write(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // best-effort like persist.ts: the UI keeps working in memory
-  }
+  writeStorageJson(key, value);
 }
 
 function isValidMemory(e: unknown): e is MemoryEntry {

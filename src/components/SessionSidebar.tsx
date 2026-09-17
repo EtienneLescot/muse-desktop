@@ -1,4 +1,5 @@
 import { Icon } from "./Icon";
+import { primaryModifier } from "../lib/a11y";
 import { useMemo, useRef, useState } from "react";
 import type { MuseSession } from "../hooks/useMuseSessions";
 import {
@@ -20,6 +21,8 @@ interface Props {
   onCancel: (id: string) => void;
   onKill: (id: string) => void;
   onRename: (id: string, title: string) => void;
+  onTogglePin: (id: string) => void;
+  onMove: (id: string, direction: -1 | 1) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
   canStart: boolean;
@@ -54,6 +57,8 @@ export function SessionSidebar({
   onCancel,
   onKill,
   onRename,
+  onTogglePin,
+  onMove,
   onArchive,
   onRestore,
   canStart,
@@ -136,6 +141,16 @@ export function SessionSidebar({
             {s.title?.replace(/^Session [\w-]+$/, "New conversation") ||
               "New conversation"}
           </span>
+          {s.pinned === true && (
+            <span className="session-pin" title="Pinned conversation">
+              <Icon name="pin" />
+            </span>
+          )}
+          {s.unread === true && (
+            <span className="session-unread" title="Unread response">
+              new
+            </span>
+          )}
           {pending > 0 && (
             <span className="badge" title={`${pending} response(s) needed`}>
               {pending}
@@ -164,7 +179,7 @@ export function SessionSidebar({
     <div className="session-list" role="navigation" aria-label="Conversations">
       <div
         className="section-label threads-label"
-        title="↑↓ to navigate · Ctrl+Tab to switch conversations"
+        title={`↑↓ to navigate · ${primaryModifier()}+Tab to switch conversations`}
       >
         <span>
           Conversations ({active.length}
@@ -339,6 +354,36 @@ export function SessionSidebar({
               >
                 Stop response
               </button>
+            )}
+            {selected && (
+              <button
+                onClick={() => {
+                  onTogglePin(selected.session_id);
+                  closeActions();
+                }}
+              >
+                {selected.pinned === true ? "Unpin conversation" : "Pin conversation"}
+              </button>
+            )}
+            {selected && !selected.archived && (
+              <div className="conversation-order-actions" aria-label="Conversation order">
+                <button
+                  onClick={() => {
+                    onMove(selected.session_id, -1);
+                    closeActions();
+                  }}
+                >
+                  Move up
+                </button>
+                <button
+                  onClick={() => {
+                    onMove(selected.session_id, 1);
+                    closeActions();
+                  }}
+                >
+                  Move down
+                </button>
+              </div>
             )}
             <button
               onClick={() => {

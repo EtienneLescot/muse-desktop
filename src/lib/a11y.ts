@@ -107,6 +107,12 @@ export function statusAnnouncement(
   return "";
 }
 
+/** Product-facing modifier label for shortcut hints on the current OS. */
+export function primaryModifier(platform?: string): "Cmd" | "Ctrl" {
+  const value = platform ?? (typeof navigator === "undefined" ? "" : navigator.platform);
+  return /Mac|iPhone|iPad|iPod/i.test(value) ? "Cmd" : "Ctrl";
+}
+
 /** Documented composer keyboard shortcuts (rendered as title attributes). */
 export const COMPOSER_SHORTCUT_TITLES = {
   textarea:

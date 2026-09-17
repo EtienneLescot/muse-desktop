@@ -1,6 +1,6 @@
 /**
  * US-9 automations/scheduled + review queue: pure schedule logic, cron
- * recurrence, due → review enqueue (never auto-send), approve/discard,
+ * recurrence, due → captured review/run context, approve/discard,
  * target resolution, and persisted round-trips.
  *
  * Runs on the built-in node:test runner, no extra framework:
@@ -13,17 +13,21 @@ import {
   buildSchedule,
   createSchedule,
   cronNextRun,
+  cronNextRunInTimeZone,
   deleteSchedule,
   discardReview,
   dueSchedules,
+  dueOccurrenceTimes,
   enqueueDue,
   enqueueRunNow,
   isScheduleDue,
+  isValidTimeZone,
   loadReviewQueue,
   loadSchedules,
   parseCron,
   pendingReviews,
   resolveReviewTarget,
+  scheduleOccurrenceKey,
   saveReviewQueue,
   saveSchedules,
   setScheduleEnabled,
@@ -114,6 +118,29 @@ describe("US-9 schedule CRUD", () => {
     assert.equal(next[0].createdAt, 1000);
   });
 
+  it("accepts IANA timezones and rejects unknown identifiers", () => {
+    assert.equal(isValidTimeZone("Europe/Paris"), true);
+    assert.equal(validateScheduleInput(onceInput({ timeZone: "UTC" })), null);
+    assert.match(validateScheduleInput(onceInput({ timeZone: "Mars/Base" })) ?? "", /timezone/);
+  });
+
+  it("captures execution context at schedule creation and due time", () => {
+    const list = sched([], onceInput({
+      workspace: " C:/repo ",
+      projectId: " project-1 ",
+      model: "gpt-5.6",
+      authorizationMode: "yolo",
+      timeZone: "Europe/Paris",
+    }), 1000);
+    assert.equal(list[0].workspace, "C:/repo");
+    assert.equal(list[0].projectId, "project-1");
+    const due = enqueueDue(list, [], 2000);
+    assert.equal(due.added[0].workspace, "C:/repo");
+    assert.equal(due.added[0].model, "gpt-5.6");
+    assert.equal(due.added[0].authorizationMode, "yolo");
+    assert.equal(due.added[0].timeZone, "Europe/Paris");
+  });
+
   it("refuses invalid input without growing the list", () => {
     const bad = createSchedule([], onceInput({ name: "" }), 1000);
     assert.deepEqual(bad, []);
@@ -164,9 +191,22 @@ describe("US-9 cron", () => {
   it("returns null for invalid expressions", () => {
     assert.equal(cronNextRun("bogus", 1000), null);
   });
+
+  it("resolves recurring wall-clock time in an explicit timezone", () => {
+    const from = Date.UTC(2026, 0, 5, 8, 0, 0);
+    const next = cronNextRunInTimeZone("0 9 * * *", from, "America/New_York");
+    assert.equal(next, Date.UTC(2026, 0, 5, 14, 0, 0));
+  });
+
+  it("skips a DST gap and preserves the second fall-back occurrence", () => {
+    const spring = cronNextRunInTimeZone("30 2 * * *", Date.UTC(2026, 2, 8, 6), "America/New_York");
+    assert.equal(spring, Date.UTC(2026, 2, 9, 6, 30));
+    const fall = cronNextRunInTimeZone("30 1 * * *", Date.UTC(2026, 10, 1, 6), "America/New_York");
+    assert.equal(fall, Date.UTC(2026, 10, 1, 6, 30));
+  });
 });
 
-describe("US-9 due → review queue (never auto-send)", () => {
+describe("US-9 due → captured review/run context", () => {
   it("a past one-shot is due once, then never again", () => {
     let list = sched([], onceInput(), 1000);
     assert.equal(isScheduleDue(list[0], 2000), true);
@@ -175,7 +215,7 @@ describe("US-9 due → review queue (never auto-send)", () => {
     assert.equal(r1.queue.length, 1);
     assert.equal(r1.queue[0].status, "pending");
     assert.equal(r1.queue[0].instructions, "Summarize yesterday's commits.");
-    // Pure enqueue: schedules advance, nothing is "sent" — the entry waits.
+    // Pure enqueue: the caller decides whether the entry waits or dispatches.
     assert.equal(isScheduleDue(r1.schedules[0], 2000), false);
     const r2 = enqueueDue(r1.schedules, r1.queue, 9999);
     assert.equal(r2.added.length, 0);
@@ -213,6 +253,30 @@ describe("US-9 due → review queue (never auto-send)", () => {
     // Next day 9:00: due again.
     const nextDay = new Date(2026, 0, 6, 9, 0, 0).getTime();
     assert.equal(isScheduleDue(r2.schedules[0], nextDay), true);
+  });
+
+  it("uses the latest missed occurrence or skips the backlog explicitly", () => {
+    const start = new Date(2026, 0, 5, 8, 0, 0).getTime();
+    const wake = new Date(2026, 0, 5, 12, 30, 0).getTime();
+    const latest = sched([], onceInput({
+      trigger: { kind: "cron", cron: "0 * * * *" },
+      missedPolicy: "latest",
+    }), start);
+    assert.equal(dueOccurrenceTimes(latest[0], wake).length, 4);
+    const latestResult = enqueueDue(latest, [], wake);
+    assert.equal(latestResult.added.length, 1);
+    assert.equal(latestResult.added[0].occurrenceAt, new Date(2026, 0, 5, 12, 0, 0).getTime());
+    assert.equal(latestResult.added[0].occurrenceKey, scheduleOccurrenceKey(latest[0].id, latestResult.added[0].occurrenceAt as number));
+
+    const skip = sched([], onceInput({
+      trigger: { kind: "cron", cron: "0 * * * *" },
+      missedPolicy: "skip",
+    }), start);
+    const skipResult = enqueueDue(skip, [], wake);
+    assert.equal(skipResult.added.length, 0);
+    assert.equal(skipResult.schedules[0].lastFiredAt, new Date(2026, 0, 5, 12, 0, 0).getTime());
+    const next = enqueueDue(skipResult.schedules, [], new Date(2026, 0, 5, 13, 0, 0).getTime());
+    assert.equal(next.added.length, 1);
   });
 
   it("run-now enqueues even a disabled schedule and advances it", () => {

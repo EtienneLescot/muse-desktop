@@ -18,6 +18,7 @@ import {
   PROJECT_LIMIT_MESSAGE,
   projectOfThread,
   resolveProjectSettings,
+  settingsForThread,
   sanitizeProjects,
   setProjectOverride,
   threadsInProject,
@@ -65,6 +66,15 @@ describe("US-3 project creation", () => {
     assert.equal(res.project.instructions, "be terse");
     assert.ok(res.project.id.length > 0);
     assert.equal(res.projects.length, 1);
+  });
+
+  it("keeps a trimmed workspace folder when provided", () => {
+    const res = createProject([], {
+      name: "Docs",
+      workspace: "  C:\\work\\docs  ",
+    });
+    assert.equal(res.error, null);
+    assert.equal(res.project?.workspace, "C:\\work\\docs");
   });
 
   it("refuses a blank name", () => {
@@ -121,6 +131,14 @@ describe("US-3 thread attach / detach", () => {
     const kept = updateProject(renamed, "p0", { name: "   " });
     assert.equal(kept[0].name, "Site");
   });
+
+  it("updates and clears the project workspace folder", () => {
+    const projects = fill(1);
+    const set = updateProject(projects, "p0", { workspace: "  C:\\work\\site  " });
+    assert.equal(set[0].workspace, "C:\\work\\site");
+    const cleared = updateProject(set, "p0", { workspace: "   " });
+    assert.equal(cleared[0].workspace, undefined);
+  });
 });
 
 describe("US-3 instruction prepending", () => {
@@ -174,6 +192,23 @@ describe("US-30 settings override + diff", () => {
     projects = setProjectOverride(projects, "p0", "networkDefault", undefined);
     assert.deepEqual(diffProjectSettings(DEFAULT_PROJECT_SETTINGS, projects[0].settings), []);
   });
+
+  it("resolves one conversation from its attached project", () => {
+    let projects = fill(2);
+    projects = setProjectOverride(projects, "p1", "model", "gpt-5.6");
+    assert.equal(
+      settingsForThread(DEFAULT_PROJECT_SETTINGS, projects, { s1: "p1" }, "s1").model,
+      "gpt-5.6",
+    );
+    assert.deepEqual(
+      settingsForThread(DEFAULT_PROJECT_SETTINGS, projects, { s1: "p1" }, "unattached"),
+      DEFAULT_PROJECT_SETTINGS,
+    );
+    assert.deepEqual(
+      settingsForThread(DEFAULT_PROJECT_SETTINGS, projects, { s1: "missing" }, "s1"),
+      DEFAULT_PROJECT_SETTINGS,
+    );
+  });
 });
 
 describe("US-3/US-30 sanitize + persistence", () => {
@@ -204,13 +239,19 @@ describe("US-3/US-30 sanitize + persistence", () => {
       rawSet(k, v);
     };
     const projects = fill(2);
-    saveProjects(updateProject(projects, "p0", { instructions: "ship it" }));
+    saveProjects(
+      updateProject(projects, "p0", {
+        instructions: "ship it",
+        workspace: "C:\\work\\site",
+      }),
+    );
     saveThreadProjects({ s1: "p0" });
     saveGlobalSettings({ ...DEFAULT_PROJECT_SETTINGS, sandbox: "full" });
     assert.ok(seen.length > 0);
     assert.ok(seen.every((k) => k.startsWith("muse-desktop.")));
     const back = loadProjects();
     assert.equal(back.find((p) => p.id === "p0")?.instructions, "ship it");
+    assert.equal(back.find((p) => p.id === "p0")?.workspace, "C:\\work\\site");
     assert.deepEqual(loadThreadProjects(), { s1: "p0" });
     assert.equal(loadGlobalSettings(DEFAULT_PROJECT_SETTINGS).sandbox, "full");
     // Corrupt payloads fall back safely.

@@ -20,6 +20,14 @@ impl<T> Default for Hosts<T> {
 }
 
 impl<T> Hosts<T> {
+    pub fn client_count(&self) -> usize {
+        self.clients.len()
+    }
+
+    pub fn session_count(&self) -> usize {
+        self.sessions.len()
+    }
+
     pub fn workspace(&self, root: &Path) -> Option<Arc<T>> {
         self.clients.get(root).cloned()
     }

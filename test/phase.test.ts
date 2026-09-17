@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   REFLEXIVE_LABEL,
+  applyItemSnapshotUpdate,
   dropEmptyPlaceholders,
   isItemStartKind,
   isRunningKind,
@@ -74,6 +75,7 @@ describe("isStoppedKind", () => {
   it("covers bare and namespaced stopped kinds", () => {
     for (const k of [
       "cancelled",
+      "retracted",
       "completed",
       "stopped",
       "exited",
@@ -87,6 +89,7 @@ describe("isStoppedKind", () => {
       "turn_end",
       "idle",
       "turn/completed",
+      "turn/retracted",
     ]) {
       assert.equal(isStoppedKind(k), true, k);
     }
@@ -111,6 +114,7 @@ describe("phaseForKind", () => {
     assert.equal(phaseForKind("thinking"), "streaming");
     assert.equal(phaseForKind("reasoning"), "streaming");
     assert.equal(phaseForKind("completed"), "stopped");
+    assert.equal(phaseForKind("turn/retracted"), "stopped");
     assert.equal(phaseForKind("turn_end"), "stopped");
     assert.equal(phaseForKind("approval/resolved"), "other");
     assert.equal(phaseForKind("something-new"), "other");
@@ -189,6 +193,75 @@ describe("upsertReflexivePlaceholder", () => {
     assert.equal(next[0].itemId, "reason-1");
     assert.equal(next[0].open, true);
   });
+
+  it("seeds and binds a user-shell tool entry to its host item", () => {
+    const seeded = upsertReflexivePlaceholder([], {
+      role: "tool",
+      initialText: "$ git status",
+      stamp,
+    });
+    assert.equal(seeded[0].role, "tool");
+    assert.equal(seeded[0].text, "$ git status");
+    const bound = upsertReflexivePlaceholder(seeded, {
+      role: "tool",
+      itemId: "shell-1",
+      stamp,
+    });
+    assert.equal(bound.length, 1);
+    assert.equal(bound[0].itemId, "shell-1");
+    assert.equal(bound[0].text, "$ git status");
+  });
+});
+
+describe("applyItemSnapshotUpdate", () => {
+  it("replaces a live lane by item id and revision", () => {
+    const live = [entry({ role: "thinking", itemId: "r1", text: "first", open: true, itemRevision: 2 })];
+    const updated = applyItemSnapshotUpdate(live, {
+      itemId: "r1",
+      role: "thinking",
+      text: "first\nsecond",
+      revision: 3,
+      open: true,
+      stamp,
+    });
+    assert.equal(updated.length, 1);
+    assert.equal(updated[0].text, "first\nsecond");
+    assert.equal(updated[0].itemRevision, 3);
+    assert.equal(applyItemSnapshotUpdate(updated, {
+      itemId: "r1",
+      role: "thinking",
+      text: "stale",
+      revision: 2,
+      open: true,
+      stamp,
+    }), updated);
+  });
+
+  it("keeps a user-shell command paired with replaced output", () => {
+    const next = applyItemSnapshotUpdate([], {
+      itemId: "shell-1",
+      role: "tool",
+      commandText: "git status",
+      text: "clean",
+      revision: 1,
+      stamp,
+    });
+    assert.equal(next[0].text, "$ git status\nclean");
+  });
+
+  it("promotes the empty post-approval placeholder instead of duplicating it", () => {
+    const placeholder = [entry({ role: "assistant", text: "", open: true })];
+    const next = applyItemSnapshotUpdate(placeholder, {
+      itemId: "answer-1",
+      role: "assistant",
+      text: "Resumed.",
+      revision: 1,
+      stamp,
+    });
+    assert.equal(next.length, 1);
+    assert.equal(next[0].itemId, "answer-1");
+    assert.equal(next[0].text, "Resumed.");
+  });
 });
 
 describe("dropEmptyPlaceholders", () => {
@@ -199,6 +272,7 @@ describe("dropEmptyPlaceholders", () => {
       entry({ role: "assistant", text: "kept", open: true }),
       entry({ role: "assistant", text: "", open: false }),
       entry({ role: "thinking", text: "", open: true }),
+      entry({ role: "tool", text: "", open: true }),
     ];
     const next = dropEmptyPlaceholders(log);
     assert.deepEqual(

@@ -1,24 +1,27 @@
 /**
  * Connectors / MCP registry (US-24 + US-26).
  *
- * Zero imports: safe to unit-test on the built-in node:test runner.
+ * Dependency-light and safe to unit-test on the built-in node:test runner.
  *
  * - US-24: a curated in-app directory of LOCAL connectors installs in
  *   1 click (no manual JSON). Installed connectors hot-list their tools
  *   without restart: `listConnectorTools` re-reads the registry on every
  *   call, so there is no cache to invalidate; `diffTools` mirrors the
  *   `notifications/tools/list_changed` semantics for the UI.
- * - US-26: REMOTE registry entries exist for bookkeeping only (no real
- *   transport here). A single-remote guard plus an explicit
+ * - US-26: REMOTE entries are accepted only after a real initialize/tools
+ *   exchange in `remoteMcp.ts`. A single-remote guard plus an explicit
  *   public-internet/allowlist message applies; private/VPN-style hosts are
- *   refused with a documented failure message.
+ *   refused with a documented failure message. Tokens never enter this
+ *   persisted registry.
  *
  * Persistence lives under `muse-desktop.connectors.v1` (localStorage,
  * best-effort). Under node:test there is no localStorage, so load/save
  * degrade gracefully to memory defaults.
  */
 
-/** Local (in-process/sidecar) vs remote (HTTP/SSE, bookkeeping only). */
+import { readStorageJson, writeStorageJson } from "./storage.ts";
+
+/** Local (in-process/sidecar) vs remote (streamable HTTP/SSE). */
 export type ConnectorKind = "local" | "remote";
 
 /** Lifecycle state of a registry entry. */
@@ -28,6 +31,23 @@ export type ConnectorStatus = "installed" | "disabled" | "error";
 export interface ConnectorTool {
   name: string;
   description: string;
+}
+
+/** Result of a real local MCP initialize + tools/list exchange. */
+export interface LocalMcpProbeResult {
+  protocolVersion: string;
+  serverName: string;
+  serverVersion: string;
+  tools: ConnectorTool[];
+  durationMs: number;
+}
+
+/** Result of a real local MCP tools/call exchange. */
+export interface LocalMcpCallResult {
+  toolName: string;
+  result: unknown;
+  isError: boolean;
+  durationMs: number;
 }
 
 /** One curated directory entry: installable in 1 click, no JSON. */
@@ -48,6 +68,17 @@ export interface ConnectorEntry {
   status: ConnectorStatus;
   /** Remote-only: the configured endpoint URL. */
   url?: string;
+  /** Local-only: explicit command used to probe/call this server. */
+  command?: string;
+  /** Local-only: last successful tools/list timestamp. */
+  lastProbeAt?: number;
+  /** Local-only: server version reported by the last successful probe. */
+  serverVersion?: string;
+  /** Protocol version reported by the last successful MCP probe. */
+  protocolVersion?: string;
+  /** Local-only: one-step rollback snapshot from the previous tools/list. */
+  previousTools?: ConnectorTool[];
+  previousServerVersion?: string;
   /** Remote-only: human-readable guard failure, if the entry is blocked. */
   guardMessage?: string;
   addedAt: number;
@@ -131,6 +162,11 @@ export const REMOTE_LIMIT_MESSAGE =
   "remove the existing remote connector before adding another. Remote MCP " +
   "also requires a public-internet HTTPS endpoint with allowlisted IPs.";
 
+/** Stable id for a user-named local MCP connector. */
+export function localConnectorIdForName(name: string): string {
+  return `local-mcp-${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
+
 /** Find a curated entry by id, or null. */
 export function findCurated(id: string): CuratedConnector | null {
   for (const c of CURATED_CONNECTORS) {
@@ -175,6 +211,123 @@ export function installConnector(
     addedAt: now,
   };
   return { registry: [...registry, entry], entry, already: false };
+}
+
+/** Register a local server only after a real tools/list response. */
+export function registerLocalConnector(
+  registry: ConnectorEntry[],
+  spec: {
+    id: string;
+    name: string;
+    command: string;
+    tools: ConnectorTool[];
+    serverVersion?: string;
+  },
+  now: number = Date.now(),
+): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
+  const id = spec.id.trim();
+  const name = spec.name.trim();
+  const command = spec.command.trim();
+  if (!id || !name || !command || spec.tools.length === 0) return null;
+  const existing = findConnector(registry, id);
+  const entry: ConnectorEntry = {
+    id,
+    name,
+    description: "Verified local MCP server.",
+    kind: "local",
+    tools: spec.tools.map((tool) => ({
+      name: tool.name.trim(),
+      description: tool.description.trim(),
+    })),
+    status: existing?.status === "disabled" ? "disabled" : "installed",
+    command,
+    lastProbeAt: now,
+    ...(spec.serverVersion?.trim() ? { serverVersion: spec.serverVersion.trim() } : {}),
+    ...(existing?.tools?.length
+      ? { previousTools: existing.tools.map((tool) => ({ ...tool })) }
+      : {}),
+    ...(existing?.serverVersion
+      ? { previousServerVersion: existing.serverVersion }
+      : {}),
+    addedAt: existing?.addedAt ?? now,
+  };
+  if (entry.tools.some((tool) => tool.name.length === 0)) return null;
+  return {
+    registry: existing
+      ? registry.map((item) => (item.id === id ? entry : item))
+      : [...registry, entry],
+    entry,
+  };
+}
+
+/**
+ * Replace the tools from a previously verified local MCP connector.
+ *
+ * Refresh is deliberately narrower than registration: it can only target an
+ * existing local entry with a persisted command, keeps its identity/status,
+ * and refuses an empty or malformed tools/list response.
+ */
+export function refreshLocalConnector(
+  registry: ConnectorEntry[],
+  id: string,
+  tools: ConnectorTool[],
+  now: number = Date.now(),
+  serverVersion?: string,
+): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
+  const existing = findConnector(registry, id);
+  if (existing === null || existing.kind !== "local" || !existing.command) {
+    return null;
+  }
+  if (!Array.isArray(tools) || tools.length === 0) return null;
+  const nextTools = tools.map((tool) => ({
+    name: tool.name.trim(),
+    description: tool.description.trim(),
+  }));
+  if (nextTools.some((tool) => tool.name.length === 0)) return null;
+  const entry: ConnectorEntry = {
+    ...existing,
+    tools: nextTools,
+    lastProbeAt: now,
+    previousTools: existing.tools.map((tool) => ({ ...tool })),
+    ...(existing.serverVersion
+      ? { previousServerVersion: existing.serverVersion }
+      : {}),
+    ...(serverVersion?.trim() ? { serverVersion: serverVersion.trim() } : {}),
+  };
+  return {
+    registry: registry.map((item) => (item.id === id ? entry : item)),
+    entry,
+  };
+}
+
+/** Restore the immediately preceding valid tools/list snapshot. */
+export function rollbackLocalConnector(
+  registry: ConnectorEntry[],
+  id: string,
+): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
+  const existing = findConnector(registry, id);
+  if (
+    existing === null ||
+    existing.kind !== "local" ||
+    !existing.command ||
+    !existing.previousTools ||
+    existing.previousTools.length === 0
+  ) {
+    return null;
+  }
+  const entry: ConnectorEntry = {
+    ...existing,
+    tools: existing.previousTools.map((tool) => ({ ...tool })),
+    ...(existing.previousServerVersion
+      ? { serverVersion: existing.previousServerVersion }
+      : {}),
+  };
+  delete entry.previousTools;
+  delete entry.previousServerVersion;
+  return {
+    registry: registry.map((item) => (item.id === id ? entry : item)),
+    entry,
+  };
 }
 
 /** Remove an entry by id. Missing ids are a no-op (`removed: false`). */
@@ -239,14 +392,39 @@ export function isPublicHttpUrl(url: string): boolean {
   if (!/^https:\/\//i.test(trimmed)) return false;
   let host = "";
   try {
-    host = new URL(trimmed).hostname.toLowerCase();
+    const parsed = new URL(trimmed);
+    if (parsed.username || parsed.password) return false;
+    host = parsed.hostname.toLowerCase();
   } catch {
     return false;
   }
   if (host.length === 0) return false;
   if (host === "localhost") return false;
-  if (host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".lan")) {
+  if (
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    host.endsWith(".lan") ||
+    host.endsWith(".localhost") ||
+    host === "localhost"
+  ) {
     return false;
+  }
+  // URL.hostname keeps IPv6 brackets. Reject loopback, unspecified,
+  // link-local and unique-local ranges before any DNS lookup is attempted.
+  if (host.startsWith("[") && host.endsWith("]")) {
+    const ipv6 = host.slice(1, -1);
+    if (
+      ipv6 === "::1" ||
+      ipv6 === "::" ||
+      ipv6.startsWith("fc") ||
+      ipv6.startsWith("fd") ||
+      ipv6.startsWith("fe8") ||
+      ipv6.startsWith("fe9") ||
+      ipv6.startsWith("fea") ||
+      ipv6.startsWith("feb")
+    ) {
+      return false;
+    }
   }
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
     if (host.startsWith("10.")) return false;
@@ -254,6 +432,9 @@ export function isPublicHttpUrl(url: string): boolean {
     const second = Number(host.split(".")[1]);
     if (host.startsWith("172.") && second >= 16 && second <= 31) return false;
     if (host.startsWith("127.")) return false;
+    if (host.startsWith("169.254.")) return false;
+    if (host === "0.0.0.0") return false;
+    if (host.startsWith("100.") && Number(host.split(".")[1]) >= 64 && Number(host.split(".")[1]) <= 127) return false;
   }
   return true;
 }
@@ -266,8 +447,10 @@ export type RemoteRequestResult =
   | { ok: false; registry: ConnectorEntry[]; code: RemoteGuardCode; message: string };
 
 /**
- * Request a REMOTE connector entry (bookkeeping only — no real transport
- * in this client). Guards, in order:
+ * Validate the guards for a REMOTE connector before a transport attempt.
+ * This legacy helper returns a provisional row for callers that only need to
+ * inspect the plan limit; real registration must use `registerRemoteConnector`
+ * after a successful exchange. Guards, in order:
  * 1. single-remote limit (any existing remote entry blocks a new one);
  * 2. public-internet/allowlist check on the URL (private/VPN hosts are
  *    refused with the documented VPN failure message).
@@ -300,18 +483,47 @@ export function requestRemoteConnector(
   return { ok: true, registry: [...registry, entry], entry };
 }
 
-function storage(): Storage | null {
-  try {
-    const g = globalThis as unknown as Record<string, unknown>;
-    const ls = g["localStorage"];
-    if (typeof ls !== "object" || ls === null) return null;
-    const get = (ls as Record<string, unknown>)["getItem"];
-    const set = (ls as Record<string, unknown>)["setItem"];
-    if (typeof get !== "function" || typeof set !== "function") return null;
-    return ls as unknown as Storage;
-  } catch {
-    return null;
-  }
+/** Register a remote endpoint only after a real initialize + tools/list exchange. */
+export function registerRemoteConnector(
+  registry: ConnectorEntry[],
+  spec: {
+    id: string;
+    name: string;
+    url: string;
+    tools: ConnectorTool[];
+    protocolVersion?: string;
+    serverVersion?: string;
+  },
+  now: number = Date.now(),
+): { registry: ConnectorEntry[]; entry: ConnectorEntry } | null {
+  const id = spec.id.trim();
+  const name = spec.name.trim();
+  const url = spec.url.trim();
+  if (!id || !name || !isPublicHttpUrl(url) || !Array.isArray(spec.tools)) return null;
+  const tools = spec.tools
+    .map((tool) => ({ name: tool.name.trim(), description: tool.description.trim() }))
+    .filter((tool) => tool.name.length > 0 && tool.name.length <= 200);
+  if (tools.length !== spec.tools.length) return null;
+  const existing = findConnector(registry, id);
+  const entry: ConnectorEntry = {
+    id,
+    name,
+    description: `Verified remote MCP endpoint ${url}.`,
+    kind: "remote",
+    tools,
+    status: existing?.status === "disabled" ? "disabled" : "installed",
+    url,
+    lastProbeAt: now,
+    ...(spec.protocolVersion?.trim() ? { protocolVersion: spec.protocolVersion.trim() } : {}),
+    ...(spec.serverVersion?.trim() ? { serverVersion: spec.serverVersion.trim() } : {}),
+    addedAt: existing?.addedAt ?? now,
+  };
+  return {
+    registry: existing
+      ? registry.map((item) => (item.id === id ? entry : item))
+      : [...registry, entry],
+    entry,
+  };
 }
 
 function isValidEntry(e: unknown): e is ConnectorEntry {
@@ -328,14 +540,9 @@ function isValidEntry(e: unknown): e is ConnectorEntry {
 
 /** Load the persisted registry; corrupt/missing data yields []. */
 export function loadConnectors(): ConnectorEntry[] {
-  try {
-    const ls = storage();
-    if (ls === null) return [];
-    const raw = ls.getItem(CONNECTORS_KEY);
-    if (raw === null) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isValidEntry).map((e) => ({
+  const parsed = readStorageJson<unknown>(CONNECTORS_KEY, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(isValidEntry).map((e) => ({
       ...e,
       tools: e.tools.filter(
         (t): t is ConnectorTool =>
@@ -347,17 +554,24 @@ export function loadConnectors(): ConnectorEntry[] {
         e.status === "installed" || e.status === "disabled" || e.status === "error"
           ? e.status
           : "installed",
+      command: typeof e.command === "string" ? e.command : undefined,
+      lastProbeAt: typeof e.lastProbeAt === "number" ? e.lastProbeAt : undefined,
+      serverVersion: typeof e.serverVersion === "string" ? e.serverVersion : undefined,
+      protocolVersion: typeof e.protocolVersion === "string" ? e.protocolVersion : undefined,
+      previousTools: Array.isArray(e.previousTools)
+        ? e.previousTools.filter(
+            (t): t is ConnectorTool =>
+              typeof t === "object" &&
+              t !== null &&
+              typeof (t as ConnectorTool).name === "string",
+          )
+        : undefined,
+      previousServerVersion:
+        typeof e.previousServerVersion === "string" ? e.previousServerVersion : undefined,
     }));
-  } catch {
-    return [];
-  }
 }
 
 /** Persist the registry (best-effort: quota/private mode never throws). */
 export function saveConnectors(registry: ConnectorEntry[]): void {
-  try {
-    storage()?.setItem(CONNECTORS_KEY, JSON.stringify(registry));
-  } catch {
-    // best-effort persistence only
-  }
+  writeStorageJson(CONNECTORS_KEY, registry);
 }

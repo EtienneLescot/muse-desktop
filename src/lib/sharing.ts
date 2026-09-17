@@ -14,10 +14,12 @@
  *   so this module ships only an explicit experimental stub behind a flag
  *   with an honest "not connected" state — no fake realtime.
  *
- * Dependency-free (no imports): unit-tested under `node:test`.
+ * Dependency-light and unit-tested under `node:test`.
  * Persistence lives under `muse-desktop.sharing.v1` (mode + bundles);
  * the helpers below touch only the `localStorage` global (best-effort).
  */
+
+import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 export type ShareMode = "manual" | "auto" | "disabled";
 
@@ -96,21 +98,11 @@ function isValidBundle(b: unknown): b is ShareBundle {
 }
 
 function readKey(key: string): unknown {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return null;
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
+  return readStorageJson<unknown>(key, null);
 }
 
 function writeKey(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // best-effort like persist.ts
-  }
+  writeStorageJson(key, value);
 }
 
 export const SHARING_KEY = "muse-desktop.sharing.v1";

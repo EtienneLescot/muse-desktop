@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
 import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
 import { cycleThreadId, selectActiveThreads } from "./lib/threads";
@@ -22,18 +24,34 @@ import { SkillPanel } from "./components/SkillPanel";
 import { SharePanel } from "./components/SharePanel";
 import { ChannelPanel } from "./components/ChannelPanel";
 import { ImportPanel } from "./components/ImportPanel";
+import { ReviewPanel } from "./components/ReviewPanel";
+import { TerminalPanel } from "./components/TerminalPanel";
+import { FilesPanel } from "./components/FilesPanel";
 import type { ShareBundle } from "./lib/sharing";
+import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
+import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
+import { userFacingError } from "./lib/errorCopy";
+import { isTauriRuntime } from "./lib/env";
+import type { Artifact, ArtifactVersion } from "./lib/artifacts";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
   inputAnnouncement,
+  primaryModifier,
   streamStatusMessage,
 } from "./lib/a11y";
 import { IndexPanel } from "./components/IndexPanel";
 import { BrowserPanel } from "./components/BrowserPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
+import { searchConversations } from "./lib/conversationSearch";
 import { WindowControls, dragWindow } from "./components/WindowControls";
+import { readStorageString, writeStorageString } from "./lib/storage.ts";
+import {
+  NOTIFICATION_ACTION_EVENT,
+  subscribeNotificationActions,
+  type NotificationActionPayload,
+} from "./lib/notifications";
 import "./App.css";
 import "./Desktop.css";
 
@@ -41,7 +59,7 @@ function initialTheme(): Theme {
   let stored: string | null = null;
   let prefersDark = false;
   try {
-    stored = localStorage.getItem(THEME_KEY);
+    stored = readStorageString(THEME_KEY);
     prefersDark =
       window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
   } catch {
@@ -51,12 +69,20 @@ function initialTheme(): Theme {
 }
 
 export default function App() {
+  const modifier = primaryModifier();
   const {
     sessions,
     activeId,
+    logs,
     activeLog,
     approvals,
     activeApprovals,
+    activeStreamActivity,
+    activeResumePending,
+    stoppingBySession,
+    activeConnectionState,
+    queuedTurns,
+    dismissQueuedTurn,
     inputRequests,
     activeInputRequests,
     workspace,
@@ -72,14 +98,32 @@ export default function App() {
     refreshModels,
     setSessionModel,
     checkPathScope,
+    createWorktree,
+    createWorktreeSession,
+    worktrees,
+    cleanupIntents,
+    removeWorktree,
+    inspectWorktree,
+    checkWorktreeReadiness,
+    runWorktreeSetup,
+    cancelWorktreeSetup,
     setActive,
     startSession,
+    startSessionInWorkspace,
+    forkSession,
     reconnectSession,
     reconnectingId,
+    reconcileSession,
+    reconcilingId,
     connectedIds,
+    userShellAvailableForSession,
+    evtCount,
     sendInput,
+    steerInput,
+    unqueueTurn,
     pendingSends,
     retrySend,
+    retryFailedTurn,
     discardSend,
     approve,
     allowlist,
@@ -93,6 +137,8 @@ export default function App() {
     killSession,
     renameSession,
     archiveSession,
+    togglePinned,
+    moveConversation,
     restoreSession,
     projects,
     threadProjects,
@@ -105,12 +151,26 @@ export default function App() {
     setGlobalSettings,
     setProjectOverride,
     settingsFor,
+    projectForSession,
     schedules,
+    scheduleRuns,
+    notifications,
+    notificationPermission,
+    notificationsMuted,
+    unreadNotificationCount,
+    enableNotifications,
+    setNotificationsMuted,
+    markNotificationRead,
     reviewQueue,
     createSchedule,
     setScheduleEnabled,
     deleteSchedule,
     runScheduleNow,
+    cancelScheduleRun,
+    markScheduleRunRecoveryFailed,
+    markScheduleRunRead,
+    setScheduleRunArchived,
+    retryScheduleRunNow,
     approveReview,
     discardReview,
     shareMode,
@@ -131,15 +191,28 @@ export default function App() {
     subagentDrilldown,
     connectors,
     connectorTools,
+    probeLocalMcp,
+    callLocalMcp,
+    registerLocalConnector,
+    refreshLocalMcp,
+    rollbackLocalMcp,
+    mcpRunningIds,
+    startLocalMcp,
+    stopLocalMcp,
+    callRegisteredLocalMcp,
+    remoteConnectedIds,
+    probeRemoteMcp,
+    callRemoteMcp,
+    disconnectRemoteMcp,
     remoteNotice,
     installConnectorById,
     uninstallConnectorById,
     setConnectorEnabledById,
-    addRemoteConnector,
     skills,
     setSkillEnabledByName,
     traceSkillSuggestions,
     invokeSkill,
+    scanSkills,
     summaries,
     compactSession,
     usageBySession,
@@ -147,12 +220,41 @@ export default function App() {
     newFromSummary,
     prefill,
     clearPrefill,
+    prefillAttachment,
+    prefillAttachmentSessionId,
+    clearPrefillAttachment,
     artifacts,
     restoreArtifact,
     commentArtifact,
     index,
+    gitReview,
+    refreshGitStatus,
+    loadGitDiff,
+    stageGitFiles,
+    restoreGitFiles,
+    applyGitHunk,
+    commitGit,
+    pushGit,
+    createGitPr,
+    terminalForSession,
+    openTerminal,
+    readTerminal,
+    writeTerminal,
+    runUserShell,
+    resizeTerminal,
+    closeTerminal,
+    prepareTerminalContext,
+    filesForSession,
+    prepareWorkspaceFileContext,
+    listWorkspaceFiles,
+    readWorkspaceFile,
+    watchWorkspaceFiles,
+    unwatchWorkspaceFiles,
+    openWorkspacePath,
     browserAnnotations,
     addBrowserAnnotation,
+    prepareBrowserContext,
+    prepareBrowserCapture,
     removeBrowserAnnotation,
     browserPermissions,
     setBrowserAppPermission,
@@ -163,6 +265,8 @@ export default function App() {
     ackScanNudge,
     error,
     backendMissing,
+    startupProbe,
+    probeStartup,
   } = useMuseSessions();
 
   // US-20: one `@mem/…` token the panel asked the composer to insert.
@@ -174,8 +278,10 @@ export default function App() {
     "task" | "projects" | "automations" | "extensions" | "library" | "archives"
   >("task");
   const [collapsed, setCollapsed] = useState(false);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
   const [workPanel, setWorkPanel] = useState<
-    "artifacts" | "browser" | "memory" | "tools" | null
+    "artifacts" | "browser" | "memory" | "tools" | "review" | "terminal" | "files" | null
   >(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -184,11 +290,7 @@ export default function App() {
   const searchWasOpen = useRef(false);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const settingsWasOpen = useRef(false);
-  const searchResults = sessions.filter((session) =>
-    (session.title + " " + session.workspace)
-      .toLocaleLowerCase()
-      .includes(search.toLocaleLowerCase()),
-  );
+  const searchResults = searchConversations(sessions, logs, search);
   useEffect(() => setSearchIndex(0), [search, searchOpen]);
   const searchDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -221,6 +323,35 @@ export default function App() {
     setSettingsOpen(false);
     setPage(next);
   };
+
+  // M3-09: a native/web notification click carries only a bounded session or
+  // run id. Resolve it through the existing session SSOT and focus the task;
+  // no notification payload is treated as transcript content.
+  useEffect(() => {
+    const openFromAction = (payload: NotificationActionPayload) => {
+      if (!payload.sessionId || !sessionsRef.current.some((session) => session.session_id === payload.sessionId)) {
+        return;
+      }
+      openPage("task");
+      setActive(payload.sessionId);
+    };
+    const onWebAction = (event: Event) => {
+      const detail = (event as CustomEvent<NotificationActionPayload>).detail;
+      if (detail && typeof detail === "object") openFromAction(detail);
+    };
+    window.addEventListener(NOTIFICATION_ACTION_EVENT, onWebAction);
+    let dispose: (() => void) | null = null;
+    let cancelled = false;
+    void subscribeNotificationActions(openFromAction).then((cleanup) => {
+      if (cancelled) cleanup();
+      else dispose = cleanup;
+    });
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NOTIFICATION_ACTION_EVENT, onWebAction);
+      dispose?.();
+    };
+  }, [setActive]);
   const newTask = () => {
     openPage("task");
     setActive(null);
@@ -254,14 +385,14 @@ export default function App() {
 
   useEffect(() => {
     document.body.classList.toggle("dark", theme === "dark");
-    try {
-      localStorage.setItem(THEME_KEY, theme);
-    } catch {
-      // best-effort (private mode, quota): the class toggle above still applies
-    }
+    writeStorageString(THEME_KEY, theme);
   }, [theme]);
 
   const active = sessions.find((s) => s.session_id === activeId) ?? null;
+  const activeProject =
+    active === null ? null : projectForSession(active.session_id);
+  const activeProjectSettings =
+    activeProject === null ? globalSettings : settingsFor(activeProject.id);
   // M0-03: retryable sends of the viewed conversation only — a retry never
   // routes by this view, it goes to the entry's own sessionId.
   const activePendingSends =
@@ -380,10 +511,80 @@ export default function App() {
       kind={sidecarKind}
       message={error}
       triedPaths={extractTriedPaths(error)}
-      onRetry={() => void startSession()}
+      onRetry={() => {
+        void probeStartup(workspace);
+        void startSession();
+      }}
       onPickWorkspace={setWorkspace}
+      startupProbe={startupProbe}
     />
   );
+
+  async function exportDiagnostics(): Promise<void> {
+    let native: NativeDiagnosticsSnapshot | null = null;
+    try {
+      native = await invoke<NativeDiagnosticsSnapshot>("collect_diagnostics");
+    } catch {
+      // Web preview and older native builds use the renderer counters below.
+    }
+    const payload = diagnosticsJson({
+      workspace,
+      sessionCount: sessions.length,
+      runningSessionCount: sessions.filter((session) => session.running).length,
+      connectedSessionCount: connectedIds.length,
+      pendingApprovalCount: activeApprovals.length,
+      pendingInputCount: activeInputRequests.length,
+      pendingSendCount: pendingSends.length,
+      scheduleCount: schedules.length,
+      scheduleRunCount: scheduleRuns.length,
+      eventCount: evtCount,
+      backendMissing,
+      error,
+      native,
+    });
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `muse-desktop-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportArtifact(
+    artifact: Artifact,
+    version: ArtifactVersion,
+  ): Promise<boolean> {
+    const slug = artifact.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "muse-artifact";
+    const extension = artifact.kind === "doc"
+      ? artifact.lang === "md" || artifact.lang === "markdown" ? "md" : "txt"
+      : artifact.lang.replace(/[^a-z0-9]+/gi, "").slice(0, 8) || "txt";
+    const filename = `${slug}-v${version.v}.${extension}`;
+    if (isTauriRuntime()) {
+      const target = await save({
+        title: "Export artifact",
+        defaultPath: filename,
+        filters: [{ name: artifact.kind === "doc" ? "Document" : "Source", extensions: [extension] }],
+      });
+      if (typeof target !== "string" || target.trim() === "") return false;
+      await invoke("artifact_export", { path: target, content: version.text });
+      return true;
+    }
+    const blob = new Blob([version.text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    return true;
+  }
 
   return (
     <div className={`app desktop-app ${collapsed ? "nav-collapsed" : ""}`}>
@@ -413,7 +614,7 @@ export default function App() {
           <button
             onClick={newTask}
             aria-label="New conversation"
-            title="New conversation · Ctrl+N"
+            title={`New conversation · ${modifier}+N`}
           >
             <Icon name="plus" />
             <span>New conversation</span>
@@ -422,7 +623,7 @@ export default function App() {
             ref={searchTrigger}
             onClick={() => setSearchOpen(true)}
             aria-label="Search"
-            title="Search · Ctrl+K"
+            title={`Search · ${modifier}+K`}
           >
             <Icon name="search" />
             <span>Search</span>
@@ -467,6 +668,8 @@ export default function App() {
             onCancel={cancelSession}
             onKill={killSession}
             onRename={renameSession}
+            onTogglePin={togglePinned}
+            onMove={moveConversation}
             onArchive={archiveSession}
             onRestore={restoreSession}
             canStart
@@ -529,7 +732,15 @@ export default function App() {
             </span>
           </div>
           <div className="top-actions">
-            {active && page === "task" && !settingsOpen && !backendMissing && !connectedIds.includes(active.session_id) && (
+            {active && page === "task" && !settingsOpen && !backendMissing && active.session_durability?.toLowerCase() === "ephemeral" && !connectedIds.includes(active.session_id) && (
+              <span
+                className="workspace-button workspace-durability-note"
+                title="This host keeps sessions only while its process is running"
+              >
+                Local transcript · session ended
+              </span>
+            )}
+            {active && page === "task" && !settingsOpen && !backendMissing && active.session_durability?.toLowerCase() !== "ephemeral" && !connectedIds.includes(active.session_id) && (
               <button className="workspace-button"
                 disabled={reconnectingId !== null || active.running}
                 onClick={() => void reconnectSession(active.session_id)}
@@ -549,6 +760,17 @@ export default function App() {
             >
               <Icon name={theme === "dark" ? "sun" : "moon"} />
             </button>
+            {active && page === "task" && !settingsOpen && (
+              <button
+                className="icon"
+                onClick={() => void forkSession(active.session_id)}
+                disabled={backendMissing || !connectedIds.includes(active.session_id)}
+                aria-label="Fork conversation"
+                title="Fork conversation from the latest completed turn"
+              >
+                <Icon name="branch" />
+              </button>
+            )}
             {active && page === "task" && !settingsOpen && (
               <button
                 className="icon"
@@ -586,6 +808,7 @@ export default function App() {
               onSelectModel={(modelId) => {
                 if (activeId !== null) void setSessionModel(activeId, modelId);
               }}
+              onExportDiagnostics={exportDiagnostics}
               checkPathScope={checkPathScope}
               onClose={() => setSettingsOpen(false)}
             />
@@ -627,12 +850,20 @@ export default function App() {
                   projectError={projectError}
                   activeSessionId={activeId}
                   globalSettings={globalSettings}
-                  onCreate={(name, instructions) =>
-                    createProject(name, instructions)
+                  onCreate={(name, instructions, projectWorkspace) =>
+                    createProject(name, instructions, projectWorkspace)
                   }
                   onDelete={deleteProject}
                   onUpdate={updateProject}
                   onAttach={attachThread}
+                  onStartConversation={async (project) => {
+                    if (!project.workspace) return;
+                    const id = await startSessionInWorkspace(
+                      project.workspace,
+                      settingsFor(project.id),
+                    );
+                    if (id !== null) attachThread(id, project.id);
+                  }}
                   onSetGlobal={setGlobalSettings}
                   onSetOverride={setProjectOverride}
                   settingsFor={settingsFor}
@@ -645,14 +876,43 @@ export default function App() {
                 {" "}
                 <SchedulesPanel
                   schedules={schedules}
+                  runs={scheduleRuns}
+                  notifications={notifications}
+                  notificationPermission={notificationPermission}
+                  notificationsMuted={notificationsMuted}
+                  unreadNotifications={unreadNotificationCount}
                   sessions={sessions}
                   activeId={activeId}
+                  workspace={workspace}
+                  projectId={activeProject?.id ?? null}
+                  model={activeProjectSettings.model}
+                  authorizationMode={authorizationMode}
                   onCreate={(input) => {
                     createSchedule(input);
                   }}
                   onToggle={(id, enabled) => setScheduleEnabled(id, enabled)}
                   onDelete={(id) => deleteSchedule(id)}
                   onRunNow={(id) => runScheduleNow(id)}
+                  onCancelRun={(id) => cancelScheduleRun(id)}
+                  onMarkRunRecoveryFailed={(id) => markScheduleRunRecoveryFailed(id)}
+                  onMarkRunRead={(id) => markScheduleRunRead(id)}
+                  onSetRunArchived={(id, archived) => setScheduleRunArchived(id, archived)}
+                  onRetryRunNow={(id) => retryScheduleRunNow(id)}
+                  onEnableNotifications={enableNotifications}
+                  onSetNotificationsMuted={setNotificationsMuted}
+                  onMarkNotificationRead={markNotificationRead}
+                  onOpenNotification={(notification) => {
+                    if (notification.sessionId) {
+                      openPage("task");
+                      setActive(notification.sessionId);
+                    }
+                  }}
+                  onOpenRun={(run) => {
+                    if (run.sessionId) {
+                      openPage("task");
+                      setActive(run.sessionId);
+                    }
+                  }}
                 />
               </>
             )}
@@ -662,16 +922,34 @@ export default function App() {
                 <ConnectorPanel
                   installed={connectors}
                   toolNames={connectorTools.map((t) => t.name)}
+                  workspace={workspace}
+                  onProbeLocal={(command) => probeLocalMcp(command, workspace)}
+                  onCallLocal={(command, toolName, argumentsText) =>
+                    callLocalMcp(command, toolName, argumentsText, workspace)
+                  }
+                  onRegisterLocal={registerLocalConnector}
+                  onRefreshLocal={(id) => refreshLocalMcp(id, workspace)}
+                  onRollbackLocal={rollbackLocalMcp}
+                  mcpRunningIds={mcpRunningIds}
+                  onStartLocal={(id) => startLocalMcp(id, workspace)}
+                  onStopLocal={stopLocalMcp}
+                  onCallRegisteredLocal={callRegisteredLocalMcp}
+                  remoteConnectedIds={remoteConnectedIds}
+                  onProbeRemote={probeRemoteMcp}
+                  onCallRemote={callRemoteMcp}
+                  onDisconnectRemote={disconnectRemoteMcp}
+                  authorizationMode={authorizationMode}
                   remoteNotice={remoteNotice}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}
                   onToggle={(id, enabled) =>
                     setConnectorEnabledById(id, enabled)
                   }
-                  onAddRemote={(name, url) => addRemoteConnector(name, url)}
                 />{" "}
                 <SkillPanel
                   skills={skills}
+                  workspace={workspace}
+                  onScan={() => scanSkills(workspace)}
                   onToggle={(name, enabled) =>
                     setSkillEnabledByName(name, enabled)
                   }
@@ -755,18 +1033,18 @@ export default function App() {
             )}
             {sidecarKind !== null
               ? active !== null && sidecarPanel
-              : error && <div className="error-banner">{error}</div>}
+              : error && <div className="error-banner">{userFacingError(error)}</div>}
             {active === null ? (
               <EmptySessionScreen
                 workspace={workspace}
                 onPickWorkspace={setWorkspace}
-                onStart={async (draft) => {
+                onStart={async (draft, inputParts) => {
                   const id = await startSession();
-                  if (id === null || draft.trim() === "") return id !== null;
+                  if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
                   // M0-03: honest result — when the first send fails the
                   // welcome draft must not be reported as sent; the text
                   // stays recoverable via the retryable pending-send notice.
-                  const res = await sendInput(id, draft);
+                  const res = await sendInput(id, draft, undefined, inputParts);
                   return res.ok;
                 }}
                 backendMissing={backendMissing}
@@ -787,7 +1065,31 @@ export default function App() {
                       {active.running ? "Working" : "Ready"}
                       <span>·</span>
                       <span title={active.workspace}>{active.workspace}</span>
+                      {active.branch !== undefined && (
+                        <>
+                          <span>·</span>
+                          <span title="Host-reported Git branch">{active.branch}</span>
+                        </>
+                      )}
+                      <span className={`connection-state connection-${activeConnectionState}`}>
+                        <span className="connection-state-dot" aria-hidden="true" />
+                        {activeConnectionState === "connected"
+                          ? "Connected"
+                          : activeConnectionState === "connecting"
+                            ? "Connecting"
+                            : activeConnectionState === "error"
+                              ? "Connection error"
+                              : "Disconnected"}
+                      </span>
                     </div>
+                    {activeProject !== null && (
+                      <div className="task-project-context" title="Effective project settings">
+                        <span>Project: {activeProject.name}</span>
+                        <span>Model: {activeProjectSettings.model}</span>
+                        <span>Sandbox: {activeProjectSettings.sandbox}</span>
+                        <span>Network: {activeProjectSettings.networkDefault}</span>
+                      </div>
+                    )}
                   </header>
                   {active.archived && (
                     <div className="preview-notice">
@@ -829,6 +1131,20 @@ export default function App() {
                   <StreamView
                     entries={activeLog}
                     sessionId={active.session_id}
+                    running={active.running}
+                    stopping={stoppingBySession[active.session_id] === true}
+                    lastEventAt={activeStreamActivity?.lastEventAt ?? null}
+                    lastEventKind={activeStreamActivity?.lastEventKind ?? null}
+                    resumePendingAt={activeResumePending?.requestedAt ?? null}
+                    pendingApprovals={activeApprovals.length}
+                    pendingInputs={activeInputRequests.length}
+                    reconnecting={reconnectingId === active.session_id}
+                    onReconnect={active.session_durability?.toLowerCase() === "ephemeral" ? undefined : () => void reconnectSession(active.session_id)}
+                    reconciling={reconcilingId === active.session_id}
+                    onReconcile={() => void reconcileSession(active.session_id)}
+                    onCancel={() => void cancelSession(active.session_id)}
+                    onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
+                    onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
                     controls={{
                       onInterrupt: (agentId) =>
                         void subagentInterrupt(active.session_id, agentId),
@@ -848,6 +1164,36 @@ export default function App() {
                     }}
                   />
 
+                  {queuedTurns.length > 0 && (
+                    <section className="queued-turns" aria-label="Queued messages">
+                      <div className="queued-turns-head">
+                        <strong>Queued messages</strong>
+                        <span className="muted">They will run in order</span>
+                      </div>
+                      {queuedTurns.map((turn) => (
+                        <div className={`queued-turn${turn.recovered ? " queued-turn-recovered" : ""}`} key={turn.turn_id}>
+                          <span className="queued-turn-text" title={turn.text}>
+                            {turn.text.length > 120 ? `${turn.text.slice(0, 120)}…` : turn.text}
+                          </span>
+                          {turn.recovered && (
+                            <span className="queued-turn-note">
+                              Saved before restart — verify the host queue
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (turn.recovered) dismissQueuedTurn(active.session_id, turn.turn_id);
+                              else void unqueueTurn(active.session_id, turn.turn_id);
+                            }}
+                            title={turn.recovered ? "Dismiss this local queue reminder" : "Remove this message from the host queue"}
+                          >
+                            {turn.recovered ? "Dismiss" : "Remove from queue"}
+                          </button>
+                        </div>
+                      ))}
+                    </section>
+                  )}
                   {activePendingSends.map((entry) => (
                     <div
                       className="pending-send"
@@ -896,11 +1242,19 @@ export default function App() {
                       </>
                     }
                     running={active.running}
+                    stopping={stoppingBySession[active.session_id] === true}
                     workspace={active.workspace}
-                    onSend={(text) => sendInput(active.session_id, text)}
+                    onSend={(text, inputParts) => sendInput(active.session_id, text, undefined, inputParts)}
+                    onSteer={(text, inputParts) => steerInput(active.session_id, text, inputParts)}
                     onCancel={() => void cancelSession(active.session_id)}
                     prefill={prefill}
                     onPrefillConsumed={clearPrefill}
+                    prefillAttachment={
+                      prefillAttachmentSessionId === active.session_id
+                        ? prefillAttachment
+                        : null
+                    }
+                    onPrefillAttachmentConsumed={clearPrefillAttachment}
                     memories={memories}
                     memoryInsert={memoryInsert}
                     onMemoryInsertConsumed={() => setMemoryInsert(null)}
@@ -914,6 +1268,9 @@ export default function App() {
                       {(
                         [
                           ["artifacts", "Content"],
+                          ["review", "Review"],
+                          ["terminal", "Terminal"],
+                          ["files", "Files"],
                           ["browser", "Browser"],
                           ["memory", "Memory"],
                           ["tools", "Activity"],
@@ -945,8 +1302,56 @@ export default function App() {
                             artifacts={artifacts[active.session_id] ?? []}
                             onRestore={restoreArtifact}
                             onComment={commentArtifact}
+                            onExport={exportArtifact}
                           />
                         </>
+                      )}
+                      {workPanel === "review" && (
+                        <ReviewPanel
+                          sessionId={active.session_id}
+                          review={gitReview(active.session_id)}
+                          onRefreshStatus={refreshGitStatus}
+                          onLoadDiff={loadGitDiff}
+                          onStageFiles={stageGitFiles}
+                          onRestoreFiles={restoreGitFiles}
+                          onApplyHunk={applyGitHunk}
+                          onCommit={commitGit}
+                          onPush={pushGit}
+                          onCreatePr={createGitPr}
+                          onSendComment={async (anchor: ReviewAnchor, body: string) => {
+                            const result = await sendInput(
+                              active.session_id,
+                              formatReviewComment(anchor, body),
+                            );
+                            return result.ok;
+                          }}
+                        />
+                      )}
+                      {workPanel === "terminal" && (
+                        <TerminalPanel
+                          sessionId={active.session_id}
+                          terminal={terminalForSession(active.session_id)}
+                          onOpen={openTerminal}
+                          onRead={readTerminal}
+                          onWrite={writeTerminal}
+                          onResize={resizeTerminal}
+                          onClose={closeTerminal}
+                          canRunThroughMuse={userShellAvailableForSession(active.session_id)}
+                          onRunThroughMuse={runUserShell}
+                          onInsertContext={prepareTerminalContext}
+                        />
+                      )}
+                      {workPanel === "files" && (
+                        <FilesPanel
+                          sessionId={active.session_id}
+                          state={filesForSession(active.session_id)}
+                          onList={listWorkspaceFiles}
+                          onRead={readWorkspaceFile}
+                          onWatch={watchWorkspaceFiles}
+                          onUnwatch={unwatchWorkspaceFiles}
+                          onOpen={openWorkspacePath}
+                          onInsertContext={prepareWorkspaceFileContext}
+                        />
                       )}
                       {workPanel === "browser" && (
                         <>
@@ -955,6 +1360,12 @@ export default function App() {
                             annotations={browserAnnotations}
                             permissions={browserPermissions}
                             onAddAnnotation={addBrowserAnnotation}
+                            onInsertContext={(context) => {
+                              void prepareBrowserContext(active.session_id, context);
+                            }}
+                            onInsertCapture={(capture) =>
+                              prepareBrowserCapture(active.session_id, capture)
+                            }
                             onRemoveAnnotation={removeBrowserAnnotation}
                             onSetPermission={setBrowserAppPermission}
                           />
@@ -991,7 +1402,26 @@ export default function App() {
                               void serverCompact(active.session_id)
                             }
                           />{" "}
-                          <OrchestrationPanel agents={orchestrationAgents} />{" "}
+                          <OrchestrationPanel
+                            agents={orchestrationAgents}
+                            sessionId={active.session_id}
+                            workspace={active.workspace}
+                            onCreateWorktree={createWorktree}
+                            onCreateConversationWorktree={(plan) =>
+                              createWorktreeSession(active.session_id, plan, activeProjectSettings)
+                            }
+                            worktrees={worktrees}
+                            cleanupIntents={cleanupIntents}
+                            onRemoveWorktree={removeWorktree}
+                            onOpenWorktree={async (record) =>
+                              startSessionInWorkspace(record.path, activeProjectSettings)
+                            }
+                            onInspectWorktree={inspectWorktree}
+                            onCheckReadiness={checkWorktreeReadiness}
+                            onRunSetup={runWorktreeSetup}
+                            onCancelSetup={cancelWorktreeSetup}
+                            sourceStatus={gitReview(active.session_id).status}
+                          />{" "}
                           <SharePanel
                             sessionId={active.session_id}
                             mode={shareMode}
@@ -1085,7 +1515,7 @@ export default function App() {
               event.preventDefault();
               setActive(
                 searchResults[Math.min(searchIndex, searchResults.length - 1)]
-                  .session_id,
+                  .session.session_id,
               );
               openPage("task");
               setSearchOpen(false);
@@ -1093,26 +1523,25 @@ export default function App() {
           }}
         />
         <div className="search-results">
-          {searchResults.map((session, index) => (
+          {searchResults.map((hit, index) => (
             <button
-              key={session.session_id}
+              key={hit.session.session_id}
               className={index === searchIndex ? "search-highlight" : undefined}
               onClick={() => {
-                setActive(session.session_id);
+                setActive(hit.session.session_id);
                 openPage("task");
                 setSearchOpen(false);
               }}
             >
               <Icon name="code" />
-              {session.title || session.session_id.slice(0, 8)}
-              <small>{session.archived ? "Archived" : ""}</small>
+              <span>
+                {hit.session.title || hit.session.session_id.slice(0, 8)}
+                {hit.excerpt !== null && <small className="search-excerpt">{hit.excerpt}</small>}
+              </span>
+              <small>{hit.session.archived ? "Archived" : ""}</small>
             </button>
           ))}
-          {!sessions.some((session) =>
-            (session.title + " " + session.workspace)
-              .toLowerCase()
-              .includes(search.toLowerCase()),
-          ) && <p className="muted">No conversations found.</p>}
+          {searchResults.length === 0 && <p className="muted">No conversations found.</p>}
         </div>
       </dialog>
     </div>

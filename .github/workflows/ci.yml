@@ -32,9 +32,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Run unit tests
-        run: npm test
+        shell: bash
+        run: |
+          set +e
+          npm test > ci-node-test.log 2>&1
+          status=$?
+          # Keep failure evidence bounded and remove machine-specific paths
+          # and common credential-shaped values before it becomes an artifact.
+          tail -n 250 ci-node-test.log \
+            | sed -E 's#(/home/runner|/Users|C:\\Users)[^ ]*#<ci-path>#g; s#(token|password|api[_-]?key|authorization)[=:][^ ]+#\1=<redacted>#gi' \
+            > ci-node-test-report.log
+          exit "$status"
       - name: Build frontend
-        run: npm run build
+        shell: bash
+        run: |
+          set +e
+          npm run build > ci-node-build.log 2>&1
+          status=$?
+          tail -n 250 ci-node-build.log \
+            | sed -E 's#(/home/runner|/Users|C:\\Users)[^ ]*#<ci-path>#g; s#(token|password|api[_-]?key|authorization)[=:][^ ]+#\1=<redacted>#gi' \
+            > ci-node-build-report.log
+          exit "$status"
+      - name: Upload frontend diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: muse-ci-frontend-diagnostics-${{ github.run_id }}
+          path: ci-node-*-report.log
+          if-no-files-found: ignore
+          retention-days: 7
 
   rust:
     name: Rust supervisor tests
@@ -73,4 +99,20 @@ jobs:
           printf '#!/bin/sh\nexit 0\n' > src-tauri/binaries/muse-x86_64-unknown-linux-gnu
           chmod +x src-tauri/binaries/muse-x86_64-unknown-linux-gnu
       - name: Run supervisor tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        shell: bash
+        run: |
+          set +e
+          cargo test --manifest-path src-tauri/Cargo.toml > ci-rust-test.log 2>&1
+          status=$?
+          tail -n 300 ci-rust-test.log \
+            | sed -E 's#(/home/runner|/Users|C:\\Users)[^ ]*#<ci-path>#g; s#(token|password|api[_-]?key|authorization)[=:][^ ]+#\1=<redacted>#gi' \
+            > ci-rust-test-report.log
+          exit "$status"
+      - name: Upload Rust diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: muse-ci-rust-diagnostics-${{ github.run_id }}
+          path: ci-rust-test-report.log
+          if-no-files-found: ignore
+          retention-days: 7

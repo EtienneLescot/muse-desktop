@@ -17,6 +17,10 @@ import {
   loadConnectors,
   REMOTE_LIMIT_MESSAGE,
   requestRemoteConnector,
+  registerRemoteConnector,
+  registerLocalConnector,
+  rollbackLocalConnector,
+  refreshLocalConnector,
   setConnectorEnabled,
   uninstallConnector,
   VPN_FAILURE_MESSAGE,
@@ -68,6 +72,120 @@ describe("installConnector (1-click local, no JSON)", () => {
 
   it("refuses unknown ids (no manual JSON path)", () => {
     assert.equal(installConnector([], "evil-custom", 1000), null);
+  });
+});
+
+describe("verified local MCP connector registration", () => {
+  it("stores the command and real tools after a successful probe", () => {
+    const result = registerLocalConnector(
+      [],
+      {
+        id: "local-mcp-demo",
+        name: "Demo",
+        command: "node server.js",
+        tools: [{ name: "demo.read", description: "Read demo data" }],
+        serverVersion: "1.2.3",
+      },
+      1234,
+    );
+    assert.ok(result);
+    assert.equal(result.entry.command, "node server.js");
+    assert.equal(result.entry.lastProbeAt, 1234);
+    assert.equal(result.entry.serverVersion, "1.2.3");
+    assert.deepEqual(listConnectorTools(result.registry).map((tool) => tool.name), ["demo.read"]);
+  });
+
+  it("updates an existing connector without re-enabling a disabled entry", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "" }],
+    });
+    assert.ok(first);
+    const disabled = setConnectorEnabled(first.registry, "local-mcp-demo", false).registry;
+    const refreshed = registerLocalConnector(disabled, {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo --new",
+      tools: [{ name: "two", description: "" }],
+    });
+    assert.ok(refreshed);
+    assert.equal(refreshed.entry.status, "disabled");
+    assert.equal(refreshed.entry.command, "demo --new");
+  });
+
+  it("refreshes one existing local entry without changing its identity or status", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "old" }],
+    }, 1000);
+    assert.ok(first);
+    const disabled = setConnectorEnabled(first.registry, "local-mcp-demo", false).registry;
+    const refreshed = refreshLocalConnector(
+      disabled,
+      "local-mcp-demo",
+      [{ name: "two", description: "new" }],
+      2000,
+    );
+    assert.ok(refreshed);
+    assert.equal(refreshed.entry.id, "local-mcp-demo");
+    assert.equal(refreshed.entry.status, "disabled");
+    assert.equal(refreshed.entry.command, "demo");
+    assert.equal(refreshed.entry.addedAt, first.entry.addedAt);
+    assert.equal(refreshed.entry.lastProbeAt, 2000);
+    assert.deepEqual(refreshed.entry.tools, [{ name: "two", description: "new" }]);
+    assert.deepEqual(refreshed.entry.previousTools, [{ name: "one", description: "old" }]);
+  });
+
+  it("restores the previous catalog without changing identity or disabled status", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "old" }],
+      serverVersion: "1.0.0",
+    }, 1000);
+    assert.ok(first);
+    const updated = refreshLocalConnector(
+      setConnectorEnabled(first.registry, "local-mcp-demo", false).registry,
+      "local-mcp-demo",
+      [{ name: "two", description: "new" }],
+      2000,
+      "2.0.0",
+    );
+    assert.ok(updated);
+    const rolledBack = rollbackLocalConnector(updated.registry, "local-mcp-demo");
+    assert.ok(rolledBack);
+    assert.equal(rolledBack.entry.status, "disabled");
+    assert.equal(rolledBack.entry.serverVersion, "1.0.0");
+    assert.deepEqual(rolledBack.entry.tools, [{ name: "one", description: "old" }]);
+    assert.equal(rolledBack.entry.previousTools, undefined);
+  });
+
+  it("refuses rollback when no previous catalog exists", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "" }],
+    });
+    assert.ok(first);
+    assert.equal(rollbackLocalConnector(first.registry, "local-mcp-demo"), null);
+  });
+
+  it("rejects refresh for unknown entries and empty tools", () => {
+    const first = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "demo",
+      tools: [{ name: "one", description: "" }],
+    });
+    assert.ok(first);
+    assert.equal(refreshLocalConnector(first.registry, "missing", [{ name: "two", description: "" }]), null);
+    assert.equal(refreshLocalConnector(first.registry, "local-mcp-demo", []), null);
   });
 });
 
@@ -191,7 +309,48 @@ describe("remote guard (US-26: single remote + public internet)", () => {
     assert.equal(isPublicHttpUrl("https://mcp.acme.com/rpc"), true);
     assert.equal(isPublicHttpUrl("http://mcp.acme.com/rpc"), false);
     assert.equal(isPublicHttpUrl("https://127.0.0.1/x"), false);
+    assert.equal(isPublicHttpUrl("https://[::1]/x"), false);
+    assert.equal(isPublicHttpUrl("https://[fd00::1]/x"), false);
+    assert.equal(isPublicHttpUrl("https://169.254.1.1/x"), false);
+    assert.equal(isPublicHttpUrl("https://user:pass@mcp.acme.com/x"), false);
     assert.equal(isPublicHttpUrl("not a url"), false);
+  });
+
+  it("registers a remote only after a verified tool catalogue", () => {
+    const r = registerRemoteConnector([], {
+      id: "remote-acme",
+      name: "Acme",
+      url: "https://mcp.acme.com/rpc",
+      protocolVersion: "2025-06-18",
+      serverVersion: "2.0",
+      tools: [{ name: "echo", description: "Echo" }],
+    }, 123);
+    assert.ok(r);
+    assert.equal(r.entry.status, "installed");
+    assert.equal(r.entry.lastProbeAt, 123);
+    assert.equal(r.entry.protocolVersion, "2025-06-18");
+    assert.equal(r.entry.serverVersion, "2.0");
+    assert.equal(r.entry.tools[0].name, "echo");
+  });
+
+  it("keeps a disabled remote disabled when it reconnects", () => {
+    const first = registerRemoteConnector([], {
+      id: "remote-acme",
+      name: "Acme",
+      url: "https://mcp.acme.com/rpc",
+      tools: [{ name: "old", description: "" }],
+    });
+    assert.ok(first);
+    const disabled = setConnectorEnabled(first.registry, "remote-acme", false).registry;
+    const refreshed = registerRemoteConnector(disabled, {
+      id: "remote-acme",
+      name: "Acme",
+      url: "https://mcp.acme.com/rpc",
+      tools: [{ name: "new", description: "" }],
+    });
+    assert.ok(refreshed);
+    assert.equal(refreshed.entry.status, "disabled");
+    assert.equal(refreshed.entry.tools[0].name, "new");
   });
 });
 
