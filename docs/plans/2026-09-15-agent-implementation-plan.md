@@ -255,7 +255,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 ### M1-12 — Recherche et organisation
 
-**État au 16/09/2026 :** la recherche parcourt les métadonnées et les journaux locaux avec extrait contextualisé ; les conversations peuvent être épinglées et le choix est conservé au redémarrage. L’ordre manuel, les non-lus et la mesure de performance des très longues listes restent ouverts.
+**État au 16/09/2026 :** la recherche parcourt les métadonnées et les journaux locaux avec extrait contextualisé ; les conversations peuvent être épinglées, réordonnées dans leur niveau et marquées non lues, avec conservation au redémarrage. La virtualisation des très longues listes reste ouverte après mesure.
 
 ### M1-10 — Steering et file de messages
 
@@ -277,7 +277,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** sidebar, recherche App, `threads.ts`, stockage. Dépend M0-09/12.
 
-**Travail :** index de recherche locale sur historique, pagination et extraits ; épinglage et ordre explicites ; non-lus distincts de running. Migration du tri existant sans perdre dates/titres.
+**Travail :** index de recherche locale sur historique, pagination et extraits ; épinglage et ordre explicites ; non-lus distincts de running. Migration du tri existant sans perdre dates/titres. La première tranche fournit recherche, épinglage, ordre et non-lus ; il reste la mesure avant virtualisation.
 
 **Acceptation :** recherche accentuée/multilingue, archive, suppression, gros historique, clavier et restart ; aucune session supprimée réindexée.
 

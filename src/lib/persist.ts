@@ -36,6 +36,10 @@ export interface StoredSession {
   archived?: boolean;
   /** US-5/M1-12: pinned conversations stay at the top of the active list. */
   pinned?: boolean;
+  /** US-5/M1-12: explicit unread marker for responses in another thread. */
+  unread?: boolean;
+  /** US-5/M1-12: manual order within the same pinned/running tier. */
+  sortOrder?: number;
 }
 
 /** Reasoning is persisted separately so it can be disclosed in the stream. */
@@ -95,7 +99,9 @@ function isValidSession(s: unknown): s is StoredSession {
     typeof r.title === "string" &&
     typeof r.createdAt === "number" &&
     (r.archived === undefined || typeof r.archived === "boolean") &&
-    (r.pinned === undefined || typeof r.pinned === "boolean")
+    (r.pinned === undefined || typeof r.pinned === "boolean") &&
+    (r.unread === undefined || typeof r.unread === "boolean") &&
+    (r.sortOrder === undefined || (typeof r.sortOrder === "number" && Number.isFinite(r.sortOrder)))
   );
 }
 

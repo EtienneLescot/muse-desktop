@@ -10,6 +10,9 @@ export interface ThreadLike {
   createdAt: number;
   archived?: boolean;
   pinned?: boolean;
+  unread?: boolean;
+  /** Lower values appear first within the same pinned/running tier. */
+  sortOrder?: number;
   running?: boolean;
 }
 
@@ -35,6 +38,11 @@ export function selectActiveThreads<T extends ThreadLike>(sessions: T[]): T[] {
       const ra = a.running === true ? 0 : 1;
       const rb = b.running === true ? 0 : 1;
       if (ra !== rb) return ra - rb;
+      const oa = a.sortOrder;
+      const ob = b.sortOrder;
+      if (oa !== undefined && ob !== undefined && oa !== ob) return oa - ob;
+      if (oa !== undefined && ob === undefined) return -1;
+      if (oa === undefined && ob !== undefined) return 1;
       return b.createdAt - a.createdAt;
     });
 }
@@ -91,5 +99,37 @@ export function withArchivedFlag<T extends ThreadLike>(
 ): T[] {
   return sessions.map((s) =>
     s.session_id === sessionId ? { ...s, archived } : s,
+  );
+}
+
+export function withUnreadFlag<T extends ThreadLike>(
+  sessions: T[],
+  sessionId: string,
+  unread: boolean,
+): T[] {
+  return sessions.map((s) =>
+    s.session_id === sessionId ? { ...s, unread } : s,
+  );
+}
+
+/** Move an active conversation one slot in the manual order. */
+export function moveThread<T extends ThreadLike>(
+  sessions: T[],
+  sessionId: string,
+  direction: -1 | 1,
+): T[] {
+  const active = selectActiveThreads(sessions);
+  const index = active.findIndex((s) => s.session_id === sessionId);
+  if (index < 0) return sessions;
+  const target = index + direction;
+  if (target < 0 || target >= active.length) return sessions;
+  const tier = (thread: ThreadLike) =>
+    `${thread.pinned === true ? "pinned" : "normal"}:${thread.running === true ? "running" : "idle"}`;
+  if (tier(active[index]) !== tier(active[target])) return sessions;
+  const ordered = active.map((s) => s.session_id);
+  [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+  const ranks = new Map(ordered.map((id, rank) => [id, rank]));
+  return sessions.map((s) =>
+    ranks.has(s.session_id) ? { ...s, sortOrder: ranks.get(s.session_id) } : s,
   );
 }

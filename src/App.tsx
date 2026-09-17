@@ -106,6 +106,7 @@ export default function App() {
     renameSession,
     archiveSession,
     togglePinned,
+    moveConversation,
     restoreSession,
     projects,
     threadProjects,
@@ -500,6 +501,7 @@ export default function App() {
             onKill={killSession}
             onRename={renameSession}
             onTogglePin={togglePinned}
+            onMove={moveConversation}
             onArchive={archiveSession}
             onRestore={restoreSession}
             canStart

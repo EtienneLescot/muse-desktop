@@ -11,10 +11,12 @@ import {
   countRunning,
   cycleThreadId,
   isArchived,
+  moveThread,
   selectActiveThreads,
   selectArchivedThreads,
   withArchivedFlag,
   withPinnedFlag,
+  withUnreadFlag,
   type ThreadLike,
 } from "../src/lib/threads.ts";
 import { loadSessions, saveSessions } from "../src/lib/persist.ts";
@@ -78,6 +80,15 @@ describe("US-5 thread sorting", () => {
       "recent",
     ]);
   });
+
+  it("honours an explicit order within the same tier", () => {
+    const list = [
+      thread("a", { sortOrder: 2 }),
+      thread("b", { sortOrder: 0 }),
+      thread("c", { sortOrder: 1 }),
+    ];
+    assert.deepEqual(selectActiveThreads(list).map((s) => s.session_id), ["b", "c", "a"]);
+  });
 });
 
 describe("US-5 pinning", () => {
@@ -86,6 +97,22 @@ describe("US-5 pinning", () => {
     const next = withPinnedFlag(list, "b", true);
     assert.equal(next.find((s) => s.session_id === "b")?.pinned, true);
     assert.equal(list[1].pinned, undefined);
+  });
+});
+
+describe("US-5 unread and manual order", () => {
+  it("marks a response unread without mutating the source", () => {
+    const list = [thread("a"), thread("b")];
+    const next = withUnreadFlag(list, "b", true);
+    assert.equal(next[1].unread, true);
+    assert.equal(list[1].unread, undefined);
+  });
+
+  it("moves a conversation and assigns stable ranks", () => {
+    const list = [thread("a"), thread("b"), thread("c")];
+    const moved = moveThread(list, "b", -1);
+    assert.deepEqual(selectActiveThreads(moved).map((s) => s.session_id), ["b", "a", "c"]);
+    assert.equal(moved.find((s) => s.session_id === "b")?.sortOrder, 0);
   });
 });
 
@@ -162,6 +189,16 @@ describe("US-5 archive / restore", () => {
       { session_id: "a", workspace: "/w", title: "pinned", createdAt: 1, pinned: true },
     ]);
     assert.equal(loadSessions()[0].pinned, true);
+  });
+
+  it("persists unread state and manual order across save/load", () => {
+    fakeStorage();
+    saveSessions([
+      { session_id: "a", workspace: "/w", title: "unread", createdAt: 1, unread: true, sortOrder: 0 },
+    ]);
+    const restored = loadSessions()[0];
+    assert.equal(restored.unread, true);
+    assert.equal(restored.sortOrder, 0);
   });
 });
 
