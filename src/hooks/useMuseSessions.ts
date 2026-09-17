@@ -534,6 +534,8 @@ export interface FilesBrowserState {
   loading: boolean;
   error: string | null;
   observedAt: number | null;
+  stale: boolean;
+  changedPaths: string[];
 }
 
 function emptyFilesBrowserState(): FilesBrowserState {
@@ -546,6 +548,8 @@ function emptyFilesBrowserState(): FilesBrowserState {
     loading: false,
     error: null,
     observedAt: null,
+    stale: false,
+    changedPaths: [],
   };
 }
 
@@ -897,6 +901,8 @@ interface UseMuseSessions {
   filesForSession: (sessionId: string) => FilesBrowserState;
   listWorkspaceFiles: (sessionId: string, path?: string) => Promise<void>;
   readWorkspaceFile: (sessionId: string, path: string) => Promise<void>;
+  watchWorkspaceFiles: (sessionId: string) => Promise<void>;
+  unwatchWorkspaceFiles: (sessionId: string) => Promise<void>;
   /** M1-07: open a verified workspace entry in the system handler. */
   openWorkspacePath: (sessionId: string, path: string) => Promise<void>;
   /** US-5: move a thread to the archived list (persisted flag). */
@@ -2353,6 +2359,40 @@ export function useMuseSessions(): UseMuseSessions {
     // Deleted stays deleted: late in-flight events for a killed session are
     // dropped instead of resurrecting its row.
     if (tombstoned.current?.has(sid)) return;
+    if (kind === "workspace_changed") {
+      let changedPaths: string[] = [];
+      try {
+        const parsed = JSON.parse(payload) as { paths?: unknown };
+        if (Array.isArray(parsed.paths)) {
+          changedPaths = parsed.paths
+            .filter((path): path is string => typeof path === "string" && path.length > 0)
+            .slice(0, 20);
+        }
+      } catch {
+        // Keep the stale marker even when an older watcher emits no payload.
+      }
+      setFilesBySession((cur) => {
+        const previous = cur[sid] ?? emptyFilesBrowserState();
+        const nextPaths = [...previous.changedPaths, ...changedPaths]
+          .filter((path, index, all) => all.indexOf(path) === index)
+          .slice(0, 20);
+        return {
+          ...cur,
+          [sid]: { ...previous, stale: true, changedPaths: nextPaths },
+        };
+      });
+      return;
+    }
+    if (kind === "workspace_watch_error") {
+      setFilesBySession((cur) => ({
+        ...cur,
+        [sid]: {
+          ...(cur[sid] ?? emptyFilesBrowserState()),
+          error: `workspace watcher failed: ${payload}`,
+        },
+      }));
+      return;
+    }
     // Keep this heartbeat independent from log timestamps: a host status
     // event can prove progress even when it has no user-facing log line.
     touchStreamActivity(sid, kind);
@@ -5662,6 +5702,8 @@ export function useMuseSessions(): UseMuseSessions {
             loading: false,
             error: null,
             observedAt: result.observedAt,
+            stale: false,
+            changedPaths: [],
           },
         }));
       } catch (e) {
@@ -5674,6 +5716,33 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [],
   );
+
+  const watchWorkspaceFiles = useCallback(async (sessionId: string): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    try {
+      await invoke("files_watch", { sessionId });
+    } catch (e) {
+      // A watcher is an enhancement over the explicit Refresh action. Keep
+      // the Files surface usable when an older/native host lacks the command.
+      setFilesBySession((cur) => ({
+        ...cur,
+        [sessionId]: {
+          ...(cur[sessionId] ?? emptyFilesBrowserState()),
+          error: `workspace watcher unavailable: ${String(e)}`,
+        },
+      }));
+    }
+  }, []);
+
+  const unwatchWorkspaceFiles = useCallback(async (sessionId: string): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    try {
+      await invoke("files_unwatch", { sessionId });
+    } catch {
+      // Teardown is best effort; dropping the native registration is safe
+      // even when the renderer is already closing.
+    }
+  }, []);
 
   const readWorkspaceFile = useCallback(
     async (sessionId: string, path: string): Promise<void> => {
@@ -5703,6 +5772,8 @@ export function useMuseSessions(): UseMuseSessions {
             preview,
             loading: false,
             error: null,
+            stale: false,
+            changedPaths: [],
           },
         }));
       } catch (e) {
@@ -5955,6 +6026,8 @@ export function useMuseSessions(): UseMuseSessions {
     filesForSession,
     listWorkspaceFiles,
     readWorkspaceFile,
+    watchWorkspaceFiles,
+    unwatchWorkspaceFiles,
     openWorkspacePath,
     error,
     evtCount,

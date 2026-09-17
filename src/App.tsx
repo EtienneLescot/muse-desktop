@@ -234,6 +234,8 @@ export default function App() {
     filesForSession,
     listWorkspaceFiles,
     readWorkspaceFile,
+    watchWorkspaceFiles,
+    unwatchWorkspaceFiles,
     openWorkspacePath,
     browserAnnotations,
     addBrowserAnnotation,
@@ -1271,6 +1273,8 @@ export default function App() {
                           state={filesForSession(active.session_id)}
                           onList={listWorkspaceFiles}
                           onRead={readWorkspaceFile}
+                          onWatch={watchWorkspaceFiles}
+                          onUnwatch={unwatchWorkspaceFiles}
                           onOpen={openWorkspacePath}
                         />
                       )}

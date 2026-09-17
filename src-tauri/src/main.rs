@@ -29,6 +29,7 @@ mod setup;
 mod mcp;
 mod skills;
 mod startup;
+mod workspace_watch;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -237,6 +238,9 @@ struct AppState {
     /// Each entry owns its child process and is removed explicitly or on app
     /// exit; calls are serialized by this mutex to keep stdio single-flight.
     mcp_servers: Arc<Mutex<HashMap<String, mcp::PersistentServer>>>,
+    /// One native watcher per Files panel/session. Dropping a registration
+    /// stops callbacks immediately; the renderer still owns refresh policy.
+    workspace_watchers: Mutex<HashMap<String, workspace_watch::WorkspaceWatcher>>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -1823,6 +1827,64 @@ async fn file_read(
         .map_err(|e| format!("file read task failed: {e}"))?
 }
 
+/// Start an event-only watcher for the active conversation workspace. The
+/// callback sends relative paths through the same bounded poll buffer as host
+/// events; it never reads file contents or executes a process.
+#[tauri::command]
+fn files_watch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let root = workspace_for_inspection(&state, &session_id)?;
+    let mut watchers = state
+        .workspace_watchers
+        .lock()
+        .map_err(|e| format!("workspace watcher state lock: {e}"))?;
+    if watchers.contains_key(&session_id) {
+        return Ok(());
+    }
+    let callback_session = session_id.clone();
+    let callback_app = app.clone();
+    let watcher = workspace_watch::WorkspaceWatcher::start(&root, move |result| match result {
+        Ok(change) => {
+            let payload = serde_json::to_string(&change)
+                .unwrap_or_else(|_| r#"{"kind":"changed","paths":[]}"#.to_string());
+            emit(
+                &callback_app,
+                "workspace",
+                &callback_session,
+                "workspace_changed",
+                payload,
+            );
+        }
+        Err(error) => {
+            emit(
+                &callback_app,
+                "workspace",
+                &callback_session,
+                "workspace_watch_error",
+                error,
+            );
+        }
+    })?;
+    watchers.insert(session_id, watcher);
+    Ok(())
+}
+
+/// Stop a watcher explicitly when the Files panel is unmounted.
+#[tauri::command]
+fn files_unwatch(state: State<'_, AppState>, session_id: String) -> Result<(), String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    state
+        .workspace_watchers
+        .lock()
+        .map_err(|e| format!("workspace watcher state lock: {e}"))?
+        .remove(&session_id);
+    Ok(())
+}
+
 /// Open a verified workspace entry with the user's default system handler.
 /// The UI only sends a relative path from the active conversation; resolving
 /// and canonicalizing it here prevents a stale or hostile renderer from
@@ -3021,6 +3083,9 @@ async fn kill_session(
     if let Ok(mut metas) = state.subagent_meta.lock() {
         metas.retain(|(sid, _), _| *sid != session_id);
     }
+    if let Ok(mut watchers) = state.workspace_watchers.lock() {
+        watchers.remove(&session_id);
+    }
     Ok(())
 }
 
@@ -3526,6 +3591,7 @@ fn main() {
             terminals: terminal::TerminalRegistry::default(),
             setup_cancellations: Mutex::new(HashMap::new()),
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
+            workspace_watchers: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
@@ -3577,6 +3643,8 @@ fn main() {
             terminal_close,
             files_list,
             file_read,
+            files_watch,
+            files_unwatch,
             file_open,
             artifact_export,
             probe_startup,
@@ -3611,6 +3679,9 @@ fn main() {
                 for client in clients { tauri::async_runtime::block_on(client.shutdown()); }
                 if let Ok(mut servers) = state.mcp_servers.lock() {
                     servers.clear();
+                };
+                if let Ok(mut watchers) = state.workspace_watchers.lock() {
+                    watchers.clear();
                 };
             }
         });

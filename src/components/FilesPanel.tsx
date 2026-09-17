@@ -10,6 +10,8 @@ interface Props {
   state: FilesBrowserState;
   onList: (sessionId: string, path?: string) => Promise<void>;
   onRead: (sessionId: string, path: string) => Promise<void>;
+  onWatch: (sessionId: string) => Promise<void>;
+  onUnwatch: (sessionId: string) => Promise<void>;
   onOpen: (sessionId: string, path: string) => Promise<void>;
 }
 
@@ -44,7 +46,14 @@ function mediaLabel(mediaType: string): string {
 }
 
 /** M1-07 real disk browser. Every row comes from the Rust Files service. */
-export function FilesPanel({ sessionId, state, onList, onRead, onOpen }: Props) {
+export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatch, onOpen }: Props) {
+  useEffect(() => {
+    void onWatch(sessionId);
+    return () => {
+      void onUnwatch(sessionId);
+    };
+  }, [onUnwatch, onWatch, sessionId]);
+
   useEffect(() => {
     if (state.entries.length === 0 && !state.loading && state.observedAt === null) {
       void onList(sessionId, ".");
@@ -90,6 +99,12 @@ export function FilesPanel({ sessionId, state, onList, onRead, onOpen }: Props) 
       {state.error && <p className="files-error" role="alert">{userFacingError(state.error)}</p>}
       {state.truncated && (
         <p className="files-note">Showing the first 200 entries. Open a subfolder to narrow the view.</p>
+      )}
+      {state.stale && (
+        <p className="files-stale" role="status">
+          Workspace changed on disk. Refresh to update this view
+          {state.changedPaths.length > 0 ? ` · ${state.changedPaths.slice(0, 3).join(", ")}` : ""}.
+        </p>
       )}
       <div className="files-layout">
         <div className="files-list" role="list" aria-label={`Files in ${currentPath}`}>

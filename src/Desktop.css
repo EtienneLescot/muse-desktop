@@ -768,6 +768,15 @@
   border-radius: 9px;
   background: var(--bg);
 }
+.files-stale {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: 9px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  font-size: 12px;
+}
 .work-panel .artifacts-tabs {
   padding: 12px 18px;
 }
