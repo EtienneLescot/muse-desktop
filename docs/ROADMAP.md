@@ -344,6 +344,14 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 - **Limites :** les ressources sont validées comme références relatives mais ne sont pas encore lues/transmises au moteur pendant l'invocation ; le runtime de skill et son rechargement par notification restent M3-05.
 - **Validation :** 4 tests Node couvrent frontmatter, limites, erreurs visibles et précédence ; 2 tests Rust couvrent les racines connues et le bornage de lecture ; TypeScript, Vite et Cargo verts.
 
+### Livraison M3-05 — invocation skill avec ressources fraîches
+
+- **Chargement au dernier moment :** `skills_read_resources` relit les ressources déclarées juste avant l'envoi d'une skill découverte. Le chemin du `SKILL.md`, le workspace et le dossier de la skill sont vérifiés côté Rust ; les ressources supprimées, binaires ou hors dossier refusent l'envoi.
+- **Contexte explicite :** les ressources UTF-8 bornées sont ajoutées au prompt sous des balises `<skill-resource>` avec leur chemin et l'indication de troncature. Un retry réutilise l'expansion persistée et ne recharge ni ne duplique le contexte.
+- **UX/fiabilité :** une erreur de ressource crée une entrée système attribuée à la skill et laisse l'envoi en échec explicite ; aucune skill partiellement chargée n'est envoyée silencieusement.
+- **Limites :** le moteur reçoit encore un contexte texte enrichi, pas une part `skill` native avec ressources ; l'invocation par ressource et le rendu de progression restent à qualifier avec le host MSP.
+- **Validation :** tests Node sur le contexte attribué et tests Rust sur la confinement des ressources ; TypeScript et Cargo verts.
+
 ## M3 — Extensions et automatisations opérationnelles
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
@@ -351,8 +359,8 @@ Preuves : [projets](../src/lib/projects.ts), [plan worktree manuel](../src/lib/w
 | M3-01 | Connecter un serveur MCP local | Adapté | Présente | Partielle | Intégration | Transport stdio, handshake et tools/list/call explicites livrés ; restent injection dans le host Muse, processus persistant et hot-reload |
 | M3-02 | Connecter un serveur MCP distant | À définir | Partielle | Locale | Unitaire | Transport/auth/secrets, restrictions et reconnexion ; aucun statut « connecté » sans échange réel |
 | M3-03 | Installer/désactiver une extension réellement utilisable | Adapté | Présente | Partielle | Intégration | Enregistrement post-probe et hot-list du registre livrés ; restent runtime persistant, package/update/rollback et injection dans le moteur |
-| M3-04 | Découvrir les skills du disque et du projet | Adapté | Présente | Partielle | Intégration | Scanner borné `SKILL.md`, ressources relatives, priorité projet/repo/équipe et rechargement explicite livrés ; reste lecture/transmission des ressources au moment de l'invocation |
-| M3-05 | Invoquer une skill avec son vrai contexte | Adapté | Présente | Partielle | Unitaire | Charger instructions/ressources au bon moment, afficher provenance ; résultat live reproductible et erreurs explicites |
+| M3-04 | Découvrir les skills du disque et du projet | Adapté | Présente | Partielle | Intégration | Scanner borné `SKILL.md`, ressources relatives, priorité projet/repo/équipe et rechargement explicite livrés ; bridge natif et notifications restent ouverts |
+| M3-05 | Invoquer une skill avec son vrai contexte | Adapté | Présente | Partielle | Intégration | Lecture fraîche des ressources relatives, provenance balisée, refus explicite si ressource disparue et retry sans double insertion livrés ; part `skill` native et progression restent à qualifier |
 | M3-06 | Exécuter un travail planifié sans clic préalable | Adapté | Présente | Partielle | Unitaire | Remplacer file d'approbation avant exécution par scheduler réel ; cible fixe, politique effective et création de run durable |
 | M3-07 | Gérer sommeil, reprise, doublons et échecs de planning | À définir | Absente | Absente | À faire | Politique de rattrapage, fuseau/DST, idempotence et retries ; une occurrence ne produit pas deux runs |
 | M3-08 | Examiner les résultats des runs | À définir | Partielle | Locale | Unitaire | Inbox de résultats, états/horaires/historique/lien conversation ; distinguer résultat et instruction en attente |

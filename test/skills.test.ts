@@ -90,6 +90,26 @@ describe("progressive disclosure (view-only default)", () => {
     assert.ok(text.includes("cover the parser"));
     assert.ok(text.includes(skill.instructions));
   });
+
+  it("invocation includes bounded resources with their provenance", () => {
+    const skill: Skill = {
+      name: "with-resource",
+      description: "Resource skill",
+      instructions: "Use the attached guide.",
+      source: "project",
+      viewOnly: true,
+      enabled: true,
+      path: ".agents/skills/with-resource/SKILL.md",
+      resources: ["guide.md"],
+      discovered: true,
+    };
+    const text = buildSkillInvocation(skill, "apply", [
+      { path: ".agents/skills/with-resource/guide.md", content: "Rules", truncated: false },
+    ]);
+    assert.match(text, /skill-resource path=/);
+    assert.match(text, /Rules/);
+    assert.match(text, /Request: apply/);
+  });
 });
 
 describe("auto-suggest (traced in log by the hook)", () => {

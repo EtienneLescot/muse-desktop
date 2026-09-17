@@ -13,6 +13,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const MAX_DOCUMENTS: usize = 100;
 const MAX_BYTES: usize = 20_001;
 const MAX_ERRORS: usize = 100;
+const MAX_RESOURCES: usize = 20;
+const MAX_RESOURCE_BYTES: usize = 20_001;
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +39,22 @@ pub struct SkillScanResult {
     pub documents: Vec<SkillDocument>,
     pub errors: Vec<SkillScanError>,
     pub scanned_at: u64,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillResource {
+    pub path: String,
+    pub content: String,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillResourcesResult {
+    pub resources: Vec<SkillResource>,
+    pub errors: Vec<SkillScanError>,
+    pub observed_at: u64,
 }
 
 pub fn scan(root: &Path) -> Result<SkillScanResult, String> {
@@ -69,6 +87,139 @@ pub fn scan(root: &Path) -> Result<SkillScanResult, String> {
     }
     out.documents.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(out)
+}
+
+/// Read resources declared by a discovered skill at invocation time. Both
+/// the SKILL.md and every resource must remain inside the skill directory.
+pub fn read_resources(
+    root: &Path,
+    skill_path: &str,
+    resource_paths: &[String],
+) -> Result<SkillResourcesResult, String> {
+    let root = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve skills workspace {}: {e}", root.display()))?;
+    if !root.is_dir() {
+        return Err(format!(
+            "skills workspace is not a directory: {}",
+            root.display()
+        ));
+    }
+    let skill_file = resolve_relative(&root, skill_path)?;
+    if !skill_file.starts_with(&root) {
+        return Err("skill path is outside the workspace".to_string());
+    }
+    if !skill_file.is_file()
+        || skill_file.file_name().and_then(|name| name.to_str()) != Some("SKILL.md")
+    {
+        return Err("skill path must point to an existing SKILL.md".to_string());
+    }
+    let skill_dir = skill_file
+        .parent()
+        .ok_or_else(|| "skill path has no parent directory".to_string())?
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve skill directory: {e}"))?;
+    if !skill_dir.starts_with(&root) {
+        return Err("skill directory is outside the workspace".to_string());
+    }
+    let mut result = SkillResourcesResult {
+        resources: Vec::new(),
+        errors: Vec::new(),
+        observed_at: now_ms(),
+    };
+    for raw in resource_paths.iter().take(MAX_RESOURCES) {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        let candidate = match resolve_relative(&skill_dir, raw) {
+            Ok(path) => path,
+            Err(error) => {
+                push_resource_error(&mut result, raw.to_string(), error);
+                continue;
+            }
+        };
+        if !candidate.starts_with(&skill_dir) || !is_safe_file(&root, &candidate) {
+            push_resource_error(
+                &mut result,
+                raw.to_string(),
+                "resource is outside the skill directory or not a regular file".to_string(),
+            );
+            continue;
+        }
+        let relative = candidate
+            .strip_prefix(&root)
+            .map(|value| value.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|_| raw.replace('\\', "/"));
+        let file = match fs::File::open(&candidate) {
+            Ok(file) => file,
+            Err(error) => {
+                push_resource_error(
+                    &mut result,
+                    relative,
+                    format!("cannot read resource: {error}"),
+                );
+                continue;
+            }
+        };
+        let mut bytes = Vec::new();
+        if let Err(error) = file.take(MAX_RESOURCE_BYTES as u64).read_to_end(&mut bytes) {
+            push_resource_error(
+                &mut result,
+                relative,
+                format!("cannot read resource: {error}"),
+            );
+            continue;
+        }
+        let truncated = bytes.len() > MAX_RESOURCE_BYTES - 1;
+        if truncated {
+            bytes.truncate(MAX_RESOURCE_BYTES - 1);
+        }
+        match String::from_utf8(bytes) {
+            Ok(content) => result.resources.push(SkillResource {
+                path: relative,
+                content,
+                truncated,
+            }),
+            Err(_) => push_resource_error(
+                &mut result,
+                relative,
+                "resource is not valid UTF-8".to_string(),
+            ),
+        }
+    }
+    Ok(result)
+}
+
+fn resolve_relative(root: &Path, raw: &str) -> Result<PathBuf, String> {
+    let raw = raw.trim();
+    if raw.is_empty() || raw.contains('\0') {
+        return Err("resource path must not be empty or contain NUL".to_string());
+    }
+    let candidate = Path::new(raw);
+    if candidate.is_absolute()
+        || candidate.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        return Err(
+            "resource path must be relative and stay inside the skill directory".to_string(),
+        );
+    }
+    root.join(candidate)
+        .canonicalize()
+        .map_err(|e| format!("resource is unavailable: {e}"))
+}
+
+fn push_resource_error(out: &mut SkillResourcesResult, path: String, message: String) {
+    if out.errors.len() < MAX_ERRORS {
+        out.errors.push(SkillScanError { path, message });
+    }
 }
 
 fn scan_root(root: &Path, directory: &Path, source: &str, out: &mut SkillScanResult) {
@@ -210,6 +361,30 @@ mod tests {
         let result = scan(&root).unwrap();
         assert_eq!(result.documents.len(), 1);
         assert!(result.documents[0].truncated);
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn read_resources_stays_inside_skill_directory() {
+        let base =
+            std::env::temp_dir().join(format!("muse-skills-resource-{}", std::process::id()));
+        let root = base.join("repo");
+        fs::create_dir_all(root.join("skills/demo")).unwrap();
+        fs::write(
+            root.join("skills/demo/SKILL.md"),
+            "---\nname: demo\ndescription: Demo\n---\nRun",
+        )
+        .unwrap();
+        fs::write(root.join("skills/demo/guide.md"), "Use the guide.").unwrap();
+        let result = read_resources(
+            &root,
+            "skills/demo/SKILL.md",
+            &["guide.md".to_string(), "../secret.md".to_string()],
+        )
+        .unwrap();
+        assert_eq!(result.resources.len(), 1);
+        assert_eq!(result.resources[0].content, "Use the guide.");
+        assert_eq!(result.errors.len(), 1);
         fs::remove_dir_all(base).ok();
     }
 }

@@ -1277,6 +1277,31 @@ async fn skills_scan(
         .map_err(|e| format!("skills scan task failed: {e}"))?
 }
 
+/// Read a bounded set of relative resources for a discovered SKILL.md.
+#[tauri::command]
+async fn skills_read_resources(
+    state: State<'_, AppState>,
+    workspace: Option<String>,
+    skill_path: String,
+    resource_paths: Vec<String>,
+) -> Result<skills::SkillResourcesResult, String> {
+    let root = match workspace
+        .map(|path| PathBuf::from(path.trim()))
+        .filter(|path| !path.as_os_str().is_empty())
+    {
+        Some(path) => path,
+        None => state
+            .workspace
+            .lock()
+            .map_err(|e| format!("workspace state lock: {e}"))?
+            .clone()
+            .ok_or_else(|| "select a workspace before reading skill resources".to_string())?,
+    };
+    tokio::task::spawn_blocking(move || skills::read_resources(&root, &skill_path, &resource_paths))
+        .await
+        .map_err(|e| format!("skills resource task failed: {e}"))?
+}
+
 /// Open (or reuse) the persistent PTY owned by a conversation workspace.
 #[tauri::command]
 fn terminal_open(
@@ -2873,6 +2898,7 @@ fn main() {
             mcp_local_probe,
             mcp_local_call,
             skills_scan,
+            skills_read_resources,
             terminal_open,
             terminal_write,
             terminal_resize,
