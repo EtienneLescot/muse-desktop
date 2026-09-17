@@ -26,11 +26,27 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 pub struct RpcError {
     pub code: i64,
     pub message: String,
+    /// Optional structured fields from the host error envelope. Keeping the
+    /// category/reason here lets command boundaries make a safe decision
+    /// without exposing the raw JSON-RPC frame to the renderer.
+    pub kind: Option<String>,
+    pub reason: Option<String>,
+    pub retryable: Option<bool>,
 }
 
 impl std::fmt::Display for RpcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MSP error {}: {}", self.code, self.message)
+        write!(f, "MSP error {}: {}", self.code, self.message)?;
+        if let Some(kind) = self.kind.as_deref().filter(|value| !value.is_empty()) {
+            write!(f, " [{kind}]")?;
+        }
+        if let Some(reason) = self.reason.as_deref().filter(|value| !value.is_empty()) {
+            write!(f, " ({reason})")?;
+        }
+        if let Some(retryable) = self.retryable {
+            write!(f, " [retryable={retryable}]")?;
+        }
+        Ok(())
     }
 }
 
@@ -113,6 +129,20 @@ pub fn route_frame(
                         .and_then(Value::as_str)
                         .unwrap_or("unknown error")
                         .to_string(),
+                    kind: err
+                        .get("data")
+                        .and_then(|data| data.get("kind"))
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    reason: err
+                        .get("data")
+                        .and_then(|data| data.get("reason"))
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    retryable: err
+                        .get("data")
+                        .and_then(|data| data.get("retryable"))
+                        .and_then(Value::as_bool),
                 })
             } else {
                 Ok(frame.get("result").cloned().unwrap_or(Value::Null))
@@ -372,11 +402,16 @@ mod tests {
         pending.insert("8".to_string(), tx);
         let (ntx, mut nrx) = mpsc::unbounded_channel();
         route_frame(
-            json!({"jsonrpc":"2.0","id":8,"error":{"code":-32052,"message":"stale"}}),
+            json!({"jsonrpc":"2.0","id":8,"error":{"code":-32052,"message":"stale","data":{"kind":"commandRejected","reason":"approval_mode_ceiling","retryable":false}}}),
             &mut pending,
             &ntx,
         );
-        assert!(rx.await.unwrap().unwrap_err().code == -32052);
+        let error = rx.await.unwrap().unwrap_err();
+        assert_eq!(error.code, -32052);
+        assert_eq!(error.kind.as_deref(), Some("commandRejected"));
+        assert_eq!(error.reason.as_deref(), Some("approval_mode_ceiling"));
+        assert_eq!(error.retryable, Some(false));
+        assert!(error.to_string().contains("approval_mode_ceiling"));
         route_frame(
             json!({"jsonrpc":"2.0","method":"turn/completed","params":{"terminal":"cancelled"}}),
             &mut pending,

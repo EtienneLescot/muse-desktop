@@ -110,6 +110,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Pré-vol natif au 17/09/2026 :** `--exercise-approval` crée une session sans préférence imposée, relève la projection `approvalMode` du host puis tente `onRequest`, `promptUnmatched` et `allowAll`. Le sidecar 1.3.0 observé accepte la posture courante `promptUnmatched` et refuse les deux autres avec `commandRejected/approval_mode_ceiling`. Cette limite est désormais explicite dans le rapport ; l'UI ne doit pas convertir une préférence locale refusée en permission effective.
 
+**Continuité sous plafond :** si une préférence locale persistée est refusée à `session/start` pour `approval_mode_ceiling`, le bridge retire uniquement ce champ et retente avec la posture par défaut du host. La réponse expose `approval_mode` lorsque disponible. `reconnectSession` garde ensuite l'historique et le compositeur utilisables si `session/setApprovalMode` est refusé, en conservant la projection observée et en suspendant l'auto-approbation jusqu'à confirmation.
+
 ### M0-07 — Diagnostics
 
 **Code :** `wire_log`, `push_stderr`, `msp.rs`, erreurs affichées.

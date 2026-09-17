@@ -54,6 +54,11 @@ pub struct SessionMeta {
     pub session_id: String,
     pub workspace: String,
     pub running: bool,
+    /// The host's effective approval projection when the session API returns
+    /// one. This is advisory renderer metadata; automatic decisions still
+    /// require an explicit per-session confirmation in the hook.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_mode: Option<String>,
 }
 
 /// One buffered backend event with its sequence number (poll transport).
@@ -561,6 +566,23 @@ fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: St
     // via `poll_events`. (`event` is kept for log readability.)
     let state: State<AppState> = app.state();
     push_event(&state, session_id, kind, payload);
+}
+
+/// Read the host's effective approval projection from any session-shaped
+/// response. Older hosts omit it, so absence remains `None` and the renderer
+/// keeps its compatibility path instead of inventing a posture.
+fn session_approval_mode(session: &Value) -> Option<String> {
+    session
+        .get("approvalMode")
+        .or_else(|| session.get("approval_mode"))
+        .and_then(|mode| mode.get("mode").or(Some(mode)))
+        .and_then(Value::as_str)
+        .filter(|mode| !mode.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn is_approval_mode_ceiling(error: &str) -> bool {
+    error.contains("approval_mode_ceiling") || error.contains("approval mode ceiling")
 }
 
 fn push_event(state: &AppState, session_id: &str, kind: &str, payload: String) {
@@ -2168,9 +2190,22 @@ async fn start_session_at_workspace(
             .ok_or_else(|| format!("unknown authorization mode: {mode}"))?;
         params["approvalMode"] = json!(wire_mode);
     }
-    let res = client
-        .request("session/start", params)
-        .await?;
+    let res = match client.request("session/start", params.clone()).await {
+        Ok(result) => result,
+        Err(error) if authorization_mode.is_some() && is_approval_mode_ceiling(&error) => {
+            // A persisted local preference must not make a new conversation
+            // unusable when this host advertises a stricter ceiling. Start
+            // with the host default, expose its effective projection below,
+            // and let the renderer keep automatic decisions fail-closed.
+            if let Some(object) = params.as_object_mut() {
+                object.remove("approvalMode");
+            }
+            client.request("session/start", params).await.map_err(|fallback| {
+                format!("session/start rejected requested posture ({error}); host default also failed: {fallback}")
+            })?
+        }
+        Err(error) => return Err(error),
+    };
     let session = res.get("session").ok_or("session/start: no session in response")?;
     let session_id = session
         .get("sessionId")
@@ -2184,6 +2219,7 @@ async fn start_session_at_workspace(
         session_id: session_id.clone(),
         workspace: root.display().to_string(),
         running,
+        approval_mode: session_approval_mode(session),
     };
     state
         .sessions
@@ -2272,6 +2308,7 @@ async fn fork_session(
         session_id: fork_id.clone(),
         workspace: root.display().to_string(),
         running,
+        approval_mode: session_approval_mode(session),
     };
     state
         .sessions
@@ -2326,7 +2363,14 @@ async fn resume_session(
     resume::validate(read.get("session").ok_or("session/read returned no conversation")?, &session_id, &root)?;
     // Register before resume: pending approval/input events may immediately
     // follow the response, before this awaiting task is scheduled again.
-    let mut meta = SessionMeta { session_id: session_id.clone(), workspace: root.display().to_string(), running: false };
+    let mut meta = SessionMeta {
+        session_id: session_id.clone(),
+        workspace: root.display().to_string(),
+        running: false,
+        approval_mode: read
+            .get("session")
+            .and_then(session_approval_mode),
+    };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client)?;
     let result = client.request("session/resume", resume::params(&session_id, new_command_id())).await;
@@ -2337,6 +2381,7 @@ async fn resume_session(
             match checked {
                 Ok(session) => {
                     meta.running = session.get("status").and_then(Value::as_str) == Some("running");
+                    meta.approval_mode = session_approval_mode(session).or(meta.approval_mode);
                     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
                     Ok(meta)
                 }
@@ -3243,6 +3288,7 @@ mod tests {
                 session_id: session_id.to_string(),
                 workspace: workspace.to_string(),
                 running: false,
+                approval_mode: None,
             },
         );
     }
@@ -3474,6 +3520,23 @@ mod tests {
         assert_eq!(host_approval_mode("workspace"), Some("promptUnmatched"));
         assert_eq!(host_approval_mode("yolo"), Some("allowAll"));
         assert_eq!(host_approval_mode("deny"), None);
+    }
+
+    #[test]
+    fn session_approval_projection_accepts_host_shapes_and_ignores_empty_values() {
+        assert_eq!(session_approval_mode(&json!({"approvalMode": "promptUnmatched"})), Some("promptUnmatched".into()));
+        assert_eq!(session_approval_mode(&json!({"approval_mode": {"mode": "allowAll"}})), Some("allowAll".into()));
+        assert_eq!(session_approval_mode(&json!({"approvalMode": {"mode": "onRequest"}})), Some("onRequest".into()));
+        assert_eq!(session_approval_mode(&json!({"approvalMode": "  "})), None);
+        assert_eq!(session_approval_mode(&json!({"approvalMode": {"mode": ""}})), None);
+        assert_eq!(session_approval_mode(&json!({})), None);
+    }
+
+    #[test]
+    fn approval_mode_ceiling_detection_is_specific_and_case_sensitive() {
+        assert!(is_approval_mode_ceiling("MSP error: approval_mode_ceiling"));
+        assert!(is_approval_mode_ceiling("command rejected (approval mode ceiling)"));
+        assert!(!is_approval_mode_ceiling("approval required for this command"));
     }
 
     #[test]

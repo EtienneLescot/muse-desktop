@@ -1132,6 +1132,8 @@ interface BackendSessionMeta {
   session_id: string;
   workspace: string;
   running: boolean;
+  /** Host projection, when this sidecar exposes one. */
+  approval_mode?: string;
 }
 
 interface BackendWorktreeSessionResult {
@@ -1774,6 +1776,15 @@ export function useMuseSessions(): UseMuseSessions {
           for (const meta of restored) {
             if (!tombstoned.current?.has(meta.session_id)) {
               next[meta.session_id] = "connected";
+            }
+          }
+          return next;
+        });
+        setHostApprovalModeBySession((cur) => {
+          const next = { ...cur };
+          for (const meta of restored) {
+            if (typeof meta.approval_mode === "string" && !tombstoned.current?.has(meta.session_id)) {
+              next[meta.session_id] = meta.approval_mode;
             }
           }
           return next;
@@ -3219,6 +3230,9 @@ export function useMuseSessions(): UseMuseSessions {
       };
       setConnectedIds((cur) => [...new Set([...cur, meta.session_id])]);
       setConnectionState(meta.session_id, "connected");
+      if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
+        setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
+      }
       setSessions((cur) => [...cur, record]);
       setLogs((cur) => (cur[meta.session_id] ? cur : { ...cur, [meta.session_id]: [] }));
       setActiveId(meta.session_id);
@@ -3314,11 +3328,29 @@ export function useMuseSessions(): UseMuseSessions {
       });
       if (tombstoned.current?.has(id)) return;
       // Resume restores the host's persisted posture. Reconcile it with the
-      // current global selector before enabling the composer again.
-      await invoke("set_approval_mode", {
-        sessionId: id,
-        mode: authorizationMode,
-      });
+      // current global selector before enabling the composer again. A host
+      // ceiling must not make the saved conversation unusable: preserve the
+      // observed projection and keep automatic approval fail-closed.
+      let postureError: unknown = null;
+      try {
+        const posture = await invoke<Record<string, unknown>>("set_approval_mode", {
+          sessionId: id,
+          mode: authorizationMode,
+        });
+        const effective = (posture.effectiveMode as Record<string, unknown> | undefined)?.mode;
+        if (typeof effective === "string") {
+          setHostApprovalModeBySession((cur) => ({ ...cur, [id]: effective }));
+        } else {
+          postureError = new Error("host returned no effective approval mode");
+          setHostApprovalModeBySession((cur) => ({ ...cur, [id]: null }));
+        }
+      } catch (error) {
+        postureError = error;
+        setHostApprovalModeBySession((cur) => ({
+          ...cur,
+          [id]: meta.approval_mode ?? null,
+        }));
+      }
       // Cold reconnects can outlive the renderer's local log (for example
       // after a storage reset or a crash during streaming). Reconcile the
       // folded server history before enabling the composer again. The read is
@@ -3368,6 +3400,9 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
       kickPoll();
       await refreshModels(id);
+      if (postureError !== null) {
+        setError("Conversation reconnected, but the host kept its existing authorization posture.");
+      }
     } catch (e) {
       setConnectionState(id, "error");
       setError(`Reconnect failed: ${String(e)}. Your saved messages are still available.`);
@@ -3418,6 +3453,9 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
+        if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
+          setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
+        }
         setConnectionState(meta.session_id, "connected");
         setSessions((current) => [
           ...current.filter((session) => session.session_id !== meta.session_id),
@@ -3470,6 +3508,9 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
+        if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
+          setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
+        }
         setConnectionState(meta.session_id, "connected");
         setSessions((current) => [
           ...current.filter((session) => session.session_id !== meta.session_id),
