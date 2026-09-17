@@ -122,11 +122,12 @@ export function normalizeSkillName(name: string): string {
 /**
  * Parse a `/skill-name optional args` composer line. Returns null unless
  * the trimmed text starts with `/` followed by a valid skill-name token
- * (`[a-z0-9-_]` runs). A lone `/` (typing in progress) is not a command.
+ * (`[a-z0-9-_]` runs, with `:` allowed for namespaced host skills). A lone
+ * `/` (typing in progress) is not a command.
  */
 export function parseSkillCommand(text: string): SkillCommand | null {
   const trimmed = text.trim();
-  const m = /^\/([A-Za-z0-9][A-Za-z0-9_-]*)([\s\S]*)$/.exec(trimmed);
+  const m = /^\/([A-Za-z0-9][A-Za-z0-9_:-]*)([\s\S]*)$/.exec(trimmed);
   if (m === null) return null;
   return { name: normalizeSkillName(m[1]), args: (m[2] ?? "").trim() };
 }

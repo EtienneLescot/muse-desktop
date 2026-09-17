@@ -371,6 +371,11 @@ import {
   type SkillSuggestion,
 } from "../lib/skills";
 import {
+  findHostSkill,
+  parseHostSkills,
+  type HostSkill,
+} from "../lib/hostSkills";
+import {
   dedupeDiscoveredSkills,
   parseSkillDocuments,
   type RawSkillDocument,
@@ -1127,6 +1132,10 @@ interface UseMuseSessions {
   setConnectorEnabledById: (id: string, enabled: boolean) => void;
   /** w-integrations US-25: skills (builtins merged over stored). */
   skills: Skill[];
+  /** M3-05: skills exposed by the connected Muse host, keyed by session. */
+  hostSkillsBySession: Record<string, HostSkill[]>;
+  /** Refresh one host-owned skill catalogue (safe no-op in browser preview). */
+  refreshHostSkills: (sessionId: string) => Promise<HostSkill[] | null>;
   /** w-integrations US-25: enable/disable a skill by slash name. */
   setSkillEnabledByName: (name: string, enabled: boolean) => void;
   /**
@@ -1446,6 +1455,27 @@ export function useMuseSessions(): UseMuseSessions {
   // Latest skills for the render-detached `/skill` path inside sendInput.
   const skillsRef = useRef<Skill[]>(skills);
   skillsRef.current = skills;
+  const [hostSkillsBySession, setHostSkillsBySession] = useState<Record<string, HostSkill[]>>({});
+  // Host catalog is keyed by session so a conversation switch never invokes
+  // a selector discovered in another workspace.
+  const hostSkillsRef = useRef<Record<string, HostSkill[]>>({});
+  hostSkillsRef.current = hostSkillsBySession;
+  const refreshHostSkills = useCallback(async (sessionId: string): Promise<HostSkill[] | null> => {
+    if (!isTauriRuntime() || sessionId.trim().length === 0) return null;
+    try {
+      const result = await invoke<unknown>("list_skills", { sessionId });
+      const parsed = parseHostSkills(result);
+      setHostSkillsBySession((current) => ({ ...current, [sessionId]: parsed }));
+      return parsed;
+    } catch (error) {
+      // Host skill discovery is additive. Older sidecars may not expose
+      // skill/list; keep the local catalogue usable and avoid a blocking UI
+      // error for an optional capability.
+      console.warn("host skill catalogue unavailable", error);
+      setHostSkillsBySession((current) => ({ ...current, [sessionId]: [] }));
+      return null;
+    }
+  }, []);
   // Latest connectors for the render-detached remote-guard path.
   const connectorsRef = useRef<ConnectorEntry[]>(connectors);
   connectorsRef.current = connectors;
@@ -1836,6 +1866,13 @@ export function useMuseSessions(): UseMuseSessions {
           if (cur !== null) return cur;
           return restored[0]?.session_id ?? null;
         });
+        // Host skills are session-scoped; hydrate them alongside restored
+        // conversations without delaying the first transcript paint.
+        void Promise.allSettled(
+          restored
+            .filter((meta) => !tombstoned.current?.has(meta.session_id))
+            .map((meta) => refreshHostSkills(meta.session_id)),
+        );
       } catch (e) {
         if (!cancelled) setError(`restore_sessions failed: ${String(e)}`);
       }
@@ -2533,6 +2570,12 @@ export function useMuseSessions(): UseMuseSessions {
         else next.branch = observation.branch;
         return next;
       }));
+      return;
+    }
+    if (kind === "skill_changed") {
+      // Refresh from the host rather than trusting notification contents;
+      // notifications only invalidate the session-scoped catalogue.
+      void refreshHostSkills(sid);
       return;
     }
     // Keep this heartbeat independent from log timestamps: a host status
@@ -3417,13 +3460,14 @@ export function useMuseSessions(): UseMuseSessions {
       if (modelId && modelId !== "default") {
         await setSessionModel(meta.session_id, modelId);
       }
+      void refreshHostSkills(meta.session_id);
       return meta.session_id;
     } catch (e) {
       setError(`start_session failed: ${String(e)}`);
       return null;
     }
     },
-    [authorizationMode, setConnectionState, setSessionModel, workspace],
+    [authorizationMode, refreshHostSkills, setConnectionState, setSessionModel, workspace],
   );
 
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
@@ -3583,6 +3627,7 @@ export function useMuseSessions(): UseMuseSessions {
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
       kickPoll();
       await refreshModels(id);
+      await refreshHostSkills(id);
       if (postureError !== null) {
         setError("Conversation reconnected, but the host kept its existing authorization posture.");
       }
@@ -3592,7 +3637,7 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, sessions, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState]);
+  }, [authorizationMode, refreshHostSkills, sessions, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState]);
 
   const startSession = useCallback(async () => {
     return await startSessionRow(undefined, globalSettings);
@@ -3653,13 +3698,14 @@ export function useMuseSessions(): UseMuseSessions {
         setActiveId(meta.session_id);
         const modelId = projectSettings?.model.trim();
         if (modelId && modelId !== "default") await setSessionModel(meta.session_id, modelId);
+        void refreshHostSkills(meta.session_id);
         return result.worktree;
       } catch (e) {
         setError(`worktree conversation failed: ${e instanceof Error ? e.message : String(e)}`);
         return null;
       }
     },
-    [authorizationMode, setConnectionState, setSessionModel],
+    [authorizationMode, refreshHostSkills, setConnectionState, setSessionModel],
   );
 
   const [forkingId, setForkingId] = useState<string | null>(null);
@@ -3708,6 +3754,7 @@ export function useMuseSessions(): UseMuseSessions {
         setLogs((current) => ({ ...current, [meta.session_id]: inherited }));
         if (inherited.length > 0) appendLog(meta.session_id, inherited);
         setActiveId(meta.session_id);
+        void refreshHostSkills(meta.session_id);
         return meta.session_id;
       } catch (error) {
         setError(`Fork failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -3716,7 +3763,7 @@ export function useMuseSessions(): UseMuseSessions {
         setForkingId(null);
       }
     },
-    [forkingId, sessions, setConnectionState],
+    [forkingId, refreshHostSkills, sessions, setConnectionState],
   );
 
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
@@ -3969,7 +4016,10 @@ export function useMuseSessions(): UseMuseSessions {
     ): Promise<SendResult> => {
       const trimmed = text.trim();
       const hasInputParts = inputParts?.some(
-        (part) => part.type === "image" || (part.type === "text" && part.text.trim().length > 0),
+        (part) =>
+          part.type === "image" ||
+          part.type === "skill" ||
+          (part.type === "text" && part.text.trim().length > 0),
       ) ?? false;
       if (!trimmed && !hasInputParts) return sendFailed(null, "the message is empty");
       // US-4: `/compact` is intercepted at send time and never reaches the
@@ -3997,11 +4047,33 @@ export function useMuseSessions(): UseMuseSessions {
       // byte-identical expansion, so skill/project expansion never doubles.
       let outgoing = prior !== null ? prior.outgoingText : trimmed;
       let fanout: ReturnType<typeof parseFanoutCommand> = null;
+      let nativeSkill: { selector: string; arguments?: string } | null = null;
+      let nativeProjectContext = "";
       if (prior === null) {
         // w-integrations US-25: `/skill-name args` expands to the skill
         // instructions (traced in the log) and sends as the turn.
         const skillCmd = parseSkillCommand(trimmed);
         if (skillCmd !== null) {
+          const hostSkill = findHostSkill(hostSkillsRef.current[sessionId] ?? [], skillCmd.name);
+          if (hostSkill !== null) {
+            // Native skills are expanded by the host. Keep the slash command
+            // in the durable transcript while sending the typed selector as
+            // a protocol `skill` part, which avoids leaking host instructions
+            // into the renderer or duplicating them on retry.
+            nativeSkill = {
+              selector: hostSkill.selector,
+              ...(skillCmd.args ? { arguments: skillCmd.args } : {}),
+            };
+            pushLog(sessionId, [
+              {
+                id: newId(),
+                ts: Date.now(),
+                role: "system",
+                text: formatSkillInvokeTrace(hostSkill.selector, skillCmd.args),
+              },
+            ]);
+            outgoing = trimmed;
+          } else {
           const skill = resolveSkill(skillsRef.current, skillCmd.name);
           if (skill === null) {
             pushLog(sessionId, [
@@ -4049,6 +4121,7 @@ export function useMuseSessions(): UseMuseSessions {
             },
           ]);
           outgoing = buildSkillInvocation(skill, skillCmd.args, resources);
+          }
         }
         // US-7: `/fanout <n> "<task>"` never reaches the model as typed —
         // it becomes one parent-turn prompt instructing N parallel
@@ -4068,14 +4141,30 @@ export function useMuseSessions(): UseMuseSessions {
           attachedId !== null
             ? (projectsRef.current.find((p) => p.id === attachedId) ?? null)
             : null;
+        if (nativeSkill !== null && project?.instructions.trim()) {
+          nativeProjectContext = buildProjectInput("", project);
+        }
         outgoing = buildProjectInput(outgoing, project);
       }
       const originalText = prior !== null ? prior.text : trimmed;
       // Attachments are part of the durable send payload. On a retry, always
       // reuse the exact serialized parts from the outbox; on a first send,
       // replace the leading text part after skill/project expansion.
-      const outgoingParts =
-        prior?.inputParts ?? inputPartsWithText(outgoing, inputParts);
+      const outgoingParts = prior?.inputParts ?? (
+        nativeSkill === null
+          ? inputPartsWithText(outgoing, inputParts)
+          : [
+              {
+                type: "skill" as const,
+                selector: nativeSkill.selector,
+                ...(nativeSkill.arguments ? { arguments: nativeSkill.arguments } : {}),
+              },
+              ...(nativeProjectContext ? [{ type: "text" as const, text: nativeProjectContext }] : []),
+              ...(inputParts ?? []).filter((part, index) =>
+                part.type === "image" || (part.type === "text" && index > 0),
+              ),
+            ]
+      );
       // A retry keeps the exact command id from the durable entry. Legacy
       // ambiguous entries have no server id and cannot be checked safely.
       const serverCommandId =
@@ -4404,20 +4493,16 @@ export function useMuseSessions(): UseMuseSessions {
    */
   const invokeSkill = useCallback(
     (sessionId: string, name: string, args: string): void => {
+      const hostSkill = findHostSkill(hostSkillsRef.current[sessionId] ?? [], name);
       const skill = resolveSkill(skillsRef.current, name);
-      if (skill === null) {
+      if (hostSkill === null && skill === null) {
         setError(`unknown skill /${name}`);
         return;
       }
-      pushLog(sessionId, [
-        {
-          id: newId(),
-          ts: Date.now(),
-          role: "system",
-          text: formatSkillInvokeTrace(skill.name, args),
-        },
-      ]);
-      void sendInput(sessionId, buildSkillInvocation(skill, args));
+      const selectedName = hostSkill?.selector ?? skill!.name;
+      // Route through sendInput so native host skills become `skill` parts,
+      // while local SKILL.md entries retain their existing expansion path.
+      void sendInput(sessionId, `/${selectedName}${args.trim() ? ` ${args.trim()}` : ""}`);
     },
     [sendInput],
   );
@@ -6558,6 +6643,8 @@ export function useMuseSessions(): UseMuseSessions {
     uninstallConnectorById,
     setConnectorEnabledById,
     skills,
+    hostSkillsBySession,
+    refreshHostSkills,
     setSkillEnabledByName,
     traceSkillSuggestions,
     invokeSkill,

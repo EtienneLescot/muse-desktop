@@ -5,11 +5,14 @@ import {
   type SkillSuggestion,
 } from "../lib/skills";
 import type { SkillScanSummary } from "../lib/skillDiscovery";
+import type { HostSkill } from "../lib/hostSkills";
 import { userFacingError } from "../lib/errorCopy";
 
 interface Props {
   skills: Skill[];
+  hostSkills: HostSkill[];
   workspace: string | null;
+  onRefreshHost: () => Promise<HostSkill[] | null>;
   onScan: () => Promise<SkillScanSummary | null>;
   onToggle: (name: string, enabled: boolean) => void;
   /** Invoke `/name` with no args (slash in the composer passes args). */
@@ -25,12 +28,13 @@ interface Props {
  * US-25 skills panel: slash-invokable skills, auto-suggest traced to the
  * log, progressive disclosure (view-only shows description only).
  */
-export function SkillPanel({ skills, workspace, onScan, onToggle, onInvoke, onTraceSuggest }: Props) {
+export function SkillPanel({ skills, hostSkills, workspace, onRefreshHost, onScan, onToggle, onInvoke, onTraceSuggest }: Props) {
   const [draft, setDraft] = useState("");
   const [suggestions, setSuggestions] = useState<SkillSuggestion[]>([]);
   const [scanBusy, setScanBusy] = useState(false);
   const [scan, setScan] = useState<SkillScanSummary | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [hostBusy, setHostBusy] = useState(false);
 
   return (
     <section className="integration-panel" aria-label="Skills">
@@ -66,6 +70,39 @@ export function SkillPanel({ skills, workspace, onScan, onToggle, onInvoke, onTr
         </div>
       )}
       {scanError !== null && <p className="error" role="alert">{scanError}</p>}
+      <div className="integration-panel-head" style={{ marginTop: "1rem" }}>
+        <span>
+          <h4>Host skills</h4>
+          <small className="muted">Provided by the connected Muse runtime</small>
+        </span>
+        <button
+          type="button"
+          className="integration-action"
+          disabled={hostBusy}
+          onClick={() => {
+            setHostBusy(true);
+            void onRefreshHost().finally(() => setHostBusy(false));
+          }}
+        >
+          {hostBusy ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+      {hostSkills.length > 0 ? (
+        <ul className="integration-list">
+          {hostSkills.map((skill) => (
+            <li key={skill.selector} className="integration-row">
+              <span className="integration-main">
+                <strong>/{skill.selector}</strong>
+                <small>{skill.description || skill.displayName}</small>
+                {skill.argumentHint && <small className="muted">{skill.argumentHint}</small>}
+              </span>
+              <button type="button" onClick={() => onInvoke(skill.selector)}>Run</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">No host skills reported for this conversation.</p>
+      )}
       <ul className="integration-list">
         {skills.map((s) => {
           const view = getSkillDetail(s, false);
