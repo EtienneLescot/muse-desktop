@@ -208,6 +208,7 @@ export default function App() {
     installConnectorById,
     uninstallConnectorById,
     setConnectorEnabledById,
+    setConnectorUseInMuseById,
     skills,
     hostSkillsBySession,
     refreshHostSkills,
@@ -947,6 +948,7 @@ export default function App() {
                   onToggle={(id, enabled) =>
                     setConnectorEnabledById(id, enabled)
                   }
+                  onUseInMuse={(id, enabled) => setConnectorUseInMuseById(id, enabled)}
                 />{" "}
                 <SkillPanel
                   skills={skills}

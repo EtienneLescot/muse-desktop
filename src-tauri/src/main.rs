@@ -1913,6 +1913,7 @@ async fn git_worktree_create_session(
     relative_path: String,
     base_ref: String,
     authorization_mode: Option<String>,
+    mcp_servers: Option<Value>,
 ) -> Result<WorktreeSessionResult, String> {
     let root = workspace_for_inspection(&state, &session_id)?;
     let created = tokio::task::spawn_blocking({
@@ -1925,7 +1926,7 @@ async fn git_worktree_create_session(
     .await
     .map_err(|e| format!("git worktree create task failed: {e}"))??;
     let child_root = PathBuf::from(&created.path);
-    match start_session_at_workspace(app, state, child_root, authorization_mode).await {
+    match start_session_at_workspace(app, state, child_root, authorization_mode, mcp_servers).await {
         Ok(session) => Ok(WorktreeSessionResult {
             worktree: created,
             session,
@@ -2603,11 +2604,116 @@ fn resolve_workspace(
     Ok(root)
 }
 
+const MAX_MCP_SERVERS: usize = 32;
+const MAX_MCP_ARGS: usize = 64;
+const MAX_MCP_ENV: usize = 64;
+const MAX_MCP_STRING_CHARS: usize = 2_000;
+
+/// Validate the opt-in MCP session extension before forwarding it to Muse.
+/// Unknown configuration keys are left to the host, but recognized stdio and
+/// streamable HTTP arms are bounded here so a renderer cannot smuggle an
+/// unbounded command or environment through the Tauri boundary.
+fn mcp_session_config(value: Option<Value>) -> Result<Option<Value>, String> {
+    let Some(value) = value else { return Ok(None); };
+    let Some(servers) = value.as_array() else {
+        return Err("mcpServers must be a JSON array".to_string());
+    };
+    if servers.is_empty() { return Ok(None); }
+    if servers.len() > MAX_MCP_SERVERS {
+        return Err(format!("mcpServers cannot contain more than {MAX_MCP_SERVERS} servers"));
+    }
+    for (index, server) in servers.iter().enumerate() {
+        let object = server
+            .as_object()
+            .ok_or_else(|| format!("mcpServers[{index}] must be an object"))?;
+        let transport = object
+            .get("transport")
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("mcpServers[{index}].transport is required"))?;
+        match transport {
+            "stdio" => {
+                let command = object
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .filter(|command| !command.trim().is_empty())
+                    .ok_or_else(|| format!("mcpServers[{index}].command is required"))?;
+                if command.chars().count() > MAX_MCP_STRING_CHARS {
+                    return Err(format!("mcpServers[{index}].command is too long"));
+                }
+                if let Some(args) = object.get("args") {
+                    let args = args
+                        .as_array()
+                        .ok_or_else(|| format!("mcpServers[{index}].args must be an array"))?;
+                    if args.len() > MAX_MCP_ARGS {
+                        return Err(format!("mcpServers[{index}].args has too many entries"));
+                    }
+                    for (arg_index, arg) in args.iter().enumerate() {
+                        let arg = arg
+                            .as_str()
+                            .ok_or_else(|| format!("mcpServers[{index}].args[{arg_index}] must be a string"))?;
+                        if arg.chars().count() > MAX_MCP_STRING_CHARS {
+                            return Err(format!("mcpServers[{index}].args[{arg_index}] is too long"));
+                        }
+                    }
+                }
+                if let Some(env) = object.get("env") {
+                    let env = env
+                        .as_object()
+                        .ok_or_else(|| format!("mcpServers[{index}].env must be an object"))?;
+                    if env.len() > MAX_MCP_ENV {
+                        return Err(format!("mcpServers[{index}].env has too many entries"));
+                    }
+                    for (name, value) in env {
+                        if name.trim().is_empty() || name.chars().count() > 200 {
+                            return Err(format!("mcpServers[{index}].env contains an invalid name"));
+                        }
+                        let value = value
+                            .as_str()
+                            .ok_or_else(|| format!("mcpServers[{index}].env values must be strings"))?;
+                        if value.chars().count() > MAX_MCP_STRING_CHARS {
+                            return Err(format!("mcpServers[{index}].env value is too long"));
+                        }
+                    }
+                }
+            }
+            "streamableHttp" => {
+                let url = object
+                    .get("url")
+                    .and_then(Value::as_str)
+                    .filter(|url| !url.trim().is_empty())
+                    .ok_or_else(|| format!("mcpServers[{index}].url is required"))?;
+                if url.chars().count() > MAX_MCP_STRING_CHARS {
+                    return Err(format!("mcpServers[{index}].url is too long"));
+                }
+                if let Some(headers) = object.get("headers") {
+                    let headers = headers
+                        .as_object()
+                        .ok_or_else(|| format!("mcpServers[{index}].headers must be an object"))?;
+                    if headers.len() > MAX_MCP_ENV {
+                        return Err(format!("mcpServers[{index}].headers has too many entries"));
+                    }
+                    for value in headers.values() {
+                        let value = value
+                            .as_str()
+                            .ok_or_else(|| format!("mcpServers[{index}].headers values must be strings"))?;
+                        if value.chars().count() > MAX_MCP_STRING_CHARS {
+                            return Err(format!("mcpServers[{index}].header value is too long"));
+                        }
+                    }
+                }
+            }
+            other => return Err(format!("mcpServers[{index}] has unsupported transport {other:?}")),
+        }
+    }
+    Ok(Some(json!({"mcpServers": servers})))
+}
+
 async fn start_session_at_workspace(
     app: AppHandle,
     state: State<'_, AppState>,
     root: PathBuf,
     authorization_mode: Option<String>,
+    mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
     let client = ensure_host(&app, &state, &root).await?;
     let mut params = json!({
@@ -2618,6 +2724,9 @@ async fn start_session_at_workspace(
         let wire_mode = host_approval_mode(mode)
             .ok_or_else(|| format!("unknown authorization mode: {mode}"))?;
         params["approvalMode"] = json!(wire_mode);
+    }
+    if let Some(config) = mcp_session_config(mcp_servers)? {
+        params["config"] = config;
     }
     let res = request_session_start(&client, params, authorization_mode.as_deref()).await?;
     let session = res.get("session").ok_or("session/start: no session in response")?;
@@ -2685,9 +2794,10 @@ async fn start_session(
     state: State<'_, AppState>,
     workspace_path: Option<String>,
     authorization_mode: Option<String>,
+    mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
     let root = resolve_workspace(&state, workspace_path)?;
-    start_session_at_workspace(app, state, root, authorization_mode).await
+    start_session_at_workspace(app, state, root, authorization_mode, mcp_servers).await
 }
 
 /// Create a server-side conversation branch from all completed turns.
@@ -2806,6 +2916,7 @@ async fn resume_session(
     state: State<'_, AppState>,
     session_id: String,
     workspace_path: String,
+    mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
     let _resume = state.resume_mutex.lock().await;
     let root = resolve_workspace(&state, Some(workspace_path))?;
@@ -2848,7 +2959,11 @@ async fn resume_session(
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client)?;
-    let result = client.request("session/resume", resume::params(&session_id, new_command_id())).await;
+    let mut resume_params = resume::params(&session_id, new_command_id());
+    if let Some(config) = mcp_session_config(mcp_servers)? {
+        resume_params["config"] = config;
+    }
+    let result = client.request("session/resume", resume_params).await;
     match result {
         Ok(result) => {
             let session = result.get("session").ok_or_else(|| "session/resume returned no conversation".to_string());
@@ -5124,6 +5239,26 @@ mod tests {
         assert!(validate_turn_input_parts(&mismatched_dimensions).is_err());
         let malformed_skill = json!([{"type": "skill", "selector": " ", "arguments": 42}]);
         assert!(validate_turn_input_parts(&malformed_skill).is_err());
+    }
+
+    #[test]
+    fn mcp_session_config_accepts_bounded_stdio_and_wraps_config() {
+        let config = mcp_session_config(Some(json!([
+            {"transport": "stdio", "command": "node", "args": ["server.js"], "mode": "optional"}
+        ]))).expect("valid MCP config");
+        assert_eq!(config, Some(json!({"mcpServers": [
+            {"transport": "stdio", "command": "node", "args": ["server.js"], "mode": "optional"}
+        ]})));
+    }
+
+    #[test]
+    fn mcp_session_config_rejects_unknown_transport_and_unbounded_values() {
+        assert!(mcp_session_config(Some(json!([{"transport": "websocket", "url": "https://example.com"}]))).is_err());
+        assert!(mcp_session_config(Some(json!([{"transport": "stdio", "command": "node", "args": [42]}]))).is_err());
+        let too_many = (0..=MAX_MCP_SERVERS)
+            .map(|_| json!({"transport": "stdio", "command": "node"}))
+            .collect::<Vec<_>>();
+        assert!(mcp_session_config(Some(Value::Array(too_many))).is_err());
     }
 
     fn scope_root() -> PathBuf {

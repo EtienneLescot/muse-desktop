@@ -339,12 +339,14 @@ import {
   registerRemoteConnector,
   saveConnectors,
   setConnectorEnabled,
+  setConnectorUseInMuse,
   uninstallConnector,
   type ConnectorEntry,
   type LocalMcpCallResult,
   type LocalMcpProbeResult,
   type ConnectorTool,
 } from "../lib/connectors";
+import { buildHostMcpServers } from "../lib/hostMcp";
 import {
   callRemoteMcp as callRemoteMcpTransport,
   isRemoteMcpAuthenticationError,
@@ -1130,6 +1132,8 @@ interface UseMuseSessions {
   uninstallConnectorById: (id: string) => void;
   /** w-integrations US-24: enable/disable an installed connector. */
   setConnectorEnabledById: (id: string, enabled: boolean) => void;
+  /** M3-01: opt one local connector into new Muse session startup config. */
+  setConnectorUseInMuseById: (id: string, enabled: boolean) => void;
   /** w-integrations US-25: skills (builtins merged over stored). */
   skills: Skill[];
   /** M3-05: skills exposed by the connected Muse host, keyed by session. */
@@ -3432,6 +3436,7 @@ export function useMuseSessions(): UseMuseSessions {
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
         authorizationMode,
+        mcpServers: buildHostMcpServers(connectorsRef.current),
       });
       const record: MuseSession = {
         session_id: meta.session_id,
@@ -3547,7 +3552,9 @@ export function useMuseSessions(): UseMuseSessions {
     setError(null);
     try {
       const meta = await invoke<BackendSessionMeta>("resume_session", {
-        sessionId: id, workspacePath: session.workspace,
+        sessionId: id,
+        workspacePath: session.workspace,
+        mcpServers: buildHostMcpServers(connectorsRef.current),
       });
       if (tombstoned.current?.has(id)) return;
       setGrantedCapabilitiesBySession((cur) => ({
@@ -3667,6 +3674,7 @@ export function useMuseSessions(): UseMuseSessions {
           relativePath: plan.path,
           baseRef: plan.base,
           authorizationMode,
+          mcpServers: buildHostMcpServers(connectorsRef.current),
         });
         setWorktrees((current) => [
           ...current.filter((record) => record.path !== result.worktree.path),
@@ -3823,6 +3831,10 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (!enabled && remoteConnectedIds.includes(id)) disconnectRemoteMcp(id);
   }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
+
+  const setConnectorUseInMuseById = useCallback((id: string, enabled: boolean): void => {
+    setConnectors((current) => setConnectorUseInMuse(current, id, enabled));
+  }, []);
 
   const probeRemoteMcp = useCallback(
     async (
@@ -6642,6 +6654,7 @@ export function useMuseSessions(): UseMuseSessions {
     installConnectorById,
     uninstallConnectorById,
     setConnectorEnabledById,
+    setConnectorUseInMuseById,
     skills,
     hostSkillsBySession,
     refreshHostSkills,

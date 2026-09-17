@@ -70,6 +70,8 @@ export interface ConnectorEntry {
   url?: string;
   /** Local-only: explicit command used to probe/call this server. */
   command?: string;
+  /** Explicit opt-in: pass this local server to new Muse sessions. */
+  useInMuse?: boolean;
   /** Local-only: last successful tools/list timestamp. */
   lastProbeAt?: number;
   /** Local-only: server version reported by the last successful probe. */
@@ -359,6 +361,19 @@ export function setConnectorEnabled(
   return { registry: next, changed };
 }
 
+/** Toggle host injection without changing connector availability. */
+export function setConnectorUseInMuse(
+  registry: ConnectorEntry[],
+  id: string,
+  enabled: boolean,
+): ConnectorEntry[] {
+  return registry.map((entry) =>
+    entry.id === id && entry.kind === "local" && entry.command
+      ? { ...entry, useInMuse: enabled }
+      : entry,
+  );
+}
+
 /**
  * Hot-list tools without restart: re-reads the registry on every call
  * (no cache), skipping disabled entries. Callers diff successive results
@@ -555,6 +570,7 @@ export function loadConnectors(): ConnectorEntry[] {
           ? e.status
           : "installed",
       command: typeof e.command === "string" ? e.command : undefined,
+      useInMuse: e.useInMuse === true,
       lastProbeAt: typeof e.lastProbeAt === "number" ? e.lastProbeAt : undefined,
       serverVersion: typeof e.serverVersion === "string" ? e.serverVersion : undefined,
       protocolVersion: typeof e.protocolVersion === "string" ? e.protocolVersion : undefined,
