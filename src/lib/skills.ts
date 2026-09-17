@@ -19,8 +19,8 @@
  * degrade gracefully.
  */
 
-/** Where a skill comes from (shareable repo/team scopes). */
-export type SkillSource = "builtin" | "repo" | "team";
+/** Where a skill comes from (builtin plus shareable project/repo/team scopes). */
+export type SkillSource = "builtin" | "repo" | "team" | "project";
 
 /** One skill definition. */
 export interface Skill {
@@ -36,6 +36,12 @@ export interface Skill {
    */
   viewOnly: boolean;
   enabled: boolean;
+  /** Absolute/relative origin when loaded from a SKILL.md on disk. */
+  path?: string;
+  /** Relative resource references declared by a discovered skill. */
+  resources?: string[];
+  /** Discovery is session-scoped and is never persisted as an override. */
+  discovered?: boolean;
 }
 
 /** One auto-suggestion: which skill, and why it matched. */
@@ -208,16 +214,23 @@ export function mergeBuiltinSkills(stored: Skill[]): Skill[] {
     if (typeof s.name !== "string" || s.name.trim().length === 0) continue;
     const key = normalizeSkillName(s.name);
     const prev = byName.get(key);
+    const priority = (source: SkillSource): number =>
+      source === "project" ? 3 : source === "repo" ? 2 : source === "team" ? 1 : 0;
+    const source =
+      s.source === "repo" || s.source === "team" || s.source === "builtin" || s.source === "project"
+        ? s.source
+        : "repo";
+    if (prev !== undefined && priority(source) < priority(prev.source)) continue;
     byName.set(key, {
       name: prev?.name ?? s.name.trim(),
       description: typeof s.description === "string" ? s.description : "",
       instructions: typeof s.instructions === "string" ? s.instructions : "",
-      source:
-        s.source === "repo" || s.source === "team" || s.source === "builtin"
-          ? s.source
-          : "repo",
+      source,
       viewOnly: typeof s.viewOnly === "boolean" ? s.viewOnly : true,
       enabled: typeof s.enabled === "boolean" ? s.enabled : true,
+      ...(typeof s.path === "string" ? { path: s.path } : {}),
+      ...(Array.isArray(s.resources) ? { resources: s.resources.filter((r): r is string => typeof r === "string") } : {}),
+      ...(s.discovered === true ? { discovered: true } : {}),
     });
   }
   return [...byName.values()];
@@ -273,7 +286,9 @@ export function loadSkills(): Skill[] {
 /** Persist skill overrides (best-effort: quota/private mode never throws). */
 export function saveSkills(skills: Skill[]): void {
   try {
-    storage()?.setItem(SKILLS_KEY, JSON.stringify(skills));
+    // Disk discoveries are refreshed from their source and must not become
+    // stale persisted overrides when a SKILL.md is deleted or renamed.
+    storage()?.setItem(SKILLS_KEY, JSON.stringify(skills.filter((skill) => skill.discovered !== true)));
   } catch {
     // best-effort persistence only
   }

@@ -160,6 +160,7 @@ export default function App() {
     setSkillEnabledByName,
     traceSkillSuggestions,
     invokeSkill,
+    scanSkills,
     summaries,
     compactSession,
     usageBySession,
@@ -737,6 +738,8 @@ export default function App() {
                 />{" "}
                 <SkillPanel
                   skills={skills}
+                  workspace={workspace}
+                  onScan={() => scanSkills(workspace)}
                   onToggle={(name, enabled) =>
                     setSkillEnabledByName(name, enabled)
                   }

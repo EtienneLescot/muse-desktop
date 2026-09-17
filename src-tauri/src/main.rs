@@ -26,6 +26,7 @@ mod terminal;
 mod files;
 mod setup;
 mod mcp;
+mod skills;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -1254,6 +1255,26 @@ async fn mcp_local_call(
     })
     .await
     .map_err(|e| format!("MCP call task failed: {e}"))?
+}
+
+/// Discover bounded, read-only SKILL.md documents in a selected workspace.
+#[tauri::command]
+async fn skills_scan(
+    state: State<'_, AppState>,
+    workspace: Option<String>,
+) -> Result<skills::SkillScanResult, String> {
+    let root = match workspace.map(|path| PathBuf::from(path.trim())).filter(|path| !path.as_os_str().is_empty()) {
+        Some(path) => path,
+        None => state
+            .workspace
+            .lock()
+            .map_err(|e| format!("workspace state lock: {e}"))?
+            .clone()
+            .ok_or_else(|| "select a workspace before scanning skills".to_string())?,
+    };
+    tokio::task::spawn_blocking(move || skills::scan(&root))
+        .await
+        .map_err(|e| format!("skills scan task failed: {e}"))?
 }
 
 /// Open (or reuse) the persistent PTY owned by a conversation workspace.
@@ -2851,6 +2872,7 @@ fn main() {
             worktree_setup_run,
             mcp_local_probe,
             mcp_local_call,
+            skills_scan,
             terminal_open,
             terminal_write,
             terminal_resize,

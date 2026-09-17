@@ -3531,6 +3531,66 @@ body.dark .composer textarea::placeholder {
   font-size: 0.8rem;
 }
 
+.integration-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.integration-panel-head > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.integration-action {
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 5px 8px;
+  font-size: 0.75rem;
+}
+
+.integration-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.skill-scan-result {
+  margin: 6px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--pale);
+  overflow: hidden;
+}
+
+.skill-scan-result > small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-scan-errors {
+  margin: 5px 0 0;
+  padding-left: 16px;
+  color: var(--danger);
+  font-size: 0.72rem;
+  max-height: 84px;
+  overflow: auto;
+}
+
+.skill-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .local-mcp {
   margin: 10px 0 12px;
   padding: 9px 10px;

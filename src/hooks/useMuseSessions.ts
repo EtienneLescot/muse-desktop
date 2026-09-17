@@ -278,6 +278,12 @@ import {
   type Skill,
   type SkillSuggestion,
 } from "../lib/skills";
+import {
+  dedupeDiscoveredSkills,
+  parseSkillDocuments,
+  type RawSkillDocument,
+  type SkillScanSummary,
+} from "../lib/skillDiscovery";
 // w-collab (US-27/US-28): share bundles + modes + channel stub (pure,
 // unit-tested). `shareThread` is aliased: the hook exposes `shareSession`.
 import {
@@ -856,6 +862,8 @@ interface UseMuseSessions {
   traceSkillSuggestions: (sessionId: string, text: string) => SkillSuggestion[];
   /** w-integrations US-25: invoke `/name args` (traced, then sent). */
   invokeSkill: (sessionId: string, name: string, args: string) => void;
+  /** M3-04: refresh bounded SKILL.md discovery for the selected workspace. */
+  scanSkills: (workspacePath?: string | null) => Promise<SkillScanSummary | null>;
   error: string | null;
   /** TEMPORARY dev diagnosis: backend events received by this window. */
   evtCount: number;
@@ -3321,6 +3329,40 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
+  const scanSkills = useCallback(
+    async (workspacePath?: string | null): Promise<SkillScanSummary | null> => {
+      try {
+        const result = await invoke<{
+          root: string;
+          documents: RawSkillDocument[];
+          errors: Array<{ path: string; message: string }>;
+          scannedAt: number;
+        }>("skills_scan", {
+          workspace: workspacePath?.trim() || null,
+        });
+        const parsed = parseSkillDocuments(result.documents);
+        const discovered = dedupeDiscoveredSkills(parsed.skills);
+        const errors = [
+          ...result.errors,
+          ...parsed.errors,
+        ];
+        // Rebuild from persisted overrides on every refresh so removed or
+        // renamed documents cannot linger in the active registry.
+        setSkills(mergeBuiltinSkills([...loadSkills(), ...discovered]));
+        return {
+          root: result.root,
+          scannedAt: result.scannedAt,
+          skills: discovered,
+          errors,
+        };
+      } catch (e) {
+        setError(`skills scan failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
+
   const registerLocalConnectorByProbe = useCallback(
     (name: string, command: string, tools: ConnectorTool[]): boolean => {
       const id = `local-mcp-${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
@@ -4384,6 +4426,7 @@ export function useMuseSessions(): UseMuseSessions {
     setSkillEnabledByName,
     traceSkillSuggestions,
     invokeSkill,
+    scanSkills,
     summaries,
     compactSession: doCompact,
     usageBySession,
