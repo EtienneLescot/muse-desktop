@@ -21,7 +21,18 @@ export interface BrowserAnnotation {
   /** Quoted selection text the comment refers to (may be empty). */
   selection: string;
   comment: string;
+  /** Optional same-origin element anchor captured from the rendered page. */
+  element?: BrowserElementAnchor;
   createdAt: number;
+}
+
+/** Bounded, descriptive metadata for a DOM element selected in a page. */
+export interface BrowserElementAnchor {
+  selector: string;
+  tag: string;
+  role?: string;
+  label?: string;
+  text?: string;
 }
 
 export interface BrowserAppPermission {
@@ -66,6 +77,7 @@ export interface BrowserCapture {
   url: string;
   selection?: string;
   comment?: string;
+  element?: BrowserElementAnchor;
   capturedAt: number;
   width: number;
   height: number;
@@ -74,6 +86,80 @@ export interface BrowserCapture {
   region?: BrowserCaptureRegion;
   sourceWidth?: number;
   sourceHeight?: number;
+}
+
+const MAX_BROWSER_ELEMENT_FIELD = 320;
+const MAX_BROWSER_ELEMENT_TEXT = 240;
+
+function boundedElementField(value: unknown, max = MAX_BROWSER_ELEMENT_FIELD): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.replace(/\s+/g, " ").trim();
+  return text.length > 0 ? Array.from(text).slice(0, max).join("") : undefined;
+}
+
+/** Validate and bound element metadata before it is persisted or sent. */
+export function normalizeBrowserElementAnchor(raw: unknown): BrowserElementAnchor | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const value = raw as Record<string, unknown>;
+  const selector = boundedElementField(value.selector);
+  const tag = boundedElementField(value.tag, 64)?.toLowerCase();
+  if (!selector || !tag || !/^[a-z][a-z0-9-]*$/.test(tag)) return null;
+  const next: BrowserElementAnchor = { selector, tag };
+  const role = boundedElementField(value.role, 120);
+  const label = boundedElementField(value.label, 240);
+  const text = boundedElementField(value.text, MAX_BROWSER_ELEMENT_TEXT);
+  if (role) next.role = role;
+  if (label) next.label = label;
+  if (text) next.text = text;
+  return next;
+}
+
+/**
+ * Describe a same-origin DOM element without executing page code. The result
+ * is intentionally metadata only and is bounded before entering the prompt.
+ */
+export function describeBrowserElement(element: Element | null): BrowserElementAnchor | null {
+  if (element === null || typeof element.tagName !== "string") return null;
+  const tag = element.tagName.toLowerCase();
+  if (!/^[a-z][a-z0-9-]*$/.test(tag)) return null;
+  const segments: string[] = [];
+  let current: Element | null = element;
+  for (let depth = 0; current !== null && depth < 6; depth += 1) {
+    const currentTag = current.tagName.toLowerCase();
+    const id = (current.getAttribute("id") ?? "").trim();
+    if (id.length > 0) {
+      const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80);
+      segments.unshift(`#${safeId}`);
+      break;
+    }
+    let index = 1;
+    let sibling = current.previousElementSibling;
+    while (sibling !== null) {
+      if (sibling.tagName.toLowerCase() === currentTag) index += 1;
+      sibling = sibling.previousElementSibling;
+    }
+    segments.unshift(`${currentTag}:nth-of-type(${index})`);
+    current = current.parentElement;
+  }
+  const selector = segments.join(" > ").slice(0, MAX_BROWSER_ELEMENT_FIELD);
+  if (selector.length === 0) return null;
+  return normalizeBrowserElementAnchor({
+    selector,
+    tag,
+    role: element.getAttribute("role") ?? undefined,
+    label: element.getAttribute("aria-label") ?? element.getAttribute("title") ?? undefined,
+    text: element.textContent ?? undefined,
+  });
+}
+
+function formatElementAnchor(anchor: BrowserElementAnchor): string[] {
+  const normalized = normalizeBrowserElementAnchor(anchor);
+  if (normalized === null) return [];
+  const lines = [`Element: <${normalized.tag}> · ${normalized.selector}`];
+  if (normalized.role) lines.push(`Element role: ${normalized.role}`);
+  if (normalized.label) lines.push(`Element label: ${normalized.label}`);
+  if (normalized.text) lines.push(`Element text: ${normalized.text}`);
+  return lines;
 }
 
 function imageDataUrlParts(dataUrl: string): { mediaType: string; base64Data: string } | null {
@@ -140,6 +226,7 @@ export function formatBrowserCaptureContext(capture: BrowserCapture): string {
   }
   if (capture.selection?.trim()) lines.push(`Selection: ${capture.selection.trim()}`);
   if (capture.comment?.trim()) lines.push(`Comment: ${capture.comment.trim()}`);
+  if (capture.element) lines.push(...formatElementAnchor(capture.element));
   lines.push("Image: attached below. Verify the page is still current before acting on it.");
   return Array.from(lines.join("\n")).slice(0, MAX_BROWSER_CONTEXT_CHARS).join("");
 }
@@ -153,12 +240,14 @@ export function formatBrowserContext(
   url: string,
   selection = "",
   comment = "",
+  element?: BrowserElementAnchor,
 ): string {
   const normalized = normalizeBrowserUrl(url);
   if (normalized === null) return "";
   const lines = [`[Browser context]`, `URL: ${normalized}`];
   if (selection.trim().length > 0) lines.push(`Selection: ${selection.trim()}`);
   if (comment.trim().length > 0) lines.push(`Comment: ${comment.trim()}`);
+  if (element) lines.push(...formatElementAnchor(element));
   const text = lines.join("\n");
   return Array.from(text).slice(0, MAX_BROWSER_CONTEXT_CHARS).join("");
 }
@@ -206,6 +295,7 @@ export function isRenderableBrowserUrl(raw: string): boolean {
 function isValidAnnotation(a: unknown): a is BrowserAnnotation {
   if (typeof a !== "object" || a === null) return false;
   const o = a as Record<string, unknown>;
+  if (o.element !== undefined && normalizeBrowserElementAnchor(o.element) === null) return false;
   return (
     typeof o.id === "string" &&
     o.id.length > 0 &&
@@ -258,15 +348,19 @@ export function createBrowserAnnotation(
   url: string,
   selection: string,
   comment: string,
+  element?: BrowserElementAnchor | null,
 ): BrowserAnnotation | null {
   const normalized = normalizeBrowserUrl(url);
   if (normalized === null) return null;
   if (comment.trim().length === 0) return null;
+  const normalizedElement = element ? normalizeBrowserElementAnchor(element) : null;
+  if (element && normalizedElement === null) return null;
   return {
     id: makeId(),
     url: normalized,
     selection: selection.trim(),
     comment: comment.trim(),
+    ...(normalizedElement ? { element: normalizedElement } : {}),
     createdAt: Date.now(),
   };
 }

@@ -18,6 +18,7 @@ import {
   BROWSER_PERMS_KEY,
   browserCaptureAttachment,
   createBrowserAnnotation,
+  normalizeBrowserElementAnchor,
   formatBrowserCaptureContext,
   formatBrowserContext,
   IMAGE_GENERATION_NOTE,
@@ -111,12 +112,39 @@ describe("anchored comments", () => {
     assert.equal(formatBrowserContext("javascript:alert(1)", "s", "c"), "");
   });
 
+  it("keeps an element anchor bounded and explicit in page context", () => {
+    const element = normalizeBrowserElementAnchor({
+      selector: "main > button:nth-of-type(2)",
+      tag: "BUTTON",
+      role: "button",
+      label: "Run tests",
+      text: "Run tests",
+    });
+    assert.deepEqual(element, {
+      selector: "main > button:nth-of-type(2)",
+      tag: "button",
+      role: "button",
+      label: "Run tests",
+      text: "Run tests",
+    });
+    assert.match(
+      formatBrowserContext("https://example.com/", "", "", element ?? undefined),
+      /Element: <button> · main > button:nth-of-type\(2\)/,
+    );
+    assert.equal(normalizeBrowserElementAnchor({ selector: "", tag: "button" }), null);
+  });
+
   it("keeps visual capture metadata next to the attached image", () => {
     const capture: BrowserCapture = {
       dataUrl: "data:image/jpeg;base64,AQID",
       url: "example.com/docs",
       selection: "quoted line",
       comment: "review this",
+      element: {
+        selector: "main > button:nth-of-type(2)",
+        tag: "button",
+        label: "Run tests",
+      },
       capturedAt: Date.parse("2026-09-17T01:00:00.000Z"),
       width: 1280,
       height: 720,
@@ -134,6 +162,7 @@ describe("anchored comments", () => {
     assert.match(attachment.name, /^muse-browser-2026-09-17T01-00-00-000Z\.jpg$/);
     assert.match(formatBrowserCaptureContext(capture), /Viewport: 1280×720/);
     assert.match(formatBrowserCaptureContext(capture), /Region: 40,20 640×360 of 1280×720/);
+    assert.match(formatBrowserCaptureContext(capture), /Element: <button>/);
     assert.match(formatBrowserCaptureContext(capture), /Image: attached below/);
   });
 

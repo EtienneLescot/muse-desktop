@@ -4956,6 +4956,25 @@ body.dark .composer textarea::placeholder {
   background: var(--bg);
 }
 
+.browser-element-anchor {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-basis: 100%;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--blue) 45%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.browser-element-anchor code {
+  color: var(--blue);
+  overflow-wrap: anywhere;
+}
+
 .browser-capture-actions {
   display: flex;
   align-items: center;

@@ -92,11 +92,13 @@ import {
   type BrowserAnnotation,
   type BrowserAppPermission,
   type BrowserCapture,
+  type BrowserElementAnchor,
 } from "../lib/browserAnnotate";
 export type {
   BrowserAnnotation,
   BrowserAppPermission,
   BrowserCapture,
+  BrowserElementAnchor,
 } from "../lib/browserAnnotate";
 export type { MemoryEntry } from "../lib/memory";
 export type {
@@ -998,8 +1000,8 @@ interface UseMuseSessions {
   dismissImport: (id: string) => void;
   /** US-19: anchored page comments (URL + selection, persisted). */
   browserAnnotations: BrowserAnnotation[];
-  /** US-19: anchor a comment to a URL + selection (no-op when invalid). */
-  addBrowserAnnotation: (url: string, selection: string, comment: string) => void;
+  /** US-19: anchor a comment to a URL, selection and optional element. */
+  addBrowserAnnotation: (url: string, selection: string, comment: string, element?: BrowserElementAnchor | null) => void;
   /** M4-02: insert explicit page context into the active composer draft. */
   prepareBrowserContext: (sessionId: string, context: string) => boolean;
   /** M4-02: insert a captured page image and its provenance into the composer. */
@@ -4349,9 +4351,9 @@ export function useMuseSessions(): UseMuseSessions {
   // US-19 browser: anchor a comment (invalid URL / empty comment = no-op),
   // remove one by id, toggle one app's computer-use permission.
   const addBrowserAnnotationCb = useCallback(
-    (url: string, selection: string, comment: string) => {
+    (url: string, selection: string, comment: string, element?: BrowserElementAnchor | null) => {
       setBrowserAnnotations((cur) =>
-        addBrowserAnnotation(cur, createBrowserAnnotation(url, selection, comment)),
+        addBrowserAnnotation(cur, createBrowserAnnotation(url, selection, comment, element)),
       );
     },
     [],
