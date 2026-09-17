@@ -3187,31 +3187,48 @@ async fn cancel_session(
     state: State<'_, AppState>,
     session_id: String,
 ) -> Result<(), String> {
-    interrupt_session(&app, &state, &session_id).await;
-    Ok(())
+    interrupt_session(&app, &state, &session_id).await
 }
 
-/// Shared body of `cancel_session`: best-effort turn interrupt, mark stopped.
-async fn interrupt_session(app: &AppHandle, state: &State<'_, AppState>, session_id: &str) {
+/// Send the interrupt command without changing local turn state. Keeping the
+/// transport request separate makes the admission-only semantics testable
+/// without constructing a Tauri application handle.
+async fn request_interrupt(state: &AppState, session_id: &str) -> Result<Value, String> {
+    let client = session_client(state, session_id)?;
+    client
+        .request(
+            "turn/interrupt",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": session_id,
+                "retract": false,
+            }),
+        )
+        .await
+}
+
+/// Shared body of `cancel_session`: request an interrupt and let the host
+/// prove the terminal state. An accepted `turn/interrupt` is admission only;
+/// the renderer remains in its stopping state until `turn/completed`,
+/// `turn/retracted` or another terminal notification arrives. This avoids a
+/// late response being rendered as a new turn after the UI already declared
+/// the conversation idle.
+async fn interrupt_session(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    session_id: &str,
+) -> Result<(), String> {
     // Clone the client out of the lock first: the std guard must never be
     // held across an await (it is !Send through the child handle).
-    let client = session_client(state, session_id).ok();
-    if let Some(c) = client {
-        // Best effort: no running turn means the host rejects this; the
-        // session is stopped either way.
-        let _ = c
-            .request(
-                "turn/interrupt",
-                json!({
-                    "commandId": new_command_id(),
-                    "sessionId": session_id,
-                    "retract": false,
-                }),
-            )
-            .await;
+    let result = request_interrupt(state, session_id).await;
+    match result {
+        Ok(_) => Ok(()),
+        Err(error) => {
+            mark_running(state, session_id, false);
+            emit(app, "status", session_id, "cancelled", String::new());
+            Err(format!("turn interrupt failed: {error}"))
+        }
     }
-    mark_running(state, session_id, false);
-    emit(app, "status", session_id, "cancelled", String::new());
 }
 
 #[tauri::command]
@@ -3225,7 +3242,7 @@ async fn kill_session(
     // Retire ownership before accepting further notifications for this session.
     // The host process is shared by all sessions, so it is NOT killed here:
     // end the turn (best effort) and forget local records.
-    interrupt_session(&app, &state, &session_id).await;
+    let _ = interrupt_session(&app, &state, &session_id).await;
     if let Ok(mut hosts) = state.hosts.lock() { hosts.forget(&session_id); }
     if let Ok(mut sessions) = state.sessions.lock() {
         sessions.remove(&session_id);
@@ -3491,6 +3508,46 @@ mod tests {
 
         assert!(error.contains("sidecar write failed"), "{error}");
         assert!(!state.sessions.lock().unwrap()["session-a"].running);
+    }
+
+    #[tokio::test]
+    async fn interrupt_ack_keeps_session_running_until_terminal_notification() {
+        let state = Arc::new(empty_state());
+        let (client, mut frames) = fixture_client(false);
+        register_fixture_session(state.as_ref(), "session-a", "fixture-a", client.clone());
+        state.sessions.lock().unwrap().get_mut("session-a").unwrap().running = true;
+
+        let request = tokio::spawn({
+            let state = state.clone();
+            async move { request_interrupt(state.as_ref(), "session-a").await }
+        });
+        let frame = fixture_frame(&mut frames).await;
+        assert_eq!(frame["method"], "turn/interrupt");
+        assert_eq!(frame["params"]["sessionId"], "session-a");
+        client
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": frame["id"],
+                "result": {"status": "accepted", "turnId": "turn-a"}
+            }))
+            .await;
+
+        assert_eq!(request.await.unwrap().unwrap()["status"], "accepted");
+        // The admission ack alone must not flip the live session to idle.
+        assert!(state.sessions.lock().unwrap()["session-a"].running);
+
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            state.as_ref(),
+            "turn/completed",
+            &json!({"sessionId":"session-a","turnId":"turn-a","terminal":"cancelled"}),
+            &mut emit,
+        );
+        assert!(!state.sessions.lock().unwrap()["session-a"].running);
+        assert_eq!(events.last().map(|event| event.2.as_str()), Some("cancelled"));
     }
 
     #[tokio::test]
