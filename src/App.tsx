@@ -730,7 +730,15 @@ export default function App() {
             </span>
           </div>
           <div className="top-actions">
-            {active && page === "task" && !settingsOpen && !backendMissing && !connectedIds.includes(active.session_id) && (
+            {active && page === "task" && !settingsOpen && !backendMissing && active.session_durability?.toLowerCase() === "ephemeral" && !connectedIds.includes(active.session_id) && (
+              <span
+                className="workspace-button workspace-durability-note"
+                title="This host keeps sessions only while its process is running"
+              >
+                Local transcript · session ended
+              </span>
+            )}
+            {active && page === "task" && !settingsOpen && !backendMissing && active.session_durability?.toLowerCase() !== "ephemeral" && !connectedIds.includes(active.session_id) && (
               <button className="workspace-button"
                 disabled={reconnectingId !== null || active.running}
                 onClick={() => void reconnectSession(active.session_id)}
@@ -1123,7 +1131,7 @@ export default function App() {
                     pendingApprovals={activeApprovals.length}
                     pendingInputs={activeInputRequests.length}
                     reconnecting={reconnectingId === active.session_id}
-                    onReconnect={() => void reconnectSession(active.session_id)}
+                    onReconnect={active.session_durability?.toLowerCase() === "ephemeral" ? undefined : () => void reconnectSession(active.session_id)}
                     reconciling={reconcilingId === active.session_id}
                     onReconcile={() => void reconcileSession(active.session_id)}
                     onCancel={() => void cancelSession(active.session_id)}
