@@ -200,31 +200,41 @@ async function main() {
       sessions.push(sessionId);
       const catalogue = await host.request("model/list");
       if (catalogue === null || typeof catalogue !== "object") fail(`host-${index === 0 ? "A" : "B"} returned no model catalogue`);
-      if (exerciseControl) {
-        // This path is deliberately opt-in: it admits a real turn and
-        // interrupts it immediately, proving the native control contract
-        // without waiting for a model response or persisting user content.
-        const turn = await host.request("turn/start", {
+    }
+    if (new Set(sessions).size !== sessions.length) fail("the two native hosts returned the same session id");
+    if (exerciseControl) {
+      // This path is deliberately opt-in: admit both real turns in parallel,
+      // then interrupt each target independently. It proves the native
+      // control contract without waiting for a model response or persisting
+      // user content in the default memory-only host.
+      const started = await Promise.all(hosts.map((host, index) =>
+        host.request("turn/start", {
           commandId: uuidv7(),
-          sessionId,
+          sessionId: sessions[index],
           input: [{ type: "text", text: "Native control smoke probe. Stop immediately." }],
-        });
+        }),
+      ));
+      const turnIds = started.map((turn, index) => {
         const turnId = turn?.turnId;
         if (turn?.status !== "accepted" || typeof turnId !== "string" || turnId.length === 0) {
           fail(`host-${index === 0 ? "A" : "B"} did not accept the control probe`);
         }
-        const interrupted = await host.request("turn/interrupt", {
+        return turnId;
+      });
+      const interrupted = await Promise.all(hosts.map((host, index) =>
+        host.request("turn/interrupt", {
           commandId: uuidv7(),
-          sessionId,
+          sessionId: sessions[index],
           retract: false,
-        });
-        if (interrupted?.status !== "accepted" || interrupted?.turnId !== turnId) {
-          fail(`host-${index === 0 ? "A" : "B"} did not acknowledge interruption of ${turnId}`);
+        }),
+      ));
+      interrupted.forEach((result, index) => {
+        if (result?.status !== "accepted" || result?.turnId !== turnIds[index]) {
+          fail(`host-${index === 0 ? "A" : "B"} did not acknowledge interruption of ${turnIds[index]}`);
         }
-        controls.push({ host: String.fromCharCode(65 + index), turnId, status: "interrupted" });
-      }
+        controls.push({ host: String.fromCharCode(65 + index), turnId: turnIds[index], status: "interrupted" });
+      });
     }
-    if (new Set(sessions).size !== sessions.length) fail("the two native hosts returned the same session id");
     process.stdout.write(`${JSON.stringify({
       schema: "muse-desktop.native-smoke.v1",
       hosts: sessions.map((sessionId, index) => ({ host: String.fromCharCode(65 + index), sessionId })),
