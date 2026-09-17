@@ -264,8 +264,11 @@ import { buildScheduleRunSummary } from "../lib/runSummary";
 export type { ScheduleRunSummary } from "../lib/runSummary";
 import {
   releaseSchedulerLease,
+  releaseNativeSchedulerLease,
   renewSchedulerLease,
+  renewNativeSchedulerLease,
   tryAcquireSchedulerLease,
+  tryAcquireNativeSchedulerLease,
 } from "../lib/schedulerLease";
 import {
   appendNotification,
@@ -2171,12 +2174,27 @@ export function useMuseSessions(): UseMuseSessions {
   const scheduleRunsRef = useRef(scheduleRuns);
   scheduleRunsRef.current = scheduleRuns;
   const schedulerLeaseOwner = useRef(`scheduler-${newId()}`);
+  const schedulerLeaseMode = useRef<"native" | "local" | "none">("none");
+  const schedulerCheckInFlight = useRef(false);
   const scheduledExecutorRef = useRef<((item: ReviewItem, run: ScheduleRun) => Promise<void>) | null>(null);
   useEffect(() => {
     const check = () => {
+      if (schedulerCheckInFlight.current) return;
+      schedulerCheckInFlight.current = true;
       const owner = schedulerLeaseOwner.current;
-      if (!tryAcquireSchedulerLease(owner, Date.now())) return;
-      renewSchedulerLease(owner, Date.now());
+      void tryAcquireNativeSchedulerLease(owner).then((nativeClaim) => {
+      const acquired = nativeClaim === null
+        ? tryAcquireSchedulerLease(owner, Date.now())
+        : nativeClaim;
+      schedulerLeaseMode.current = nativeClaim === null
+        ? (acquired ? "local" : "none")
+        : (acquired ? "native" : "none");
+      if (!acquired) return;
+      if (nativeClaim === null) {
+        renewSchedulerLease(owner, Date.now());
+      } else {
+        void renewNativeSchedulerLease(owner);
+      }
       const res = enqueueDue(schedulesRef.current, reviewQueueRef.current, Date.now());
       if (res.added.length === 0) {
         // `skip` can consume missed cron slots without creating a run. Keep
@@ -2240,6 +2258,11 @@ export function useMuseSessions(): UseMuseSessions {
         };
         void scheduledExecutorRef.current?.(item, run);
       }
+      }).catch(() => {
+        schedulerLeaseMode.current = "none";
+      }).finally(() => {
+        schedulerCheckInFlight.current = false;
+      });
     };
     check();
     const timer = setInterval(check, 15000);
@@ -2258,6 +2281,10 @@ export function useMuseSessions(): UseMuseSessions {
       window.removeEventListener("pageshow", wake);
       document.removeEventListener("visibilitychange", wake);
       releaseSchedulerLease(schedulerLeaseOwner.current);
+      if (schedulerLeaseMode.current === "native") {
+        void releaseNativeSchedulerLease(schedulerLeaseOwner.current);
+      }
+      schedulerLeaseMode.current = "none";
     };
   }, []);
   // w-settings write-through persistence (best-effort, like the rest here).

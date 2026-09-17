@@ -32,6 +32,7 @@ mod mcp_package;
 mod secret_store;
 mod skills;
 mod startup;
+mod scheduler;
 mod workspace_watch;
 use hosts::Hosts;
 
@@ -286,6 +287,9 @@ struct AppState {
     /// One native watcher per Files panel/session. Dropping a registration
     /// stops callbacks immediately; the renderer still owns refresh policy.
     workspace_watchers: Mutex<HashMap<String, workspace_watch::WorkspaceWatcher>>,
+    /// Process-level scheduler lease. The open native file handle makes the
+    /// claim exclusive across separately launched app processes.
+    scheduler_lease: Mutex<Option<scheduler::NativeLease>>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -1860,6 +1864,127 @@ fn collect_diagnostics(state: State<'_, AppState>) -> Result<NativeDiagnosticsSn
         pending_approval_count,
         event_buffer_count,
     })
+}
+
+fn scheduler_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join("scheduler"))
+        .map_err(|error| format!("cannot resolve scheduler data directory: {error}"))
+}
+
+/// Claim the native scheduler lease for this app process. The renderer keeps
+/// the schedule/run ledger as its SSOT; this command only arbitrates which
+/// process may perform the due-occurrence check.
+#[tauri::command]
+fn scheduler_claim(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    owner_id: String,
+    lease_ttl_ms: Option<u64>,
+) -> Result<scheduler::LeaseResponse, String> {
+    let now = scheduler::now_ms();
+    let mut held = state
+        .scheduler_lease
+        .lock()
+        .map_err(|error| format!("scheduler lease state lock: {error}"))?;
+    if let Some(current) = held.as_mut() {
+        if current.owner_id() == owner_id.trim() && current.expires_at() > now {
+            return current
+                .renew(&owner_id, now, lease_ttl_ms.unwrap_or(30_000))
+                .map_err(|error| format!("scheduler lease renew failed: {error}"));
+        }
+        if current.expires_at() <= now {
+            if let Some(expired) = held.take() {
+                expired.release();
+            }
+        } else {
+            return Ok(scheduler::LeaseResponse {
+                schema: scheduler::SCHEMA.to_string(),
+                acquired: false,
+                owner_id: Some(current.owner_id().to_string()),
+                expires_at: Some(current.expires_at()),
+                native: true,
+            });
+        }
+    }
+    let data_dir = scheduler_data_dir(&app)?;
+    match scheduler::claim(
+        &data_dir,
+        &owner_id,
+        now,
+        lease_ttl_ms.unwrap_or(30_000),
+    )? {
+        scheduler::ClaimOutcome::Acquired(lease) => {
+            let response = lease.response();
+            *held = Some(lease);
+            Ok(response)
+        }
+        scheduler::ClaimOutcome::Blocked(record) => Ok(scheduler::LeaseResponse {
+            schema: scheduler::SCHEMA.to_string(),
+            acquired: false,
+            owner_id: Some(record.owner_id),
+            expires_at: Some(record.expires_at),
+            native: true,
+        }),
+    }
+}
+
+/// Renew an existing process-level scheduler claim. A missing or expired
+/// lease is reported as `acquired: false`, allowing the renderer to stop its
+/// due-check without stealing another process's claim.
+#[tauri::command]
+fn scheduler_renew(
+    state: State<'_, AppState>,
+    owner_id: String,
+    lease_ttl_ms: Option<u64>,
+) -> Result<scheduler::LeaseResponse, String> {
+    let now = scheduler::now_ms();
+    let mut held = state
+        .scheduler_lease
+        .lock()
+        .map_err(|error| format!("scheduler lease state lock: {error}"))?;
+    let Some(current) = held.as_mut() else {
+        return Ok(scheduler::LeaseResponse {
+            schema: scheduler::SCHEMA.to_string(),
+            acquired: false,
+            owner_id: None,
+            expires_at: None,
+            native: true,
+        });
+    };
+    match current.renew(&owner_id, now, lease_ttl_ms.unwrap_or(30_000)) {
+        Ok(response) => Ok(response),
+        Err(_) => {
+            if let Some(expired) = held.take() {
+                expired.release();
+            }
+            Ok(scheduler::LeaseResponse {
+                schema: scheduler::SCHEMA.to_string(),
+                acquired: false,
+                owner_id: None,
+                expires_at: None,
+                native: true,
+            })
+        }
+    }
+}
+
+/// Release the current process claim only when the owner matches. Returning
+/// a boolean keeps the command idempotent during webview teardown.
+#[tauri::command]
+fn scheduler_release(state: State<'_, AppState>, owner_id: String) -> Result<bool, String> {
+    let mut held = state
+        .scheduler_lease
+        .lock()
+        .map_err(|error| format!("scheduler lease state lock: {error}"))?;
+    if held.as_ref().is_some_and(|lease| lease.owner_id() == owner_id.trim()) {
+        if let Some(lease) = held.take() {
+            lease.release();
+        }
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 /// Apply one selected hunk after checking the exact Review observation.
@@ -4225,6 +4350,7 @@ mod tests {
             setup_cancellations: Mutex::new(HashMap::new()),
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             workspace_watchers: Mutex::new(HashMap::new()),
+            scheduler_lease: Mutex::new(None),
         }
     }
 
@@ -5861,6 +5987,7 @@ fn main() {
             setup_cancellations: Mutex::new(HashMap::new()),
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             workspace_watchers: Mutex::new(HashMap::new()),
+            scheduler_lease: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
@@ -5942,6 +6069,9 @@ fn main() {
             subagent_drilldown,
             check_input_reached,
             collect_diagnostics,
+            scheduler_claim,
+            scheduler_renew,
+            scheduler_release,
             open_native_browser,
         ])
         .build(tauri::generate_context!())
@@ -5964,6 +6094,11 @@ fn main() {
                 };
                 if let Ok(mut watchers) = state.workspace_watchers.lock() {
                     watchers.clear();
+                };
+                if let Ok(mut lease) = state.scheduler_lease.lock() {
+                    if let Some(native) = lease.take() {
+                        native.release();
+                    }
                 };
             }
         });
