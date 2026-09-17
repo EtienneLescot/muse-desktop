@@ -331,10 +331,11 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 ### Livraison M2-01 — racines de projet
 
 - **Modèle :** un projet peut maintenant conserver une racine de travail optionnelle. Les valeurs sont nettoyées à l’écriture, validées à la restauration et restent compatibles avec les groupes créés avant cette évolution.
+- **Migration guidée livrée :** les projets restaurés sans racine exploitable et sans marqueur de choix explicite sont regroupés dans une notice calme **N projects need a folder**. **Choose next folder** ouvre le sélecteur natif pour un seul projet à la fois, écrit uniquement `workspace` et marque la racine comme examinée via la SSOT projet ; l’entrée migrée disparaît du compteur. Les projets actuels créés sans dossier sont marqués comme examinés et continuent d’utiliser le dossier par défaut. En web preview, l’action explique que le sélecteur est disponible dans l’application desktop ; aucune racine n’est déduite du nom du projet.
 - **UX :** le panneau **Projects** permet de choisir, remplacer ou retirer un dossier. Chaque projet expose **New conversation here** quand une racine est définie ; l’action démarre réellement la session dans ce dossier puis rattache la conversation au projet.
 - **SSOT :** le hook de sessions reste l’unique point de création des sessions. Le chemin choisi est passé au même contrat `start_session` que le workspace global ; il n’existe pas de second état local pour la conversation.
 - **Validation :** tests de création, mise à jour, suppression et persistance d’une racine ; TypeScript, build Vite et 57 tests Rust sont verts.
-- **Limites :** les anciens projets restent sans racine tant que l’utilisateur ne la choisit pas, et la migration automatique de groupes ambigus est volontairement exclue. La sélection d’environnement/worktree et les règles héritées du moteur restent M2-02/M2-03.
+- **Limites :** les projets restent sans racine tant que l’utilisateur ne la choisit pas ; la migration reste explicite et un dossier déplacé ou supprimé doit encore être requalifié. La sélection d’environnement/worktree et les règles héritées du moteur restent M2-02/M2-03.
 
 ### Livraison M2-02 — paramètres projet effectifs
 
@@ -390,7 +391,7 @@ Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
-| M2-01 | Un projet représente des dossiers persistants | Adapté | Présente | Câblée | Intégration | Racine persistante, sélection de dossier et création de conversation dans cette racine livrées ; restent migration explicite des anciens groupes et environnement/worktree |
+| M2-01 | Un projet représente des dossiers persistants | Adapté | Présente | Câblée | Intégration | Racine persistante, sélection de dossier et création de conversation dans cette racine livrées ; migration guidée des anciens groupes sans racine livrée ; restent validation native d’un dossier déplacé ou supprimé et environnement/worktree |
 | M2-02 | Les paramètres projet s'appliquent réellement | Adapté | Présente | Partielle | Intégration | Héritage global/projet visible, modèle effectif appliqué à la création d'une session et auto-compact appliqué via la SSOT de résolution ; sandbox/réseau restent en attente d'un contrat moteur vérifié |
 | M2-03 | Créer automatiquement un worktree pour une conversation | Adapté | Présente | Câblée | Intégration | Création Git, persistance, suppression confirmée, ouverture explicite et action atomique **Create & open** avec rollback d'admission livrées ; restent qualification native et pannes après admission |
 | M2-04 | Préparer l'environnement du worktree | Adapté | Présente | Partielle | Intégration | Commande explicite, profils persistants par workspace, annulation native ciblée, états et sortie bornée livrés ; readiness locale et allowlist d'environnement livrées ; reste la qualification native |
