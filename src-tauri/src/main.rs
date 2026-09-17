@@ -853,14 +853,36 @@ async fn consume_command_events(
                 push_stderr(&stderr_tail, format!("shell command error: {message}"));
             }
             CommandEvent::Terminated(payload) => {
+                flush_command_buffers(&client, &mut out_buf, &mut err_buf, &stderr_tail).await;
                 client.shutdown().await;
                 return PumpExit::Terminated(payload);
             }
             _ => {}
         }
     }
+    flush_command_buffers(&client, &mut out_buf, &mut err_buf, &stderr_tail).await;
     client.shutdown().await;
     PumpExit::ChannelClosed
+}
+
+/// Drain the final unterminated stdout/stderr fragments before the host is
+/// torn down. The shell normally emits newline-delimited chunks, but a process
+/// can disappear between its last write and the line delimiter. Treating that
+/// fragment as one final line preserves a complete JSON response and keeps an
+/// incomplete one in the bounded diagnostics tail instead of leaving callers
+/// waiting for the request timeout.
+async fn flush_command_buffers(
+    client: &MspClient,
+    out_buf: &mut Vec<u8>,
+    err_buf: &mut Vec<u8>,
+    stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>,
+) {
+    if !out_buf.is_empty() {
+        ingest_stdout_chunk(client, out_buf, stderr_tail, b"\n").await;
+    }
+    for line in split_lines(err_buf, b"\n") {
+        push_stderr(stderr_tail, line);
+    }
 }
 
 /// Forward the host's stdout frames into the MSP client; stash stderr for
@@ -3867,6 +3889,43 @@ mod tests {
             .unwrap()
             .unwrap_err();
         assert_eq!(request_error, "sidecar dropped the response");
+    }
+
+    #[tokio::test]
+    async fn command_event_pump_flushes_unterminated_response_before_exit() {
+        let (tx, rx) = tauri::async_runtime::channel(4);
+        let (writes, mut frames) = mpsc::unbounded_channel();
+        let (notify_tx, _notify_rx) = mpsc::unbounded_channel();
+        let child = RecordingChild { writes, fail_write: false };
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let pump = tokio::spawn(consume_command_events(rx, client.clone(), stderr_tail));
+
+        let request = tokio::spawn({
+            let client = client.clone();
+            async move { client.request("model/list", Value::Null).await }
+        });
+        let request_frame = fixture_frame(&mut frames).await;
+        let response = serde_json::to_vec(&json!({
+            "jsonrpc": "2.0",
+            "id": request_frame["id"],
+            "result": {"models": []}
+        }))
+        .unwrap();
+        tx.send(CommandEvent::Stdout(response)).await.unwrap();
+        assert!(!request.is_finished(), "unterminated stdout must wait for flush");
+        tx.send(CommandEvent::Terminated(TerminatedPayload {
+            code: Some(0),
+            signal: None,
+        }))
+        .await
+        .unwrap();
+
+        assert!(matches!(pump.await.unwrap(), PumpExit::Terminated(_)));
+        assert_eq!(request.await.unwrap().unwrap()["models"], json!([]));
     }
 
     #[tokio::test]
