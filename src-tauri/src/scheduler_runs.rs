@@ -7,10 +7,14 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const SCHEMA: &str = "muse-desktop.native-schedule-runs.v1";
 pub const FILE_NAME: &str = "schedule-runs.json";
 pub const MAX_BYTES: usize = 2 * 1024 * 1024;
+
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn ledger_path(dir: &Path) -> PathBuf {
     dir.join(FILE_NAME)
@@ -51,7 +55,12 @@ pub fn write(dir: &Path, payload: &str) -> Result<(), String> {
     }
     fs::create_dir_all(dir).map_err(|error| format!("could not create scheduler data directory: {error}"))?;
     let target = ledger_path(dir);
-    let temp = dir.join(format!(".{FILE_NAME}.{}.tmp", std::process::id()));
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp = dir.join(format!(".{FILE_NAME}.{}-{nonce}-{counter}.tmp", std::process::id()));
     let result = (|| {
         let mut file = OpenOptions::new()
             .create(true)
