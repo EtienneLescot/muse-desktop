@@ -5,6 +5,8 @@ import {
   IMAGE_GENERATION_NOTE,
   formatBrowserContext,
   formatBrowserCaptureContext,
+  formatBrowserObservation,
+  normalizeBrowserObservation,
   normalizeBrowserUrl,
   type BrowserAnnotation,
   type BrowserAppPermission,
@@ -59,6 +61,9 @@ export function BrowserPanel({
   const [capture, setCapture] = useState<BrowserCapture | null>(null);
   const [captureRegion, setCaptureRegion] = useState<BrowserCaptureRegion | null>(null);
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
+  const [pageObservation, setPageObservation] = useState<ReturnType<typeof normalizeBrowserObservation>>(null);
+  const [controlStatus, setControlStatus] = useState<string | null>(null);
+  const [typeText, setTypeText] = useState("");
   const frameRef = useRef<HTMLIFrameElement>(null);
   const captureImageRef = useRef<HTMLImageElement>(null);
   const captureDragRef = useRef<{ x: number; y: number } | null>(null);
@@ -126,6 +131,96 @@ export function BrowserPanel({
     } catch {
       // The iframe is cross-origin; the explicit selection field remains the
       // safe fallback and no page script is executed by Muse.
+    }
+  };
+
+  const sameOriginDocument = (): Document | null => {
+    try {
+      return frameRef.current?.contentDocument ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const observePage = () => {
+    if (!renderable || normalized === null) return;
+    const document = sameOriginDocument();
+    if (document === null) {
+      setControlStatus("Page observation is unavailable for this cross-origin preview.");
+      return;
+    }
+    const labels = (selector: string): string[] => Array.from(document.querySelectorAll(selector))
+      .map((node) => {
+        const element = node as HTMLElement;
+        const text = (element.getAttribute("aria-label") ?? element.getAttribute("title") ?? element.textContent ?? "")
+          .replace(/\s+/g, " ").trim();
+        return text;
+      })
+      .filter((text) => text.length > 0)
+      .slice(0, 20);
+    const observation = normalizeBrowserObservation({
+      title: document.title,
+      text: document.body?.innerText ?? "",
+      links: labels("a"),
+      controls: labels("button, input, textarea, select"),
+    });
+    setPageObservation(observation);
+    setControlStatus(observation ? "Page observed. Content remains untrusted data." : "Page observation returned no usable data.");
+  };
+
+  const selectedElement = (): Element | null => {
+    const document = sameOriginDocument();
+    if (document === null || elementAnchor === null) return null;
+    try {
+      return document.querySelector(elementAnchor.selector);
+    } catch {
+      return null;
+    }
+  };
+
+  const clickSelectedElement = () => {
+    const element = selectedElement();
+    if (element === null) {
+      setControlStatus("Select an element in a same-origin page before clicking it.");
+      return;
+    }
+    try {
+      element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: element.ownerDocument.defaultView }));
+      setControlStatus(`Clicked ${elementAnchor?.selector ?? "selected element"}. Check the page for its result.`);
+    } catch {
+      setControlStatus("The selected element could not be clicked.");
+    }
+  };
+
+  const typeIntoSelectedElement = () => {
+    const value = typeText.trim();
+    if (value.length === 0) {
+      setControlStatus("Enter text before using Type into field.");
+      return;
+    }
+    const element = selectedElement();
+    if (element === null) {
+      setControlStatus("Select an input or textarea in a same-origin page first.");
+      return;
+    }
+    const tag = element.tagName.toLowerCase();
+    const inputType = (element.getAttribute("type") ?? "text").toLowerCase();
+    if ((tag !== "input" && tag !== "textarea") || ["password", "file", "hidden"].includes(inputType)) {
+      setControlStatus("For safety, Type into field only supports visible text inputs and textareas.");
+      return;
+    }
+    if (element.hasAttribute("disabled") || element.hasAttribute("readonly")) {
+      setControlStatus("This field is disabled or read-only.");
+      return;
+    }
+    try {
+      (element as HTMLInputElement | HTMLTextAreaElement).value = value.slice(0, 2_000);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      setTypeText("");
+      setControlStatus(`Text entered in ${elementAnchor?.selector ?? "selected field"}.`);
+    } catch {
+      setControlStatus("The selected field could not be updated.");
     }
   };
 
@@ -278,6 +373,8 @@ export function BrowserPanel({
     setNativeBrowserStatus(null);
     setSelection("");
     setElementAnchor(null);
+    setPageObservation(null);
+    setControlStatus(null);
     setFrameKey((key) => key + 1);
   };
 
@@ -386,6 +483,41 @@ export function BrowserPanel({
             onError={() => setFrameError("This page could not be loaded in the embedded preview.")}
           />
         )}
+        <div className="browser-controls" aria-label="Browser page controls">
+          <div className="browser-controls-head">
+            <span>Page controls</span>
+            <span className="muted">Same-origin preview only</span>
+          </div>
+          <div className="browser-controls-actions">
+            <button type="button" disabled={!renderable} onClick={observePage}>
+              Observe page
+            </button>
+            <button type="button" disabled={elementAnchor === null} onClick={clickSelectedElement}>
+              Click selected element
+            </button>
+            <input
+              type="text"
+              aria-label="Text to enter into selected field"
+              placeholder="Text for selected field"
+              value={typeText}
+              onChange={(event) => setTypeText(event.target.value)}
+              disabled={elementAnchor === null}
+            />
+            <button type="button" disabled={elementAnchor === null || typeText.trim().length === 0} onClick={typeIntoSelectedElement}>
+              Type into field
+            </button>
+          </div>
+          {controlStatus && <div className="muted browser-control-status" role="status" aria-live="polite">{controlStatus}</div>}
+          {pageObservation && normalized && (
+            <details className="browser-observation" open>
+              <summary>Observed page: {pageObservation.title}</summary>
+              <pre>{formatBrowserObservation(normalized, pageObservation)}</pre>
+              <button type="button" onClick={() => onInsertContext(formatBrowserObservation(normalized, pageObservation))}>
+                Add observation to prompt
+              </button>
+            </details>
+          )}
+        </div>
         <div className="browser-annotate">
           <div className="muted">Anchor a comment to this page + selection:</div>
           {elementAnchor && (

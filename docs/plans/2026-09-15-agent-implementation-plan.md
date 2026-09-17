@@ -521,6 +521,8 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 **Code :** adaptateur outils navigateur ; dépend M4-01/M3-01 et moteur compatible. Exposer observe/click/type/navigation avec surface et session explicites, arrêt et erreurs ; traiter le texte de page comme données non fiables. **Acceptation :** workflow web complet, navigation inattendue et stop sans agir sur un autre onglet.
 
+**État au 17/09/2026 :** première tranche locale livrée dans `BrowserPanel` : **Observe page** collecte titre, texte, liens et contrôles d'une iframe same-origin avec bornage et provenance ; **Click selected element** et **Type into field** sont des gestes explicites limités à l'élément sélectionné, aux champs texte visibles et à la frame courante. Le contexte d'observation est marqué comme contenu non fiable et ne déclenche aucun IPC. Reste : adaptateur `browser.observe/click/type/navigation` vers un host MSP vérifié, sessions/onglets explicites, arrêt d'actions longues, cross-origin/native WebView2 et qualification du workflow complet.
+
 ### M4-04 — Computer use
 
 **Code :** service distinct par OS ; dépend M0-06 et faisabilité moteur. Autorisations OS, inventaire des apps, capture/action ciblées, interruptions et journal minimal. **Acceptation :** application de test, permission refusée, fenêtre disparue, utilisateur reprenant le contrôle ; pas d'action après stop.

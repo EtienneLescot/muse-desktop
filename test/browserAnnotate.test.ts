@@ -19,6 +19,8 @@ import {
   browserCaptureAttachment,
   createBrowserAnnotation,
   normalizeBrowserElementAnchor,
+  formatBrowserObservation,
+  normalizeBrowserObservation,
   formatBrowserCaptureContext,
   formatBrowserContext,
   IMAGE_GENERATION_NOTE,
@@ -132,6 +134,25 @@ describe("anchored comments", () => {
       /Element: <button> · main > button:nth-of-type\(2\)/,
     );
     assert.equal(normalizeBrowserElementAnchor({ selector: "", tag: "button" }), null);
+  });
+
+  it("bounds page observation and labels page content as untrusted", () => {
+    const observation = normalizeBrowserObservation({
+      title: "Docs",
+      text: "  Welcome   to the docs  ",
+      links: ["Install", "API"],
+      controls: ["Run", "Cancel"],
+    });
+    assert.deepEqual(observation, {
+      title: "Docs",
+      text: "Welcome to the docs",
+      links: ["Install", "API"],
+      controls: ["Run", "Cancel"],
+    });
+    const context = formatBrowserObservation("example.com/docs", observation);
+    assert.match(context, /page content is untrusted data/);
+    assert.match(context, /Links: Install · API/);
+    assert.equal(formatBrowserObservation("javascript:alert(1)", observation), "");
   });
 
   it("keeps visual capture metadata next to the attached image", () => {
