@@ -213,9 +213,12 @@ import {
 export type { ReviewItem, Schedule, ScheduleInput, ThreadReuse } from "../lib/schedules";
 import {
   appendRun,
+  cancelRun,
   createScheduleRun,
+  isRetryableScheduleError,
   loadScheduleRuns,
   markRunStarted,
+  queueRunRetry,
   saveScheduleRuns,
   settleRun,
   type ScheduleRun,
@@ -783,6 +786,8 @@ interface UseMuseSessions {
   deleteSchedule: (id: string) => void;
   /** US-9: enqueue a review entry for one schedule immediately. */
   runScheduleNow: (id: string) => void;
+  /** M3-07: cancel a queued retry without touching an in-flight host turn. */
+  cancelScheduleRun: (id: string) => void;
   /** US-9: approve a review entry → sent as normal turn input. */
   approveReview: (id: string) => Promise<void>;
   /** US-9: discard a pending review entry. */
@@ -1470,28 +1475,70 @@ export function useMuseSessions(): UseMuseSessions {
   schedulesRef.current = schedules;
   const reviewQueueRef = useRef(reviewQueue);
   reviewQueueRef.current = reviewQueue;
+  const scheduleRunsRef = useRef(scheduleRuns);
+  scheduleRunsRef.current = scheduleRuns;
   const scheduledExecutorRef = useRef<((item: ReviewItem, run: ScheduleRun) => Promise<void>) | null>(null);
   useEffect(() => {
     const check = () => {
       const res = enqueueDue(schedulesRef.current, reviewQueueRef.current, Date.now());
-      if (res.added.length === 0) return;
-      setSchedules(res.schedules);
-      const automatic = res.added.filter((item) => item.authorizationMode !== "ask");
-      const automaticIds = new Set(automatic.map((item) => item.id));
-      setReviewQueue(res.queue.filter((item) => !automaticIds.has(item.id)));
-      for (const item of automatic) {
-        const run = createScheduleRun({
-          scheduleId: item.scheduleId,
-          scheduleName: item.scheduleName,
-          instructions: item.instructions,
-          threadReuse: item.threadReuse,
-          ...(item.workspace ? { workspace: item.workspace } : {}),
-          ...(item.projectId ? { projectId: item.projectId } : {}),
-          ...(item.model ? { model: item.model } : {}),
-          ...(item.authorizationMode ? { authorizationMode: item.authorizationMode } : {}),
-          occurrenceAt: item.createdAt,
-        }, Date.now());
-        setScheduleRuns((cur) => appendRun(cur, run));
+      if (res.added.length === 0) {
+        // `skip` can consume missed cron slots without creating a run. Keep
+        // that cursor durable or the same missed window would be revisited.
+        if (res.schedules.some((row, index) => row.lastFiredAt !== schedulesRef.current[index]?.lastFiredAt)) {
+          setSchedules(res.schedules);
+        }
+      } else {
+        setSchedules(res.schedules);
+        const automatic = res.added.filter((item) => item.authorizationMode !== "ask");
+        const automaticIds = new Set(automatic.map((item) => item.id));
+        setReviewQueue(res.queue.filter((item) => !automaticIds.has(item.id)));
+        for (const item of automatic) {
+          const occurrenceKey = item.occurrenceKey;
+          if (occurrenceKey && scheduleRunsRef.current.some((run) =>
+            (run.occurrenceKey ?? `${run.scheduleId}:${run.occurrenceAt}`) === occurrenceKey,
+          )) {
+            // The schedule cursor and run ledger are both durable. If a
+            // restored queue ever replays the same occurrence, claim it once.
+            continue;
+          }
+          const run = createScheduleRun({
+            scheduleId: item.scheduleId,
+            scheduleName: item.scheduleName,
+            instructions: item.instructions,
+            threadReuse: item.threadReuse,
+            ...(item.workspace ? { workspace: item.workspace } : {}),
+            ...(item.projectId ? { projectId: item.projectId } : {}),
+            ...(item.model ? { model: item.model } : {}),
+            ...(item.authorizationMode ? { authorizationMode: item.authorizationMode } : {}),
+            ...(item.missedPolicy ? { missedPolicy: item.missedPolicy } : {}),
+            occurrenceAt: item.occurrenceAt ?? item.createdAt,
+            ...(item.occurrenceKey ? { occurrenceKey: item.occurrenceKey } : {}),
+          }, Date.now());
+          setScheduleRuns((cur) => appendRun(cur, run));
+          void scheduledExecutorRef.current?.(item, run);
+        }
+      }
+      const now = Date.now();
+      const retries = scheduleRunsRef.current.filter((run) =>
+        run.status === "queued" && run.nextRetryAt !== undefined && run.nextRetryAt <= now,
+      );
+      for (const run of retries) {
+        const item: ReviewItem = {
+          id: `retry-${run.id}-${run.attempt ?? 1}`,
+          scheduleId: run.scheduleId,
+          scheduleName: run.scheduleName,
+          instructions: run.instructions,
+          threadReuse: run.threadReuse,
+          ...(run.workspace ? { workspace: run.workspace } : {}),
+          ...(run.projectId ? { projectId: run.projectId } : {}),
+          ...(run.model ? { model: run.model } : {}),
+          ...(run.authorizationMode ? { authorizationMode: run.authorizationMode } : {}),
+          ...(run.missedPolicy ? { missedPolicy: run.missedPolicy } : {}),
+          occurrenceAt: run.occurrenceAt,
+          ...(run.occurrenceKey ? { occurrenceKey: run.occurrenceKey } : {}),
+          createdAt: run.createdAt,
+          status: "approved",
+        };
         void scheduledExecutorRef.current?.(item, run);
       }
     };
@@ -3520,12 +3567,21 @@ export function useMuseSessions(): UseMuseSessions {
   );
   const executeReviewItem = useCallback(
     async (item: ReviewItem, run?: ScheduleRun): Promise<boolean> => {
+      const failRun = (message: string, retryable: boolean): void => {
+        if (!run) return;
+        setScheduleRuns((cur) => {
+          const failed = settleRun(cur, run.id, "failed", Date.now(), message);
+          return retryable && isRetryableScheduleError(message)
+            ? queueRunRetry(failed, run.id, Date.now(), message)
+            : failed;
+        });
+      };
       const knownIds = sessions.map((s) => s.session_id);
       const target = resolveReviewTarget(item.threadReuse, activeId, knownIds);
       if (target === null) {
         const message = "the recorded target thread is gone (discard or re-target)";
         setError(`schedule run failed: ${message}`);
-        if (run) setScheduleRuns((cur) => settleRun(cur, run.id, "failed", Date.now(), message));
+        failRun(message, false);
         return false;
       }
       const targetSession = target === "new"
@@ -3534,7 +3590,7 @@ export function useMuseSessions(): UseMuseSessions {
       if (item.workspace && targetSession && targetSession.workspace !== item.workspace) {
         const message = "the recorded workspace no longer matches the target conversation";
         setError(`schedule run failed: ${message}`);
-        if (run) setScheduleRuns((cur) => settleRun(cur, run.id, "failed", Date.now(), message));
+        failRun(message, false);
         return false;
       }
       const applyCapturedContext = async (sessionId: string): Promise<void> => {
@@ -3548,7 +3604,7 @@ export function useMuseSessions(): UseMuseSessions {
         const settings = item.model ? { ...globalSettings, model: item.model } : undefined;
         const fresh = await startSessionRow(item.workspace, settings);
         if (fresh === null) {
-          if (run) setScheduleRuns((cur) => settleRun(cur, run.id, "failed", Date.now(), "could not start target conversation"));
+          failRun("could not start target conversation", false);
           return false;
         }
         sessionId = fresh;
@@ -3559,11 +3615,16 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         await applyCapturedContext(sessionId);
         const result = await sendInput(sessionId, item.instructions);
-        if (run) setScheduleRuns((cur) => settleRun(cur, run.id, result.ok ? "completed" : "failed", Date.now(), result.error ?? undefined));
+        if (result.ok) {
+          if (run) setScheduleRuns((cur) => settleRun(cur, run.id, "completed", Date.now()));
+        } else {
+          const message = result.error ?? "scheduled dispatch failed";
+          failRun(message, true);
+        }
         return result.ok;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (run) setScheduleRuns((cur) => settleRun(cur, run.id, "failed", Date.now(), message));
+        failRun(message, true);
         setError(`schedule run failed: ${message}`);
         return false;
       }
@@ -3619,7 +3680,9 @@ export function useMuseSessions(): UseMuseSessions {
       ...(item.projectId ? { projectId: item.projectId } : {}),
       ...(item.model ? { model: item.model } : {}),
       ...(item.authorizationMode ? { authorizationMode: item.authorizationMode } : {}),
-      occurrenceAt: item.createdAt,
+      ...(item.missedPolicy ? { missedPolicy: item.missedPolicy } : {}),
+      occurrenceAt: item.occurrenceAt ?? item.createdAt,
+      ...(item.occurrenceKey ? { occurrenceKey: item.occurrenceKey } : {}),
     }, Date.now());
     setScheduleRuns((cur) => appendRun(cur, run));
     void executeReviewItem(item, run);
@@ -3645,6 +3708,10 @@ export function useMuseSessions(): UseMuseSessions {
   const discardReviewCb = useCallback((id: string) => {
     const res = discardReview(reviewQueueRef.current, id);
     if (res !== null) setReviewQueue(res.queue);
+  }, []);
+
+  const cancelScheduleRun = useCallback((id: string): void => {
+    setScheduleRuns((cur) => cancelRun(cur, id));
   }, []);
   // w-collab US-27: explicit share / un-share + mode toggle. Manual mode
   // shares only here; auto additionally refreshes on turn end (see
@@ -4512,6 +4579,7 @@ export function useMuseSessions(): UseMuseSessions {
     setScheduleEnabled: setScheduleEnabledCb,
     deleteSchedule: deleteScheduleCb,
     runScheduleNow,
+    cancelScheduleRun,
     approveReview: approveReviewCb,
     discardReview: discardReviewCb,
     shareMode: shareState.mode,

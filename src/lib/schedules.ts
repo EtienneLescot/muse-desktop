@@ -32,6 +32,9 @@ export type ThreadReuse =
 
 export type ScheduleAuthorizationMode = "ask" | "workspace" | "yolo";
 
+/** Behaviour when the app wakes after more than one cron occurrence. */
+export type ScheduleMissedPolicy = "skip" | "latest";
+
 export interface Schedule {
   id: string;
   name: string;
@@ -43,12 +46,12 @@ export interface Schedule {
   projectId?: string;
   model?: string;
   authorizationMode?: ScheduleAuthorizationMode;
+  missedPolicy?: ScheduleMissedPolicy;
   enabled: boolean;
   createdAt: number;
   /**
-   * Last time this schedule enqueued a review entry. For one-shot triggers
-   * any defined value means "already fired" (never fires again); for cron
-   * triggers it is the anchor the next run is computed from.
+   * Last occurrence cursor. For one-shot triggers any defined value means
+   * "already fired"; for cron triggers it anchors the next occurrence.
    */
   lastFiredAt?: number;
 }
@@ -62,6 +65,7 @@ export interface ScheduleInput {
   projectId?: string;
   model?: string;
   authorizationMode?: ScheduleAuthorizationMode;
+  missedPolicy?: ScheduleMissedPolicy;
 }
 
 export type ReviewStatus = "pending" | "approved" | "discarded";
@@ -76,6 +80,11 @@ export interface ReviewItem {
   projectId?: string;
   model?: string;
   authorizationMode?: ScheduleAuthorizationMode;
+  missedPolicy?: ScheduleMissedPolicy;
+  /** Actual scheduled occurrence represented by this review item. */
+  occurrenceAt?: number;
+  /** Stable schedule + occurrence key used for idempotency. */
+  occurrenceKey?: string;
   /** Enqueue time (epoch ms). */
   createdAt: number;
   status: ReviewStatus;
@@ -109,6 +118,9 @@ export function validateScheduleInput(input: ScheduleInput): string | null {
   }
   if (input.threadReuse.kind === "session" && input.threadReuse.sessionId.length === 0) {
     return "target thread must be selected";
+  }
+  if (input.missedPolicy !== undefined && input.missedPolicy !== "skip" && input.missedPolicy !== "latest") {
+    return "unknown missed-run policy";
   }
   return null;
 }
@@ -229,6 +241,7 @@ export function buildSchedule(input: ScheduleInput, nowTs: number): Schedule {
     ...(input.projectId?.trim() ? { projectId: input.projectId.trim() } : {}),
     ...(input.model?.trim() ? { model: input.model.trim() } : {}),
     ...(input.authorizationMode ? { authorizationMode: input.authorizationMode } : {}),
+    ...(input.missedPolicy ? { missedPolicy: input.missedPolicy } : {}),
     enabled: true,
     createdAt: nowTs,
   };
@@ -278,7 +291,11 @@ export function dueSchedules(schedules: Schedule[], nowTs: number): Schedule[] {
   return schedules.filter((s) => isScheduleDue(s, nowTs));
 }
 
-function buildReviewItem(s: Schedule, nowTs: number): ReviewItem {
+export function scheduleOccurrenceKey(scheduleId: string, occurrenceAt: number): string {
+  return `${scheduleId}:${occurrenceAt}`;
+}
+
+function buildReviewItem(s: Schedule, nowTs: number, occurrenceAt: number): ReviewItem {
   return {
     id: makeId("rev"),
     scheduleId: s.id,
@@ -289,9 +306,31 @@ function buildReviewItem(s: Schedule, nowTs: number): ReviewItem {
     ...(s.projectId ? { projectId: s.projectId } : {}),
     ...(s.model ? { model: s.model } : {}),
     ...(s.authorizationMode ? { authorizationMode: s.authorizationMode } : {}),
+    ...(s.missedPolicy ? { missedPolicy: s.missedPolicy } : {}),
+    occurrenceAt,
+    occurrenceKey: scheduleOccurrenceKey(s.id, occurrenceAt),
     createdAt: nowTs,
     status: "pending",
   };
+}
+
+const MAX_CATCH_UP_OCCURRENCES = 512;
+
+/** List the cron/one-shot occurrences that are due at `nowTs`, bounded. */
+export function dueOccurrenceTimes(s: Schedule, nowTs: number): number[] {
+  if (!s.enabled || !Number.isFinite(nowTs)) return [];
+  if (s.trigger.kind === "once") {
+    return s.trigger.at <= nowTs && s.lastFiredAt === undefined ? [s.trigger.at] : [];
+  }
+  const out: number[] = [];
+  let anchor = s.lastFiredAt ?? s.createdAt;
+  while (out.length < MAX_CATCH_UP_OCCURRENCES) {
+    const next = cronNextRun(s.trigger.cron, anchor);
+    if (next === null || next > nowTs) break;
+    out.push(next);
+    anchor = next;
+  }
+  return out;
 }
 
 /**
@@ -305,13 +344,31 @@ export function enqueueDue(
   queue: ReviewItem[],
   nowTs: number,
 ): { schedules: Schedule[]; queue: ReviewItem[]; added: ReviewItem[] } {
-  const dueIds = new Set(dueSchedules(schedules, nowTs).map((s) => s.id));
+  const due = schedules
+    .map((schedule) => ({ schedule, occurrences: dueOccurrenceTimes(schedule, nowTs) }))
+    .filter(({ occurrences }) => occurrences.length > 0);
+  const dueIds = new Set(due.map(({ schedule }) => schedule.id));
   if (dueIds.size === 0) return { schedules, queue, added: [] };
   const added: ReviewItem[] = [];
+  const existingKeys = new Set(queue.map((item) => item.occurrenceKey ??
+    (item.occurrenceAt === undefined ? null : scheduleOccurrenceKey(item.scheduleId, item.occurrenceAt)))
+    .filter((key): key is string => key !== null));
   const next = schedules.map((s) => {
     if (!dueIds.has(s.id)) return s;
-    added.push(buildReviewItem(s, nowTs));
-    return { ...s, lastFiredAt: nowTs };
+    const occurrences = due.find(({ schedule }) => schedule.id === s.id)?.occurrences ?? [];
+    const latest = occurrences[occurrences.length - 1];
+    // `skip` advances over all missed cron slots when more than one is due;
+    // it still runs a single occurrence when exactly one slot is due.
+    const shouldRun = s.missedPolicy !== "skip" || occurrences.length === 1;
+    if (shouldRun) {
+      const key = scheduleOccurrenceKey(s.id, latest);
+      if (!existingKeys.has(key)) {
+        const item = buildReviewItem(s, nowTs, latest);
+        added.push(item);
+        existingKeys.add(key);
+      }
+    }
+    return { ...s, lastFiredAt: latest };
   });
   return {
     schedules: next,
@@ -333,7 +390,7 @@ export function enqueueRunNow(
 ): { schedules: Schedule[]; queue: ReviewItem[]; added: ReviewItem } | null {
   const s = schedules.find((x) => x.id === id);
   if (!s) return null;
-  const added = buildReviewItem(s, nowTs);
+  const added = buildReviewItem(s, nowTs, nowTs);
   return {
     schedules: schedules.map((x) => (x.id === id ? { ...x, lastFiredAt: nowTs } : x)),
     queue: [...queue, added].slice(-MAX_REVIEW_ITEMS),
@@ -439,7 +496,8 @@ function isValidSchedule(s: unknown): s is Schedule {
     (o.workspace === undefined || typeof o.workspace === "string") &&
     (o.projectId === undefined || typeof o.projectId === "string") &&
     (o.model === undefined || typeof o.model === "string") &&
-    (o.authorizationMode === undefined || o.authorizationMode === "ask" || o.authorizationMode === "workspace" || o.authorizationMode === "yolo")
+    (o.authorizationMode === undefined || o.authorizationMode === "ask" || o.authorizationMode === "workspace" || o.authorizationMode === "yolo") &&
+    (o.missedPolicy === undefined || o.missedPolicy === "skip" || o.missedPolicy === "latest")
   );
 }
 
@@ -458,7 +516,10 @@ function isValidReview(r: unknown): r is ReviewItem {
     (o.workspace === undefined || typeof o.workspace === "string") &&
     (o.projectId === undefined || typeof o.projectId === "string") &&
     (o.model === undefined || typeof o.model === "string") &&
-    (o.authorizationMode === undefined || o.authorizationMode === "ask" || o.authorizationMode === "workspace" || o.authorizationMode === "yolo")
+    (o.authorizationMode === undefined || o.authorizationMode === "ask" || o.authorizationMode === "workspace" || o.authorizationMode === "yolo") &&
+    (o.missedPolicy === undefined || o.missedPolicy === "skip" || o.missedPolicy === "latest") &&
+    (o.occurrenceAt === undefined || typeof o.occurrenceAt === "number") &&
+    (o.occurrenceKey === undefined || typeof o.occurrenceKey === "string")
   );
 }
 

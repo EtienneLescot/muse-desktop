@@ -3078,6 +3078,18 @@ body.dark .composer textarea::placeholder {
   min-width: 0;
 }
 
+.sched-policy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.sched-policy select {
+  flex: 1;
+}
+
 .sched-list {
   list-style: none;
   margin: 8px 0 0;

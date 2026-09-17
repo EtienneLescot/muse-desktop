@@ -16,6 +16,7 @@ import {
   deleteSchedule,
   discardReview,
   dueSchedules,
+  dueOccurrenceTimes,
   enqueueDue,
   enqueueRunNow,
   isScheduleDue,
@@ -24,6 +25,7 @@ import {
   parseCron,
   pendingReviews,
   resolveReviewTarget,
+  scheduleOccurrenceKey,
   saveReviewQueue,
   saveSchedules,
   setScheduleEnabled,
@@ -228,6 +230,30 @@ describe("US-9 due → captured review/run context", () => {
     // Next day 9:00: due again.
     const nextDay = new Date(2026, 0, 6, 9, 0, 0).getTime();
     assert.equal(isScheduleDue(r2.schedules[0], nextDay), true);
+  });
+
+  it("uses the latest missed occurrence or skips the backlog explicitly", () => {
+    const start = new Date(2026, 0, 5, 8, 0, 0).getTime();
+    const wake = new Date(2026, 0, 5, 12, 30, 0).getTime();
+    const latest = sched([], onceInput({
+      trigger: { kind: "cron", cron: "0 * * * *" },
+      missedPolicy: "latest",
+    }), start);
+    assert.equal(dueOccurrenceTimes(latest[0], wake).length, 4);
+    const latestResult = enqueueDue(latest, [], wake);
+    assert.equal(latestResult.added.length, 1);
+    assert.equal(latestResult.added[0].occurrenceAt, new Date(2026, 0, 5, 12, 0, 0).getTime());
+    assert.equal(latestResult.added[0].occurrenceKey, scheduleOccurrenceKey(latest[0].id, latestResult.added[0].occurrenceAt as number));
+
+    const skip = sched([], onceInput({
+      trigger: { kind: "cron", cron: "0 * * * *" },
+      missedPolicy: "skip",
+    }), start);
+    const skipResult = enqueueDue(skip, [], wake);
+    assert.equal(skipResult.added.length, 0);
+    assert.equal(skipResult.schedules[0].lastFiredAt, new Date(2026, 0, 5, 12, 0, 0).getTime());
+    const next = enqueueDue(skipResult.schedules, [], new Date(2026, 0, 5, 13, 0, 0).getTime());
+    assert.equal(next.added.length, 1);
   });
 
   it("run-now enqueues even a disabled schedule and advances it", () => {
