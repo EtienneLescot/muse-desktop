@@ -2138,6 +2138,186 @@ body.dark .composer textarea::placeholder {
   min-height: 0;
 }
 
+/* ---- M1-01 read-only Git review pane. ---- */
+.review-panel {
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  overflow: hidden;
+}
+
+.review-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.review-panel-head h2 {
+  margin: 4px 0 0;
+  font-size: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-refresh,
+.review-load {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.review-refresh:hover:not(:disabled),
+.review-load:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+
+.review-error {
+  border: 1px solid color-mix(in srgb, var(--danger) 48%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.review-repo-meta,
+.review-diff-meta,
+.review-selected-file {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 0.78rem;
+}
+
+.review-count {
+  color: var(--blue);
+  font-weight: 650;
+}
+
+.review-empty {
+  margin: 6px 0;
+  font-size: 0.85rem;
+}
+
+.review-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  max-height: 180px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.review-files li + li {
+  border-top: 1px solid var(--line);
+}
+
+.review-files button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 7px 8px;
+  min-width: 0;
+}
+
+.review-files button:hover,
+.review-files button.selected {
+  background: var(--pale);
+}
+
+.review-status-code {
+  color: var(--blue);
+  font-size: 0.72rem;
+  min-width: 22px;
+}
+
+.review-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-code);
+  font-size: 0.76rem;
+}
+
+.review-binary {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.review-diff-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.review-diff-controls button,
+.review-diff-controls input {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 5px 8px;
+  font-size: 0.75rem;
+}
+
+.review-diff-controls button.active {
+  border-color: var(--blue);
+  color: var(--blue);
+  font-weight: 650;
+}
+
+.review-diff-controls input {
+  flex: 1;
+  min-width: 100px;
+}
+
+.review-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  flex: 1;
+}
+
+.review-selected-file {
+  color: var(--text);
+}
+
+.review-patch {
+  flex: 1;
+  min-height: 140px;
+  margin: 0;
+  padding: 9px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  color: var(--text);
+  font: 0.72rem/1.5 var(--font-code);
+  white-space: pre;
+  tab-size: 2;
+}
+
 .artifacts-tabs {
   display: flex;
   gap: var(--space-1);

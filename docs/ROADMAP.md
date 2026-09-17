@@ -140,7 +140,7 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 
 | ID | Résultat attendu | Design | UI | Fonction | Validation | Reste à faire et critère de sortie |
 |---|---|---|---|---|---|---|
-| M1-01 | Voir les fichiers réellement modifiés | Maquette | Absente | Absente | À faire | Backend Git status/diff ; scopes non indexé/indexé/branche/dernier tour ; correspondance exacte avec Git, y compris renommages et fichiers binaires |
+| M1-01 | Voir les fichiers réellement modifiés | Adapté | Présente | Câblée | Unitaire | Socle livré en lecture seule ; restent les scénarios E2E webview/live, le snapshot « dernier tour » et la vérification runtime des cas hors Git/modifications externes |
 | M1-02 | Commenter une ligne de diff et demander sa correction | À définir | Absente | Absente | À faire | Ancrer fichier, révision, côté et ligne ; transmettre au bon contexte ; gérer commentaire devenu obsolète |
 | M1-03 | Indexer ou annuler une modification | À définir | Absente | Absente | À faire | Actions fichier puis hunk ; protections contre changement concurrent ; annulation explicite et aucune perte silencieuse |
 | M1-04 | Commit, push et création de PR depuis l'app | Maquette | Absente | Absente | À faire | Relier identité/remote/branche ; gérer auth, hooks, rejet et conflits ; vérifier le commit et la PR réellement créés |
@@ -155,6 +155,14 @@ La maquette `design/prototype` ne constitue pas une implémentation native. Les 
 | M1-13 | Lire une longue conversation confortablement | Adapté | Présente | Partielle | UI | Vérifier rendu Markdown/code/liens et outils ; mesurer longue session, mémoire et scroll ; virtualiser si les mesures l'exigent |
 
 Preuves : [maquette](../design/prototype/), [contenus actuels](../src/components/ArtifactsPane.tsx), [messages](../src/components/MessageContent.tsx), [mentions](../src/lib/mentions.ts), [shell applicatif](../src/App.tsx).
+
+### Livraison M1-01 — revue Git en lecture seule
+
+- **Contrat backend :** `git_status(sessionId)` et `git_diff(sessionId, scope, baseRef?)` résolvent le workspace de la conversation, exécutent Git hors thread UI et renvoient une erreur explicite pour un dossier hors dépôt. Les sorties de statut utilisent les séparateurs NUL afin de préserver espaces, Unicode et paires de renommage.
+- **État exposé :** branche, HEAD observé, upstream, avance/retard et liste des fichiers avec états index/worktree, conflits, non suivis et renommages. Les diffs sont disponibles pour `unstaged`, `staged` et `branch` avec base explicite ; les hunks, compteurs, marqueurs binaires et patch borné sont conservés.
+- **UI :** l’onglet **Review** est accessible depuis la barre de travail de chaque conversation. Il recharge le dépôt, sélectionne un scope, accepte une base de branche et affiche la liste des fichiers puis le patch réel, sans déduire les changements du texte de Muse.
+- **Validation :** suite Node 381 tests, suite Rust 44 tests, build frontend réussi. Les tests Rust couvrent notamment Unicode, chemins avec espaces, renommage, avance/retard, hunks, binaire, base absente et garde contre une référence de branche interprétée comme option.
+- **Limites assumées :** cette tranche ne modifie pas le dépôt. Les commentaires ancrés (M1-02), stage/revert (M1-03), commit/push/PR (M1-04), ainsi que la qualification native avec un vrai workspace, restent les étapes suivantes.
 
 **Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10. **Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
 

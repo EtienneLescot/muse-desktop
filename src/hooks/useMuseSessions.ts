@@ -319,6 +319,13 @@ import {
   shouldScanNudge,
   type MemoryEntry,
 } from "../lib/memory";
+import {
+  EMPTY_GIT_REVIEW,
+  type GitDiffScope,
+  type GitDiffSnapshot,
+  type GitReviewState,
+  type GitStatusSnapshot,
+} from "../lib/git";
 
 
 /** One session: persisted metadata + live running flag. */
@@ -346,6 +353,8 @@ export interface IndexApi {
   deleteIndex: () => void;
   setIndexQuery: (q: string) => void;
 }
+
+export type { GitDiffScope, GitDiffSnapshot, GitReviewState, GitStatusSnapshot } from "../lib/git";
 
 type FileWithRelPath = File & { webkitRelativePath?: string };
 
@@ -530,6 +539,14 @@ interface UseMuseSessions {
   commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string) => void;
   /** US-23 opt-in local index (panel state + folder-pick indexing). */
   index: IndexApi;
+  /** M1-01: read-only Git status/diff snapshots per conversation workspace. */
+  gitReview: (sessionId: string) => GitReviewState;
+  refreshGitStatus: (sessionId: string) => Promise<void>;
+  loadGitDiff: (
+    sessionId: string,
+    scope: GitDiffScope,
+    baseRef?: string,
+  ) => Promise<void>;
   /** US-5: move a thread to the archived list (persisted flag). */
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -968,6 +985,13 @@ export function useMuseSessions(): UseMuseSessions {
   const [evtCount, setEvtCount] = useState(0);
   const [connectedIds, setConnectedIds] = useState<string[]>([]);
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
+  // M1-01: review snapshots are owned by the hook so the panel never reads
+  // stale or cross-session Git state. A refresh replaces the snapshot; the
+  // observed HEAD in each result is the basis for later mutating actions.
+  const [gitReviewBySession, setGitReviewBySession] = useState<
+    Record<string, GitReviewState>
+  >({});
+  const gitRequestSeq = useRef<Record<string, number>>({});
   // Mirror of "any session running", read by the poll loop to pick cadence.
   // Plain ref (not state): the loop lives outside render, StrictMode-safe.
   const runningRef = useRef(false);
@@ -3125,6 +3149,96 @@ export function useMuseSessions(): UseMuseSessions {
     [kickPoll],
   );
 
+  const beginGitRequest = useCallback((sessionId: string): number => {
+    const next = (gitRequestSeq.current[sessionId] ?? 0) + 1;
+    gitRequestSeq.current[sessionId] = next;
+    setGitReviewBySession((cur) => ({
+      ...cur,
+      [sessionId]: {
+        ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+        loading: true,
+        error: null,
+      },
+    }));
+    return next;
+  }, []);
+
+  const refreshGitStatus = useCallback(
+    async (sessionId: string): Promise<void> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const status = await invoke<GitStatusSnapshot>("git_status", {
+          sessionId,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            status,
+            loading: false,
+            error: null,
+          },
+        }));
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+      }
+    },
+    [beginGitRequest],
+  );
+
+  const loadGitDiff = useCallback(
+    async (
+      sessionId: string,
+      scope: GitDiffScope,
+      baseRef?: string,
+    ): Promise<void> => {
+      const request = beginGitRequest(sessionId);
+      try {
+        const diff = await invoke<GitDiffSnapshot>("git_diff", {
+          sessionId,
+          scope,
+          baseRef: baseRef ?? null,
+        });
+        if (gitRequestSeq.current[sessionId] !== request) return;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            diff,
+            loading: false,
+            error: null,
+          },
+        }));
+      } catch (e) {
+        if (gitRequestSeq.current[sessionId] !== request) return;
+        setGitReviewBySession((cur) => ({
+          ...cur,
+          [sessionId]: {
+            ...(cur[sessionId] ?? EMPTY_GIT_REVIEW),
+            loading: false,
+            error: String(e),
+          },
+        }));
+      }
+    },
+    [beginGitRequest],
+  );
+
+  const gitReview = useCallback(
+    (sessionId: string): GitReviewState =>
+      gitReviewBySession[sessionId] ?? EMPTY_GIT_REVIEW,
+    [gitReviewBySession],
+  );
+
   // US-23 search over the stored index (empty unless opted in). Search
   // keeps working while paused — pause only suspends indexing updates.
   const indexResults = searchIndex(indexStore, indexEnabled ? indexQuery : "");
@@ -3266,6 +3380,9 @@ export function useMuseSessions(): UseMuseSessions {
     restoreArtifact,
     commentArtifact,
     index,
+    gitReview,
+    refreshGitStatus,
+    loadGitDiff,
     error,
     evtCount,
   };
