@@ -1096,7 +1096,24 @@ where
                 .to_string(),
             );
         }
-        "turn/retracted" | "turn/unqueued" | "turn/retryScheduled" => {
+        "turn/retracted" => {
+            // Retraction is the host's terminal confirmation for an accepted
+            // interrupt. Keep the product status stable (`cancelled`) and
+            // retain the turn anchor so the renderer closes only this turn.
+            mark_running(state, sid, false);
+            emit_fn(
+                "status",
+                sid,
+                "cancelled",
+                json!({
+                    "terminal": "cancelled",
+                    "turnId": p.get("turnId"),
+                    "reason": p.get("reason"),
+                })
+                .to_string(),
+            );
+        }
+        "turn/unqueued" | "turn/retryScheduled" => {
             emit_fn("status", sid, method, p.to_string())
         }
         "userInput/requested" => {
@@ -3548,6 +3565,37 @@ mod tests {
         );
         assert!(!state.sessions.lock().unwrap()["session-a"].running);
         assert_eq!(events.last().map(|event| event.2.as_str()), Some("cancelled"));
+    }
+
+    #[test]
+    fn turn_retracted_is_terminal_cancellation() {
+        let state = empty_state();
+        state.sessions.lock().unwrap().insert(
+            "session-a".to_string(),
+            SessionMeta {
+                session_id: "session-a".to_string(),
+                workspace: "C:/fixture".to_string(),
+                running: true,
+                approval_mode: None,
+            },
+        );
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "turn/retracted",
+            &json!({"sessionId":"session-a","turnId":"turn-a","reason":"interrupted"}),
+            &mut emit,
+        );
+
+        assert!(!state.sessions.lock().unwrap()["session-a"].running);
+        let (_, sid, kind, payload) = events.last().expect("terminal status event");
+        assert_eq!(sid, "session-a");
+        assert_eq!(kind, "cancelled");
+        assert!(payload.contains("\"terminal\":\"cancelled\""));
+        assert!(payload.contains("\"turnId\":\"turn-a\""));
     }
 
     #[tokio::test]

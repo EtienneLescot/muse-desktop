@@ -59,6 +59,7 @@ export function isStoppedKind(kind: string): boolean {
   const base = normalizeKind(kind);
   return (
     base === "cancelled" ||
+    base === "retracted" ||
     base === "completed" ||
     base === "stopped" ||
     base === "exited" ||
