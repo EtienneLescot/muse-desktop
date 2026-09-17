@@ -36,6 +36,15 @@ try {
             --output $manifest `
             --version $version `
             --target "x86_64-pc-windows-msvc"
+        node (Join-Path $repo "scripts\verify-release-manifest.mjs") `
+            --manifest $manifest `
+            --artifact $installer.FullName `
+            --sidecar $sidecar `
+            --version $version `
+            --target "x86_64-pc-windows-msvc"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Release manifest verification failed: $manifest"
+        }
     }
 } finally {
     Pop-Location
