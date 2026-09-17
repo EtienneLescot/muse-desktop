@@ -385,7 +385,23 @@ async function main() {
           // item stream to this bare connection. Keep that distinction visible
           // instead of treating admission as transcript proof.
         }
-        userShellChecks.push({ host: String.fromCharCode(65 + index), status: "accepted", itemStarted });
+        let historyItem = false;
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const read = await host.request("session/read", { excludeItems: false, sessionId });
+          const items = read?.history?.items;
+          historyItem = Array.isArray(items) && items.some(
+            (item) => item?.kind === "userShell" && item?.commandId === commandId,
+          );
+        } catch {
+          // An ephemeral or older host may not serve inline history here.
+        }
+        userShellChecks.push({
+          host: String.fromCharCode(65 + index),
+          status: "accepted",
+          itemStarted,
+          historyItem,
+        });
       }
     }
     if (new Set(sessions).size !== sessions.length) fail("the two native hosts returned the same session id");
