@@ -6,6 +6,7 @@ import {
   nextStreamWindowStart,
   prependStreamWindowStart,
   shouldWindowStream,
+  streamWindowEnd,
   STREAM_WINDOW_SIZE,
 } from "../src/lib/streamWindow.ts";
 
@@ -33,5 +34,13 @@ describe("bounded transcript window", () => {
     assert.equal(prependStreamWindowStart(1840), 1720);
     assert.equal(prependStreamWindowStart(40), 0);
     assert.equal(prependStreamWindowStart(40, 15), 25);
+  });
+
+  it("keeps every loaded page bounded to one DOM window", () => {
+    assert.equal(streamWindowEnd(2000, 1840), 2000);
+    assert.equal(streamWindowEnd(2000, 1720), 1880);
+    assert.equal(streamWindowEnd(2000, 0), STREAM_WINDOW_SIZE);
+    assert.equal(streamWindowEnd(80, 0), 80);
+    assert.equal(streamWindowEnd(0, 10), 0);
   });
 });
