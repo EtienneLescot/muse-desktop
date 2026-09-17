@@ -2,9 +2,9 @@
  * US-9 automations/scheduled + review queue: pure schedule logic.
  *
  * NOTE: no workflow/* MSP endpoint exists, so scheduling remains a bounded
- * client-side timer. A due schedule creates a durable review/run context;
- * execution still goes through the normal send/approval path until a native
- * scheduler service is qualified.
+ * client-side timer. A due schedule captures a durable review/run context;
+ * ask mode waits for review while workspace and YOLO modes dispatch through
+ * the normal turn path. A native background scheduler is still a follow-up.
  *
  * Dependency-free (zero imports) so it stays runnable under `node:test`
  * without React or Tauri.
@@ -259,7 +259,7 @@ export function deleteSchedule(schedules: Schedule[], id: string): Schedule[] {
   return schedules.filter((s) => s.id !== id);
 }
 
-/* ---------------- due → review queue (never auto-send) ---------------- */
+/* ---------------- due → review queue / automatic dispatch ---------------- */
 
 /** True when an enabled schedule owes a review entry at `nowTs`. */
 export function isScheduleDue(s: Schedule, nowTs: number): boolean {
@@ -295,10 +295,10 @@ function buildReviewItem(s: Schedule, nowTs: number): ReviewItem {
 }
 
 /**
- * Enqueue one review entry per due schedule and advance those schedules
+ * Enqueue one review/run context per due schedule and advance those schedules
  * (one-shot: marked fired; cron: anchored at `nowTs` so the same occurrence
- * never enqueues twice). Pure: the caller persists both lists, and nothing
- * here sends anything to the model — human approval does that later.
+ * never enqueues twice). Pure: the caller decides whether the captured item
+ * waits for approval or is dispatched automatically.
  */
 export function enqueueDue(
   schedules: Schedule[],

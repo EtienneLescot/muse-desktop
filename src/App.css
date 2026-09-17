@@ -3118,6 +3118,45 @@ body.dark .composer textarea::placeholder {
   color: var(--danger);
 }
 
+.schedule-runs {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.schedule-runs h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.schedule-run {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.run-status {
+  margin-left: auto;
+  text-transform: capitalize;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.schedule-run[data-status="running"] .run-status,
+.schedule-run[data-status="queued"] .run-status {
+  color: var(--blue);
+}
+
+.schedule-run[data-status="completed"] .run-status {
+  color: var(--green);
+}
+
+.schedule-run[data-status="failed"] .run-status {
+  color: var(--danger);
+}
+
 /* US-9 review queue: pending automation entries awaiting approve/discard. */
 .review-queue {
   border-top: 1px solid var(--line);

@@ -6,6 +6,7 @@ import {
   type ScheduleAuthorizationMode,
   type ThreadReuse,
 } from "../lib/schedules";
+import type { ScheduleRun } from "../lib/scheduleRuns";
 
 interface SessionRef {
   session_id: string;
@@ -14,6 +15,7 @@ interface SessionRef {
 
 interface Props {
   schedules: Schedule[];
+  runs: ScheduleRun[];
   sessions: SessionRef[];
   activeId: string | null;
   workspace: string | null;
@@ -45,13 +47,21 @@ function describeReuse(r: ThreadReuse, sessions: SessionRef[]): string {
   );
 }
 
+function describeRunStatus(status: ScheduleRun["status"]): string {
+  if (status === "completed") return "Dispatched";
+  if (status === "running") return "Running";
+  if (status === "failed") return "Failed";
+  return "Queued";
+}
+
 /**
  * US-9 automations panel (sidebar): create/list/enable/disable/delete
- * schedules plus a run-now button that enqueues a review entry immediately.
- * Due schedules never auto-send — everything lands in the review queue.
+ * schedules plus a run-now button. Ask mode creates a review entry; workspace
+ * and YOLO modes dispatch automatically and surface the latest run records.
  */
 export function SchedulesPanel({
   schedules,
+  runs,
   sessions,
   activeId,
   workspace,
@@ -210,7 +220,7 @@ export function SchedulesPanel({
                 <button
                   type="button"
                   onClick={() => onRunNow(s.id)}
-                  title="Enqueue a review entry now"
+                  title="Run this automation now"
                 >
                   Run
                 </button>
@@ -226,6 +236,23 @@ export function SchedulesPanel({
             </li>
           ))}
         </ul>
+      )}
+      {runs.length > 0 && (
+        <div className="schedule-runs" aria-label="Recent automation runs">
+          <h3>Recent runs</h3>
+          <ul className="sched-list">
+            {runs.slice(-8).reverse().map((run) => (
+              <li key={run.id} className="sched-item schedule-run" data-status={run.status}>
+                <div className="sched-head">
+                  <strong>{run.scheduleName}</strong>
+                  <span className="run-status">{describeRunStatus(run.status)}</span>
+                </div>
+                <span className="muted">{new Date(run.createdAt).toLocaleString()} · {run.sessionId ? "conversation started" : "dispatching"}</span>
+                {run.error && <small className="error">{run.error}</small>}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

@@ -211,6 +211,16 @@ import {
   type ScheduleInput,
 } from "../lib/schedules";
 export type { ReviewItem, Schedule, ScheduleInput, ThreadReuse } from "../lib/schedules";
+import {
+  appendRun,
+  createScheduleRun,
+  loadScheduleRuns,
+  markRunStarted,
+  saveScheduleRuns,
+  settleRun,
+  type ScheduleRun,
+} from "../lib/scheduleRuns";
+export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
 // US-12 + US-21 versioned artifacts + thread recap: extraction, versioning
 // and per-thread persistence live in ../lib/artifacts (dependency-free,
 // unit-tested); restore reuses the US-4 composer prefill below.
@@ -763,6 +773,8 @@ interface UseMuseSessions {
   /** US-9: automation schedules (all) + pending review entries. */
   schedules: Schedule[];
   reviewQueue: ReviewItem[];
+  /** M3-06: durable scheduled execution records. */
+  scheduleRuns: ScheduleRun[];
   /** US-9: validate + append a schedule; returns the id, null on error. */
   createSchedule: (input: ScheduleInput) => string | null;
   /** US-9: enable/disable one schedule. */
@@ -1066,6 +1078,7 @@ export function useMuseSessions(): UseMuseSessions {
   // written through on every change (effect below).
   const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
+  const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() => loadScheduleRuns());
   // w-integrations US-24/US-26: connector registry (survives restarts via
   // localStorage), written through on every change.
   const [connectors, setConnectors] = useState<ConnectorEntry[]>(() => loadConnectors());
@@ -1445,20 +1458,42 @@ export function useMuseSessions(): UseMuseSessions {
     saveReviewQueue(reviewQueue);
   }, [reviewQueue]);
 
+  useEffect(() => {
+    saveScheduleRuns(scheduleRuns);
+  }, [scheduleRuns]);
+
   // US-9 client-side scheduler: no workflow/* MSP endpoint exists, so a
-  // UI-side interval enqueues review entries for due schedules (never
-  // auto-sends — approval sends as normal turn input). Refs stay fresh
-  // where interval-closure deps would go stale.
+  // bounded UI-side interval admits due schedules. Ask mode enters review;
+  // workspace/YOLO mode creates a run record and dispatches automatically.
+  // Refs stay fresh where interval-closure deps would go stale.
   const schedulesRef = useRef(schedules);
   schedulesRef.current = schedules;
   const reviewQueueRef = useRef(reviewQueue);
   reviewQueueRef.current = reviewQueue;
+  const scheduledExecutorRef = useRef<((item: ReviewItem, run: ScheduleRun) => Promise<void>) | null>(null);
   useEffect(() => {
     const check = () => {
       const res = enqueueDue(schedulesRef.current, reviewQueueRef.current, Date.now());
       if (res.added.length === 0) return;
       setSchedules(res.schedules);
-      setReviewQueue(res.queue);
+      const automatic = res.added.filter((item) => item.authorizationMode !== "ask");
+      const automaticIds = new Set(automatic.map((item) => item.id));
+      setReviewQueue(res.queue.filter((item) => !automaticIds.has(item.id)));
+      for (const item of automatic) {
+        const run = createScheduleRun({
+          scheduleId: item.scheduleId,
+          scheduleName: item.scheduleName,
+          instructions: item.instructions,
+          threadReuse: item.threadReuse,
+          ...(item.workspace ? { workspace: item.workspace } : {}),
+          ...(item.projectId ? { projectId: item.projectId } : {}),
+          ...(item.model ? { model: item.model } : {}),
+          ...(item.authorizationMode ? { authorizationMode: item.authorizationMode } : {}),
+          occurrenceAt: item.createdAt,
+        }, Date.now());
+        setScheduleRuns((cur) => appendRun(cur, run));
+        void scheduledExecutorRef.current?.(item, run);
+      }
     };
     check();
     const timer = setInterval(check, 15000);
@@ -3483,6 +3518,62 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [projects, globalSettings],
   );
+  const executeReviewItem = useCallback(
+    async (item: ReviewItem, run?: ScheduleRun): Promise<boolean> => {
+      const knownIds = sessions.map((s) => s.session_id);
+      const target = resolveReviewTarget(item.threadReuse, activeId, knownIds);
+      if (target === null) {
+        const message = "the recorded target thread is gone (discard or re-target)";
+        setError(`schedule run failed: ${message}`);
+        if (run) setScheduleRuns((cur) => settleRun(cur, run.id, "failed", Date.now(), message));
+        return false;
+      }
+      const targetSession = target === "new"
+        ? null
+        : sessions.find((session) => session.session_id === target) ?? null;
+      if (item.workspace && targetSession && targetSession.workspace !== item.workspace) {
+        const message = "the recorded workspace no longer matches the target conversation";
+        setError(`schedule run failed: ${message}`);
+        if (run) setScheduleRuns((cur) => settleRun(cur, run.id, "failed", Date.now(), message));
+        return false;
+      }
+      const applyCapturedContext = async (sessionId: string): Promise<void> => {
+        if (item.authorizationMode && item.authorizationMode !== authorizationMode) {
+          await invoke("set_approval_mode", { sessionId, mode: item.authorizationMode });
+        }
+        if (item.model && item.model !== "default") await setSessionModel(sessionId, item.model);
+      };
+      let sessionId: string;
+      if (target === "new") {
+        const settings = item.model ? { ...globalSettings, model: item.model } : undefined;
+        const fresh = await startSessionRow(item.workspace, settings);
+        if (fresh === null) {
+          if (run) setScheduleRuns((cur) => settleRun(cur, run.id, "failed", Date.now(), "could not start target conversation"));
+          return false;
+        }
+        sessionId = fresh;
+      } else {
+        sessionId = target;
+      }
+      if (run) setScheduleRuns((cur) => markRunStarted(cur, run.id, Date.now(), sessionId));
+      try {
+        await applyCapturedContext(sessionId);
+        const result = await sendInput(sessionId, item.instructions);
+        if (run) setScheduleRuns((cur) => settleRun(cur, run.id, result.ok ? "completed" : "failed", Date.now(), result.error ?? undefined));
+        return result.ok;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (run) setScheduleRuns((cur) => settleRun(cur, run.id, "failed", Date.now(), message));
+        setError(`schedule run failed: ${message}`);
+        return false;
+      }
+    },
+    [activeId, authorizationMode, globalSettings, sendInput, sessions, setSessionModel, startSessionRow],
+  );
+  scheduledExecutorRef.current = async (item, run) => {
+    await executeReviewItem(item, run);
+  };
+
   // US-9 automation actions (create/toggle/delete/run-now/approve/discard).
   const createScheduleCb = useCallback((input: ScheduleInput): string | null => {
     const err = validateScheduleInput(input);
@@ -3514,8 +3605,25 @@ export function useMuseSessions(): UseMuseSessions {
       return;
     }
     setSchedules(res.schedules);
-    setReviewQueue(res.queue);
-  }, []);
+    const item = res.added;
+    if (item.authorizationMode === "ask") {
+      setReviewQueue(res.queue);
+      return;
+    }
+    const run = createScheduleRun({
+      scheduleId: item.scheduleId,
+      scheduleName: item.scheduleName,
+      instructions: item.instructions,
+      threadReuse: item.threadReuse,
+      ...(item.workspace ? { workspace: item.workspace } : {}),
+      ...(item.projectId ? { projectId: item.projectId } : {}),
+      ...(item.model ? { model: item.model } : {}),
+      ...(item.authorizationMode ? { authorizationMode: item.authorizationMode } : {}),
+      occurrenceAt: item.createdAt,
+    }, Date.now());
+    setScheduleRuns((cur) => appendRun(cur, run));
+    void executeReviewItem(item, run);
+  }, [executeReviewItem]);
 
   const approveReviewCb = useCallback(
     async (id: string): Promise<void> => {
@@ -3524,46 +3632,14 @@ export function useMuseSessions(): UseMuseSessions {
         setError(`approve failed: review entry ${id.slice(0, 8)} is not pending`);
         return;
       }
-      const knownIds = sessions.map((s) => s.session_id);
-      const target = resolveReviewTarget(item.threadReuse, activeId, knownIds);
-      if (target === null) {
-        setError("approve failed: the recorded target thread is gone (discard or re-target)");
-        return;
-      }
       // Settle first: the entry leaves the pending queue even if the send
       // below fails (the error banner then explains; the instructions stay
       // readable in the settled entry).
       const settled = approveReview(reviewQueueRef.current, id);
       if (settled !== null) setReviewQueue(settled.queue);
-      const targetSession = target === "new"
-        ? null
-        : sessions.find((session) => session.session_id === target) ?? null;
-      if (item.workspace && targetSession && targetSession.workspace !== item.workspace) {
-        setError("approve failed: the recorded workspace no longer matches the target conversation");
-        return;
-      }
-      const applyCapturedContext = async (sessionId: string): Promise<void> => {
-        if (item.authorizationMode && item.authorizationMode !== authorizationMode) {
-          await invoke("set_approval_mode", { sessionId, mode: item.authorizationMode });
-        }
-        if (item.model && item.model !== "default") {
-          await setSessionModel(sessionId, item.model);
-        }
-      };
-      if (target === "new") {
-        const settings = item.model
-          ? { ...globalSettings, model: item.model }
-          : undefined;
-        const fresh = await startSessionRow(item.workspace, settings);
-        if (fresh === null) return;
-        await applyCapturedContext(fresh);
-        await sendInput(fresh, item.instructions);
-      } else {
-        await applyCapturedContext(target);
-        await sendInput(target, item.instructions);
-      }
+      await executeReviewItem(item);
     },
-    [activeId, authorizationMode, globalSettings, sessions, sendInput, setSessionModel, startSessionRow],
+    [executeReviewItem],
   );
 
   const discardReviewCb = useCallback((id: string) => {
@@ -4431,6 +4507,7 @@ export function useMuseSessions(): UseMuseSessions {
     settingsFor,
     schedules,
     reviewQueue: pendingReviews(reviewQueue),
+    scheduleRuns,
     createSchedule: createScheduleCb,
     setScheduleEnabled: setScheduleEnabledCb,
     deleteSchedule: deleteScheduleCb,
