@@ -7,6 +7,7 @@ import {
   buildReleaseManifest,
   RELEASE_MANIFEST_SCHEMA,
 } from "../scripts/release-manifest.mjs";
+import { verifyReleaseManifest } from "../scripts/verify-release-manifest.mjs";
 
 test("release manifest records deterministic hashes without machine paths", async () => {
   const root = await mkdtemp(join(tmpdir(), "muse-release-"));
@@ -36,4 +37,32 @@ test("release manifest rejects missing metadata", () => {
     () => buildReleaseManifest({ artifactPath: "", sidecarPath: "x", version: "1", target: "t" }),
     /artifactPath and sidecarPath are required/,
   );
+});
+
+test("release manifest verification detects tampering and validates explicit files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "muse-release-verify-"));
+  const installer = join(root, "Muse-Desktop_0.1.0_x64-setup.exe");
+  const sidecar = join(root, "muse-x86_64-pc-windows-msvc.exe");
+  const manifestPath = join(root, "release.manifest.json");
+  await writeFile(installer, Buffer.from("installer-bytes"));
+  await writeFile(sidecar, Buffer.from("sidecar-bytes"));
+  const manifest = buildReleaseManifest({
+    artifactPath: installer,
+    sidecarPath: sidecar,
+    version: "0.1.0",
+    target: "x86_64-pc-windows-msvc",
+  });
+  await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
+  const valid = verifyReleaseManifest({
+    manifestPath,
+    artifactPath: installer,
+    sidecarPath: sidecar,
+    version: "0.1.0",
+    target: "x86_64-pc-windows-msvc",
+  });
+  assert.equal(valid.valid, true);
+  await writeFile(installer, Buffer.from("tampered"));
+  const invalid = verifyReleaseManifest({ manifestPath, artifactPath: installer, sidecarPath: sidecar });
+  assert.equal(invalid.valid, false);
+  assert.match(invalid.errors.join(" "), /installer\.(bytes|sha256) mismatch/);
 });
