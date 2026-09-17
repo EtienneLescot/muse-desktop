@@ -47,6 +47,11 @@ import { Icon } from "./components/Icon";
 import { searchConversations } from "./lib/conversationSearch";
 import { WindowControls, dragWindow } from "./components/WindowControls";
 import { readStorageString, writeStorageString } from "./lib/storage.ts";
+import {
+  NOTIFICATION_ACTION_EVENT,
+  subscribeNotificationActions,
+  type NotificationActionPayload,
+} from "./lib/notifications";
 import "./App.css";
 import "./Desktop.css";
 
@@ -270,6 +275,8 @@ export default function App() {
     "task" | "projects" | "automations" | "extensions" | "library" | "archives"
   >("task");
   const [collapsed, setCollapsed] = useState(false);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
   const [workPanel, setWorkPanel] = useState<
     "artifacts" | "browser" | "memory" | "tools" | "review" | "terminal" | "files" | null
   >(null);
@@ -313,6 +320,35 @@ export default function App() {
     setSettingsOpen(false);
     setPage(next);
   };
+
+  // M3-09: a native/web notification click carries only a bounded session or
+  // run id. Resolve it through the existing session SSOT and focus the task;
+  // no notification payload is treated as transcript content.
+  useEffect(() => {
+    const openFromAction = (payload: NotificationActionPayload) => {
+      if (!payload.sessionId || !sessionsRef.current.some((session) => session.session_id === payload.sessionId)) {
+        return;
+      }
+      openPage("task");
+      setActive(payload.sessionId);
+    };
+    const onWebAction = (event: Event) => {
+      const detail = (event as CustomEvent<NotificationActionPayload>).detail;
+      if (detail && typeof detail === "object") openFromAction(detail);
+    };
+    window.addEventListener(NOTIFICATION_ACTION_EVENT, onWebAction);
+    let dispose: (() => void) | null = null;
+    let cancelled = false;
+    void subscribeNotificationActions(openFromAction).then((cleanup) => {
+      if (cancelled) cleanup();
+      else dispose = cleanup;
+    });
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NOTIFICATION_ACTION_EVENT, onWebAction);
+      dispose?.();
+    };
+  }, [setActive]);
   const newTask = () => {
     openPage("task");
     setActive(null);

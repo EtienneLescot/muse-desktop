@@ -9,6 +9,7 @@ import {
   loadNotifications,
   loadNotificationPreferences,
   markNotificationRead,
+  notificationActionPayload,
   NOTIFICATION_PREFERENCES_KEY,
   saveNotifications,
   saveNotificationPreferences,
@@ -78,6 +79,15 @@ describe("M3-09 notification records", () => {
     assert.equal(input.kind, "input-needed");
     assert.equal(input.dedupeKey, "input:session-1:input-1");
     assert.match(input.body, /2 questions/);
+  });
+
+  it("keeps native action payloads limited to routing ids", () => {
+    const notification = buildRunNotification(run(), 3000) as MuseNotification;
+    assert.deepEqual(notificationActionPayload(notification), {
+      notificationId: notification.id,
+      sessionId: "session-1",
+      runId: notification.runId,
+    });
   });
 
   it("round-trips valid records and drops malformed local storage entries", () => {

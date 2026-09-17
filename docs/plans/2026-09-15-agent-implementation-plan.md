@@ -495,9 +495,9 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Code :** `src/lib/notifications.ts`, `useMuseSessions` et `SchedulesPanel` ; dépend M3-08/M0-12.
 
-**État au 16/09/2026 :** l'inbox locale est livrée pour les runs terminés/échoués et pour les demandes d'autorisation ou de réponse utilisateur : chaque entrée conserve une clé d'idempotence, un aperçu, la session cible et un état non-lu ; Automations permet l'ouverture de la conversation et le marquage lu. Dans un build Tauri, la demande de permission et l'envoi utilisent désormais `tauri-plugin-notification`; le web preview conserve l'API `Notification` comme fallback explicite, sans rejouer les historiques au démarrage. La préférence de silence desktop est persistée séparément ; un clic sur un toast tente de restaurer la fenêtre Tauri avant de laisser l'inbox ouvrir la session. La persistance d'un scheduler/notification quand l'app est fermée et le routage OS direct restent ouverts.
+**État au 17/09/2026 :** l'inbox locale est livrée pour les runs terminés/échoués et pour les demandes d'autorisation ou de réponse utilisateur : chaque entrée conserve une clé d'idempotence, un aperçu, la session cible et un état non-lu ; Automations permet l'ouverture de la conversation et le marquage lu. Dans un build Tauri, la demande de permission et l'envoi utilisent désormais `tauri-plugin-notification`; le web preview conserve l'API `Notification` comme fallback explicite, sans rejouer les historiques au démarrage. La préférence de silence desktop est persistée séparément. Les notifications Tauri déclarent désormais l'action **Open conversation** et transportent uniquement les identifiants de routage bornés ; `App` valide la session puis ouvre directement le fil, et le fallback web émet le même événement. La persistance d'un scheduler/notification quand l'app est fermée et la qualification OS restent ouvertes.
 
-**Travail restant :** service natif OS/Tauri quand l'application est fermée et routage OS direct vers la session. Pas de notification par token ou tick.
+**Travail restant :** service natif OS/Tauri quand l'application est fermée et qualification du prompt d'action sur chaque plateforme. Pas de notification par token ou tick.
 
 **Acceptation :** notification unique, clic ouvre la cible, cible supprimée, OS refuse et mode muet respecté.
 
