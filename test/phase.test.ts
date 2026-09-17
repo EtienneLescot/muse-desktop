@@ -248,6 +248,20 @@ describe("applyItemSnapshotUpdate", () => {
     });
     assert.equal(next[0].text, "$ git status\nclean");
   });
+
+  it("promotes the empty post-approval placeholder instead of duplicating it", () => {
+    const placeholder = [entry({ role: "assistant", text: "", open: true })];
+    const next = applyItemSnapshotUpdate(placeholder, {
+      itemId: "answer-1",
+      role: "assistant",
+      text: "Resumed.",
+      revision: 1,
+      stamp,
+    });
+    assert.equal(next.length, 1);
+    assert.equal(next[0].itemId, "answer-1");
+    assert.equal(next[0].text, "Resumed.");
+  });
 });
 
 describe("dropEmptyPlaceholders", () => {

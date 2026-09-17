@@ -145,7 +145,18 @@ export function applyItemSnapshotUpdate(
 ): LogEntry[] {
   const itemId = update.itemId.trim();
   if (itemId.length === 0 || update.text.length === 0) return log;
-  const index = lastIndex(log, (entry) => entry.itemId === itemId && entry.role === update.role);
+  const matched = lastIndex(log, (entry) => entry.itemId === itemId && entry.role === update.role);
+  // An approval/input decision paints a send-time placeholder before the host
+  // can reveal its item id. Promote that empty lane instead of appending a
+  // second assistant entry when the first progress event is `item/updated`.
+  const index = matched >= 0
+    ? matched
+    : lastIndex(log, (entry) =>
+        entry.open === true &&
+        entry.role === update.role &&
+        entry.itemId === undefined &&
+        entry.text === "",
+      );
   const existing = index >= 0 ? log[index] : undefined;
   if (
     existing !== undefined &&
