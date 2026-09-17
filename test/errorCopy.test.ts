@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { userFacingError } from "../src/lib/errorCopy.ts";
+import { reconnectErrorMessage, userFacingError } from "../src/lib/errorCopy.ts";
 
 describe("M0-11 generated error copy", () => {
   it("replaces protocol verbs with calm English while retaining bounded detail", () => {
@@ -35,6 +35,17 @@ describe("M0-11 generated error copy", () => {
     assert.equal(
       userFacingError("native browser open failed: invalid URL"),
       "The native browser could not be opened. — invalid URL",
+    );
+  });
+
+  it("explains when the host has no durable resume contract", () => {
+    assert.equal(
+      reconnectErrorMessage("session/read failed: method not found"),
+      "Reconnect unavailable: this host cannot resume saved conversations. Your saved messages are still available locally.",
+    );
+    assert.equal(
+      userFacingError(reconnectErrorMessage("session/read failed: method not found")),
+      "Reconnect unavailable: this host cannot resume saved conversations. Your saved messages are still available locally.",
     );
   });
 });

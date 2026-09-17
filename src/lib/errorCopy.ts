@@ -42,6 +42,15 @@ function asText(error: unknown): string {
   return String(error);
 }
 
+/** Keep the durable-resume limitation actionable without exposing wire text. */
+export function reconnectErrorMessage(error: unknown): string {
+  const detail = asText(error).trim();
+  if (/session\/(?:read|resume).*?(?:method not found|methodnotfound|-32601)/i.test(detail)) {
+    return "Reconnect unavailable: this host cannot resume saved conversations. Your saved messages are still available locally.";
+  }
+  return `Reconnect failed: ${detail || "the host did not respond"}. Your saved messages are still available.`;
+}
+
 /** Return calm, English, redacted copy for a user-facing error surface. */
 export function userFacingError(error: unknown, fallback = "Something went wrong."): string {
   const redacted = redactDiagnostic(asText(error).replace(/^Error:\s*/i, ""));
