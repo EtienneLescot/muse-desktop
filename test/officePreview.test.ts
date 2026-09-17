@@ -3,6 +3,7 @@ import test from "node:test";
 import { strToU8, zipSync } from "fflate";
 import {
   officePreviewForFile,
+  MAX_OFFICE_ENTRY_BYTES,
   MAX_OFFICE_PREVIEW_ROWS,
 } from "../src/lib/officePreview.ts";
 
@@ -71,4 +72,10 @@ test("office preview bounds oversized row sets", () => {
   );
   assert.equal(preview?.rows.length, MAX_OFFICE_PREVIEW_ROWS);
   assert.equal(preview?.truncated, true);
+});
+
+test("office preview rejects an oversized XML entry before inflating it", () => {
+  const oversized = strToU8("x".repeat(MAX_OFFICE_ENTRY_BYTES + 1));
+  const data = encode(zipSync({ "word/document.xml": oversized }));
+  assert.equal(officePreviewForFile("oversized.docx", data), null);
 });

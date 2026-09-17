@@ -12,6 +12,11 @@ export const MAX_OFFICE_PREVIEW_BYTES = 5 * 1024 * 1024;
 export const MAX_OFFICE_PREVIEW_ROWS = 100;
 export const MAX_OFFICE_PREVIEW_COLUMNS = 20;
 export const MAX_OFFICE_XML_CHARS = 1_000_000;
+/** Never inflate more XML than the parser can inspect, even when a ZIP entry
+ * advertises a much larger uncompressed size than the compressed payload. */
+export const MAX_OFFICE_ENTRY_BYTES = MAX_OFFICE_XML_CHARS * 4;
+export const MAX_OFFICE_ARCHIVE_BYTES = MAX_OFFICE_ENTRY_BYTES * 2;
+export const MAX_OFFICE_ARCHIVE_ENTRIES = 500;
 
 export type OfficeFormat = "docx" | "xlsx" | "pptx";
 
@@ -184,6 +189,14 @@ function parsePptx(archive: Record<string, Uint8Array>): OfficePreview | null {
   return boundedRows(rows, "pptx", ["Slide", "Text"], truncated);
 }
 
+function isPreviewPart(format: OfficeFormat, name: string): boolean {
+  if (format === "docx") return name === "word/document.xml";
+  if (format === "xlsx") {
+    return name === "xl/sharedStrings.xml" || /^xl\/worksheets\/sheet\d+\.xml$/i.test(name);
+  }
+  return /^ppt\/slides\/slide\d+\.xml$/i.test(name);
+}
+
 /** Parse one bounded DOCX/XLSX/PPTX payload into a safe table preview. */
 export function officePreviewForFile(path: string, base64Data: string): OfficePreview | null {
   const format = extension(path);
@@ -191,12 +204,38 @@ export function officePreviewForFile(path: string, base64Data: string): OfficePr
   const bytes = decodeBase64(base64Data);
   if (!bytes || bytes.length === 0 || bytes.length > MAX_OFFICE_PREVIEW_BYTES) return null;
   let archive: Record<string, Uint8Array>;
+  let entryCount = 0;
+  let extractedBytes = 0;
+  let rejectedEntry = false;
   try {
-    archive = unzipSync(bytes);
+    archive = unzipSync(bytes, {
+      // Office containers include many relationships, thumbnails and media
+      // parts. They are not needed for a text preview and must never be
+      // inflated into renderer memory.
+      filter: (entry) => {
+        entryCount += 1;
+        if (entryCount > MAX_OFFICE_ARCHIVE_ENTRIES) {
+          rejectedEntry = true;
+          return false;
+        }
+        if (!isPreviewPart(format, entry.name)) return false;
+        const size = entry.originalSize;
+        if (!Number.isSafeInteger(size) || size < 0 || size > MAX_OFFICE_ENTRY_BYTES) {
+          rejectedEntry = true;
+          return false;
+        }
+        if (extractedBytes + size > MAX_OFFICE_ARCHIVE_BYTES) {
+          rejectedEntry = true;
+          return false;
+        }
+        extractedBytes += size;
+        return true;
+      },
+    });
   } catch {
     return null;
   }
-  if (Object.keys(archive).length > 500) return null;
+  if (rejectedEntry || Object.keys(archive).length > MAX_OFFICE_ARCHIVE_ENTRIES) return null;
   if (format === "docx") return parseDocx(archive);
   if (format === "xlsx") return parseXlsx(archive);
   return parsePptx(archive);
