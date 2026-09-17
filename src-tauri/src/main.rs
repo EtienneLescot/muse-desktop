@@ -25,6 +25,7 @@ mod git;
 mod terminal;
 mod files;
 mod artifact_export;
+mod browser_download;
 mod setup;
 mod mcp;
 mod skills;
@@ -1938,6 +1939,18 @@ async fn artifact_export(path: String, content: String) -> Result<(), String> {
         .map_err(|e| format!("artifact export task failed: {e}"))?
 }
 
+/// Write an explicitly selected same-origin browser download after the
+/// renderer has shown a native save dialog. The payload is bounded and
+/// validated again here so a compromised page cannot write arbitrary bytes or
+/// create a destination directory through the renderer.
+#[tauri::command]
+async fn browser_download_write(path: String, data: String) -> Result<(), String> {
+    let target = PathBuf::from(path.trim());
+    tokio::task::spawn_blocking(move || browser_download::write_base64(&target, &data))
+        .await
+        .map_err(|e| format!("browser download task failed: {e}"))?
+}
+
 /// Probe local prerequisites for the first-launch recovery screen. This is a
 /// read-only, bounded check: it never starts a sidecar or changes WSL/Muse.
 #[tauri::command]
@@ -3722,6 +3735,7 @@ fn main() {
             files_unwatch,
             file_open,
             artifact_export,
+            browser_download_write,
             probe_startup,
             list_models,
             set_model,
