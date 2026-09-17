@@ -73,6 +73,49 @@ export function streamHealthLabel(health: StreamHealth): string {
   }
 }
 
+/**
+ * Turn an internal event kind into a compact, user-facing progress hint.
+ * Event names are transport details, so keep the mapping allowlisted instead
+ * of exposing raw host strings in the conversation UI.
+ */
+export function streamEventLabel(kind: string | null | undefined): string | null {
+  if (!kind) return null;
+  const normalized = kind.trim().toLowerCase().replace(/\\/g, "/");
+  const labels: Record<string, string> = {
+    "client/send": "message accepted",
+    "client/steer": "steering accepted",
+    "client/approval": "authorization sent",
+    "client/input": "answer sent",
+    "history/reconciled": "conversation synchronized",
+    output: "response update",
+    thinking: "reasoning update",
+    reasoning: "reasoning update",
+    "item/started": "work item started",
+    item_started: "work item started",
+    "item/done": "work item completed",
+    item_done: "work item completed",
+    tool_request: "tool request",
+    input_request: "waiting for your answer",
+    "approval/resolved": "authorization resolved",
+    "approval/updated": "authorization updated",
+    status: "status update",
+    subagent_event: "sub-agent update",
+    "turn/completed": "turn completed",
+    host_exited: "host disconnected",
+  };
+  const exact = labels[normalized];
+  if (exact) return exact;
+  // A bounded fallback helps future additive event kinds remain diagnosable
+  // without rendering arbitrary payload text in the UI.
+  const compact = normalized
+    .replace(/^turn\//, "")
+    .replace(/[\/_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!compact) return null;
+  return `${compact.slice(0, 48)}${compact.length > 48 ? "…" : ""}`;
+}
+
 /** Human-readable elapsed time without noisy millisecond precision. */
 export function formatElapsed(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000));

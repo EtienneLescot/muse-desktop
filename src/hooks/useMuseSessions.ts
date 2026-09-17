@@ -788,6 +788,9 @@ interface UseMuseSessions {
   forkSession: (sessionId: string, lastTurnId?: string) => Promise<string | null>;
   reconnectSession: (id: string) => Promise<void>;
   reconnectingId: string | null;
+  /** M0-02: reconcile durable history and pending actions without a restart. */
+  reconcileSession: (id: string) => Promise<void>;
+  reconcilingId: string | null;
   connectedIds: string[];
   /**
    * M0-03: send one turn and get an explicit result. `retryKey` re-sends
@@ -3196,6 +3199,69 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+  const [reconcilingId, setReconcilingId] = useState<string | null>(null);
+
+  /**
+   * Refresh the folded server state for a quiet turn without replacing its
+   * live host. This is deliberately separate from reconnect: a dropped event
+   * can leave the host healthy, and reattaching it would add unnecessary
+   * lifecycle churn. All results flow back through the hook's SSOT.
+   */
+  const reconcileSession = useCallback(async (id: string): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    const session = sessions.find((candidate) => candidate.session_id === id);
+    if (!session) return;
+    setReconcilingId(id);
+    setError(null);
+    try {
+      const history = await invoke<unknown>("read_session_history", { sessionId: id });
+      const remote = historyItemsToLogEntries(extractHistoryItems(history));
+      // A history snapshot containing only the original user message is not
+      // proof that the host resumed. Require a durable assistant/tool/reasoning
+      // item before clearing the post-decision liveness marker.
+      const progressFound = remote.some((entry) =>
+        entry.role === "assistant" ||
+        entry.role === "thinking" ||
+        entry.role === "tool" ||
+        entry.role === "subagent" ||
+        entry.role === "system",
+      );
+      if (remote.length > 0) {
+        const local = logsRef.current[id] ?? loadLog(id);
+        const merged = mergeHistoryLog(local, remote);
+        setLogs((cur) => ({ ...cur, [id]: merged }));
+        saveLog(id, merged);
+      }
+      try {
+        const pending = await invoke<unknown>("list_pending_requests", { sessionId: id });
+        if (typeof pending === "object" && pending !== null) {
+          const { approvals: nextApprovals, inputs: nextInputs } = parsePendingSnapshot(id, pending);
+          setApprovals((cur) => [
+            ...cur.filter((item) => item.session_id !== id),
+            ...nextApprovals,
+          ]);
+          setInputRequests((cur) => [
+            ...cur.filter((item) => item.session_id !== id),
+            ...nextInputs,
+          ]);
+        }
+      } catch {
+        // Older hosts may not expose pending snapshots; history is still
+        // useful and the explicit error below should not hide it.
+      }
+      await reconcileQueueSnapshot(id);
+      if (progressFound) {
+        touchStreamActivity(id, "history/reconciled");
+        clearResumePending(id);
+      }
+      kickPoll();
+    } catch (e) {
+      setError(`Sync failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setReconcilingId(null);
+    }
+  }, [kickPoll, reconcileQueueSnapshot, sessions, touchStreamActivity]);
+
   const reconnectSession = useCallback(async (id: string) => {
     const session = sessions.find((s) => s.session_id === id);
     if (!session || !isTauriRuntime()) return;
@@ -6036,6 +6102,8 @@ export function useMuseSessions(): UseMuseSessions {
     forkSession,
     reconnectSession,
     reconnectingId,
+    reconcileSession,
+    reconcilingId,
     connectedIds,
     sendInput,
     steerInput,

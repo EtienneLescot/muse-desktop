@@ -108,6 +108,8 @@ export default function App() {
     forkSession,
     reconnectSession,
     reconnectingId,
+    reconcileSession,
+    reconcilingId,
     connectedIds,
     evtCount,
     sendInput,
@@ -1078,11 +1080,14 @@ export default function App() {
                     running={active.running}
                     stopping={stoppingBySession[active.session_id] === true}
                     lastEventAt={activeStreamActivity?.lastEventAt ?? null}
+                    lastEventKind={activeStreamActivity?.lastEventKind ?? null}
                     resumePendingAt={activeResumePending?.requestedAt ?? null}
                     pendingApprovals={activeApprovals.length}
                     pendingInputs={activeInputRequests.length}
                     reconnecting={reconnectingId === active.session_id}
                     onReconnect={() => void reconnectSession(active.session_id)}
+                    reconciling={reconcilingId === active.session_id}
+                    onReconcile={() => void reconcileSession(active.session_id)}
                     onCancel={() => void cancelSession(active.session_id)}
                     onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
                     onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
