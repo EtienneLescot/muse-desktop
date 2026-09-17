@@ -181,6 +181,8 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Acceptation :** commentaire transmis sur bonne ligne/côté ; fichier renommé ou diff modifié entre sélection et envoi ; aucune confusion entre deux dépôts.
 
+**État au 16/09/2026 :** socle livré dans la PR M1. Le panneau Review rend les lignes old/new sélectionnables, vérifie à nouveau le statut et le diff avant envoi, puis transmet un contexte structuré à la conversation. La persistance d’une file de commentaires et le triage multi-commentaires restent à décider avant M1-04.
+
 ### M1-03 — Stage et revert
 
 **Code :** service Git et Review. Dépend M1-01.

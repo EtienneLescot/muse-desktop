@@ -541,12 +541,12 @@ interface UseMuseSessions {
   index: IndexApi;
   /** M1-01: read-only Git status/diff snapshots per conversation workspace. */
   gitReview: (sessionId: string) => GitReviewState;
-  refreshGitStatus: (sessionId: string) => Promise<void>;
+  refreshGitStatus: (sessionId: string) => Promise<GitStatusSnapshot | null>;
   loadGitDiff: (
     sessionId: string,
     scope: GitDiffScope,
     baseRef?: string,
-  ) => Promise<void>;
+  ) => Promise<GitDiffSnapshot | null>;
   /** US-5: move a thread to the archived list (persisted flag). */
   renameSession: (sessionId: string, title: string) => void;
   archiveSession: (sessionId: string) => void;
@@ -3165,13 +3165,13 @@ export function useMuseSessions(): UseMuseSessions {
   }, []);
 
   const refreshGitStatus = useCallback(
-    async (sessionId: string): Promise<void> => {
+    async (sessionId: string): Promise<GitStatusSnapshot | null> => {
       const request = beginGitRequest(sessionId);
       try {
         const status = await invoke<GitStatusSnapshot>("git_status", {
           sessionId,
         });
-        if (gitRequestSeq.current[sessionId] !== request) return;
+        if (gitRequestSeq.current[sessionId] !== request) return null;
         setGitReviewBySession((cur) => ({
           ...cur,
           [sessionId]: {
@@ -3181,8 +3181,9 @@ export function useMuseSessions(): UseMuseSessions {
             error: null,
           },
         }));
+        return status;
       } catch (e) {
-        if (gitRequestSeq.current[sessionId] !== request) return;
+        if (gitRequestSeq.current[sessionId] !== request) return null;
         setGitReviewBySession((cur) => ({
           ...cur,
           [sessionId]: {
@@ -3191,6 +3192,7 @@ export function useMuseSessions(): UseMuseSessions {
             error: String(e),
           },
         }));
+        return null;
       }
     },
     [beginGitRequest],
@@ -3201,7 +3203,7 @@ export function useMuseSessions(): UseMuseSessions {
       sessionId: string,
       scope: GitDiffScope,
       baseRef?: string,
-    ): Promise<void> => {
+    ): Promise<GitDiffSnapshot | null> => {
       const request = beginGitRequest(sessionId);
       try {
         const diff = await invoke<GitDiffSnapshot>("git_diff", {
@@ -3209,7 +3211,7 @@ export function useMuseSessions(): UseMuseSessions {
           scope,
           baseRef: baseRef ?? null,
         });
-        if (gitRequestSeq.current[sessionId] !== request) return;
+        if (gitRequestSeq.current[sessionId] !== request) return null;
         setGitReviewBySession((cur) => ({
           ...cur,
           [sessionId]: {
@@ -3219,8 +3221,9 @@ export function useMuseSessions(): UseMuseSessions {
             error: null,
           },
         }));
+        return diff;
       } catch (e) {
-        if (gitRequestSeq.current[sessionId] !== request) return;
+        if (gitRequestSeq.current[sessionId] !== request) return null;
         setGitReviewBySession((cur) => ({
           ...cur,
           [sessionId]: {
@@ -3229,6 +3232,7 @@ export function useMuseSessions(): UseMuseSessions {
             error: String(e),
           },
         }));
+        return null;
       }
     },
     [beginGitRequest],

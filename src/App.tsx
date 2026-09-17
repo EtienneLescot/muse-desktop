@@ -24,6 +24,7 @@ import { ChannelPanel } from "./components/ChannelPanel";
 import { ImportPanel } from "./components/ImportPanel";
 import { ReviewPanel } from "./components/ReviewPanel";
 import type { ShareBundle } from "./lib/sharing";
+import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -959,6 +960,13 @@ export default function App() {
                           review={gitReview(active.session_id)}
                           onRefreshStatus={refreshGitStatus}
                           onLoadDiff={loadGitDiff}
+                          onSendComment={async (anchor: ReviewAnchor, body: string) => {
+                            const result = await sendInput(
+                              active.session_id,
+                              formatReviewComment(anchor, body),
+                            );
+                            return result.ok;
+                          }}
                         />
                       )}
                       {workPanel === "browser" && (
