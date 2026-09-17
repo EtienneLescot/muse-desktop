@@ -118,6 +118,27 @@ describe("M3-06 schedule run ledger", () => {
     assert.equal(read[0].unread, false);
   });
 
+  it("keeps a bounded structured result summary with the run", () => {
+    fakeStorage();
+    const initial = run();
+    const summary = {
+      headline: "Reviewed the latest changes.",
+      totalItems: 8,
+      assistantMessages: 2,
+      toolEvents: 3,
+      filesMentioned: ["src/App.tsx"],
+      decisions: ["approved the navigation update"],
+    };
+    const completed = completeRun([initial], initial.id, 3000, "Reviewed", summary);
+    assert.deepEqual(completed[0].resultSummary, summary);
+    saveScheduleRuns(completed);
+    assert.deepEqual(loadScheduleRuns()[0].resultSummary, summary);
+    localStorage.setItem("muse-desktop.schedule-runs.v1", JSON.stringify([
+      { ...completed[0], resultSummary: { ...summary, toolEvents: "many" } },
+    ]));
+    assert.equal(loadScheduleRuns().length, 0);
+  });
+
   it("queues bounded exponential retries and cancels a pending retry", () => {
     const initial = run();
     const failed = settleRun(markRunStarted([initial], initial.id, 2000), initial.id, "failed", 2100, "host unavailable");

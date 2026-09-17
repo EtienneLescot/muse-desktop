@@ -4149,6 +4149,29 @@ body.dark .composer textarea::placeholder {
   white-space: nowrap;
 }
 
+.run-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  border-left: 2px solid var(--blue);
+  padding-left: 8px;
+  line-height: 1.35;
+}
+
+.run-summary strong {
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-summary-facts {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
 .schedule-run[data-status="running"] .run-status,
 .schedule-run[data-status="queued"] .run-status {
   color: var(--blue);
@@ -4281,6 +4304,32 @@ body.dark .composer textarea::placeholder {
 
 .run-output-error {
   border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+
+.run-output-summary {
+  border-color: color-mix(in srgb, var(--blue) 30%, var(--line));
+}
+
+.run-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.run-summary-decisions {
+  margin-top: 6px;
+}
+
+.run-summary-decisions ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+.run-summary-decisions li {
+  margin: 2px 0;
 }
 
 .notification-enable {
