@@ -30,6 +30,8 @@ export const MSP_METHODS_SENT: MspMethod[] = [
   "session/resume",
   "session/list",
   "model/list",
+  // Newer hosts expose skill/list before the pinned SDK declaration does.
+  "skill/list" as unknown as MspMethod,
   "session/compact",
   "session/setModel",
   "session/userShell",
@@ -73,6 +75,9 @@ export const MSP_NOTIFICATIONS_HANDLED: MspNotification[] = [
   "session/tokenUsage",
   "session/approvalModeChanged",
   "session/branchChanged",
+  // Additive notification; keep the compatibility cast until the SDK is
+  // bumped to a revision containing the stable skill notification literal.
+  "skill/changed" as unknown as MspNotification,
 ];
 
 /** Host error codes our UI interprets (kinds per the SDK error registry). */

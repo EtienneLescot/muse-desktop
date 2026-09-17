@@ -18,6 +18,7 @@ export type OutboxState = "sending" | "accepted" | "failed";
 /** Protocol-ready parts retained so an ambiguous send can be retried exactly. */
 export type OutboxInputPart =
   | { type: "text"; text: string }
+  | { type: "skill"; selector: string; arguments?: string }
   | { type: "image"; mediaType: string; base64Data: string; width?: number; height?: number };
 
 export interface OutboxEntry {

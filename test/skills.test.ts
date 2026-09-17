@@ -44,6 +44,13 @@ describe("parseSkillCommand (/skill-name slash in composer)", () => {
     assert.equal(parseSkillCommand("/Review-PR x")?.name, "review-pr");
   });
 
+  it("accepts namespaced host selectors", () => {
+    assert.deepEqual(parseSkillCommand("/threejs:threejs demo"), {
+      name: "threejs:threejs",
+      args: "demo",
+    });
+  });
+
   it("rejects plain text and a lone slash", () => {
     assert.equal(parseSkillCommand("hello world"), null);
     assert.equal(parseSkillCommand("/"), null);

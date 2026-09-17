@@ -15,6 +15,7 @@ export const MAX_TEXT_CHARS = 120_000;
 
 export type TurnInputPart =
   | { type: "text"; text: string }
+  | { type: "skill"; selector: string; arguments?: string }
   | {
       type: "image";
       mediaType: string;

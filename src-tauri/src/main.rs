@@ -1537,6 +1537,14 @@ where
                 );
             }
         }
+        "skill/changed" => {
+            // Host skills can be installed or removed while the app is open.
+            // Forward the notification so the renderer refreshes its
+            // per-session catalogue through authoritative `skill/list`.
+            if !sid.is_empty() {
+                emit_fn("skill_changed", sid, "skill_changed", "{}".to_string());
+            }
+        }
         // US-4 (server half): provider-reported context occupancy
         // (SS4.6.6 triple). The host only emits on change; forward
         // defensively — unknown pressure levels pass through untouched (the
@@ -3047,6 +3055,21 @@ async fn list_models(
     Ok(out)
 }
 
+/// M3-05: read the host-owned skill catalogue for one conversation. The host
+/// remains the source of truth for selectors and metadata; the renderer only
+/// keeps a bounded display projection and sends invocations as `skill` parts.
+#[tauri::command]
+async fn list_skills(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let client = session_client(&state, &session_id)?;
+    client
+        .request("skill/list", json!({"sessionId": session_id}))
+        .await
+}
+
 /// US-4 (server half): real context compaction (`session/compact`). The ack
 /// is admission-only (`accepted`); the work runs async on the host and its
 /// terminal outcome arrives as a view event. `noop` (e.g.
@@ -3365,6 +3388,25 @@ fn validate_turn_input_parts(input: &Value) -> Result<(), String> {
                     ));
                 }
                 let _ = media_type;
+            }
+            "skill" => {
+                let selector = object
+                    .get("selector")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| format!("inputParts[{index}].selector is required"))?;
+                if selector.chars().count() > 200 {
+                    return Err(format!("inputParts[{index}].selector exceeds 200 characters"));
+                }
+                if let Some(arguments) = object.get("arguments") {
+                    let value = arguments
+                        .as_str()
+                        .ok_or_else(|| format!("inputParts[{index}].arguments must be a string"))?;
+                    if value.chars().count() > 120_000 {
+                        return Err(format!("inputParts[{index}].arguments exceeds 120000 characters"));
+                    }
+                }
+                let _ = selector;
             }
             other => {
                 return Err(format!(
@@ -5063,6 +5105,12 @@ mod tests {
     }
 
     #[test]
+    fn turn_input_parts_accept_host_skill() {
+        let valid = json!([{"type": "skill", "selector": "plan", "arguments": "focus on tests"}]);
+        assert!(validate_turn_input_parts(&valid).is_ok());
+    }
+
+    #[test]
     fn turn_input_parts_reject_unknown_or_malformed_images() {
         let unknown = json!([{"type": "file", "path": "README.md"}]);
         assert!(validate_turn_input_parts(&unknown).is_err());
@@ -5074,6 +5122,8 @@ mod tests {
             {"type": "image", "mediaType": "image/png", "base64Data": "AQID", "width": 2}
         ]);
         assert!(validate_turn_input_parts(&mismatched_dimensions).is_err());
+        let malformed_skill = json!([{"type": "skill", "selector": " ", "arguments": 42}]);
+        assert!(validate_turn_input_parts(&malformed_skill).is_err());
     }
 
     fn scope_root() -> PathBuf {
@@ -5383,6 +5433,7 @@ fn main() {
             read_session_history,
             read_queue_snapshot,
             list_pending_requests,
+            list_skills,
             restore_sessions,
             send_input,
             user_shell,

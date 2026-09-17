@@ -209,6 +209,8 @@ export default function App() {
     uninstallConnectorById,
     setConnectorEnabledById,
     skills,
+    hostSkillsBySession,
+    refreshHostSkills,
     setSkillEnabledByName,
     traceSkillSuggestions,
     invokeSkill,
@@ -948,7 +950,9 @@ export default function App() {
                 />{" "}
                 <SkillPanel
                   skills={skills}
+                  hostSkills={activeId !== null ? (hostSkillsBySession[activeId] ?? []) : []}
                   workspace={workspace}
+                  onRefreshHost={() => activeId !== null ? refreshHostSkills(activeId) : Promise.resolve(null)}
                   onScan={() => scanSkills(workspace)}
                   onToggle={(name, enabled) =>
                     setSkillEnabledByName(name, enabled)
