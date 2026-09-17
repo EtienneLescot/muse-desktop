@@ -309,6 +309,7 @@ import {
   productAuthorizationMode,
   type AuthorizationMode,
 } from "../lib/authorization";
+import { parseApprovalResolution } from "../lib/approvalResolution";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
@@ -2860,17 +2861,22 @@ export function useMuseSessions(): UseMuseSessions {
       // The host can settle an approval independently of the click promise
       // (for example after a reconnect). Reconcile the durable card by id;
       // never leave a stale request blocking the conversation.
-      try {
-        const obj = JSON.parse(payload) as Record<string, unknown>;
-        if (typeof obj.approvalId === "string") {
-          setApprovals((cur) =>
-            cur.filter(
-              (a) => !(a.session_id === sid && a.request_id === obj.approvalId),
-            ),
-          );
-        }
-      } catch {
-        // Legacy status payloads have no id; the click path still reconciles.
+      const resolution = parseApprovalResolution(payload);
+      if (resolution.approvalId !== null) {
+        setApprovals((cur) =>
+          cur.filter(
+            (a) => !(a.session_id === sid && a.request_id === resolution.approvalId),
+          ),
+        );
+      }
+      // A resolution can be observed after a reconnect, without a local
+      // approve() promise having painted the resume bridge. Treat only an
+      // explicitly accepted decision as resumed work; denials still settle
+      // through the host's terminal event without a misleading spinner.
+      if (resolution.accepted) {
+        ensurePlaceholder(sid);
+        markResumePending(sid, "approval");
+        kickPoll();
       }
     }
     if (!isApprovalStatus) {
