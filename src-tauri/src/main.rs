@@ -42,7 +42,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, RunEvent, State, Url, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+use tauri_plugin_shell::process::{CommandChild, CommandEvent, TerminatedPayload};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::mpsc;
 
@@ -820,45 +820,76 @@ async fn ingest_stdout_chunk(
     }
 }
 
+/// Result of draining the shell event stream. A closed receiver is treated as
+/// a host loss as well: the shell plugin can close stdout without delivering a
+/// `Terminated` event when the process disappears during teardown.
+#[derive(Debug, Clone)]
+enum PumpExit {
+    Terminated(TerminatedPayload),
+    ChannelClosed,
+}
+
+/// Consume the production shell events without depending on an `AppHandle`.
+/// Keeping this boundary separate lets tests exercise the actual receiver,
+/// chunking and shutdown behavior with a deterministic child client.
+async fn consume_command_events(
+    mut rx: tauri::async_runtime::Receiver<CommandEvent>,
+    client: std::sync::Arc<MspClient>,
+    stderr_tail: std::sync::Arc<Mutex<Vec<String>>>,
+) -> PumpExit {
+    let mut out_buf = Vec::new();
+    let mut err_buf = Vec::new();
+    while let Some(ev) = rx.recv().await {
+        match ev {
+            CommandEvent::Stdout(chunk) => {
+                ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &chunk).await;
+            }
+            CommandEvent::Stderr(chunk) => {
+                for line in split_lines(&mut err_buf, &chunk) {
+                    push_stderr(&stderr_tail, line);
+                }
+            }
+            CommandEvent::Error(message) => {
+                push_stderr(&stderr_tail, format!("shell command error: {message}"));
+            }
+            CommandEvent::Terminated(payload) => {
+                client.shutdown().await;
+                return PumpExit::Terminated(payload);
+            }
+            _ => {}
+        }
+    }
+    client.shutdown().await;
+    PumpExit::ChannelClosed
+}
+
 /// Forward the host's stdout frames into the MSP client; stash stderr for
 /// diagnostics; announce host death only to sessions owned by this client.
 fn pump_stdout(
     app: AppHandle,
-    mut rx: tauri::async_runtime::Receiver<CommandEvent>,
+    rx: tauri::async_runtime::Receiver<CommandEvent>,
     client: std::sync::Arc<MspClient>,
     stderr_tail: std::sync::Arc<Mutex<Vec<String>>>,
 ) {
     tauri::async_runtime::spawn(async move {
-        let mut out_buf = Vec::new();
-        let mut err_buf = Vec::new();
-        while let Some(ev) = rx.recv().await {
-            match ev {
-                CommandEvent::Stdout(chunk) => {
-                    ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, &chunk).await;
-                }
-                CommandEvent::Stderr(chunk) => {
-                    for line in split_lines(&mut err_buf, &chunk) {
-                        push_stderr(&stderr_tail, line);
-                    }
-                }
-                CommandEvent::Terminated(payload) => {
-                    let state: State<AppState> = app.state();
-                    let ids = state.hosts.lock().map(|mut hosts| hosts.remove(&client)).unwrap_or_default();
-                    client.shutdown().await;
-                    let why = format!(
-                        "sidecar host exited (code {:?}, signal {:?}). {}",
-                        payload.code,
-                        payload.signal,
-                        tail_of(&stderr_tail)
-                    );
-                    for sid in ids {
-                        mark_running(&state, &sid, false);
-                        emit(&app, "status", &sid, "host_exited", why.clone());
-                    }
-                    break;
-                }
-                _ => {}
-            }
+        let exit = consume_command_events(rx, client.clone(), stderr_tail.clone()).await;
+        let state: State<AppState> = app.state();
+        let ids = state.hosts.lock().map(|mut hosts| hosts.remove(&client)).unwrap_or_default();
+        let why = match exit {
+            PumpExit::Terminated(payload) => format!(
+                "sidecar host exited (code {:?}, signal {:?}). {}",
+                payload.code,
+                payload.signal,
+                tail_of(&stderr_tail)
+            ),
+            PumpExit::ChannelClosed => format!(
+                "sidecar event stream closed unexpectedly. {}",
+                tail_of(&stderr_tail)
+            ),
+        };
+        for sid in ids {
+            mark_running(&state, &sid, false);
+            emit(&app, "status", &sid, "host_exited", why.clone());
         }
     });
 }
@@ -3748,6 +3779,51 @@ mod tests {
 
         ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, b"not-json\n").await;
         assert!(stderr_tail.lock().unwrap()[0].contains("unparsable frame"));
+    }
+
+    #[tokio::test]
+    async fn command_event_pump_handles_shell_errors_and_closed_channel() {
+        let (tx, rx) = tauri::async_runtime::channel(16);
+        let (writes, mut frames) = mpsc::unbounded_channel();
+        let (notify_tx, mut notify_rx) = mpsc::unbounded_channel();
+        let child = RecordingChild { writes, fail_write: false };
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let pump = tokio::spawn(consume_command_events(rx, client.clone(), stderr_tail.clone()));
+
+        let request = tokio::spawn({
+            let client = client.clone();
+            async move { client.request("model/list", Value::Null).await }
+        });
+        let request_frame = fixture_frame(&mut frames).await;
+        let response = format!(
+            "{}\n",
+            serde_json::to_string(&json!({
+                "jsonrpc": "2.0",
+                "id": request_frame["id"],
+                "result": {"models": []}
+            })).unwrap()
+        );
+        let split_at = response.len() / 2;
+        tx.send(CommandEvent::Stdout(response.as_bytes()[..split_at].to_vec())).await.unwrap();
+        assert!(!request.is_finished(), "partial shell stdout must not complete a request");
+        tx.send(CommandEvent::Stdout(response.as_bytes()[split_at..].to_vec())).await.unwrap();
+        assert_eq!(request.await.unwrap().unwrap()["models"], json!([]));
+
+        tx.send(CommandEvent::Stderr(b"token=secret\n".to_vec())).await.unwrap();
+        tx.send(CommandEvent::Error("pipe lost".to_string())).await.unwrap();
+        tx.send(CommandEvent::Stdout(b"not-json\n".to_vec())).await.unwrap();
+        drop(tx);
+
+        assert!(matches!(pump.await.unwrap(), PumpExit::ChannelClosed));
+        let diagnostics = stderr_tail.lock().unwrap().join(" | ");
+        assert!(diagnostics.contains("[redacted]"));
+        assert!(diagnostics.contains("shell command error: pipe lost"));
+        assert!(diagnostics.contains("unparsable frame"));
+        assert!(notify_rx.try_recv().is_err());
     }
 
     #[tokio::test]

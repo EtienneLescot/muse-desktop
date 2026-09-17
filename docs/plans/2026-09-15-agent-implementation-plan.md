@@ -200,7 +200,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Pilote superviseur livré au 17/09/2026 :** `send_input_for_state` est partagé par la commande Tauri et les tests. Deux clients injectés sur des workspaces distincts valident le payload `turn/start`, les réponses hors ordre et l'isolation de l'état `running`; une écriture enfant en erreur reste bornée et ne marque pas de tour comme démarré. Le pilote reste sans provider modèle.
 
-**Reste :** faire traverser la vraie fixture enfant par le pump stdout, puis qualifier l'appel `invoke` de la webview et le scénario A/B natif avec approbations. Ces tests restent séparés d'un tour modèle réel.
+**Reste :** l'injection couvre maintenant la boucle `CommandEvent` réelle, y compris les chunks stdout partiels, les erreurs du shell et la fermeture du receiver qui réveille le client. Il reste à qualifier l'appel `invoke` de la webview et le scénario A/B natif avec approbations. Ces tests restent séparés d'un tour modèle réel.
 **Pré-vol natif :** le smoke Windows partage désormais cette commande avec `--exercise-control` pour vérifier le contrôle `turn/start` → `turn/interrupt` sur deux hosts réels. Son option `--exercise-errors` vérifie aussi les catégories `methodNotFound` et `invalidParams` sur les deux transports, sans exposer les trames brutes ; il ne remplace pas l'injection de panne dans le superviseur Tauri.
 
 **Acceptation :** depuis un clone propre, `npm test` lance la fixture sans dépendance externe ; détecter volontairement une mauvaise route A/B et un envoi perdu dès que le pilote Tauri isolé est ajouté. Choisir le pilote Tauri selon support réel des plateformes, consigner toute limite dans l'ADR.
