@@ -74,6 +74,7 @@ pub struct GitPrResult {
   pub url: String,
   pub base: String,
   pub head: String,
+  pub existing: bool,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -1186,6 +1187,26 @@ fn gh_command(root: &Path, args: &[&str]) -> Result<String, String> {
     Ok(decode(&output.stdout))
 }
 
+/// Parse the bounded JSON returned by `gh pr list --json url`. The command is
+/// filtered to one open PR by the caller; this helper only accepts a verified
+/// HTTP(S) URL and ignores malformed rows rather than exposing arbitrary text.
+fn parse_existing_pr_url(output: &str) -> Result<Option<String>, String> {
+    let parsed: serde_json::Value = serde_json::from_str(output)
+        .map_err(|e| format!("GitHub CLI returned invalid pull request JSON: {e}"))?;
+    let rows = parsed
+        .as_array()
+        .ok_or_else(|| "GitHub CLI returned an unexpected pull request list".to_string())?;
+    for row in rows.iter().take(1) {
+        let Some(url) = row.get("url").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        if url.starts_with("https://") || url.starts_with("http://") {
+            return Ok(Some(url.to_string()));
+        }
+    }
+    Ok(None)
+}
+
 /// Create a GitHub pull request through the user's existing `gh` auth. No
 /// credentials are read from or written to web storage, and merge is never
 /// attempted by this command.
@@ -1209,6 +1230,31 @@ pub fn create_pr(
     let canonical = root
         .canonicalize()
         .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    let existing = gh_command(
+        &canonical,
+        &[
+            "pr",
+            "list",
+            "--head",
+            head_branch.trim(),
+            "--base",
+            base.trim(),
+            "--state",
+            "open",
+            "--json",
+            "url",
+            "--limit",
+            "1",
+        ],
+    )?;
+    if let Some(url) = parse_existing_pr_url(&existing)? {
+        return Ok(GitPrResult {
+            url,
+            base: base.trim().to_string(),
+            head: head_branch.trim().to_string(),
+            existing: true,
+        });
+    }
     let output = gh_command(
         &canonical,
         &[
@@ -1235,6 +1281,7 @@ pub fn create_pr(
         url: url.to_string(),
         base: base.trim().to_string(),
         head: head_branch.trim().to_string(),
+        existing: false,
     })
 }
 
@@ -1762,5 +1809,17 @@ mod tests {
         assert!(validate_ref("--force", "branch").is_err());
         assert!(validate_ref("feature bad", "branch").is_err());
         assert!(validate_ref("feature/review", "branch").is_ok());
+    }
+
+    #[test]
+    fn existing_pr_parser_accepts_only_a_bounded_http_url() {
+        assert_eq!(
+            parse_existing_pr_url(r#"[{"url":"https://github.com/acme/repo/pull/4"}]"#)
+                .unwrap(),
+            Some("https://github.com/acme/repo/pull/4".to_string())
+        );
+        assert_eq!(parse_existing_pr_url("[]").unwrap(), None);
+        assert_eq!(parse_existing_pr_url(r#"[{"url":"file:///tmp/pr"}]"#).unwrap(), None);
+        assert!(parse_existing_pr_url("not json").is_err());
     }
 }

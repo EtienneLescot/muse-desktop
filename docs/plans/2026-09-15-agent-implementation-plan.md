@@ -251,6 +251,8 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Ajout au 17/09/2026 :** la synchronisation du dépôt est désormais disponible dans la même source de vérité Review. **Fetch** exécute un remote explicite sans pruning et remonte le statut actualisé. **Pull latest** exige un remote et une branche explicites, vérifie HEAD et l'empreinte complète du statut observé, refuse les worktrees sales et limite l'opération à `git pull --ff-only`; les divergences et conflits restent donc à résoudre explicitement. Les tests Rust couvrent remote absent, observation périmée, worktree sale et un fast-forward local réel.
 
+**Ajout au 17/09/2026 — PR idempotente :** avant de créer une PR, le service consulte `gh pr list` avec le couple base/head et l'état `open`. Une URL existante est renvoyée avec `existing: true`, ce qui rend le bouton réentrant et évite les erreurs ou doublons lors d'un second clic. Le parseur refuse les réponses JSON invalides et les URL non HTTP(S) ; la forge reste l'autorité pour les cas d'authentification et de rejet.
+
 ### M1-05 — Terminal PTY
 
 **Code :** nouveau service PTY Rust et panneau Terminal. Dépend M0-01/14.

@@ -1097,7 +1097,7 @@ export function ReviewPanel({
                 </button>
               </div>
               <textarea value={prBody} onChange={(event) => setPrBody(event.target.value)} placeholder="Describe the change (optional)" aria-label="Pull request description" rows={2} />
-              {prResult && <a className="review-ship-result review-ship-link" href={prResult.url} target="_blank" rel="noreferrer">Open pull request · {prResult.head} → {prResult.base}</a>}
+              {prResult && <a className="review-ship-result review-ship-link" href={prResult.url} target="_blank" rel="noreferrer">{prResult.existing ? "Existing pull request" : "Open pull request"} · {prResult.head} → {prResult.base}</a>}
             </div>
           </section>
 
