@@ -355,15 +355,6 @@ export function DesktopControlPanel({
           <p className="muted">
             Inspect visible windows and send one explicit action at a time.
           </p>
-          <p className="muted capability-line">
-            <CapabilityBadge
-              status={status.supported ? "available" : "unavailable"}
-              reason={status.supported
-                ? "Windows desktop observation is connected; control actions still require explicit consent and an advertised host skill."
-                : status.reason}
-            />
-            {status.supported ? "Desktop runtime connected" : "Desktop runtime unavailable"}
-          </p>
         </div>
         <button type="button" onClick={() => void refresh()} disabled={busy}>
           Refresh windows
@@ -371,7 +362,12 @@ export function DesktopControlPanel({
       </header>
 
       <div className={`desktop-control-status ${status.supported ? "is-ready" : "is-muted"}`} role="status">
-        <strong>{status.supported ? "Available" : "Unavailable"}</strong>
+        <CapabilityBadge
+          status={status.supported ? "available" : "unavailable"}
+          reason={status.supported
+            ? "Windows desktop observation is connected; control actions still require explicit consent and an advertised host skill."
+            : status.reason}
+        />
         <span>{status.reason}</span>
       </div>
 
