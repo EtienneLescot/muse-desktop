@@ -103,6 +103,10 @@ pub struct GitWorktreeInspection {
     pub ignored_file_count: usize,
     pub active_signals: Vec<String>,
     pub branch_referenced_elsewhere: bool,
+    /// Number of native Muse sessions still attached to this checkout.
+    /// This is kept separate from Git's own lock signals so cleanup can
+    /// refuse a checkout that is still addressable from the app.
+    pub attached_session_count: usize,
     pub observed_at: u64,
 }
 
@@ -989,6 +993,7 @@ pub fn inspect_worktree(root: &Path, path: &str) -> Result<GitWorktreeInspection
         ignored_file_count: ignored_file_count(&candidate),
         active_signals,
         branch_referenced_elsewhere,
+        attached_session_count: 0,
         observed_at: now_ms(),
     })
 }

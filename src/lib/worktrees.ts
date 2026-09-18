@@ -65,6 +65,8 @@ export interface WorktreeInspection {
   activeSignals?: string[];
   /** The inspected branch was also reported by another linked worktree. */
   branchReferencedElsewhere?: boolean;
+  /** Muse conversations still attached to this checkout in the native app. */
+  attachedSessionCount?: number;
   observedAt: number;
 }
 

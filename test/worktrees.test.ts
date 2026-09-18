@@ -187,6 +187,9 @@ describe("M2-06 retention policy", () => {
     assert.match(dirty.reason, /Protected/);
     const active = retentionDecision(record, { repoRoot: record.repoRoot, path: record.path, branch: record.branch, head: "abc", clean: true, conflicted: false, fileCount: 0, activeSignals: ["index lock"], observedAt: 1 }, { maxAgeDays: 7 }, 8 * 86_400_000);
     assert.match(active.reason, /active operation/);
+    const attached = retentionDecision(record, { repoRoot: record.repoRoot, path: record.path, branch: record.branch, head: "abc", clean: true, conflicted: false, fileCount: 0, attachedSessionCount: 1, observedAt: 1 }, { maxAgeDays: 7 }, 8 * 86_400_000);
+    assert.match(attached.reason, /conversation/);
+    assert.equal(attached.eligible, false);
     const eligible = retentionDecision(record, { repoRoot: record.repoRoot, path: record.path, branch: record.branch, head: "abc", clean: true, conflicted: false, fileCount: 0, observedAt: 1 }, { maxAgeDays: 7 }, 8 * 86_400_000);
     assert.equal(eligible.eligible, true);
     assert.equal(normalizeRetentionDays("0"), null);

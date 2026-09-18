@@ -1167,6 +1167,9 @@ export function OrchestrationPanel({
                       {inspectionByBranch[p.branch].branchReferencedElsewhere
                         ? " · branch checked out elsewhere"
                         : ""}
+                      {(inspectionByBranch[p.branch].attachedSessionCount ?? 0) > 0
+                        ? ` · ${inspectionByBranch[p.branch].attachedSessionCount} Muse conversation(s) attached`
+                        : ""}
                       {` · observed ${new Date(inspectionByBranch[p.branch].observedAt).toLocaleTimeString()}`}
                     </p>
                   </details>

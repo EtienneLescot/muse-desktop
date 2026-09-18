@@ -2354,6 +2354,28 @@ fn workspace_for_inspection(state: &State<'_, AppState>, session_id: &str) -> Re
         .ok_or_else(|| "conversation workspace is unavailable".to_string())
 }
 
+/// Count renderer-visible sessions whose native workspace is this managed
+/// checkout. Cleanup treats an attached conversation as a live reference even
+/// when its current turn is idle: the session can still issue a new turn and
+/// the host process keeps the checkout as its working directory.
+fn attached_sessions_for_worktree(state: &AppState, path: &str) -> usize {
+    let Ok(candidate) = Path::new(path).canonicalize() else {
+        return 0;
+    };
+    let Ok(sessions) = state.sessions.lock() else {
+        return 0;
+    };
+    sessions
+        .values()
+        .filter(|session| {
+            Path::new(&session.workspace)
+                .canonicalize()
+                .map(|workspace| workspace == candidate)
+                .unwrap_or(false)
+        })
+        .count()
+}
+
 /// Read the real Git state for the workspace owned by this conversation.
 /// Git runs off the UI thread and only receives an absolute, canonicalized
 /// path selected by the supervisor; no shell interpolation is involved.
@@ -2833,6 +2855,12 @@ async fn git_worktree_remove(
     path: String,
 ) -> Result<(), String> {
     let root = workspace_for_inspection(&state, &session_id)?;
+    let attached = attached_sessions_for_worktree(state.inner(), &path);
+    if attached > 0 {
+        return Err(format!(
+            "worktree has {attached} Muse conversation(s) attached; close them before removal"
+        ));
+    }
     tokio::task::spawn_blocking(move || git::remove_worktree(&root, &path))
         .await
         .map_err(|e| format!("worktree remove task failed: {e}"))?
@@ -2846,9 +2874,12 @@ async fn git_worktree_inspect(
     path: String,
 ) -> Result<git::GitWorktreeInspection, String> {
     let root = workspace_for_inspection(&state, &session_id)?;
-    tokio::task::spawn_blocking(move || git::inspect_worktree(&root, &path))
+    let inspected_path = path.clone();
+    let mut inspection = tokio::task::spawn_blocking(move || git::inspect_worktree(&root, &path))
         .await
-        .map_err(|e| format!("worktree inspect task failed: {e}"))?
+        .map_err(|e| format!("worktree inspect task failed: {e}"))??;
+    inspection.attached_session_count = attached_sessions_for_worktree(state.inner(), &inspected_path);
+    Ok(inspection)
 }
 
 /// Acquire OS advisory locks for all declared writer target paths. This guard
@@ -7941,6 +7972,26 @@ mod tests {
         );
         // Items without identity contribute nothing (no empty announce).
         assert!(extract_subagent_meta(&json!({"kind": "subagent"})).is_none());
+    }
+
+    #[test]
+    fn attached_worktree_sessions_are_counted_even_when_idle() {
+        let path = std::env::temp_dir().join(format!("muse-attached-{}", new_command_id()));
+        std::fs::create_dir_all(&path).unwrap();
+        let state = empty_state();
+        state.sessions.lock().unwrap().insert(
+            "session-attached".to_string(),
+            SessionMeta {
+                session_id: "session-attached".to_string(),
+                workspace: path.display().to_string(),
+                running: false,
+                session_durability: None,
+                approval_mode: None,
+                granted_capabilities: None,
+            },
+        );
+        assert_eq!(attached_sessions_for_worktree(&state, &path.display().to_string()), 1);
+        std::fs::remove_dir_all(path).unwrap();
     }
 
     #[test]
