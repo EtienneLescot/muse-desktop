@@ -6,6 +6,7 @@ import {
   buildApprovalNotification,
   buildInputNotification,
   buildRunNotification,
+  filterNotifications,
   loadNotifications,
   loadNotificationPreferences,
   mergeNotifications,
@@ -61,6 +62,15 @@ describe("M3-09 notification records", () => {
     assert.equal(unreadNotificationCount(appended), 1);
     const read = markNotificationRead(appended, notification.id);
     assert.equal(unreadNotificationCount(read), 0);
+  });
+
+  it("filters unread rows newest first without mutating the inbox", () => {
+    const older = buildRunNotification(run(), 3000) as MuseNotification;
+    const newer = { ...buildInputNotification({ sessionId: "session-1", inputId: "input-1" }, 4000), unread: false };
+    const rows = [older, newer];
+    assert.deepEqual(filterNotifications(rows, "all").map((item) => item.id), [newer.id, older.id]);
+    assert.deepEqual(filterNotifications(rows, "unread").map((item) => item.id), [older.id]);
+    assert.deepEqual(rows.map((item) => item.id), [older.id, newer.id]);
   });
 
   it("marks the entire inbox as read without changing its order", () => {

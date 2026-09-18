@@ -207,6 +207,19 @@ export function unreadNotificationCount(notifications: MuseNotification[]): numb
   return notifications.filter((item) => item.unread === true).length;
 }
 
+export type NotificationFilter = "all" | "unread";
+
+/** Select inbox rows for the UI without mutating the durable ledger. */
+export function filterNotifications(
+  notifications: readonly MuseNotification[],
+  filter: NotificationFilter = "all",
+): MuseNotification[] {
+  return notifications
+    .filter((item) => filter === "all" || item.unread === true)
+    .slice()
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
 function validNotification(value: unknown): value is MuseNotification {
   if (typeof value !== "object" || value === null) return false;
   const row = value as Record<string, unknown>;

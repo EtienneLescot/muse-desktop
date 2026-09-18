@@ -9,7 +9,7 @@ import {
   nextScheduleOccurrence,
 } from "../lib/schedules";
 import { MAX_RUN_ATTEMPTS, type ScheduleRun } from "../lib/scheduleRuns";
-import type { MuseNotification, NotificationPermission } from "../lib/notifications";
+import { filterNotifications, type MuseNotification, type NotificationFilter, type NotificationPermission } from "../lib/notifications";
 import type { SchedulerRuntimeStatus } from "../lib/schedulerLease";
 import type { SchedulerWakeupStatus } from "../lib/schedulerWakeup";
 import { userFacingError } from "../lib/errorCopy";
@@ -161,6 +161,8 @@ export function SchedulesPanel({
   const [missedPolicy, setMissedPolicy] = useState<ScheduleMissedPolicy>("latest");
   const [formError, setFormError] = useState<string | null>(null);
   const [runFilter, setRunFilter] = useState<RunFilter>("all");
+  const [notificationFilter, setNotificationFilter] = useState<NotificationFilter>("all");
+  const [notificationsExpanded, setNotificationsExpanded] = useState(false);
   const localTimeZone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     [],
@@ -176,6 +178,13 @@ export function SchedulesPanel({
     })
     .slice(-8)
     .reverse(), [runFilter, runs]);
+  const filteredNotifications = useMemo(
+    () => filterNotifications(notifications, notificationFilter),
+    [notificationFilter, notifications],
+  );
+  const visibleNotifications = notificationsExpanded
+    ? filteredNotifications
+    : filteredNotifications.slice(0, 6);
 
   function submit(): void {
     const input: ScheduleInput = {
@@ -557,6 +566,18 @@ export function SchedulesPanel({
               </button>
             </>
           )}
+          <select
+            className="notification-filter"
+            aria-label="Notification filter"
+            value={notificationFilter}
+            onChange={(event) => {
+              setNotificationFilter(event.currentTarget.value as NotificationFilter);
+              setNotificationsExpanded(false);
+            }}
+          >
+            <option value="all">All ({notifications.length})</option>
+            <option value="unread">Unread ({unreadNotifications})</option>
+          </select>
         </div>
         {notificationPermission === "granted" ? (
           <div className="notification-permission-row">
@@ -577,11 +598,14 @@ export function SchedulesPanel({
             {notificationPermission === "denied" ? "Enable notifications in system settings" : "Enable desktop notifications"}
           </button>
         )}
-        {notifications.length === 0 ? (
-          <p className="muted notification-empty">Completed and failed automations will appear here.</p>
+        {filteredNotifications.length === 0 ? (
+          <p className="muted notification-empty">
+            {notificationFilter === "unread" ? "No unread notifications." : "Completed and failed automations will appear here."}
+          </p>
         ) : (
-          <ul className="notification-list">
-            {notifications.slice(-6).reverse().map((notification) => (
+          <>
+            <ul className="notification-list">
+            {visibleNotifications.map((notification) => (
               <li key={notification.id} className="notification-item" data-unread={notification.unread === true}>
                 <div className="notification-item-head">
                   <strong className="notification-title">{notification.title}</strong>
@@ -603,7 +627,17 @@ export function SchedulesPanel({
                 </div>
               </li>
             ))}
-          </ul>
+            </ul>
+            {filteredNotifications.length > 6 && (
+              <button
+                type="button"
+                className="notification-show-more"
+                onClick={() => setNotificationsExpanded((expanded) => !expanded)}
+              >
+                {notificationsExpanded ? "Show latest 6" : `Show all ${filteredNotifications.length}`}
+              </button>
+            )}
+          </>
         )}
       </div>
     </section>

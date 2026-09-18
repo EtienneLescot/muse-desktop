@@ -4921,6 +4921,17 @@ body.dark .composer textarea::placeholder {
   border-color: var(--line);
 }
 
+.notification-filter {
+  margin-left: auto;
+  min-height: 28px;
+  padding: 3px 24px 3px 8px;
+  font-size: 0.72rem;
+}
+
+.schedule-notifications-head .notification-mark-all + .notification-filter {
+  margin-left: 0;
+}
+
 .run-filter {
   margin-left: auto;
   min-height: 28px;
@@ -5471,6 +5482,17 @@ body.dark .composer textarea::placeholder {
   color: var(--muted);
   margin: 0;
   word-break: break-word;
+}
+
+.notification-show-more {
+  margin-top: 7px;
+  color: var(--blue);
+  border-color: transparent;
+  font-size: 0.72rem;
+}
+
+.notification-show-more:hover {
+  border-color: var(--line);
 }
 
 .sidebar-outbox {
