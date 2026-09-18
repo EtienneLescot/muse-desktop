@@ -5918,6 +5918,16 @@ body.dark .composer textarea::placeholder {
   background: color-mix(in srgb, var(--accent) 15%, var(--surface));
 }
 
+.browser-host-actions .browser-host-stop {
+  border-color: color-mix(in srgb, var(--warning, #d89024) 48%, var(--line));
+  color: color-mix(in srgb, var(--warning, #d89024) 86%, var(--text));
+  background: color-mix(in srgb, var(--warning, #d89024) 8%, var(--surface));
+}
+
+.browser-host-actions .browser-host-stop:not(:disabled):hover {
+  background: color-mix(in srgb, var(--warning, #d89024) 16%, var(--surface));
+}
+
 .browser-control-status {
   font-size: 0.74rem;
 }

@@ -43,6 +43,18 @@ export function findBrowserSkill(
   return skills.find((skill) => aliases.has(normalizedSelector(skill.selector))) ?? null;
 }
 
+/** Return true only when a selector is both a browser action and host-advertised. */
+export function isAdvertisedBrowserSkill(
+  skills: readonly HostSkill[],
+  selector: string,
+): boolean {
+  const normalized = normalizedSelector(selector);
+  if (normalized.length === 0) return false;
+  return (Object.values(SELECTOR_ALIASES) as readonly (readonly string[])[])
+    .some((aliases) => aliases.some((alias) => normalizedSelector(alias) === normalized))
+    && skills.some((skill) => normalizedSelector(skill.selector) === normalized);
+}
+
 function bounded(value: string | undefined, max: number): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.replace(/\s+/g, " ").trim();

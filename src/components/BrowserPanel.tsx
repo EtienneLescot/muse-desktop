@@ -27,9 +27,11 @@ import { userFacingError } from "../lib/errorCopy";
 import {
   buildBrowserSkillArguments,
   findBrowserSkill,
+  isAdvertisedBrowserSkill,
   type BrowserSkillAction,
 } from "../lib/browserSkills";
 import type { HostSkill } from "../lib/hostSkills";
+import type { SkillInvocationProgress } from "../lib/skills";
 
 interface Props {
   annotations: BrowserAnnotation[];
@@ -43,8 +45,12 @@ interface Props {
   onInsertCapture: (capture: BrowserCapture) => boolean;
   /** Host-owned browser skills, if the connected engine advertises them. */
   hostSkills?: readonly HostSkill[];
+  /** Current renderer progress for the active host skill invocation. */
+  skillProgress?: SkillInvocationProgress;
   /** Invoke one advertised host skill through the session SSOT. */
   onInvokeBrowserSkill?: (selector: string, args: string) => void;
+  /** Stop the active browser skill through the session SSOT. */
+  onCancelBrowserSkill?: () => Promise<void> | void;
 }
 
 /** Apps offered a computer-use toggle (explicit opt-in, default denied). */
@@ -65,7 +71,9 @@ export function BrowserPanel({
   onInsertContext,
   onInsertCapture,
   hostSkills = [],
+  skillProgress,
   onInvokeBrowserSkill,
+  onCancelBrowserSkill,
 }: Props) {
   const initialTabsRef = useRef<BrowserTab[] | null>(null);
   if (initialTabsRef.current === null) {
@@ -94,6 +102,7 @@ export function BrowserPanel({
   const [pageObservation, setPageObservation] = useState<ReturnType<typeof normalizeBrowserObservation>>(null);
   const [controlStatus, setControlStatus] = useState<string | null>(null);
   const [typeText, setTypeText] = useState("");
+  const [stoppingHostSkill, setStoppingHostSkill] = useState(false);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const captureImageRef = useRef<HTMLImageElement>(null);
   const captureDragRef = useRef<{ x: number; y: number } | null>(null);
@@ -716,6 +725,20 @@ export function BrowserPanel({
     openTab: true,
     download: true,
   }) as BrowserSkillAction[]).filter((action) => findBrowserSkill(hostSkills, action) !== null);
+  const browserSkillInFlight =
+    skillProgress !== undefined &&
+    ["preparing", "loading-resources", "sending", "queued", "running", "unknown"].includes(skillProgress.stage) &&
+    isAdvertisedBrowserSkill(hostSkills, skillProgress.name);
+
+  const stopBrowserSkill = () => {
+    if (!browserSkillInFlight || onCancelBrowserSkill === undefined || stoppingHostSkill) return;
+    setStoppingHostSkill(true);
+    setControlStatus("Asking Muse to stop the browser action…");
+    void Promise.resolve(onCancelBrowserSkill())
+      .then(() => setControlStatus("Stop requested. Waiting for Muse to confirm."))
+      .catch((error) => setControlStatus(`The browser action could not be stopped: ${error instanceof Error ? error.message : String(error)}`))
+      .finally(() => setStoppingHostSkill(false));
+  };
   browserControlsAllowedRef.current = browserControlsAllowed;
 
   return (
@@ -898,6 +921,17 @@ export function BrowserPanel({
                     : `Ask Muse to ${action}`}
                 </button>
               ))}
+              {browserSkillInFlight && onCancelBrowserSkill !== undefined && (
+                <button
+                  type="button"
+                  className="browser-host-stop"
+                  onClick={stopBrowserSkill}
+                  disabled={stoppingHostSkill}
+                  title="Ask Muse to stop the active browser action"
+                >
+                  {stoppingHostSkill ? "Stopping…" : "Stop Muse action"}
+                </button>
+              )}
             </div>
           )}
           {controlStatus && <div className="muted browser-control-status" role="status" aria-live="polite">{controlStatus}</div>}

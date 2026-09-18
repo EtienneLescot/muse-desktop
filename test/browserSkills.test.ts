@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildBrowserSkillArguments,
   findBrowserSkill,
+  isAdvertisedBrowserSkill,
 } from "../src/lib/browserSkills.ts";
 
 const skills = [
@@ -15,6 +16,9 @@ test("browser host skills are used only when advertised", () => {
   assert.equal(findBrowserSkill(skills, "observe")?.selector, "browser.observe");
   assert.equal(findBrowserSkill(skills, "openTab")?.selector, "browser/open-tab");
   assert.equal(findBrowserSkill(skills, "click"), null);
+  assert.equal(isAdvertisedBrowserSkill(skills, "browser.observe"), true);
+  assert.equal(isAdvertisedBrowserSkill(skills, "browser.download"), false);
+  assert.equal(isAdvertisedBrowserSkill(skills, "terminal.exec"), false);
 });
 
 test("browser skill arguments keep explicit context bounded", () => {

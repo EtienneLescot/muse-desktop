@@ -1493,9 +1493,11 @@ export default function App() {
                             annotations={browserAnnotations}
                             permissions={browserPermissions}
                             hostSkills={hostSkillsBySession[active.session_id] ?? []}
+                            skillProgress={skillInvocationsBySession[active.session_id]}
                             onInvokeBrowserSkill={(selector, args) =>
                               invokeSkill(active.session_id, selector, args)
                             }
+                            onCancelBrowserSkill={() => cancelSession(active.session_id)}
                             onAddAnnotation={addBrowserAnnotation}
                             onInsertContext={(context) => {
                               void prepareBrowserContext(active.session_id, context);
