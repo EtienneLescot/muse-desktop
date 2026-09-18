@@ -793,7 +793,7 @@ export function StreamView({
             <strong>{streamHealthLabel(health)}</strong>
             <span>{healthDetail(health)}</span>
           </span>
-          {(health === "stalled" || health === "waiting-host") && (
+          {(health === "stalled" || health === "waiting-host" || health === "retrying") && (
             <span className="stream-health-actions">
               {onReconcile && (
                 <button type="button" onClick={onReconcile} disabled={reconciling}>
@@ -807,7 +807,7 @@ export function StreamView({
               )}
               {onCancel && (
                 <button type="button" className="quiet" onClick={onCancel}>
-                  Stop
+                  {health === "retrying" ? "Stop retry" : "Stop"}
                 </button>
               )}
             </span>
