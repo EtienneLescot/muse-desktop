@@ -1730,18 +1730,24 @@ where
             // error object instead of flattening it into a message string.
             // Older hosts may omit fields; nulls keep the envelope additive
             // and let the renderer fall back to the legacy reason.
-            emit_fn("status",
-                sid,
-                terminal,
-                json!({
-                    "terminal": terminal,
-                    "turnId": p.get("turnId"),
-                    "reason": p.get("reason"),
-                    "error": p.get("error"),
-                    "durationMs": p.get("durationMs"),
-                })
-                .to_string(),
-            );
+            let mut payload = json!({
+                "terminal": terminal,
+                "turnId": p.get("turnId"),
+                "reason": p.get("reason"),
+                "error": p.get("error"),
+                "durationMs": p.get("durationMs"),
+            });
+            // Hosts may already have a concise result. Preserve only string
+            // preview fields and bound them before they cross the native
+            // bridge; the renderer applies its own final presentation bound.
+            if let Some(object) = payload.as_object_mut() {
+                for key in ["result", "resultPreview", "output", "summary", "text"] {
+                    if let Some(value) = p.get(key).and_then(Value::as_str) {
+                        object.insert(key.to_string(), Value::String(truncate(value, 319)));
+                    }
+                }
+            }
+            emit_fn("status", sid, terminal, payload.to_string());
         }
         "turn/retracted" | "turn/stopped" => {
             // Retraction and stopped are host terminal confirmations for an
@@ -5030,6 +5036,45 @@ mod tests {
         );
         assert!(!state.sessions.lock().unwrap()["session-a"].running);
         assert_eq!(events.last().map(|event| event.2.as_str()), Some("cancelled"));
+    }
+
+    #[test]
+    fn completed_turn_preserves_bounded_host_result_preview() {
+        let state = empty_state();
+        state.sessions.lock().unwrap().insert(
+            "session-a".to_string(),
+            SessionMeta {
+                session_id: "session-a".to_string(),
+                workspace: "C:/fixture".to_string(),
+                running: true,
+                session_durability: None,
+                approval_mode: None,
+                granted_capabilities: None,
+            },
+        );
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "turn/completed",
+            &json!({
+                "sessionId": "session-a",
+                "turnId": "turn-a",
+                "terminal": "completed",
+                "result": "x".repeat(500),
+            }),
+            &mut emit,
+        );
+
+        let payload = events
+            .last()
+            .map(|event| serde_json::from_str::<Value>(&event.3).expect("status payload"))
+            .expect("terminal event");
+        let preview = payload["result"].as_str().expect("result preview");
+        assert_eq!(preview.chars().count(), 320);
+        assert!(preview.ends_with('…'));
     }
 
     #[test]
