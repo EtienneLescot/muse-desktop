@@ -954,17 +954,29 @@ export default function App() {
                   onSetNotificationsMuted={setNotificationsMuted}
                   onMarkNotificationRead={markNotificationRead}
                   onOpenNotification={(notification) => {
-                    if (notification.sessionId) {
+                    const route = resolveNotificationRoute(
+                      { sessionId: notification.sessionId, runId: notification.runId },
+                      sessionsRef.current.map((session) => session.session_id),
+                      scheduleRunsRef.current.map((run) => run.id),
+                    );
+                    if (route?.kind === "task") {
                       openPage("task");
-                      setActive(notification.sessionId);
-                    } else if (notification.runId) {
+                      setActive(route.sessionId);
+                    } else if (route?.kind === "automations") {
                       openPage("automations");
                     }
                   }}
                   onOpenRun={(run) => {
-                    if (run.sessionId) {
+                    const route = resolveNotificationRoute(
+                      { sessionId: run.sessionId, runId: run.id },
+                      sessionsRef.current.map((session) => session.session_id),
+                      scheduleRunsRef.current.map((candidate) => candidate.id),
+                    );
+                    if (route?.kind === "task") {
                       openPage("task");
-                      setActive(run.sessionId);
+                      setActive(route.sessionId);
+                    } else if (route?.kind === "automations") {
+                      openPage("automations");
                     }
                   }}
                 />

@@ -463,11 +463,13 @@ export function SchedulesPanel({
                   )}
                 </details>
                 <div className="sched-actions">
-                  {run.sessionId && (
-                    <button type="button" onClick={() => onOpenRun(run)} title="Open conversation">
-                      Open conversation
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => onOpenRun(run)}
+                    title={run.sessionId ? "Open conversation" : "Open automation run"}
+                  >
+                    {run.sessionId ? "Open conversation" : "Open run"}
+                  </button>
                   {run.unread && (
                     <button type="button" onClick={() => onMarkRunRead(run.id)} title="Mark run as read">
                       Mark read
