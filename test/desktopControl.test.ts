@@ -115,6 +115,27 @@ test("desktop observation keeps semantic range and selection states readable", (
   assert.match(desktopElementLabel({ ...base, value: "on" }), /value on/);
 });
 
+test("desktop observation keeps bounded document text readable", () => {
+  const documentControl: DesktopElement = {
+    id: "document",
+    title: "Editor",
+    className: "RichEdit",
+    semanticRole: "document",
+    automationId: "editor",
+    value: "Draft paragraph with a bounded preview",
+    valueRedacted: false,
+    bounds: { x: 0, y: 0, width: 480, height: 240 },
+    enabled: true,
+    visible: true,
+    offscreen: false,
+  };
+  assert.match(desktopElementLabel(documentControl), /Draft paragraph with a bounded preview/);
+  assert.doesNotMatch(
+    formatDesktopObservation({ ...windowFixture }, [documentControl]),
+    /\u0000/,
+  );
+});
+
 test("desktop captures keep provenance and reject oversized payloads", () => {
   const capture = {
     dataUrl: "data:image/jpeg;base64," + "A".repeat(80),

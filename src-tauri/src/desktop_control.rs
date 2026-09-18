@@ -399,9 +399,9 @@ mod windows_impl {
     fn semantic_value(element: &windows::Win32::UI::Accessibility::IUIAutomationElement) -> String {
         use windows::Win32::UI::Accessibility::{
             IUIAutomationRangeValuePattern, IUIAutomationSelectionItemPattern,
-            IUIAutomationTogglePattern, IUIAutomationValuePattern, ToggleState_Indeterminate,
-            ToggleState_Off, ToggleState_On, UIA_RangeValuePatternId, UIA_SelectionItemPatternId,
-            UIA_TogglePatternId, UIA_ValuePatternId,
+            IUIAutomationTextPattern, IUIAutomationTogglePattern, IUIAutomationValuePattern,
+            ToggleState_Indeterminate, ToggleState_Off, ToggleState_On, UIA_RangeValuePatternId,
+            UIA_SelectionItemPatternId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ValuePatternId,
         };
 
         if let Ok(pattern) =
@@ -456,6 +456,22 @@ mod windows_impl {
                 } else {
                     String::new()
                 };
+            }
+        }
+        // TextPattern is deliberately last: document editors can expose a
+        // large document range even when their ValuePattern is empty. Keep
+        // the read bounded and let the caller's password/credential guard
+        // run before this function so document text never bypasses masking.
+        if let Ok(pattern) =
+            unsafe { element.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId) }
+        {
+            if let Ok(range) = unsafe { pattern.DocumentRange() } {
+                if let Ok(value) = unsafe { range.GetText(500) } {
+                    let value = bounded_bstr(value, 500);
+                    if !value.is_empty() {
+                        return value;
+                    }
+                }
             }
         }
         String::new()

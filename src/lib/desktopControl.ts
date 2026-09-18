@@ -28,7 +28,7 @@ export interface DesktopElement {
   className: string;
   semanticRole: string;
   automationId: string;
-  /** Bounded UIA value for non-sensitive controls; never populated for redacted values. */
+  /** Bounded UIA value/text for non-sensitive controls; never populated for redacted values. */
   value: string;
   valueRedacted: boolean;
   bounds: DesktopBounds;
