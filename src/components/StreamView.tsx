@@ -31,6 +31,7 @@ import {
   isTerminalSubagentStatus,
   subagentStatusLabel,
 } from "../lib/subagent";
+import { officePreviewForFile, type OfficePreview } from "../lib/officePreview";
 import { MessageContent } from "./MessageContent";
 
 function outputDownloadName(entry: LogEntry, mediaType?: string): string {
@@ -63,6 +64,36 @@ function downloadLoadedOutput(entry: LogEntry, loaded: { content: string; base64
   anchor.download = outputDownloadName(entry, loaded.mediaType);
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function RichOfficeTable({ preview }: { preview: OfficePreview }) {
+  return (
+    <div className="file-structured-preview" role="region" aria-label={preview.format.toUpperCase() + " output preview"}>
+      <div className="file-structured-meta">
+        <span>{preview.format.toUpperCase()} · {preview.rows.length} rows</span>
+        {preview.truncated && <span>Preview limited for safety</span>}
+      </div>
+      <div className="file-structured-scroll">
+        <table>
+          <caption className="sr-only">Structured preview of rich output</caption>
+          <thead>
+            <tr>
+              {preview.columns.map((column, index) => <th scope="col" key={column + "-" + index}>{column}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {preview.rows.map((row, rowIndex) => (
+              <tr key={"output-row-" + rowIndex}>
+                {preview.columns.map((_, columnIndex) => (
+                  <td key={"output-cell-" + rowIndex + "-" + columnIndex}>{row[columnIndex] ?? ""}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 /** US-6 controls for one sub-agent block. Read-result and drill-down resolve
@@ -786,6 +817,14 @@ export function StreamView({
       {visibleEntries.map((e, visibleIndex) => {
         const entryIndex = safeWindowStart + visibleIndex;
         const entryA11y = streamEntryA11y(roleLabel(e), entryIndex, entries.length);
+        const loadedOutput = loadedOutputs[e.id];
+        const richPath = e.richContent?.[0]?.path ?? "";
+        const richMediaType = loadedOutput?.mediaType ?? e.richContent?.[0]?.mediaType ?? "";
+        const richOfficePreview = loadedOutput?.eof && loadedOutput.base64Data &&
+          (richMediaType.startsWith("application/vnd.openxmlformats")
+            || richMediaType.startsWith("application/vnd.oasis.opendocument"))
+          ? officePreviewForFile(richPath, loadedOutput.base64Data)
+          : null;
         // US-10 reflexive phase: an open entry with no text yet (send just
         // happened, or `item/started` arrived before the first delta) shows
         // a plain muted label. The label is rendered, never stored: the
@@ -1046,30 +1085,32 @@ export function StreamView({
                           ? "Preview output"
                           : "Load full output"}
                 </button>
-                {loadedOutputs[e.id] && (
+                {loadedOutput && (
                   <>
                     <span className="tool-output-meta">
-                      {loadedOutputs[e.id].byteLen.toLocaleString()} bytes loaded
-                      {loadedOutputs[e.id].eof ? " · complete" : " · more available"}
+                      {loadedOutput.byteLen.toLocaleString()} bytes loaded
+                      {loadedOutput.eof ? " · complete" : " · more available"}
                     </span>
-                    {loadedOutputs[e.id].eof && (loadedOutputs[e.id].content.length > 0 || loadedOutputs[e.id].base64Data) && (
+                    {loadedOutput.eof && (loadedOutput.content.length > 0 || loadedOutput.base64Data) && (
                       <button
                         type="button"
                         className="tool-output-button"
-                        onClick={() => downloadLoadedOutput(e, loadedOutputs[e.id])}
+                        onClick={() => downloadLoadedOutput(e, loadedOutput)}
                       >
                         Download output
                       </button>
                     )}
-                    {loadedOutputs[e.id].base64Data && loadedOutputs[e.id].mediaType?.startsWith("image/") && loadedOutputs[e.id].eof ? (
+                    {loadedOutput.base64Data && loadedOutput.mediaType?.startsWith("image/") && loadedOutput.eof ? (
                       <img
                         className="rich-content-preview"
-                        src={`data:${loadedOutputs[e.id].mediaType};base64,${loadedOutputs[e.id].base64Data}`}
+                        src={"data:" + loadedOutput.mediaType + ";base64," + loadedOutput.base64Data}
                         alt="Muse rich output preview"
                       />
-                    ) : loadedOutputs[e.id].content.length > 0 ? (
-                      <pre className="tool-output-content">{loadedOutputs[e.id].content}</pre>
-                    ) : loadedOutputs[e.id].base64Data ? (
+                    ) : richOfficePreview ? (
+                      <RichOfficeTable preview={richOfficePreview} />
+                    ) : loadedOutput.content.length > 0 ? (
+                      <pre className="tool-output-content">{loadedOutput.content}</pre>
+                    ) : loadedOutput.base64Data ? (
                       <p className="muted">Binary output is still loading; preview appears when complete.</p>
                     ) : null}
                   </>
