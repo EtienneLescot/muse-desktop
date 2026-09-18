@@ -3422,6 +3422,10 @@ export function useMuseSessions(): UseMuseSessions {
       // explicitly accepted decision as resumed work; denials still settle
       // through the host's terminal event without a misleading spinner.
       if (resolution.accepted) {
+        if (resolution.turnId !== undefined) {
+          turnIdsRef.current[sid] = resolution.turnId;
+          delete lastTerminalTurnIdsRef.current[sid];
+        }
         ensurePlaceholder(sid);
         markResumePending(sid, "approval");
         kickPoll();

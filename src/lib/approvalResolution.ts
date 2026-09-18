@@ -10,6 +10,8 @@ export interface ApprovalResolution {
   approvalId: string | null;
   decision: string | null;
   accepted: boolean;
+  /** Host turn that will resume after an accepted decision, when supplied. */
+  turnId?: string;
 }
 
 /** Minimal approval shape needed to classify the choice currently selected. */
@@ -73,6 +75,10 @@ export function parseApprovalResolution(payload: string): ApprovalResolution {
       : null;
     const id = value.approvalId ?? value.approval_id ?? value.requestId ?? value.request_id;
     const approvalId = typeof id === "string" && id.trim().length > 0 ? id.trim() : null;
+    const rawTurnId = value.turnId ?? value.turn_id ?? nested?.turnId ?? nested?.turn_id;
+    const turnId = typeof rawTurnId === "string" && rawTurnId.trim().length > 0
+      ? rawTurnId.trim().slice(0, 160)
+      : undefined;
     const decision = normalizeDecision(
       value.decision ?? value.outcome ?? nested?.decision ?? nested?.outcome,
     );
@@ -80,6 +86,7 @@ export function parseApprovalResolution(payload: string): ApprovalResolution {
       approvalId,
       decision,
       accepted: isApprovalDecisionAccepted(decision),
+      ...(turnId === undefined ? {} : { turnId }),
     };
   } catch {
     return { approvalId: null, decision: null, accepted: false };

@@ -23,6 +23,18 @@ describe("approval resolution payloads", () => {
     assert.equal(parseApprovalResolution('{"approval_id":"a3","resolution":{"decision":"granted"}}').approvalId, "a3");
   });
 
+  it("keeps a bounded resumed turn id when the host provides one", () => {
+    assert.deepEqual(
+      parseApprovalResolution('{"approvalId":"a1","decision":"allow once","turnId":"turn-7"}'),
+      { approvalId: "a1", decision: "allow_once", accepted: true, turnId: "turn-7" },
+    );
+    assert.deepEqual(
+      parseApprovalResolution('{"approvalId":"a1","decision":"rejected","turn_id":"turn-8"}'),
+      { approvalId: "a1", decision: "rejected", accepted: false, turnId: "turn-8" },
+    );
+    assert.equal(parseApprovalResolution(`{"approvalId":"a1","decision":"allow","turnId":"${"x".repeat(300)}"}`).turnId?.length, 160);
+  });
+
   it("keeps rejected or cancelled resolutions out of the resume bridge", () => {
     assert.equal(parseApprovalResolution('{"approvalId":"a1","decision":"rejected"}').accepted, false);
     assert.equal(parseApprovalResolution('{"approvalId":"a2","decision":"cancelled"}').accepted, false);
