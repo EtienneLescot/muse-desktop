@@ -138,6 +138,7 @@ import {
   isRunningKind,
   isStoppedKind,
   isSubagentItemKind,
+  isTerminalItemStatus,
   isThinkingItemKind,
   upsertReflexivePlaceholder,
 } from "../lib/phase";
@@ -3430,7 +3431,8 @@ export function useMuseSessions(): UseMuseSessions {
       const outputRef = typeof parsed?.outputRef === "string" && parsed.outputRef.trim().length > 0
         ? parsed.outputRef.trim()
         : undefined;
-      if (itemId.length === 0 || (text.length === 0 && richContent === undefined && outputRef === undefined)) return;
+      const terminalSnapshot = parsed?.open === false || parsed?.completed === true || isTerminalItemStatus(parsed?.status);
+      if (itemId.length === 0 || (!terminalSnapshot && text.length === 0 && richContent === undefined && outputRef === undefined)) return;
       const lane: "assistant" | "thinking" | "tool" = parsed?.lane === "thinking"
         ? "thinking"
         : parsed?.lane === "shell_output"
@@ -3457,7 +3459,7 @@ export function useMuseSessions(): UseMuseSessions {
           ...(outputRef === undefined ? {} : { outputRef }),
           ...(richContent === undefined ? {} : { richContent }),
           ...(revision === undefined ? {} : { revision }),
-          open: true,
+          open: !terminalSnapshot,
           stamp: { id: newId(), ts: Date.now() },
         });
         if (next === cur[sid]) return cur;

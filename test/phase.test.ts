@@ -14,6 +14,7 @@ import {
   isRunningKind,
   isStoppedKind,
   isSubagentItemKind,
+  isTerminalItemStatus,
   isThinkingItemKind,
   normalizeKind,
   phaseForKind,
@@ -144,6 +145,15 @@ describe("isThinkingItemKind", () => {
       assert.equal(isThinkingItemKind(k), true, k);
     }
     assert.equal(isThinkingItemKind("agentMessage"), false);
+  });
+});
+
+describe("isTerminalItemStatus", () => {
+  it("recognizes terminal item snapshot statuses", () => {
+    assert.equal(isTerminalItemStatus("completed"), true);
+    assert.equal(isTerminalItemStatus("item/done"), true);
+    assert.equal(isTerminalItemStatus("inProgress"), false);
+    assert.equal(isTerminalItemStatus(null), false);
   });
 });
 

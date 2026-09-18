@@ -26,6 +26,17 @@ const THINKING_ITEM_KINDS = new Set([
   "reasoningsummary",
 ]);
 
+const TERMINAL_ITEM_STATUSES = new Set([
+  "completed",
+  "done",
+  "stopped",
+  "cancelled",
+  "canceled",
+  "retracted",
+  "failed",
+  "error",
+]);
+
 /**
  * Lowercase + strip the `turn/`-style namespace: `turn/started` -> `started`,
  * `ITEM/STARTED` -> `started`. Bare kinds (`turn_start`) pass through.
@@ -112,6 +123,11 @@ export function isSubagentItemKind(itemKind: string): boolean {
 /** True for reasoning item kinds emitted by the host. */
 export function isThinkingItemKind(itemKind: string): boolean {
   return THINKING_ITEM_KINDS.has(normalizeKind(itemKind));
+}
+
+/** True for additive item snapshot statuses that close a transcript lane. */
+export function isTerminalItemStatus(status: unknown): boolean {
+  return typeof status === "string" && TERMINAL_ITEM_STATUSES.has(normalizeKind(status));
 }
 
 export interface PlaceholderStamp {
