@@ -31,6 +31,9 @@
  * The explicit `--exercise-reasoning` path applies the supported reasoning
  * effort values to each ephemeral session and records the host's effective
  * projection without starting a model turn.
+ * The explicit `--exercise-model` path selects one model from `model/list`,
+ * applies it to each ephemeral session and re-reads the catalogue to check
+ * whether the host projects the active model.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
@@ -43,6 +46,7 @@
  *   node scripts/native-smoke.mjs --exercise-reconnect
  *   node scripts/native-smoke.mjs --exercise-history
  *   node scripts/native-smoke.mjs --exercise-reasoning
+ *   node scripts/native-smoke.mjs --exercise-model
  *   node scripts/native-smoke.mjs --exercise-control --exercise-terminal
  *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
@@ -114,6 +118,10 @@ function exercisesHistoryPath() {
 
 function exercisesReasoningPath() {
   return process.argv.includes("--exercise-reasoning");
+}
+
+function exercisesModelPath() {
+  return process.argv.includes("--exercise-model");
 }
 
 function exercisesTerminalPath() {
@@ -357,6 +365,7 @@ async function main() {
   const exerciseReconnect = exercisesReconnectPath();
   const exerciseHistory = exercisesHistoryPath();
   const exerciseReasoning = exercisesReasoningPath();
+  const exerciseModel = exercisesModelPath();
   const exerciseTerminal = exercisesTerminalPath();
   if (exerciseTerminal && !exerciseControl) {
     fail("--exercise-terminal requires --exercise-control");
@@ -379,6 +388,7 @@ async function main() {
     const reconnectChecks = [];
     const historyChecks = [];
     const reasoningChecks = [];
+    const modelChecks = [];
     let isolation = null;
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
@@ -509,6 +519,53 @@ async function main() {
       }
       const catalogue = await host.request("model/list");
       if (catalogue === null || typeof catalogue !== "object") fail(`host-${index === 0 ? "A" : "B"} returned no model catalogue`);
+      if (exerciseModel) {
+        const models = Array.isArray(catalogue.models)
+          ? catalogue.models
+          : Array.isArray(catalogue.items)
+            ? catalogue.items
+            : [];
+        const candidate = models.find((model) => {
+          const id = model?.modelId ?? model?.model_id ?? model?.id;
+          return typeof id === "string" && id.trim().length > 0;
+        });
+        if (!candidate) {
+          modelChecks.push({ host: String.fromCharCode(65 + index), status: "no-model" });
+        } else {
+          const modelId = String(candidate.modelId ?? candidate.model_id ?? candidate.id).trim();
+          try {
+            const changed = await host.request("session/setModel", {
+              commandId: uuidv7(),
+              sessionId,
+              model: { modelId },
+            });
+            if (changed?.status !== "accepted") {
+              fail(`host-${index === 0 ? "A" : "B"} returned an incomplete model result for ${modelId}`);
+            }
+            const refreshed = await host.request("model/list");
+            const refreshedModels = Array.isArray(refreshed?.models)
+              ? refreshed.models
+              : Array.isArray(refreshed?.items)
+                ? refreshed.items
+                : [];
+            const active = refreshedModels.find((model) => {
+              const id = model?.modelId ?? model?.model_id ?? model?.id;
+              return id === modelId;
+            });
+            modelChecks.push({
+              host: String.fromCharCode(65 + index),
+              requested: modelId,
+              status: "accepted",
+              ...(typeof active?.isActive === "boolean"
+                ? { active: active.isActive, projection: "reported" }
+                : { active: null, projection: "not-reported" }),
+            });
+          } catch (error) {
+            if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+            modelChecks.push({ host: String.fromCharCode(65 + index), requested: modelId, status: "unsupported" });
+          }
+        }
+      }
       if (exerciseReasoning) {
         const efforts = [];
         for (const reasoningEffort of ["none", "high", "ultra"]) {
@@ -732,6 +789,7 @@ async function main() {
       ...(exerciseReconnect ? { reconnect: reconnectChecks } : {}),
       ...(exerciseHistory ? { history: historyChecks } : {}),
       ...(exerciseReasoning ? { reasoningEffort: reasoningChecks } : {}),
+      ...(exerciseModel ? { modelSelection: modelChecks } : {}),
     };
     if (reportPath !== null) {
       await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
