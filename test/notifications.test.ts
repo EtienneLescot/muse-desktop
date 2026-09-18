@@ -11,6 +11,7 @@ import {
   mergeNotifications,
   markNotificationRead,
   notificationActionPayload,
+  resolveNotificationRoute,
   NOTIFICATION_PREFERENCES_KEY,
   saveNotifications,
   saveNotificationPreferences,
@@ -89,6 +90,22 @@ describe("M3-09 notification records", () => {
       sessionId: "session-1",
       runId: notification.runId,
     });
+  });
+
+  it("routes validated clicks to the session first, then the automation inbox", () => {
+    assert.deepEqual(
+      resolveNotificationRoute(
+        { sessionId: "session-1", runId: "run-1" },
+        ["session-1"],
+        ["run-1"],
+      ),
+      { kind: "task", sessionId: "session-1" },
+    );
+    assert.deepEqual(
+      resolveNotificationRoute({ sessionId: "missing", runId: "run-1" }, [], ["run-1"]),
+      { kind: "automations", runId: "run-1" },
+    );
+    assert.equal(resolveNotificationRoute({ sessionId: "missing", runId: "unknown" }, [], []), null);
   });
 
   it("round-trips valid records and drops malformed local storage entries", () => {

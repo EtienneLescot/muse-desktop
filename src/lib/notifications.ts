@@ -28,6 +28,26 @@ export interface NotificationActionPayload extends Record<string, unknown> {
   runId?: string;
 }
 
+export type NotificationRoute =
+  | { kind: "task"; sessionId: string }
+  | { kind: "automations"; runId: string }
+  | null;
+
+/** Resolve a notification click through the current session/run SSOT. */
+export function resolveNotificationRoute(
+  payload: NotificationActionPayload,
+  sessionIds: readonly string[],
+  runIds: readonly string[],
+): NotificationRoute {
+  if (payload.sessionId && sessionIds.includes(payload.sessionId)) {
+    return { kind: "task", sessionId: payload.sessionId };
+  }
+  if (payload.runId && runIds.includes(payload.runId)) {
+    return { kind: "automations", runId: payload.runId };
+  }
+  return null;
+}
+
 let actionTypeSetup: Promise<boolean> | null = null;
 
 export function notificationActionPayload(notification: MuseNotification): NotificationActionPayload {

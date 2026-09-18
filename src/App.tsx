@@ -57,6 +57,7 @@ import { WindowControls, dragWindow } from "./components/WindowControls";
 import { readStorageString, writeStorageString } from "./lib/storage.ts";
 import {
   NOTIFICATION_ACTION_EVENT,
+  resolveNotificationRoute,
   subscribeNotificationActions,
   type NotificationActionPayload,
 } from "./lib/notifications";
@@ -351,14 +352,19 @@ export default function App() {
   // no notification payload is treated as transcript content.
   useEffect(() => {
     const openFromAction = (payload: NotificationActionPayload) => {
-      if (payload.sessionId && sessionsRef.current.some((session) => session.session_id === payload.sessionId)) {
+      const route = resolveNotificationRoute(
+        payload,
+        sessionsRef.current.map((session) => session.session_id),
+        scheduleRunsRef.current.map((run) => run.id),
+      );
+      if (route?.kind === "task") {
         openPage("task");
-        setActive(payload.sessionId);
+        setActive(route.sessionId);
         return;
       }
       // A dispatch can fail before a session exists. Keep that notification
       // actionable by opening the durable run inbox instead of dropping it.
-      if (payload.runId && scheduleRunsRef.current.some((run) => run.id === payload.runId)) {
+      if (route?.kind === "automations") {
         openPage("automations");
       }
     };
