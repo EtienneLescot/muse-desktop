@@ -34,6 +34,7 @@ mod skills;
 mod startup;
 mod scheduler;
 mod scheduler_runs;
+mod scheduler_schedules;
 mod notification_ledger;
 mod workspace_watch;
 use hosts::Hosts;
@@ -2236,6 +2237,22 @@ fn scheduler_runs_read(app: AppHandle) -> Result<Value, String> {
 fn scheduler_runs_write(app: AppHandle, payload: String) -> Result<(), String> {
     let data_dir = scheduler_data_dir(&app)?;
     scheduler_runs::write(&data_dir, &payload)
+}
+
+/// Read the renderer-owned schedule definitions from app data. The native
+/// copy is a durability mirror; validation and dispatch remain in the hook.
+#[tauri::command]
+fn scheduler_schedules_read(app: AppHandle) -> Result<Value, String> {
+    let data_dir = scheduler_data_dir(&app)?;
+    let bytes = scheduler_schedules::read(&data_dir)?;
+    serde_json::from_slice(&bytes).map_err(|_| "schedules ledger is not valid JSON".to_string())
+}
+
+/// Atomically mirror bounded schedule definitions under app data.
+#[tauri::command]
+fn scheduler_schedules_write(app: AppHandle, payload: String) -> Result<(), String> {
+    let data_dir = scheduler_data_dir(&app)?;
+    scheduler_schedules::write(&data_dir, &payload)
 }
 
 /// Read the renderer-owned notification inbox from app data.
@@ -7257,6 +7274,8 @@ fn main() {
             scheduler_release,
             scheduler_runs_read,
             scheduler_runs_write,
+            scheduler_schedules_read,
+            scheduler_schedules_write,
             notifications_read,
             notifications_write,
             open_native_browser,

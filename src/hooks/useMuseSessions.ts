@@ -271,6 +271,7 @@ import {
 } from "../lib/scheduleRuns";
 export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
 import { loadNativeScheduleRuns, saveNativeScheduleRuns } from "../lib/scheduleRunLedger";
+import { loadNativeSchedules, mergeSchedules, saveNativeSchedules } from "../lib/scheduleLedger";
 import { buildScheduleRunSummary } from "../lib/runSummary";
 export type { ScheduleRunSummary } from "../lib/runSummary";
 import {
@@ -1521,6 +1522,7 @@ export function useMuseSessions(): UseMuseSessions {
   // US-9 automations: restored once (survive restarts via localStorage),
   // written through on every change (effect below).
   const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
+  const nativeSchedulesHydratedRef = useRef(!isTauriRuntime());
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
   const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() =>
     recoverScheduleRuns(loadScheduleRuns(), Date.now()),
@@ -2159,7 +2161,25 @@ export function useMuseSessions(): UseMuseSessions {
   // US-9 write-through persistence (best-effort localStorage, like the rest).
   useEffect(() => {
     saveSchedules(schedules);
+    if (nativeSchedulesHydratedRef.current) {
+      void saveNativeSchedules(schedules);
+    }
   }, [schedules]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    void loadNativeSchedules().then((nativeSchedules) => {
+      if (cancelled) return;
+      if (nativeSchedules !== null) {
+        setSchedules((current) => mergeSchedules(current, nativeSchedules));
+      }
+      nativeSchedulesHydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     saveReviewQueue(reviewQueue);

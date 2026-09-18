@@ -658,8 +658,12 @@ function isValidReview(r: unknown): r is ReviewItem {
 
 export function loadSchedules(): Schedule[] {
   const raw = readRaw(SCHEDULES_KEY);
-  if (!Array.isArray(raw)) return [];
-  return raw.filter(isValidSchedule).slice(-MAX_SCHEDULES);
+  return normalizeSchedules(raw);
+}
+
+/** Normalize schedules from local or native persistence without trusting JSON. */
+export function normalizeSchedules(raw: unknown): Schedule[] {
+  return Array.isArray(raw) ? raw.filter(isValidSchedule).slice(-MAX_SCHEDULES) : [];
 }
 
 export function saveSchedules(schedules: Schedule[]): void {
