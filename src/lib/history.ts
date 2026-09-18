@@ -8,6 +8,7 @@ export interface SessionHistoryItem {
   status?: unknown;
   revision?: unknown;
   text?: unknown;
+  content?: unknown;
   displayText?: unknown;
   summary?: unknown;
   visibleOutput?: unknown;
@@ -43,6 +44,29 @@ export interface PagedHistoryEvent {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/** Normalize flat session/read rows and raw MSP wrappers to one item shape. */
+function normalizeHistoryItem(raw: unknown): SessionHistoryItem | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  const outer = raw as Record<string, unknown>;
+  const nested = typeof outer.item === "object" && outer.item !== null && !Array.isArray(outer.item)
+    ? outer.item as Record<string, unknown>
+    : null;
+  const item = nested === null ? { ...outer } : { ...outer, ...nested };
+  const aliases: Array<[string, string]> = [
+    ["itemId", "item_id"],
+    ["turnId", "turn_id"],
+    ["commandText", "command_text"],
+    ["outputRef", "output_ref"],
+    ["modelVisibleContent", "model_visible_content"],
+    ["recordedAt", "recorded_at"],
+  ];
+  for (const [canonical, alias] of aliases) {
+    if (item[canonical] === undefined && item[alias] !== undefined) item[canonical] = item[alias];
+  }
+  if (item.kind === undefined) item.kind = item.itemKind ?? item.type;
+  return item as SessionHistoryItem;
 }
 
 function outputReference(value: unknown): string | undefined {
@@ -109,12 +133,14 @@ function itemText(item: SessionHistoryItem, kind: string): string {
       const parts = item.summary.filter((part): part is string => typeof part === "string");
       if (parts.length > 0) return parts.join("\n\n");
     }
-    return stringValue(item.text) ?? stringValue(item.fallbackText) ?? "";
+    return stringValue(item.text) ?? stringValue(item.content) ?? stringValue(item.fallbackText) ?? "";
   }
   if (kind === "toolCall" || kind === "userShell") {
     const output =
       stringValue(item.visibleOutput) ??
       stringValue(item.message) ??
+      stringValue(item.text) ??
+      stringValue(item.content) ??
       stringValue(item.fallbackText);
     if (kind === "userShell") {
       const command = stringValue(item.commandText);
@@ -141,6 +167,7 @@ function itemText(item: SessionHistoryItem, kind: string): string {
   return (
     stringValue(item.displayText) ??
     stringValue(item.text) ??
+    stringValue(item.content) ??
     stringValue(item.message) ??
     stringValue(item.fallbackText) ??
     ""
@@ -180,8 +207,8 @@ function timestamp(item: SessionHistoryItem, fallback: number): number {
 export function historyItemsToLogEntries(items: unknown[], now = Date.now()): LogEntry[] {
   const entries: LogEntry[] = [];
   items.forEach((raw, index) => {
-    if (typeof raw !== "object" || raw === null) return;
-    const item = raw as SessionHistoryItem;
+    const item = normalizeHistoryItem(raw);
+    if (item === null) return;
     const rawKind = stringValue(item.kind);
     const itemId = stringValue(item.itemId);
     const turnId = stringValue(item.turnId);
@@ -196,6 +223,7 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
     // lane when the host supplied either a lazy output reference or rich
     // metadata so the renderer can offer its preview affordance.
     if (text.length === 0 && metadata === undefined && outputRef === undefined) return;
+    const normalizedStatus = stringValue(item.status)?.trim().replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase().replace(/[\s-]+/g, "_");
     const entry: LogEntry = {
       id: `history:${itemId}`,
       ts: timestamp(item, now + index),
@@ -205,7 +233,7 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
       ...(turnId === undefined ? {} : { turnId }),
       ...(outputRef === undefined ? {} : { outputRef }),
       ...(metadata === undefined ? {} : { richContent: metadata }),
-      open: item.status === "inProgress",
+      open: normalizedStatus === "in_progress" || normalizedStatus === "running" || normalizedStatus === "started",
     };
     const revision = typeof item.revision === "number" && Number.isFinite(item.revision)
       ? item.revision
@@ -251,7 +279,8 @@ export function historyEventsToLogEntries(events: unknown[], now = Date.now()): 
     if (typeof event.params !== "object" || event.params === null) return;
     const params = event.params as Record<string, unknown>;
     if (typeof params.item !== "object" || params.item === null) return;
-    const item = params.item as SessionHistoryItem;
+    const item = normalizeHistoryItem(params.item);
+    if (item === null) return;
     const itemId = stringValue(item.itemId);
     if (itemId === undefined) return;
     const revision = typeof item.revision === "number" && Number.isFinite(item.revision)

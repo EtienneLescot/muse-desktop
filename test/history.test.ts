@@ -32,6 +32,35 @@ describe("session history hydration", () => {
     ]);
   });
 
+  it("normalizes nested MSP snapshots and terminal status aliases", () => {
+    const entries = historyItemsToLogEntries([
+      {
+        item: {
+          item_id: "r-nested",
+          turn_id: "turn-1",
+          kind: "analysis",
+          status: "done",
+          content: "The workspace is ready.",
+        },
+      },
+      {
+        item: {
+          item_id: "s-nested",
+          turn_id: "turn-1",
+          kind: "userShell",
+          status: "succeeded",
+          command_text: "git status --short",
+          content: "clean",
+        },
+      },
+    ], 1000);
+    assert.deepEqual(entries.map((entry) => [entry.itemId, entry.role, entry.text, entry.open]), [
+      ["r-nested", "thinking", "The workspace is ready.", false],
+      ["s-nested", "tool", "$ git status --short\nclean", false],
+    ]);
+    assert.equal(entries[0].turnId, "turn-1");
+  });
+
   it("keeps a durable user-shell command paired with its completed output", () => {
     const entries = historyItemsToLogEntries([
       {
@@ -72,6 +101,29 @@ describe("session history hydration", () => {
     assert.deepEqual(entries.map((entry) => [entry.itemId, entry.role, entry.text, entry.open]), [
       ["a1", "assistant", "complete", false],
       ["u1", "user", "Hello", false],
+    ]);
+  });
+
+  it("folds a nested paged snapshot with snake_case ids", () => {
+    const entries = historyEventsToLogEntries([
+      {
+        method: "item/updated",
+        params: {
+          item: {
+            item: {
+              item_id: "paged-analysis",
+              turn_id: "turn-paged",
+              kind: "analysis",
+              status: "done",
+              content: "Durable reasoning",
+              revision: 3,
+            },
+          },
+        },
+      },
+    ], 1000);
+    assert.deepEqual(entries.map((entry) => [entry.itemId, entry.role, entry.text, entry.open, entry.turnId]), [
+      ["paged-analysis", "thinking", "Durable reasoning", false, "turn-paged"],
     ]);
   });
 
