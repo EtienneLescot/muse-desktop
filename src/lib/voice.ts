@@ -40,6 +40,8 @@ export interface VoiceRecognition {
 
 export type VoiceRecognitionFactory = new () => VoiceRecognition;
 
+export type VoicePermissionState = "granted" | "denied" | "unavailable";
+
 /** Discover the standard or WebKit-prefixed speech recognition constructor. */
 export function getVoiceRecognitionFactory(
   scope: unknown = globalThis,
@@ -48,6 +50,47 @@ export function getVoiceRecognitionFactory(
   const value = scope as Record<string, unknown>;
   const factory = value.SpeechRecognition ?? value.webkitSpeechRecognition;
   return typeof factory === "function" ? (factory as VoiceRecognitionFactory) : null;
+}
+
+/**
+ * Ask for microphone permission only after the user presses Voice.
+ *
+ * The stream is stopped immediately after the permission result; speech
+ * recognition remains the only consumer and audio is never persisted or sent
+ * through the Muse bridge. Browsers/WebViews without getUserMedia keep the
+ * existing SpeechRecognition path instead of reporting a false denial.
+ */
+export async function requestVoicePermission(
+  scope: unknown = globalThis,
+): Promise<VoicePermissionState> {
+  if (typeof scope !== "object" || scope === null) return "unavailable";
+  const root = scope as Record<string, unknown>;
+  const navigatorValue = root.navigator;
+  if (typeof navigatorValue !== "object" || navigatorValue === null) return "unavailable";
+  const mediaDevices = (navigatorValue as Record<string, unknown>).mediaDevices;
+  if (typeof mediaDevices !== "object" || mediaDevices === null) return "unavailable";
+  const getUserMedia = (mediaDevices as Record<string, unknown>).getUserMedia;
+  if (typeof getUserMedia !== "function") return "unavailable";
+  try {
+    const stream = await (getUserMedia as (constraints: { audio: true }) => Promise<unknown>).call(
+      mediaDevices,
+      { audio: true },
+    );
+    const tracks = stream && typeof stream === "object"
+      ? (stream as Record<string, unknown>).getTracks
+      : null;
+    if (typeof tracks === "function") {
+      const values = (tracks as () => unknown[]).call(stream);
+      for (const track of values) {
+        if (track && typeof track === "object" && typeof (track as Record<string, unknown>).stop === "function") {
+          ((track as Record<string, unknown>).stop as () => void).call(track);
+        }
+      }
+    }
+    return "granted";
+  } catch {
+    return "denied";
+  }
 }
 
 function normalizeTranscript(value: string): string {

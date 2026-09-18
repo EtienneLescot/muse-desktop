@@ -50,6 +50,7 @@ import {
 import {
   appendVoiceTranscript,
   getVoiceRecognitionFactory,
+  requestVoicePermission,
   transcriptFromVoiceEvent,
   voiceErrorMessage,
   type VoiceRecognition,
@@ -188,6 +189,7 @@ export function Composer({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [voiceSupported] = useState(() => getVoiceRecognitionFactory() !== null);
   const [voiceListening, setVoiceListening] = useState(false);
+  const [voicePermissionPending, setVoicePermissionPending] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
   const [recents, setRecents] = useState<RecentMention[]>(() =>
     workspace !== null ? loadRecents(workspace) : [],
@@ -403,7 +405,7 @@ export function Composer({
     setBlocked(null);
   }
 
-  function toggleVoice(): void {
+  async function toggleVoice(): Promise<void> {
     if (voiceListening) {
       voiceRecognitionRef.current?.stop();
       setVoiceStatus("Finishing transcription…");
@@ -412,6 +414,14 @@ export function Composer({
     const Factory = getVoiceRecognitionFactory();
     if (Factory === null) {
       setVoiceStatus("Voice input is unavailable in this browser build.");
+      return;
+    }
+    setVoicePermissionPending(true);
+    setVoiceStatus("Requesting microphone access…");
+    const permission = await requestVoicePermission();
+    setVoicePermissionPending(false);
+    if (permission === "denied") {
+      setVoiceStatus("Microphone access was denied. You can type the message instead.");
       return;
     }
     try {
@@ -937,8 +947,8 @@ export function Composer({
             <button
               type="button"
               className={voiceListening ? "composer-voice composer-voice-active" : "composer-voice"}
-              onClick={toggleVoice}
-              disabled={disabled || sending || checking}
+              onClick={() => void toggleVoice()}
+              disabled={disabled || sending || checking || voicePermissionPending}
               aria-pressed={voiceListening}
               aria-label={voiceListening ? "Stop voice input" : "Start voice input"}
               title={voiceSupported ? "Transcribe speech into the draft; audio is not stored" : "Voice input unavailable in this browser build"}

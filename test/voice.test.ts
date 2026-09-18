@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   appendVoiceTranscript,
   getVoiceRecognitionFactory,
+  requestVoicePermission,
   transcriptFromVoiceEvent,
   voiceErrorMessage,
 } from "../src/lib/voice.ts";
@@ -41,5 +42,22 @@ describe("voice input boundary", () => {
     );
     assert.match(voiceErrorMessage({ error: "not-allowed" }), /Microphone access was denied/);
     assert.match(voiceErrorMessage({ error: "no-speech" }), /No speech detected/);
+  });
+
+  it("preflights microphone permission and stops the temporary stream", async () => {
+    let stopped = 0;
+    const granted = await requestVoicePermission({
+      navigator: {
+        mediaDevices: {
+          getUserMedia: async () => ({ getTracks: () => [{ stop: () => { stopped += 1; } }] }),
+        },
+      },
+    });
+    assert.equal(granted, "granted");
+    assert.equal(stopped, 1);
+    assert.equal(await requestVoicePermission({}), "unavailable");
+    assert.equal(await requestVoicePermission({
+      navigator: { mediaDevices: { getUserMedia: async () => { throw new Error("denied"); } } },
+    }), "denied");
   });
 });
