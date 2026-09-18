@@ -77,3 +77,10 @@ test("startup probe display text removes invisible and replacement characters", 
   };
   assert.equal(startupProbeRows(probe)[0]?.check.detail, "WSL output");
 });
+
+test("startup probe display text repairs legacy interleaved UTF-16 NULs", () => {
+  assert.equal(
+    sanitizeStartupText("D\u0000e\u0000f\u0000a\u0000u\u0000l\u0000t\u0000: Ubuntu"),
+    "Default: Ubuntu",
+  );
+});

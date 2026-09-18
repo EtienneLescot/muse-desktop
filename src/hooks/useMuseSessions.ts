@@ -2226,14 +2226,6 @@ export function useMuseSessions(): UseMuseSessions {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollOnce]);
 
-  // Run the read-only first-launch probe whenever the selected workspace
-  // changes. It never blocks boot and intentionally does not surface a
-  // second global error when an older bundle does not expose the command.
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-    void probeStartup(workspace);
-  }, [probeStartup, workspace]);
-
   // Write-through persistence.
   useEffect(() => {
     if (!historyReady) return;

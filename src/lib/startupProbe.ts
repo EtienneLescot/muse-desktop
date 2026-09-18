@@ -23,7 +23,15 @@ const INVISIBLE_STARTUP_MARKERS = /[\u0000-\u001f\u007f-\u009f\u200b\u200c\u200d
 
 /** Keep legacy/preview probe payloads readable without changing the SSOT. */
 export function sanitizeStartupText(value: string, maxChars = 240): string {
-  return Array.from(value ?? "")
+  const raw = String(value ?? "");
+  // Older Windows bundles forwarded UTF-16 console output as a JavaScript
+  // string (`D\0e\0f\0...`). Drop the interleaved NULs before the generic
+  // control-marker cleanup so the label does not become `D e f ...`.
+  const nulCount = Array.from(raw).filter((character) => character === "\u0000").length;
+  const normalized = nulCount >= 2 && nulCount * 4 >= raw.length
+    ? raw.replace(/\u0000/g, "")
+    : raw;
+  return Array.from(normalized)
     .map((character) => (INVISIBLE_STARTUP_MARKERS.test(character) ? " " : character))
     .join("")
     .replace(/\s+/g, " ")
