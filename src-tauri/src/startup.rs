@@ -32,14 +32,63 @@ pub struct StartupProbe {
     pub checked_at: u64,
 }
 
+/// Windows console tools can emit UTF-16 even when stdout is piped. Decode
+/// that shape before clipping so the webview never receives NULs or mojibake.
+fn decode_probe_bytes(bytes: &[u8]) -> String {
+    if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
+        return String::from_utf8_lossy(&bytes[3..]).into_owned();
+    }
+    let pairs = bytes.len() / 2;
+    if pairs >= 2 {
+        let mut little_endian_nuls = 0usize;
+        let mut big_endian_nuls = 0usize;
+        for pair in bytes[..pairs * 2].chunks_exact(2) {
+            if pair[1] == 0 {
+                little_endian_nuls += 1;
+            }
+            if pair[0] == 0 {
+                big_endian_nuls += 1;
+            }
+        }
+        let threshold = (pairs / 3).max(1);
+        if little_endian_nuls >= threshold && little_endian_nuls > big_endian_nuls {
+            let units = bytes[..pairs * 2]
+                .chunks_exact(2)
+                .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                .collect::<Vec<_>>();
+            return String::from_utf16_lossy(&units);
+        }
+        if big_endian_nuls >= threshold && big_endian_nuls > little_endian_nuls {
+            let units = bytes[..pairs * 2]
+                .chunks_exact(2)
+                .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
+                .collect::<Vec<_>>();
+            return String::from_utf16_lossy(&units);
+        }
+    }
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
 fn clip_detail(raw: &str) -> String {
-    let one_line = raw
+    let cleaned = raw
+        .chars()
+        .map(|character| {
+            if character == '\n' {
+                '\n'
+            } else if character == '\u{fffd}' || character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    let one_line = cleaned
         .lines()
         .find(|line| !line.trim().is_empty())
         .unwrap_or("")
-        .replace(['\r', '\n'], " ")
-        .trim()
-        .to_string();
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     if one_line.chars().count() <= DETAIL_LIMIT {
         return one_line;
     }
@@ -140,11 +189,11 @@ fn finish_probe(mut child: Child) -> StartupCheck {
     let stderr = child.stderr.take().map(drain_pipe);
     let mut detail = String::new();
     if let Some(reader) = stdout {
-        detail.push_str(&String::from_utf8_lossy(&reader.join().unwrap_or_default()));
+        detail.push_str(&decode_probe_bytes(&reader.join().unwrap_or_default()));
     }
     if let Some(reader) = stderr {
         let stderr_bytes = reader.join().unwrap_or_default();
-        let stderr = String::from_utf8_lossy(&stderr_bytes);
+        let stderr = decode_probe_bytes(&stderr_bytes);
         if !stderr.trim().is_empty() {
             if !detail.is_empty() && !detail.ends_with('\n') {
                 detail.push('\n');
@@ -261,6 +310,20 @@ mod tests {
         let detail = clip_detail(&format!("first line\n{}", "x".repeat(500)));
         assert!(!detail.contains('\n'));
         assert!(detail.chars().count() <= DETAIL_LIMIT + 1);
+    }
+
+    #[test]
+    fn decodes_utf16_console_output_before_clipping() {
+        let bytes = "Default Distribution: Ubuntu"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+        assert_eq!(clip_detail(&decode_probe_bytes(&bytes)), "Default Distribution: Ubuntu");
+    }
+
+    #[test]
+    fn removes_replacement_and_control_characters_from_details() {
+        assert_eq!(clip_detail("\u{0}WSL\u{fffd} ready\nnext"), "WSL ready");
     }
 
     #[test]

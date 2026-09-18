@@ -4008,15 +4008,6 @@ body.dark .composer textarea::placeholder {
 .settings-runtime-probe {
   margin-top: 2px;
 }
-.welcome-runtime-probe {
-  width: min(100%, 560px);
-  margin: 12px auto 0;
-  text-align: left;
-}
-
-.welcome-runtime-action {
-  margin-top: 9px;
-}
 
 .settings-storage-warning {
   border: 1px solid color-mix(in srgb, var(--blue) 48%, var(--line));

@@ -1175,8 +1175,6 @@ export default function App() {
                 onAuthorizationModeChange={setAuthorizationMode}
                 reasoningEffort={globalSettings.reasoningEffort}
                 onReasoningEffortChange={(value) => setGlobalSettings({ reasoningEffort: value })}
-                startupProbe={startupProbe}
-                onProbeStartup={() => probeStartup(workspace)}
               />
             ) : (
               <div className="session-view">

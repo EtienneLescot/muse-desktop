@@ -6,7 +6,6 @@ import type { AuthorizationMode } from "../lib/authorization";
 import { ReasoningEffortControl } from "./ReasoningEffortControl";
 import type { ReasoningEffort } from "../lib/reasoning";
 import type { ProjectWorkspaceOption } from "../lib/projects";
-import { startupCheckStatusLabel, startupProbeRows, startupProbeSummary, type StartupProbe } from "../lib/startupProbe";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
 import { userFacingError } from "../lib/errorCopy";
 import {
@@ -43,8 +42,6 @@ interface Props {
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
   reasoningEffort: ReasoningEffort;
   onReasoningEffortChange: (value: ReasoningEffort) => void;
-  startupProbe?: StartupProbe | null;
-  onProbeStartup?: () => void | Promise<unknown>;
 }
 
 export interface NewConversationEnvironment {
@@ -71,8 +68,6 @@ export function EmptySessionScreen({
   onAuthorizationModeChange,
   reasoningEffort,
   onReasoningEffortChange,
-  startupProbe = null,
-  onProbeStartup,
 }: Props) {
   const welcomeDraftKey = "muse-desktop.welcome-draft";
   const [draft, setDraft] = useState(() => readSessionStorageString(welcomeDraftKey));
@@ -193,31 +188,6 @@ export function EmptySessionScreen({
           onPickWorkspace(path);
         }}
       />
-      {startupProbe !== null && (
-        <section className="startup-probe welcome-runtime-probe" aria-label="Runtime readiness">
-          <header>
-            <h3>Runtime readiness</h3>
-            <span className="muted">{startupProbeSummary(startupProbe)}</span>
-          </header>
-          <ul>
-            {startupProbeRows(startupProbe).map(({ label, check }) => (
-              <li key={label} data-status={check.status}>
-                <span className="startup-probe-dot" aria-hidden="true" />
-                <span className="startup-probe-label">{label}</span>
-                <span className="startup-probe-status">{startupCheckStatusLabel(check.status)}</span>
-                <span className="startup-probe-detail" title={check.detail}>
-                  {check.detail || check.status}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {onProbeStartup && (
-            <button type="button" className="settings-secondary-action welcome-runtime-action" onClick={() => void onProbeStartup()}>
-              Run check again
-            </button>
-          )}
-        </section>
-      )}
       <div className="welcome-environment">
         <label htmlFor="welcome-environment-select">Start in</label>
         <select
