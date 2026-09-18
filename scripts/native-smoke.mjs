@@ -34,6 +34,10 @@
  * The explicit `--exercise-model` path selects one model from `model/list`,
  * applies it to each ephemeral session and re-reads the catalogue to check
  * whether the host projects the active model.
+ * The explicit `--exercise-compaction` path probes `session/compact` on a
+ * fresh session and records whether the host admits a no-op, reports that a
+ * turn is missing/active, or does not expose the method. It never starts a
+ * model turn or sends conversation content.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
@@ -47,6 +51,7 @@
  *   node scripts/native-smoke.mjs --exercise-history
  *   node scripts/native-smoke.mjs --exercise-reasoning
  *   node scripts/native-smoke.mjs --exercise-model
+ *   node scripts/native-smoke.mjs --exercise-compaction
  *   node scripts/native-smoke.mjs --exercise-control --exercise-terminal
  *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
@@ -122,6 +127,10 @@ function exercisesReasoningPath() {
 
 function exercisesModelPath() {
   return process.argv.includes("--exercise-model");
+}
+
+function exercisesCompactionPath() {
+  return process.argv.includes("--exercise-compaction");
 }
 
 function exercisesTerminalPath() {
@@ -366,6 +375,7 @@ async function main() {
   const exerciseHistory = exercisesHistoryPath();
   const exerciseReasoning = exercisesReasoningPath();
   const exerciseModel = exercisesModelPath();
+  const exerciseCompaction = exercisesCompactionPath();
   const exerciseTerminal = exercisesTerminalPath();
   if (exerciseTerminal && !exerciseControl) {
     fail("--exercise-terminal requires --exercise-control");
@@ -389,6 +399,7 @@ async function main() {
     const historyChecks = [];
     const reasoningChecks = [];
     const modelChecks = [];
+    const compactionChecks = [];
     let isolation = null;
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
@@ -594,6 +605,37 @@ async function main() {
         }
         reasoningChecks.push({ host: String.fromCharCode(65 + index), efforts });
       }
+      if (exerciseCompaction) {
+        const hostLabel = String.fromCharCode(65 + index);
+        try {
+          const compacted = await host.request("session/compact", {
+            commandId: uuidv7(),
+            sessionId,
+          });
+          if (compacted === null || typeof compacted !== "object") {
+            fail(`host-${hostLabel} returned no compaction envelope`);
+          }
+          const status = compacted.status;
+          if (status !== "accepted" && status !== "noop") {
+            fail(`host-${hostLabel} returned an unknown compaction status`);
+          }
+          compactionChecks.push({ host: hostLabel, status });
+        } catch (error) {
+          if (error?.code === -32601 && error?.kind === "methodNotFound") {
+            compactionChecks.push({ host: hostLabel, status: "unsupported" });
+          } else if (error?.code === -32030 && error?.kind === "commandRejected") {
+            if (error.reason === "missing_run") {
+              compactionChecks.push({ host: hostLabel, status: "missing-run" });
+            } else if (error.reason === "run_active") {
+              compactionChecks.push({ host: hostLabel, status: "run-active" });
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
+      }
       if (exerciseReconnect) {
         // These are the same point-in-time reads used by the renderer after a
         // reconnect. Keep the result intentionally small: the smoke proves
@@ -790,6 +832,7 @@ async function main() {
       ...(exerciseHistory ? { history: historyChecks } : {}),
       ...(exerciseReasoning ? { reasoningEffort: reasoningChecks } : {}),
       ...(exerciseModel ? { modelSelection: modelChecks } : {}),
+      ...(exerciseCompaction ? { compaction: compactionChecks } : {}),
     };
     if (reportPath !== null) {
       await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
