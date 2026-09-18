@@ -2440,9 +2440,9 @@ export function useMuseSessions(): UseMuseSessions {
   }, []);
 
   // US-9 client-side scheduler: no workflow/* MSP endpoint exists, so a
-  // bounded UI-side interval admits due schedules. Ask mode enters review;
+  // bounded UI-side scheduler admits due schedules. Ask mode enters review;
   // workspace/YOLO mode creates a run record and dispatches automatically.
-  // Refs stay fresh where interval-closure deps would go stale.
+  // Refs stay fresh where timeout-closure deps would go stale.
   const schedulesRef = useRef(schedules);
   schedulesRef.current = schedules;
   const reviewQueueRef = useRef(reviewQueue);
@@ -2452,13 +2452,14 @@ export function useMuseSessions(): UseMuseSessions {
   const schedulerLeaseOwner = useRef(`scheduler-${newId()}`);
   const schedulerLeaseMode = useRef<"native" | "local" | "none">("none");
   const schedulerCheckInFlight = useRef(false);
+  const schedulerCheckPromise = useRef<Promise<void> | null>(null);
   const scheduledExecutorRef = useRef<((item: ReviewItem, run: ScheduleRun) => Promise<void>) | null>(null);
   useEffect(() => {
-    const check = () => {
-      if (schedulerCheckInFlight.current) return;
+    const check = (): Promise<void> => {
+      if (schedulerCheckInFlight.current) return schedulerCheckPromise.current ?? Promise.resolve();
       schedulerCheckInFlight.current = true;
       const owner = schedulerLeaseOwner.current;
-      void tryAcquireNativeSchedulerLease(owner).then((nativeClaim) => {
+      const task = tryAcquireNativeSchedulerLease(owner).then((nativeClaim) => {
       const acquired = nativeClaim === null
         ? tryAcquireSchedulerLease(owner, Date.now())
         : nativeClaim;
@@ -2540,7 +2541,10 @@ export function useMuseSessions(): UseMuseSessions {
         setSchedulerStatus(schedulerRuntimeErrorStatus(Date.now()));
       }).finally(() => {
         schedulerCheckInFlight.current = false;
+        schedulerCheckPromise.current = null;
       });
+      schedulerCheckPromise.current = task;
+      return task;
     };
     // Keep one adaptive timeout rather than setInterval: a suspended webview
     // can otherwise accumulate callbacks and race the lease/reconciliation
@@ -2550,12 +2554,10 @@ export function useMuseSessions(): UseMuseSessions {
     const scheduleNextCheck = () => {
       if (stopped) return;
       timer = setTimeout(() => {
-        check();
-        scheduleNextCheck();
+        void check().finally(scheduleNextCheck);
       }, 15000);
     };
-    check();
-    scheduleNextCheck();
+    void check().finally(scheduleNextCheck);
     // A suspended renderer can miss several interval ticks. Re-check as soon
     // as the window becomes usable again so the persisted missed-run policy
     // is applied promptly instead of waiting for the next 15 s tick.
