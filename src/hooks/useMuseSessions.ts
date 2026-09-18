@@ -533,6 +533,27 @@ import {
 } from "../lib/history";
 import { parseBranchObservation } from "../lib/branch";
 
+const GIT_STATUS_CAPTURE_TIMEOUT_MS = 1500;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(
+      () => reject(new Error("operation timed out")),
+      timeoutMs,
+    );
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 
 /** One session: persisted metadata + live running flag. */
 export interface MuseSession extends StoredSession {
@@ -4948,7 +4969,10 @@ export function useMuseSessions(): UseMuseSessions {
     async (sessionId: string, clientMessageId: string): Promise<void> => {
       if (!isTauriRuntime()) return;
       try {
-        const status = await invoke<GitStatusSnapshot>("git_status", { sessionId });
+        const status = await withTimeout(
+          invoke<GitStatusSnapshot>("git_status", { sessionId }),
+          GIT_STATUS_CAPTURE_TIMEOUT_MS,
+        );
         const snapshot: GitTurnSnapshot = {
           clientMessageId,
           turnId: null,
