@@ -12,6 +12,11 @@ use std::process::Command;
 
 pub const SCHEMA: &str = "muse-desktop.scheduler-wakeup.v1";
 const TASK_NAME: &str = "Muse-Desktop\\AutomationWake";
+const MAC_LABEL: &str = "com.muse.desktop.automation-wake";
+#[cfg(target_os = "linux")]
+const LINUX_SERVICE: &str = "muse-desktop-automation-wake.service";
+#[cfg(target_os = "linux")]
+const LINUX_TIMER: &str = "muse-desktop-automation-wake.timer";
 const MAX_FUTURE_MS: u64 = 366 * 24 * 60 * 60 * 1_000;
 
 #[derive(Debug, Clone, Serialize)]
@@ -64,6 +69,126 @@ fn xml_escape(value: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
+}
+
+#[cfg(target_os = "macos")]
+fn seconds_until(wake_at: u64, now: u64) -> u64 {
+    wake_at.saturating_sub(now).saturating_add(999) / 1_000
+}
+
+#[cfg(target_os = "macos")]
+fn launchd_uid() -> Result<String, String> {
+    let output = Command::new("id")
+        .arg("-u")
+        .output()
+        .map_err(|error| format!("macOS launchd user lookup failed: {error}"))?;
+    if !output.status.success() {
+        return Err("macOS launchd user lookup failed".to_string());
+    }
+    let uid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if uid.is_empty() || !uid.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err("macOS launchd returned an invalid user id".to_string());
+    }
+    Ok(uid)
+}
+
+fn launchd_plist(executable: &Path, delay_seconds: u64) -> Result<String, String> {
+    let command = executable
+        .to_str()
+        .ok_or_else(|| "scheduler executable path is not valid UTF-8".to_string())?;
+    Ok(format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>{label}</string>
+  <key>ProgramArguments</key><array><string>{command}</string><string>--automation-wakeup</string></array>
+  <key>StartInterval</key><integer>{delay}</integer>
+  <key>RunAtLoad</key><false/>
+  <key>ProcessType</key><string>Background</string>
+</dict></plist>
+"#,
+        label = xml_escape(MAC_LABEL),
+        command = xml_escape(command),
+        delay = delay_seconds.max(60),
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn run_launchctl(args: &[&str]) -> Result<(), String> {
+    let output = Command::new("launchctl")
+        .args(args)
+        .output()
+        .map_err(|error| format!("macOS launchd is unavailable: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if detail.is_empty() {
+        "macOS launchd rejected the wake-up job".to_string()
+    } else {
+        format!(
+            "macOS launchd rejected the wake-up job: {}",
+            detail.chars().take(400).collect::<String>()
+        )
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn systemd_user_dir() -> Result<PathBuf, String> {
+    if let Some(config) = std::env::var_os("XDG_CONFIG_HOME") {
+        return Ok(PathBuf::from(config).join("systemd/user"));
+    }
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| "HOME is unavailable for systemd user scheduling".to_string())?;
+    Ok(PathBuf::from(home).join(".config/systemd/user"))
+}
+
+fn systemd_escape(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('%', "%%")
+        .replace('\n', " ")
+}
+
+fn systemd_unit_files(executable: &Path, wake_at: u64) -> Result<(String, String), String> {
+    let command = executable
+        .to_str()
+        .ok_or_else(|| "scheduler executable path is not valid UTF-8".to_string())?;
+    let timestamp = chrono::DateTime::<Utc>::from_timestamp_millis(wake_at as i64)
+        .ok_or_else(|| "scheduler wake-up time cannot be represented".to_string())?
+        .format("%Y-%m-%d %H:%M:%S UTC")
+        .to_string();
+    let service = format!(
+        "[Unit]\nDescription=Wake Muse-Desktop for a scheduled automation\n\n[Service]\nType=oneshot\nExecStart=\"{}\" --automation-wakeup\n",
+        systemd_escape(command),
+    );
+    let timer = format!(
+        "[Unit]\nDescription=One-shot Muse-Desktop automation wake-up\n\n[Timer]\nOnCalendar={}\nPersistent=true\nAccuracySec=1s\nUnit=muse-desktop-automation-wake.service\n\n[Install]\nWantedBy=timers.target\n",
+        timestamp,
+    );
+    Ok((service, timer))
+}
+
+#[cfg(target_os = "linux")]
+fn run_systemctl(args: &[&str]) -> Result<(), String> {
+    let output = Command::new("systemctl")
+        .args(["--user"])
+        .args(args)
+        .output()
+        .map_err(|error| format!("systemd user scheduler is unavailable: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if detail.is_empty() {
+        "systemd user scheduler rejected the wake-up timer".to_string()
+    } else {
+        format!(
+            "systemd user scheduler rejected the wake-up timer: {}",
+            detail.chars().take(400).collect::<String>()
+        )
+    })
 }
 
 /// Build the Task Scheduler XML without machine-specific state besides the
@@ -151,9 +276,83 @@ pub fn sync(
             "Native wake-up scheduled for the next automation.",
         ));
     }
+    #[cfg(target_os = "macos")]
+    {
+        let uid = launchd_uid()?;
+        let home = std::env::var_os("HOME")
+            .ok_or_else(|| "HOME is unavailable for launchd scheduling".to_string())?;
+        let plist_path = PathBuf::from(home)
+            .join("Library/LaunchAgents")
+            .join(format!("{MAC_LABEL}.plist"));
+        let target = format!("gui/{uid}/{MAC_LABEL}");
+        let _ = run_launchctl(&["bootout", &target]);
+        if wake_at.is_none() {
+            let _ = fs::remove_file(&plist_path);
+            return Ok(response(
+                true,
+                false,
+                None,
+                "Native wake-up cleared; no enabled automation is scheduled.",
+            ));
+        }
+        if let Some(parent) = plist_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("launchd wake-up directory unavailable: {error}"))?;
+        }
+        let plist = launchd_plist(executable, seconds_until(wake_at.unwrap(), now))?;
+        fs::write(&plist_path, plist)
+            .map_err(|error| format!("launchd wake-up definition could not be written: {error}"))?;
+        let path = plist_path
+            .to_str()
+            .ok_or_else(|| "launchd wake-up definition path is invalid".to_string())?;
+        run_launchctl(&["bootstrap", &format!("gui/{uid}"), path])?;
+        return Ok(response(
+            true,
+            true,
+            wake_at,
+            "Native wake-up scheduled for the next automation.",
+        ));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let unit_dir = systemd_user_dir()?;
+        let service_path = unit_dir.join(LINUX_SERVICE);
+        let timer_path = unit_dir.join(LINUX_TIMER);
+        let _ = run_systemctl(&["disable", "--now", LINUX_TIMER]);
+        if wake_at.is_none() {
+            let _ = fs::remove_file(service_path);
+            let _ = fs::remove_file(timer_path);
+            let _ = run_systemctl(&["daemon-reload"]);
+            return Ok(response(
+                true,
+                false,
+                None,
+                "Native wake-up cleared; no enabled automation is scheduled.",
+            ));
+        }
+        fs::create_dir_all(&unit_dir)
+            .map_err(|error| format!("systemd user unit directory unavailable: {error}"))?;
+        let (service, timer) = systemd_unit_files(executable, wake_at.unwrap())?;
+        fs::write(&service_path, service)
+            .map_err(|error| format!("systemd service definition could not be written: {error}"))?;
+        fs::write(&timer_path, timer)
+            .map_err(|error| format!("systemd timer definition could not be written: {error}"))?;
+        run_systemctl(&["daemon-reload"])?;
+        run_systemctl(&["enable", "--now", LINUX_TIMER])?;
+        return Ok(response(
+            true,
+            true,
+            wake_at,
+            "Native wake-up scheduled for the next automation.",
+        ));
+    }
     #[cfg(not(target_os = "windows"))]
     {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        unreachable!("platform-specific scheduler branch returned above");
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let _ = (data_dir, executable, wake_at);
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         Ok(response(
             false,
             false,
@@ -184,5 +383,26 @@ mod tests {
         assert!(xml.contains("StartBoundary>2025-01-01T00:00:00Z"));
         assert!(xml.contains("C:\\Muse &amp; Desktop"));
         assert!(xml.contains("--automation-wakeup"));
+    }
+
+    #[test]
+    fn launchd_plist_is_one_shot_and_escapes_command() {
+        let plist = launchd_plist(
+            Path::new("/Applications/Muse & Desktop.app/Contents/MacOS/Muse"),
+            61,
+        )
+        .unwrap();
+        assert!(plist.contains("StartInterval</key><integer>61</integer>"));
+        assert!(plist.contains("Muse &amp; Desktop"));
+        assert!(plist.contains("--automation-wakeup"));
+    }
+
+    #[test]
+    fn systemd_units_are_user_scoped_and_percent_safe() {
+        let (service, timer) =
+            systemd_unit_files(Path::new("/opt/Muse Desktop/Muse"), 1_735_689_600_000).unwrap();
+        assert!(service.contains("ExecStart=\"/opt/Muse Desktop/Muse\" --automation-wakeup"));
+        assert!(timer.contains("OnCalendar=2025-01-01 00:00:00 UTC"));
+        assert_eq!(systemd_escape("100% ready"), "100%% ready");
     }
 }
