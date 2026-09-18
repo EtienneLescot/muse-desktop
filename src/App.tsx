@@ -1686,7 +1686,9 @@ export default function App() {
                                 record.path,
                                 activeProject !== null ? activeProjectSettings : undefined,
                               );
-                              if (opened !== null) prefillComposer(formatHandoffContext(plan));
+                              if (opened !== null) {
+                                prefillComposer(formatHandoffContext(plan, logs[active.session_id] ?? []));
+                              }
                               return opened;
                             }}
                             writerPrompts={orchestrationWriterPrompts}

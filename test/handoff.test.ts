@@ -112,6 +112,18 @@ describe("M2-05 handoff planner", () => {
     assert.ok(context.length <= 4_000);
   });
 
+  it("includes only a bounded user and Muse excerpt in the handoff note", () => {
+    const context = formatHandoffContext(buildHandoffPlan(base), [
+      { role: "system", text: "internal protocol payload must stay local" },
+      { role: "user", text: "Please inspect the release pipeline." },
+      { role: "assistant", text: "I found the installer manifest and will verify it." },
+    ]);
+    assert.match(context, /Conversation context \(local excerpt/);
+    assert.match(context, /You: Please inspect the release pipeline\./);
+    assert.match(context, /Muse: I found the installer manifest/);
+    assert.doesNotMatch(context, /internal protocol payload/);
+  });
+
   it("treats a newly observed target as a stale plan", () => {
     const plan = buildHandoffPlan(base);
     assert.equal(isHandoffPlanStale(plan, { ...base, targetDirty: false }), true);

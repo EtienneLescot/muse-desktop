@@ -41,6 +41,12 @@ export interface HandoffPlan {
   createdAt: number;
 }
 
+/** Minimal transcript shape used for a bounded local context excerpt. */
+export interface HandoffTranscriptEntry {
+  role: string;
+  text: string;
+}
+
 /** Stable, non-secret inputs used to decide whether a plan is still current. */
 export interface HandoffSnapshot {
   direction: HandoffDirection;
@@ -58,10 +64,27 @@ export interface HandoffSnapshot {
 }
 
 const MAX_HANDOFF_CONTEXT = 4_000;
+const MAX_HANDOFF_ENTRIES = 8;
 
 function contextValue(value: string | null | undefined, fallback: string): string {
   const normalized = (value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
   return normalized.length > 240 ? `${normalized.slice(0, 240)}…` : normalized || fallback;
+}
+
+function transcriptExcerpt(entries: readonly HandoffTranscriptEntry[]): string[] {
+  return entries
+    .filter((entry) => {
+      const role = entry.role.trim().toLowerCase();
+      // System/protocol rows are local bookkeeping and should never be copied
+      // into a handoff prompt as if they were user intent.
+      return (role === "user" || role === "assistant") && entry.text.trim().length > 0;
+    })
+    .slice(-MAX_HANDOFF_ENTRIES)
+    .map((entry) => {
+      const role = entry.role.trim().toLowerCase() === "user" ? "You" : "Muse";
+      const text = contextValue(entry.text, "");
+      return `${role}: ${text}`;
+    });
 }
 
 function check(
@@ -213,7 +236,10 @@ export function isHandoffPlanStale(
  * Format a reviewable handoff as editable composer context. This is a local
  * context handoff only; it never claims that the MSP host moved a session.
  */
-export function formatHandoffContext(plan: HandoffPlan): string {
+export function formatHandoffContext(
+  plan: HandoffPlan,
+  entries: readonly HandoffTranscriptEntry[] = [],
+): string {
   const direction = plan.direction === "local-to-worktree"
     ? "Local → Worktree"
     : "Worktree → Local";
@@ -227,6 +253,14 @@ export function formatHandoffContext(plan: HandoffPlan): string {
     ...plan.checks.map((item) => `- [${item.status}] ${contextValue(item.label, "check")}: ${contextValue(item.detail, "no detail")}`),
     "Review the working tree and confirm the intended transfer before making changes.",
   ];
+  const excerpt = transcriptExcerpt(entries);
+  if (excerpt.length > 0) {
+    lines.push(
+      "",
+      "Conversation context (local excerpt; verify against the target workspace):",
+      ...excerpt,
+    );
+  }
   const result = lines.join("\n");
   return result.length <= MAX_HANDOFF_CONTEXT
     ? result
