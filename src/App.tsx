@@ -829,6 +829,8 @@ export default function App() {
                 if (activeId !== null) void setSessionModel(activeId, modelId);
               }}
               onExportDiagnostics={exportDiagnostics}
+              startupProbe={startupProbe}
+              onProbeStartup={() => probeStartup(workspace)}
               checkPathScope={checkPathScope}
               onClose={() => setSettingsOpen(false)}
             />

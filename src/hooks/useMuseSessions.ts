@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/env";
+import type { StartupProbe } from "../lib/startupProbe";
+export type { StartupCheck, StartupProbe } from "../lib/startupProbe";
 import { loadQueuedTurns, reconcileQueuedTurns, saveQueuedTurns } from "../lib/queuedTurns";
 import {
   appendLog,
@@ -502,21 +504,6 @@ export type SessionConnectionState =
   | "connecting"
   | "connected"
   | "error";
-
-/** M0-10: one bounded native first-launch prerequisite check. */
-export interface StartupCheck {
-  status: "ready" | "missing" | "blocked" | "unknown";
-  detail: string;
-}
-
-export interface StartupProbe {
-  platform: string;
-  sidecar: StartupCheck;
-  wsl: StartupCheck | null;
-  museCli: StartupCheck | null;
-  workspace: StartupCheck | null;
-  checkedAt: number;
-}
 
 /** US-23 local index surface (opt-in, default off). */
 export interface IndexApi {
