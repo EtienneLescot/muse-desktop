@@ -5891,6 +5891,33 @@ body.dark .composer textarea::placeholder {
   background: var(--bg);
 }
 
+.browser-host-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
+.browser-host-actions > .muted {
+  flex: 1 0 100%;
+  color: color-mix(in srgb, var(--accent) 72%, var(--muted));
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.browser-host-actions button {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+.browser-host-actions button:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+}
+
 .browser-control-status {
   font-size: 0.74rem;
 }

@@ -1492,6 +1492,10 @@ export default function App() {
                           <BrowserPanel
                             annotations={browserAnnotations}
                             permissions={browserPermissions}
+                            hostSkills={hostSkillsBySession[active.session_id] ?? []}
+                            onInvokeBrowserSkill={(selector, args) =>
+                              invokeSkill(active.session_id, selector, args)
+                            }
                             onAddAnnotation={addBrowserAnnotation}
                             onInsertContext={(context) => {
                               void prepareBrowserContext(active.session_id, context);

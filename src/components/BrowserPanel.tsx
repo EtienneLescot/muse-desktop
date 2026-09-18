@@ -24,6 +24,12 @@ import {
 } from "../lib/browserAnnotate";
 import { isTauriRuntime } from "../lib/env";
 import { userFacingError } from "../lib/errorCopy";
+import {
+  buildBrowserSkillArguments,
+  findBrowserSkill,
+  type BrowserSkillAction,
+} from "../lib/browserSkills";
+import type { HostSkill } from "../lib/hostSkills";
 
 interface Props {
   annotations: BrowserAnnotation[];
@@ -35,6 +41,10 @@ interface Props {
   onInsertContext: (context: string) => void;
   /** Insert an explicitly captured visual page as context + image attachment. */
   onInsertCapture: (capture: BrowserCapture) => boolean;
+  /** Host-owned browser skills, if the connected engine advertises them. */
+  hostSkills?: readonly HostSkill[];
+  /** Invoke one advertised host skill through the session SSOT. */
+  onInvokeBrowserSkill?: (selector: string, args: string) => void;
 }
 
 /** Apps offered a computer-use toggle (explicit opt-in, default denied). */
@@ -54,6 +64,8 @@ export function BrowserPanel({
   onSetPermission,
   onInsertContext,
   onInsertCapture,
+  hostSkills = [],
+  onInvokeBrowserSkill,
 }: Props) {
   const initialTabsRef = useRef<BrowserTab[] | null>(null);
   if (initialTabsRef.current === null) {
@@ -678,6 +690,28 @@ export function BrowserPanel({
   const isAllowed = (app: string) =>
     permissions.find((p) => p.app === app)?.allowed === true;
   const browserControlsAllowed = isAllowed("browser");
+
+  const invokeBrowserSkill = (action: BrowserSkillAction): void => {
+    const skill = findBrowserSkill(hostSkills, action);
+    if (skill === null || onInvokeBrowserSkill === undefined) {
+      setControlStatus("This browser action is not available from the connected Muse host.");
+      return;
+    }
+    onInvokeBrowserSkill(
+      skill.selector,
+      buildBrowserSkillArguments(action, normalized ?? currentUrl, elementAnchor, typeText),
+    );
+    setControlStatus(`Asked Muse to ${action === "openTab" ? "open a new tab" : action} in the browser.`);
+  };
+
+  const advertisedBrowserSkills = (Object.keys({
+    observe: true,
+    click: true,
+    type: true,
+    navigate: true,
+    openTab: true,
+    download: true,
+  }) as BrowserSkillAction[]).filter((action) => findBrowserSkill(hostSkills, action) !== null);
   browserControlsAllowedRef.current = browserControlsAllowed;
 
   return (
@@ -840,6 +874,24 @@ export function BrowserPanel({
               Type into field
             </button>
           </div>
+          {advertisedBrowserSkills.length > 0 && (
+            <div className="browser-host-actions" aria-label="Muse browser actions">
+              <span className="muted">Muse actions from the connected host</span>
+              {advertisedBrowserSkills.map((action) => (
+                <button
+                  type="button"
+                  key={action}
+                  onClick={() => invokeBrowserSkill(action)}
+                  disabled={action !== "observe" && elementAnchor === null}
+                  title="Run the advertised browser skill through the current conversation"
+                >
+                  {action === "openTab"
+                    ? "Ask Muse to open a tab"
+                    : `Ask Muse to ${action}`}
+                </button>
+              ))}
+            </div>
+          )}
           {controlStatus && <div className="muted browser-control-status" role="status" aria-live="polite">{controlStatus}</div>}
           {downloadStatus && <div className="muted browser-control-status" role="status" aria-live="polite">{downloadStatus}</div>}
           {pageObservation && normalized && (
