@@ -2542,8 +2542,20 @@ export function useMuseSessions(): UseMuseSessions {
         schedulerCheckInFlight.current = false;
       });
     };
+    // Keep one adaptive timeout rather than setInterval: a suspended webview
+    // can otherwise accumulate callbacks and race the lease/reconciliation
+    // path when it becomes visible again.
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleNextCheck = () => {
+      if (stopped) return;
+      timer = setTimeout(() => {
+        check();
+        scheduleNextCheck();
+      }, 15000);
+    };
     check();
-    const timer = setInterval(check, 15000);
+    scheduleNextCheck();
     // A suspended renderer can miss several interval ticks. Re-check as soon
     // as the window becomes usable again so the persisted missed-run policy
     // is applied promptly instead of waiting for the next 15 s tick.
@@ -2554,7 +2566,8 @@ export function useMuseSessions(): UseMuseSessions {
     window.addEventListener("pageshow", wake);
     document.addEventListener("visibilitychange", wake);
     return () => {
-      clearInterval(timer);
+      stopped = true;
+      if (timer !== null) clearTimeout(timer);
       window.removeEventListener("focus", wake);
       window.removeEventListener("pageshow", wake);
       document.removeEventListener("visibilitychange", wake);
