@@ -23,6 +23,9 @@
  * pending approval/input snapshot. This is the native reconciliation half of
  * M0-02/M0-05; it deliberately does not claim a cold resume because the
  * bundled sidecar currently reports ephemeral session durability.
+ * The explicit `--exercise-history` path probes the bounded `session/list`
+ * and `view/page` reads used by the renderer's restore fallback. Unsupported
+ * methods are reported as such rather than treated as a successful proof.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
@@ -33,6 +36,7 @@
  *   node scripts/native-smoke.mjs --exercise-isolation
  *   node scripts/native-smoke.mjs --exercise-user-shell
  *   node scripts/native-smoke.mjs --exercise-reconnect
+ *   node scripts/native-smoke.mjs --exercise-history
  *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -92,6 +96,10 @@ function exercisesUserShellPath() {
 
 function exercisesReconnectPath() {
   return process.argv.includes("--exercise-reconnect");
+}
+
+function exercisesHistoryPath() {
+  return process.argv.includes("--exercise-history");
 }
 
 function fail(message) {
@@ -310,6 +318,7 @@ async function main() {
   const exerciseIsolation = exercisesIsolationPath();
   const exerciseUserShell = exercisesUserShellPath();
   const exerciseReconnect = exercisesReconnectPath();
+  const exerciseHistory = exercisesHistoryPath();
   const reportPath = reportArgument();
   const roots = await Promise.all([
     mkdtemp(join(tmpdir(), "muse-native-smoke-a-")),
@@ -326,6 +335,7 @@ async function main() {
     const approvalModes = [];
     const userShellChecks = [];
     const reconnectChecks = [];
+    const historyChecks = [];
     let isolation = null;
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
@@ -355,6 +365,56 @@ async function main() {
       const sessionId = session?.sessionId ?? session?.id;
       if (typeof sessionId !== "string" || sessionId.length === 0) fail(`host-${index === 0 ? "A" : "B"} did not return a session id`);
       sessions.push(sessionId);
+      if (exerciseHistory) {
+        let sessionList = "available";
+        let sessionCount = 0;
+        let sessionListHasCursor = false;
+        try {
+          const listed = await host.request("session/list", { limit: 200 });
+          if (listed === null || typeof listed !== "object") {
+            fail(`host-${index === 0 ? "A" : "B"} returned no session list envelope`);
+          }
+          if (listed.sessions !== undefined && !Array.isArray(listed.sessions)) {
+            fail(`host-${index === 0 ? "A" : "B"} returned invalid session list rows`);
+          }
+          sessionCount = Array.isArray(listed.sessions) ? listed.sessions.length : 0;
+          if (listed.nextCursor !== undefined && listed.nextCursor !== null && typeof listed.nextCursor !== "string") {
+            fail(`host-${index === 0 ? "A" : "B"} returned an invalid session list cursor`);
+          }
+          sessionListHasCursor = typeof listed.nextCursor === "string" && listed.nextCursor.trim().length > 0;
+        } catch (error) {
+          if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+          sessionList = "unsupported";
+        }
+        let viewPage = "available";
+        let eventCount = 0;
+        try {
+          const page = await host.request("view/page", {
+            sessionId,
+            direction: "forward",
+            limit: 200,
+          });
+          if (page === null || typeof page !== "object") {
+            fail(`host-${index === 0 ? "A" : "B"} returned no view page envelope`);
+          }
+          const events = page.events ?? page.items;
+          if (events !== undefined && !Array.isArray(events)) {
+            fail(`host-${index === 0 ? "A" : "B"} returned invalid view page rows`);
+          }
+          eventCount = Array.isArray(events) ? events.length : 0;
+        } catch (error) {
+          if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+          viewPage = "unsupported";
+        }
+        historyChecks.push({
+          host: String.fromCharCode(65 + index),
+          sessionList,
+          sessionCount,
+          sessionListHasCursor,
+          viewPage,
+          eventCount,
+        });
+      }
       if (exerciseApproval) {
         const startupMode = session?.approvalMode?.mode;
         if (typeof startupMode !== "string" || startupMode.length === 0) {
@@ -563,6 +623,7 @@ async function main() {
       ...(exerciseIsolation ? { isolation } : {}),
       ...(exerciseUserShell ? { userShell: userShellChecks } : {}),
       ...(exerciseReconnect ? { reconnect: reconnectChecks } : {}),
+      ...(exerciseHistory ? { history: historyChecks } : {}),
     };
     if (reportPath !== null) {
       await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
