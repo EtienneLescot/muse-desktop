@@ -142,6 +142,27 @@ export function isDesktopPointInBounds(
   return x >= 0 && y >= 0 && x < window.bounds.width && y < window.bounds.height;
 }
 
+/** Return the center of an observed child control as a safe window-relative point. */
+export function desktopElementClickPoint(
+  window: DesktopWindow | null,
+  element: DesktopElement,
+): { x: number; y: number } | null {
+  if (
+    window === null
+    || !Number.isFinite(element.bounds.x)
+    || !Number.isFinite(element.bounds.y)
+    || !Number.isFinite(element.bounds.width)
+    || !Number.isFinite(element.bounds.height)
+    || element.bounds.width <= 0
+    || element.bounds.height <= 0
+  ) {
+    return null;
+  }
+  const x = Math.floor(element.bounds.x + element.bounds.width / 2);
+  const y = Math.floor(element.bounds.y + element.bounds.height / 2);
+  return isDesktopPointInBounds(window, x, y) ? { x, y } : null;
+}
+
 function imageDataUrlParts(dataUrl: string): { mediaType: string; base64Data: string } | null {
   const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=]+)$/i.exec(dataUrl.trim());
   if (!match || match[2].length === 0) return null;

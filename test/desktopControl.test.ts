@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   desktopCaptureAttachment,
+  desktopElementClickPoint,
   desktopElementLabel,
   desktopWindowLabel,
   formatDesktopCaptureContext,
@@ -45,6 +46,31 @@ test("desktop coordinates stay within the selected window", () => {
   assert.equal(isDesktopPointInBounds(windowFixture, 800, 599), false);
   assert.equal(isDesktopPointInBounds(windowFixture, -1, 1), false);
   assert.equal(isDesktopPointInBounds(null, 0, 0), false);
+});
+
+test("observed control click points stay relative to the selected window", () => {
+  const window = { id: "window", title: "Editor", bounds: { x: 0, y: 0, width: 500, height: 400 } };
+  const element: DesktopElement = {
+    id: "control",
+    title: "Save",
+    className: "Button",
+    semanticRole: "button",
+    automationId: "save",
+    value: "",
+    valueRedacted: false,
+    bounds: { x: 100, y: 40, width: 80, height: 20 },
+    enabled: true,
+    visible: true,
+    offscreen: false,
+  };
+  assert.deepEqual(desktopElementClickPoint(window, element), { x: 140, y: 50 });
+  assert.equal(
+    desktopElementClickPoint(window, {
+      ...element,
+      bounds: { x: 490, y: 390, width: 30, height: 30 },
+    }),
+    null,
+  );
 });
 
 test("desktop window labels keep title and bounded geometry visible", () => {

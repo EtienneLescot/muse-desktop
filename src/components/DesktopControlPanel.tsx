@@ -5,6 +5,7 @@ import { isTauriRuntime } from "../lib/env";
 import {
   DESKTOP_KEYS,
   DESKTOP_PERMISSION_APP,
+  desktopElementClickPoint,
   desktopWindowLabel,
   desktopElementLabel,
   desktopCaptureAttachment,
@@ -215,6 +216,24 @@ export function DesktopControlPanel({
         });
       },
       "Click sent",
+    );
+  };
+
+  const clickObservedControl = (element: DesktopElement) => {
+    const point = desktopElementClickPoint(selected, element);
+    if (point === null) {
+      setError("This observed control is outside the selected window bounds.");
+      return;
+    }
+    void run(
+      async () => {
+        await invoke("desktop_click", {
+          windowId: selected?.id,
+          x: point.x,
+          y: point.y,
+        });
+      },
+      "Observed control clicked",
     );
   };
 
@@ -466,7 +485,17 @@ export function DesktopControlPanel({
                   <div className="desktop-element-list" role="list" aria-label="Observed desktop controls">
                     {elements.slice(0, 40).map((element) => (
                       <div className="desktop-element-row" role="listitem" key={element.id}>
-                        <strong>{element.title || element.className || "Unnamed control"}</strong>
+                        <div className="desktop-element-row-head">
+                          <strong>{element.title || element.className || "Unnamed control"}</strong>
+                          <button
+                            type="button"
+                            onClick={() => clickObservedControl(element)}
+                            disabled={busy || !allowed || selected === null || !element.enabled || element.offscreen}
+                            title="Click the center of this observed control"
+                          >
+                            Click
+                          </button>
+                        </div>
                         <span>{desktopElementLabel(element)}</span>
                       </div>
                     ))}

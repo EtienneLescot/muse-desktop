@@ -6212,6 +6212,20 @@ body.dark .composer textarea::placeholder {
   font-size: 12px;
 }
 
+.desktop-element-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.desktop-element-row-head button {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
 .desktop-element-row span {
   color: var(--muted);
   overflow-wrap: anywhere;
