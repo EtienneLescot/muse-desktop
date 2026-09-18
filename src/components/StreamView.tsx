@@ -25,6 +25,7 @@ import {
   type TranscriptHit,
 } from "../lib/transcriptSearch";
 import { streamEntryA11y, streamWindowAnnouncement } from "../lib/streamA11y";
+import { streamNavigationTarget } from "../lib/streamNavigation";
 import {
   isTerminalSubagentStatus,
   subagentStatusLabel,
@@ -342,6 +343,25 @@ export function StreamView({
     setAwayFromBottom(!stickRef.current);
   }
 
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>): void {
+    // The transcript itself is focusable so keyboard users can navigate a
+    // long conversation without first finding an individual message.
+    if (e.target !== e.currentTarget) return;
+    const target = streamNavigationTarget(
+      e.key,
+      e.currentTarget.clientHeight,
+      e.currentTarget.scrollTop,
+      e.currentTarget.scrollHeight - e.currentTarget.clientHeight,
+    );
+    if (target === null) return;
+    e.preventDefault();
+    if (e.key === "End") {
+      jumpToLatest();
+      return;
+    }
+    e.currentTarget.scrollTo({ top: target, behavior: "auto" });
+  }
+
   async function runResult(
     entry: LogEntry,
     kind: "result" | "drilldown",
@@ -469,11 +489,16 @@ export function StreamView({
       ref={streamRef}
       className="stream"
       onScroll={onScroll}
+      onKeyDown={onKeyDown}
+      tabIndex={0}
       role="log"
       aria-live="off"
       aria-label="Conversation messages"
+      aria-keyshortcuts="Home End PageUp PageDown"
       aria-busy={running || reconciling}
       data-entry-count={entries.length}
+      data-window-start={safeWindowStart}
+      data-window-end={safeWindowEnd}
     >
       {streamWindowed && (
         <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
