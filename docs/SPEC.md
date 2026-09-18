@@ -289,8 +289,9 @@ Prouvé par le code lu : sous-agents = orchestration sidecar, **aucun spawn IPC 
 
 Schéma officiel : 31 méthodes, 23 notifications, registre d'erreurs. Constat :
 aucun écart dans ce que notre client envoie (`initialize`, `session/start`,
-`session/read`, `session/resume`, `session/list`, `model/list`,
-`session/compact`, `session/setModel`, `session/setApprovalMode`,
+`session/read`, `session/resume`, `session/list`, `session/rename`, `model/list`,
+`session/compact`, `session/setModel`, `session/setReasoningEffort`, `session/setApprovalMode`,
+`item/readOutput`,
 `turn/start`, `turn/interrupt`, `approval/decide`, `userInput/answer`,
 `userInput/cancel` et les cinq contrôles `subagent/*` réellement utilisés —
 params conformes, `commandId` UUIDv7 requis quand attendu, `workspaceRoot`
@@ -300,8 +301,8 @@ confirmés. **Pas de méthode spawn** → fan-out via tour parent acté.
 `subagent/*` = exactement 8 méthodes control-only → acté. **Pas de
 `workflow/*`** → scheduling client-side acté. Le seuil tokens a une source
 réelle : notifications `session/contextUsage` + `session/tokenUsage`.
-Capacités serveur non exploitées (pistes) : `session/compact`,
-`model/list` + `session/setModel`, `turn/steer`, `session/fork`,
+Capacités serveur non exploitées (pistes) :
+`turn/steer`,
 `turn/cancel`/`unqueue`, `view/page`, `approval/listPending`,
 `userInput/clarify`. Garde-fou : `src/lib/msp.ts` + `test/msp-conformance.test.ts`
 valident nos méthodes/notifications contre `@muse-code/sdk@0.1.1` à la
