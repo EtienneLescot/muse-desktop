@@ -788,6 +788,19 @@ fn session_list_next_cursor(result: &Value) -> Result<Option<String>, String> {
     Ok(Some(cursor.to_string()))
 }
 
+/// Extract only a host-authored textual completion preview. Structured result
+/// objects are intentionally reduced to their documented summary-like fields;
+/// arbitrary JSON is never copied into the renderer transcript.
+fn completion_preview(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) if !text.trim().is_empty() => Some(text.clone()),
+        Value::Object(object) => ["resultPreview", "summary", "output", "text", "message", "headline"]
+            .iter()
+            .find_map(|key| object.get(*key).and_then(completion_preview)),
+        _ => None,
+    }
+}
+
 fn session_meta_from_list_row(
     root: &Path,
     session: &Value,
@@ -1742,8 +1755,8 @@ where
             // bridge; the renderer applies its own final presentation bound.
             if let Some(object) = payload.as_object_mut() {
                 for key in ["result", "resultPreview", "output", "summary", "text"] {
-                    if let Some(value) = p.get(key).and_then(Value::as_str) {
-                        object.insert(key.to_string(), Value::String(truncate(value, 319)));
+                    if let Some(value) = p.get(key).and_then(completion_preview) {
+                        object.insert(key.to_string(), Value::String(truncate(&value, 319)));
                     }
                 }
             }
@@ -5075,6 +5088,26 @@ mod tests {
         let preview = payload["result"].as_str().expect("result preview");
         assert_eq!(preview.chars().count(), 320);
         assert!(preview.ends_with('…'));
+
+        let mut structured_events = Vec::new();
+        let mut structured_emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            structured_events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "turn/completed",
+            &json!({
+                "sessionId": "session-a",
+                "terminal": "completed",
+                "result": {"summary": "Files are ready."},
+            }),
+            &mut structured_emit,
+        );
+        let structured = structured_events
+            .last()
+            .map(|event| serde_json::from_str::<Value>(&event.3).expect("structured status payload"))
+            .expect("structured terminal event");
+        assert_eq!(structured["result"], Value::String("Files are ready.".to_string()));
     }
 
     #[test]
