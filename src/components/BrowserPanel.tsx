@@ -34,6 +34,8 @@ import type { HostSkill } from "../lib/hostSkills";
 import type { SkillInvocationProgress } from "../lib/skills";
 
 interface Props {
+  /** Conversation identity; browser navigation must not leak across sessions. */
+  sessionId: string;
   annotations: BrowserAnnotation[];
   permissions: BrowserAppPermission[];
   onAddAnnotation: (url: string, selection: string, comment: string, element?: BrowserElementAnchor | null) => void;
@@ -63,6 +65,7 @@ const KNOWN_APPS = ["browser", "finder", "terminal", "editor"];
  * opt-in per app. Image generation is out of scope (honest note, no UI).
  */
 export function BrowserPanel({
+  sessionId,
   annotations,
   permissions,
   onAddAnnotation,
@@ -77,7 +80,7 @@ export function BrowserPanel({
 }: Props) {
   const initialTabsRef = useRef<BrowserTab[] | null>(null);
   if (initialTabsRef.current === null) {
-    const stored = loadBrowserTabs();
+    const stored = loadBrowserTabs(sessionId);
     initialTabsRef.current = stored.length > 0 ? stored : [createBrowserTab()];
   }
   const initialTabs = initialTabsRef.current;
@@ -110,8 +113,8 @@ export function BrowserPanel({
   const browserControlsAllowedRef = useRef(false);
 
   useEffect(() => {
-    saveBrowserTabs(tabs);
-  }, [tabs]);
+    saveBrowserTabs(tabs, sessionId);
+  }, [sessionId, tabs]);
 
   useEffect(() => () => {
     selectionCleanupRef.current?.();

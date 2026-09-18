@@ -17,6 +17,7 @@ import {
   BROWSER_ANNOTATIONS_KEY,
   BROWSER_PERMS_KEY,
   BROWSER_TABS_KEY,
+  browserTabsStorageKey,
   browserCaptureAttachment,
   browserDownloadFilename,
   normalizeSameOriginTarget,
@@ -304,6 +305,19 @@ describe("browser persistence", () => {
     assert.deepEqual(back[0].history, ["https://example.com/", "https://example.com/current"]);
     assert.equal(back[0].historyIndex, 1);
     assert.ok(!store.getItem(BROWSER_TABS_KEY)?.includes("javascript:"));
+  });
+
+  it("isolates tab history by conversation", () => {
+    saveBrowserTabs([
+      { id: "tab-a", url: "https://a.example/", history: ["https://a.example/"], historyIndex: 0 },
+    ], "session-a");
+    saveBrowserTabs([
+      { id: "tab-b", url: "https://b.example/", history: ["https://b.example/"], historyIndex: 0 },
+    ], "session-b");
+    assert.notEqual(browserTabsStorageKey("session-a"), browserTabsStorageKey("session-b"));
+    assert.deepEqual(loadBrowserTabs("session-a").map((tab) => tab.id), ["tab-a"]);
+    assert.deepEqual(loadBrowserTabs("session-b").map((tab) => tab.id), ["tab-b"]);
+    assert.deepEqual(loadBrowserTabs("session-c"), []);
   });
 
   it("round-trips annotations under the muse-desktop.* key", () => {

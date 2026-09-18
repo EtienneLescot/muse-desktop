@@ -1490,6 +1490,8 @@ export default function App() {
                         <>
                           {" "}
                           <BrowserPanel
+                            key={active.session_id}
+                            sessionId={active.session_id}
                             annotations={browserAnnotations}
                             permissions={browserPermissions}
                             hostSkills={hostSkillsBySession[active.session_id] ?? []}

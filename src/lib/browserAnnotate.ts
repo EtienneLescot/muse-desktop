@@ -471,9 +471,25 @@ export function createBrowserTab(): BrowserTab {
   return { id: `tab-${makeId()}`, url: "", history: [], historyIndex: -1 };
 }
 
+/**
+ * Scope navigation state to one conversation without putting the raw session
+ * id in a storage key. The FNV-1a projection is deterministic, bounded and
+ * keeps two sessions from ever sharing a tab history by accident.
+ */
+export function browserTabsStorageKey(sessionId?: string): string {
+  const normalized = sessionId?.trim() ?? "";
+  if (!normalized) return BROWSER_TABS_KEY;
+  let hash = 0x811c9dc5;
+  for (const character of normalized) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${BROWSER_TABS_KEY}.session.${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
 /** Load navigation state while dropping malformed or unsafe URLs. */
-export function loadBrowserTabs(): BrowserTab[] {
-  const raw = read<unknown>(BROWSER_TABS_KEY, []);
+export function loadBrowserTabs(sessionId?: string): BrowserTab[] {
+  const raw = read<unknown>(browserTabsStorageKey(sessionId), []);
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
   const tabs: BrowserTab[] = [];
@@ -488,7 +504,7 @@ export function loadBrowserTabs(): BrowserTab[] {
 }
 
 /** Persist only the bounded navigation projection; never page cookies/state. */
-export function saveBrowserTabs(tabs: BrowserTab[]): void {
+export function saveBrowserTabs(tabs: BrowserTab[], sessionId?: string): void {
   const seen = new Set<string>();
   const safe: BrowserTab[] = [];
   for (const candidate of tabs) {
@@ -498,7 +514,7 @@ export function saveBrowserTabs(tabs: BrowserTab[]): void {
     safe.push(tab);
     if (safe.length >= MAX_BROWSER_TABS) break;
   }
-  write(BROWSER_TABS_KEY, safe);
+  write(browserTabsStorageKey(sessionId), safe);
 }
 
 export function loadBrowserAnnotations(): BrowserAnnotation[] {
