@@ -46,6 +46,26 @@ export interface RetryScheduled {
 }
 
 /**
+ * Reject retry metadata that belongs to a different or already terminal turn.
+ *
+ * Hosts may deliver buffered notifications after a reconnect. A retry event
+ * for an older turn must never repaint the current conversation as retrying.
+ * Events without a turn id remain compatible with older hosts and are
+ * accepted because there is no safe identity to compare.
+ */
+export function shouldAcceptRetryScheduled(
+  retry: RetryScheduled,
+  currentTurnId?: string,
+  lastTerminalTurnId?: string,
+): boolean {
+  const turnId = retry.turnId?.trim();
+  if (!turnId) return true;
+  if (lastTerminalTurnId !== undefined && turnId === lastTerminalTurnId) return false;
+  if (currentTurnId !== undefined && turnId !== currentTurnId) return false;
+  return true;
+}
+
+/**
  * Parse the additive `turn/retryScheduled` payload without exposing raw host
  * JSON. Unknown or unbounded values are ignored; the caller can fall back to
  * the generic liveness row when an older host omits this metadata.

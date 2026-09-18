@@ -156,7 +156,11 @@ import {
   type EngineErrorDetails,
 } from "../lib/engineError";
 import { statusLogText } from "../lib/statusLog";
-import { parseRetryScheduled, type RetryScheduled } from "../lib/streamHealth";
+import {
+  parseRetryScheduled,
+  shouldAcceptRetryScheduled,
+  type RetryScheduled,
+} from "../lib/streamHealth";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
 // endpoint exists); children surface as `subagent` entries as usual.
 import {
@@ -1226,14 +1230,17 @@ function shortTitle(text: string): string {
  * Parse a stream-chunk payload: JSON `{itemId, text}` from the supervisor, or
  * raw text from older payloads. Never throws.
  */
-function parseChunk(payload: string): { itemId?: string; text: string } {
+function parseChunk(payload: string): { itemId?: string; turnId?: string; text: string } {
   const trimmed = payload.trim();
   if (trimmed.startsWith("{")) {
     try {
       const obj = JSON.parse(trimmed) as Record<string, unknown>;
       if (typeof obj.text === "string") {
         const itemId = typeof obj.itemId === "string" ? obj.itemId : undefined;
-        return { itemId, text: obj.text };
+        const turnId = typeof obj.turnId === "string" && obj.turnId.trim().length > 0
+          ? obj.turnId.trim()
+          : undefined;
+        return { itemId, turnId, text: obj.text };
       }
     } catch {
       // fall through to raw text
@@ -1727,6 +1734,9 @@ export function useMuseSessions(): UseMuseSessions {
   // Latest server turn id per session, used to target turn/steer without a
   // race against a newly started or completed turn.
   const turnIdsRef = useRef<Record<string, string>>({});
+  // Keep the last terminal turn id long enough to reject a buffered retry
+  // notification that arrives after the turn has already completed.
+  const lastTerminalTurnIdsRef = useRef<Record<string, string>>({});
   // Shared poll cursor: the periodic tick and the post-send kick both drain
   // from here, so a kick never replays what the tick already fed.
   const cursorRef = useRef(0);
@@ -2844,7 +2854,11 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "output") {
       ensureSessionRow(sid, null);
-      const { itemId, text } = parseChunk(payload);
+      const { itemId, turnId, text } = parseChunk(payload);
+      if (turnId !== undefined) {
+        turnIdsRef.current[sid] = turnId;
+        delete lastTerminalTurnIdsRef.current[sid];
+      }
       setLogs((cur) => {
         const log = cur[sid] ?? [];
         // Coalesce into the last open assistant entry, not merely the last
@@ -2870,7 +2884,11 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "thinking") {
       ensureSessionRow(sid, null);
-      const { itemId, text } = parseChunk(payload);
+      const { itemId, turnId, text } = parseChunk(payload);
+      if (turnId !== undefined) {
+        turnIdsRef.current[sid] = turnId;
+        delete lastTerminalTurnIdsRef.current[sid];
+      }
       // A few hosts can deliver the first delta before item/started. Promote
       // the send-time placeholder first so the delta still lands in the
       // dedicated lane and never leaves a phantom assistant "thinking" row.
@@ -2909,7 +2927,11 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "shell_output") {
       ensureSessionRow(sid, null);
-      const { itemId, text } = parseChunk(payload);
+      const { itemId, turnId, text } = parseChunk(payload);
+      if (turnId !== undefined) {
+        turnIdsRef.current[sid] = turnId;
+        delete lastTerminalTurnIdsRef.current[sid];
+      }
       setLogs((cur) => {
         const log = cur[sid] ?? [];
         const i = lastOpenIndex(log, "tool", undefined, itemId);
@@ -3068,6 +3090,10 @@ export function useMuseSessions(): UseMuseSessions {
         ? parsed.turnId
         : undefined;
       const commandText = typeof parsed?.commandText === "string" ? parsed.commandText : undefined;
+      if (turnId !== undefined) {
+        turnIdsRef.current[sid] = turnId;
+        delete lastTerminalTurnIdsRef.current[sid];
+      }
       setLogs((cur) => {
         const next = applyItemSnapshotUpdate(cur[sid] ?? [], {
           itemId,
@@ -3119,6 +3145,20 @@ export function useMuseSessions(): UseMuseSessions {
         const text = statusLogText(kind, payload);
         if (text !== null) pushLog(sid, [{ id: newId(), ts: Date.now(), role: "system", text }]);
         return;
+      }
+      if (!shouldAcceptRetryScheduled(
+        retry,
+        turnIdsRef.current[sid],
+        lastTerminalTurnIdsRef.current[sid],
+      )) {
+        // A reconnect can flush an older retry after a newer turn started or
+        // after this turn already completed. Keep that stale notification out
+        // of the live status and transcript.
+        return;
+      }
+      if (retry.turnId !== undefined) {
+        turnIdsRef.current[sid] = retry.turnId;
+        delete lastTerminalTurnIdsRef.current[sid];
       }
       clearResumePending(sid);
       clearStopping(sid);
@@ -3270,6 +3310,10 @@ export function useMuseSessions(): UseMuseSessions {
       } catch {
         // unparseable payload: still show the reflexive phase
       }
+      if (turnId !== undefined) {
+        turnIdsRef.current[sid] = turnId;
+        delete lastTerminalTurnIdsRef.current[sid];
+      }
       if (itemRole !== "tool") {
         setSessions((cur) =>
           cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
@@ -3285,6 +3329,9 @@ export function useMuseSessions(): UseMuseSessions {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         if (typeof obj.turnId === "string" && obj.turnId.length > 0) {
           turnIdsRef.current[sid] = obj.turnId;
+          if (lastTerminalTurnIdsRef.current[sid] !== obj.turnId) {
+            delete lastTerminalTurnIdsRef.current[sid];
+          }
           setQueuedTurnsBySession((cur) => {
             const queued = cur[sid];
             if (!queued || !queued.some((turn) => turn.turn_id === obj.turnId)) return cur;
@@ -3302,6 +3349,13 @@ export function useMuseSessions(): UseMuseSessions {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const queuedTurnId = typeof obj.turnId === "string" ? obj.turnId : "";
         if (queuedTurnId.length > 0) {
+          setRetryScheduledBySession((cur) => {
+            const retry = cur[sid];
+            if (retry?.turnId !== queuedTurnId) return cur;
+            const next = { ...cur };
+            delete next[sid];
+            return next;
+          });
           setQueuedTurnsBySession((cur) => {
             const queued = cur[sid] ?? [];
             const next = { ...cur, [sid]: queued.filter((turn) => turn.turn_id !== queuedTurnId) };
@@ -3327,6 +3381,7 @@ export function useMuseSessions(): UseMuseSessions {
       ensurePlaceholder(sid);
     } else if (isStoppedKind(kind)) {
       if (completion?.turnId !== undefined) {
+        lastTerminalTurnIdsRef.current[sid] = completion.turnId;
         // Older hosts may omit item/completed. Preserve the exact turn anchor
         // on any remaining open lane before closing it.
         closeOpenBlocks(sid, undefined, completion.turnId);
