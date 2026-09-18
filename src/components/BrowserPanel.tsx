@@ -8,7 +8,7 @@ import {
   formatBrowserCaptureContext,
   formatBrowserObservation,
   normalizeBrowserObservation,
-  normalizeSameOriginDownloadTarget,
+  normalizeSameOriginTarget,
   normalizeBrowserUrl,
   createBrowserTab,
   loadBrowserTabs,
@@ -145,9 +145,10 @@ export function BrowserPanel({
       };
       const syncPageDownload = (event: MouseEvent) => {
         const target = event.target;
-        const anchor = target instanceof Element
-          ? target.closest("a[href]") as HTMLAnchorElement | null
+        const targetElement = target && typeof (target as Element).closest === "function"
+          ? target as Element
           : null;
+        const anchor = targetElement?.closest("a[href]") as HTMLAnchorElement | null;
         if (anchor === null || !anchor.hasAttribute("download")) return;
         event.preventDefault();
         if (!browserControlsAllowedRef.current) {
@@ -271,6 +272,24 @@ export function BrowserPanel({
     }
   };
 
+  const navigateSelectedLink = () => {
+    if (!browserControlsAllowed) {
+      setControlStatus("Allow computer-use for browser before navigating a page link.");
+      return;
+    }
+    if (!elementAnchor?.href || normalized === null) {
+      setControlStatus("Select a link in the same-origin page before navigating it.");
+      return;
+    }
+    const target = normalizeSameOriginTarget(normalized, elementAnchor.href);
+    if (target === null) {
+      setControlStatus("For safety, navigation is limited to the current page origin.");
+      return;
+    }
+    navigate(target);
+    setControlStatus("Navigated to the selected link.");
+  };
+
   const downloadLink = async (link: string | undefined, suggested?: string): Promise<void> => {
     if (!browserControlsAllowedRef.current) {
       setDownloadStatus("Allow computer-use for browser before saving a page link.");
@@ -282,7 +301,7 @@ export function BrowserPanel({
     }
     try {
       const page = new URL(normalized);
-      const targetUrl = normalizeSameOriginDownloadTarget(page.toString(), link);
+      const targetUrl = normalizeSameOriginTarget(page.toString(), link);
       if (targetUrl === null) {
         setDownloadStatus("For safety, downloads are limited to the current page origin.");
         return;
@@ -750,6 +769,14 @@ export function BrowserPanel({
               title={browserControlsAllowed ? "Click the selected same-origin element" : "Allow computer-use for browser first"}
             >
               Click selected element
+            </button>
+            <button
+              type="button"
+              disabled={elementAnchor?.href === undefined || !browserControlsAllowed}
+              onClick={navigateSelectedLink}
+              title={browserControlsAllowed ? "Navigate to the selected same-origin link" : "Allow computer-use for browser first"}
+            >
+              Navigate selected link
             </button>
             <button
               type="button"

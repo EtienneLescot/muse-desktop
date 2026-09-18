@@ -19,7 +19,7 @@ import {
   BROWSER_TABS_KEY,
   browserCaptureAttachment,
   browserDownloadFilename,
-  normalizeSameOriginDownloadTarget,
+  normalizeSameOriginTarget,
   createBrowserAnnotation,
   normalizeBrowserElementAnchor,
   formatBrowserObservation,
@@ -245,15 +245,15 @@ describe("computer-use permissions (default denied)", () => {
 
   it("keeps page-triggered downloads same-origin and http(s)-only", () => {
     assert.equal(
-      normalizeSameOriginDownloadTarget("https://example.com/docs/start", "/files/report.csv"),
+      normalizeSameOriginTarget("https://example.com/docs/start", "/files/report.csv"),
       "https://example.com/files/report.csv",
     );
     assert.equal(
-      normalizeSameOriginDownloadTarget("https://example.com/docs/start", "https://cdn.example.net/report.csv"),
+      normalizeSameOriginTarget("https://example.com/docs/start", "https://cdn.example.net/report.csv"),
       null,
     );
     assert.equal(
-      normalizeSameOriginDownloadTarget("https://example.com/docs/start", "javascript:alert(1)"),
+      normalizeSameOriginTarget("https://example.com/docs/start", "javascript:alert(1)"),
       null,
     );
   });

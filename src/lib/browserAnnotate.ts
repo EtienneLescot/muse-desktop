@@ -153,10 +153,10 @@ export function browserDownloadFilename(url: string, suggested?: string): string
 }
 
 /**
- * Resolve a page-triggered download without crossing the page origin or
- * leaving the http(s)-only browser boundary.
+ * Resolve a page target without crossing the page origin or leaving the
+ * http(s)-only browser boundary.
  */
-export function normalizeSameOriginDownloadTarget(pageUrl: string, targetUrl: string): string | null {
+export function normalizeSameOriginTarget(pageUrl: string, targetUrl: string): string | null {
   const page = normalizeBrowserUrl(pageUrl);
   if (page === null) return null;
   try {
