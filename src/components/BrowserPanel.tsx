@@ -697,6 +697,10 @@ export function BrowserPanel({
       setControlStatus("This browser action is not available from the connected Muse host.");
       return;
     }
+    if (action !== "observe" && !browserControlsAllowed) {
+      setControlStatus("Allow computer-use for browser before asking Muse to act on the page.");
+      return;
+    }
     onInvokeBrowserSkill(
       skill.selector,
       buildBrowserSkillArguments(action, normalized ?? currentUrl, elementAnchor, typeText),
@@ -882,7 +886,11 @@ export function BrowserPanel({
                   type="button"
                   key={action}
                   onClick={() => invokeBrowserSkill(action)}
-                  disabled={action !== "observe" && elementAnchor === null}
+                  disabled={
+                    (action !== "observe" && (!browserControlsAllowed || elementAnchor === null)) ||
+                    (["navigate", "openTab", "download"].includes(action) && elementAnchor?.href === undefined) ||
+                    (action === "type" && typeText.trim().length === 0)
+                  }
                   title="Run the advertised browser skill through the current conversation"
                 >
                   {action === "openTab"
