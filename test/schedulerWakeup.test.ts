@@ -33,6 +33,13 @@ describe("scheduler wake-up planning", () => {
 
   it("moves an already-due occurrence to a bounded wake retry", () => {
     assert.equal(nextSchedulerWakeAt([once("due", 9_000)], 10_000), 70_000);
+    assert.equal(nextSchedulerWakeAt([once("boundary", 11_001)], 10_000), 11_001);
+    assert.equal(nextSchedulerWakeAt([once("near", 10_500)], 10_000), 70_000);
+  });
+
+  it("rejects a non-finite scheduler clock without scheduling a wake-up", () => {
+    assert.equal(nextSchedulerWakeAt([once("future", 20_000)], Number.NaN), null);
+    assert.equal(nextSchedulerWakeAt([once("future", 20_000)], Number.POSITIVE_INFINITY), null);
   });
 
   it("serializes native updates and coalesces pending changes", async () => {

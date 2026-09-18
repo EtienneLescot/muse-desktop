@@ -377,8 +377,12 @@ mod tests {
     #[test]
     fn wake_time_is_bounded_and_due_values_are_delayed() {
         assert_eq!(checked_wake_at(Some(9_000), 10_000).unwrap(), Some(70_000));
+        assert_eq!(checked_wake_at(Some(10_000), 10_000).unwrap(), Some(70_000));
+        assert_eq!(checked_wake_at(Some(11_001), 10_000).unwrap(), Some(11_001));
         assert!(checked_wake_at(Some(10_000 + MAX_FUTURE_MS + 1), 10_000).is_err());
         assert!(checked_wake_at(None, 10_000).unwrap().is_none());
+        assert!(checked_wake_at(Some(0), 10_000).is_err());
+        assert!(checked_wake_at(Some(10_000), 0).is_err());
     }
 
     #[test]
@@ -390,6 +394,7 @@ mod tests {
         .unwrap();
         assert!(xml.contains("StartBoundary>2025-01-01T00:00:00Z"));
         assert!(xml.contains("C:\\Muse &amp; Desktop"));
+        assert!(xml.contains("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>"));
         assert!(xml.contains("--automation-wakeup"));
     }
 
