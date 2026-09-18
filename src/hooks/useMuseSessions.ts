@@ -280,6 +280,7 @@ export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
 import { loadNativeScheduleRuns, saveNativeScheduleRuns } from "../lib/scheduleRunLedger";
 import { loadNativeSchedules, mergeSchedules, saveNativeSchedules } from "../lib/scheduleLedger";
 import {
+  createSchedulerWakeupQueue,
   INITIAL_SCHEDULER_WAKEUP_STATUS,
   nextSchedulerWakeAt,
   syncNativeSchedulerWakeup,
@@ -1558,6 +1559,10 @@ export function useMuseSessions(): UseMuseSessions {
   const [schedulerWakeupStatus, setSchedulerWakeupStatus] = useState<SchedulerWakeupStatus>(
     () => INITIAL_SCHEDULER_WAKEUP_STATUS,
   );
+  const nativeSchedulerWakeupWriterRef = useRef<((wakeAt: number | null) => Promise<SchedulerWakeupStatus>) | null>(null);
+  if (nativeSchedulerWakeupWriterRef.current === null) {
+    nativeSchedulerWakeupWriterRef.current = createSchedulerWakeupQueue(syncNativeSchedulerWakeup);
+  }
   // The native app-data copy is hydrated once before any subsequent state
   // write. The renderer state remains the SSOT; this gate prevents a startup
   // localStorage render from overwriting a newer native snapshot.
@@ -2261,7 +2266,9 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     let cancelled = false;
     const wakeAt = nextSchedulerWakeAt(schedules);
-    void syncNativeSchedulerWakeup(wakeAt).then((status) => {
+    const syncWakeup = nativeSchedulerWakeupWriterRef.current;
+    if (syncWakeup === null) return;
+    void syncWakeup(wakeAt).then((status) => {
       if (!cancelled) setSchedulerWakeupStatus(status);
     });
     return () => {

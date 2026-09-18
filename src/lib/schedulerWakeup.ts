@@ -63,3 +63,45 @@ export async function syncNativeSchedulerWakeup(
     };
   }
 }
+
+/** Serialize native task updates so the last schedule snapshot wins. */
+export function createSchedulerWakeupQueue(
+  sync: (wakeAt: number | null) => Promise<SchedulerWakeupStatus> = syncNativeSchedulerWakeup,
+): (wakeAt: number | null) => Promise<SchedulerWakeupStatus> {
+  type Waiter = (status: SchedulerWakeupStatus) => void;
+  let pending: { wakeAt: number | null; waiters: Waiter[] } | null = null;
+  let draining = false;
+
+  const drain = async (): Promise<void> => {
+    if (draining) return;
+    draining = true;
+    try {
+      while (pending !== null) {
+        const next = pending;
+        pending = null;
+        let status: SchedulerWakeupStatus;
+        try {
+          status = await sync(next.wakeAt);
+        } catch {
+          status = {
+            ...INITIAL_SCHEDULER_WAKEUP_STATUS,
+            message: "Native wake-up is unavailable; keep Muse open for automations.",
+          };
+        }
+        next.waiters.forEach((resolve) => resolve(status));
+      }
+    } finally {
+      draining = false;
+      if (pending !== null) void drain();
+    }
+  };
+
+  return (wakeAt) => new Promise((resolve) => {
+    if (pending === null) pending = { wakeAt, waiters: [resolve] };
+    else {
+      pending.wakeAt = wakeAt;
+      pending.waiters.push(resolve);
+    }
+    void drain();
+  });
+}

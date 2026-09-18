@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { nextSchedulerWakeAt } from "../src/lib/schedulerWakeup.ts";
+import {
+  createSchedulerWakeupQueue,
+  nextSchedulerWakeAt,
+  type SchedulerWakeupStatus,
+} from "../src/lib/schedulerWakeup.ts";
 import type { Schedule } from "../src/lib/schedules.ts";
 
 function once(id: string, at: number, enabled = true): Schedule {
@@ -29,5 +33,32 @@ describe("scheduler wake-up planning", () => {
 
   it("moves an already-due occurrence to a bounded wake retry", () => {
     assert.equal(nextSchedulerWakeAt([once("due", 9_000)], 10_000), 70_000);
+  });
+
+  it("serializes native updates and coalesces pending changes", async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const calls: Array<number | null> = [];
+    const status = (wakeAt: number | null): SchedulerWakeupStatus => ({
+      schema: "muse-desktop.scheduler-wakeup.v1",
+      supported: true,
+      installed: wakeAt !== null,
+      wakeAt,
+      message: "ok",
+    });
+    const queue = createSchedulerWakeupQueue(async (wakeAt) => {
+      calls.push(wakeAt);
+      if (calls.length === 1) await firstFinished;
+      return status(wakeAt);
+    });
+    const first = queue(10_000);
+    const second = queue(20_000);
+    const third = queue(30_000);
+    releaseFirst();
+    const results = await Promise.all([first, second, third]);
+    assert.deepEqual(calls, [10_000, 30_000]);
+    assert.equal(results[0].wakeAt, 10_000);
+    assert.equal(results[1].wakeAt, 30_000);
+    assert.equal(results[2].wakeAt, 30_000);
   });
 });
