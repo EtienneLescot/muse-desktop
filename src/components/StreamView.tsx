@@ -33,6 +33,38 @@ import {
 } from "../lib/subagent";
 import { MessageContent } from "./MessageContent";
 
+function outputDownloadName(entry: LogEntry, mediaType?: string): string {
+  const source = entry.richContent?.[0]?.path ?? "muse-output";
+  const basename = source.split(/[\\/]/).pop() ?? "muse-output";
+  const safe = basename.replace(/[<>:\"/\\|?*\u0000-\u001f]/g, "-").trim().slice(0, 120) || "muse-output";
+  if (safe.includes(".")) return safe;
+  const extension = mediaType?.startsWith("image/") ? mediaType.slice(6).split(";")[0] : undefined;
+  return extension ? `${safe}.${extension.replace(/[^a-z0-9.+-]/gi, "")}` : `${safe}.txt`;
+}
+
+function downloadLoadedOutput(entry: LogEntry, loaded: { content: string; base64Data?: string; mediaType?: string }): void {
+  if (typeof document === "undefined" || typeof URL === "undefined" || typeof Blob === "undefined") return;
+  let blob: Blob;
+  if (loaded.base64Data !== undefined) {
+    if (typeof atob !== "function") return;
+    try {
+      const binary = atob(loaded.base64Data);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      blob = new Blob([bytes], { type: loaded.mediaType ?? "application/octet-stream" });
+    } catch {
+      return;
+    }
+  } else {
+    blob = new Blob([loaded.content], { type: "text/plain;charset=utf-8" });
+  }
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = outputDownloadName(entry, loaded.mediaType);
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 /** US-6 controls for one sub-agent block. Read-result and drill-down resolve
  *  to display text (also logged as system lines by the hook); the rest are
  *  fire-and-forget with errors surfaced in the hook error banner. */
@@ -1020,6 +1052,15 @@ export function StreamView({
                       {loadedOutputs[e.id].byteLen.toLocaleString()} bytes loaded
                       {loadedOutputs[e.id].eof ? " · complete" : " · more available"}
                     </span>
+                    {loadedOutputs[e.id].eof && (loadedOutputs[e.id].content.length > 0 || loadedOutputs[e.id].base64Data) && (
+                      <button
+                        type="button"
+                        className="tool-output-button"
+                        onClick={() => downloadLoadedOutput(e, loadedOutputs[e.id])}
+                      >
+                        Download output
+                      </button>
+                    )}
                     {loadedOutputs[e.id].base64Data && loadedOutputs[e.id].mediaType?.startsWith("image/") && loadedOutputs[e.id].eof ? (
                       <img
                         className="rich-content-preview"
