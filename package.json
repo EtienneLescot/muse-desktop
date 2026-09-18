@@ -9,6 +9,7 @@
     "test": "node --experimental-strip-types --test \"test/**/*.test.ts\"",
     "smoke:native": "node scripts/native-smoke.mjs",
     "release:update": "node scripts/release-update.mjs",
+    "release:launch": "node scripts/release-launcher.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "dev:clean": "sh scripts/dev-clean.sh",

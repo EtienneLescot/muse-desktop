@@ -39,7 +39,7 @@ To build the Windows x64 installer locally (the matching `muse` sidecar must be 
 npm run tauri -- build --bundles nsis
 ```
 
-The NSIS installer is written to `src-tauri/target/release/bundle/nsis/`. Use `--bundles msi` or `--bundles all` for the MSI package or both formats. `scripts/build-windows.ps1` generates an adjacent `.manifest.json` for every requested installer and verifies deterministic SHA-256 checksums for the installer and the sidecar. Release signing, publishing and update channels are not configured yet.
+The NSIS installer is written to `src-tauri/target/release/bundle/nsis/`. Use `--bundles msi` or `--bundles all` for the MSI package or both formats. `scripts/build-windows.ps1` generates an adjacent `.manifest.json` for every requested installer and verifies deterministic SHA-256 checksums for the installer and the sidecar. `scripts/release-manifest.mjs` and `scripts/verify-release-manifest.mjs` support optional Ed25519 signing with an explicit trust key; `scripts/release-update.mjs` stages and swaps verified releases, and `npm run release:launch -- run --pid … --staged … --slots-root … --executable …` coordinates a bounded stop/swap/restart. Publishing, installer handoff and differential update channels still need product integration.
 
 On Windows, `powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1` performs the same build after checking that the x64 sidecar is present. Pass `-Bundle msi` or `-Bundle all` when another bundle format is needed.
 
