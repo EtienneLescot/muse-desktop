@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { historyItemsToLogEntries, mergeHistoryLog } from "../src/lib/history.ts";
+import { historyEventsToLogEntries, historyItemsToLogEntries, mergeHistoryLog } from "../src/lib/history.ts";
 
 describe("session history hydration", () => {
   it("maps durable item kinds to the live conversation lanes", () => {
@@ -59,6 +59,34 @@ describe("session history hydration", () => {
       },
     ]);
     assert.equal(entries[0].outputRef, "output://shell-large");
+  });
+
+  it("folds paged item events to the newest revision and ignores bookkeeping", () => {
+    const entries = historyEventsToLogEntries([
+      { method: "turn/started", params: { viewCursor: "1" } },
+      { method: "item/started", params: { item: { itemId: "a1", kind: "agentMessage", revision: 1, text: "partial", status: "inProgress" } } },
+      { method: "item/updated", params: { item: { itemId: "a1", kind: "agentMessage", revision: 2, text: "complete", status: "completed" } } },
+      { method: "item/updated", params: { item: { itemId: "a1", kind: "agentMessage", revision: 1, text: "stale" } } },
+      { method: "item/completed", params: { item: { itemId: "u1", kind: "userMessage", revision: 1, displayText: "Hello", status: "completed" } } },
+    ], 1000);
+    assert.deepEqual(entries.map((entry) => [entry.itemId, entry.role, entry.text, entry.open]), [
+      ["a1", "assistant", "complete", false],
+      ["u1", "user", "Hello", false],
+    ]);
+  });
+
+  it("accepts the structured host output reference returned by view/page", () => {
+    const entries = historyItemsToLogEntries([
+      {
+        itemId: "tool-1",
+        kind: "toolCall",
+        tool: "bash",
+        visibleOutput: "summary",
+        outputRef: { id: "out-1", uri: "output://out-1", availability: "available" },
+        status: "completed",
+      },
+    ]);
+    assert.equal(entries[0].outputRef, "output://out-1");
   });
 
   it("reconciles by item id and keeps local notes without duplicating user text", () => {

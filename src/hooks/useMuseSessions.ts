@@ -483,6 +483,7 @@ import { formatTerminalContext } from "../lib/terminalContext";
 import { formatWorkspaceFileContext } from "../lib/fileContext";
 import {
   extractHistoryItems,
+  historyEventsToLogEntries,
   historyItemsToLogEntries,
   mergeHistoryLog,
 } from "../lib/history";
@@ -1410,6 +1411,11 @@ function parsePendingSnapshot(
   return { approvals, inputs };
 }
 
+function isMethodUnavailable(error: unknown): boolean {
+  const detail = error instanceof Error ? error.message : String(error);
+  return /(?:-32601|method\s*not\s*found|methodnotfound)/i.test(detail);
+}
+
 /**
  * Session-multiplexing hook.
  *
@@ -1785,6 +1791,48 @@ export function useMuseSessions(): UseMuseSessions {
   const outboxRef = useRef<Record<string, OutboxEntry[]>>({});
   outboxRef.current = outbox;
 
+  /**
+   * Read the host's folded history, falling back to the durable cursor-paged
+   * view when an older/newer host does not expose `session/read`. Paging is
+   * bounded by both page size and total pages so a malformed or endlessly
+   * advancing cursor cannot stall reconciliation. The returned projection is
+   * always the same LogEntry shape consumed by the renderer SSOT.
+   */
+  const readHistoryEntries = useCallback(async (sessionId: string): Promise<LogEntry[]> => {
+    try {
+      const history = await invoke<unknown>("read_session_history", { sessionId });
+      return historyItemsToLogEntries(extractHistoryItems(history));
+    } catch (error) {
+      if (!isMethodUnavailable(error)) throw error;
+      const events: unknown[] = [];
+      let cursor: string | undefined;
+      let previousCursor: string | undefined;
+      for (let page = 0; page < 8; page += 1) {
+        const result = await invoke<unknown>("page_session_history", {
+          sessionId,
+          direction: "forward",
+          limit: 500,
+          ...(cursor === undefined ? {} : { cursor }),
+        });
+        if (typeof result !== "object" || result === null) {
+          throw new Error("view/page returned an invalid history envelope");
+        }
+        const envelope = result as { events?: unknown; nextCursor?: unknown };
+        if (Array.isArray(envelope.events)) events.push(...envelope.events);
+        const next = typeof envelope.nextCursor === "string" && envelope.nextCursor.trim().length > 0
+          ? envelope.nextCursor.trim()
+          : undefined;
+        if (next === undefined) break;
+        if (next === cursor || next === previousCursor) {
+          throw new Error("view/page returned a repeated history cursor");
+        }
+        previousCursor = cursor;
+        cursor = next;
+      }
+      return historyEventsToLogEntries(events);
+    }
+  }, []);
+
   // One drain of the backend event buffer, shared by the periodic tick and
   // the immediate post-send kick. Stable across renders: it only touches refs
   // plus setState, so send/answer/approve callbacks can safely depend on it.
@@ -1828,8 +1876,7 @@ export function useMuseSessions(): UseMuseSessions {
               // still provides a useful recovery and the stale action remains.
             }
             try {
-              const history = await invoke<unknown>("read_session_history", { sessionId });
-              const remote = historyItemsToLogEntries(extractHistoryItems(history));
+              const remote = await readHistoryEntries(sessionId);
               if (remote.length === 0) return;
               const local = logsRef.current[sessionId] ?? loadLog(sessionId);
               const merged = mergeHistoryLog(local, remote);
@@ -1847,7 +1894,7 @@ export function useMuseSessions(): UseMuseSessions {
     } catch (err) {
       if (aliveRef.current) setError(`event poll failed: ${String(err)}`);
     }
-  }, []);
+  }, [readHistoryEntries]);
 
   // Immediate drain right after the backend acknowledges new work: without
   // this the next tick can be a full slow interval away, so the first paint
@@ -3853,8 +3900,7 @@ export function useMuseSessions(): UseMuseSessions {
     setReconcilingId(id);
     setError(null);
     try {
-      const history = await invoke<unknown>("read_session_history", { sessionId: id });
-      const remote = historyItemsToLogEntries(extractHistoryItems(history));
+      const remote = await readHistoryEntries(id);
       // A history snapshot containing only the original user message is not
       // proof that the host resumed. Require a durable assistant/tool/reasoning
       // item before clearing the post-decision liveness marker.
@@ -3899,7 +3945,7 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconcilingId(null);
     }
-  }, [kickPoll, reconcileQueueSnapshot, sessions, touchStreamActivity]);
+  }, [kickPoll, readHistoryEntries, reconcileQueueSnapshot, sessions, touchStreamActivity]);
 
   const reconnectSession = useCallback(async (id: string) => {
     const session = sessions.find((s) => s.session_id === id);
@@ -3953,10 +3999,7 @@ export function useMuseSessions(): UseMuseSessions {
       // point-in-time and never re-emits pending requests; resume remains the
       // sole path that re-attaches the live session and restarts polling.
       try {
-        const history = await invoke<unknown>("read_session_history", {
-          sessionId: id,
-        });
-        const remote = historyItemsToLogEntries(extractHistoryItems(history));
+        const remote = await readHistoryEntries(id);
         if (remote.length > 0) {
           const local = logsRef.current[id] ?? loadLog(id);
           const merged = mergeHistoryLog(local, remote);
@@ -4006,7 +4049,7 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, refreshHostSkills, sessions, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState]);
+  }, [authorizationMode, readHistoryEntries, refreshHostSkills, sessions, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState]);
 
   const startSession = useCallback(async () => {
     return await startSessionRow(undefined, globalSettings);

@@ -29,8 +29,27 @@ export interface SessionHistoryItem {
   outputRef?: unknown;
 }
 
+/** A durable notification returned by MSP `view/page`.
+ *
+ * The protocol intentionally keeps the event method beside its params. We
+ * only use the item lifecycle events here; session/turn bookkeeping remains
+ * owned by the live event reducer and must never become transcript noise.
+ */
+export interface PagedHistoryEvent {
+  method?: unknown;
+  params?: unknown;
+}
+
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function outputReference(value: unknown): string | undefined {
+  const direct = stringValue(value);
+  if (direct !== undefined) return direct;
+  if (typeof value !== "object" || value === null) return undefined;
+  const object = value as { uri?: unknown; id?: unknown };
+  return stringValue(object.uri) ?? stringValue(object.id);
 }
 
 /** Normalize additive host aliases before choosing a transcript lane. */
@@ -153,7 +172,7 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
       text,
       itemId,
       ...(turnId === undefined ? {} : { turnId }),
-      ...(stringValue(item.outputRef) === undefined ? {} : { outputRef: stringValue(item.outputRef) }),
+      ...(outputReference(item.outputRef) === undefined ? {} : { outputRef: outputReference(item.outputRef) }),
       open: item.status === "inProgress",
     };
     const revision = typeof item.revision === "number" && Number.isFinite(item.revision)
@@ -178,6 +197,49 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
     entries.push(entry);
   });
   return entries;
+}
+
+/**
+ * Convert the durable item lifecycle events served by `view/page` into the
+ * same folded item projection used by `session/read`.
+ *
+ * A page can contain multiple revisions of one item (for example an open
+ * `item/started` followed by `item/updated` and `item/completed`). Keep the
+ * highest revision, while retaining arrival order for items whose revision is
+ * absent on an older compatible host. This function is deliberately pure so
+ * paging and gap-recovery tests can exercise it without a browser runtime.
+ */
+export function historyEventsToLogEntries(events: unknown[], now = Date.now()): LogEntry[] {
+  const byItem = new Map<string, { item: SessionHistoryItem; index: number; revision?: number }>();
+  events.forEach((raw, index) => {
+    if (typeof raw !== "object" || raw === null) return;
+    const event = raw as PagedHistoryEvent;
+    const method = typeof event.method === "string" ? event.method : "";
+    if (method !== "item/started" && method !== "item/updated" && method !== "item/completed") return;
+    if (typeof event.params !== "object" || event.params === null) return;
+    const params = event.params as Record<string, unknown>;
+    if (typeof params.item !== "object" || params.item === null) return;
+    const item = params.item as SessionHistoryItem;
+    const itemId = stringValue(item.itemId);
+    if (itemId === undefined) return;
+    const revision = typeof item.revision === "number" && Number.isFinite(item.revision)
+      ? item.revision
+      : undefined;
+    const previous = byItem.get(itemId);
+    if (
+      previous !== undefined &&
+      previous.revision !== undefined &&
+      revision !== undefined &&
+      revision <= previous.revision
+    ) return;
+    byItem.set(itemId, { item, index, revision });
+  });
+  return historyItemsToLogEntries(
+    [...byItem.values()]
+      .sort((a, b) => a.index - b.index)
+      .map(({ item }) => item),
+    now,
+  );
 }
 
 /** Read inline items from either the normal history envelope or a snapshot. */

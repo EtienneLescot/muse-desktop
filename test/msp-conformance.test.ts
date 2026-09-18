@@ -18,6 +18,7 @@ describe("msp conformance surface", () => {
       "initialize",
       "session/start",
       "session/read",
+      "view/page",
       "session/resume",
       "session/list",
       "model/list",

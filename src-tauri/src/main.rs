@@ -700,10 +700,12 @@ const MAX_OUTPUT_OFFSET_BYTES: u64 = 100 * 1024 * 1024;
 const MAX_OUTPUT_LENGTH_BYTES: u64 = 64 * 1024;
 
 fn item_output_ref(item: &Value) -> Option<String> {
-    item.get("outputRef")
-        .or_else(|| item.get("output_ref"))
-        .and_then(Value::as_str)
-        .map(str::trim)
+    let raw = item.get("outputRef").or_else(|| item.get("output_ref"))?;
+    let value = raw
+        .as_str()
+        .or_else(|| raw.get("uri").and_then(Value::as_str))
+        .or_else(|| raw.get("id").and_then(Value::as_str))?;
+    Some(value.trim())
         .filter(|value| !value.is_empty())
         .filter(|value| value.chars().count() <= MAX_OUTPUT_REF_CHARS)
         .map(str::to_string)
@@ -737,6 +739,55 @@ fn read_item_output_params(
         "offsetBytes": offset,
         "lengthBytes": length,
     }))
+}
+
+const MAX_VIEW_PAGE_CURSOR_CHARS: usize = 4096;
+const DEFAULT_VIEW_PAGE_LIMIT: u32 = 200;
+const MAX_VIEW_PAGE_LIMIT: u32 = 1000;
+
+/// Build the bounded request for the durable `view/page` history surface.
+/// `cursor` and `anchor` are opaque to the desktop: they are only trimmed and
+/// size-checked before being relayed to the host. The two fields are mutually
+/// exclusive according to MSP, so callers cannot accidentally mix a cold
+/// anchor with a continuation cursor.
+fn view_page_params(
+    session_id: &str,
+    cursor: Option<&str>,
+    direction: Option<&str>,
+    anchor: Option<&str>,
+    limit: Option<u32>,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(session_id, "sessionId")?;
+    if cursor.is_some() && anchor.is_some() {
+        return Err("view/page cursor and anchor are mutually exclusive".to_string());
+    }
+    let clean_opaque = |value: &str, label: &str| -> Result<String, String> {
+        let value = require_non_empty(value, label)?;
+        if value.chars().count() > MAX_VIEW_PAGE_CURSOR_CHARS {
+            return Err(format!("{label} exceeds {MAX_VIEW_PAGE_CURSOR_CHARS} characters"));
+        }
+        Ok(value)
+    };
+    let direction = direction.unwrap_or("forward").trim();
+    if direction != "forward" && direction != "backward" {
+        return Err("view/page direction must be forward or backward".to_string());
+    }
+    let limit = limit.unwrap_or(DEFAULT_VIEW_PAGE_LIMIT);
+    if limit == 0 || limit > MAX_VIEW_PAGE_LIMIT {
+        return Err(format!("view/page limit must be between 1 and {MAX_VIEW_PAGE_LIMIT}"));
+    }
+    let mut params = json!({
+        "sessionId": session_id,
+        "direction": direction,
+        "limit": limit,
+    });
+    if let Some(cursor) = cursor {
+        params["cursor"] = json!(clean_opaque(cursor, "cursor")?);
+    }
+    if let Some(anchor) = anchor {
+        params["anchor"] = json!(clean_opaque(anchor, "anchor")?);
+    }
+    Ok(params)
 }
 
 fn initialize_session_durability(result: &Value) -> Option<String> {
@@ -3458,6 +3509,31 @@ async fn read_session_history(
     Ok(read.get("history").cloned().unwrap_or_else(|| json!({"items": []})))
 }
 
+/// Read durable history through the cursor-paged `view/page` surface. This is
+/// the compatibility fallback for hosts that expose the paged view but do
+/// not serve the larger `session/read` envelope. The renderer folds only the
+/// item lifecycle events and keeps the opaque cursor in the bridge boundary.
+#[tauri::command]
+async fn page_session_history(
+    state: State<'_, AppState>,
+    session_id: String,
+    cursor: Option<String>,
+    direction: Option<String>,
+    anchor: Option<String>,
+    limit: Option<u32>,
+) -> Result<Value, String> {
+    let params = view_page_params(
+        &session_id,
+        cursor.as_deref(),
+        direction.as_deref(),
+        anchor.as_deref(),
+        limit,
+    )?;
+    session_client(&state, &session_id)?
+        .request("view/page", params)
+        .await
+}
+
 /// Read one bounded chunk of host-owned output for a completed or streaming
 /// item. Large tool payloads stay out of the transcript until the user asks
 /// for them, and every request is capped before it reaches the sidecar.
@@ -5401,6 +5477,42 @@ mod tests {
     }
 
     #[test]
+    fn view_page_params_keep_opaque_cursor_contract_bounded() {
+        let params = view_page_params(
+            " session-a ",
+            Some(" cursor-1 "),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(params["sessionId"], "session-a");
+        assert_eq!(params["cursor"], "cursor-1");
+        assert_eq!(params["direction"], "forward");
+        assert_eq!(params["limit"], DEFAULT_VIEW_PAGE_LIMIT);
+
+        let anchored = view_page_params(
+            "session-a",
+            None,
+            Some("backward"),
+            Some("latestCompaction"),
+            Some(MAX_VIEW_PAGE_LIMIT),
+        )
+        .unwrap();
+        assert_eq!(anchored["direction"], "backward");
+        assert_eq!(anchored["anchor"], "latestCompaction");
+        assert!(view_page_params("session-a", Some("c"), None, Some("a"), None).is_err());
+        assert!(view_page_params("session-a", None, Some("sideways"), None, None).is_err());
+        assert!(view_page_params("session-a", None, None, None, Some(0)).is_err());
+        assert!(view_page_params(
+            "session-a", None, None, None, Some(MAX_VIEW_PAGE_LIMIT + 1)
+        ).is_err());
+        assert!(view_page_params(
+            "session-a", Some(&"x".repeat(MAX_VIEW_PAGE_CURSOR_CHARS + 1)), None, None, None
+        ).is_err());
+    }
+
+    #[test]
     fn rename_session_params_trim_and_bound_the_host_title() {
         let params = rename_session_params(" session-a ", "  Project notes  ").unwrap();
         assert_eq!(params["sessionId"], "session-a");
@@ -5416,6 +5528,10 @@ mod tests {
     fn item_output_reference_is_trimmed_and_bounded() {
         assert_eq!(item_output_ref(&json!({"outputRef": " output://a "})), Some("output://a".to_string()));
         assert_eq!(item_output_ref(&json!({"output_ref": "output://b"})), Some("output://b".to_string()));
+        assert_eq!(
+            item_output_ref(&json!({"outputRef": {"id": "out-1", "uri": "output://out-1"}})),
+            Some("output://out-1".to_string())
+        );
         assert_eq!(item_output_ref(&json!({"outputRef": ""})), None);
         assert_eq!(item_output_ref(&json!({"outputRef": "x".repeat(MAX_OUTPUT_REF_CHARS + 1)})), None);
     }
@@ -6268,6 +6384,7 @@ fn main() {
             set_approval_mode,
             resume_session,
             read_session_history,
+            page_session_history,
             read_item_output,
             read_queue_snapshot,
             list_pending_requests,
