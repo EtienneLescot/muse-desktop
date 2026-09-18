@@ -312,7 +312,11 @@ import {
   type NotificationPermission,
 } from "../lib/notifications";
 export type { MuseNotification, NotificationPermission } from "../lib/notifications";
-import { loadNativeNotifications, saveNativeNotifications } from "../lib/notificationLedger";
+import {
+  createNotificationWriteQueue,
+  loadNativeNotifications,
+  saveNativeNotifications,
+} from "../lib/notificationLedger";
 // US-12 + US-21 versioned artifacts + thread recap: extraction, versioning
 // and per-thread persistence live in ../lib/artifacts (dependency-free,
 // unit-tested); restore reuses the US-4 composer prefill below.
@@ -1542,9 +1546,15 @@ export function useMuseSessions(): UseMuseSessions {
   // localStorage render from overwriting a newer native snapshot.
   const nativeScheduleRunsHydratedRef = useRef(!isTauriRuntime());
   const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
+  const notificationsRef = useRef<MuseNotification[]>([]);
+  notificationsRef.current = notifications;
   // As with schedule runs, native inbox hydration happens before the first
   // desktop write so a webview reload cannot erase unread attention items.
   const nativeNotificationsHydratedRef = useRef(!isTauriRuntime());
+  const nativeNotificationWriterRef = useRef<((rows: MuseNotification[]) => void) | null>(null);
+  if (nativeNotificationWriterRef.current === null && isTauriRuntime()) {
+    nativeNotificationWriterRef.current = createNotificationWriteQueue(saveNativeNotifications);
+  }
   const [notificationPreferences, setNotificationPreferences] = useState(() => loadNotificationPreferences());
   const [notificationPermissionState, setNotificationPermissionState] = useState<NotificationPermission>(
     () => readNotificationPermission(),
@@ -2253,7 +2263,7 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveNotifications(notifications);
     if (nativeNotificationsHydratedRef.current) {
-      void saveNativeNotifications(notifications);
+      nativeNotificationWriterRef.current?.(notifications);
     }
   }, [notifications]);
 
@@ -2264,6 +2274,8 @@ export function useMuseSessions(): UseMuseSessions {
       if (cancelled) return;
       if (nativeNotifications !== null) {
         setNotifications((current) => mergeNotifications(current, nativeNotifications));
+      } else {
+        nativeNotificationWriterRef.current?.(notificationsRef.current);
       }
       nativeNotificationsHydratedRef.current = true;
     });

@@ -1,6 +1,7 @@
 /** Native mirror for the in-app notification inbox (M3-09). */
 import { isTauriRuntime } from "./env";
 import { normalizeNotifications, type MuseNotification } from "./notifications";
+import { createLatestWriteQueue } from "./writeQueue";
 
 export const NATIVE_NOTIFICATIONS_SCHEMA = "muse-desktop.native-notifications.v1";
 
@@ -32,4 +33,11 @@ export async function saveNativeNotifications(notifications: MuseNotification[])
   } catch {
     return false;
   }
+}
+
+/** Keep notification mirror writes ordered when several events arrive together. */
+export function createNotificationWriteQueue(
+  write: (notifications: MuseNotification[]) => Promise<unknown>,
+): (notifications: MuseNotification[]) => void {
+  return createLatestWriteQueue(write);
 }

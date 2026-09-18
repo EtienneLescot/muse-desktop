@@ -1,6 +1,7 @@
 /** Native durability mirror for the M0-03 send outbox. */
 
 import { isTauriRuntime } from "./env.ts";
+import { createLatestWriteQueue } from "./writeQueue.ts";
 import {
   isValidOutboxEntry,
   normalizeOutboxEntries,
@@ -104,31 +105,5 @@ export async function saveNativeOutbox(store: OutboxStore): Promise<boolean | nu
 export function createOutboxWriteQueue(
   write: (store: OutboxStore) => Promise<unknown>,
 ): (store: OutboxStore) => void {
-  let pending: OutboxStore | null = null;
-  let draining = false;
-
-  const drain = async () => {
-    if (draining) return;
-    draining = true;
-    try {
-      while (pending !== null) {
-        const next = pending;
-        pending = null;
-        try {
-          await write(next);
-        } catch {
-          // A failed mirror must never break the renderer's live outbox. The
-          // next state remains eligible for a subsequent invocation.
-        }
-      }
-    } finally {
-      draining = false;
-      if (pending !== null) void drain();
-    }
-  };
-
-  return (store) => {
-    pending = store;
-    void drain();
-  };
+  return createLatestWriteQueue(write);
 }
