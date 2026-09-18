@@ -176,6 +176,20 @@ impl HostSandboxPolicy {
     }
 }
 
+fn sandbox_policy_conflict(
+    current: &HostSandboxPolicy,
+    requested: &HostSandboxPolicy,
+) -> Option<String> {
+    if current == requested {
+        return None;
+    }
+    Some(format!(
+        "workspace host already uses sandbox posture {}; restart the workspace host before starting this conversation with {}",
+        current.summary(),
+        requested.summary(),
+    ))
+}
+
 /// One buffered backend event with its sequence number (poll transport).
 #[derive(Debug, Serialize, Clone)]
 pub struct DrainedEvent {
@@ -1198,12 +1212,10 @@ async fn ensure_host(
             .map_err(|e| format!("state lock: {e}"))?
             .get(root)
             .cloned();
-        if let Some(current) = current.filter(|current| current != &sandbox) {
-            return Err(format!(
-                "workspace host already uses sandbox posture {}; restart the workspace host before starting this conversation with {}",
-                current.summary(),
-                sandbox.summary(),
-            ));
+        if let Some(current) = current {
+            if let Some(conflict) = sandbox_policy_conflict(&current, &sandbox) {
+                return Err(conflict);
+            }
         }
         return Ok(client);
     }
@@ -5402,6 +5414,18 @@ mod tests {
         assert_eq!(read_only.summary(), "workspace (read-only writes, shell disabled)");
         let elevated = HostSandboxPolicy::parse(Some("elevated"), None, None).unwrap();
         assert_eq!(elevated.summary(), "elevated");
+    }
+
+    #[test]
+    fn sandbox_policy_conflict_is_stable_and_allows_matching_hosts() {
+        let current = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
+        let same = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
+        assert_eq!(sandbox_policy_conflict(&current, &same), None);
+        let requested = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
+        assert_eq!(
+            sandbox_policy_conflict(&current, &requested).as_deref(),
+            Some("workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with network")
+        );
     }
 
     struct RecordingChild {
