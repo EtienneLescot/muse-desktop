@@ -37,13 +37,14 @@ function finiteDuration(value: unknown): number | undefined {
     : undefined;
 }
 
-function resultText(value: unknown): string | null {
+function resultText(value: unknown, depth = 0): string | null {
+  if (depth > 2) return null;
   const text = nonEmpty(value);
   if (text !== null) return text;
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const object = value as Record<string, unknown>;
   for (const key of ["resultPreview", "summary", "output", "text", "message", "headline"]) {
-    const nested = resultText(object[key]);
+    const nested = resultText(object[key], depth + 1);
     if (nested !== null) return nested;
   }
   return null;

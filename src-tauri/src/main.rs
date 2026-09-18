@@ -792,11 +792,18 @@ fn session_list_next_cursor(result: &Value) -> Result<Option<String>, String> {
 /// objects are intentionally reduced to their documented summary-like fields;
 /// arbitrary JSON is never copied into the renderer transcript.
 fn completion_preview(value: &Value) -> Option<String> {
+    completion_preview_at(value, 0)
+}
+
+fn completion_preview_at(value: &Value, depth: u8) -> Option<String> {
+    if depth > 2 {
+        return None;
+    }
     match value {
         Value::String(text) if !text.trim().is_empty() => Some(text.clone()),
         Value::Object(object) => ["resultPreview", "summary", "output", "text", "message", "headline"]
             .iter()
-            .find_map(|key| object.get(*key).and_then(completion_preview)),
+            .find_map(|key| object.get(*key).and_then(|nested| completion_preview_at(nested, depth + 1))),
         _ => None,
     }
 }

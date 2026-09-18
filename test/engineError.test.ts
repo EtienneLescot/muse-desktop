@@ -58,6 +58,10 @@ describe("M0-07 structured engine failures", () => {
       result: { summary: "Structured result from the host." },
     }));
     assert.equal(structured?.resultPreview, "Structured result from the host.");
+    const tooDeep = parseTurnCompletion("turn/completed", JSON.stringify({
+      result: { summary: { summary: { summary: { text: "ignored" } } } },
+    }));
+    assert.equal(tooDeep?.resultPreview, undefined);
   });
 
   it("finds only the prompt before the failed turn", () => {
