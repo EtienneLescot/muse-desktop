@@ -36,7 +36,8 @@ export function SidecarErrorPanel({
   startupProbe,
 }: Props) {
   const [pickerError, setPickerError] = useState<string | null>(null);
-  const recoverySteps = startupRecoverySteps(kind, message);
+  const safeMessage = sanitizeStartupText(message, 4_000);
+  const recoverySteps = startupRecoverySteps(kind, safeMessage);
 
   async function pickWorkspace() {
     try {
@@ -59,7 +60,7 @@ export function SidecarErrorPanel({
           ? "Sidecar binary not found"
           : "Could not start the Muse sidecar"}
       </h2>
-      <p className="sidecar-error-message">{message}</p>
+      <p className="sidecar-error-message">{safeMessage || "The Muse sidecar could not start."}</p>
       {checks.length > 0 && (
         <section className="startup-probe" aria-label="Environment check">
           <header>
@@ -111,7 +112,7 @@ export function SidecarErrorPanel({
               <ul className="sidecar-error-paths">
                 {triedPaths.map((p) => (
                   <li key={p}>
-                    <code>{p}</code>
+                    <code>{sanitizeStartupText(p, 500)}</code>
                   </li>
                 ))}
               </ul>
