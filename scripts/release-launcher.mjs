@@ -12,7 +12,7 @@
  */
 import { spawn } from "node:child_process";
 import { access, constants } from "node:fs/promises";
-import { resolve, isAbsolute } from "node:path";
+import { resolve, isAbsolute, win32 as windowsPath } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import {
@@ -41,9 +41,10 @@ function checkedPid(value) {
   return pid;
 }
 
-function checkedExecutable(value) {
-  const path = resolve(String(value ?? ""));
-  if (!isAbsolute(path)) throw new Error("executable must be an absolute path");
+function checkedExecutable(value, platform = process.platform) {
+  const pathApi = platform === "win32" ? windowsPath : { resolve, isAbsolute };
+  const path = pathApi.resolve(String(value ?? ""));
+  if (!pathApi.isAbsolute(path)) throw new Error("executable must be an absolute path");
   return path;
 }
 
@@ -130,7 +131,7 @@ export async function launchInstalledApp(
  * handed to Windows Installer through `msiexec /i`.
  */
 export function buildInstallerInvocation(installerPath, args = [], platform = process.platform) {
-  const file = checkedExecutable(installerPath);
+  const file = checkedExecutable(installerPath, platform);
   if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string")) {
     throw new Error("installer args must be an array of strings");
   }
@@ -165,7 +166,7 @@ export async function launchInstaller(
   });
   if (typeof child?.unref === "function") child.unref();
   return {
-    installerPath: resolve(installerPath),
+    installerPath: platform === "win32" ? windowsPath.resolve(installerPath) : resolve(installerPath),
     executable: invocation.executable,
     args: invocation.args,
     pid: Number.isSafeInteger(child?.pid) ? child.pid : null,
