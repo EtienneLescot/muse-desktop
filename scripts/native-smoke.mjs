@@ -63,7 +63,7 @@
  *   node scripts/native-smoke.mjs --exercise-control --exercise-terminal
  *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -944,6 +944,7 @@ async function main() {
       ...(exerciseCutDuringTurn ? { cutDuringTurn: cutDuringTurnChecks } : {}),
     };
     if (reportPath !== null) {
+      await mkdir(dirname(reportPath), { recursive: true });
       await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
     }
     process.stdout.write(`${JSON.stringify(report)}\n`);
