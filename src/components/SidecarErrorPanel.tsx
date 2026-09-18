@@ -8,8 +8,8 @@ import { userFacingError } from "../lib/errorCopy";
 import {
   startupCheckStatusLabel,
   sanitizeStartupText,
+  startupProbeRows,
   type StartupProbe,
-  type StartupCheck,
 } from "../lib/startupProbe";
 
 interface Props {
@@ -48,14 +48,9 @@ export function SidecarErrorPanel({
     }
   }
 
-  const checks: Array<[string, StartupCheck]> = startupProbe === null || startupProbe === undefined
-    ? []
-    : [
-        ["Sidecar", startupProbe.sidecar],
-        ...(startupProbe.wsl ? [["WSL", startupProbe.wsl] as [string, StartupCheck]] : []),
-        ...(startupProbe.museCli ? [["Muse CLI", startupProbe.museCli] as [string, StartupCheck]] : []),
-        ...(startupProbe.workspace ? [["Workspace", startupProbe.workspace] as [string, StartupCheck]] : []),
-      ];
+  // Keep recovery and settings surfaces on the same sanitized probe projection.
+  // Native/WSL output may contain control markers or replacement characters.
+  const checks = startupProbe ? startupProbeRows(startupProbe) : [];
 
   return (
     <div className="sidecar-error" role="alert">
@@ -72,7 +67,7 @@ export function SidecarErrorPanel({
             <span className="muted">{startupProbe ? sanitizeStartupText(startupProbe.platform, 40) : ""}</span>
           </header>
           <ul>
-            {checks.map(([label, check]) => (
+            {checks.map(({ label, check }) => (
               <li key={label} data-status={check.status}>
                 <span className="startup-probe-dot" aria-hidden="true" />
                 <span className="startup-probe-label">{label}</span>
