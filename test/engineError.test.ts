@@ -42,6 +42,20 @@ describe("M0-07 structured engine failures", () => {
     assert.equal(parseTurnCompletion("failed", ""), null);
   });
 
+  it("keeps an optional host-authored completion preview bounded", () => {
+    const result = parseTurnCompletion("turn/completed", JSON.stringify({
+      turnId: "turn-1",
+      result: "The requested files were updated.",
+    }));
+    assert.equal(result?.error, null);
+    assert.equal(result?.resultPreview, "The requested files were updated.");
+    const bounded = parseTurnCompletion("turn/completed", JSON.stringify({
+      text: "x".repeat(500),
+    }));
+    assert.equal(bounded?.resultPreview?.length, 320);
+    assert.equal(bounded?.resultPreview?.endsWith("…"), true);
+  });
+
   it("finds only the prompt before the failed turn", () => {
     const entries = [
       { id: "u1", role: "user", text: "first" },

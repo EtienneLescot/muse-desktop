@@ -23,6 +23,8 @@ export interface TurnCompletionDetails {
   reason: string | null;
   error: EngineErrorDetails | null;
   turnId?: string;
+  /** Optional host-authored completion text, bounded before it reaches UI. */
+  resultPreview?: string;
 }
 
 function nonEmpty(value: unknown): string | null {
@@ -33,6 +35,12 @@ function finiteDuration(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? Math.floor(value)
     : undefined;
+}
+
+function boundedResult(value: unknown): string | undefined {
+  const text = nonEmpty(value);
+  if (text === null) return undefined;
+  return text.length > 320 ? `${text.slice(0, 319)}…` : text;
 }
 
 /** Parse a terminal status payload without ever throwing. */
@@ -63,12 +71,15 @@ export function parseTurnCompletion(
   const row = parsed as Record<string, unknown>;
   // Do not swallow unrelated status JSON merely because its kind happens to
   // be one of the broad stopped-state labels.
-  if (!["terminal", "reason", "error", "turnId", "durationMs"].some((key) => key in row)) {
+  if (!["terminal", "reason", "error", "turnId", "durationMs", "result", "resultPreview", "output", "summary", "text"].some((key) => key in row)) {
     return null;
   }
   const terminal = nonEmpty(row.terminal) ?? kind;
   const reason = redactDiagnostic(nonEmpty(row.reason));
   const turnId = nonEmpty(row.turnId) ?? undefined;
+  const resultPreview = boundedResult(
+    row.resultPreview ?? row.result ?? row.output ?? row.summary ?? row.text,
+  );
   const rawError = row.error;
   if (typeof rawError !== "object" || rawError === null || Array.isArray(rawError)) {
     const failureTerminal = /^(failed|failure|error|timeout|timed[_-]?out|rejected)$/i.test(terminal);
@@ -76,6 +87,7 @@ export function parseTurnCompletion(
       terminal,
       reason,
       ...(turnId === undefined ? {} : { turnId }),
+      ...(resultPreview === undefined ? {} : { resultPreview }),
       error: failureTerminal && reason !== null
         ? { kind: "unknown", message: reason, retryable: false }
         : null,
@@ -93,7 +105,13 @@ export function parseTurnCompletion(
         turnId: nonEmpty(row.turnId) ?? undefined,
         durationMs: finiteDuration(row.durationMs),
       };
-  return { terminal, reason, error, ...(turnId === undefined ? {} : { turnId }) };
+  return {
+    terminal,
+    reason,
+    error,
+    ...(turnId === undefined ? {} : { turnId }),
+    ...(resultPreview === undefined ? {} : { resultPreview }),
+  };
 }
 
 /** Copy-safe user-facing summary for the transcript header. */

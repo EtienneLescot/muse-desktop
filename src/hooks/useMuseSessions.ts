@@ -3484,7 +3484,10 @@ export function useMuseSessions(): UseMuseSessions {
         ? { status: "failed", error: failure.message, retryable: failure.retryable }
         : kind === "host_exited"
           ? { status: "failed", error: "host exited before the scheduled turn completed", retryable: false }
-          : { status: "completed" });
+          : {
+              status: "completed",
+              ...(completion?.resultPreview ? { resultPreview: completion.resultPreview } : {}),
+            });
     }
     const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated" || kind === "approval_mode_changed";
     if (kind === "approval/resolved") {
