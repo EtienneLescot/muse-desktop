@@ -10,6 +10,7 @@ import {
   dropOutbox,
   loadActiveId,
   loadGlobalSettings,
+  loadGitTurnSnapshot,
   loadLog,
   loadOutbox,
   loadProjects,
@@ -21,6 +22,7 @@ import {
   newId,
   saveActiveId,
   saveGlobalSettings,
+  saveGitTurnSnapshot,
   saveLog,
   saveOutbox,
   saveProjects,
@@ -29,6 +31,7 @@ import {
   saveTombstones,
   saveWorktrees,
   saveWorkspace,
+  dropGitTurnSnapshot,
   type LogEntry,
   type LogRole,
   type RichContent,
@@ -1872,7 +1875,14 @@ export function useMuseSessions(): UseMuseSessions {
   >({});
   const [gitTurnSnapshotsBySession, setGitTurnSnapshotsBySession] = useState<
     Record<string, GitTurnSnapshot>
-  >({});
+  >(() => {
+    const restored: Record<string, GitTurnSnapshot> = {};
+    for (const session of loadSessions()) {
+      const snapshot = loadGitTurnSnapshot(session.session_id);
+      if (snapshot !== null) restored[session.session_id] = snapshot;
+    }
+    return restored;
+  });
   const gitTurnSnapshotsRef = useRef<Record<string, GitTurnSnapshot>>({});
   gitTurnSnapshotsRef.current = gitTurnSnapshotsBySession;
   const gitRequestSeq = useRef<Record<string, number>>({});
@@ -3772,14 +3782,14 @@ export function useMuseSessions(): UseMuseSessions {
           ) {
             return cur;
           }
-          return {
-            ...cur,
-            [sid]: {
-              ...previous,
-              phase: completion.error ? "failed" : "completed",
-              ...(completion.turnId ? { turnId: completion.turnId } : {}),
-            },
+          const phase: GitTurnSnapshot["phase"] = completion.error ? "failed" : "completed";
+          const next: GitTurnSnapshot = {
+            ...previous,
+            phase,
+            ...(completion.turnId ? { turnId: completion.turnId } : {}),
           };
+          saveGitTurnSnapshot(sid, next);
+          return { ...cur, [sid]: next };
         });
       }
       if (completion?.turnId !== undefined) {
@@ -4946,6 +4956,7 @@ export function useMuseSessions(): UseMuseSessions {
           phase: "captured",
           status,
         };
+        saveGitTurnSnapshot(sessionId, snapshot);
         setGitTurnSnapshotsBySession((current) => ({ ...current, [sessionId]: snapshot }));
       } catch {
         // A non-Git workspace must not block a conversation send. Review will
@@ -4964,6 +4975,7 @@ export function useMuseSessions(): UseMuseSessions {
         const previous = current[sessionId];
         if (!previous) return current;
         const next = { ...previous, ...update };
+        saveGitTurnSnapshot(sessionId, next);
         gitTurnSnapshotsRef.current = { ...current, [sessionId]: next };
         return { ...current, [sessionId]: next };
       });
@@ -5987,6 +5999,13 @@ export function useMuseSessions(): UseMuseSessions {
       dropLog(sessionId);
       // M0-03: a deleted thread takes its retryable sends with it.
       dropOutbox(sessionId);
+      dropGitTurnSnapshot(sessionId);
+      setGitTurnSnapshotsBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       setOutbox((cur) => {
         if (!(sessionId in cur)) return cur;
         const next = { ...cur };

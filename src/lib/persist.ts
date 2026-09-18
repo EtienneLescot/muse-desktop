@@ -19,6 +19,7 @@ import type {
 } from "./projects.ts";
 import { normalizeReasoningEffort } from "./reasoning.ts";
 import type { WorktreeRecord } from "./worktrees.ts";
+import type { GitTurnSnapshot } from "./git.ts";
 import {
   readStorageJson,
   removeStorageKey,
@@ -106,6 +107,7 @@ const WORKSPACE_KEY = "muse-desktop.workspace.v1";
 const ACTIVE_KEY = "muse-desktop.active.v1";
 const TOMBSTONES_KEY = "muse-desktop.tombstones.v1";
 const logKey = (sessionId: string) => `muse-desktop.log.v1.${sessionId}`;
+const gitTurnSnapshotKey = (sessionId: string) => `muse-desktop.git-turn.v1.${sessionId}`;
 
 /** Cap per-session log length (mitigation for huge/corrupt histories). */
 export const MAX_LOG_ENTRIES = 2000;
@@ -118,6 +120,58 @@ function write(key: string, value: unknown): void {
   // Quota or privacy mode remains best-effort; the facade records the issue
   // for an optional recovery banner while the live session keeps working.
   writeStorageJson(key, value);
+}
+
+function isValidGitTurnSnapshot(value: unknown): value is GitTurnSnapshot {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  if (
+    typeof row.clientMessageId !== "string" ||
+    row.clientMessageId.length === 0 ||
+    (row.turnId !== null && row.turnId !== undefined && typeof row.turnId !== "string") ||
+    typeof row.capturedAt !== "number" ||
+    !Number.isFinite(row.capturedAt) ||
+    !["captured", "running", "queued", "completed", "failed"].includes(String(row.phase))
+  ) return false;
+  const status = row.status;
+  if (typeof status !== "object" || status === null || Array.isArray(status)) return false;
+  const state = status as Record<string, unknown>;
+  if (
+    typeof state.repoRoot !== "string" ||
+    typeof state.fingerprint !== "string" ||
+    !Array.isArray(state.files) ||
+    state.files.length > 500
+  ) return false;
+  return state.files.every((file) => {
+    if (typeof file !== "object" || file === null || Array.isArray(file)) return false;
+    const row = file as Record<string, unknown>;
+    return typeof row.path === "string" &&
+      (row.originalPath === null || row.originalPath === undefined || typeof row.originalPath === "string") &&
+      typeof row.indexStatus === "string" &&
+      typeof row.worktreeStatus === "string" &&
+      typeof row.changeType === "string" &&
+      typeof row.staged === "boolean" &&
+      typeof row.unstaged === "boolean" &&
+      typeof row.untracked === "boolean" &&
+      typeof row.conflicted === "boolean" &&
+      typeof row.binary === "boolean";
+  });
+}
+
+/** Load the latest explicit repository baseline for one conversation. */
+export function loadGitTurnSnapshot(sessionId: string): GitTurnSnapshot | null {
+  const value = read<unknown>(gitTurnSnapshotKey(sessionId), null);
+  return isValidGitTurnSnapshot(value) ? value : null;
+}
+
+/** Persist one bounded repository baseline without making it part of the log. */
+export function saveGitTurnSnapshot(sessionId: string, snapshot: GitTurnSnapshot): void {
+  write(gitTurnSnapshotKey(sessionId), snapshot);
+}
+
+/** Remove the baseline together with a deleted conversation. */
+export function dropGitTurnSnapshot(sessionId: string): void {
+  removeStorageKey(gitTurnSnapshotKey(sessionId));
 }
 
 function isValidSession(s: unknown): s is StoredSession {
