@@ -73,6 +73,7 @@ interface Props {
     plan: WorktreePlan,
     command: string,
     envAllowlist: string[],
+    onCreated?: (record: WorktreeRecord) => void,
   ) => Promise<WorktreeRecord | null>;
   worktrees: WorktreeRecord[];
   cleanupIntents: WorktreeCleanupIntent[];
@@ -156,6 +157,7 @@ export function OrchestrationPanel({
   const [envAllowlistText, setEnvAllowlistText] = useState("");
   const [setupError, setSetupError] = useState<string | null>(null);
   const [setupRunning, setSetupRunning] = useState<string | null>(null);
+  const setupAndOpenRecordRef = useRef<WorktreeRecord | null>(null);
   const [setupProfiles, setSetupProfiles] = useState<SetupProfile[]>(() =>
     loadSetupProfiles(workspace),
   );
@@ -418,8 +420,27 @@ export function OrchestrationPanel({
     }
     setSetupError(null);
     setCreating(plan.agent);
-    await onCreateSetupConversationWorktree(plan, setupCommand.trim(), env.names);
+    setSetupRunning(null);
+    setupAndOpenRecordRef.current = null;
+    await onCreateSetupConversationWorktree(
+      plan,
+      setupCommand.trim(),
+      env.names,
+      (record) => {
+        setupAndOpenRecordRef.current = record;
+        setSetupRunning(plan.branch);
+      },
+    );
+    setupAndOpenRecordRef.current = null;
+    setSetupRunning(null);
     setCreating(null);
+  }
+
+  async function cancelSetupAndOpen(): Promise<void> {
+    const record = setupAndOpenRecordRef.current;
+    if (record === null || setupRunning === null) return;
+    setSetupError(null);
+    await onCancelSetup(sessionId, record);
   }
 
   async function runSetup(record: WorktreeRecord): Promise<void> {
@@ -999,11 +1020,13 @@ export function OrchestrationPanel({
               <>
                 <button
                   type="button"
-                  onClick={() => void createSetupAndOpen(p)}
-                  disabled={creating !== null || setupCommand.trim().length === 0}
-                  title="Create the worktree, run the explicit setup command, and open its conversation"
+                  onClick={() => void (setupRunning === p.branch ? cancelSetupAndOpen() : createSetupAndOpen(p))}
+                  disabled={setupRunning !== p.branch && (creating !== null || setupCommand.trim().length === 0)}
+                  title={setupRunning === p.branch
+                    ? "Cancel setup and remove the new worktree"
+                    : "Create the worktree, run the explicit setup command, and open its conversation"}
                 >
-                  {creating === p.agent ? "Setting up & opening…" : "Setup & open"}
+                  {setupRunning === p.branch ? "Cancel setup & open" : creating === p.agent ? "Setting up & opening…" : "Setup & open"}
                 </button>
                 <button
                   type="button"

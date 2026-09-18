@@ -1626,10 +1626,11 @@ export default function App() {
                                 activeProject !== null ? activeProjectSettings : undefined,
                               )
                             }
-                            onCreateSetupConversationWorktree={async (plan, command, envAllowlist) => {
+                            onCreateSetupConversationWorktree={async (plan, command, envAllowlist, onCreated) => {
                               const projectSettings = activeProject !== null ? activeProjectSettings : undefined;
                               const created = await createWorktree(active.session_id, plan);
                               if (created === null) return null;
+                              onCreated?.(created);
                               const setup = await runWorktreeSetup(
                                 active.session_id,
                                 created,
