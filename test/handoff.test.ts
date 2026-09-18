@@ -65,6 +65,20 @@ describe("M2-05 handoff planner", () => {
     );
   });
 
+  it("keeps the reverse direction explicit in the transfer steps", () => {
+    const plan = buildHandoffPlan({
+      ...base,
+      direction: "worktree-to-local",
+      sourceWorkspace: base.targetPath,
+      sourceBranch: base.targetBranch,
+      targetPath: base.sourceWorkspace,
+      targetBranch: base.sourceBranch,
+    });
+    assert.equal(plan.direction, "worktree-to-local");
+    assert.match(plan.steps.at(-1) ?? "", /Local/);
+    assert.equal(plan.snapshot.direction, "worktree-to-local");
+  });
+
   it("captures the inspected target state and detects a changed source", () => {
     const plan = buildHandoffPlan({
       ...base,

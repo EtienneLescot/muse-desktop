@@ -19,6 +19,7 @@ import {
   buildHandoffPlan,
   isHandoffPlanStale,
   type HandoffInput,
+  type HandoffDirection,
   type HandoffPlan,
 } from "../lib/handoff";
 import type { GitStatusSnapshot } from "../lib/git";
@@ -169,6 +170,9 @@ export function OrchestrationPanel({
   const [handoffByBranch, setHandoffByBranch] = useState<
     Record<string, HandoffPlan>
   >({});
+  const [handoffDirectionByBranch, setHandoffDirectionByBranch] = useState<
+    Record<string, HandoffDirection>
+  >({});
   const [inspectionByBranch, setInspectionByBranch] = useState<
     Record<string, WorktreeInspection>
   >({});
@@ -197,6 +201,8 @@ export function OrchestrationPanel({
     setSelectedProfileId("");
     setProfileName("");
     setEnvAllowlistText("");
+    setHandoffByBranch({});
+    setHandoffDirectionByBranch({});
     retentionWorkspace.current = workspace;
     setRetentionPolicy(loadWorktreeRetention(workspace));
   }, [workspace]);
@@ -513,11 +519,30 @@ export function OrchestrationPanel({
     setEnvAllowlistText("");
   }
 
-  function handoffInputFor(record: WorktreeRecord): HandoffInput {
-    const sourceFiles = sourceStatus?.files ?? [];
+  function handoffInputFor(
+    record: WorktreeRecord,
+    direction: HandoffDirection = handoffDirectionByBranch[record.branch] ?? "local-to-worktree",
+  ): HandoffInput {
     const inspection = inspectionByBranch[record.branch];
+    if (direction === "worktree-to-local") {
+      const targetFiles = sourceStatus?.files ?? [];
+      return {
+        direction,
+        sourceWorkspace: record.path,
+        sourceBranch: inspection?.branch ?? record.branch,
+        sourceChangedFiles: inspection?.fileCount ?? 0,
+        sourceConflictedFiles: inspection?.conflicted ? 1 : 0,
+        sourceStatusObserved: inspection !== undefined,
+        targetPath: workspace,
+        targetBranch: sourceStatus?.branch ?? "local",
+        targetExists: true,
+        targetDirty: sourceStatus === null ? undefined : targetFiles.length > 0,
+        targetBranchInUse: false,
+      };
+    }
+    const sourceFiles = sourceStatus?.files ?? [];
     return {
-      direction: "local-to-worktree",
+      direction,
       sourceWorkspace: workspace,
       sourceBranch: sourceStatus?.branch ?? null,
       sourceChangedFiles: sourceFiles.length,
@@ -535,6 +560,16 @@ export function OrchestrationPanel({
   function prepareHandoff(record: WorktreeRecord): void {
     const plan = buildHandoffPlan(handoffInputFor(record));
     setHandoffByBranch((current) => ({ ...current, [record.branch]: plan }));
+  }
+
+  function changeHandoffDirection(record: WorktreeRecord, direction: HandoffDirection): void {
+    setHandoffDirectionByBranch((current) => ({ ...current, [record.branch]: direction }));
+    setHandoffByBranch((current) => {
+      if (!(record.branch in current)) return current;
+      const next = { ...current };
+      delete next[record.branch];
+      return next;
+    });
   }
 
   async function inspect(record: WorktreeRecord): Promise<void> {
@@ -897,6 +932,17 @@ export function OrchestrationPanel({
                     Run setup
                   </button>
                 )}
+                <select
+                  aria-label={`Handoff direction for ${p.agent}`}
+                  value={handoffDirectionByBranch[p.branch] ?? "local-to-worktree"}
+                  onChange={(event) => {
+                    const record = recordFor(p);
+                    if (record) changeHandoffDirection(record, event.target.value as HandoffDirection);
+                  }}
+                >
+                  <option value="local-to-worktree">Local → Worktree</option>
+                  <option value="worktree-to-local">Worktree → Local</option>
+                </select>
                 <button
                   type="button"
                   onClick={() => {
@@ -929,7 +975,7 @@ export function OrchestrationPanel({
                 )}
                 {handoffByBranch[p.branch] && (() => {
                   const plan = handoffByBranch[p.branch];
-                  const stale = isHandoffPlanStale(plan, handoffInputFor(recordFor(p)!));
+                  const stale = isHandoffPlanStale(plan, handoffInputFor(recordFor(p)!, plan.direction));
                   return (
                   <details className="orchestration-handoff">
                     <summary>
