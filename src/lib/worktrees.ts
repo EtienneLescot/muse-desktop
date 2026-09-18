@@ -59,6 +59,8 @@ export interface WorktreeInspection {
   clean: boolean;
   conflicted: boolean;
   fileCount: number;
+  /** Ignored files are not changes, but may hide generated setup artifacts. */
+  ignoredFileCount?: number;
   /** Conservative Git lock/in-progress markers; empty does not prove idle. */
   activeSignals?: string[];
   /** The inspected branch was also reported by another linked worktree. */

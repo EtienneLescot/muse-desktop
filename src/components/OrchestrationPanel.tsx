@@ -851,6 +851,9 @@ export function OrchestrationPanel({
                     </summary>
                     <p>
                       {inspectionByBranch[p.branch].fileCount} changed file(s)
+                      {(inspectionByBranch[p.branch].ignoredFileCount ?? 0) > 0
+                        ? ` · ${inspectionByBranch[p.branch].ignoredFileCount} ignored file(s)`
+                        : ""}
                       {inspectionByBranch[p.branch].conflicted ? " · conflicts present" : ""}
                       {(inspectionByBranch[p.branch].activeSignals?.length ?? 0) > 0
                         ? ` · ${inspectionByBranch[p.branch].activeSignals?.join(", ")}`
