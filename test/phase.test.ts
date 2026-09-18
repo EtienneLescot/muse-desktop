@@ -90,6 +90,7 @@ describe("isStoppedKind", () => {
       "idle",
       "turn/completed",
       "turn/retracted",
+      "turn/stopped",
     ]) {
       assert.equal(isStoppedKind(k), true, k);
     }

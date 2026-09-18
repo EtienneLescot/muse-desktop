@@ -1743,17 +1743,17 @@ where
                 .to_string(),
             );
         }
-        "turn/retracted" => {
-            // Retraction is the host's terminal confirmation for an accepted
-            // interrupt. Keep the product status stable (`cancelled`) and
-            // retain the turn anchor so the renderer closes only this turn.
+        "turn/retracted" | "turn/stopped" => {
+            // Retraction and stopped are host terminal confirmations for an
+            // accepted interrupt. Preserve the turn anchor so the renderer
+            // closes only this turn while keeping the host's terminal kind.
             mark_running(state, sid, false);
             emit_fn(
                 "status",
                 sid,
-                "cancelled",
+                if method == "turn/stopped" { "stopped" } else { "cancelled" },
                 json!({
-                    "terminal": "cancelled",
+                    "terminal": if method == "turn/stopped" { "stopped" } else { "cancelled" },
                     "turnId": p.get("turnId"),
                     "reason": p.get("reason"),
                 })
@@ -5062,6 +5062,39 @@ mod tests {
         assert_eq!(sid, "session-a");
         assert_eq!(kind, "cancelled");
         assert!(payload.contains("\"terminal\":\"cancelled\""));
+        assert!(payload.contains("\"turnId\":\"turn-a\""));
+    }
+
+    #[test]
+    fn turn_stopped_is_terminal_stop() {
+        let state = empty_state();
+        state.sessions.lock().unwrap().insert(
+            "session-a".to_string(),
+            SessionMeta {
+                session_id: "session-a".to_string(),
+                workspace: "C:/fixture".to_string(),
+                running: true,
+                session_durability: None,
+                approval_mode: None,
+                granted_capabilities: None,
+            },
+        );
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "turn/stopped",
+            &json!({"sessionId":"session-a","turnId":"turn-a","reason":"interrupted"}),
+            &mut emit,
+        );
+
+        assert!(!state.sessions.lock().unwrap()["session-a"].running);
+        let (_, sid, kind, payload) = events.last().expect("terminal status event");
+        assert_eq!(sid, "session-a");
+        assert_eq!(kind, "stopped");
+        assert!(payload.contains("\"terminal\":\"stopped\""));
         assert!(payload.contains("\"turnId\":\"turn-a\""));
     }
 

@@ -71,6 +71,8 @@ export const MSP_NOTIFICATIONS_HANDLED: MspNotification[] = [
   "turn/started",
   "turn/completed",
   "turn/retracted",
+  // Additive host alias used by some engines for an acknowledged stop.
+  "turn/stopped" as unknown as MspNotification,
   "turn/retryScheduled",
   "turn/unqueued",
   "userInput/requested",

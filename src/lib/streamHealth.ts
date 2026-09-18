@@ -182,6 +182,7 @@ export function streamEventLabel(kind: string | null | undefined): string | null
     subagent_event: "sub-agent update",
     "turn/completed": "turn completed",
     "turn/retracted": "turn cancelled",
+    "turn/stopped": "turn stopped",
     "turn/retryscheduled": "retry scheduled",
     host_exited: "host disconnected",
   };

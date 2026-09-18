@@ -70,6 +70,7 @@ describe("msp conformance surface", () => {
       "approval/requested",
       "userInput/requested",
       "turn/completed",
+      "turn/stopped",
       "session/contextUsage",
       "session/approvalModeChanged",
     ] as const) {
