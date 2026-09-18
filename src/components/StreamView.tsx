@@ -68,6 +68,13 @@ function mediaTypeExtension(mediaType?: string): string | undefined {
   return known[normalized];
 }
 
+function isWorkspaceRelativePath(value: string): boolean {
+  const path = value.trim();
+  return path.length > 0
+    && !/^[a-z][a-z0-9+.-]*:\/\//i.test(path)
+    && !/^(?:[a-z]:[\\/]|[\\/]{1,2})/i.test(path);
+}
+
 function downloadLoadedOutput(entry: LogEntry, loaded: { content: string; base64Data?: string; mediaType?: string }): void {
   if (typeof document === "undefined" || typeof URL === "undefined" || typeof Blob === "undefined") return;
   let blob: Blob;
@@ -1161,7 +1168,7 @@ export function StreamView({
                         Save output
                       </button>
                     )}
-                    {loadedOutput.eof && onOpenWorkspacePath && e.richContent?.[0]?.path && (
+                    {loadedOutput.eof && onOpenWorkspacePath && e.richContent?.[0]?.path && isWorkspaceRelativePath(e.richContent[0].path) && (
                       <button
                         type="button"
                         className="tool-output-button"
