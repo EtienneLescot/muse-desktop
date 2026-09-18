@@ -130,6 +130,49 @@ export function isTerminalItemStatus(status: unknown): boolean {
   return typeof status === "string" && TERMINAL_ITEM_STATUSES.has(normalizeKind(status));
 }
 
+export type ItemSnapshotLane = "assistant" | "thinking" | "tool";
+
+function nestedItemValue(snapshot: Record<string, unknown>, key: string): unknown {
+  const direct = snapshot[key];
+  if (direct !== undefined) return direct;
+  const nested = snapshot.item;
+  if (typeof nested === "object" && nested !== null) {
+    return (nested as Record<string, unknown>)[key];
+  }
+  return undefined;
+}
+
+/**
+ * Resolve the renderer lane from both the bridge's flat shape and the raw
+ * MSP-style `{ item: { kind } }` shape. Hosts may omit the derived `lane`
+ * while still identifying reasoning or user-shell items by kind.
+ */
+export function itemSnapshotLane(snapshot: Record<string, unknown>): ItemSnapshotLane {
+  const explicit = typeof snapshot.lane === "string"
+    ? snapshot.lane.trim().toLowerCase()
+    : "";
+  if (explicit === "thinking" || explicit === "reasoning") return "thinking";
+  if (explicit === "tool" || explicit === "shell_output" || explicit === "shell-output") return "tool";
+  const kindValue = nestedItemValue(snapshot, "itemKind") ?? nestedItemValue(snapshot, "kind") ?? nestedItemValue(snapshot, "type");
+  if (typeof kindValue === "string") {
+    if (isThinkingItemKind(kindValue)) return "thinking";
+    const normalized = kindValue.toLowerCase().replace(/[\s_-]+/g, "");
+    if (normalized === "usershell" || normalized === "shell") return "tool";
+  }
+  return "assistant";
+}
+
+/** True when a full item snapshot represents a terminal state. */
+export function itemSnapshotIsTerminal(snapshot: Record<string, unknown>): boolean {
+  if (
+    snapshot.open === false ||
+    snapshot.completed === true ||
+    nestedItemValue(snapshot, "open") === false ||
+    nestedItemValue(snapshot, "completed") === true
+  ) return true;
+  return isTerminalItemStatus(nestedItemValue(snapshot, "status"));
+}
+
 export interface PlaceholderStamp {
   id: string;
   ts: number;

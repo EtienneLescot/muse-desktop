@@ -135,10 +135,11 @@ import {
   applyItemSnapshotUpdate,
   dropEmptyPlaceholders,
   isItemStartKind,
+  itemSnapshotIsTerminal,
+  itemSnapshotLane,
   isRunningKind,
   isStoppedKind,
   isSubagentItemKind,
-  isTerminalItemStatus,
   isThinkingItemKind,
   upsertReflexivePlaceholder,
 } from "../lib/phase";
@@ -3425,26 +3426,32 @@ export function useMuseSessions(): UseMuseSessions {
       } catch {
         return;
       }
-      const itemId = typeof parsed?.itemId === "string" ? parsed.itemId : "";
-      const text = typeof parsed?.text === "string" ? parsed.text : "";
-      const richContent = parseRichContent(parsed?.richContent);
-      const outputRef = typeof parsed?.outputRef === "string" && parsed.outputRef.trim().length > 0
-        ? parsed.outputRef.trim()
+      if (parsed === null) return;
+      const nested = parsed?.item && typeof parsed.item === "object"
+        ? parsed.item as Record<string, unknown>
+        : null;
+      const itemIdValue = parsed?.itemId ?? parsed?.id ?? nested?.itemId ?? nested?.id;
+      const itemId = typeof itemIdValue === "string" ? itemIdValue : "";
+      const textValue = parsed?.text ?? parsed?.content ?? nested?.text ?? nested?.content;
+      const text = typeof textValue === "string" ? textValue : "";
+      const richContent = parseRichContent(parsed?.richContent ?? nested?.richContent);
+      const outputRefValue = parsed?.outputRef ?? parsed?.output_ref ?? nested?.outputRef ?? nested?.output_ref;
+      const outputRef = typeof outputRefValue === "string" && outputRefValue.trim().length > 0
+        ? outputRefValue.trim()
         : undefined;
-      const terminalSnapshot = parsed?.open === false || parsed?.completed === true || isTerminalItemStatus(parsed?.status);
+      const terminalSnapshot = itemSnapshotIsTerminal(parsed);
       if (itemId.length === 0 || (!terminalSnapshot && text.length === 0 && richContent === undefined && outputRef === undefined)) return;
-      const lane: "assistant" | "thinking" | "tool" = parsed?.lane === "thinking"
-        ? "thinking"
-        : parsed?.lane === "shell_output"
-          ? "tool"
-          : "assistant";
-      const revision = typeof parsed?.revision === "number" && Number.isFinite(parsed.revision)
-        ? parsed.revision
+      const lane = itemSnapshotLane(parsed);
+      const revisionValue = parsed?.revision ?? nested?.revision;
+      const revision = typeof revisionValue === "number" && Number.isFinite(revisionValue)
+        ? revisionValue
         : undefined;
-      const turnId = typeof parsed?.turnId === "string" && parsed.turnId.length > 0
-        ? parsed.turnId
+      const turnIdValue = parsed?.turnId ?? parsed?.turn_id ?? nested?.turnId ?? nested?.turn_id;
+      const turnId = typeof turnIdValue === "string" && turnIdValue.length > 0
+        ? turnIdValue
         : undefined;
-      const commandText = typeof parsed?.commandText === "string" ? parsed.commandText : undefined;
+      const commandTextValue = parsed?.commandText ?? parsed?.command_text ?? nested?.commandText ?? nested?.command_text;
+      const commandText = typeof commandTextValue === "string" ? commandTextValue : undefined;
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];

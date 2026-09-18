@@ -11,6 +11,8 @@ import {
   applyItemSnapshotUpdate,
   dropEmptyPlaceholders,
   isItemStartKind,
+  itemSnapshotIsTerminal,
+  itemSnapshotLane,
   isRunningKind,
   isStoppedKind,
   isSubagentItemKind,
@@ -154,6 +156,23 @@ describe("isTerminalItemStatus", () => {
     assert.equal(isTerminalItemStatus("item/done"), true);
     assert.equal(isTerminalItemStatus("inProgress"), false);
     assert.equal(isTerminalItemStatus(null), false);
+  });
+});
+
+describe("item snapshot normalization", () => {
+  it("keeps reasoning and shell snapshots in their dedicated lanes", () => {
+    assert.equal(itemSnapshotLane({ item: { kind: "reasoning" } }), "thinking");
+    assert.equal(itemSnapshotLane({ itemKind: "analysis" }), "thinking");
+    assert.equal(itemSnapshotLane({ item: { kind: "userShell" } }), "tool");
+    assert.equal(itemSnapshotLane({ lane: "shell_output", kind: "assistant" }), "tool");
+    assert.equal(itemSnapshotLane({ kind: "agentMessage" }), "assistant");
+  });
+
+  it("recognizes terminal flags from flat and nested host snapshots", () => {
+    assert.equal(itemSnapshotIsTerminal({ open: false }), true);
+    assert.equal(itemSnapshotIsTerminal({ completed: true }), true);
+    assert.equal(itemSnapshotIsTerminal({ item: { status: "done" } }), true);
+    assert.equal(itemSnapshotIsTerminal({ status: "inProgress", item: { status: "inProgress" } }), false);
   });
 });
 
