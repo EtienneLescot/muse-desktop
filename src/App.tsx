@@ -235,6 +235,7 @@ export default function App() {
     summaries,
     compactSession,
     usageBySession,
+    serverCompactionBySession,
     serverCompact,
     newFromSummary,
     prefill,
@@ -1509,6 +1510,9 @@ export default function App() {
                               void newFromSummary(active.session_id)
                             }
                             usage={usageBySession[active.session_id] ?? null}
+                            serverCompaction={
+                              serverCompactionBySession[active.session_id] ?? { status: "idle" }
+                            }
                             onServerCompact={() =>
                               void serverCompact(active.session_id)
                             }

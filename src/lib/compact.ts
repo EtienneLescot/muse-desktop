@@ -60,6 +60,31 @@ export interface TokenUsage {
   turnId?: string;
 }
 
+/** Renderer-only state for the asynchronous host compaction gesture. */
+export type ServerCompactionStatus = "idle" | "pending" | "accepted" | "noop" | "error";
+
+export interface ServerCompactionState {
+  status: ServerCompactionStatus;
+  /** Bounded friendly detail for the error state only. */
+  message?: string;
+}
+
+/** Stable copy for the compact-bar status; no wire terminology leaks into UI. */
+export function serverCompactionStatusLabel(state: ServerCompactionState): string {
+  switch (state.status) {
+    case "pending":
+      return "Compacting engine context…";
+    case "accepted":
+      return "Compaction accepted — waiting for the engine…";
+    case "noop":
+      return "Engine context is already compact.";
+    case "error":
+      return state.message?.trim() || "Engine compaction could not be completed.";
+    default:
+      return "";
+  }
+}
+
 /** Parse a `context_usage` poll payload; null when it is not an object. */
 export function parseContextUsage(raw: unknown): ContextUsage | null {
   if (typeof raw !== "object" || raw === null) return null;

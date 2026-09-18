@@ -6,7 +6,9 @@ import {
   needsCompaction,
   suggestsServerCompaction,
   type ContextUsage,
+  type ServerCompactionState,
   type ThreadSummary,
+  serverCompactionStatusLabel,
 } from "../lib/compact";
 
 interface Props {
@@ -18,6 +20,8 @@ interface Props {
   usage: ContextUsage | null;
   /** Server context gesture (`session/compact`) — user-clicked only. */
   onServerCompact: () => void;
+  /** Live renderer state for the server gesture. */
+  serverCompaction?: ServerCompactionState;
 }
 
 /**
@@ -39,10 +43,12 @@ export function CompactBar({
   onNewFromSummary,
   usage,
   onServerCompact,
+  serverCompaction = { status: "idle" },
 }: Props) {
   const warn = needsCompaction(entryCount);
   const suggestServer = suggestsServerCompaction(usage);
-  if (!warn && summary === null && !suggestServer && usage === null)
+  const serverStatusLabel = serverCompactionStatusLabel(serverCompaction);
+  if (!warn && summary === null && !suggestServer && usage === null && serverCompaction.status === "idle")
     return null;
   const auto = needsAutoCompaction(entryCount);
 
@@ -70,10 +76,20 @@ export function CompactBar({
           type="button"
           className="compact-primary"
           onClick={onServerCompact}
+          disabled={serverCompaction.status === "pending" || serverCompaction.status === "accepted"}
           title="Compact the engine context"
         >
-          Compact server
+          {serverCompaction.status === "pending" ? "Compacting…" : "Compact server"}
         </button>
+      )}
+      {serverStatusLabel !== "" && (
+        <span
+          className={`compact-server-status compact-server-status-${serverCompaction.status}`}
+          role="status"
+          aria-live="polite"
+        >
+          {serverStatusLabel}
+        </span>
       )}
       {summary === null ? (
         <>

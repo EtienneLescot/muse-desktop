@@ -149,6 +149,7 @@ import {
   parseTokenUsage,
   saveSummary,
   type ContextUsage,
+  type ServerCompactionState,
   type ThreadSummary,
 } from "../lib/compact";
 import {
@@ -345,7 +346,7 @@ import {
 } from "../lib/approvalResolution";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
-import { reconnectErrorMessage } from "../lib/errorCopy";
+import { reconnectErrorMessage, userFacingError } from "../lib/errorCopy";
 import { forkFailureMessage } from "../lib/fork";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
@@ -911,6 +912,8 @@ interface UseMuseSessions {
   clearPrefillAttachment: () => void;
   /** US-4: host occupancy per session (`session/contextUsage` triple). */
   usageBySession: Record<string, ContextUsage>;
+  /** US-4: renderer-only lifecycle for the host compaction gesture. */
+  serverCompactionBySession: Record<string, ServerCompactionState>;
   /** US-4: server context gesture (`session/compact`), user-clicked only. */
   serverCompact: (sessionId: string) => Promise<void>;
   /** US-12 + US-21: versioned artifacts per thread (extracted blocks). */
@@ -2537,21 +2540,63 @@ export function useMuseSessions(): UseMuseSessions {
   const [usageBySession, setUsageBySession] = useState<
     Record<string, ContextUsage>
   >({});
+  const [serverCompactionBySession, setServerCompactionBySession] = useState<
+    Record<string, ServerCompactionState>
+  >({});
+  const serverCompactionRef = useRef<Record<string, ServerCompactionState>>({});
+  serverCompactionRef.current = serverCompactionBySession;
+
+  const settleServerCompaction = useCallback(
+    (sessionId: string, state: ServerCompactionState): void => {
+      serverCompactionRef.current = {
+        ...serverCompactionRef.current,
+        [sessionId]: state,
+      };
+      setServerCompactionBySession(serverCompactionRef.current);
+      if (state.status === "idle") return;
+      window.setTimeout(() => {
+        if (serverCompactionRef.current[sessionId]?.status !== state.status) return;
+        const next = { ...serverCompactionRef.current };
+        delete next[sessionId];
+        serverCompactionRef.current = next;
+        setServerCompactionBySession(next);
+      }, state.status === "pending" ? 20_000 : 8_000);
+    },
+    [],
+  );
 
   // US-4 server half: the real context gesture (`session/compact`).
   // User-clicked only — async host work is never fired automatically.
   // The ack is admission-only; `noop` is a success. Rejections carry the
   // friendly sentence mapped in Rust (`missing_run`, `run_active`).
   const serverCompact = useCallback(async (sessionId: string) => {
+    if (serverCompactionRef.current[sessionId]?.status === "pending") return;
+    settleServerCompaction(sessionId, { status: "pending" });
     let status: string;
     try {
       status = await invoke<string>("compact_session", { sessionId });
     } catch (e) {
-      setError(
+      const message = userFacingError(
         `server compact failed: ${e instanceof Error ? e.message : String(e)}`,
+        "Engine compaction could not be completed.",
       );
+      settleServerCompaction(sessionId, { status: "error", message });
+      const note: LogEntry = {
+        id: newId(),
+        ts: Date.now(),
+        role: "system",
+        text: `Server compaction failed — ${message}`,
+      };
+      setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
+      appendLog(sessionId, [note]);
       return;
     }
+    const outcome: ServerCompactionState = status === "noop"
+      ? { status: "noop" }
+      : status === "accepted"
+        ? { status: "accepted" }
+        : { status: "error", message: "The host returned an unknown compaction result." };
+    settleServerCompaction(sessionId, outcome);
     const note: LogEntry = {
       id: newId(),
       ts: Date.now(),
@@ -2559,7 +2604,9 @@ export function useMuseSessions(): UseMuseSessions {
       text:
         status === "noop"
           ? "Server compaction: nothing to compact (noop)."
-          : "Server compaction accepted — the host is working in the background.",
+          : status === "accepted"
+            ? "Server compaction accepted — the host is working in the background."
+            : "Server compaction failed — the host returned an unknown result.",
     };
     setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
     appendLog(sessionId, [note]);
@@ -4025,7 +4072,7 @@ export function useMuseSessions(): UseMuseSessions {
       clearTimeout(entry.timer);
     }
     resumeReconcileTimersRef.current = {};
-  }, []);
+  }, [settleServerCompaction]);
 
   const reconnectSession = useCallback(async (id: string) => {
     const session = sessions.find((s) => s.session_id === id);
@@ -7534,6 +7581,7 @@ export function useMuseSessions(): UseMuseSessions {
     summaries,
     compactSession: doCompact,
     usageBySession,
+    serverCompactionBySession,
     serverCompact,
     newFromSummary,
     prefill,

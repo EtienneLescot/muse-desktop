@@ -20,6 +20,7 @@ import {
   needsCompaction,
   parseContextUsage,
   parseTokenUsage,
+  serverCompactionStatusLabel,
   saveSummary,
   suggestsServerCompaction,
 } from "../src/lib/compact.ts";
@@ -149,6 +150,21 @@ describe("summary persistence", () => {
 });
 
 describe("server context usage (US-4 server half)", () => {
+  it("keeps the server gesture lifecycle explicit and calm", () => {
+    assert.equal(serverCompactionStatusLabel({ status: "idle" }), "");
+    assert.match(serverCompactionStatusLabel({ status: "pending" }), /Compacting/);
+    assert.match(serverCompactionStatusLabel({ status: "accepted" }), /waiting/);
+    assert.match(serverCompactionStatusLabel({ status: "noop" }), /already compact/);
+    assert.equal(
+      serverCompactionStatusLabel({ status: "error", message: "Try again" }),
+      "Try again",
+    );
+    assert.match(
+      serverCompactionStatusLabel({ status: "error" }),
+      /could not be completed/,
+    );
+  });
+
   it("parses a full triple, keeps host pressure verbatim", () => {
     const u = parseContextUsage({
       pressure: "warning",

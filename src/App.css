@@ -2551,6 +2551,27 @@ body.dark .composer textarea::placeholder {
   font-weight: 700;
 }
 
+.compact-server-status {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+
+.compact-server-status-pending,
+.compact-server-status-accepted {
+  color: var(--accent);
+}
+
+.compact-server-status-noop {
+  color: var(--muted);
+}
+
+.compact-server-status-error {
+  color: var(--danger);
+}
+
 .error,
 .error-banner {
   color: var(--danger);
