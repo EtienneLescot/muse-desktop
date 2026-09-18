@@ -34,6 +34,8 @@ import {
 import { officePreviewForFile, type OfficePreview } from "../lib/officePreview";
 import { MessageContent } from "./MessageContent";
 
+const MAX_INLINE_RICH_PDF_BYTES = 5 * 1024 * 1024;
+
 function outputDownloadName(entry: LogEntry, mediaType?: string): string {
   const source = entry.richContent?.[0]?.path ?? "muse-output";
   const basename = source.split(/[\\/]/).pop() ?? "muse-output";
@@ -1106,6 +1108,15 @@ export function StreamView({
                         src={"data:" + loadedOutput.mediaType + ";base64," + loadedOutput.base64Data}
                         alt="Muse rich output preview"
                       />
+                    ) : loadedOutput.base64Data && loadedOutput.mediaType === "application/pdf" && loadedOutput.eof && loadedOutput.byteLen <= MAX_INLINE_RICH_PDF_BYTES ? (
+                      <object
+                        className="rich-content-pdf-preview"
+                        data={"data:application/pdf;base64," + loadedOutput.base64Data}
+                        type="application/pdf"
+                        aria-label="Muse PDF output preview"
+                      >
+                        <p className="muted">This WebView cannot render the PDF. Use Download output.</p>
+                      </object>
                     ) : richOfficePreview ? (
                       <RichOfficeTable preview={richOfficePreview} />
                     ) : loadedOutput.content.length > 0 ? (

@@ -3246,6 +3246,17 @@ body.dark .composer textarea::placeholder {
   border-radius: var(--radius-sm);
   background: var(--bg);
 }
+
+.rich-content-pdf-preview {
+  display: block;
+  flex: 1 0 100%;
+  width: 100%;
+  min-height: 420px;
+  max-height: 620px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
 .orchestration-writer-result {
   grid-column: 1 / -1;
   margin: 2px 0 0;
