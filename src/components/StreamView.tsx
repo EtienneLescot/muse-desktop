@@ -205,6 +205,10 @@ export function StreamView({
     safeWindowEnd,
     entries.length,
   );
+  const visibleEntrySignature = useMemo(
+    () => visibleEntries.map((entry) => entry.id).join("\u001f"),
+    [visibleEntries],
+  );
   const findHits = useMemo(
     () => searchTranscript(entries, findQuery),
     [entries, findQuery],
@@ -350,7 +354,7 @@ export function StreamView({
     const nodes = stream.querySelectorAll<HTMLElement>("[data-entry-index]");
     nodes.forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, [safeWindowEnd, safeWindowStart, streamWindowed, visibleEntries.length]);
+  }, [safeWindowEnd, safeWindowStart, streamWindowed, visibleEntrySignature]);
 
   useLayoutEffect(() => {
     if (findTarget === null) return;
