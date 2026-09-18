@@ -75,6 +75,25 @@ export function DesktopControlPanel({
     [selectedId, windows],
   );
 
+  const syncPermission = useCallback(
+    async (nextAllowed: boolean): Promise<boolean> => {
+      if (!isTauriRuntime()) {
+        onSetPermission(DESKTOP_PERMISSION_APP, nextAllowed);
+        return true;
+      }
+      try {
+        await invoke("set_desktop_control_permission", { allowed: nextAllowed });
+        onSetPermission(DESKTOP_PERMISSION_APP, nextAllowed);
+        setError(null);
+        return true;
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+        return false;
+      }
+    },
+    [onSetPermission],
+  );
+
   const refresh = useCallback(async () => {
     setError(null);
     if (!isTauriRuntime()) {
@@ -135,6 +154,13 @@ export function DesktopControlPanel({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // The persisted renderer preference is the product SSOT. Reassert it into
+  // the volatile native gate whenever this panel mounts or the preference
+  // changes; a fresh app process must never inherit consent implicitly.
+  useEffect(() => {
+    void syncPermission(allowed);
+  }, [allowed, syncPermission]);
 
   const run = useCallback(
     async (operation: () => Promise<void>, success: string) => {
@@ -372,9 +398,7 @@ export function DesktopControlPanel({
         <input
           type="checkbox"
           checked={allowed}
-          onChange={(event) =>
-            onSetPermission(DESKTOP_PERMISSION_APP, event.target.checked)
-          }
+          onChange={(event) => void syncPermission(event.target.checked)}
           disabled={!status.supported}
         />
         <span>

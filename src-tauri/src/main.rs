@@ -260,6 +260,10 @@ struct AppState {
     /// Capabilities are fixed for a connection lifetime and never inferred
     /// from the renderer's authorization posture.
     host_capabilities: Mutex<HashMap<PathBuf, Vec<String>>>,
+    /// Volatile native gate for computer-use actions. The renderer owns the
+    /// persisted product preference; this flag is reset on launch and must be
+    /// explicitly synchronized by the current webview before any action.
+    desktop_control_allowed: Mutex<bool>,
     approvals: Mutex<HashMap<(String, String), PendingApproval>>,
     /// (session_id, item_id) -> MSP item kind (`agentMessage`, `subagent`,
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
@@ -3076,6 +3080,29 @@ fn desktop_control_status() -> desktop_control::DesktopControlStatus {
     desktop_control::status()
 }
 
+fn require_desktop_control_permission(allowed: bool) -> Result<(), String> {
+    if allowed {
+        Ok(())
+    } else {
+        Err("desktop control requires explicit Allow desktop control consent".to_string())
+    }
+}
+
+/// Synchronize the renderer's persisted checkbox into a volatile native gate.
+/// The value is intentionally not persisted here: reopening the app requires
+/// the current webview to reassert consent before input can be injected.
+#[tauri::command]
+fn set_desktop_control_permission(
+    state: State<'_, AppState>,
+    allowed: bool,
+) -> Result<(), String> {
+    *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())? = allowed;
+    Ok(())
+}
+
 /// Enumerate visible, titled top-level windows. The result is read-only and
 /// bounded by the native module; no process command line or document content
 /// is exposed to the renderer.
@@ -3088,18 +3115,38 @@ fn desktop_windows() -> Result<Vec<desktop_control::DesktopWindow>, String> {
 /// The snapshot is descriptive only; it never grants the host an input path.
 #[tauri::command]
 fn desktop_window_elements(
+    state: State<'_, AppState>,
     window_id: String,
 ) -> Result<Vec<desktop_control::DesktopElement>, String> {
+    let allowed = *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
+    require_desktop_control_permission(allowed)?;
     desktop_control::elements(&window_id)
 }
 
 #[tauri::command]
-fn desktop_focus_window(window_id: String) -> Result<(), String> {
+fn desktop_focus_window(state: State<'_, AppState>, window_id: String) -> Result<(), String> {
+    let allowed = *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
+    require_desktop_control_permission(allowed)?;
     desktop_control::focus(&window_id)
 }
 
 #[tauri::command]
-fn desktop_send_text(window_id: String, text: String) -> Result<usize, String> {
+fn desktop_send_text(
+    state: State<'_, AppState>,
+    window_id: String,
+    text: String,
+) -> Result<usize, String> {
+    let allowed = *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
+    require_desktop_control_permission(allowed)?;
     if text.chars().count() > desktop_control::MAX_TEXT_CHARS {
         return Err(format!(
             "desktop text is limited to {} characters",
@@ -3110,14 +3157,33 @@ fn desktop_send_text(window_id: String, text: String) -> Result<usize, String> {
 }
 
 #[tauri::command]
-fn desktop_press_key(window_id: String, key: String) -> Result<(), String> {
+fn desktop_press_key(
+    state: State<'_, AppState>,
+    window_id: String,
+    key: String,
+) -> Result<(), String> {
+    let allowed = *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
+    require_desktop_control_permission(allowed)?;
     let parsed = desktop_control::DesktopKey::parse(&key)
         .ok_or_else(|| "unsupported desktop key".to_string())?;
     desktop_control::press_key(&window_id, parsed)
 }
 
 #[tauri::command]
-fn desktop_click(window_id: String, x: i32, y: i32) -> Result<(), String> {
+fn desktop_click(
+    state: State<'_, AppState>,
+    window_id: String,
+    x: i32,
+    y: i32,
+) -> Result<(), String> {
+    let allowed = *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
+    require_desktop_control_permission(allowed)?;
     desktop_control::click(&window_id, x, y)
 }
 
@@ -4943,6 +5009,7 @@ mod tests {
             sessions: Mutex::new(HashMap::new()),
             host_durability: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
+            desktop_control_allowed: Mutex::new(false),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -7307,6 +7374,13 @@ mod tests {
         // Items without identity contribute nothing (no empty announce).
         assert!(extract_subagent_meta(&json!({"kind": "subagent"})).is_none());
     }
+
+    #[test]
+    fn desktop_control_gate_requires_explicit_consent() {
+        assert!(require_desktop_control_permission(true).is_ok());
+        let error = require_desktop_control_permission(false).unwrap_err();
+        assert!(error.contains("Allow desktop control"));
+    }
 }
 
 fn main() {
@@ -7321,6 +7395,7 @@ fn main() {
             sessions: Mutex::new(HashMap::new()),
             host_durability: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
+            desktop_control_allowed: Mutex::new(false),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -7406,6 +7481,7 @@ fn main() {
             browser_download_write,
             browser_download_fetch,
             desktop_control_status,
+            set_desktop_control_permission,
             desktop_windows,
             desktop_window_elements,
             desktop_focus_window,
