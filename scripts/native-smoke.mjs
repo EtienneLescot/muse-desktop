@@ -16,6 +16,9 @@
  * or the host's explicit ceiling rejection.
  * The explicit `--exercise-isolation` path kills host B after setup and
  * verifies that host A still answers a read-only request.
+ * The explicit `--exercise-cut-during-turn` path accepts a turn on host B,
+ * closes that sidecar before a terminal notification, and verifies that host
+ * A remains reachable. It is a transport/isolation proof, not a model test.
  * The explicit `--exercise-user-shell` path negotiates the `userShell`
  * capability, admits a harmless command in each workspace and observes the
  * corresponding shell item without sending a model turn.
@@ -49,6 +52,7 @@
  *   node scripts/native-smoke.mjs --exercise-errors
  *   node scripts/native-smoke.mjs --exercise-approval
  *   node scripts/native-smoke.mjs --exercise-isolation
+ *   node scripts/native-smoke.mjs --exercise-cut-during-turn
  *   node scripts/native-smoke.mjs --exercise-user-shell
  *   node scripts/native-smoke.mjs --exercise-reconnect
  *   node scripts/native-smoke.mjs --exercise-history
@@ -111,6 +115,10 @@ function exercisesApprovalPath() {
 
 function exercisesIsolationPath() {
   return process.argv.includes("--exercise-isolation");
+}
+
+function exercisesCutDuringTurnPath() {
+  return process.argv.includes("--exercise-cut-during-turn");
 }
 
 function exercisesUserShellPath() {
@@ -378,6 +386,7 @@ async function main() {
   const exerciseErrors = exercisesErrorPath();
   const exerciseApproval = exercisesApprovalPath();
   const exerciseIsolation = exercisesIsolationPath();
+  const exerciseCutDuringTurn = exercisesCutDuringTurnPath();
   const exerciseUserShell = exercisesUserShellPath();
   const exerciseReconnect = exercisesReconnectPath();
   const exerciseHistory = exercisesHistoryPath();
@@ -410,6 +419,7 @@ async function main() {
     const modelChecks = [];
     const compactionChecks = [];
     const queueChecks = [];
+    const cutDuringTurnChecks = [];
     let isolation = null;
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
@@ -872,6 +882,30 @@ async function main() {
         });
       });
     }
+    if (exerciseCutDuringTurn) {
+      // Admit a real turn on B, then close only B before it can report a
+      // terminal event. The surviving host must keep its own route alive.
+      const turn = await hosts[1].request("turn/start", {
+        commandId: uuidv7(),
+        sessionId: sessions[1],
+        input: [{ type: "text", text: "Native cut-during-turn smoke probe." }],
+      });
+      if (turn?.status !== "accepted" || typeof turn?.turnId !== "string" || turn.turnId.length === 0) {
+        fail("host-B did not accept the cut-during-turn probe");
+      }
+      await hosts[1].close();
+      const catalogue = await hosts[0].request("model/list");
+      if (catalogue === null || typeof catalogue !== "object") {
+        fail("host-A stopped answering after host-B was cut during a turn");
+      }
+      cutDuringTurnChecks.push({
+        killedHost: "B",
+        turnId: turn.turnId,
+        terminalNotification: "not-observed-before-close",
+        survivingHost: "A",
+        survivingModelCatalogue: "available",
+      });
+    }
     if (exerciseIsolation) {
       // Kill only B after both hosts have completed their setup. A must keep
       // its own process, session identity and read-only catalogue alive.
@@ -907,6 +941,7 @@ async function main() {
       ...(exerciseModel ? { modelSelection: modelChecks } : {}),
       ...(exerciseCompaction ? { compaction: compactionChecks } : {}),
       ...(exerciseQueue ? { queue: queueChecks } : {}),
+      ...(exerciseCutDuringTurn ? { cutDuringTurn: cutDuringTurnChecks } : {}),
     };
     if (reportPath !== null) {
       await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
