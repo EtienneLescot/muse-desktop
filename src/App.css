@@ -3431,6 +3431,52 @@ body.dark .composer textarea::placeholder {
   font-weight: 650;
 }
 
+.review-last-turn {
+  display: grid;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--blue) 42%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--blue) 7%, var(--surface));
+  padding: 9px 10px;
+  font-size: 0.78rem;
+}
+
+.review-last-turn-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-last-turn-head strong {
+  display: block;
+  margin-top: 2px;
+}
+
+.review-last-turn-head time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.review-last-turn p {
+  margin: 0;
+}
+
+.review-last-turn-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-last-turn-files code {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
 .review-empty {
   margin: 6px 0;
   font-size: 0.85rem;

@@ -256,6 +256,7 @@ export default function App() {
     commentArtifact,
     index,
     gitReview,
+    gitTurnSnapshot,
     refreshGitStatus,
     loadGitDiff,
     stageGitFiles,
@@ -1505,6 +1506,7 @@ export default function App() {
                         <ReviewPanel
                           sessionId={active.session_id}
                           review={gitReview(active.session_id)}
+                          lastTurnSnapshot={gitTurnSnapshot(active.session_id)}
                           onRefreshStatus={refreshGitStatus}
                           onLoadDiff={loadGitDiff}
                           onStageFiles={stageGitFiles}

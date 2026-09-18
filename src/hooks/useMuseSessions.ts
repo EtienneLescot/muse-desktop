@@ -518,6 +518,7 @@ import {
   type GitPushResult,
   type GitReviewState,
   type GitStatusSnapshot,
+  type GitTurnSnapshot,
 } from "../lib/git";
 import { formatTerminalContext } from "../lib/terminalContext";
 import { formatWorkspaceFileContext } from "../lib/fileContext";
@@ -567,7 +568,13 @@ export interface IndexApi {
   setIndexQuery: (q: string) => void;
 }
 
-export type { GitDiffScope, GitDiffSnapshot, GitReviewState, GitStatusSnapshot } from "../lib/git";
+export type {
+  GitDiffScope,
+  GitDiffSnapshot,
+  GitReviewState,
+  GitStatusSnapshot,
+  GitTurnSnapshot,
+} from "../lib/git";
 
 /** M1-05: persistent terminal session owned by a conversation workspace. */
 export interface TerminalInfo {
@@ -973,6 +980,8 @@ interface UseMuseSessions {
   index: IndexApi;
   /** M1-01/M1-03: Git status/diff snapshots and guarded Review mutations. */
   gitReview: (sessionId: string) => GitReviewState;
+  /** M1-01: explicit Git baseline captured before the latest logical turn. */
+  gitTurnSnapshot: (sessionId: string) => GitTurnSnapshot | null;
   refreshGitStatus: (sessionId: string) => Promise<GitStatusSnapshot | null>;
   loadGitDiff: (
     sessionId: string,
@@ -1861,6 +1870,11 @@ export function useMuseSessions(): UseMuseSessions {
   const [gitReviewBySession, setGitReviewBySession] = useState<
     Record<string, GitReviewState>
   >({});
+  const [gitTurnSnapshotsBySession, setGitTurnSnapshotsBySession] = useState<
+    Record<string, GitTurnSnapshot>
+  >({});
+  const gitTurnSnapshotsRef = useRef<Record<string, GitTurnSnapshot>>({});
+  gitTurnSnapshotsRef.current = gitTurnSnapshotsBySession;
   const gitRequestSeq = useRef<Record<string, number>>({});
   // M1-05: PTYs are backend-owned and survive work-panel unmounts. The hook
   // mirrors only the UI metadata and bounded output tail for the active window.
@@ -3748,6 +3762,25 @@ export function useMuseSessions(): UseMuseSessions {
     } else if (isStoppedKind(kind)) {
       if (completion !== null) {
         setTurnCompletionBySession((cur) => ({ ...cur, [sid]: completion }));
+        setGitTurnSnapshotsBySession((cur) => {
+          const previous = cur[sid];
+          if (!previous) return cur;
+          if (
+            previous.turnId !== null &&
+            completion.turnId !== undefined &&
+            previous.turnId !== completion.turnId
+          ) {
+            return cur;
+          }
+          return {
+            ...cur,
+            [sid]: {
+              ...previous,
+              phase: completion.error ? "failed" : "completed",
+              ...(completion.turnId ? { turnId: completion.turnId } : {}),
+            },
+          };
+        });
       }
       if (completion?.turnId !== undefined) {
         lastTerminalTurnIdsRef.current[sid] = completion.turnId;
@@ -4900,6 +4933,44 @@ export function useMuseSessions(): UseMuseSessions {
   // while other sessions keep sending freely.
   const inFlightSends = useRef<Set<string>>(new Set());
 
+  /** Capture an explicit repository baseline before a new logical turn. */
+  const captureGitTurnSnapshot = useCallback(
+    async (sessionId: string, clientMessageId: string): Promise<void> => {
+      if (!isTauriRuntime()) return;
+      try {
+        const status = await invoke<GitStatusSnapshot>("git_status", { sessionId });
+        const snapshot: GitTurnSnapshot = {
+          clientMessageId,
+          turnId: null,
+          capturedAt: Date.now(),
+          phase: "captured",
+          status,
+        };
+        setGitTurnSnapshotsBySession((current) => ({ ...current, [sessionId]: snapshot }));
+      } catch {
+        // A non-Git workspace must not block a conversation send. Review will
+        // simply omit the explicit last-turn card until a status is available.
+      }
+    },
+    [],
+  );
+
+  const updateGitTurnSnapshot = useCallback(
+    (
+      sessionId: string,
+      update: Partial<Pick<GitTurnSnapshot, "turnId" | "phase">>,
+    ): void => {
+      setGitTurnSnapshotsBySession((current) => {
+        const previous = current[sessionId];
+        if (!previous) return current;
+        const next = { ...previous, ...update };
+        gitTurnSnapshotsRef.current = { ...current, [sessionId]: next };
+        return { ...current, [sessionId]: next };
+      });
+    },
+    [],
+  );
+
   /** Outbox state + disk for one session (functional update, no stale read). */
   function updateOutbox(
     sessionId: string,
@@ -5132,6 +5203,12 @@ export function useMuseSessions(): UseMuseSessions {
             : "Sending expanded instructions",
         });
       }
+      // A retry keeps the original baseline; a fresh logical turn captures
+      // the repository state before admission so Review can report concrete
+      // files changed during that turn without reading assistant text.
+      if (prior === null) {
+        await captureGitTurnSnapshot(sessionId, clientMessageId);
+      }
       inFlightSends.current.add(sessionId);
       let requestPending = false;
       let underlyingSettled = false;
@@ -5212,6 +5289,10 @@ export function useMuseSessions(): UseMuseSessions {
               ? admission.turnId
               : undefined;
             if (admission.disposition === "queued") {
+              updateGitTurnSnapshot(sessionId, {
+                phase: "queued",
+                ...(admissionTurnId ? { turnId: admissionTurnId } : {}),
+              });
               if (typeof admission.turnId === "string" && admission.turnId.length > 0) {
                 const queued: QueuedTurn = {
                   session_id: sessionId,
@@ -5243,6 +5324,12 @@ export function useMuseSessions(): UseMuseSessions {
                 },
               ]);
             }
+          }
+          if (admissionDisposition !== "queued" && admissionDisposition !== "steered") {
+            updateGitTurnSnapshot(sessionId, {
+              phase: "running",
+              ...(admissionTurnId ? { turnId: admissionTurnId } : {}),
+            });
           }
           acked = true;
           if (skillInvocation !== null) {
@@ -5282,6 +5369,7 @@ export function useMuseSessions(): UseMuseSessions {
           });
         }
         setError(failure);
+        updateGitTurnSnapshot(sessionId, { phase: "failed" });
         if (!ambiguous) {
           // Definitive refusal: the turn never started, so withdraw the
           // reflexive placeholder; the entry stays retryable (same key).
@@ -5302,7 +5390,16 @@ export function useMuseSessions(): UseMuseSessions {
         }
       }
     },
-    [kickPoll, doCompact, touchStreamActivity, workspace, startSkillInvocation, updateSkillInvocation],
+    [
+      captureGitTurnSnapshot,
+      kickPoll,
+      doCompact,
+      touchStreamActivity,
+      workspace,
+      startSkillInvocation,
+      updateSkillInvocation,
+      updateGitTurnSnapshot,
+    ],
   );
 
   const steerInput = useCallback(
@@ -7042,6 +7139,12 @@ export function useMuseSessions(): UseMuseSessions {
     [gitReviewBySession],
   );
 
+  const gitTurnSnapshot = useCallback(
+    (sessionId: string): GitTurnSnapshot | null =>
+      gitTurnSnapshotsBySession[sessionId] ?? null,
+    [gitTurnSnapshotsBySession],
+  );
+
   const stageGitFiles = useCallback(
     async (
       sessionId: string,
@@ -7941,6 +8044,7 @@ export function useMuseSessions(): UseMuseSessions {
     commentArtifact,
     index,
     gitReview,
+    gitTurnSnapshot,
     refreshGitStatus,
     loadGitDiff,
     stageGitFiles,

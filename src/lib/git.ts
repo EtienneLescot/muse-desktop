@@ -68,6 +68,28 @@ export interface GitReviewState {
   error: string | null;
 }
 
+/**
+ * Explicit repository observation captured immediately before a logical turn
+ * is admitted. The snapshot is metadata only; it never guesses a diff from
+ * assistant text and remains useful when the host does not expose turn files.
+ */
+export type GitTurnPhase = "captured" | "running" | "queued" | "completed" | "failed";
+
+export interface GitTurnSnapshot {
+  clientMessageId: string;
+  turnId: string | null;
+  capturedAt: number;
+  phase: GitTurnPhase;
+  status: GitStatusSnapshot;
+}
+
+export interface GitTurnComparison {
+  changed: boolean;
+  headChanged: boolean;
+  statusChanged: boolean;
+  changedPaths: string[];
+}
+
 /** Exact observation sent with a mutating Review action. */
 export interface GitMutationExpectation {
   head: string | null;
@@ -101,6 +123,40 @@ export const EMPTY_GIT_REVIEW: GitReviewState = {
   loading: false,
   error: null,
 };
+
+/** Compare a captured turn baseline with a fresh status observation. */
+export function compareGitTurnSnapshot(
+  snapshot: GitTurnSnapshot,
+  current: GitStatusSnapshot,
+): GitTurnComparison {
+  const before = new Map(
+    snapshot.status.files.map((file) => [
+      `${file.path}\u0000${file.originalPath ?? ""}`,
+      JSON.stringify(file),
+    ]),
+  );
+  const after = new Map(
+    current.files.map((file) => [
+      `${file.path}\u0000${file.originalPath ?? ""}`,
+      JSON.stringify(file),
+    ]),
+  );
+  const changedPaths = new Set<string>();
+  for (const [key, value] of before) {
+    if (after.get(key) !== value) changedPaths.add(key.split("\u0000", 1)[0]);
+  }
+  for (const [key, value] of after) {
+    if (before.get(key) !== value) changedPaths.add(key.split("\u0000", 1)[0]);
+  }
+  const headChanged = snapshot.status.head !== current.head;
+  const statusChanged = snapshot.status.fingerprint !== current.fingerprint;
+  return {
+    changed: headChanged || statusChanged,
+    headChanged,
+    statusChanged,
+    changedPaths: Array.from(changedPaths).sort((a, b) => a.localeCompare(b)),
+  };
+}
 
 /** A compact status label for a file row, keeping the two Git columns clear. */
 export function statusCode(file: GitStatusFile): string {
