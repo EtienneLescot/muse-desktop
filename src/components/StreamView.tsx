@@ -38,6 +38,7 @@ import {
 } from "../lib/subagent";
 import { officePreviewForFile, type OfficePreview } from "../lib/officePreview";
 import { MessageContent } from "./MessageContent";
+import { loadStreamPosition, saveStreamPosition } from "../lib/streamPosition";
 
 const MAX_INLINE_RICH_PDF_BYTES = 5 * 1024 * 1024;
 
@@ -318,6 +319,18 @@ export function StreamView({
   } | null>(null);
   const jumpLatestRef = useRef(false);
   const loadingOlderRef = useRef(false);
+  const persistViewportTimerRef = useRef<number | null>(null);
+
+  function scheduleViewportPersistence(id: string | null, top: number, start: number): void {
+    if (id === null || !Number.isFinite(top) || !Number.isFinite(start)) return;
+    if (persistViewportTimerRef.current !== null) {
+      window.clearTimeout(persistViewportTimerRef.current);
+    }
+    persistViewportTimerRef.current = window.setTimeout(() => {
+      persistViewportTimerRef.current = null;
+      saveStreamPosition(id, top, start);
+    }, 180);
+  }
 
   function appendBase64(first: string | undefined, second: string): string {
     if (!first) return second;
@@ -378,7 +391,8 @@ export function StreamView({
   useEffect(() => {
     const key = sessionId ?? "";
     const saved = windowStartsRef.current[key];
-    const next = initialStreamWindowStart(entries.length, saved);
+    const persisted = loadStreamPosition(sessionId);
+    const next = initialStreamWindowStart(entries.length, saved ?? persisted?.windowStart);
     windowSessionRef.current = sessionId;
     previousEntryCountRef.current = entries.length;
     prependScrollRef.current = null;
@@ -391,6 +405,21 @@ export function StreamView({
     setFindQuery("");
     setFindTarget(null);
     setFindSelection(null);
+    if (sessionId !== null && scrollTopsRef.current[key] === undefined && persisted !== null) {
+      scrollTopsRef.current[key] = persisted.scrollTop;
+    }
+  }, [sessionId]);
+
+  useEffect(() => () => {
+    if (persistViewportTimerRef.current !== null) {
+      window.clearTimeout(persistViewportTimerRef.current);
+      persistViewportTimerRef.current = null;
+    }
+    if (sessionId === null) return;
+    const key = sessionId;
+    const top = scrollTopsRef.current[key];
+    const start = windowStartsRef.current[key] ?? 0;
+    if (top !== undefined) saveStreamPosition(key, top, start);
   }, [sessionId]);
 
   useEffect(() => {
@@ -539,6 +568,11 @@ export function StreamView({
   }, [sessionId]);
 
   useEffect(() => {
+    if (sessionId === null || streamRef.current === null) return;
+    scheduleViewportPersistence(sessionId, streamRef.current.scrollTop, safeWindowStart);
+  }, [safeWindowStart, sessionId]);
+
+  useEffect(() => {
     // Streaming can update this list many times per second. Instant
     // alignment avoids stacking smooth-scroll animations and keeps the
     // latest token visible without starving input/paint work.
@@ -600,6 +634,7 @@ export function StreamView({
       setWindowStart(maxWindowStart);
     }
     if (sessionId !== null) scrollTopsRef.current[sessionId] = el.scrollTop;
+    scheduleViewportPersistence(sessionId, el.scrollTop, safeWindowStart);
     setAwayFromBottom(!stickRef.current);
   }
 

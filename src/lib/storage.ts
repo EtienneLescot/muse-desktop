@@ -369,6 +369,7 @@ export function storageDataKind(key: string): StorageDataKind {
     normalized === "muse-desktop.theme.v1" ||
     normalized === "muse-desktop.welcome-draft" ||
     normalized === "muse-desktop.scheduler-lease.v1" ||
+    normalized === "muse-desktop.stream-position.v1" ||
     normalized === "muse-desktop.storage-migrations.v1" ||
     normalized.includes(".draft.") ||
     normalized.includes(".attachment-draft.") ||

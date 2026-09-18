@@ -294,6 +294,7 @@ describe("defensive storage facade", () => {
     assert.equal(storageDataKind("muse-desktop.active.v1"), "ui");
     assert.equal(storageDataKind("muse-desktop.draft.session-1"), "ui");
     assert.equal(storageDataKind("muse-desktop.scheduler-lease.v1"), "ui");
+    assert.equal(storageDataKind("muse-desktop.stream-position.v1"), "ui");
   });
 
   it("reads kind metadata from exported snapshots and falls back for old files", () => {
