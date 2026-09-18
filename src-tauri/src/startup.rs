@@ -38,6 +38,23 @@ fn decode_probe_bytes(bytes: &[u8]) -> String {
     if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
         return String::from_utf8_lossy(&bytes[3..]).into_owned();
     }
+    // `wsl.exe` and a few Windows console tools may include an explicit
+    // UTF-16 BOM. Handle it before the heuristic below so short diagnostics
+    // cannot be mistaken for an ANSI/UTF-8 byte stream.
+    if bytes.starts_with(&[0xff, 0xfe]) {
+        let units = bytes[2..]
+            .chunks_exact(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect::<Vec<_>>();
+        return String::from_utf16_lossy(&units);
+    }
+    if bytes.starts_with(&[0xfe, 0xff]) {
+        let units = bytes[2..]
+            .chunks_exact(2)
+            .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
+            .collect::<Vec<_>>();
+        return String::from_utf16_lossy(&units);
+    }
     let pairs = bytes.len() / 2;
     if pairs >= 2 {
         let mut little_endian_nuls = 0usize;
@@ -331,7 +348,38 @@ mod tests {
             .encode_utf16()
             .flat_map(u16::to_le_bytes)
             .collect::<Vec<_>>();
-        assert_eq!(clip_detail(&decode_probe_bytes(&bytes)), "Default Distribution: Ubuntu");
+        assert_eq!(
+            clip_detail(&decode_probe_bytes(&bytes)),
+            "Default Distribution: Ubuntu"
+        );
+    }
+
+    #[test]
+    fn decodes_utf16_bom_console_output_before_clipping() {
+        let mut bytes = vec![0xff, 0xfe];
+        bytes.extend(
+            "Workspace: G:\\repos\\openscreen"
+                .encode_utf16()
+                .flat_map(u16::to_le_bytes),
+        );
+        assert_eq!(
+            clip_detail(&decode_probe_bytes(&bytes)),
+            "Workspace: G:\\repos\\openscreen"
+        );
+    }
+
+    #[test]
+    fn decodes_utf16_big_endian_bom_console_output_before_clipping() {
+        let mut bytes = vec![0xfe, 0xff];
+        bytes.extend(
+            "Default Distribution: Ubuntu"
+                .encode_utf16()
+                .flat_map(u16::to_be_bytes),
+        );
+        assert_eq!(
+            clip_detail(&decode_probe_bytes(&bytes)),
+            "Default Distribution: Ubuntu"
+        );
     }
 
     #[test]
