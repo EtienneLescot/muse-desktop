@@ -152,6 +152,28 @@ impl HostSandboxPolicy {
         }
         args
     }
+
+    /// Stable, user-facing summary used when a workspace host cannot satisfy
+    /// a different project posture without being restarted.
+    fn summary(&self) -> String {
+        let mode = match self.mode {
+            HostSandboxMode::Workspace => "workspace",
+            HostSandboxMode::Network => "network",
+            HostSandboxMode::Elevated => "elevated",
+        };
+        let mut restrictions = Vec::new();
+        if self.disable_write {
+            restrictions.push("read-only writes");
+        }
+        if self.disable_shell {
+            restrictions.push("shell disabled");
+        }
+        if restrictions.is_empty() {
+            mode.to_string()
+        } else {
+            format!("{mode} ({})", restrictions.join(", "))
+        }
+    }
 }
 
 /// One buffered backend event with its sequence number (poll transport).
@@ -1165,6 +1187,24 @@ async fn ensure_host(
         sandbox_disable_shell,
     )?;
     if let Some(client) = state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.workspace(root) {
+        // Muse fixes sandbox posture at `serve` time. Reusing a live host
+        // with a different requested policy would silently weaken a project
+        // setting, so fail closed and direct the user to the explicit restart
+        // action in Settings. Hosts from older builds without a cached
+        // posture remain compatible; their effective posture is unknown.
+        let current = state
+            .host_sandbox
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(root)
+            .cloned();
+        if let Some(current) = current.filter(|current| current != &sandbox) {
+            return Err(format!(
+                "workspace host already uses sandbox posture {}; restart the workspace host before starting this conversation with {}",
+                current.summary(),
+                sandbox.summary(),
+            ));
+        }
         return Ok(client);
     }
     let (rx, child) = spawn_sidecar(app, root, &sandbox)?;
@@ -5352,6 +5392,16 @@ mod tests {
     fn sandbox_policy_keeps_legacy_flags_when_project_options_are_absent() {
         let policy = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
         assert_eq!(policy.cli_args(), vec!["serve", "--sandbox-network", "enabled"]);
+    }
+
+    #[test]
+    fn sandbox_policy_summary_explains_restart_conflicts_without_raw_debug() {
+        let workspace = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
+        assert_eq!(workspace.summary(), "workspace");
+        let read_only = HostSandboxPolicy::parse(Some("workspace"), Some(true), Some(true)).unwrap();
+        assert_eq!(read_only.summary(), "workspace (read-only writes, shell disabled)");
+        let elevated = HostSandboxPolicy::parse(Some("elevated"), None, None).unwrap();
+        assert_eq!(elevated.summary(), "elevated");
     }
 
     struct RecordingChild {
