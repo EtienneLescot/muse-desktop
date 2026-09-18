@@ -18,6 +18,8 @@ export interface HandoffInput {
   targetBranch: string;
   targetExists: boolean;
   targetDirty?: boolean;
+  /** Optional read-only inspection signal; undefined means not refreshed. */
+  targetIgnoredFiles?: number;
   targetBranchInUse?: boolean;
 }
 
@@ -97,6 +99,18 @@ export function buildHandoffPlan(input: HandoffInput): HandoffPlan {
       : input.targetDirty
         ? check("target-status", "Target status", "blocked", "Target worktree has uncommitted changes.")
         : check("target-status", "Target status", "pass", "Target worktree is clean."),
+  );
+  checks.push(
+    input.targetIgnoredFiles === undefined
+      ? check("target-ignored", "Ignored files", "warn", "Inspect the target worktree before transferring generated artifacts.")
+      : input.targetIgnoredFiles > 0
+        ? check(
+            "target-ignored",
+            "Ignored files",
+            "warn",
+            `${input.targetIgnoredFiles} ignored file(s) need an explicit review before transfer.`,
+          )
+        : check("target-ignored", "Ignored files", "pass", "No ignored files detected."),
   );
   checks.push(
     input.targetBranchInUse === undefined

@@ -442,6 +442,7 @@ export function OrchestrationPanel({
       targetPath: record.path,
       targetBranch: record.branch,
       targetExists: true,
+      targetIgnoredFiles: inspectionByBranch[record.branch]?.ignoredFileCount,
     });
     setHandoffByBranch((current) => ({ ...current, [record.branch]: plan }));
   }

@@ -54,4 +54,14 @@ describe("M2-05 handoff planner", () => {
     assert.equal(plan.ready, true);
     assert.equal(plan.checks.find((item) => item.id === "source-dirty")?.status, "warn");
   });
+
+  it("keeps ignored target artifacts visible without blocking the plan", () => {
+    const plan = buildHandoffPlan({ ...base, targetIgnoredFiles: 2 });
+    assert.equal(plan.ready, true);
+    assert.equal(plan.checks.find((item) => item.id === "target-ignored")?.status, "warn");
+    assert.match(
+      plan.checks.find((item) => item.id === "target-ignored")?.detail ?? "",
+      /2 ignored/,
+    );
+  });
 });

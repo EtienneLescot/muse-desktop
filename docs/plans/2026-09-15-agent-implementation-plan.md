@@ -409,7 +409,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **État :** le panneau d'orchestration propose un plan de handoff local et en lecture seule pour chaque worktree créé. Les préconditions source/cible sont évaluées avec les statuts `pass/warn/blocked` : workspace et cible, conflits, changements non commités, état Git cible observé et branche déjà utilisée. Le plan propose ensuite les étapes d'observation, snapshot et transfert sans déclencher de bascule.
 
-**Reste :** transfert atomique du host MSP, déplacement du contexte, inspection de fichiers ignorés, verrou de processus et rollback explicite. Tant que le host reste mono-workspace, aucun bouton ne doit présenter une conversation comme transférée avant confirmation native.
+**Reste :** transfert atomique du host MSP, déplacement du contexte, verrou de processus et rollback explicite. Les fichiers ignorés sont maintenant comptés par l'inspection du worktree et maintenus comme avertissement dans le plan ; leurs chemins et contenus ne sont pas transférés. Tant que le host reste mono-workspace, aucun bouton ne doit présenter une conversation comme transférée avant confirmation native.
 
 **Acceptation :** aller/retour Local ↔ Worktree avec fichiers suivis/non suivis ; conflit volontaire et échec intermédiaire sans perte.
 
