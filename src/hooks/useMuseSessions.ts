@@ -161,6 +161,7 @@ import { statusLogText } from "../lib/statusLog";
 import {
   parseRetryScheduled,
   shouldAcceptRetryScheduled,
+  STREAM_STALE_AFTER_MS,
   type RetryScheduled,
 } from "../lib/streamHealth";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
@@ -848,7 +849,7 @@ interface UseMuseSessions {
   reconnectSession: (id: string) => Promise<void>;
   reconnectingId: string | null;
   /** M0-02: reconcile durable history and pending actions without a restart. */
-  reconcileSession: (id: string) => Promise<void>;
+  reconcileSession: (id: string, options?: { silent?: boolean }) => Promise<void>;
   reconcilingId: string | null;
   connectedIds: string[];
   /** M1-06: capability negotiated with each workspace host. */
@@ -1456,6 +1457,13 @@ export function useMuseSessions(): UseMuseSessions {
   const [resumePendingBySession, setResumePendingBySession] = useState<
     Record<string, ResumePending>
   >({});
+  // One bounded recovery read per accepted decision. The host remains the
+  // authority; this only prevents a quiet post-approval turn from waiting
+  // forever for a notification that was dropped or never emitted.
+  const resumeReconcileTimersRef = useRef<Record<string, {
+    requestedAt: number;
+    timer: ReturnType<typeof setTimeout>;
+  }>>({});
   const [retryScheduledBySession, setRetryScheduledBySession] = useState<
     Record<string, RetryScheduled>
   >({});
@@ -3915,12 +3923,15 @@ export function useMuseSessions(): UseMuseSessions {
    * can leave the host healthy, and reattaching it would add unnecessary
    * lifecycle churn. All results flow back through the hook's SSOT.
    */
-  const reconcileSession = useCallback(async (id: string): Promise<void> => {
+  const reconcileSession = useCallback(async (
+    id: string,
+    options: { silent?: boolean } = {},
+  ): Promise<void> => {
     if (!isTauriRuntime()) return;
     const session = sessions.find((candidate) => candidate.session_id === id);
     if (!session) return;
     setReconcilingId(id);
-    setError(null);
+    if (!options.silent) setError(null);
     try {
       const remote = await readHistoryEntries(id);
       // A history snapshot containing only the original user message is not
@@ -3963,11 +3974,50 @@ export function useMuseSessions(): UseMuseSessions {
       }
       kickPoll();
     } catch (e) {
-      setError(`Sync failed: ${e instanceof Error ? e.message : String(e)}`);
+      if (!options.silent) {
+        setError(`Sync failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
     } finally {
       setReconcilingId(null);
     }
   }, [kickPoll, readHistoryEntries, reconcileQueueSnapshot, sessions, touchStreamActivity]);
+
+  // A decision can be accepted while a host notification is lost or while an
+  // older host simply stays quiet. Once the same liveness threshold is
+  // reached, perform one bounded read of history and pending requests. This
+  // is recovery only: it never invents a completion or clears the bridge
+  // unless the host returns a durable progress item.
+  useEffect(() => {
+    const timers = resumeReconcileTimersRef.current;
+    for (const [sessionId, entry] of Object.entries(timers)) {
+      const pending = resumePendingBySession[sessionId];
+      if (pending === undefined || pending.requestedAt !== entry.requestedAt) {
+        clearTimeout(entry.timer);
+        delete timers[sessionId];
+      }
+    }
+    for (const [sessionId, pending] of Object.entries(resumePendingBySession)) {
+      const existing = timers[sessionId];
+      if (existing?.requestedAt === pending.requestedAt) continue;
+      if (existing !== undefined) clearTimeout(existing.timer);
+      const delay = Math.max(0, STREAM_STALE_AFTER_MS - Math.max(0, Date.now() - pending.requestedAt));
+      const timer = setTimeout(() => {
+        delete timers[sessionId];
+        if (!aliveRef.current) return;
+        const current = resumePendingBySession[sessionId];
+        if (current?.requestedAt !== pending.requestedAt) return;
+        void reconcileSession(sessionId, { silent: true });
+      }, delay);
+      timers[sessionId] = { requestedAt: pending.requestedAt, timer };
+    }
+  }, [reconcileSession, resumePendingBySession]);
+
+  useEffect(() => () => {
+    for (const entry of Object.values(resumeReconcileTimersRef.current)) {
+      clearTimeout(entry.timer);
+    }
+    resumeReconcileTimersRef.current = {};
+  }, []);
 
   const reconnectSession = useCallback(async (id: string) => {
     const session = sessions.find((s) => s.session_id === id);
