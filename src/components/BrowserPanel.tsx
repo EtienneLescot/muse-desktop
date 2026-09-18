@@ -290,6 +290,35 @@ export function BrowserPanel({
     setControlStatus("Navigated to the selected link.");
   };
 
+  const openSelectedLinkInNewTab = () => {
+    if (!browserControlsAllowed) {
+      setControlStatus("Allow computer-use for browser before opening a new tab.");
+      return;
+    }
+    if (!elementAnchor?.href || normalized === null) {
+      setControlStatus("Select a link in the same-origin page before opening it.");
+      return;
+    }
+    if (tabs.length >= MAX_BROWSER_TABS) {
+      setControlStatus(`The browser supports up to ${MAX_BROWSER_TABS} tabs.`);
+      return;
+    }
+    const target = normalizeSameOriginTarget(normalized, elementAnchor.href);
+    if (target === null) {
+      setControlStatus("For safety, navigation is limited to the current page origin.");
+      return;
+    }
+    const tab = {
+      ...createBrowserTab(),
+      url: target,
+      history: [target],
+      historyIndex: 0,
+    };
+    setTabs((current) => [...current, tab]);
+    activateTab(tab);
+    setControlStatus("Opened the selected link in a new tab.");
+  };
+
   const downloadLink = async (link: string | undefined, suggested?: string): Promise<void> => {
     if (!browserControlsAllowedRef.current) {
       setDownloadStatus("Allow computer-use for browser before saving a page link.");
@@ -777,6 +806,14 @@ export function BrowserPanel({
               title={browserControlsAllowed ? "Navigate to the selected same-origin link" : "Allow computer-use for browser first"}
             >
               Navigate selected link
+            </button>
+            <button
+              type="button"
+              disabled={elementAnchor?.href === undefined || !browserControlsAllowed || tabs.length >= MAX_BROWSER_TABS}
+              onClick={openSelectedLinkInNewTab}
+              title={browserControlsAllowed ? "Open the selected same-origin link in a new tab" : "Allow computer-use for browser first"}
+            >
+              Open in new tab
             </button>
             <button
               type="button"
