@@ -181,8 +181,8 @@ export function verifyReleaseChannelIndex(index, { publicKey, requireSignature =
   return { ...checked, signature: { algorithm: signature.algorithm, keyId: checkedText(signature.keyId, "signature key id"), value: signature.value } };
 }
 
-export function selectRelease(index, { target, currentVersion = "0.0.0", allowPrerelease = false } = {}) {
-  const checked = verifyReleaseChannelIndex(index);
+export function selectRelease(index, { target, currentVersion = "0.0.0", allowPrerelease = false, publicKey, requireSignature = false } = {}) {
+  const checked = verifyReleaseChannelIndex(index, { publicKey, requireSignature });
   const requestedTarget = checkedText(target, "target");
   const current = checkedVersion(currentVersion);
   const candidates = checked.releases.filter((release) => release.target === requestedTarget &&
