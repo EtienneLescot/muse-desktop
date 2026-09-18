@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 import type { LogEntry } from "../lib/persist";
+import { isTauriRuntime } from "../lib/env";
 import type { ItemOutputChunk } from "../hooks/useMuseSessions";
 import { REFLEXIVE_LABEL } from "../lib/phase";
 import { subagentSummary } from "../lib/subagent";
@@ -41,8 +44,28 @@ function outputDownloadName(entry: LogEntry, mediaType?: string): string {
   const basename = source.split(/[\\/]/).pop() ?? "muse-output";
   const safe = basename.replace(/[<>:\"/\\|?*\u0000-\u001f]/g, "-").trim().slice(0, 120) || "muse-output";
   if (safe.includes(".")) return safe;
-  const extension = mediaType?.startsWith("image/") ? mediaType.slice(6).split(";")[0] : undefined;
+  const extension = mediaTypeExtension(mediaType);
   return extension ? `${safe}.${extension.replace(/[^a-z0-9.+-]/gi, "")}` : `${safe}.txt`;
+}
+
+function mediaTypeExtension(mediaType?: string): string | undefined {
+  const normalized = mediaType?.toLowerCase().split(";", 1)[0];
+  if (!normalized) return undefined;
+  if (normalized.startsWith("image/")) return normalized.slice(6);
+  const known: Record<string, string> = {
+    "application/pdf": "pdf",
+    "application/json": "json",
+    "text/csv": "csv",
+    "text/markdown": "md",
+    "text/plain": "txt",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/vnd.oasis.opendocument.text": "odt",
+    "application/vnd.oasis.opendocument.spreadsheet": "ods",
+    "application/vnd.oasis.opendocument.presentation": "odp",
+  };
+  return known[normalized];
 }
 
 function downloadLoadedOutput(entry: LogEntry, loaded: { content: string; base64Data?: string; mediaType?: string }): void {
@@ -66,6 +89,33 @@ function downloadLoadedOutput(entry: LogEntry, loaded: { content: string; base64
   anchor.download = outputDownloadName(entry, loaded.mediaType);
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function utf8Base64(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+async function saveLoadedOutput(
+  entry: LogEntry,
+  loaded: { content: string; base64Data?: string; mediaType?: string },
+): Promise<void> {
+  const filename = outputDownloadName(entry, loaded.mediaType);
+  if (!isTauriRuntime()) {
+    downloadLoadedOutput(entry, loaded);
+    return;
+  }
+  const target = await save({
+    title: "Save Muse output",
+    defaultPath: filename,
+  });
+  if (typeof target !== "string" || target.trim() === "") return;
+  const data = loaded.base64Data ?? utf8Base64(loaded.content);
+  await invoke("output_export", { path: target, data });
 }
 
 function RichOfficeTable({ preview }: { preview: OfficePreview }) {
@@ -136,6 +186,8 @@ interface Props {
   onRetryFailedTurn?: (entry: LogEntry) => Promise<void>;
   /** Start a server-side branch from this completed turn. */
   onForkFromEntry?: (turnId: string) => void;
+  /** Open a verified workspace output with the system default application. */
+  onOpenWorkspacePath?: (path: string) => Promise<void>;
   controls?: SubagentControls;
 }
 
@@ -204,6 +256,7 @@ export function StreamView({
   onForceStop,
   onRetryFailedTurn,
   onForkFromEntry,
+  onOpenWorkspacePath,
   controls,
 }: Props) {
   const streamRef = useRef<HTMLDivElement>(null);
@@ -223,6 +276,7 @@ export function StreamView({
     eof: boolean;
     loading: boolean;
   }>>({});
+  const [outputError, setOutputError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [retryingFailure, setRetryingFailure] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
@@ -1097,11 +1151,27 @@ export function StreamView({
                       <button
                         type="button"
                         className="tool-output-button"
-                        onClick={() => downloadLoadedOutput(e, loadedOutput)}
+                        onClick={() => {
+                          setOutputError(null);
+                          void saveLoadedOutput(e, loadedOutput).catch((error) => {
+                            setOutputError(error instanceof Error ? error.message : String(error));
+                          });
+                        }}
                       >
-                        Download output
+                        Save output
                       </button>
                     )}
+                    {loadedOutput.eof && onOpenWorkspacePath && e.richContent?.[0]?.path && (
+                      <button
+                        type="button"
+                        className="tool-output-button"
+                        onClick={() => void onOpenWorkspacePath(e.richContent![0].path)}
+                        title="Open the verified workspace output with the system default application"
+                      >
+                        Open in app
+                      </button>
+                    )}
+                    {outputError && <span className="error">{outputError}</span>}
                     {loadedOutput.base64Data && loadedOutput.mediaType?.startsWith("image/") && loadedOutput.eof ? (
                       <img
                         className="rich-content-preview"

@@ -25,6 +25,7 @@ mod git;
 mod terminal;
 mod files;
 mod artifact_export;
+mod output_export;
 mod browser_download;
 mod setup;
 mod mcp;
@@ -3133,6 +3134,17 @@ async fn browser_download_fetch(
 #[tauri::command]
 fn desktop_control_status() -> desktop_control::DesktopControlStatus {
     desktop_control::status()
+}
+
+/// Write one explicitly selected completed host output to a local binary file.
+/// The renderer obtains the destination from the native save dialog; the
+/// backend validates it again and bounds the decoded payload before writing.
+#[tauri::command]
+async fn output_export(path: String, data: String) -> Result<(), String> {
+    let target = PathBuf::from(path.trim());
+    tokio::task::spawn_blocking(move || output_export::write_base64(&target, &data))
+        .await
+        .map_err(|e| format!("output export task failed: {e}"))?
 }
 
 fn require_desktop_control_permission(allowed: bool) -> Result<(), String> {
@@ -7549,6 +7561,7 @@ fn main() {
             files_unwatch,
             file_open,
             artifact_export,
+            output_export,
             browser_download_write,
             browser_download_fetch,
             desktop_control_status,

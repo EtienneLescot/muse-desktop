@@ -1292,6 +1292,7 @@ export default function App() {
                     onForceStop={() => void killSession(active.session_id)}
                     onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
                     onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
+                    onOpenWorkspacePath={(path) => openWorkspacePath(active.session_id, path)}
                     controls={{
                       onInterrupt: (agentId) =>
                         void subagentInterrupt(active.session_id, agentId),
