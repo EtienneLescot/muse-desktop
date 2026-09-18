@@ -37,6 +37,18 @@ function finiteDuration(value: unknown): number | undefined {
     : undefined;
 }
 
+function field(row: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (row[key] !== undefined) return row[key];
+  }
+  return undefined;
+}
+
+function isFailureTerminal(value: string): boolean {
+  const normalized = value.toLowerCase().replace(/^.*\//, "").replace(/[\s_-]+/g, "");
+  return new Set(["failed", "failure", "error", "timeout", "timedout", "rejected"]).has(normalized);
+}
+
 function resultText(value: unknown, depth = 0): string | null {
   if (depth > 2) return null;
   const text = nonEmpty(value);
@@ -66,7 +78,7 @@ export function parseTurnCompletion(
     parsed = JSON.parse(payload);
   } catch {
     const reason = nonEmpty(payload);
-    const failureTerminal = /^(failed|failure|error|timeout|timed[_-]?out|rejected)$/i.test(kind);
+    const failureTerminal = isFailureTerminal(kind);
     return reason === null
       ? null
       : {
@@ -84,18 +96,18 @@ export function parseTurnCompletion(
   const row = parsed as Record<string, unknown>;
   // Do not swallow unrelated status JSON merely because its kind happens to
   // be one of the broad stopped-state labels.
-  if (!["terminal", "reason", "error", "turnId", "durationMs", "result", "resultPreview", "output", "summary", "text"].some((key) => key in row)) {
+  if (!["terminal", "status", "reason", "error", "failure", "turnId", "turn_id", "durationMs", "duration_ms", "result", "resultPreview", "result_preview", "output", "summary", "text"].some((key) => key in row)) {
     return null;
   }
-  const terminal = nonEmpty(row.terminal) ?? kind;
-  const reason = redactDiagnostic(nonEmpty(row.reason));
-  const turnId = nonEmpty(row.turnId) ?? undefined;
+  const terminal = nonEmpty(field(row, "terminal", "status")) ?? kind;
+  const reason = redactDiagnostic(nonEmpty(field(row, "reason", "reason_text")));
+  const turnId = nonEmpty(field(row, "turnId", "turn_id")) ?? undefined;
   const resultPreview = boundedResult(
-    row.resultPreview ?? row.result ?? row.output ?? row.summary ?? row.text,
+    field(row, "resultPreview", "result_preview", "result", "output", "summary", "text"),
   );
-  const rawError = row.error;
+  const rawError = field(row, "error", "failure");
   if (typeof rawError !== "object" || rawError === null || Array.isArray(rawError)) {
-    const failureTerminal = /^(failed|failure|error|timeout|timed[_-]?out|rejected)$/i.test(terminal);
+    const failureTerminal = isFailureTerminal(terminal);
     return {
       terminal,
       reason,
@@ -111,12 +123,12 @@ export function parseTurnCompletion(
   const error = message === null
     ? null
     : {
-        kind: nonEmpty(failure.kind) ?? "unknown",
+        kind: nonEmpty(field(failure, "kind", "category")) ?? "unknown",
         message,
         retryable: failure.retryable === true,
         reason: reason ?? undefined,
-        turnId: nonEmpty(row.turnId) ?? undefined,
-        durationMs: finiteDuration(row.durationMs),
+        turnId: nonEmpty(field(row, "turnId", "turn_id")) ?? nonEmpty(field(failure, "turnId", "turn_id")) ?? undefined,
+        durationMs: finiteDuration(field(row, "durationMs", "duration_ms")),
       };
   return {
     terminal,

@@ -32,6 +32,34 @@ describe("M0-07 structured engine failures", () => {
     );
   });
 
+  it("accepts snake_case terminal payloads without leaking secrets", () => {
+    const result = parseTurnCompletion("turn/failed", JSON.stringify({
+      status: "failed",
+      turn_id: "turn-snake",
+      duration_ms: 2048,
+      result_preview: { summary: "The run stopped safely." },
+      failure: {
+        category: "provider_error",
+        message: "Bearer abc123 was rejected",
+        retryable: true,
+      },
+    }));
+    assert.deepEqual(result, {
+      terminal: "failed",
+      reason: null,
+      turnId: "turn-snake",
+      resultPreview: "The run stopped safely.",
+      error: {
+        kind: "provider_error",
+        message: "Bearer [redacted] was rejected",
+        retryable: true,
+        reason: undefined,
+        turnId: "turn-snake",
+        durationMs: 2048,
+      },
+    });
+  });
+
   it("falls back to a legacy plain reason without throwing", () => {
     const result = parseTurnCompletion("failed", "legacy host failure");
     assert.deepEqual(result, {
