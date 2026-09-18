@@ -249,6 +249,7 @@ export function removeStorageKey(key: string): boolean {
 export function exportStorageSnapshot(prefix = "muse-desktop."): string {
   const store = storage();
   const entries: Record<string, unknown> = {};
+  const metadata: Record<string, { kind: StorageDataKind }> = {};
   if (store === null) {
     record(prefix, "unavailable", "local storage is unavailable");
   } else {
@@ -275,6 +276,7 @@ export function exportStorageSnapshot(prefix = "muse-desktop."): string {
         continue;
       }
       if (raw === null) continue;
+      metadata[key] = { kind: storageDataKind(key) };
       try {
         entries[key] = JSON.parse(raw);
       } catch {
@@ -293,6 +295,7 @@ export function exportStorageSnapshot(prefix = "muse-desktop."): string {
       version: 1,
       exportedAt: new Date().toISOString(),
       entries,
+      metadata,
     },
     null,
     2,
@@ -309,6 +312,33 @@ export interface StorageSnapshotEntry {
   key: string;
   existing: boolean;
   parseError: boolean;
+  /** Durable product data is safe to select by default; UI state is opt-in. */
+  kind: StorageDataKind;
+}
+
+export type StorageDataKind = "durable" | "ui";
+
+/**
+ * Classify persisted keys before recovery. UI state is intentionally narrow:
+ * restoring it can resurrect a stale selection, draft, browser tab or lease
+ * without restoring the session it pointed at.
+ */
+export function storageDataKind(key: string): StorageDataKind {
+  const normalized = key.trim().toLowerCase();
+  if (
+    normalized === "muse-desktop.active.v1" ||
+    normalized === "muse-desktop.theme.v1" ||
+    normalized === "muse-desktop.welcome-draft" ||
+    normalized === "muse-desktop.scheduler-lease.v1" ||
+    normalized === "muse-desktop.storage-migrations.v1" ||
+    normalized.includes(".draft.") ||
+    normalized.includes(".attachment-draft.") ||
+    normalized.includes(".mentions.") ||
+    normalized === "muse-desktop.browser.tabs.v1"
+  ) {
+    return "ui";
+  }
+  return "durable";
 }
 
 export interface StorageSnapshotPreview {
@@ -352,6 +382,9 @@ export function inspectStorageSnapshot(
   }
   const entries: StorageSnapshotEntry[] = [];
   const errors: string[] = [];
+  const metadata = typeof snapshot.metadata === "object" && snapshot.metadata !== null
+    ? snapshot.metadata as Record<string, unknown>
+    : {};
   const store = storage();
   if (store === null) {
     record(prefix, "unavailable", "local storage is unavailable");
@@ -373,7 +406,12 @@ export function inspectStorageSnapshot(
     const parseError = typeof value === "object" && value !== null &&
       (value as Record<string, unknown>).parseError === true &&
       typeof (value as Record<string, unknown>).raw === "string";
-    entries.push({ key, existing, parseError });
+    const meta = metadata[key];
+    const kind = typeof meta === "object" && meta !== null &&
+      (meta as Record<string, unknown>).kind === "ui"
+      ? "ui"
+      : storageDataKind(key);
+    entries.push({ key, existing, parseError, kind });
   }
   return { entries, errors };
 }

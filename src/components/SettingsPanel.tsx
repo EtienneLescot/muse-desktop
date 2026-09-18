@@ -214,7 +214,11 @@ export function SettingsPanel({
         return;
       }
       setRecoveryPreview({ serialized, snapshot });
-      setSelectedRecoveryKeys(snapshot.entries.filter((entry) => !entry.existing).map((entry) => entry.key));
+      setSelectedRecoveryKeys(
+        snapshot.entries
+          .filter((entry) => !entry.existing && entry.kind === "durable")
+          .map((entry) => entry.key),
+      );
       setExportStatus(
         snapshot.errors.length > 0
           ? `Recovery snapshot ready with ${snapshot.errors.length} warnings. Choose entries to restore.`
@@ -537,7 +541,7 @@ export function SettingsPanel({
               <span className="muted">{recoveryPreview.snapshot.entries.length} entries</span>
             </div>
             <p className="settings-note">
-              New entries are selected by default. Existing entries stay unchecked until you explicitly choose to replace them.
+              New durable data is selected by default. UI state and existing entries stay unchecked until you explicitly choose to restore or replace them.
             </p>
             <div className="settings-recovery-list">
               {recoveryPreview.snapshot.entries.map((entry) => (
@@ -553,7 +557,7 @@ export function SettingsPanel({
                   <span>
                     <code>{entry.key}</code>
                     <small>
-                      {entry.existing ? "Replace existing" : "Add new"}
+                      {entry.kind === "ui" ? "UI state" : "Durable data"} · {entry.existing ? "Replace existing" : "Add new"}
                       {entry.parseError ? " · raw value" : ""}
                     </small>
                   </span>
