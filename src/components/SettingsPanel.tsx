@@ -16,6 +16,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
+import { startupProbeRows, type StartupProbe } from "../lib/startupProbe";
 import type { ScopeVerdict } from "../lib/scope";
 import {
   CONFIGURED_PROVIDERS,
@@ -69,6 +70,10 @@ interface Props {
   onSelectModel: (modelId: string) => void;
   /** Export bounded local diagnostics without transcript contents. */
   onExportDiagnostics: () => void;
+  /** Latest read-only native prerequisite probe, when available. */
+  startupProbe?: StartupProbe | null;
+  /** Re-run the read-only native prerequisite probe. */
+  onProbeStartup?: () => void | Promise<unknown>;
   /**
    * Existing scope-guard prompt path: out-of-scope attempts go here.
    * Surfaces the backend verdict (and the error-banner prompt) for the path.
@@ -92,6 +97,8 @@ export function SettingsPanel({
   onRefreshModels,
   onSelectModel,
   onExportDiagnostics,
+  startupProbe = null,
+  onProbeStartup,
   checkPathScope,
   onClose,
 }: Props) {
@@ -270,6 +277,51 @@ export function SettingsPanel({
           </button>
         )}
       </header>
+
+      <div className="settings-group">
+        <div className="settings-runtime-head">
+          <div>
+            <h3>Environment</h3>
+            <p className="settings-note">
+              Read-only checks for the desktop runtime, WSL, Muse CLI, and the selected workspace.
+            </p>
+          </div>
+          {onProbeStartup && (
+            <button
+              type="button"
+              className="settings-secondary-action"
+              onClick={() => void onProbeStartup()}
+            >
+              Run check
+            </button>
+          )}
+        </div>
+        {startupProbe === null ? (
+          <p className="settings-note settings-runtime-empty">
+            No environment check has run in this window yet.
+          </p>
+        ) : (
+          <div className="startup-probe settings-runtime-probe">
+            <header>
+              <h3>Environment check</h3>
+              <span className="muted">
+                {startupProbe.platform} · {new Date(startupProbe.checkedAt).toLocaleTimeString()}
+              </span>
+            </header>
+            <ul>
+              {startupProbeRows(startupProbe).map(({ label, check }) => (
+                <li key={label} data-status={check.status}>
+                  <span className="startup-probe-dot" aria-hidden="true" />
+                  <span className="startup-probe-label">{label}</span>
+                  <span className="startup-probe-detail" title={check.detail}>
+                    {check.detail || check.status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
 
       <div className="settings-group">
         <h3>Default folder</h3>

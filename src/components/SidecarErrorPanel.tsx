@@ -5,7 +5,7 @@ import {
   type SidecarErrorKind,
 } from "../lib/sidecarError";
 import { userFacingError } from "../lib/errorCopy";
-import type { StartupProbe, StartupCheck } from "../hooks/useMuseSessions";
+import type { StartupProbe, StartupCheck } from "../lib/startupProbe";
 
 interface Props {
   kind: SidecarErrorKind;

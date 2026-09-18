@@ -3684,6 +3684,44 @@ body.dark .composer textarea::placeholder {
   margin: 0;
 }
 
+.settings-runtime-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-runtime-head > div {
+  min-width: 0;
+}
+
+.settings-secondary-action {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--blue) 45%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+  color: var(--text);
+  padding: 5px 9px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.settings-secondary-action:hover {
+  border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 14%, var(--surface));
+}
+
+.settings-runtime-empty {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.settings-runtime-probe {
+  margin-top: 2px;
+}
+
 .settings-storage-warning {
   border: 1px solid color-mix(in srgb, var(--blue) 48%, var(--line));
   border-radius: var(--radius-sm);
