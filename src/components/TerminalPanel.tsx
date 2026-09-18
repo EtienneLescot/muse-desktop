@@ -50,11 +50,12 @@ export function TerminalPanel({
 
   useEffect(() => {
     if (!terminal) return;
+    const terminalId = terminal.info.terminalId;
     let disposed = false;
     let timer: number | null = null;
     const read = () => {
       if (disposed) return;
-      void onRead(terminal.info.terminalId).finally(() => {
+      void onRead(terminalId).finally(() => {
         if (!disposed) timer = window.setTimeout(read, 180);
       });
     };
@@ -63,7 +64,7 @@ export function TerminalPanel({
       disposed = true;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [onRead, terminal]);
+  }, [onRead, terminal?.info.terminalId]);
 
   useEffect(() => {
     outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight });
