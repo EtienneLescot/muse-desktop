@@ -26,9 +26,12 @@ export interface DesktopElement {
   id: string;
   title: string;
   className: string;
+  semanticRole: string;
+  automationId: string;
   bounds: DesktopBounds;
   enabled: boolean;
   visible: boolean;
+  offscreen: boolean;
 }
 
 export const DESKTOP_KEYS = [
@@ -74,7 +77,8 @@ export function desktopWindowLabel(window: DesktopWindow): string {
 export function desktopElementLabel(element: DesktopElement): string {
   const name = element.title || element.className || "Unnamed control";
   const state = element.enabled ? "enabled" : "disabled";
-  return `${name} · ${element.bounds.width}×${element.bounds.height} · ${state}`;
+  const role = element.semanticRole ? ` · ${element.semanticRole}` : "";
+  return `${name} · ${element.bounds.width}×${element.bounds.height} · ${state}${role}`;
 }
 
 /** Format native control metadata as explicitly observed, untrusted context. */
@@ -88,7 +92,10 @@ export function formatDesktopObservation(
       .trim()
       .slice(0, 160);
     const bounds = `${element.bounds.x},${element.bounds.y} ${element.bounds.width}×${element.bounds.height}`;
-    return `${index + 1}. ${name} [${element.className || "unknown"}] at ${bounds} · ${element.enabled ? "enabled" : "disabled"}`;
+    const role = element.semanticRole ? ` · role ${element.semanticRole}` : "";
+    const automationId = element.automationId ? ` · automationId ${element.automationId}` : "";
+    const visibility = element.offscreen ? " · offscreen" : "";
+    return `${index + 1}. ${name} [${element.className || "unknown"}] at ${bounds} · ${element.enabled ? "enabled" : "disabled"}${role}${automationId}${visibility}`;
   });
   const text = [
     "[Desktop observation]",

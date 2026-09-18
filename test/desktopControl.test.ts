@@ -51,14 +51,19 @@ test("desktop observation keeps native controls bounded and attributable", () =>
     id: "child",
     title: "Run",
     className: "Button",
+    semanticRole: "button",
+    automationId: "run-action",
     bounds: { x: 12, y: 18, width: 80, height: 28 },
     enabled: true,
     visible: true,
+    offscreen: false,
   }];
-  assert.equal(desktopElementLabel(elements[0]), "Run · 80×28 · enabled");
+  assert.equal(desktopElementLabel(elements[0]), "Run · 80×28 · enabled · button");
   const context = formatDesktopObservation(windowFixture, elements);
   assert.match(context, /\[Desktop observation\]/);
   assert.match(context, /Run \[Button\]/);
+  assert.match(context, /role button/);
+  assert.match(context, /automationId run-action/);
   assert.match(context, /read-only/);
 });
 

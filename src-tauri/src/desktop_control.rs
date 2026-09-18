@@ -37,9 +37,12 @@ pub struct DesktopElement {
     pub id: String,
     pub title: String,
     pub class_name: String,
+    pub semantic_role: String,
+    pub automation_id: String,
     pub bounds: DesktopBounds,
     pub enabled: bool,
     pub visible: bool,
+    pub offscreen: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -275,6 +278,8 @@ mod windows_impl {
             id: id_for(hwnd),
             title,
             class_name,
+            semantic_role: String::new(),
+            automation_id: String::new(),
             bounds: DesktopBounds {
                 x: screen_bounds.x.saturating_sub(context.root.x),
                 y: screen_bounds.y.saturating_sub(context.root.y),
@@ -283,6 +288,7 @@ mod windows_impl {
             },
             enabled: unsafe { (GetWindowLongW(hwnd, GWL_STYLE) as u32 & WS_DISABLED) == 0 },
             visible: true,
+            offscreen: false,
         });
         TRUE
     }
@@ -292,6 +298,11 @@ mod windows_impl {
         let Some(root) = bounds(hwnd) else {
             return Err("desktop window bounds are unavailable".to_string());
         };
+        if let Ok(rows) = semantic_elements(hwnd, root.clone()) {
+            if !rows.is_empty() {
+                return Ok(rows);
+            }
+        }
         let mut context = ElementContext {
             root,
             rows: Vec::with_capacity(48),
@@ -303,6 +314,118 @@ mod windows_impl {
             return Err("Windows could not enumerate child controls".to_string());
         }
         Ok(context.rows)
+    }
+
+    /// Prefer Windows UI Automation's control tree when the target exposes it.
+    /// Some legacy or elevated windows reject COM/UIA access; callers then use
+    /// the Win32 child enumeration above rather than claiming semantic data.
+    fn semantic_elements(hwnd: HWND, root: DesktopBounds) -> Result<Vec<DesktopElement>, String> {
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+            COINIT_MULTITHREADED,
+        };
+        use windows::Win32::UI::Accessibility::{
+            CUIAutomation, IUIAutomationTreeWalker,
+        };
+
+        let init = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+        if init.is_err() {
+            return Err("Windows UI Automation could not initialize".to_string());
+        }
+        let result = (|| {
+            let automation: windows::Win32::UI::Accessibility::IUIAutomation = unsafe {
+                CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
+            }
+            .map_err(|_| "Windows UI Automation is unavailable".to_string())?;
+            let root_element = unsafe {
+                automation.ElementFromHandle(windows::Win32::Foundation::HWND(hwnd))
+            }
+            .map_err(|_| "Windows UI Automation could not inspect this window".to_string())?;
+            let walker: IUIAutomationTreeWalker = unsafe { automation.ControlViewWalker() }
+                .map_err(|_| "Windows UI Automation control view is unavailable".to_string())?;
+            let mut rows = Vec::with_capacity(48);
+            collect_semantic_children(&walker, &root_element, &root, &mut rows, 0);
+            Ok(rows)
+        })();
+        unsafe { CoUninitialize() };
+        result
+    }
+
+    fn bounded_bstr(value: windows::core::BSTR, max: usize) -> String {
+        value
+            .to_string()
+            .replace('\u{0}', "")
+            .chars()
+            .take(max)
+            .collect()
+    }
+
+    fn collect_semantic_children(
+        walker: &windows::Win32::UI::Accessibility::IUIAutomationTreeWalker,
+        parent: &windows::Win32::UI::Accessibility::IUIAutomationElement,
+        root: &DesktopBounds,
+        rows: &mut Vec<DesktopElement>,
+        depth: usize,
+    ) {
+        if rows.len() >= MAX_ELEMENTS || depth > 32 {
+            return;
+        }
+        let mut child = unsafe { walker.GetFirstChildElement(parent) }.ok();
+        while let Some(element) = child {
+            if rows.len() >= MAX_ELEMENTS {
+                break;
+            }
+            let rect = unsafe { element.CurrentBoundingRectangle() }.ok();
+            let offscreen = unsafe { element.CurrentIsOffscreen() }
+                .map(|value| value.as_bool())
+                .unwrap_or(false);
+            if let Some(rect) = rect {
+                let width = (rect.right - rect.left).max(0);
+                let height = (rect.bottom - rect.top).max(0);
+                if width > 0 && height > 0 {
+                    let native = unsafe { element.CurrentNativeWindowHandle() }
+                        .ok()
+                        .map(|value| value.0 as usize)
+                        .unwrap_or(0);
+                    let title = unsafe { element.CurrentName() }
+                        .map(|value| bounded_bstr(value, 240))
+                        .unwrap_or_default();
+                    let class_name = unsafe { element.CurrentClassName() }
+                        .map(|value| bounded_bstr(value, 100))
+                        .unwrap_or_default();
+                    let semantic_role = unsafe { element.CurrentLocalizedControlType() }
+                        .map(|value| bounded_bstr(value, 80))
+                        .unwrap_or_default();
+                    let automation_id = unsafe { element.CurrentAutomationId() }
+                        .map(|value| bounded_bstr(value, 120))
+                        .unwrap_or_default();
+                    rows.push(DesktopElement {
+                        id: if native == 0 {
+                            format!("uia:{}", rows.len())
+                        } else {
+                            format!("{:x}", native)
+                        },
+                        title,
+                        class_name,
+                        semantic_role,
+                        automation_id,
+                        bounds: DesktopBounds {
+                            x: rect.left.saturating_sub(root.x),
+                            y: rect.top.saturating_sub(root.y),
+                            width,
+                            height,
+                        },
+                        enabled: unsafe { element.CurrentIsEnabled() }
+                            .map(|value| value.as_bool())
+                            .unwrap_or(true),
+                        visible: !offscreen,
+                        offscreen,
+                    });
+                }
+            }
+            collect_semantic_children(walker, &element, root, rows, depth + 1);
+            child = unsafe { walker.GetNextSiblingElement(&element) }.ok();
+        }
     }
 
     pub fn focus(id: &str) -> Result<HWND, String> {
