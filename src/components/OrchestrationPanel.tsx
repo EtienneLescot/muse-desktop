@@ -5,6 +5,7 @@ import {
   planWriterQueue,
   type WriterQueueStatus,
 } from "../lib/writerQueue";
+import { loadWriterTargets, saveWriterTargets } from "../lib/writerTargets";
 import { buildHandoffPlan, type HandoffPlan } from "../lib/handoff";
 import type { GitStatusSnapshot } from "../lib/git";
 import {
@@ -107,7 +108,10 @@ export function OrchestrationPanel({
   const [creating, setCreating] = useState<string | null>(null);
   const [openingBranch, setOpeningBranch] = useState<string | null>(null);
   const [removingBranch, setRemovingBranch] = useState<string | null>(null);
-  const [writerTargets, setWriterTargets] = useState<Record<string, string>>({});
+  const [writerTargets, setWriterTargets] = useState<Record<string, string>>(() =>
+    loadWriterTargets(workspace),
+  );
+  const writerTargetsWorkspace = useRef(workspace);
   const [setupCommand, setSetupCommand] = useState("");
   const [envAllowlistText, setEnvAllowlistText] = useState("");
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -133,6 +137,18 @@ export function OrchestrationPanel({
     loadWorktreeRetention(workspace),
   );
   const retentionWorkspace = useRef(workspace);
+
+  useEffect(() => {
+    // The declaration is workspace-scoped. On a workspace switch, hydrate
+    // first and skip the write pass so the previous workspace cannot leak
+    // into the new one.
+    if (writerTargetsWorkspace.current !== workspace) {
+      writerTargetsWorkspace.current = workspace;
+      setWriterTargets(loadWriterTargets(workspace));
+      return;
+    }
+    saveWriterTargets(workspace, writerTargets);
+  }, [workspace, writerTargets]);
 
   useEffect(() => {
     setSetupProfiles(loadSetupProfiles(workspace));

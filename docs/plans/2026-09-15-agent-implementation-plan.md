@@ -433,7 +433,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Code :** fanout.ts, orchestration, worktrees. Dépend M2-03/07.
 
-**État :** le panneau d'orchestration expose un pré-vol par writer : chemins relatifs déclarés, normalisation bornée, refus des traversées et détection des recouvrements (fichier ou sous-dossier). Un writer sans worktree ou sans cible ne peut pas être marqué prêt. Les writers sans collision reçoivent des lanes déterministes (`cores - 2`, borné 4–8) et les suivants sont représentés en file FIFO dans `src/lib/writerQueue.ts` ; le calcul reste pur et partage l'ordre du fan-out.
+**État :** le panneau d'orchestration expose un pré-vol par writer : chemins relatifs déclarés, normalisation bornée, refus des traversées et détection des recouvrements (fichier ou sous-dossier). Les déclarations sont persistées par workspace dans `muse-desktop.writer-targets.v1`, avec bornage des workspaces, agents et texte, puis restaurées au changement de dépôt sans fuite entre racines. Un writer sans worktree ou sans cible ne peut pas être marqué prêt. Les writers sans collision reçoivent des lanes déterministes (`cores - 2`, borné 4–8) et les suivants sont représentés en file FIFO dans `src/lib/writerQueue.ts` ; le calcul reste pur et partage l'ordre du fan-out.
 
 **Reste :** le protocole MSP n'expose pas encore de lancement, d'annulation ou de verrouillage de fichiers pour des writers réels. Ajouter un dispatch natif seulement après contrat vérifié, puis collecter les résultats et proposer une intégration séparée des changements.
 
