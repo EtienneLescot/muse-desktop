@@ -37,8 +37,20 @@ function finiteDuration(value: unknown): number | undefined {
     : undefined;
 }
 
-function boundedResult(value: unknown): string | undefined {
+function resultText(value: unknown): string | null {
   const text = nonEmpty(value);
+  if (text !== null) return text;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const object = value as Record<string, unknown>;
+  for (const key of ["resultPreview", "summary", "output", "text", "message", "headline"]) {
+    const nested = resultText(object[key]);
+    if (nested !== null) return nested;
+  }
+  return null;
+}
+
+function boundedResult(value: unknown): string | undefined {
+  const text = resultText(value);
   if (text === null) return undefined;
   return text.length > 320 ? `${text.slice(0, 319)}…` : text;
 }

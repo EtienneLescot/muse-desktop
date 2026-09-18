@@ -54,6 +54,10 @@ describe("M0-07 structured engine failures", () => {
     }));
     assert.equal(bounded?.resultPreview?.length, 320);
     assert.equal(bounded?.resultPreview?.endsWith("…"), true);
+    const structured = parseTurnCompletion("turn/completed", JSON.stringify({
+      result: { summary: "Structured result from the host." },
+    }));
+    assert.equal(structured?.resultPreview, "Structured result from the host.");
   });
 
   it("finds only the prompt before the failed turn", () => {
