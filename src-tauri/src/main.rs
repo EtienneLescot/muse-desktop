@@ -788,6 +788,28 @@ fn session_list_next_cursor(result: &Value) -> Result<Option<String>, String> {
     Ok(Some(cursor.to_string()))
 }
 
+fn session_meta_from_list_row(
+    root: &Path,
+    session: &Value,
+    session_durability: Option<String>,
+    granted_capabilities: Option<Vec<String>>,
+) -> Option<SessionMeta> {
+    let session_id = session
+        .get("sessionId")
+        .or_else(|| session.get("id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|id| !id.is_empty())?;
+    Some(SessionMeta {
+        session_id: session_id.to_string(),
+        workspace: root.display().to_string(),
+        running: session.get("status").and_then(Value::as_str) == Some("running"),
+        session_durability,
+        approval_mode: session_approval_mode(session),
+        granted_capabilities,
+    })
+}
+
 /// Build the bounded request for the durable `view/page` history surface.
 /// `cursor` and `anchor` are opaque to the desktop: they are only trimmed and
 /// size-checked before being relayed to the host. The two fields are mutually
@@ -3707,7 +3729,14 @@ fn poll_events(state: State<'_, AppState>, since: Option<u64>) -> Result<PollRes
 async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>, String> {
     let clients = state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.snapshot();
     let mut out = Vec::new();
-    for (_, client) in clients {
+    for (root, client) in clients {
+        let session_durability = state
+            .host_durability
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(&root)
+            .cloned();
+        let granted_capabilities = session_granted_capabilities(&state, &root)?;
         let mut cursor = None;
         let mut seen_cursors = HashSet::new();
         let mut seen_sessions = HashSet::new();
@@ -3726,24 +3755,49 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
                     if !seen_sessions.insert(sid.to_string()) {
                         continue;
                     }
-                    if !state
-                        .hosts
-                        .lock()
-                        .map_err(|e| format!("state lock: {e}"))?
-                        .owns(sid, &client)
-                    {
+                    // A session listed by a workspace-owned host can be
+                    // admitted after a desktop restart. If another live host
+                    // already owns the same id, fail closed and keep that
+                    // existing route instead of stealing it.
+                    let bound = {
+                        let mut hosts = state
+                            .hosts
+                            .lock()
+                            .map_err(|e| format!("state lock: {e}"))?;
+                        hosts.owns(sid, &client) || hosts.bind(sid, &root, &client).is_ok()
+                    };
+                    if !bound {
                         continue;
                     }
-                    if let Some(mut meta) = state
+                    let Some(listed) = session_meta_from_list_row(
+                        &root,
+                        s,
+                        session_durability.clone(),
+                        granted_capabilities.clone(),
+                    ) else {
+                        continue;
+                    };
+                    let mut sessions = state
                         .sessions
                         .lock()
-                        .map_err(|e| format!("state lock: {e}"))?
-                        .get(sid)
-                        .cloned()
-                    {
-                        meta.running = s.get("status").and_then(Value::as_str) == Some("running");
-                        out.push(meta);
-                    }
+                        .map_err(|e| format!("state lock: {e}"))?;
+                    let meta = if let Some(existing) = sessions.get_mut(sid) {
+                        existing.running = listed.running;
+                        if listed.approval_mode.is_some() {
+                            existing.approval_mode = listed.approval_mode.clone();
+                        }
+                        if listed.session_durability.is_some() {
+                            existing.session_durability = listed.session_durability.clone();
+                        }
+                        if listed.granted_capabilities.is_some() {
+                            existing.granted_capabilities = listed.granted_capabilities.clone();
+                        }
+                        existing.clone()
+                    } else {
+                        sessions.insert(listed.session_id.clone(), listed.clone());
+                        listed
+                    };
+                    out.push(meta);
                 }
             }
             let Some(next) = session_list_next_cursor(&res)? else { break };
@@ -5614,6 +5668,28 @@ mod tests {
             &"x".repeat(MAX_SESSION_LIST_CURSOR_CHARS + 1)
         ))
         .is_err());
+    }
+
+    #[test]
+    fn session_list_rows_rehydrate_unknown_durable_sessions() {
+        let meta = session_meta_from_list_row(
+            Path::new("C:/workspace"),
+            &json!({
+                "sessionId": "session-restored",
+                "status": "running",
+                "approvalMode": {"mode": "promptUnmatched"}
+            }),
+            Some("durable".to_string()),
+            Some(vec!["userShell".to_string()]),
+        )
+        .unwrap();
+        assert_eq!(meta.session_id, "session-restored");
+        assert_eq!(meta.workspace, "C:/workspace");
+        assert!(meta.running);
+        assert_eq!(meta.session_durability.as_deref(), Some("durable"));
+        assert_eq!(meta.approval_mode.as_deref(), Some("promptUnmatched"));
+        assert_eq!(meta.granted_capabilities, Some(vec!["userShell".to_string()]));
+        assert!(session_meta_from_list_row(Path::new("C:/workspace"), &json!({}), None, None).is_none());
     }
 
     #[test]
