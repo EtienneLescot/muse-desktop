@@ -26,6 +26,8 @@
  * The explicit `--exercise-history` path probes the bounded `session/list`
  * and `view/page` reads used by the renderer's restore fallback. Unsupported
  * methods are reported as such rather than treated as a successful proof.
+ * The explicit `--exercise-terminal` path tightens `--exercise-control` by
+ * requiring a terminal turn notification after the interrupt acknowledgement.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
@@ -37,6 +39,7 @@
  *   node scripts/native-smoke.mjs --exercise-user-shell
  *   node scripts/native-smoke.mjs --exercise-reconnect
  *   node scripts/native-smoke.mjs --exercise-history
+ *   node scripts/native-smoke.mjs --exercise-control --exercise-terminal
  *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -103,6 +106,29 @@ function exercisesReconnectPath() {
 
 function exercisesHistoryPath() {
   return process.argv.includes("--exercise-history");
+}
+
+function exercisesTerminalPath() {
+  return process.argv.includes("--exercise-terminal");
+}
+
+async function waitForTerminalNotification(host, turnId, label, required) {
+  for (const method of ["turn/completed", "turn/retracted", "turn/stopped"]) {
+    try {
+      const params = await host.waitForNotification(
+        method,
+        (candidate) => candidate?.turnId === turnId,
+        2_500,
+      );
+      return { method, params };
+    } catch {
+      // Compatible hosts use different terminal aliases. Keep probing the
+      // allowlisted forms, but never treat an interrupt acknowledgement as a
+      // terminal state by itself.
+    }
+  }
+  if (required) fail(`${label} did not emit a terminal notification for ${turnId}`);
+  return { method: null, params: null };
 }
 
 function fail(message) {
@@ -322,6 +348,10 @@ async function main() {
   const exerciseUserShell = exercisesUserShellPath();
   const exerciseReconnect = exercisesReconnectPath();
   const exerciseHistory = exercisesHistoryPath();
+  const exerciseTerminal = exercisesTerminalPath();
+  if (exerciseTerminal && !exerciseControl) {
+    fail("--exercise-terminal requires --exercise-control");
+  }
   const reportPath = reportArgument();
   const roots = await Promise.all([
     mkdtemp(join(tmpdir(), "muse-native-smoke-a-")),
@@ -612,11 +642,24 @@ async function main() {
           retract: false,
         }),
       ));
+      const terminals = await Promise.all(hosts.map((host, index) =>
+        waitForTerminalNotification(host, turnIds[index], `host-${index === 0 ? "A" : "B"}`, exerciseTerminal),
+      ));
       interrupted.forEach((result, index) => {
         if (result?.status !== "accepted" || result?.turnId !== turnIds[index]) {
           fail(`host-${index === 0 ? "A" : "B"} did not acknowledge interruption of ${turnIds[index]}`);
         }
-        controls.push({ host: String.fromCharCode(65 + index), turnId: turnIds[index], status: "interrupted" });
+        if (terminals[index]?.params?.turnId !== undefined && terminals[index].params.turnId !== turnIds[index]) {
+          fail(`host-${index === 0 ? "A" : "B"} emitted a mismatched terminal turn`);
+        }
+        controls.push({
+          host: String.fromCharCode(65 + index),
+          turnId: turnIds[index],
+          status: "interrupted",
+          ...(terminals[index].method === null
+            ? { terminalNotification: "unsupported" }
+            : { terminalMethod: terminals[index].method }),
+        });
       });
     }
     if (exerciseIsolation) {
