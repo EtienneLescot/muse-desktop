@@ -309,7 +309,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Acceptation :** branche indépendante, source inchangée, point invalide, source active et échec ; ne jamais substituer un résumé au fork demandé.
 
-**État au 17/09/2026 :** `session/fork` est câblé dans le superviseur et l’action d’en-tête crée une nouvelle conversation serveur dans le même workspace, avec continuité locale des entrées terminées. Les items conservent maintenant leur `turnId` et les messages terminés proposent **Fork from here**, transmis comme `cutPoint.lastTurnId`; le bouton d’en-tête reste le raccourci vers le dernier tour terminé. Les erreurs de frontière et la qualification live restent ouvertes.
+**État au 18/09/2026 :** `session/fork` est câblé dans le superviseur et l’action d’en-tête crée une nouvelle conversation serveur dans le même workspace, avec continuité locale des entrées terminées. Les items conservent maintenant leur `turnId` et les messages terminés proposent **Fork from here**, transmis comme `cutPoint.lastTurnId`; le bouton d’en-tête reste le raccourci vers le dernier tour terminé. Une ancre devenue indisponible produit maintenant une guidance récupérable vers le fork du dernier tour, sans retry implicite sur un autre point. La qualification live et la reprise après rechargement restent ouvertes.
 
 ### M1-12 — Recherche et organisation
 

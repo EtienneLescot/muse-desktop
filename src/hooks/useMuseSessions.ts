@@ -345,6 +345,7 @@ import {
 import { checkScope, type ScopeVerdict } from "../lib/scope";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
 import { reconnectErrorMessage } from "../lib/errorCopy";
+import { forkFailureMessage } from "../lib/fork";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
 import {
@@ -4218,7 +4219,7 @@ export function useMuseSessions(): UseMuseSessions {
         void refreshHostSkills(meta.session_id);
         return meta.session_id;
       } catch (error) {
-        setError(`Fork failed: ${error instanceof Error ? error.message : String(error)}`);
+        setError(forkFailureMessage(error));
         return null;
       } finally {
         setForkingId(null);
