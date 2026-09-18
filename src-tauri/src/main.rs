@@ -3471,23 +3471,13 @@ async fn set_approval_mode(
 }
 
 /// Explicitly attach a saved durable session; never create a replacement ID.
-#[tauri::command]
-async fn resume_session(
-    app: AppHandle,
-    state: State<'_, AppState>,
+async fn resume_session_with_client(
+    state: &State<'_, AppState>,
+    client: Arc<MspClient>,
+    root: PathBuf,
     session_id: String,
-    workspace_path: String,
     mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
-    let _resume = state.resume_mutex.lock().await;
-    let root = resolve_workspace(&state, Some(workspace_path))?;
-    if session_client(&state, &session_id).is_ok() {
-        let owner_root = state.hosts.lock().map_err(|e| e.to_string())?.session_workspace(&session_id)?;
-        if owner_root != root { return Err("conversation belongs to a different workspace".into()); }
-        return state.sessions.lock().map_err(|e| e.to_string())?.get(&session_id).cloned()
-            .ok_or_else(|| "conversation metadata is unavailable".into());
-    }
-    let client = ensure_host(&app, &state, &root).await?;
     if state
         .host_durability
         .lock()
@@ -3544,6 +3534,36 @@ async fn resume_session(
             Err(format!("could not reconnect conversation: {error}"))
         }
     }
+}
+
+async fn resume_session_inner(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    session_id: String,
+    workspace_path: String,
+    mcp_servers: Option<Value>,
+) -> Result<SessionMeta, String> {
+    let _resume = state.resume_mutex.lock().await;
+    let root = resolve_workspace(state, Some(workspace_path))?;
+    if session_client(state, &session_id).is_ok() {
+        let owner_root = state.hosts.lock().map_err(|e| e.to_string())?.session_workspace(&session_id)?;
+        if owner_root != root { return Err("conversation belongs to a different workspace".into()); }
+        return state.sessions.lock().map_err(|e| e.to_string())?.get(&session_id).cloned()
+            .ok_or_else(|| "conversation metadata is unavailable".into());
+    }
+    let client = ensure_host(app, state, &root).await?;
+    resume_session_with_client(state, client, root, session_id, mcp_servers).await
+}
+
+#[tauri::command]
+async fn resume_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    workspace_path: String,
+    mcp_servers: Option<Value>,
+) -> Result<SessionMeta, String> {
+    resume_session_inner(&app, &state, session_id, workspace_path, mcp_servers).await
 }
 
 /// Read the folded durable item history for an attached conversation.
@@ -5863,6 +5883,90 @@ mod tests {
         assert_eq!(response[0]["session_durability"], "durable");
         assert_eq!(response[0]["approval_mode"], "promptUnmatched");
         assert_eq!(response[0]["granted_capabilities"][0], "userShell");
+        assert_eq!(state.sessions.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn durable_resume_attaches_after_read_without_replaying_history() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        let root = std::env::current_dir().expect("test workspace").canonicalize().unwrap();
+        let responder_root = root.clone();
+        state.hosts.lock().unwrap().insert(root.clone(), client.clone());
+        state
+            .host_durability
+            .lock()
+            .unwrap()
+            .insert(root.clone(), "durable".to_string());
+
+        let responder_client = client.clone();
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let read = fixture_frame(&mut frames).await;
+                assert_eq!(read["method"], "session/read");
+                assert_eq!(read["params"]["sessionId"], "durable-session");
+                assert_eq!(read["params"]["excludeItems"], true);
+                responder_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": read["id"],
+                        "result": {
+                            "session": {
+                                "sessionId": "durable-session",
+                                "path": "durable.jsonl",
+                                "workspaceRoot": responder_root.clone(),
+                                "status": "idle",
+                                "approvalMode": {"mode": "promptUnmatched"}
+                            },
+                            "history": {"items": [{"kind": "agentMessage", "text": "must not be replayed here"}]}
+                        }
+                    }))
+                    .await;
+
+                let resume = fixture_frame(&mut frames).await;
+                assert_eq!(resume["method"], "session/resume");
+                assert_eq!(resume["params"]["sessionId"], "durable-session");
+                assert_eq!(resume["params"]["excludeItems"], true);
+                assert!(resume["params"]["commandId"].as_str().is_some());
+                responder_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": resume["id"],
+                        "result": {
+                            "session": {
+                                "sessionId": "durable-session",
+                                "path": "durable.jsonl",
+                                "workspaceRoot": responder_root,
+                                "status": "running",
+                                "approvalMode": {"mode": "promptUnmatched"}
+                            }
+                        }
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::async_runtime::block_on(resume_session_with_client(
+            &state,
+            client.clone(),
+            root.clone(),
+            "durable-session".to_string(),
+            None,
+        ))
+        .expect("durable resume should succeed");
+
+        responder.join().expect("resume responder should finish");
+        assert_eq!(response.session_id, "durable-session");
+        assert_eq!(response.workspace, root.display().to_string());
+        assert!(response.running);
+        assert_eq!(response.session_durability.as_deref(), Some("durable"));
+        assert_eq!(response.approval_mode.as_deref(), Some("promptUnmatched"));
+        assert!(state.hosts.lock().unwrap().owns("durable-session", &client));
         assert_eq!(state.sessions.lock().unwrap().len(), 1);
     }
 
