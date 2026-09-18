@@ -24,4 +24,16 @@ describe("scheduled run result summaries", () => {
     assert.equal(summary.headline, "Tool completed");
     assert.equal(summary.assistantMessages, 0);
   });
+
+  it("keeps only explicit next-step lines as bounded facts", () => {
+    const summary = buildScheduleRunSummary("session-3", [
+      { id: "a", role: "assistant", text: "Next steps: run the migration.\nTodo: review the generated diff.\nThis sentence should not become a task." },
+      { id: "a2", role: "assistant", text: "Follow-up: ask the team to verify the deploy." },
+    ]);
+    assert.deepEqual(summary.nextSteps, [
+      "run the migration.",
+      "review the generated diff.",
+      "ask the team to verify the deploy.",
+    ]);
+  });
 });

@@ -424,6 +424,7 @@ export function SchedulesPanel({
                       {run.resultSummary.assistantMessages} response{run.resultSummary.assistantMessages === 1 ? "" : "s"}
                       {run.resultSummary.toolEvents > 0 ? ` · ${run.resultSummary.toolEvents} tool event${run.resultSummary.toolEvents === 1 ? "" : "s"}` : ""}
                       {run.resultSummary.filesMentioned.length > 0 ? ` · ${run.resultSummary.filesMentioned.length} file${run.resultSummary.filesMentioned.length === 1 ? "" : "s"}` : ""}
+                      {run.resultSummary.nextSteps && run.resultSummary.nextSteps.length > 0 ? ` · ${run.resultSummary.nextSteps.length} next step${run.resultSummary.nextSteps.length === 1 ? "" : "s"}` : ""}
                     </span>
                   </div>
                 )}
@@ -470,6 +471,12 @@ export function SchedulesPanel({
                         <div className="run-summary-decisions">
                           <span className="run-detail-label">Recorded outcomes</span>
                           <ul>{run.resultSummary.decisions.slice(0, 4).map((decision) => <li key={decision}>{decision}</li>)}</ul>
+                        </div>
+                      )}
+                      {run.resultSummary.nextSteps && run.resultSummary.nextSteps.length > 0 && (
+                        <div className="run-summary-next">
+                          <span className="run-detail-label">Next steps observed</span>
+                          <ul>{run.resultSummary.nextSteps.map((step) => <li key={step}>{step}</li>)}</ul>
                         </div>
                       )}
                     </div>

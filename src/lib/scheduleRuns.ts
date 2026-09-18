@@ -305,7 +305,8 @@ function validRunSummary(value: unknown): value is ScheduleRunSummary {
     typeof row.assistantMessages === "number" && Number.isInteger(row.assistantMessages) && row.assistantMessages >= 0 &&
     typeof row.toolEvents === "number" && Number.isInteger(row.toolEvents) && row.toolEvents >= 0 &&
     Array.isArray(row.filesMentioned) && row.filesMentioned.every((item) => typeof item === "string" && item.length <= 200) && row.filesMentioned.length <= 12 &&
-    Array.isArray(row.decisions) && row.decisions.every((item) => typeof item === "string" && item.length <= 200) && row.decisions.length <= 12;
+    Array.isArray(row.decisions) && row.decisions.every((item) => typeof item === "string" && item.length <= 200) && row.decisions.length <= 12 &&
+    (row.nextSteps === undefined || (Array.isArray(row.nextSteps) && row.nextSteps.every((item) => typeof item === "string" && item.length <= 200) && row.nextSteps.length <= 4));
 }
 
 /** Parse a persisted ledger without trusting renderer or native storage. */

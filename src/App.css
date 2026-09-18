@@ -5049,6 +5049,21 @@ body.dark .composer textarea::placeholder {
   margin: 2px 0;
 }
 
+.run-summary-next {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.run-summary-next ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+.run-summary-next li {
+  margin: 2px 0;
+}
+
 .notification-enable {
   margin-top: 8px;
   color: var(--blue);
