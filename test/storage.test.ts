@@ -12,6 +12,7 @@ import {
   removeStorageKey,
   removeSessionStorageKey,
   storageDataKind,
+  storageSnapshotChecksum,
   subscribeStorageIssues,
   writeStorageJson,
   writeStorageString,
@@ -128,9 +129,12 @@ describe("defensive storage facade", () => {
       format: string;
       version: number;
       entries: Record<string, unknown>;
+      metadata: Record<string, unknown>;
+      checksum: string;
     };
     assert.equal(snapshot.format, "muse-desktop-storage");
     assert.equal(snapshot.version, 1);
+    assert.equal(snapshot.checksum, storageSnapshotChecksum(snapshot.entries, snapshot.metadata));
     assert.deepEqual(snapshot.entries["muse-desktop.sessions.v1"], [{ session_id: "s1" }]);
     assert.deepEqual(snapshot.entries["muse-desktop.corrupt.v1"], {
       raw: "{broken",
@@ -250,6 +254,38 @@ describe("defensive storage facade", () => {
     assert.deepEqual(JSON.parse(values.get("muse-desktop.new.v1") ?? "{}"), { restored: true });
     assert.equal(values.has("muse-desktop.corrupt.v1"), false);
     assert.equal(result.skipped, 3);
+  });
+
+  it("rejects a damaged checksum before preview or restore", () => {
+    const { values } = fakeStorage();
+    const snapshot = JSON.stringify({
+      format: "muse-desktop-storage",
+      version: 1,
+      entries: { "muse-desktop.sessions.v1": [{ session_id: "s1" }] },
+      metadata: { "muse-desktop.sessions.v1": { kind: "durable" } },
+      checksum: "fnv1a-00000000",
+    });
+    const preview = inspectStorageSnapshot(snapshot);
+    assert.deepEqual(preview.entries, []);
+    assert.match(preview.errors.join(" "), /checksum mismatch/);
+    const imported = importStorageSnapshot(snapshot, "muse-desktop.", true);
+    assert.equal(imported.imported, 0);
+    assert.match(imported.errors.join(" "), /checksum mismatch/);
+    assert.equal(values.size, 0);
+  });
+
+  it("accepts legacy recovery snapshots without a checksum", () => {
+    const { values } = fakeStorage();
+    const snapshot = JSON.stringify({
+      format: "muse-desktop-storage",
+      version: 1,
+      entries: { "muse-desktop.sessions.v1": [{ session_id: "legacy" }] },
+    });
+    const imported = importStorageSnapshot(snapshot, "muse-desktop.", true);
+    assert.equal(imported.imported, 1);
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.sessions.v1") ?? "[]"), [
+      { session_id: "legacy" },
+    ]);
   });
 
   it("classifies UI state so recovery does not resurrect stale pointers", () => {

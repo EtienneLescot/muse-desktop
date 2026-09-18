@@ -296,6 +296,7 @@ export function exportStorageSnapshot(prefix = "muse-desktop."): string {
       exportedAt: new Date().toISOString(),
       entries,
       metadata,
+      checksum: storageSnapshotChecksum(entries, metadata),
     },
     null,
     2,
@@ -314,6 +315,44 @@ export interface StorageSnapshotEntry {
   parseError: boolean;
   /** Durable product data is safe to select by default; UI state is opt-in. */
   kind: StorageDataKind;
+}
+
+/** Canonicalize recovery data so key ordering does not affect its checksum. */
+function canonicalRecoveryValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalRecoveryValue);
+  if (typeof value !== "object" || value === null) return value;
+  return Object.keys(value as Record<string, unknown>)
+    .sort()
+    .reduce<Record<string, unknown>>((result, key) => {
+      result[key] = canonicalRecoveryValue((value as Record<string, unknown>)[key]);
+      return result;
+    }, {});
+}
+
+/** Lightweight damage detector for explicit local recovery files. */
+export function storageSnapshotChecksum(entries: unknown, metadata: unknown): string {
+  const input = JSON.stringify({
+    entries: canonicalRecoveryValue(entries),
+    metadata: canonicalRecoveryValue(metadata),
+  });
+  let hash = 2_166_136_261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function recoveryChecksumError(
+  snapshot: Record<string, unknown>,
+  entries: unknown,
+  metadata: unknown,
+): string | null {
+  if (snapshot.checksum === undefined) return null;
+  if (typeof snapshot.checksum !== "string") return "Recovery snapshot checksum is invalid.";
+  return snapshot.checksum === storageSnapshotChecksum(entries, metadata)
+    ? null
+    : "Recovery snapshot checksum mismatch; the file may be damaged.";
 }
 
 export type StorageDataKind = "durable" | "ui";
@@ -385,6 +424,8 @@ export function inspectStorageSnapshot(
   const metadata = typeof snapshot.metadata === "object" && snapshot.metadata !== null
     ? snapshot.metadata as Record<string, unknown>
     : {};
+  const checksumError = recoveryChecksumError(snapshot, values, metadata);
+  if (checksumError !== null) return { entries: [], errors: [checksumError] };
   const store = storage();
   if (store === null) {
     record(prefix, "unavailable", "local storage is unavailable");
@@ -536,6 +577,11 @@ export function importStorageSnapshot(
   if (typeof entries !== "object" || entries === null || Array.isArray(entries)) {
     return { ...result, errors: ["Recovery snapshot has no valid entries map."] };
   }
+  const metadata = typeof snapshot.metadata === "object" && snapshot.metadata !== null
+    ? snapshot.metadata
+    : {};
+  const checksumError = recoveryChecksumError(snapshot, entries, metadata);
+  if (checksumError !== null) return { ...result, errors: [checksumError] };
   const store = storage();
   if (store === null) {
     record(prefix, "unavailable", "local storage is unavailable");
