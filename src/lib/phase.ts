@@ -146,7 +146,7 @@ export function applyItemSnapshotUpdate(
   update: ItemSnapshotUpdate,
 ): LogEntry[] {
   const itemId = update.itemId.trim();
-  if (itemId.length === 0 || update.text.length === 0) return log;
+  if (itemId.length === 0) return log;
   const matched = lastIndex(log, (entry) => entry.itemId === itemId && entry.role === update.role);
   // An approval/input decision paints a send-time placeholder before the host
   // can reveal its item id. Promote that empty lane instead of appending a
@@ -167,6 +167,25 @@ export function applyItemSnapshotUpdate(
     update.revision <= existing.itemRevision
   ) {
     return log;
+  }
+  // Some hosts emit a terminal full snapshot with no visible text. Keep the
+  // last rendered content, bind the authoritative item id and close the lane
+  // instead of leaving an already-visible thinking placeholder open forever.
+  // An empty snapshot for an unknown item carries no user-visible state and
+  // must not create a phantom transcript row.
+  if (update.text.length === 0) {
+    if (existing === undefined) return log;
+    if (update.open !== false) return log;
+    const nextEntry: LogEntry = {
+      ...existing,
+      itemId,
+      ...(update.turnId === undefined ? {} : { turnId: update.turnId }),
+      ...(update.revision === undefined ? {} : { itemRevision: update.revision }),
+      ...(update.outputRef === undefined ? {} : { outputRef: update.outputRef }),
+      ...(update.richContent === undefined ? {} : { richContent: update.richContent.map((item) => ({ ...item })) }),
+      open: false,
+    };
+    return [...log.slice(0, index), nextEntry, ...log.slice(index + 1)];
   }
   const command = update.commandText?.trim();
   const text = update.role === "tool" && command !== undefined && command.length > 0

@@ -238,6 +238,33 @@ describe("applyItemSnapshotUpdate", () => {
     }), updated);
   });
 
+  it("closes a visible lane when the host sends an empty terminal snapshot", () => {
+    const live = [entry({ role: "thinking", itemId: "r-empty", text: "last visible step", open: true, itemRevision: 2 })];
+    const closed = applyItemSnapshotUpdate(live, {
+      itemId: "r-empty",
+      role: "thinking",
+      text: "",
+      revision: 3,
+      open: false,
+      stamp,
+    });
+    assert.equal(closed.length, 1);
+    assert.equal(closed[0].text, "last visible step");
+    assert.equal(closed[0].open, false);
+    assert.equal(closed[0].itemRevision, 3);
+  });
+
+  it("ignores an empty snapshot for an unknown item", () => {
+    const log = [entry({ role: "assistant", text: "kept" })];
+    assert.equal(applyItemSnapshotUpdate(log, {
+      itemId: "missing",
+      role: "thinking",
+      text: "",
+      open: false,
+      stamp,
+    }), log);
+  });
+
   it("keeps a user-shell command paired with replaced output", () => {
     const next = applyItemSnapshotUpdate([], {
       itemId: "shell-1",
