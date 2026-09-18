@@ -43,3 +43,18 @@ export function startupProbeRows(probe: StartupProbe): StartupProbeRow[] {
   ];
 }
 
+
+/** True when at least one available prerequisite needs user attention. */
+export function startupProbeNeedsAttention(probe: StartupProbe): boolean {
+  return startupProbeRows(probe).some(({ check }) => check.status !== "ready");
+}
+
+/** Compact summary for first-launch surfaces; never relies on colour alone. */
+export function startupProbeSummary(probe: StartupProbe): string {
+  const rows = startupProbeRows(probe);
+  if (rows.length === 0) return "No checks available";
+  const ready = rows.filter(({ check }) => check.status === "ready").length;
+  return startupProbeNeedsAttention(probe)
+    ? `${ready}/${rows.length} checks ready · attention needed`
+    : `${ready}/${rows.length} checks ready`;
+}

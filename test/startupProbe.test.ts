@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   startupCheckStatusLabel,
+  startupProbeNeedsAttention,
   startupProbeRows,
+  startupProbeSummary,
   type StartupProbe,
 } from "../src/lib/startupProbe.ts";
 
@@ -38,3 +40,23 @@ test("startup probe rows keep a stable runtime order and omit unavailable checks
   );
 });
 
+
+test("startup probe summaries keep first-launch guidance textual", () => {
+  const needsAttention: StartupProbe = {
+    platform: "windows",
+    sidecar: check("ready", "Sidecar ready"),
+    wsl: check("blocked", "WSL is not ready"),
+    museCli: check("missing", "Muse CLI missing"),
+    workspace: null,
+    checkedAt: 1,
+  };
+  assert.equal(startupProbeNeedsAttention(needsAttention), true);
+  assert.equal(startupProbeSummary(needsAttention), "1/3 checks ready · attention needed");
+  const ready: StartupProbe = {
+    ...needsAttention,
+    wsl: check("ready", "WSL ready"),
+    museCli: check("ready", "Muse CLI ready"),
+  };
+  assert.equal(startupProbeNeedsAttention(ready), false);
+  assert.equal(startupProbeSummary(ready), "3/3 checks ready");
+});
