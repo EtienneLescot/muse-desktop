@@ -293,6 +293,7 @@ export default function App() {
     backendMissing,
     startupProbe,
     probeStartup,
+    setError,
   } = useMuseSessions();
 
   // US-20: one `@mem/…` token the panel asked the composer to insert.
@@ -1625,6 +1626,37 @@ export default function App() {
                                 activeProject !== null ? activeProjectSettings : undefined,
                               )
                             }
+                            onCreateSetupConversationWorktree={async (plan, command, envAllowlist) => {
+                              const projectSettings = activeProject !== null ? activeProjectSettings : undefined;
+                              const created = await createWorktree(active.session_id, plan);
+                              if (created === null) return null;
+                              const setup = await runWorktreeSetup(
+                                active.session_id,
+                                created,
+                                command,
+                                envAllowlist,
+                              );
+                              if (setup === null || setup.status !== "ready") {
+                                const status = setup?.status ?? "failed";
+                                const removed = await removeWorktree(active.session_id, created);
+                                setError(
+                                  `Worktree setup ${status}; the new checkout was ${removed ? "removed" : "kept for cleanup retry"}.`,
+                                );
+                                return null;
+                              }
+                              const opened = await startSessionInWorkspace(
+                                created.path,
+                                projectSettings,
+                              );
+                              if (opened === null) {
+                                const removed = await removeWorktree(active.session_id, created);
+                                setError(
+                                  `Conversation admission failed; the new checkout was ${removed ? "removed" : "kept for cleanup retry"}.`,
+                                );
+                                return null;
+                              }
+                              return created;
+                            }}
                             worktrees={worktrees}
                             cleanupIntents={cleanupIntents}
                             onRemoveWorktree={removeWorktree}

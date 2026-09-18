@@ -68,6 +68,12 @@ interface Props {
   onCreateConversationWorktree: (
     plan: WorktreePlan,
   ) => Promise<WorktreeRecord | null>;
+  /** Create a worktree, run the explicit setup command, then open it. */
+  onCreateSetupConversationWorktree: (
+    plan: WorktreePlan,
+    command: string,
+    envAllowlist: string[],
+  ) => Promise<WorktreeRecord | null>;
   worktrees: WorktreeRecord[];
   cleanupIntents: WorktreeCleanupIntent[];
   onRemoveWorktree: (
@@ -117,6 +123,7 @@ export function OrchestrationPanel({
   workspace,
   onCreateWorktree,
   onCreateConversationWorktree,
+  onCreateSetupConversationWorktree,
   worktrees,
   cleanupIntents,
   onRemoveWorktree,
@@ -394,6 +401,24 @@ export function OrchestrationPanel({
     if (creating !== null || recordFor(plan) !== undefined) return;
     setCreating(plan.agent);
     await onCreateConversationWorktree(plan);
+    setCreating(null);
+  }
+
+  async function createSetupAndOpen(plan: WorktreePlan): Promise<void> {
+    if (creating !== null || recordFor(plan) !== undefined) return;
+    const validation = validateSetupCommand(setupCommand);
+    if (validation !== null) {
+      setSetupError(validation);
+      return;
+    }
+    const env = parseSetupEnvAllowlist(envAllowlistText);
+    if (env.error !== null) {
+      setSetupError(env.error);
+      return;
+    }
+    setSetupError(null);
+    setCreating(plan.agent);
+    await onCreateSetupConversationWorktree(plan, setupCommand.trim(), env.names);
     setCreating(null);
   }
 
@@ -972,6 +997,14 @@ export function OrchestrationPanel({
               </>
             ) : (
               <>
+                <button
+                  type="button"
+                  onClick={() => void createSetupAndOpen(p)}
+                  disabled={creating !== null || setupCommand.trim().length === 0}
+                  title="Create the worktree, run the explicit setup command, and open its conversation"
+                >
+                  {creating === p.agent ? "Setting up & opening…" : "Setup & open"}
+                </button>
                 <button
                   type="button"
                   onClick={() => void createAndOpen(p)}

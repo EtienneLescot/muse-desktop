@@ -1246,6 +1246,8 @@ interface UseMuseSessions {
   /** M3-04: refresh bounded SKILL.md discovery for the selected workspace. */
   scanSkills: (workspacePath?: string | null) => Promise<SkillScanSummary | null>;
   error: string | null;
+  /** Set a bounded user-facing orchestration error from a composite action. */
+  setError: (message: string | null) => void;
   /** TEMPORARY dev diagnosis: backend events received by this window. */
   evtCount: number;
   /** True when the Tauri backend is unreachable (plain-browser preview). */
@@ -7882,6 +7884,7 @@ export function useMuseSessions(): UseMuseSessions {
     unwatchWorkspaceFiles,
     openWorkspacePath,
     error,
+    setError: (message) => setError(message),
     evtCount,
     dismissQueuedTurn,
     startupProbe,
