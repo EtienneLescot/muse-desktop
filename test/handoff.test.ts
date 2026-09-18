@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildHandoffPlan, isHandoffPlanStale } from "../src/lib/handoff.ts";
+import { buildHandoffPlan, formatHandoffContext, isHandoffPlanStale } from "../src/lib/handoff.ts";
 
 const base = {
   direction: "local-to-worktree" as const,
@@ -102,6 +102,14 @@ describe("M2-05 handoff planner", () => {
       targetIgnoredFiles: 1,
       targetBranchInUse: false,
     }), true);
+  });
+
+  it("formats a bounded, explicit context note without claiming a host transfer", () => {
+    const context = formatHandoffContext(buildHandoffPlan(base));
+    assert.match(context, /locally reviewed context note/);
+    assert.match(context, /Local → Worktree/);
+    assert.match(context, /C:\/repo/);
+    assert.ok(context.length <= 4_000);
   });
 
   it("treats a newly observed target as a stale plan", () => {

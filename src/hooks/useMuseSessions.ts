@@ -937,6 +937,8 @@ interface UseMuseSessions {
   newFromSummary: (sourceId: string) => Promise<void>;
   /** US-4: prefill text for the composer after `newFromSummary`. */
   prefill: string | null;
+  /** Put an explicit user-editable note into the active composer. */
+  prefillComposer: (text: string) => void;
   clearPrefill: () => void;
   /** M4-02: one captured browser image waiting for the active composer. */
   prefillAttachment: ComposerAttachment | null;
@@ -5457,6 +5459,10 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const clearPrefill = useCallback(() => setPrefill(null), []);
+  const prefillComposer = useCallback((text: string) => {
+    const bounded = text.trim().slice(0, 8_000);
+    if (bounded.length > 0) setPrefill(bounded);
+  }, []);
 
   /**
    * US-21: 1-click restore — the version text goes through the US-4
@@ -7849,6 +7855,7 @@ export function useMuseSessions(): UseMuseSessions {
     serverCompact,
     newFromSummary,
     prefill,
+    prefillComposer,
     clearPrefill,
     prefillAttachment: prefillAttachmentState?.attachment ?? null,
     prefillAttachmentSessionId: prefillAttachmentState?.sessionId ?? null,

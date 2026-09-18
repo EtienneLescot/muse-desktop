@@ -84,6 +84,8 @@ interface Props {
   ) => Promise<boolean>;
   /** Open a new conversation rooted at a created worktree. */
   onOpenWorktree: (record: WorktreeRecord) => Promise<string | null>;
+  /** Open a reviewed worktree conversation with an editable handoff note. */
+  onOpenHandoffWorktree?: (record: WorktreeRecord, plan: HandoffPlan) => Promise<string | null>;
   /** Explicitly dispatch one admitted writer into its worktree conversation. */
   onDispatchWriter?: (record: WorktreeRecord, prompt: string) => Promise<{ sessionId: string } | null>;
   /** Stop a dispatched writer without changing another conversation. */
@@ -130,6 +132,7 @@ export function OrchestrationPanel({
   cleanupIntents,
   onRemoveWorktree,
   onOpenWorktree,
+  onOpenHandoffWorktree,
   onDispatchWriter,
   onStopWriter,
   onOpenWriterConversation,
@@ -608,6 +611,14 @@ export function OrchestrationPanel({
     setOpeningBranch(null);
   }
 
+  async function openHandoffWorktree(record: WorktreeRecord, plan: HandoffPlan): Promise<void> {
+    if (openingBranch !== null || isHandoffPlanStale(plan, handoffInputFor(record, plan.direction)) || !plan.ready) return;
+    if (onOpenHandoffWorktree === undefined) return;
+    setOpeningBranch(record.branch);
+    await onOpenHandoffWorktree(record, plan);
+    setOpeningBranch(null);
+  }
+
   async function removeWorktree(record: WorktreeRecord): Promise<void> {
     if (removingBranch !== null) return;
     setRemovingBranch(record.branch);
@@ -997,6 +1008,16 @@ export function OrchestrationPanel({
                     <ol>
                       {plan.steps.map((step) => <li key={step}>{step}</li>)}
                     </ol>
+                    {onOpenHandoffWorktree !== undefined && !stale && plan.ready && (
+                      <button
+                        type="button"
+                        onClick={() => void openHandoffWorktree(recordFor(p)!, plan)}
+                        disabled={openingBranch !== null}
+                        title="Open a new worktree conversation with this handoff note in the composer"
+                      >
+                        {openingBranch === p.branch ? "Opening…" : "Open with handoff context"}
+                      </button>
+                    )}
                     <small className="muted">Prepared {new Date(plan.createdAt).toLocaleTimeString()}</small>
                   </details>
                   );

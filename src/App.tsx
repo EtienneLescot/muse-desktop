@@ -35,6 +35,7 @@ import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
 import { userFacingError } from "./lib/errorCopy";
 import { isTauriRuntime } from "./lib/env";
+import { formatHandoffContext } from "./lib/handoff";
 import type { Artifact, ArtifactVersion } from "./lib/artifacts";
 import {
   parseWorkspaceRootObservation,
@@ -242,6 +243,7 @@ export default function App() {
     serverCompact,
     newFromSummary,
     prefill,
+    prefillComposer,
     clearPrefill,
     prefillAttachment,
     prefillAttachmentSessionId,
@@ -1667,6 +1669,14 @@ export default function App() {
                                 activeProject !== null ? activeProjectSettings : undefined,
                               )
                             }
+                            onOpenHandoffWorktree={async (record, plan) => {
+                              const opened = await startSessionInWorkspace(
+                                record.path,
+                                activeProject !== null ? activeProjectSettings : undefined,
+                              );
+                              if (opened !== null) prefillComposer(formatHandoffContext(plan));
+                              return opened;
+                            }}
                             writerPrompts={orchestrationWriterPrompts}
                             writerLogs={logs}
                             writerSessionRunning={writerSessionRunning}

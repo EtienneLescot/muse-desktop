@@ -57,6 +57,13 @@ export interface HandoffSnapshot {
   targetBranchInUse: boolean | undefined;
 }
 
+const MAX_HANDOFF_CONTEXT = 4_000;
+
+function contextValue(value: string | null | undefined, fallback: string): string {
+  const normalized = (value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+  return normalized.length > 240 ? `${normalized.slice(0, 240)}…` : normalized || fallback;
+}
+
 function check(
   id: string,
   label: string,
@@ -200,4 +207,28 @@ export function isHandoffPlanStale(
     snapshot.targetIgnoredFiles !== input.targetIgnoredFiles ||
     snapshot.targetBranchInUse !== input.targetBranchInUse
   );
+}
+
+/**
+ * Format a reviewable handoff as editable composer context. This is a local
+ * context handoff only; it never claims that the MSP host moved a session.
+ */
+export function formatHandoffContext(plan: HandoffPlan): string {
+  const direction = plan.direction === "local-to-worktree"
+    ? "Local → Worktree"
+    : "Worktree → Local";
+  const lines = [
+    "## Muse handoff context",
+    "This is a locally reviewed context note. The host session was not transferred automatically.",
+    `Direction: ${direction}`,
+    `Source: ${contextValue(plan.snapshot.sourceWorkspace, "unknown workspace")} (${contextValue(plan.snapshot.sourceBranch, "no branch")})`,
+    `Target: ${contextValue(plan.snapshot.targetPath, "unknown target")} (${contextValue(plan.snapshot.targetBranch, "no branch")})`,
+    "Checks:",
+    ...plan.checks.map((item) => `- [${item.status}] ${contextValue(item.label, "check")}: ${contextValue(item.detail, "no detail")}`),
+    "Review the working tree and confirm the intended transfer before making changes.",
+  ];
+  const result = lines.join("\n");
+  return result.length <= MAX_HANDOFF_CONTEXT
+    ? result
+    : `${result.slice(0, MAX_HANDOFF_CONTEXT - 1)}…`;
 }
