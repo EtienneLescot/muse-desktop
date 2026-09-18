@@ -75,12 +75,12 @@ test("ODT preview extracts headings and paragraphs", () => {
 test("ODS preview extracts bounded rows and repeated cells", () => {
   const data = archive({
     "content.xml":
-      "<office:document-content><table:table><table:table-row><table:table-cell><text:p>Name</text:p></table:table-cell><table:table-cell><text:p>Age</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell table:number-columns-repeated=\"2\"><text:p>Ada</text:p></table:table-cell></table:table-row></table:table></office:document-content>",
+      "<office:document-content><table:table><table:table-row><table:table-cell><text:p>Name</text:p></table:table-cell><table:table-cell><text:p>Age</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell table:number-columns-repeated=\"2\"><text:p>Ada</text:p></table:table-cell></table:table-row><table:table-row table:number-rows-repeated=\"2\"><table:table-cell><text:p>Grace</text:p></table:table-cell><table:table-cell><text:p>42</text:p></table:table-cell></table:table-row></table:table></office:document-content>",
   });
   const preview = officePreviewForFile("people.ods", data);
   assert.equal(preview?.format, "ods");
   assert.deepEqual(preview?.columns, ["Name", "Age"]);
-  assert.deepEqual(preview?.rows, [["Ada", "Ada"]]);
+  assert.deepEqual(preview?.rows, [["Ada", "Ada"], ["Grace", "42"], ["Grace", "42"]]);
 });
 
 test("ODP preview extracts slide text in document order", () => {

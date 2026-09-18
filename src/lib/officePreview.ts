@@ -212,9 +212,9 @@ function parseOds(archive: Record<string, Uint8Array>): OfficePreview | null {
   if (!xml) return null;
   const rows: string[][] = [];
   let truncated = false;
-  for (const rowMatch of xml.matchAll(/<table:table-row\b[^>]*>([\s\S]*?)<\/table:table-row>/gi)) {
+  for (const rowMatch of xml.matchAll(/<table:table-row\b([^>]*)>([\s\S]*?)<\/table:table-row>/gi)) {
     const cells: string[] = [];
-    for (const cellMatch of (rowMatch[1] ?? "").matchAll(/<table:table-cell\b([^>]*)>([\s\S]*?)<\/table:table-cell>/gi)) {
+    for (const cellMatch of (rowMatch[2] ?? "").matchAll(/<table:table-cell\b([^>]*)>([\s\S]*?)<\/table:table-cell>/gi)) {
       const attributes = cellMatch[1] ?? "";
       const body = cellMatch[2] ?? "";
       const repeated = Math.min(
@@ -230,8 +230,15 @@ function parseOds(archive: Record<string, Uint8Array>): OfficePreview | null {
         cells.push(text);
       }
     }
-    if (cells.some((cell) => cell.length > 0)) rows.push(cells);
-    if (rows.length >= MAX_OFFICE_PREVIEW_ROWS + 1) {
+    const repeatedRows = Math.max(
+      1,
+      Number.parseInt(/table:number-rows-repeated\s*=\s*["'](\d+)["']/i.exec(rowMatch[1] ?? "")?.[1] ?? "1", 10) || 1,
+    );
+    const rowsToAdd = Math.min(repeatedRows, MAX_OFFICE_PREVIEW_ROWS + 1 - rows.length);
+    for (let repetition = 0; repetition < rowsToAdd; repetition += 1) {
+      if (cells.some((cell) => cell.length > 0)) rows.push([...cells]);
+    }
+    if (repeatedRows > rowsToAdd || rows.length >= MAX_OFFICE_PREVIEW_ROWS + 1) {
       truncated = true;
       break;
     }
