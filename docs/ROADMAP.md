@@ -625,6 +625,8 @@ Preuves : [browser actuel](../src/components/BrowserPanel.tsx), [contrôle deskt
 
 ### Livraison M4-05 — sorties riches du moteur (première passe)
 
+- **Preview des documents complets :** lorsque la lecture différée atteint EOF, les sorties DOCX, XLSX, PPTX, ODT, ODS et ODP réutilisent le parseur borné de Files et affichent un tableau local dans la lane de conversation. Les images conservent leur aperçu base64 et chaque sortie complète reste téléchargeable explicitement.
+
 - **Contrat transcript :** le bridge natif extrait une liste bornée de métadonnées `modelVisibleContent` (`type`, MIME, chemin, outil source et dimensions valides) avec `outputRef`, sans copier de contenu ou de chemin non borné dans les événements. L'historique durable et les lanes live partagent le même type `RichContent` via la SSOT de persistance.
 - **Chargement paresseux :** un item assistant, tool ou thinking muni d'une référence de sortie affiche ses métadonnées puis propose **Preview output**. Le hook appelle `item/readOutput` par blocs de 64 KiB, conserve l'offset et l'EOF localement, et accepte les chunks texte ou base64 sans les mélanger ; les données binaires restent hors du journal persistant.
 - **Aperçu :** les images base64 complètes sont rendues dans la lane d'origine avec leur MIME, tandis que les documents ou sorties incomplètes restent explicitement signalés et peuvent être chargés par blocs supplémentaires. Une sortie complète peut aussi être téléchargée localement avec un nom dérivé du chemin riche, sans écriture automatique ni exécution. Une entrée riche sans texte visible reste affichée après réconciliation d'historique.
