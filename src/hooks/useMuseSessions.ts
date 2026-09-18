@@ -4279,6 +4279,13 @@ export function useMuseSessions(): UseMuseSessions {
         setLogs((current) => ({ ...current, [meta.session_id]: inherited }));
         if (inherited.length > 0) appendLog(meta.session_id, inherited);
         setActiveId(meta.session_id);
+        // A fork is a new host session, so the renderer-side copy of the
+        // requested model must be applied through the same session/setModel
+        // path as a normal start. Without this, Settings/Composer showed the
+        // inherited model while the host silently used its default.
+        if (source.model_id && source.model_id !== "default") {
+          await setSessionModel(meta.session_id, source.model_id);
+        }
         void refreshHostSkills(meta.session_id);
         return meta.session_id;
       } catch (error) {
@@ -4288,7 +4295,7 @@ export function useMuseSessions(): UseMuseSessions {
         setForkingId(null);
       }
     },
-    [forkingId, refreshHostSkills, sessions, setConnectionState],
+    [forkingId, refreshHostSkills, sessions, setConnectionState, setSessionModel],
   );
 
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
