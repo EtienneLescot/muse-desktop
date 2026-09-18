@@ -427,7 +427,7 @@ export function DesktopControlPanel({
               <div className="desktop-observation-heading">
                 <div>
                   <strong>Observe visible controls</strong>
-                  <p className="muted">Read-only metadata from the selected window. No input is sent.</p>
+                  <p className="muted">Read-only metadata and safe control values. Password-like values stay hidden; no input is sent.</p>
                 </div>
                 <button
                   type="button"

@@ -6214,6 +6214,8 @@ body.dark .composer textarea::placeholder {
 
 .desktop-element-row span {
   color: var(--muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .desktop-control-actions label,
