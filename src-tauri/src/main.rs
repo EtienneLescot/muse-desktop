@@ -38,6 +38,7 @@ mod scheduler_schedules;
 mod scheduler_wakeup;
 mod notification_ledger;
 mod outbox_ledger;
+mod desktop_control;
 mod workspace_watch;
 use hosts::Hosts;
 
@@ -3065,6 +3066,50 @@ async fn browser_download_fetch(
     target_url: String,
 ) -> Result<browser_download::FetchResult, String> {
     browser_download::fetch_same_origin(&page_url, &target_url).await
+}
+
+/// Report whether this build has an OS-backed desktop-control runtime. The
+/// renderer still requires an explicit per-app consent row before calling any
+/// mutating command; this status only describes platform capability.
+#[tauri::command]
+fn desktop_control_status() -> desktop_control::DesktopControlStatus {
+    desktop_control::status()
+}
+
+/// Enumerate visible, titled top-level windows. The result is read-only and
+/// bounded by the native module; no process command line or document content
+/// is exposed to the renderer.
+#[tauri::command]
+fn desktop_windows() -> Result<Vec<desktop_control::DesktopWindow>, String> {
+    desktop_control::windows()
+}
+
+#[tauri::command]
+fn desktop_focus_window(window_id: String) -> Result<(), String> {
+    desktop_control::focus(&window_id)
+}
+
+#[tauri::command]
+fn desktop_send_text(window_id: String, text: String) -> Result<usize, String> {
+    if text.chars().count() > desktop_control::MAX_TEXT_CHARS {
+        return Err(format!(
+            "desktop text is limited to {} characters",
+            desktop_control::MAX_TEXT_CHARS
+        ));
+    }
+    desktop_control::send_text(&window_id, &text)
+}
+
+#[tauri::command]
+fn desktop_press_key(window_id: String, key: String) -> Result<(), String> {
+    let parsed = desktop_control::DesktopKey::parse(&key)
+        .ok_or_else(|| "unsupported desktop key".to_string())?;
+    desktop_control::press_key(&window_id, parsed)
+}
+
+#[tauri::command]
+fn desktop_click(window_id: String, x: i32, y: i32) -> Result<(), String> {
+    desktop_control::click(&window_id, x, y)
 }
 
 /// Probe local prerequisites for the first-launch recovery screen. This is a
@@ -7351,6 +7396,12 @@ fn main() {
             artifact_export,
             browser_download_write,
             browser_download_fetch,
+            desktop_control_status,
+            desktop_windows,
+            desktop_focus_window,
+            desktop_send_text,
+            desktop_press_key,
+            desktop_click,
             probe_startup,
             list_models,
             set_model,

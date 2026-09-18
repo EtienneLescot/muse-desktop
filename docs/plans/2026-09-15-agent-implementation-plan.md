@@ -568,6 +568,10 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 **Code :** service distinct par OS ; dépend M0-06 et faisabilité moteur. Autorisations OS, inventaire des apps, capture/action ciblées, interruptions et journal minimal. **Acceptation :** application de test, permission refusée, fenêtre disparue, utilisateur reprenant le contrôle ; pas d'action après stop.
 
+**État au 18/09/2026 — première tranche Windows livrée :** `src-tauri/src/desktop_control.rs` expose un statut de runtime, un inventaire borné des fenêtres de premier niveau visibles et titrées, le focus, l'injection de texte UTF-16 plafonnée, une allowlist de touches et un clic dans les bounds observés. `DesktopControlPanel` est accessible comme panneau de travail et partage la permission computer-use persistée ; l'état est refusé par défaut et chaque action retourne son succès ou son erreur dans la même surface. Les plateformes sans runtime renvoient `supported: false`. Les tests Node couvrent l'autorisation par défaut et le bornage des coordonnées ; Cargo couvre les types natifs et le build Windows.
+
+**Reste :** capture visuelle et observation de contenu, annulation d'une action longue, intégration d'un selector `computer.*` réellement annoncé par le host, qualification du dialogue Windows et implémentations macOS/Linux. Cette tranche ne doit pas être présentée comme un contrôle autonome du bureau : le host n'invoque aucune commande native depuis le catalogue sans contrat et consentement vérifiés.
+
 ### M4-05 — Artefacts riches
 
 **Code :** artifacts.ts, previews et service fichiers ; dépend M1-07/08. Séparer génération image/document côté moteur, fichiers persistés et rendu sécurisé ; détecter formats supportés, version/source réelle et export. **Acceptation :** fichier ouvert hors app, preview défaillante avec fallback, version et provenance exactes ; ne pas assimiler bloc Markdown et fichier livré.

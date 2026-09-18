@@ -49,6 +49,7 @@ import {
 } from "./lib/a11y";
 import { IndexPanel } from "./components/IndexPanel";
 import { BrowserPanel } from "./components/BrowserPanel";
+import { DesktopControlPanel } from "./components/DesktopControlPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
 import { searchConversations } from "./lib/conversationSearch";
@@ -308,7 +309,7 @@ export default function App() {
   const [pendingNotificationAction, setPendingNotificationAction] =
     useState<NotificationActionPayload | null>(null);
   const [workPanel, setWorkPanel] = useState<
-    "artifacts" | "browser" | "memory" | "tools" | "review" | "terminal" | "files" | null
+    "artifacts" | "browser" | "desktop" | "memory" | "tools" | "review" | "terminal" | "files" | null
   >(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1424,6 +1425,7 @@ export default function App() {
                           ["terminal", "Terminal"],
                           ["files", "Files"],
                           ["browser", "Browser"],
+                          ["desktop", "Desktop"],
                           ["memory", "Memory"],
                           ["tools", "Activity"],
                         ] as const
@@ -1532,6 +1534,12 @@ export default function App() {
                             onSetPermission={setBrowserAppPermission}
                           />
                         </>
+                      )}
+                      {workPanel === "desktop" && (
+                        <DesktopControlPanel
+                          permissions={browserPermissions}
+                          onSetPermission={setBrowserAppPermission}
+                        />
                       )}
                       {workPanel === "memory" && (
                         <>

@@ -5961,6 +5961,160 @@ body.dark .composer textarea::placeholder {
   background: color-mix(in srgb, var(--warning, #d89024) 16%, var(--surface));
 }
 
+/* M4-04: explicit, local desktop-control surface. The capability stays
+   visually quiet until the user opts in; mutating controls remain disabled
+   while the consent row is off. */
+.desktop-control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  min-height: 100%;
+}
+
+.desktop-control-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.desktop-control-header h2 {
+  margin: 2px 0 4px;
+  font-size: 20px;
+}
+
+.desktop-control-status,
+.desktop-control-consent {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.desktop-control-status {
+  flex-direction: column;
+}
+
+.desktop-control-status.is-ready {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.desktop-control-status.is-muted {
+  opacity: .8;
+}
+
+.desktop-control-consent {
+  cursor: pointer;
+}
+
+.desktop-control-consent input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.desktop-control-consent span {
+  display: grid;
+  gap: 3px;
+}
+
+.desktop-control-consent small {
+  color: var(--muted);
+}
+
+.desktop-control-feedback {
+  margin: 0;
+}
+
+.desktop-control-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, .8fr) minmax(240px, 1.2fr);
+  gap: 14px;
+  min-height: 260px;
+}
+
+.desktop-window-list,
+.desktop-control-actions {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.desktop-window-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: auto;
+  max-height: 420px;
+}
+
+.desktop-window-list button {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 9px 10px;
+  color: inherit;
+  background: transparent;
+}
+
+.desktop-window-list button:hover,
+.desktop-window-list button.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.desktop-window-list button span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.desktop-control-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.desktop-control-actions label,
+.desktop-control-click {
+  display: grid;
+  gap: 6px;
+}
+
+.desktop-control-actions textarea,
+.desktop-control-actions select,
+.desktop-control-actions input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.desktop-control-click {
+  grid-template-columns: auto 68px 68px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-control-footnote {
+  margin-top: auto;
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .desktop-control-layout {
+    grid-template-columns: 1fr;
+  }
+  .desktop-control-click {
+    grid-template-columns: 1fr 68px 68px;
+  }
+  .desktop-control-click button {
+    grid-column: 1 / -1;
+  }
+}
+
 .browser-control-status {
   font-size: 0.74rem;
 }
