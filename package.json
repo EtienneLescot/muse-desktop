@@ -11,6 +11,7 @@
     "release:update": "node scripts/release-update.mjs",
     "release:delta": "node scripts/release-delta.mjs",
     "release:channel": "node scripts/release-channel.mjs",
+    "release:fetch": "node scripts/release-fetch.mjs",
     "release:launch": "node scripts/release-launcher.mjs",
     "release:installer": "node scripts/release-launcher.mjs installer",
     "preview": "vite preview",
