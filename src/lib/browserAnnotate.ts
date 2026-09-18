@@ -155,6 +155,13 @@ export function browserCapturePreviewSize(
   };
 }
 
+/** Return true only when a capture still belongs to the page being shown. */
+export function browserCaptureMatchesPage(captureUrl: string, pageUrl: string): boolean {
+  const capture = normalizeBrowserUrl(captureUrl);
+  const page = normalizeBrowserUrl(pageUrl);
+  return capture !== null && page !== null && capture === page;
+}
+
 const MAX_BROWSER_ELEMENT_FIELD = 320;
 const MAX_BROWSER_ELEMENT_TEXT = 240;
 export const MAX_BROWSER_OBSERVATION_CHARS = 4_000;

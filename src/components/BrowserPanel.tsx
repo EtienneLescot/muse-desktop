@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   browserCaptureAttachment,
+  browserCaptureMatchesPage,
   browserCapturePreviewSize,
   browserDownloadFilename,
   describeBrowserElement,
@@ -112,8 +113,11 @@ export function BrowserPanel({
   const frameRef = useRef<HTMLIFrameElement>(null);
   const captureImageRef = useRef<HTMLImageElement>(null);
   const captureDragRef = useRef<{ x: number; y: number } | null>(null);
+  const currentUrlRef = useRef(currentUrl);
+  const captureGenerationRef = useRef(0);
   const selectionCleanupRef = useRef<(() => void) | null>(null);
   const browserControlsAllowedRef = useRef(false);
+  currentUrlRef.current = currentUrl;
 
   useEffect(() => {
     saveBrowserTabs(tabs, sessionId);
@@ -438,6 +442,8 @@ export function BrowserPanel({
 
   const captureVisiblePage = async (): Promise<void> => {
     if (!renderable || normalized === null) return;
+    const requestUrl = normalized;
+    const requestGeneration = captureGenerationRef.current;
     const getDisplayMedia = navigator.mediaDevices?.getDisplayMedia;
     if (typeof getDisplayMedia !== "function") {
       setCaptureStatus("Visual capture is unavailable in this browser build.");
@@ -483,6 +489,14 @@ export function BrowserPanel({
         height,
         devicePixelRatio: window.devicePixelRatio || 1,
       };
+      // The display picker is asynchronous. Do not attach pixels captured for
+      // an older page after navigation or a reload has reset the panel state.
+      if (
+        requestGeneration !== captureGenerationRef.current ||
+        !browserCaptureMatchesPage(requestUrl, currentUrlRef.current)
+      ) {
+        return;
+      }
       if (browserCaptureAttachment(next) === null) {
         throw new Error("the captured image exceeds the 5 MB attachment limit");
       }
@@ -570,6 +584,7 @@ export function BrowserPanel({
   };
 
   const resetPageState = () => {
+    captureGenerationRef.current += 1;
     setFrameError(null);
     setNativeBrowserStatus(null);
     setSelection("");

@@ -19,6 +19,7 @@ import {
   BROWSER_TABS_KEY,
   browserTabsStorageKey,
   browserCaptureAttachment,
+  browserCaptureMatchesPage,
   browserCapturePreviewSize,
   browserDownloadFilename,
   normalizeSameOriginTarget,
@@ -101,6 +102,14 @@ describe("browser capture preview sizing", () => {
     assert.equal(bounded?.zoom, 2.5);
     assert.equal(bounded?.width, 250);
     assert.equal(bounded?.height, 250);
+  });
+});
+
+describe("browser capture freshness", () => {
+  it("matches equivalent normalized URLs and rejects a changed page", () => {
+    assert.equal(browserCaptureMatchesPage("example.com/docs", "https://example.com/docs"), true);
+    assert.equal(browserCaptureMatchesPage("https://example.com/docs", "https://example.com/other"), false);
+    assert.equal(browserCaptureMatchesPage("javascript:alert(1)", "https://example.com/docs"), false);
   });
 });
 
