@@ -317,6 +317,7 @@ import {
   loadNativeNotifications,
   saveNativeNotifications,
 } from "../lib/notificationLedger";
+import { createLatestWriteQueue } from "../lib/writeQueue";
 // US-12 + US-21 versioned artifacts + thread recap: extraction, versioning
 // and per-thread persistence live in ../lib/artifacts (dependency-free,
 // unit-tested); restore reuses the US-4 composer prefill below.
@@ -1534,6 +1535,10 @@ export function useMuseSessions(): UseMuseSessions {
   // written through on every change (effect below).
   const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
   const nativeSchedulesHydratedRef = useRef(!isTauriRuntime());
+  const nativeScheduleWriterRef = useRef<((rows: Schedule[]) => void) | null>(null);
+  if (nativeScheduleWriterRef.current === null && isTauriRuntime()) {
+    nativeScheduleWriterRef.current = createLatestWriteQueue(saveNativeSchedules);
+  }
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
   const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() =>
     recoverScheduleRuns(loadScheduleRuns(), Date.now()),
@@ -1545,6 +1550,10 @@ export function useMuseSessions(): UseMuseSessions {
   // write. The renderer state remains the SSOT; this gate prevents a startup
   // localStorage render from overwriting a newer native snapshot.
   const nativeScheduleRunsHydratedRef = useRef(!isTauriRuntime());
+  const nativeScheduleRunsWriterRef = useRef<((rows: ScheduleRun[]) => void) | null>(null);
+  if (nativeScheduleRunsWriterRef.current === null && isTauriRuntime()) {
+    nativeScheduleRunsWriterRef.current = createLatestWriteQueue(saveNativeScheduleRuns);
+  }
   const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
   const notificationsRef = useRef<MuseNotification[]>([]);
   notificationsRef.current = notifications;
@@ -2215,7 +2224,7 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveSchedules(schedules);
     if (nativeSchedulesHydratedRef.current) {
-      void saveNativeSchedules(schedules);
+      nativeScheduleWriterRef.current?.(schedules);
     }
   }, [schedules]);
 
@@ -2226,6 +2235,8 @@ export function useMuseSessions(): UseMuseSessions {
       if (cancelled) return;
       if (nativeSchedules !== null) {
         setSchedules((current) => mergeSchedules(current, nativeSchedules));
+      } else {
+        nativeScheduleWriterRef.current?.(schedulesRef.current);
       }
       nativeSchedulesHydratedRef.current = true;
     });
@@ -2241,7 +2252,7 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveScheduleRuns(scheduleRuns);
     if (nativeScheduleRunsHydratedRef.current) {
-      void saveNativeScheduleRuns(scheduleRuns);
+      nativeScheduleRunsWriterRef.current?.(scheduleRuns);
     }
   }, [scheduleRuns]);
 
@@ -2252,6 +2263,8 @@ export function useMuseSessions(): UseMuseSessions {
       if (cancelled) return;
       if (nativeRuns !== null) {
         setScheduleRuns((current) => mergeScheduleRuns(current, nativeRuns));
+      } else {
+        nativeScheduleRunsWriterRef.current?.(scheduleRunsRef.current);
       }
       nativeScheduleRunsHydratedRef.current = true;
     });
