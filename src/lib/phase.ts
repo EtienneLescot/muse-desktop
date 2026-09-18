@@ -28,6 +28,7 @@ const THINKING_ITEM_KINDS = new Set([
 
 const TERMINAL_ITEM_STATUSES = new Set([
   "completed",
+  "complete",
   "done",
   "stopped",
   "cancelled",
@@ -35,6 +36,15 @@ const TERMINAL_ITEM_STATUSES = new Set([
   "retracted",
   "failed",
   "error",
+  "failure",
+  "success",
+  "succeeded",
+  "aborted",
+  "interrupted",
+  "timeout",
+  "timed_out",
+  "terminated",
+  "rejected",
 ]);
 
 /**

@@ -154,6 +154,8 @@ describe("isTerminalItemStatus", () => {
   it("recognizes terminal item snapshot statuses", () => {
     assert.equal(isTerminalItemStatus("completed"), true);
     assert.equal(isTerminalItemStatus("item/done"), true);
+    assert.equal(isTerminalItemStatus("succeeded"), true);
+    assert.equal(isTerminalItemStatus("timed_out"), true);
     assert.equal(isTerminalItemStatus("inProgress"), false);
     assert.equal(isTerminalItemStatus(null), false);
   });
