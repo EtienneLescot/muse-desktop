@@ -1551,6 +1551,7 @@ export function useMuseSessions(): UseMuseSessions {
   const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() =>
     recoverScheduleRuns(loadScheduleRuns(), Date.now()),
   );
+  const [nativeScheduleRunsReady, setNativeScheduleRunsReady] = useState(!isTauriRuntime());
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerRuntimeStatus>(
     () => INITIAL_SCHEDULER_RUNTIME_STATUS,
   );
@@ -1566,6 +1567,7 @@ export function useMuseSessions(): UseMuseSessions {
     nativeScheduleRunsWriterRef.current = createLatestWriteQueue(saveNativeScheduleRuns);
   }
   const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
+  const [nativeNotificationsReady, setNativeNotificationsReady] = useState(!isTauriRuntime());
   const notificationsRef = useRef<MuseNotification[]>([]);
   notificationsRef.current = notifications;
   // As with schedule runs, native inbox hydration happens before the first
@@ -2289,6 +2291,7 @@ export function useMuseSessions(): UseMuseSessions {
         nativeScheduleRunsWriterRef.current?.(scheduleRunsRef.current);
       }
       nativeScheduleRunsHydratedRef.current = true;
+      setNativeScheduleRunsReady(true);
     });
     return () => {
       cancelled = true;
@@ -2313,6 +2316,7 @@ export function useMuseSessions(): UseMuseSessions {
         nativeNotificationWriterRef.current?.(notificationsRef.current);
       }
       nativeNotificationsHydratedRef.current = true;
+      setNativeNotificationsReady(true);
     });
     return () => {
       cancelled = true;
@@ -2328,6 +2332,7 @@ export function useMuseSessions(): UseMuseSessions {
   // historical completion as a desktop toast.
   const observedTerminalRuns = useRef<Set<string> | null>(null);
   useEffect(() => {
+    if (!nativeScheduleRunsReady) return;
     const terminal = new Set(
       scheduleRuns
         .filter((run) => run.status === "completed" || run.status === "failed")
@@ -2349,12 +2354,13 @@ export function useMuseSessions(): UseMuseSessions {
     if (built.length > 0) {
       setNotifications((cur) => built.reduce(appendNotification, cur));
     }
-  }, [scheduleRuns]);
+  }, [nativeScheduleRunsReady, scheduleRuns]);
 
   // Desktop toasts are best-effort. The in-app notification list remains the
   // source of truth when the browser API is denied or unavailable.
   const deliveredNotificationIds = useRef<Set<string> | null>(null);
   useEffect(() => {
+    if (!nativeNotificationsReady) return;
     if (deliveredNotificationIds.current === null) {
       deliveredNotificationIds.current = new Set(notifications.map((item) => item.id));
       return;
@@ -2364,7 +2370,7 @@ export function useMuseSessions(): UseMuseSessions {
       deliveredNotificationIds.current.add(item.id);
       if (!notificationPreferences.desktopMuted) void deliverDesktopNotification(item);
     }
-  }, [notifications, notificationPreferences.desktopMuted]);
+  }, [nativeNotificationsReady, notifications, notificationPreferences.desktopMuted]);
 
   // Approval and answerable-input prompts are attention notifications. They
   // are in-memory host state, so an app restart does not replay stale prompts.
