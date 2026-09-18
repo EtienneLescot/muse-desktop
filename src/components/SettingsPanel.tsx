@@ -452,8 +452,9 @@ export function SettingsPanel({
       <div className="settings-group">
         <h3>Isolation preferences</h3>
         <p className="settings-note">
-          Applied when a new Muse host starts for a workspace. An existing
-          host keeps its current posture until it is restarted.
+          Applied when a new Muse host starts for a workspace. Project
+          overrides can tighten this posture; an existing host keeps its
+          current posture until it is restarted.
         </p>
         <label className="settings-label" htmlFor="settings-sandbox-mode">
           Isolation (workspace by default)

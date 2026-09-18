@@ -1217,7 +1217,7 @@ export default function App() {
                     {activeProject !== null && (
                       <div
                         className="task-project-context"
-                        title="Project settings: the model and isolation posture are sent to a new workspace host; an existing host keeps its posture until restart."
+                        title="Project settings: the model and project isolation overrides are sent to a new workspace host; the global permission gate still applies and an existing host keeps its posture until restart."
                       >
                         <span>Project: {activeProject.name}</span>
                         <span>
@@ -1225,7 +1225,7 @@ export default function App() {
                             ? "Host default"
                             : activeProjectSettings.model}
                         </span>
-                        <span title="Applied when this workspace host starts; an existing host keeps its posture until restart">
+                        <span title="Projected to host startup with the global permission gate; an existing host keeps its posture until restart">
                           Sandbox preference: {activeProjectSettings.sandbox}
                         </span>
                         <span title="Project network preference remains the approval policy; host network posture is selected at workspace startup">
@@ -1601,13 +1601,20 @@ export default function App() {
                             workspace={active.workspace}
                             onCreateWorktree={createWorktree}
                             onCreateConversationWorktree={(plan) =>
-                              createWorktreeSession(active.session_id, plan, activeProjectSettings)
+                              createWorktreeSession(
+                                active.session_id,
+                                plan,
+                                activeProject !== null ? activeProjectSettings : undefined,
+                              )
                             }
                             worktrees={worktrees}
                             cleanupIntents={cleanupIntents}
                             onRemoveWorktree={removeWorktree}
                             onOpenWorktree={async (record) =>
-                              startSessionInWorkspace(record.path, activeProjectSettings)
+                              startSessionInWorkspace(
+                                record.path,
+                                activeProject !== null ? activeProjectSettings : undefined,
+                              )
                             }
                             writerPrompts={orchestrationWriterPrompts}
                             writerLogs={logs}
@@ -1623,7 +1630,10 @@ export default function App() {
                                 );
                                 const writerId =
                                   existing?.session_id ??
-                                  (await startSessionInWorkspace(record.path, activeProjectSettings));
+                                  (await startSessionInWorkspace(
+                                    record.path,
+                                    activeProject !== null ? activeProjectSettings : undefined,
+                                  ));
                                 if (writerId === null) return null;
                                 const result = await sendInput(writerId, prompt);
                                 return result.ok ? { sessionId: writerId } : null;

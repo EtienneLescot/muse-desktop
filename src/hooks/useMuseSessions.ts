@@ -346,7 +346,7 @@ import {
 // w-settings (US-16 sandbox + US-31 providers): pure settings helpers
 // (dependency-free, unit-tested); scope-guard client for the path probe.
 import {
-  effectiveSandboxMode,
+  hostSandboxConfigForProject,
   PROVIDER_MAP_KEY,
   SETTINGS_KEY,
   parseModelList,
@@ -4076,6 +4076,7 @@ export function useMuseSessions(): UseMuseSessions {
     async (
       workspaceOverride?: string,
       projectSettings?: ProjectSettings,
+      projectSandboxSettings?: ProjectSettings,
     ): Promise<string | null> => {
     try {
       setError(null);
@@ -4087,10 +4088,13 @@ export function useMuseSessions(): UseMuseSessions {
         setError("Pick a workspace folder first.");
         return null;
       }
+      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSandboxSettings);
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
         authorizationMode,
-        sandboxMode: effectiveSandboxMode(sandbox),
+        sandboxMode: sandboxConfig.mode,
+        sandboxDisableWrite: sandboxConfig.disableWrite,
+        sandboxDisableShell: sandboxConfig.disableShell,
         mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
       });
       const requestedModelId = projectSettings?.model.trim();
@@ -4263,10 +4267,16 @@ export function useMuseSessions(): UseMuseSessions {
     setConnectionState(id, "connecting");
     setError(null);
     try {
+      const projectSettings = threadProjects[id] !== undefined
+        ? settingsForThread(globalSettings, projects, threadProjects, id)
+        : undefined;
+      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSettings);
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
         workspacePath: session.workspace,
-        sandboxMode: effectiveSandboxMode(sandbox),
+        sandboxMode: sandboxConfig.mode,
+        sandboxDisableWrite: sandboxConfig.disableWrite,
+        sandboxDisableShell: sandboxConfig.disableShell,
         mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
       });
       if (tombstoned.current?.has(id)) return;
@@ -4354,10 +4364,10 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, readHistoryEntries, refreshHostSkills, sessions, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, sandbox]);
+  }, [authorizationMode, globalSettings, projects, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, sandbox]);
 
   const startSession = useCallback(async () => {
-    return await startSessionRow(undefined, globalSettings);
+    return await startSessionRow(undefined, globalSettings, undefined);
   }, [globalSettings, startSessionRow]);
 
   const startSessionInWorkspace = useCallback(
@@ -4366,7 +4376,12 @@ export function useMuseSessions(): UseMuseSessions {
       projectSettings?: ProjectSettings,
       projectId?: string,
     ) => {
-      const sessionId = await startSessionRow(workspacePath, projectSettings);
+      const sessionSettings = projectSettings ?? globalSettings;
+      const sessionId = await startSessionRow(
+        workspacePath,
+        sessionSettings,
+        projectSettings,
+      );
       if (sessionId === null || projectId === undefined) return sessionId;
       // Attach before the caller can send the first turn. The ref is updated
       // synchronously so the send path uses the same project instructions and
@@ -4381,7 +4396,7 @@ export function useMuseSessions(): UseMuseSessions {
       setThreadProjects(next);
       return sessionId;
     },
-    [startSessionRow],
+    [globalSettings, startSessionRow],
   );
 
   const createWorktreeSession = useCallback(
@@ -4396,13 +4411,17 @@ export function useMuseSessions(): UseMuseSessions {
       }
       try {
         setError(null);
+        const sessionSettings = projectSettings ?? globalSettings;
+        const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSettings);
         const result = await invoke<BackendWorktreeSessionResult>("git_worktree_create_session", {
           sessionId,
           branch: plan.branch,
           relativePath: plan.path,
           baseRef: plan.base,
           authorizationMode,
-          sandboxMode: effectiveSandboxMode(sandbox),
+          sandboxMode: sandboxConfig.mode,
+          sandboxDisableWrite: sandboxConfig.disableWrite,
+          sandboxDisableShell: sandboxConfig.disableShell,
           mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
         });
         setWorktrees((current) => [
@@ -4410,7 +4429,7 @@ export function useMuseSessions(): UseMuseSessions {
           result.worktree,
         ]);
         const meta = result.session;
-        const requestedModelId = projectSettings?.model.trim();
+        const requestedModelId = sessionSettings.model.trim();
         const record: MuseSession = {
           session_id: meta.session_id,
           workspace: meta.workspace,
@@ -4439,8 +4458,8 @@ export function useMuseSessions(): UseMuseSessions {
         setActiveId(meta.session_id);
         const modelId = requestedModelId;
         if (modelId && modelId !== "default") await setSessionModel(meta.session_id, modelId);
-        if (projectSettings?.reasoningEffort !== undefined) {
-          await setSessionReasoningEffort(meta.session_id, projectSettings.reasoningEffort);
+        if (sessionSettings.reasoningEffort !== undefined) {
+          await setSessionReasoningEffort(meta.session_id, sessionSettings.reasoningEffort);
         }
         void refreshHostSkills(meta.session_id);
         return result.worktree;
@@ -4452,6 +4471,7 @@ export function useMuseSessions(): UseMuseSessions {
     [
       authorizationMode,
       sandbox,
+      globalSettings,
       refreshHostSkills,
       setConnectionState,
       setSessionModel,

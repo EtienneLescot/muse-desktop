@@ -31,6 +31,19 @@ export interface SandboxSettings {
   elevatedAllowed: boolean;
 }
 
+/** Project-level security preferences projected onto the host at startup. */
+export interface ProjectSandboxPreferences {
+  sandbox: "read-only" | "workspace" | "full";
+  networkDefault: "allow" | "prompt" | "deny";
+}
+
+/** Exact host posture sent with a new workspace host request. */
+export interface HostSandboxConfig {
+  mode: SandboxMode;
+  disableWrite: boolean;
+  disableShell: boolean;
+}
+
 /** Global sandbox settings live under this localStorage key. */
 export const SETTINGS_KEY = "muse-desktop.settings.v1";
 
@@ -72,6 +85,41 @@ export function effectiveSandboxMode(s: SandboxSettings): SandboxMode {
   if (s.mode === "network" && !s.networkAllowed) return "workspace";
   if (s.mode === "elevated" && !s.elevatedAllowed) return "workspace";
   return s.mode;
+}
+
+/**
+ * Resolve the global permission gate and the project override once, before a
+ * host is spawned. A project can tighten the global posture (read-only or
+ * deny network); it can relax it only when the corresponding global toggle
+ * has already granted permission. This keeps the hook as the SSOT while the
+ * Rust bridge receives only concrete startup flags.
+ */
+export function hostSandboxConfigForProject(
+  global: SandboxSettings,
+  project?: ProjectSandboxPreferences,
+): HostSandboxConfig {
+  const globalMode = effectiveSandboxMode(global);
+  if (project === undefined) {
+    return {
+      mode: globalMode,
+      disableWrite: false,
+      disableShell: false,
+    };
+  }
+  const preferences = project;
+  const networkEnabled =
+    preferences.networkDefault === "allow" && globalMode !== "workspace";
+  const mode: SandboxMode =
+    preferences.sandbox === "full" && globalMode === "elevated"
+      ? "elevated"
+      : networkEnabled
+        ? "network"
+        : "workspace";
+  return {
+    mode,
+    disableWrite: preferences.sandbox === "read-only",
+    disableShell: preferences.sandbox === "read-only",
+  };
 }
 
 /** Whether `mode` may be selected right now (workspace is always allowed). */
