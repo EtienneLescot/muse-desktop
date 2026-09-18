@@ -1052,6 +1052,13 @@ export default function App() {
                   onForgetRemoteCredential={forgetRemoteMcpCredential}
                   authorizationMode={authorizationMode}
                   remoteNotice={remoteNotice}
+                  activeSessionId={activeId}
+                  canReconnectActive={
+                    active !== null &&
+                    !backendMissing &&
+                    active.session_durability?.toLowerCase() !== "ephemeral"
+                  }
+                  onReconnectActive={(sessionId) => reconnectSession(sessionId)}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}
                   onToggle={(id, enabled) =>

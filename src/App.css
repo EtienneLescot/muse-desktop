@@ -6250,6 +6250,28 @@ body.dark .composer textarea::placeholder {
   font-size: 12px;
 }
 
+.connector-session-apply {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--blue) 42%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--blue) 7%, var(--surface));
+}
+
+.connector-session-apply p {
+  margin: 3px 0 0;
+  max-width: 52ch;
+}
+
+.connector-session-apply button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .desktop-element-row-head {
   display: flex;
   align-items: center;
