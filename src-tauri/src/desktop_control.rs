@@ -392,6 +392,75 @@ mod windows_impl {
         .any(|marker| haystack.contains(marker))
     }
 
+    fn format_numeric(value: f64) -> Option<String> {
+        value.is_finite().then(|| format!("{value:.3}"))
+    }
+
+    fn semantic_value(element: &windows::Win32::UI::Accessibility::IUIAutomationElement) -> String {
+        use windows::Win32::UI::Accessibility::{
+            IUIAutomationRangeValuePattern, IUIAutomationSelectionItemPattern,
+            IUIAutomationTogglePattern, IUIAutomationValuePattern, ToggleState_Indeterminate,
+            ToggleState_Off, ToggleState_On, UIA_RangeValuePatternId, UIA_SelectionItemPatternId,
+            UIA_TogglePatternId, UIA_ValuePatternId,
+        };
+
+        if let Ok(pattern) =
+            unsafe { element.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) }
+        {
+            if let Ok(value) = unsafe { pattern.CurrentValue() } {
+                let value = bounded_bstr(value, 500);
+                if !value.is_empty() {
+                    return value;
+                }
+            }
+        }
+        if let Ok(pattern) = unsafe {
+            element.GetCurrentPatternAs::<IUIAutomationRangeValuePattern>(UIA_RangeValuePatternId)
+        } {
+            let current = unsafe { pattern.CurrentValue() }
+                .ok()
+                .and_then(format_numeric);
+            let minimum = unsafe { pattern.CurrentMinimum() }
+                .ok()
+                .and_then(format_numeric);
+            let maximum = unsafe { pattern.CurrentMaximum() }
+                .ok()
+                .and_then(format_numeric);
+            if let (Some(current), Some(minimum), Some(maximum)) = (current, minimum, maximum) {
+                return format!("{current} (range {minimum}–{maximum})");
+            }
+        }
+        if let Ok(pattern) = unsafe {
+            element.GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(
+                UIA_SelectionItemPatternId,
+            )
+        } {
+            if let Ok(selected) = unsafe { pattern.CurrentIsSelected() } {
+                return if selected.as_bool() {
+                    "selected".to_string()
+                } else {
+                    "not selected".to_string()
+                };
+            }
+        }
+        if let Ok(pattern) = unsafe {
+            element.GetCurrentPatternAs::<IUIAutomationTogglePattern>(UIA_TogglePatternId)
+        } {
+            if let Ok(state) = unsafe { pattern.CurrentToggleState() } {
+                return if state == ToggleState_On {
+                    "on".to_string()
+                } else if state == ToggleState_Off {
+                    "off".to_string()
+                } else if state == ToggleState_Indeterminate {
+                    "indeterminate".to_string()
+                } else {
+                    String::new()
+                };
+            }
+        }
+        String::new()
+    }
+
     fn collect_semantic_children(
         walker: &windows::Win32::UI::Accessibility::IUIAutomationTreeWalker,
         parent: &windows::Win32::UI::Accessibility::IUIAutomationElement,
@@ -438,15 +507,7 @@ mod windows_impl {
                     let value = if value_redacted {
                         String::new()
                     } else {
-                        unsafe {
-                            element
-                                .GetCurrentPatternAs::<
-                                    windows::Win32::UI::Accessibility::IUIAutomationValuePattern,
-                                >(windows::Win32::UI::Accessibility::UIA_ValuePatternId)
-                        }
-                        .and_then(|pattern| unsafe { pattern.CurrentValue() })
-                        .map(|value| bounded_bstr(value, 500))
-                        .unwrap_or_default()
+                        semantic_value(&element)
                     };
                     rows.push(DesktopElement {
                         id: if native == 0 {

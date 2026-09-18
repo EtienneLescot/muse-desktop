@@ -96,6 +96,25 @@ test("desktop observation exposes safe values and marks protected ones without l
   assert.match(formatDesktopObservation({ ...windowFixture }, [safe]), /value Muse/);
 });
 
+test("desktop observation keeps semantic range and selection states readable", () => {
+  const base: DesktopElement = {
+    id: "semantic",
+    title: "Control",
+    className: "Control",
+    semanticRole: "control",
+    automationId: "control",
+    value: "50.000 (range 0.000–100.000)",
+    valueRedacted: false,
+    bounds: { x: 0, y: 0, width: 80, height: 20 },
+    enabled: true,
+    visible: true,
+    offscreen: false,
+  };
+  assert.match(desktopElementLabel(base), /range 0\.000–100\.000/);
+  assert.match(desktopElementLabel({ ...base, value: "selected" }), /selected/);
+  assert.match(desktopElementLabel({ ...base, value: "on" }), /value on/);
+});
+
 test("desktop captures keep provenance and reject oversized payloads", () => {
   const capture = {
     dataUrl: "data:image/jpeg;base64," + "A".repeat(80),
