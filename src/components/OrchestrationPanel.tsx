@@ -771,6 +771,7 @@ export function OrchestrationPanel({
         <p className="orchestration-inspection-summary" aria-live="polite">
           {inspectionSummary.inspected}/{inspectionSummary.total} inspected · {inspectionSummary.clean} clean · {inspectionSummary.changed} with changes
           {inspectionSummary.conflicted > 0 ? ` · ${inspectionSummary.conflicted} conflicted` : ""}
+          {inspectionSummary.attached > 0 ? ` · ${inspectionSummary.attached} attached` : ""}
         </p>
       )}
       {queueNote !== null && <p className="muted">{queueNote}</p>}

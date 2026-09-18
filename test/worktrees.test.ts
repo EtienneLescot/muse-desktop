@@ -130,7 +130,7 @@ describe("multi-worktree inspection summary", () => {
       "task-b": { repoRoot: "C:/repo", path: records[1].path, branch: "task-b", head: "b", clean: false, conflicted: false, fileCount: 2, observedAt: 2 },
       "task-c": { repoRoot: "C:/repo", path: records[2].path, branch: "task-c", head: "c", clean: false, conflicted: true, fileCount: 1, observedAt: 2 },
     });
-    assert.deepEqual(summary, { total: 3, inspected: 3, clean: 1, changed: 2, conflicted: 1 });
+    assert.deepEqual(summary, { total: 3, inspected: 3, clean: 1, changed: 2, conflicted: 1, attached: 0 });
   });
 });
 
