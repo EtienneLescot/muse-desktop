@@ -125,6 +125,7 @@ export interface ItemSnapshotUpdate {
   text: string;
   turnId?: string;
   commandText?: string;
+  outputRef?: string;
   revision?: number;
   open?: boolean;
   stamp: PlaceholderStamp;
@@ -177,6 +178,7 @@ export function applyItemSnapshotUpdate(
     itemId,
     ...(update.turnId === undefined ? {} : { turnId: update.turnId }),
     ...(update.revision === undefined ? {} : { itemRevision: update.revision }),
+    ...(update.outputRef === undefined ? {} : { outputRef: update.outputRef }),
     open: update.open ?? true,
   };
   if (index >= 0) {

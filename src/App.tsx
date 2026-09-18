@@ -199,6 +199,7 @@ export default function App() {
     subagentFollowup,
     subagentReadResult,
     subagentDrilldown,
+    readItemOutput,
     connectors,
     connectorTools,
     probeLocalMcp,
@@ -1225,6 +1226,8 @@ export default function App() {
                           active.session_id,
                           entry.childSessionId,
                         ),
+                      onReadOutput: (entry, offsetBytes) =>
+                        readItemOutput(active.session_id, entry, offsetBytes),
                     }}
                   />
 

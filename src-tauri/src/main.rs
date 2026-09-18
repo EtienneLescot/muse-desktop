@@ -261,6 +261,8 @@ struct AppState {
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
     /// its own. Scoped by session: bare item ids may repeat across sessions.
     item_kinds: Mutex<HashMap<(String, String), String>>,
+    /// (session_id, item_id) -> opaque host output reference for lazy reads.
+    item_output_refs: Mutex<HashMap<(String, String), String>>,
     /// (session_id, item_id) -> sub-agent identity from `item/started`.
     /// Scoped by session like `item_kinds`; purged with it on kill.
     subagent_meta: Mutex<HashMap<(String, String), SubagentMeta>>,
@@ -691,6 +693,50 @@ fn completed_item_text(item: &Value, kind: &str) -> Option<String> {
             .or_else(|| text("fallbackText"));
     }
     None
+}
+
+const MAX_OUTPUT_REF_CHARS: usize = 4096;
+const MAX_OUTPUT_OFFSET_BYTES: u64 = 100 * 1024 * 1024;
+const MAX_OUTPUT_LENGTH_BYTES: u64 = 64 * 1024;
+
+fn item_output_ref(item: &Value) -> Option<String> {
+    item.get("outputRef")
+        .or_else(|| item.get("output_ref"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .filter(|value| value.chars().count() <= MAX_OUTPUT_REF_CHARS)
+        .map(str::to_string)
+}
+
+fn read_item_output_params(
+    session_id: &str,
+    item_id: &str,
+    output_ref: &str,
+    offset_bytes: Option<u64>,
+    length_bytes: Option<u64>,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(session_id, "sessionId")?;
+    let item_id = require_non_empty(item_id, "itemId")?;
+    let output_ref = require_non_empty(output_ref, "outputRef")?;
+    if output_ref.chars().count() > MAX_OUTPUT_REF_CHARS {
+        return Err(format!("outputRef exceeds {MAX_OUTPUT_REF_CHARS} characters"));
+    }
+    let offset = offset_bytes.unwrap_or(0);
+    if offset > MAX_OUTPUT_OFFSET_BYTES {
+        return Err(format!("offsetBytes exceeds {MAX_OUTPUT_OFFSET_BYTES}"));
+    }
+    let length = length_bytes.unwrap_or(MAX_OUTPUT_LENGTH_BYTES);
+    if length == 0 || length > MAX_OUTPUT_LENGTH_BYTES {
+        return Err(format!("lengthBytes must be between 1 and {MAX_OUTPUT_LENGTH_BYTES}"));
+    }
+    Ok(json!({
+        "sessionId": session_id,
+        "itemId": item_id,
+        "outputRef": output_ref,
+        "offsetBytes": offset,
+        "lengthBytes": length,
+    }))
 }
 
 fn initialize_session_durability(result: &Value) -> Option<String> {
@@ -1148,6 +1194,11 @@ where
                 if let Ok(mut kinds) = state.item_kinds.lock() {
                     kinds.insert((sid.to_string(), item_id.to_string()), kind.clone());
                 }
+                if let Some(output_ref) = item_output_ref(item) {
+                    if let Ok(mut refs) = state.item_output_refs.lock() {
+                        refs.insert((sid.to_string(), item_id.to_string()), output_ref);
+                    }
+                }
                 // Sub-agent lanes need identity up front (objective/role for
                 // the header, childSessionId for drill-down): announce the
                 // block now so the UI owns the entry before deltas land.
@@ -1193,6 +1244,7 @@ where
                         "itemId": item_id,
                         "itemKind": kind,
                         "commandText": item.get("commandText"),
+                        "outputRef": item_output_ref(item),
                         "turnId": item.get("turnId"),
                     }).to_string(),
                 );
@@ -1219,7 +1271,12 @@ where
                 .unwrap_or_default();
             // itemId rides along so the UI closes exactly this block on
             // completion instead of every open block in the session.
-            let item_ref = json!({"itemId": item_id, "text": delta}).to_string();
+            let output_ref = state
+                .item_output_refs
+                .lock()
+                .ok()
+                .and_then(|refs| refs.get(&(sid.to_string(), item_id.to_string())).cloned());
+            let item_ref = json!({"itemId": item_id, "text": delta, "outputRef": output_ref}).to_string();
             match kind.as_str() {
                 "subagent" | "workflow" | "reminderChild" => {
                     // Re-attach identity learned at `item/started` so entries
@@ -1304,6 +1361,16 @@ where
                         .ok()
                         .and_then(|kinds| kinds.get(&(sid.to_string(), item_id.to_string())).cloned())
                 });
+            if let Some(output_ref) = item.and_then(item_output_ref) {
+                if let Ok(mut refs) = state.item_output_refs.lock() {
+                    refs.insert((sid.to_string(), item_id.to_string()), output_ref);
+                }
+            }
+            let output_ref = state
+                .item_output_refs
+                .lock()
+                .ok()
+                .and_then(|refs| refs.get(&(sid.to_string(), item_id.to_string())).cloned());
             if !item_id.is_empty() {
                 if let Some(kind) = kind.as_deref() {
                     if let Ok(mut kinds) = state.item_kinds.lock() {
@@ -1375,6 +1442,7 @@ where
                                     "lane": lane,
                                     "text": text,
                                     "commandText": item.and_then(|i| i.get("commandText")),
+                                    "outputRef": output_ref,
                                     "turnId": turn_id,
                                     "revision": item.and_then(|i| i.get("revision")),
                                     "status": item.and_then(|i| i.get("status")),
@@ -1395,6 +1463,7 @@ where
                                 "itemId": item_id,
                                 "itemKind": kind,
                                 "commandText": item.and_then(|i| i.get("commandText")),
+                                "outputRef": output_ref,
                                 "turnId": turn_id,
                             })
                             .to_string(),
@@ -1433,7 +1502,7 @@ where
                                 lane,
                                 sid,
                                 lane,
-                                json!({"itemId": item_id, "text": text}).to_string(),
+                                json!({"itemId": item_id, "text": text, "outputRef": output_ref}).to_string(),
                             );
                         }
                         // A metadata-only, non-terminal update never emits a
@@ -3389,6 +3458,30 @@ async fn read_session_history(
     Ok(read.get("history").cloned().unwrap_or_else(|| json!({"items": []})))
 }
 
+/// Read one bounded chunk of host-owned output for a completed or streaming
+/// item. Large tool payloads stay out of the transcript until the user asks
+/// for them, and every request is capped before it reaches the sidecar.
+#[tauri::command]
+async fn read_item_output(
+    state: State<'_, AppState>,
+    session_id: String,
+    item_id: String,
+    output_ref: String,
+    offset_bytes: Option<u64>,
+    length_bytes: Option<u64>,
+) -> Result<Value, String> {
+    let params = read_item_output_params(
+        &session_id,
+        &item_id,
+        &output_ref,
+        offset_bytes,
+        length_bytes,
+    )?;
+    session_client(&state, &session_id)?
+        .request("item/readOutput", params)
+        .await
+}
+
 /// Read the host's folded queue when its history response includes a snapshot.
 /// A null result means this host served inline metadata without queue state;
 /// the renderer must retain its local reminders in that case.
@@ -4329,6 +4422,9 @@ async fn kill_session(
     if let Ok(mut kinds) = state.item_kinds.lock() {
         kinds.retain(|(sid, _), _| *sid != session_id);
     }
+    if let Ok(mut refs) = state.item_output_refs.lock() {
+        refs.retain(|(sid, _), _| *sid != session_id);
+    }
     // Same for the sub-agent identity table (stale childSessionId entries
     // would attach the wrong drill-down to a reused item id).
     if let Ok(mut metas) = state.subagent_meta.lock() {
@@ -4427,6 +4523,7 @@ mod tests {
             host_capabilities: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
+            item_output_refs: Mutex::new(HashMap::new()),
             subagent_meta: Mutex::new(HashMap::new()),
             item_deltas_seen: Mutex::new(HashSet::new()),
             item_fallback_emitted: Mutex::new(HashSet::new()),
@@ -5242,6 +5339,43 @@ mod tests {
         assert!(user_shell_payload("session-a", "command-a", " ").is_err());
         let too_long = "x".repeat(MAX_USER_SHELL_COMMAND_CHARS + 1);
         assert!(user_shell_payload("session-a", "command-a", &too_long).is_err());
+    }
+
+    #[test]
+    fn read_item_output_params_are_bounded_and_explicit() {
+        let params = read_item_output_params(
+            "session-a",
+            "item-a",
+            "output://a",
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(params["sessionId"], "session-a");
+        assert_eq!(params["itemId"], "item-a");
+        assert_eq!(params["outputRef"], "output://a");
+        assert_eq!(params["offsetBytes"], 0);
+        assert_eq!(params["lengthBytes"], MAX_OUTPUT_LENGTH_BYTES);
+        assert!(read_item_output_params("", "item-a", "output://a", None, None).is_err());
+        assert!(read_item_output_params("session-a", "", "output://a", None, None).is_err());
+        assert!(read_item_output_params("session-a", "item-a", " ", None, None).is_err());
+        assert!(read_item_output_params(
+            "session-a", "item-a", "output://a", Some(MAX_OUTPUT_OFFSET_BYTES + 1), None
+        ).is_err());
+        assert!(read_item_output_params(
+            "session-a", "item-a", "output://a", None, Some(0)
+        ).is_err());
+        assert!(read_item_output_params(
+            "session-a", "item-a", "output://a", None, Some(MAX_OUTPUT_LENGTH_BYTES + 1)
+        ).is_err());
+    }
+
+    #[test]
+    fn item_output_reference_is_trimmed_and_bounded() {
+        assert_eq!(item_output_ref(&json!({"outputRef": " output://a "})), Some("output://a".to_string()));
+        assert_eq!(item_output_ref(&json!({"output_ref": "output://b"})), Some("output://b".to_string()));
+        assert_eq!(item_output_ref(&json!({"outputRef": ""})), None);
+        assert_eq!(item_output_ref(&json!({"outputRef": "x".repeat(MAX_OUTPUT_REF_CHARS + 1)})), None);
     }
 
     #[test]
@@ -6073,6 +6207,7 @@ fn main() {
             host_capabilities: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
+            item_output_refs: Mutex::new(HashMap::new()),
             subagent_meta: Mutex::new(HashMap::new()),
             item_deltas_seen: Mutex::new(HashSet::new()),
             item_fallback_emitted: Mutex::new(HashSet::new()),
@@ -6091,6 +6226,7 @@ fn main() {
             set_approval_mode,
             resume_session,
             read_session_history,
+            read_item_output,
             read_queue_snapshot,
             list_pending_requests,
             list_skills,

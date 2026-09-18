@@ -47,6 +47,20 @@ describe("session history hydration", () => {
     ]);
   });
 
+  it("preserves a lazy output reference for large tool items", () => {
+    const entries = historyItemsToLogEntries([
+      {
+        itemId: "shell-large",
+        kind: "userShell",
+        commandText: "npm test",
+        visibleOutput: "summary",
+        outputRef: "output://shell-large",
+        status: "completed",
+      },
+    ]);
+    assert.equal(entries[0].outputRef, "output://shell-large");
+  });
+
   it("reconciles by item id and keeps local notes without duplicating user text", () => {
     const local = [
       { id: "local-user", ts: 1, role: "user" as const, text: "Hello" },

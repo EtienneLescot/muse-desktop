@@ -65,6 +65,8 @@ export interface LogEntry {
   turnId?: string;
   /** Host item revision used to apply idempotent `item/updated` snapshots. */
   itemRevision?: number;
+  /** Opaque host reference for lazily loading a large item output. */
+  outputRef?: string;
   /** True while further stream chunks may still be appended. */
   open?: boolean;
   /** Drill-down into the child's own transcript (`session/read`). */
@@ -154,6 +156,7 @@ function isValidEntry(e: unknown): e is LogEntry {
       r.role === "system" ||
       r.role === "tool") &&
     typeof r.text === "string" &&
+    (r.outputRef === undefined || (typeof r.outputRef === "string" && r.outputRef.length > 0 && r.outputRef.length <= 4096)) &&
     validSubagentStatus &&
     validEngineError
   );
