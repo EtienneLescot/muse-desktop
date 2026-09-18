@@ -279,6 +279,7 @@ export default function App() {
     addBrowserAnnotation,
     prepareBrowserContext,
     prepareBrowserCapture,
+    prepareDesktopCapture,
     removeBrowserAnnotation,
     browserPermissions,
     setBrowserAppPermission,
@@ -1539,6 +1540,9 @@ export default function App() {
                         <DesktopControlPanel
                           permissions={browserPermissions}
                           onSetPermission={setBrowserAppPermission}
+                          onInsertCapture={(capture) =>
+                            prepareDesktopCapture(active.session_id, capture)
+                          }
                         />
                       )}
                       {workPanel === "memory" && (

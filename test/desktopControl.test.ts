@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  desktopCaptureAttachment,
   desktopWindowLabel,
+  formatDesktopCaptureContext,
   isDesktopControlAllowed,
   isDesktopPointInBounds,
   type DesktopWindow,
@@ -37,3 +39,20 @@ test("desktop window labels keep title and bounded geometry visible", () => {
   assert.equal(desktopWindowLabel(windowFixture), "Editor · 800×600");
 });
 
+test("desktop captures keep provenance and reject oversized payloads", () => {
+  const capture = {
+    dataUrl: "data:image/jpeg;base64," + "A".repeat(80),
+    source: "desktop-screen" as const,
+    capturedAt: 1_700_000_000_000,
+    width: 1280,
+    height: 720,
+    devicePixelRatio: 1,
+  };
+  const attachment = desktopCaptureAttachment(capture);
+  assert.equal(attachment?.kind, "image");
+  assert.match(formatDesktopCaptureContext(capture), /\[Desktop capture\]/);
+  assert.equal(
+    desktopCaptureAttachment({ ...capture, dataUrl: "data:image/jpeg;base64," + "A".repeat(20_000_000) }),
+    null,
+  );
+});

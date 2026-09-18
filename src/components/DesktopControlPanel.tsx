@@ -6,9 +6,12 @@ import {
   DESKTOP_KEYS,
   DESKTOP_PERMISSION_APP,
   desktopWindowLabel,
+  desktopCaptureAttachment,
+  formatDesktopCaptureContext,
   isDesktopControlAllowed,
   isDesktopPointInBounds,
   type DesktopControlStatus,
+  type DesktopCapture,
   type DesktopKey,
   type DesktopWindow,
 } from "../lib/desktopControl";
@@ -16,6 +19,7 @@ import {
 interface Props {
   permissions: BrowserAppPermission[];
   onSetPermission: (app: string, allowed: boolean) => void;
+  onInsertCapture: (capture: DesktopCapture) => boolean;
 }
 
 const WEB_STATUS: DesktopControlStatus = {
@@ -24,7 +28,7 @@ const WEB_STATUS: DesktopControlStatus = {
   reason: "Desktop control is available only in the installed Muse app",
 };
 
-export function DesktopControlPanel({ permissions, onSetPermission }: Props) {
+export function DesktopControlPanel({ permissions, onSetPermission, onInsertCapture }: Props) {
   const [status, setStatus] = useState<DesktopControlStatus>(WEB_STATUS);
   const [windows, setWindows] = useState<DesktopWindow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -35,6 +39,8 @@ export function DesktopControlPanel({ permissions, onSetPermission }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [capture, setCapture] = useState<DesktopCapture | null>(null);
+  const [capturing, setCapturing] = useState(false);
   const allowed = isDesktopControlAllowed(permissions);
   const selected = useMemo(
     () => windows.find((window) => window.id === selectedId) ?? null,
@@ -129,6 +135,74 @@ export function DesktopControlPanel({ permissions, onSetPermission }: Props) {
     );
   };
 
+  const captureScreen = async () => {
+    if (!allowed) {
+      setError("Allow desktop control before capturing a desktop surface.");
+      return;
+    }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setError("Screen capture is unavailable in this desktop runtime.");
+      return;
+    }
+    setCapturing(true);
+    setError(null);
+    setMessage(null);
+    let stream: MediaStream | null = null;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: "window" },
+        audio: false,
+      });
+      const track = stream.getVideoTracks()[0];
+      if (!track) throw new Error("No desktop surface was selected");
+      const settings = track.getSettings();
+      const video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      video.srcObject = stream;
+      await video.play();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const width = Math.min(8_000, settings.width ?? video.videoWidth);
+      const height = Math.min(8_000, settings.height ?? video.videoHeight);
+      if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+        throw new Error("The selected desktop surface has no usable dimensions");
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("The desktop capture canvas is unavailable");
+      context.drawImage(video, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+      const next: DesktopCapture = {
+        dataUrl,
+        source: "desktop-screen",
+        capturedAt: Date.now(),
+        width,
+        height,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      };
+      if (desktopCaptureAttachment(next) === null) {
+        throw new Error("The desktop capture exceeded the supported image limit");
+      }
+      setCapture(next);
+      setMessage("Desktop surface captured. Review it before inserting it into the prompt.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      stream?.getTracks().forEach((track) => track.stop());
+      setCapturing(false);
+    }
+  };
+
+  const insertCapture = () => {
+    if (capture === null) return;
+    if (onInsertCapture(capture)) {
+      setCapture(null);
+      setMessage("Desktop capture added to the conversation draft.");
+    }
+  };
+
   return (
     <section className="desktop-control-panel" aria-label="Desktop control">
       <header className="desktop-control-header">
@@ -147,6 +221,28 @@ export function DesktopControlPanel({ permissions, onSetPermission }: Props) {
       <div className={`desktop-control-status ${status.supported ? "is-ready" : "is-muted"}`} role="status">
         <strong>{status.supported ? "Available" : "Unavailable"}</strong>
         <span>{status.reason}</span>
+      </div>
+
+      <div className="desktop-capture-block">
+        <div className="desktop-capture-heading">
+          <div>
+            <strong>Capture a desktop surface</strong>
+            <p className="muted">Choose a window or monitor in the OS picker. Nothing is captured automatically.</p>
+          </div>
+          <button type="button" onClick={() => void captureScreen()} disabled={capturing || !status.supported || !allowed}>
+            {capturing ? "Capturing…" : "Capture screen"}
+          </button>
+        </div>
+        {capture && (
+          <div className="desktop-capture-preview">
+            <img src={capture.dataUrl} alt={`Captured desktop surface ${capture.width} by ${capture.height}`} />
+            <div>
+              <span className="muted">{formatDesktopCaptureContext(capture).split("\n")[2]}</span>
+              <button type="button" onClick={insertCapture}>Add to prompt</button>
+              <button type="button" onClick={() => setCapture(null)}>Discard</button>
+            </div>
+          </div>
+        )}
       </div>
 
       <label className="desktop-control-consent">
@@ -250,4 +346,3 @@ export function DesktopControlPanel({ permissions, onSetPermission }: Props) {
     </section>
   );
 }
-

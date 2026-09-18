@@ -6025,6 +6025,48 @@ body.dark .composer textarea::placeholder {
   color: var(--muted);
 }
 
+.desktop-capture-block {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.desktop-capture-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.desktop-capture-heading p {
+  margin: 4px 0 0;
+}
+
+.desktop-capture-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.desktop-capture-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #000;
+}
+
+.desktop-capture-preview > div {
+  display: grid;
+  gap: 8px;
+  justify-items: stretch;
+}
+
 .desktop-control-feedback {
   margin: 0;
 }
@@ -6112,6 +6154,11 @@ body.dark .composer textarea::placeholder {
   }
   .desktop-control-click button {
     grid-column: 1 / -1;
+  }
+  .desktop-capture-heading,
+  .desktop-capture-preview {
+    grid-template-columns: 1fr;
+    display: grid;
   }
 }
 

@@ -103,6 +103,11 @@ import {
   type BrowserCapture,
   type BrowserElementAnchor,
 } from "../lib/browserAnnotate";
+import {
+  desktopCaptureAttachment,
+  formatDesktopCaptureContext,
+  type DesktopCapture,
+} from "../lib/desktopControl";
 export type {
   BrowserAnnotation,
   BrowserAppPermission,
@@ -1112,6 +1117,8 @@ interface UseMuseSessions {
   prepareBrowserContext: (sessionId: string, context: string) => boolean;
   /** M4-02: insert a captured page image and its provenance into the composer. */
   prepareBrowserCapture: (sessionId: string, capture: BrowserCapture) => boolean;
+  /** M4-04: insert an explicitly captured desktop surface into the composer. */
+  prepareDesktopCapture: (sessionId: string, capture: DesktopCapture) => boolean;
   /** US-19: remove an anchored comment by id. */
   removeBrowserAnnotation: (id: string) => void;
   /** US-19: computer-use per-app permissions (default denied). */
@@ -6096,6 +6103,22 @@ export function useMuseSessions(): UseMuseSessions {
     [sessions],
   );
 
+  const prepareDesktopCapture = useCallback(
+    (sessionId: string, capture: DesktopCapture): boolean => {
+      const target = sessions.find((session) => session.session_id === sessionId);
+      const attachment = desktopCaptureAttachment(capture);
+      const context = formatDesktopCaptureContext(capture);
+      if (target === undefined || attachment === null || context.length === 0) {
+        setError("desktop capture unavailable: the image or session is invalid");
+        return false;
+      }
+      setPrefill((current) => (current ? `${current}\n\n${context}` : context));
+      setPrefillAttachmentState({ sessionId, attachment });
+      return true;
+    },
+    [sessions],
+  );
+
   const clearPrefillAttachment = useCallback(() => {
     setPrefillAttachmentState(null);
   }, []);
@@ -7603,6 +7626,7 @@ export function useMuseSessions(): UseMuseSessions {
     addBrowserAnnotation: addBrowserAnnotationCb,
     prepareBrowserContext,
     prepareBrowserCapture,
+    prepareDesktopCapture,
     removeBrowserAnnotation: removeBrowserAnnotationCb,
     browserPermissions,
     setBrowserAppPermission: setBrowserAppPermissionCb,
