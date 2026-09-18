@@ -35,6 +35,26 @@ export interface HandoffPlan {
   ready: boolean;
   checks: HandoffCheck[];
   steps: string[];
+  /** The read-only inputs captured when the plan was prepared. */
+  snapshot: HandoffSnapshot;
+  /** Local timestamp used to explain when a plan should be refreshed. */
+  createdAt: number;
+}
+
+/** Stable, non-secret inputs used to decide whether a plan is still current. */
+export interface HandoffSnapshot {
+  direction: HandoffDirection;
+  sourceWorkspace: string;
+  sourceBranch: string | null;
+  sourceChangedFiles: number;
+  sourceConflictedFiles: number;
+  sourceStatusObserved: boolean | undefined;
+  targetPath: string;
+  targetBranch: string;
+  targetExists: boolean;
+  targetDirty: boolean | undefined;
+  targetIgnoredFiles: number | undefined;
+  targetBranchInUse: boolean | undefined;
 }
 
 function check(
@@ -129,5 +149,55 @@ export function buildHandoffPlan(input: HandoffInput): HandoffPlan {
       ? "Start the conversation against the worktree after the transfer command is available."
       : "Start the conversation against Local after the transfer command is available.",
   ];
-  return { direction: input.direction, ready, checks, steps };
+  return {
+    direction: input.direction,
+    ready,
+    checks,
+    steps,
+    snapshot: {
+      direction: input.direction,
+      sourceWorkspace,
+      sourceBranch: input.sourceBranch,
+      sourceChangedFiles: input.sourceChangedFiles,
+      sourceConflictedFiles: input.sourceConflictedFiles,
+      sourceStatusObserved: input.sourceStatusObserved,
+      targetPath,
+      targetBranch,
+      targetExists: input.targetExists,
+      targetDirty: input.targetDirty,
+      targetIgnoredFiles: input.targetIgnoredFiles,
+      targetBranchInUse: input.targetBranchInUse,
+    },
+    createdAt: Date.now(),
+  };
+}
+
+/**
+ * A plan is review-only evidence. If a new inspection changes any captured
+ * input, it must be prepared again before a future transfer command can use
+ * it. The comparison is deliberately explicit so a missing observation never
+ * becomes an accidental match.
+ */
+export function isHandoffPlanStale(
+  plan: HandoffPlan,
+  input: HandoffInput,
+): boolean {
+  const snapshot = plan.snapshot;
+  const sourceWorkspace = input.sourceWorkspace.trim();
+  const targetPath = input.targetPath.trim();
+  const targetBranch = input.targetBranch.trim();
+  return (
+    snapshot.direction !== input.direction ||
+    snapshot.sourceWorkspace !== sourceWorkspace ||
+    snapshot.sourceBranch !== input.sourceBranch ||
+    snapshot.sourceChangedFiles !== input.sourceChangedFiles ||
+    snapshot.sourceConflictedFiles !== input.sourceConflictedFiles ||
+    snapshot.sourceStatusObserved !== input.sourceStatusObserved ||
+    snapshot.targetPath !== targetPath ||
+    snapshot.targetBranch !== targetBranch ||
+    snapshot.targetExists !== input.targetExists ||
+    snapshot.targetDirty !== input.targetDirty ||
+    snapshot.targetIgnoredFiles !== input.targetIgnoredFiles ||
+    snapshot.targetBranchInUse !== input.targetBranchInUse
+  );
 }

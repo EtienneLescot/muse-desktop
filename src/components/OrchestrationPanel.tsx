@@ -13,7 +13,12 @@ import {
   writerDispatchIsActive,
   type WriterDispatchRecord,
 } from "../lib/writerDispatch";
-import { buildHandoffPlan, type HandoffPlan } from "../lib/handoff";
+import {
+  buildHandoffPlan,
+  isHandoffPlanStale,
+  type HandoffInput,
+  type HandoffPlan,
+} from "../lib/handoff";
 import type { GitStatusSnapshot } from "../lib/git";
 import {
   compareHeadHashes,
@@ -430,9 +435,10 @@ export function OrchestrationPanel({
     setEnvAllowlistText("");
   }
 
-  function prepareHandoff(record: WorktreeRecord): void {
+  function handoffInputFor(record: WorktreeRecord): HandoffInput {
     const sourceFiles = sourceStatus?.files ?? [];
-    const plan = buildHandoffPlan({
+    const inspection = inspectionByBranch[record.branch];
+    return {
       direction: "local-to-worktree",
       sourceWorkspace: workspace,
       sourceBranch: sourceStatus?.branch ?? null,
@@ -442,8 +448,14 @@ export function OrchestrationPanel({
       targetPath: record.path,
       targetBranch: record.branch,
       targetExists: true,
-      targetIgnoredFiles: inspectionByBranch[record.branch]?.ignoredFileCount,
-    });
+      targetDirty: inspection === undefined ? undefined : !inspection.clean,
+      targetIgnoredFiles: inspection?.ignoredFileCount,
+      targetBranchInUse: inspection?.branchReferencedElsewhere,
+    };
+  }
+
+  function prepareHandoff(record: WorktreeRecord): void {
+    const plan = buildHandoffPlan(handoffInputFor(record));
     setHandoffByBranch((current) => ({ ...current, [record.branch]: plan }));
   }
 
@@ -824,13 +836,21 @@ export function OrchestrationPanel({
                     <pre>{setupByBranch[p.branch].output || "(no output)"}</pre>
                   </details>
                 )}
-                {handoffByBranch[p.branch] && (
+                {handoffByBranch[p.branch] && (() => {
+                  const plan = handoffByBranch[p.branch];
+                  const stale = isHandoffPlanStale(plan, handoffInputFor(recordFor(p)!));
+                  return (
                   <details className="orchestration-handoff">
                     <summary>
-                      Handoff plan · {handoffByBranch[p.branch].ready ? "reviewable" : "blocked"}
+                      Handoff plan · {stale ? "refresh required" : plan.ready ? "reviewable" : "blocked"}
                     </summary>
+                    {stale && (
+                      <p className="orchestration-handoff-stale" role="status">
+                        Git or inspection inputs changed since this plan was prepared. Prepare the handoff again before relying on these checks.
+                      </p>
+                    )}
                     <ul>
-                      {handoffByBranch[p.branch].checks.map((item) => (
+                      {plan.checks.map((item) => (
                         <li key={item.id} data-status={item.status}>
                           <strong>{item.label}</strong>
                           <span>{item.detail}</span>
@@ -838,10 +858,12 @@ export function OrchestrationPanel({
                       ))}
                     </ul>
                     <ol>
-                      {handoffByBranch[p.branch].steps.map((step) => <li key={step}>{step}</li>)}
+                      {plan.steps.map((step) => <li key={step}>{step}</li>)}
                     </ol>
+                    <small className="muted">Prepared {new Date(plan.createdAt).toLocaleTimeString()}</small>
                   </details>
-                )}
+                  );
+                })()}
                 {inspectionByBranch[p.branch] && (
                   <details className="orchestration-inspection">
                     <summary>

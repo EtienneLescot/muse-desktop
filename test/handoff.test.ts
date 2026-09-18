@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildHandoffPlan } from "../src/lib/handoff.ts";
+import { buildHandoffPlan, isHandoffPlanStale } from "../src/lib/handoff.ts";
 
 const base = {
   direction: "local-to-worktree" as const,
@@ -63,5 +63,35 @@ describe("M2-05 handoff planner", () => {
       plan.checks.find((item) => item.id === "target-ignored")?.detail ?? "",
       /2 ignored/,
     );
+  });
+
+  it("captures the inspected target state and detects a changed source", () => {
+    const plan = buildHandoffPlan({
+      ...base,
+      targetDirty: false,
+      targetIgnoredFiles: 1,
+      targetBranchInUse: false,
+    });
+    assert.equal(plan.snapshot.targetDirty, false);
+    assert.equal(plan.snapshot.targetIgnoredFiles, 1);
+    assert.equal(plan.snapshot.targetBranchInUse, false);
+    assert.equal(isHandoffPlanStale(plan, {
+      ...base,
+      targetDirty: false,
+      targetIgnoredFiles: 1,
+      targetBranchInUse: false,
+    }), false);
+    assert.equal(isHandoffPlanStale(plan, {
+      ...base,
+      sourceChangedFiles: 1,
+      targetDirty: false,
+      targetIgnoredFiles: 1,
+      targetBranchInUse: false,
+    }), true);
+  });
+
+  it("treats a newly observed target as a stale plan", () => {
+    const plan = buildHandoffPlan(base);
+    assert.equal(isHandoffPlanStale(plan, { ...base, targetDirty: false }), true);
   });
 });

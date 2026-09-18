@@ -4320,6 +4320,15 @@ body.dark .composer textarea::placeholder {
 .orchestration-handoff li[data-status="warn"] {
   color: var(--warning, #c48721);
 }
+.orchestration-handoff-stale {
+  margin: 6px 0;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--warning, #c48721) 45%, transparent);
+  border-radius: 7px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--warning, #c48721) 10%, transparent);
+  font-size: 0.7rem;
+}
 .orchestration-handoff li strong {
   margin-right: 5px;
   color: var(--text);
