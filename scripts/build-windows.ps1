@@ -23,9 +23,12 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Frontend build failed with exit code $LASTEXITCODE"
     }
-    npm run tauri -- build --bundles $Bundle
-    if ($LASTEXITCODE -ne 0) {
-        throw "Tauri build failed with exit code $LASTEXITCODE"
+    $bundleTargets = if ($Bundle -eq "all") { @("nsis", "msi") } else { @($Bundle) }
+    foreach ($bundleTarget in $bundleTargets) {
+        npm run tauri -- build --bundles $bundleTarget
+        if ($LASTEXITCODE -ne 0) {
+            throw "Tauri $bundleTarget build failed with exit code $LASTEXITCODE"
+        }
     }
 
     $bundleRoot = Join-Path $repo "src-tauri\target\release\bundle"
