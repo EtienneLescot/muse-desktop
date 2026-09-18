@@ -66,34 +66,7 @@ export function verifyReleaseManifest({
   if (manifest.product !== "Muse-Desktop") errors.push("unexpected release product");
   if (version !== undefined && manifest.version !== String(version).trim()) errors.push("release version mismatch");
   if (target !== undefined && manifest.target !== String(target).trim()) errors.push("release target mismatch");
-  const signature = manifest.signature;
-  if (signature === undefined || signature === null) {
-    if (requireSignature) errors.push("release signature is required");
-  } else if (
-    typeof signature !== "object" ||
-    signature.algorithm !== RELEASE_SIGNATURE_ALGORITHM ||
-    typeof signature.keyId !== "string" ||
-    typeof signature.value !== "string" ||
-    !signature.keyId.trim() ||
-    !/^[A-Za-z0-9+/]+={0,2}$/.test(signature.value) ||
-    signature.value.length > 16_000
-  ) {
-    errors.push("release signature is malformed");
-  } else if (!publicKey) {
-    errors.push(`release signature ${signature.keyId} has no trusted public key`);
-  } else {
-    try {
-      const valid = verify(
-        null,
-        Buffer.from(releaseManifestPayload(manifest), "utf8"),
-        publicKey?.type === "public" ? publicKey : createPublicKey(publicKey),
-        Buffer.from(signature.value, "base64"),
-      );
-      if (!valid) errors.push(`release signature ${signature.keyId} is invalid`);
-    } catch (error) {
-      errors.push(`release signature could not be verified: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
+  errors.push(...verifyReleaseManifestSignature(manifest, { publicKey, requireSignature }));
   for (const [label, filePath] of [["installer", artifactPath], ["sidecar", sidecarPath]]) {
     if (!filePath) {
       errors.push(`${label} path is required`);
@@ -106,6 +79,37 @@ export function verifyReleaseManifest({
     }
   }
   return { valid: errors.length === 0, errors, manifest };
+}
+
+/** Verify the optional signature against an already parsed path-free manifest. */
+export function verifyReleaseManifestSignature(manifest, { publicKey, requireSignature = false } = {}) {
+  const signature = manifest?.signature;
+  if (signature === undefined || signature === null) {
+    return requireSignature ? ["release signature is required"] : [];
+  }
+  if (
+    typeof signature !== "object" ||
+    signature.algorithm !== RELEASE_SIGNATURE_ALGORITHM ||
+    typeof signature.keyId !== "string" ||
+    typeof signature.value !== "string" ||
+    !signature.keyId.trim() ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(signature.value) ||
+    signature.value.length > 16_000
+  ) {
+    return ["release signature is malformed"];
+  }
+  if (!publicKey) return [`release signature ${signature.keyId} has no trusted public key`];
+  try {
+    const valid = verify(
+      null,
+      Buffer.from(releaseManifestPayload(manifest), "utf8"),
+      publicKey?.type === "public" ? publicKey : createPublicKey(publicKey),
+      Buffer.from(signature.value, "base64"),
+    );
+    return valid ? [] : [`release signature ${signature.keyId} is invalid`];
+  } catch (error) {
+    return [`release signature could not be verified: ${error instanceof Error ? error.message : String(error)}`];
+  }
 }
 
 function argument(name) {

@@ -16,7 +16,10 @@ import { randomBytes } from "node:crypto";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { fileDigest } from "./release-manifest.mjs";
-import { verifyReleaseManifest } from "./verify-release-manifest.mjs";
+import {
+  verifyReleaseManifest,
+  verifyReleaseManifestSignature,
+} from "./verify-release-manifest.mjs";
 
 export const RELEASE_UPDATE_SCHEMA = "muse-desktop.release-update.v1";
 export const RELEASE_UPDATE_STATE_SCHEMA = "muse-desktop.release-slots.v1";
@@ -102,6 +105,8 @@ export function buildReleaseUpdatePlan({
   target,
   channel = "stable",
   allowDowngrade = false,
+  publicKey,
+  requireSignature = false,
 }) {
   const current = parseVersion(currentVersion);
   const checkedTarget = checkedText(target, "target", MAX_TARGET_CHARS);
@@ -111,6 +116,8 @@ export function buildReleaseUpdatePlan({
     artifactPath,
     sidecarPath,
     target: checkedTarget,
+    publicKey,
+    requireSignature,
   });
   if (!verification.valid) {
     throw new Error(`release manifest verification failed: ${verification.errors.join("; ")}`);
@@ -129,11 +136,12 @@ export function buildReleaseUpdatePlan({
     target: checkedTarget,
     installer: verification.manifest.installer,
     sidecar: verification.manifest.sidecar,
+    ...(verification.manifest.signature ? { signature: verification.manifest.signature } : {}),
     ...(allowDowngrade ? { allowDowngrade: true } : {}),
   };
 }
 
-function validatePlan(plan) {
+function validatePlan(plan, { publicKey, requireSignature = false } = {}) {
   if (!plan || typeof plan !== "object") throw new Error("release update plan must be an object");
   if (plan.schema !== RELEASE_UPDATE_SCHEMA || plan.product !== "Muse-Desktop" || plan.action !== "stage") {
     throw new Error("unsupported release update plan");
@@ -146,12 +154,22 @@ function validatePlan(plan) {
   checkedText(plan.target, "target", MAX_TARGET_CHARS);
   safeName(plan.installer?.file, "installer file");
   safeName(plan.sidecar?.file, "sidecar file");
+  const signatureErrors = verifyReleaseManifestSignature({
+    schema: "muse-desktop.release-manifest.v1",
+    product: "Muse-Desktop",
+    version: plan.candidateVersion,
+    target: plan.target,
+    installer: plan.installer,
+    sidecar: plan.sidecar,
+    ...(plan.signature ? { signature: plan.signature } : {}),
+  }, { publicKey, requireSignature });
+  if (signatureErrors.length > 0) throw new Error(signatureErrors.join("; "));
   return plan;
 }
 
 /** Verify a plan again immediately before copying candidate files. */
-export function verifyReleaseUpdatePlan({ plan, artifactPath, sidecarPath }) {
-  const checked = validatePlan(plan);
+export function verifyReleaseUpdatePlan({ plan, artifactPath, sidecarPath, publicKey, requireSignature = false }) {
+  const checked = validatePlan(plan, { publicKey, requireSignature });
   const artifact = fileDigest(artifactPath);
   const sidecar = fileDigest(sidecarPath);
   assertDigest("installer", checked.installer, artifact);
@@ -164,8 +182,8 @@ function nonce() {
 }
 
 /** Stage candidate files and publish the directory with one atomic rename. */
-export async function stageReleaseUpdate({ plan, artifactPath, sidecarPath, stagingRoot }) {
-  const checked = verifyReleaseUpdatePlan({ plan, artifactPath, sidecarPath });
+export async function stageReleaseUpdate({ plan, artifactPath, sidecarPath, stagingRoot, publicKey, requireSignature = false }) {
+  const checked = verifyReleaseUpdatePlan({ plan, artifactPath, sidecarPath, publicKey, requireSignature });
   const root = resolve(stagingRoot);
   await mkdir(root, { recursive: true });
   const name = `candidate-${checked.candidateVersion}-${nonce()}`;
@@ -188,9 +206,12 @@ export async function stageReleaseUpdate({ plan, artifactPath, sidecarPath, stag
   return { path: published, version: checked.candidateVersion };
 }
 
-async function readCandidate(candidatePath) {
+async function readCandidate(candidatePath, { publicKey, requireSignature = false } = {}) {
   const candidate = resolve(candidatePath);
-  const plan = validatePlan(await readJson(join(candidate, "update-plan.json"), MAX_PLAN_BYTES, "update plan"));
+  const plan = validatePlan(await readJson(join(candidate, "update-plan.json"), MAX_PLAN_BYTES, "update plan"), {
+    publicKey,
+    requireSignature,
+  });
   const installerPath = join(candidate, safeName(plan.installer.file, "installer file"));
   const sidecarPath = join(candidate, safeName(plan.sidecar.file, "sidecar file"));
   assertDigest("installer", plan.installer, fileDigest(installerPath));
@@ -220,14 +241,14 @@ async function writeState(slotsRoot, currentVersion, previousVersion) {
 }
 
 /** Atomically promote a staged candidate, retaining the prior slot for rollback. */
-export async function applyStagedRelease({ stagedPath, slotsRoot }) {
+export async function applyStagedRelease({ stagedPath, slotsRoot, publicKey, requireSignature = false }) {
   const root = resolve(slotsRoot);
   const candidate = resolve(stagedPath);
   if (!isWithin(root, candidate) || candidate === root) {
     throw new Error("staged release must live under the slots root");
   }
   if (!(await exists(join(candidate, "READY")))) throw new Error("staged release is missing its READY marker");
-  const verified = await readCandidate(candidate);
+  const verified = await readCandidate(candidate, { publicKey, requireSignature });
   const current = join(root, "current");
   const previous = join(root, "previous");
   const displaced = join(root, `.displaced-${nonce()}`);
@@ -255,7 +276,7 @@ export async function applyStagedRelease({ stagedPath, slotsRoot }) {
 }
 
 /** Swap the two slots and persist the resulting active version. */
-export async function rollbackRelease({ slotsRoot }) {
+export async function rollbackRelease({ slotsRoot, publicKey, requireSignature = false }) {
   const root = resolve(slotsRoot);
   const current = join(root, "current");
   const previous = join(root, "previous");
@@ -272,8 +293,14 @@ export async function rollbackRelease({ slotsRoot }) {
     if (await exists(temporary)) await rename(temporary, current).catch(() => undefined);
     throw error;
   }
-  const currentPlan = validatePlan(await readJson(join(current, "update-plan.json"), MAX_PLAN_BYTES, "current update plan"));
-  const previousPlan = validatePlan(await readJson(join(previous, "update-plan.json"), MAX_PLAN_BYTES, "previous update plan"));
+  const currentPlan = validatePlan(await readJson(join(current, "update-plan.json"), MAX_PLAN_BYTES, "current update plan"), {
+    publicKey,
+    requireSignature,
+  });
+  const previousPlan = validatePlan(await readJson(join(previous, "update-plan.json"), MAX_PLAN_BYTES, "previous update plan"), {
+    publicKey,
+    requireSignature,
+  });
   await writeState(root, currentPlan.candidateVersion, previousPlan.candidateVersion);
   return { currentVersion: currentPlan.candidateVersion, previousVersion: previousPlan.candidateVersion };
 }
@@ -289,6 +316,11 @@ function requireArgument(name) {
   return value;
 }
 
+async function optionalPublicKey() {
+  const path = argument("--public-key");
+  return path ? readFile(path, "utf8") : undefined;
+}
+
 async function cli() {
   const command = process.argv[2];
   if (command === "plan") {
@@ -300,6 +332,8 @@ async function cli() {
       target: requireArgument("--target"),
       channel: argument("--channel") ?? "stable",
       allowDowngrade: process.argv.includes("--allow-downgrade"),
+      publicKey: await optionalPublicKey(),
+      requireSignature: process.argv.includes("--require-signature"),
     });
     const output = resolve(requireArgument("--output"));
     await writeFile(output, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
@@ -313,6 +347,8 @@ async function cli() {
       artifactPath: requireArgument("--artifact"),
       sidecarPath: requireArgument("--sidecar"),
       stagingRoot: requireArgument("--staging-root"),
+      publicKey: await optionalPublicKey(),
+      requireSignature: process.argv.includes("--require-signature"),
     });
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return;
@@ -321,12 +357,18 @@ async function cli() {
     const result = await applyStagedRelease({
       stagedPath: requireArgument("--staged"),
       slotsRoot: requireArgument("--slots-root"),
+      publicKey: await optionalPublicKey(),
+      requireSignature: process.argv.includes("--require-signature"),
     });
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return;
   }
   if (command === "rollback") {
-    const result = await rollbackRelease({ slotsRoot: requireArgument("--slots-root") });
+    const result = await rollbackRelease({
+      slotsRoot: requireArgument("--slots-root"),
+      publicKey: await optionalPublicKey(),
+      requireSignature: process.argv.includes("--require-signature"),
+    });
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return;
   }

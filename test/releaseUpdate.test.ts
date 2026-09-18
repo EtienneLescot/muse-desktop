@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -126,5 +127,57 @@ describe("release update transaction", () => {
 
     const rollback = await rollbackRelease({ slotsRoot: slots });
     assert.deepEqual(rollback, { currentVersion: "1.1.0", previousVersion: "1.2.0" });
+  });
+
+  it("carries and rechecks a signed plan through staging and promotion", async () => {
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const { root, artifact, sidecar, manifest } = await fixture("1.3.0");
+    const signed = buildReleaseManifest({
+      artifactPath: artifact,
+      sidecarPath: sidecar,
+      version: "1.3.0",
+      target: "x86_64-pc-windows-msvc",
+      signingKey: privateKey,
+      keyId: "update-test",
+    });
+    await writeFile(manifest, `${JSON.stringify(signed)}\n`, "utf8");
+    const plan = buildReleaseUpdatePlan({
+      manifestPath: manifest,
+      artifactPath: artifact,
+      sidecarPath: sidecar,
+      currentVersion: "1.2.0",
+      target: "x86_64-pc-windows-msvc",
+      publicKey,
+      requireSignature: true,
+    });
+    assert.equal(plan.signature?.keyId, "update-test");
+    const slots = join(root, "signed-slots");
+    const staged = await stageReleaseUpdate({
+      plan,
+      artifactPath: artifact,
+      sidecarPath: sidecar,
+      stagingRoot: slots,
+      publicKey,
+      requireSignature: true,
+    });
+    const current = await applyStagedRelease({
+      stagedPath: staged.path,
+      slotsRoot: slots,
+      publicKey,
+      requireSignature: true,
+    });
+    assert.equal(current.currentVersion, "1.3.0");
+    const tamperedPlan = { ...plan, signature: { ...plan.signature, value: "A".repeat(120) } };
+    await assert.rejects(
+      () => stageReleaseUpdate({
+        plan: tamperedPlan,
+        artifactPath: artifact,
+        sidecarPath: sidecar,
+        stagingRoot: join(root, "tampered-slots"),
+        publicKey,
+        requireSignature: true,
+      }),
+      /signature .* invalid|signature .* could not be verified/,
+    );
   });
 });
