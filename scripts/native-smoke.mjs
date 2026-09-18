@@ -28,6 +28,9 @@
  * methods are reported as such rather than treated as a successful proof.
  * The explicit `--exercise-terminal` path tightens `--exercise-control` by
  * requiring a terminal turn notification after the interrupt acknowledgement.
+ * The explicit `--exercise-reasoning` path applies the supported reasoning
+ * effort values to each ephemeral session and records the host's effective
+ * projection without starting a model turn.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
@@ -39,6 +42,7 @@
  *   node scripts/native-smoke.mjs --exercise-user-shell
  *   node scripts/native-smoke.mjs --exercise-reconnect
  *   node scripts/native-smoke.mjs --exercise-history
+ *   node scripts/native-smoke.mjs --exercise-reasoning
  *   node scripts/native-smoke.mjs --exercise-control --exercise-terminal
  *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
@@ -106,6 +110,10 @@ function exercisesReconnectPath() {
 
 function exercisesHistoryPath() {
   return process.argv.includes("--exercise-history");
+}
+
+function exercisesReasoningPath() {
+  return process.argv.includes("--exercise-reasoning");
 }
 
 function exercisesTerminalPath() {
@@ -348,6 +356,7 @@ async function main() {
   const exerciseUserShell = exercisesUserShellPath();
   const exerciseReconnect = exercisesReconnectPath();
   const exerciseHistory = exercisesHistoryPath();
+  const exerciseReasoning = exercisesReasoningPath();
   const exerciseTerminal = exercisesTerminalPath();
   if (exerciseTerminal && !exerciseControl) {
     fail("--exercise-terminal requires --exercise-control");
@@ -369,6 +378,7 @@ async function main() {
     const userShellChecks = [];
     const reconnectChecks = [];
     const historyChecks = [];
+    const reasoningChecks = [];
     let isolation = null;
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
@@ -499,6 +509,31 @@ async function main() {
       }
       const catalogue = await host.request("model/list");
       if (catalogue === null || typeof catalogue !== "object") fail(`host-${index === 0 ? "A" : "B"} returned no model catalogue`);
+      if (exerciseReasoning) {
+        const efforts = [];
+        for (const reasoningEffort of ["none", "high", "ultra"]) {
+          try {
+            const changed = await host.request("session/setReasoningEffort", {
+              commandId: uuidv7(),
+              sessionId,
+              reasoningEffort,
+            });
+            if (changed?.status !== "accepted") {
+              fail(`host-${index === 0 ? "A" : "B"} returned an incomplete reasoning effort result for ${reasoningEffort}`);
+            }
+            const effective = changed?.effectiveReasoningEffort ?? changed?.reasoningEffort ?? reasoningEffort;
+            if (typeof effective !== "string" || effective.length === 0) {
+              fail(`host-${index === 0 ? "A" : "B"} returned no effective reasoning effort for ${reasoningEffort}`);
+            }
+            efforts.push({ requested: reasoningEffort, status: "accepted", effective });
+          } catch (error) {
+            if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+            efforts.push({ requested: reasoningEffort, status: "unsupported" });
+            break;
+          }
+        }
+        reasoningChecks.push({ host: String.fromCharCode(65 + index), efforts });
+      }
       if (exerciseReconnect) {
         // These are the same point-in-time reads used by the renderer after a
         // reconnect. Keep the result intentionally small: the smoke proves
@@ -693,6 +728,7 @@ async function main() {
       ...(exerciseUserShell ? { userShell: userShellChecks } : {}),
       ...(exerciseReconnect ? { reconnect: reconnectChecks } : {}),
       ...(exerciseHistory ? { history: historyChecks } : {}),
+      ...(exerciseReasoning ? { reasoningEffort: reasoningChecks } : {}),
     };
     if (reportPath !== null) {
       await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
