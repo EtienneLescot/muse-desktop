@@ -39,7 +39,12 @@ jobs:
           status=$?
           # Keep failure evidence bounded and remove machine-specific paths
           # and common credential-shaped values before it becomes an artifact.
-          tail -n 250 ci-node-test.log \
+          {
+            echo '--- frontend test failures ---'
+            grep -n -E 'not ok|AssertionError|^# fail [1-9]|^✖' ci-node-test.log | tail -n 80 || true
+            echo '--- frontend test tail ---'
+            tail -n 250 ci-node-test.log
+          } \
             | sed -E 's#(/home/runner|/Users|C:\\Users)[^ ]*#<ci-path>#g; s#(token|password|api[_-]?key|authorization)[=:][^ ]+#\1=<redacted>#gi' \
             > ci-node-test-report.log
           exit "$status"
