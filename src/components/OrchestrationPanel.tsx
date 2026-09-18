@@ -3,9 +3,16 @@ import { fanoutLanes, fanoutQueueNote } from "../lib/fanout";
 import {
   parseWriterPaths,
   planWriterQueue,
+  type WriterQueueRow,
   type WriterQueueStatus,
 } from "../lib/writerQueue";
 import { loadWriterTargets, saveWriterTargets } from "../lib/writerTargets";
+import {
+  buildWriterPrompt,
+  writerDispatchCanStart,
+  writerDispatchIsActive,
+  type WriterDispatchRecord,
+} from "../lib/writerDispatch";
 import { buildHandoffPlan, type HandoffPlan } from "../lib/handoff";
 import type { GitStatusSnapshot } from "../lib/git";
 import {
@@ -62,6 +69,16 @@ interface Props {
   ) => Promise<boolean>;
   /** Open a new conversation rooted at a created worktree. */
   onOpenWorktree: (record: WorktreeRecord) => Promise<string | null>;
+  /** Explicitly dispatch one admitted writer into its worktree conversation. */
+  onDispatchWriter?: (record: WorktreeRecord, prompt: string) => Promise<{ sessionId: string } | null>;
+  /** Stop a dispatched writer without changing another conversation. */
+  onStopWriter?: (sessionId: string) => Promise<void>;
+  /** Open the writer conversation that owns a dispatch result. */
+  onOpenWriterConversation?: (sessionId: string) => void;
+  /** Latest host running projection, keyed by conversation id. */
+  writerSessionRunning?: Readonly<Record<string, boolean>>;
+  /** Objective text captured from the parent sub-agent entry. */
+  writerPrompts?: Readonly<Record<string, string>>;
   onInspectWorktree: (
     sessionId: string,
     record: WorktreeRecord,
@@ -95,6 +112,11 @@ export function OrchestrationPanel({
   cleanupIntents,
   onRemoveWorktree,
   onOpenWorktree,
+  onDispatchWriter,
+  onStopWriter,
+  onOpenWriterConversation,
+  writerSessionRunning,
+  writerPrompts,
   onInspectWorktree,
   onCheckReadiness,
   onRunSetup,
@@ -111,6 +133,7 @@ export function OrchestrationPanel({
   const [writerTargets, setWriterTargets] = useState<Record<string, string>>(() =>
     loadWriterTargets(workspace),
   );
+  const [writerDispatches, setWriterDispatches] = useState<Record<string, WriterDispatchRecord>>({});
   const writerTargetsWorkspace = useRef(workspace);
   const [setupCommand, setSetupCommand] = useState("");
   const [envAllowlistText, setEnvAllowlistText] = useState("");
@@ -192,6 +215,123 @@ export function OrchestrationPanel({
       ),
     [plans, worktrees, workspace, writerTargets],
   );
+  const activeWriterDispatches = Object.values(writerDispatches).filter((dispatch) =>
+    writerDispatchIsActive(dispatch.status),
+  ).length;
+
+  useEffect(() => {
+    if (writerSessionRunning === undefined) return;
+    setWriterDispatches((current) => {
+      let next = current;
+      let changed = false;
+      for (const [agent, dispatch] of Object.entries(current)) {
+        if (
+          dispatch.status === "running" &&
+          dispatch.sessionId !== null &&
+          writerSessionRunning[dispatch.sessionId] === false
+        ) {
+          if (!changed) next = { ...current };
+          next[agent] = { ...dispatch, status: "complete" };
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [writerSessionRunning]);
+
+  async function dispatchWriter(row: WriterQueueRow): Promise<void> {
+    if (onDispatchWriter === undefined) return;
+    const plan = plans.find((item) => item.agent === row.agent);
+    const record = plan === undefined ? undefined : recordFor(plan);
+    if (
+      record === undefined ||
+      !writerDispatchCanStart(row.status, activeWriterDispatches, writerQueue.lanes)
+    ) {
+      return;
+    }
+    const prompt = buildWriterPrompt(
+      row.agent,
+      row.targetPaths,
+      writerPrompts?.[row.agent],
+    );
+    setWriterDispatches((current) => ({
+      ...current,
+      [row.agent]: {
+        agent: row.agent,
+        sessionId: null,
+        status: "starting",
+        prompt,
+        error: null,
+      },
+    }));
+    try {
+      const result = await onDispatchWriter(record, prompt);
+      setWriterDispatches((current) => ({
+        ...current,
+        [row.agent]: result === null
+          ? {
+              agent: row.agent,
+              sessionId: null,
+              status: "failed",
+              prompt,
+              error: "The writer conversation could not be started.",
+            }
+          : {
+              agent: row.agent,
+              sessionId: result.sessionId,
+              status: "running",
+              prompt,
+              error: null,
+            },
+      }));
+    } catch (error) {
+      setWriterDispatches((current) => ({
+        ...current,
+        [row.agent]: {
+          agent: row.agent,
+          sessionId: null,
+          status: "failed",
+          prompt,
+          error: userFacingError(error, "The writer dispatch failed."),
+        },
+      }));
+    }
+  }
+
+  async function stopWriter(agent: string): Promise<void> {
+    const dispatch = writerDispatches[agent];
+    if (
+      dispatch === undefined ||
+      dispatch.sessionId === null ||
+      dispatch.status !== "running" ||
+      onStopWriter === undefined
+    ) {
+      return;
+    }
+    setWriterDispatches((current) => ({
+      ...current,
+      [agent]: { ...dispatch, status: "stopping" },
+    }));
+    try {
+      await onStopWriter(dispatch.sessionId);
+      setWriterDispatches((current) => {
+        const latest = current[agent];
+        return latest?.sessionId === dispatch.sessionId
+          ? { ...current, [agent]: { ...latest, status: "complete" } }
+          : current;
+      });
+    } catch (error) {
+      setWriterDispatches((current) => ({
+        ...current,
+        [agent]: {
+          ...dispatch,
+          status: "failed",
+          error: userFacingError(error, "The writer could not be stopped."),
+        },
+      }));
+    }
+  }
+
   if (plans.length === 0) return null;
 
   function onCompare(): void {
@@ -399,6 +539,9 @@ export function OrchestrationPanel({
         <ul>
           {writerQueue.rows.map((row) => {
             const parsed = parseWriterPaths(writerTargets[row.agent] ?? "");
+            const plan = plans.find((item) => item.agent === row.agent);
+            const record = plan === undefined ? undefined : recordFor(plan);
+            const dispatch = writerDispatches[row.agent];
             const statusLabel: Record<WriterQueueStatus, string> = {
               blocked: "Create its worktree first",
               needsPaths: "Declare target files",
@@ -423,9 +566,48 @@ export function OrchestrationPanel({
                     spellCheck={false}
                   />
                 </label>
-                <span>{statusLabel[row.status]}</span>
+                <span>
+                  {statusLabel[row.status]}
+                  {dispatch?.status === "starting" ? ` · Starting…` : ""}
+                  {dispatch?.status === "running" ? ` · Running` : ""}
+                  {dispatch?.status === "stopping" ? ` · Stopping…` : ""}
+                  {dispatch?.status === "complete" ? ` · Complete` : ""}
+                  {dispatch?.status === "failed" ? ` · Failed` : ""}
+                </span>
                 {parsed.invalid.length > 0 && (
                   <small>Ignored invalid paths: {parsed.invalid.join(", ")}</small>
+                )}
+                {onDispatchWriter !== undefined && record !== undefined &&
+                  (row.status === "ready" || row.status === "queued") && (
+                    <button
+                      type="button"
+                      disabled={!writerDispatchCanStart(row.status, activeWriterDispatches, writerQueue.lanes) || dispatch?.status === "starting" || dispatch?.status === "running" || dispatch?.status === "stopping"}
+                      onClick={() => void dispatchWriter(row)}
+                    >
+                      {dispatch?.status === "complete" || dispatch?.status === "failed"
+                        ? "Dispatch again"
+                        : dispatch?.status === "starting"
+                          ? `Starting…`
+                          : "Dispatch writer"}
+                    </button>
+                  )}
+                {dispatch?.sessionId !== null && dispatch?.sessionId !== undefined &&
+                  onOpenWriterConversation !== undefined && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenWriterConversation(dispatch.sessionId as string)}
+                    >
+                      Open conversation
+                    </button>
+                  )}
+                {dispatch?.sessionId !== null && dispatch?.sessionId !== undefined &&
+                  dispatch.status === "running" && onStopWriter !== undefined && (
+                    <button type="button" onClick={() => void stopWriter(row.agent)}>
+                      Stop writer
+                    </button>
+                  )}
+                {dispatch?.error !== null && dispatch?.error !== undefined && (
+                  <small role="alert">{dispatch.error}</small>
                 )}
               </li>
             );

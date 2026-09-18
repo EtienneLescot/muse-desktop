@@ -490,6 +490,23 @@ export default function App() {
     return seen;
   }, [activeLog]);
 
+  const orchestrationWriterPrompts = useMemo(() => {
+    const prompts: Record<string, string> = {};
+    for (const entry of activeLog) {
+      if (entry.role !== "subagent" || typeof entry.agentId !== "string") continue;
+      const objective =
+        typeof entry.objective === "string" && entry.objective.trim() !== ""
+          ? entry.objective
+          : entry.text;
+      if (objective.trim() !== "") prompts[entry.agentId] = objective.slice(0, 2_000);
+    }
+    return prompts;
+  }, [activeLog]);
+  const writerSessionRunning = useMemo(
+    () => Object.fromEntries(sessions.map((session) => [session.session_id, session.running])),
+    [sessions],
+  );
+
   // US-32: one polite live region announces stream running/stopped
   // transitions plus approval/input arrivals (not every render).
   const [liveMessage, setLiveMessage] = useState("");
@@ -1562,6 +1579,31 @@ export default function App() {
                             onOpenWorktree={async (record) =>
                               startSessionInWorkspace(record.path, activeProjectSettings)
                             }
+                            writerPrompts={orchestrationWriterPrompts}
+                            writerSessionRunning={writerSessionRunning}
+                            onDispatchWriter={async (record, prompt) => {
+                              const sourceId = activeId;
+                              try {
+                                const existing = sessions.find(
+                                  (session) =>
+                                    session.workspace.toLowerCase() === record.path.toLowerCase() &&
+                                    session.archived !== true &&
+                                    connectedIds.includes(session.session_id),
+                                );
+                                const writerId =
+                                  existing?.session_id ??
+                                  (await startSessionInWorkspace(record.path, activeProjectSettings));
+                                if (writerId === null) return null;
+                                const result = await sendInput(writerId, prompt);
+                                return result.ok ? { sessionId: writerId } : null;
+                              } finally {
+                                if (sourceId !== null) setActive(sourceId);
+                              }
+                            }}
+                            onStopWriter={async (writerId) => {
+                              await cancelSession(writerId);
+                            }}
+                            onOpenWriterConversation={(writerId) => setActive(writerId)}
                             onInspectWorktree={inspectWorktree}
                             onCheckReadiness={checkWorktreeReadiness}
                             onRunSetup={runWorktreeSetup}
