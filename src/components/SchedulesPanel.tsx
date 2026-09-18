@@ -6,6 +6,7 @@ import {
   type ScheduleAuthorizationMode,
   type ScheduleMissedPolicy,
   type ThreadReuse,
+  nextScheduleOccurrence,
 } from "../lib/schedules";
 import { MAX_RUN_ATTEMPTS, type ScheduleRun } from "../lib/scheduleRuns";
 import type { MuseNotification, NotificationPermission } from "../lib/notifications";
@@ -73,6 +74,14 @@ function describeRunStatus(status: ScheduleRun["status"]): string {
   if (status === "failed") return "Failed";
   if (status === "cancelled") return "Cancelled";
   return "Queued";
+}
+
+function describeNextSchedule(s: Schedule, now = Date.now()): string {
+  if (!s.enabled) return "Disabled";
+  const next = nextScheduleOccurrence(s);
+  if (next === null) return "No further runs";
+  if (next <= now) return "Due now";
+  return `Next ${new Date(next).toLocaleString()}${s.timeZone ? ` · ${s.timeZone}` : ""}`;
 }
 
 function describeSchedulerMode(mode: SchedulerRuntimeStatus["mode"]): string {
@@ -315,6 +324,7 @@ export function SchedulesPanel({
                   {describeSchedule(s)}
                 </span>
               </div>
+              <div className="muted sched-next">{describeNextSchedule(s)}</div>
               <div className="muted sched-target">
                 → {describeReuse(s.threadReuse, sessions)}
               </div>

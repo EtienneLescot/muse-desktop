@@ -4527,6 +4527,11 @@ body.dark .composer textarea::placeholder {
   font-size: 0.8rem;
 }
 
+.sched-next {
+  color: var(--blue);
+  font-size: 0.72rem;
+}
+
 .sched-actions {
   display: flex;
   gap: 6px;

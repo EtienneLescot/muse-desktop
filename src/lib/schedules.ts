@@ -405,6 +405,25 @@ export function isScheduleDue(s: Schedule, nowTs: number): boolean {
   return next !== null && next <= nowTs;
 }
 
+/**
+ * Return the next occurrence represented by a schedule's durable cursor.
+ * A past value is intentional: it means the schedule is currently due and
+ * lets the UI explain a missed occurrence instead of hiding it behind a
+ * future countdown. Disabled or completed one-shot schedules return null.
+ */
+export function nextScheduleOccurrence(s: Schedule): number | null {
+  if (!s.enabled) return null;
+  if (s.trigger.kind === "once") {
+    return s.lastFiredAt === undefined && Number.isFinite(s.trigger.at)
+      ? s.trigger.at
+      : null;
+  }
+  const anchor = s.lastFiredAt ?? s.createdAt;
+  return s.timeZone
+    ? cronNextRunInTimeZone(s.trigger.cron, anchor, s.timeZone)
+    : cronNextRun(s.trigger.cron, anchor);
+}
+
 /** Enabled schedules that owe a review entry at `nowTs`. */
 export function dueSchedules(schedules: Schedule[], nowTs: number): Schedule[] {
   return schedules.filter((s) => isScheduleDue(s, nowTs));
