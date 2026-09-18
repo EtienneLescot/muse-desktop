@@ -14,6 +14,11 @@ import {
   writerDispatchIsActive,
   type WriterDispatchRecord,
 } from "../lib/writerDispatch";
+import {
+  acquireWriterLock,
+  releaseWriterLock,
+  releaseWriterLocksForWorkspace,
+} from "../lib/writerLocks";
 import type { LogEntry } from "../lib/persist";
 import {
   buildHandoffPlan,
@@ -156,6 +161,7 @@ export function OrchestrationPanel({
     loadWriterTargets(workspace),
   );
   const [writerDispatches, setWriterDispatches] = useState<Record<string, WriterDispatchRecord>>({});
+  const writerLocksByAgent = useRef<Record<string, string>>({});
   const writerTargetsWorkspace = useRef(workspace);
   const [setupCommand, setSetupCommand] = useState("");
   const [envAllowlistText, setEnvAllowlistText] = useState("");
@@ -198,6 +204,15 @@ export function OrchestrationPanel({
     }
     saveWriterTargets(workspace, writerTargets);
   }, [workspace, writerTargets]);
+
+  useEffect(() => {
+    // Release process-local leases when this panel changes workspace or unmounts.
+    return () => {
+      for (const token of Object.values(writerLocksByAgent.current)) releaseWriterLock(token);
+      writerLocksByAgent.current = {};
+      releaseWriterLocksForWorkspace(workspace);
+    };
+  }, [workspace]);
 
   useEffect(() => {
     setSetupProfiles(loadSetupProfiles(workspace));
@@ -267,6 +282,8 @@ export function OrchestrationPanel({
             status: "complete",
             result: observedResult,
           };
+          releaseWriterLock(writerLocksByAgent.current[agent]);
+          delete writerLocksByAgent.current[agent];
           changed = true;
         } else if (
           dispatch.status === "complete" &&
@@ -297,6 +314,25 @@ export function OrchestrationPanel({
       row.targetPaths,
       writerPrompts?.[row.agent],
     );
+    const lease = acquireWriterLock(workspace, row.agent, row.targetPaths);
+    if (lease.lock === null) {
+      const owners = lease.conflicts.map((conflict) => conflict.agent).join(", ");
+      setWriterDispatches((current) => ({
+        ...current,
+        [row.agent]: {
+          agent: row.agent,
+          sessionId: null,
+          status: "failed",
+          prompt,
+          error: owners.length > 0
+            ? `Target files are currently leased by ${owners}.`
+            : "A writer lease requires a workspace and declared target files.",
+          result: null,
+        },
+      }));
+      return;
+    }
+    writerLocksByAgent.current[row.agent] = lease.lock.token;
     setWriterDispatches((current) => ({
       ...current,
       [row.agent]: {
@@ -330,7 +366,13 @@ export function OrchestrationPanel({
               result: null,
             },
       }));
+      if (result === null) {
+        releaseWriterLock(writerLocksByAgent.current[row.agent]);
+        delete writerLocksByAgent.current[row.agent];
+      }
     } catch (error) {
+      releaseWriterLock(writerLocksByAgent.current[row.agent]);
+      delete writerLocksByAgent.current[row.agent];
       setWriterDispatches((current) => ({
         ...current,
         [row.agent]: {
@@ -362,6 +404,8 @@ export function OrchestrationPanel({
     }));
     try {
       await onStopWriter(writerSessionId);
+      releaseWriterLock(writerLocksByAgent.current[agent]);
+      delete writerLocksByAgent.current[agent];
       setWriterDispatches((current) => {
         const latest = current[agent];
         return latest?.sessionId === writerSessionId
