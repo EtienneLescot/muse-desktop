@@ -8,6 +8,10 @@ import {
   isDesktopPointInBounds,
   type DesktopWindow,
 } from "../src/lib/desktopControl.ts";
+import {
+  buildDesktopSkillArguments,
+  findDesktopSkill,
+} from "../src/lib/desktopSkills.ts";
 
 const windowFixture: DesktopWindow = {
   id: "abc",
@@ -55,4 +59,13 @@ test("desktop captures keep provenance and reject oversized payloads", () => {
     desktopCaptureAttachment({ ...capture, dataUrl: "data:image/jpeg;base64," + "A".repeat(20_000_000) }),
     null,
   );
+});
+
+test("host desktop skills are used only when the selector is advertised", () => {
+  const skills = [{ selector: "computer.click", description: "Click" }];
+  assert.equal(findDesktopSkill(skills, "click")?.selector, "computer.click");
+  assert.equal(findDesktopSkill(skills, "type"), null);
+  const args = buildDesktopSkillArguments("click", windowFixture, undefined, 12, 18);
+  assert.match(args, /"action":"click"/);
+  assert.match(args, /"point":\{"x":12,"y":18\}/);
 });

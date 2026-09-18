@@ -6067,6 +6067,24 @@ body.dark .composer textarea::placeholder {
   justify-items: stretch;
 }
 
+.desktop-host-actions {
+  display: grid;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.desktop-host-actions p {
+  margin: 4px 0 0;
+}
+
+.desktop-host-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .desktop-control-feedback {
   margin: 0;
 }

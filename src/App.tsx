@@ -1543,6 +1543,12 @@ export default function App() {
                           onInsertCapture={(capture) =>
                             prepareDesktopCapture(active.session_id, capture)
                           }
+                          hostSkills={hostSkillsBySession[active.session_id] ?? []}
+                          skillProgress={skillInvocationsBySession[active.session_id]}
+                          onInvokeDesktopSkill={(selector, args) =>
+                            invokeSkill(active.session_id, selector, args)
+                          }
+                          onCancelDesktopSkill={() => cancelSession(active.session_id)}
                         />
                       )}
                       {workPanel === "memory" && (

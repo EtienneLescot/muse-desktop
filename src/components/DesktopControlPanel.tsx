@@ -15,11 +15,23 @@ import {
   type DesktopKey,
   type DesktopWindow,
 } from "../lib/desktopControl";
+import {
+  buildDesktopSkillArguments,
+  findDesktopSkill,
+  isAdvertisedDesktopSkill,
+  type DesktopSkillAction,
+} from "../lib/desktopSkills";
+import type { HostSkill } from "../lib/hostSkills";
+import type { SkillInvocationProgress } from "../lib/skills";
 
 interface Props {
   permissions: BrowserAppPermission[];
   onSetPermission: (app: string, allowed: boolean) => void;
   onInsertCapture: (capture: DesktopCapture) => boolean;
+  hostSkills?: readonly HostSkill[];
+  skillProgress?: SkillInvocationProgress;
+  onInvokeDesktopSkill?: (selector: string, args: string) => void;
+  onCancelDesktopSkill?: () => Promise<void> | void;
 }
 
 const WEB_STATUS: DesktopControlStatus = {
@@ -28,7 +40,15 @@ const WEB_STATUS: DesktopControlStatus = {
   reason: "Desktop control is available only in the installed Muse app",
 };
 
-export function DesktopControlPanel({ permissions, onSetPermission, onInsertCapture }: Props) {
+export function DesktopControlPanel({
+  permissions,
+  onSetPermission,
+  onInsertCapture,
+  hostSkills = [],
+  skillProgress,
+  onInvokeDesktopSkill,
+  onCancelDesktopSkill,
+}: Props) {
   const [status, setStatus] = useState<DesktopControlStatus>(WEB_STATUS);
   const [windows, setWindows] = useState<DesktopWindow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -41,6 +61,7 @@ export function DesktopControlPanel({ permissions, onSetPermission, onInsertCapt
   const [error, setError] = useState<string | null>(null);
   const [capture, setCapture] = useState<DesktopCapture | null>(null);
   const [capturing, setCapturing] = useState(false);
+  const [stoppingHostSkill, setStoppingHostSkill] = useState(false);
   const allowed = isDesktopControlAllowed(permissions);
   const selected = useMemo(
     () => windows.find((window) => window.id === selectedId) ?? null,
@@ -203,6 +224,46 @@ export function DesktopControlPanel({ permissions, onSetPermission, onInsertCapt
     }
   };
 
+  const invokeDesktopSkill = (action: DesktopSkillAction) => {
+    const skill = findDesktopSkill(hostSkills, action);
+    if (skill === null || onInvokeDesktopSkill === undefined || selected === null) {
+      setError("This desktop action is not available from the connected Muse host.");
+      return;
+    }
+    if (action !== "observe" && !allowed) {
+      setError("Allow desktop control before asking Muse to act on a window.");
+      return;
+    }
+    const pointX = Number(x);
+    const pointY = Number(y);
+    onInvokeDesktopSkill(
+      skill.selector,
+      buildDesktopSkillArguments(action, selected, action === "type" ? text : key, pointX, pointY),
+    );
+    setMessage(`Asked Muse to ${action} the selected window.`);
+  };
+
+  const advertisedDesktopSkills = (Object.keys({
+    observe: true,
+    focus: true,
+    click: true,
+    type: true,
+    key: true,
+    screenshot: true,
+  }) as DesktopSkillAction[]).filter((action) => findDesktopSkill(hostSkills, action) !== null);
+  const desktopSkillInFlight = skillProgress !== undefined
+    && ["preparing", "loading-resources", "sending", "queued", "running", "unknown"].includes(skillProgress.stage)
+    && isAdvertisedDesktopSkill(hostSkills, skillProgress.name);
+  const stopDesktopSkill = () => {
+    if (!desktopSkillInFlight || onCancelDesktopSkill === undefined || stoppingHostSkill) return;
+    setStoppingHostSkill(true);
+    setMessage("Asking Muse to stop the desktop action…");
+    void Promise.resolve(onCancelDesktopSkill())
+      .then(() => setMessage("Stop requested. Waiting for Muse to confirm."))
+      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+      .finally(() => setStoppingHostSkill(false));
+  };
+
   return (
     <section className="desktop-control-panel" aria-label="Desktop control">
       <header className="desktop-control-header">
@@ -244,6 +305,32 @@ export function DesktopControlPanel({ permissions, onSetPermission, onInsertCapt
           </div>
         )}
       </div>
+
+      {advertisedDesktopSkills.length > 0 && (
+        <div className="desktop-host-actions">
+          <div>
+            <strong>Host actions</strong>
+            <p className="muted">Only actions announced by the connected Muse host appear here.</p>
+          </div>
+          <div className="desktop-host-action-buttons">
+            {advertisedDesktopSkills.map((action) => (
+              <button
+                type="button"
+                key={action}
+                onClick={() => invokeDesktopSkill(action)}
+                disabled={busy || selected === null || (action !== "observe" && !allowed)}
+              >
+                {action}
+              </button>
+            ))}
+            {desktopSkillInFlight && (
+              <button type="button" onClick={stopDesktopSkill} disabled={stoppingHostSkill}>
+                {stoppingHostSkill ? "Stopping…" : "Stop Muse action"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <label className="desktop-control-consent">
         <input
