@@ -82,6 +82,44 @@ pub struct SessionMeta {
     pub granted_capabilities: Option<Vec<String>>,
 }
 
+/// Sandbox posture selected when a workspace-owned Muse host is spawned.
+/// Muse fixes this posture for the lifetime of `muse serve`; it cannot be
+/// changed through MSP for an already running host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum HostSandboxMode {
+    Workspace,
+    Network,
+    Elevated,
+}
+
+impl HostSandboxMode {
+    fn parse(raw: Option<&str>) -> Result<Self, String> {
+        match raw.unwrap_or("workspace").trim().to_ascii_lowercase().as_str() {
+            "workspace" => Ok(Self::Workspace),
+            "network" => Ok(Self::Network),
+            "elevated" => Ok(Self::Elevated),
+            other => Err(format!("unsupported sandbox mode `{other}`")),
+        }
+    }
+
+    fn cli_args(&self) -> Vec<&'static str> {
+        match self {
+            // Workspace mode keeps writes and shell execution available in
+            // the selected root while restricting network access.
+            Self::Workspace => vec!["serve", "--sandbox-network", "restricted"],
+            Self::Network => vec!["serve", "--sandbox-network", "enabled"],
+            // Elevated is an explicit product permission and opts out of the
+            // Muse sandbox while retaining explicit network access.
+            Self::Elevated => vec![
+                "serve",
+                "--disable-sandbox",
+                "--sandbox-network",
+                "enabled",
+            ],
+        }
+    }
+}
+
 /// One buffered backend event with its sequence number (poll transport).
 #[derive(Debug, Serialize, Clone)]
 pub struct DrainedEvent {
@@ -257,6 +295,9 @@ struct AppState {
     sessions: Mutex<HashMap<String, SessionMeta>>,
     /// Host-level initialize facts, keyed by canonical workspace root.
     host_durability: Mutex<HashMap<PathBuf, String>>,
+    /// Sandbox posture used to spawn each workspace-owned host. This is a
+    /// process-lifetime fact because Muse does not negotiate it over MSP.
+    host_sandbox: Mutex<HashMap<PathBuf, HostSandboxMode>>,
     /// Host-level capability grants, keyed by canonical workspace root.
     /// Capabilities are fixed for a connection lifetime and never inferred
     /// from the renderer's authorization posture.
@@ -1064,15 +1105,17 @@ async fn ensure_host(
     app: &AppHandle,
     state: &State<'_, AppState>,
     root: &PathBuf,
+    sandbox_mode: Option<&str>,
 ) -> Result<std::sync::Arc<MspClient>, String> {
     // Serialize creation: without this, two concurrent `start_session` calls
     // both pass the check below and spawn two hosts (loser shut down, its
     // in-flight requests failing spuriously).
     let _creation = state.host_mutex.lock().await;
+    let sandbox = HostSandboxMode::parse(sandbox_mode)?;
     if let Some(client) = state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.workspace(root) {
         return Ok(client);
     }
-    let (rx, child) = spawn_sidecar(app, root)?;
+    let (rx, child) = spawn_sidecar(app, root, &sandbox)?;
     let shared: SharedChild = std::sync::Arc::new(tokio::sync::Mutex::new(Some(Box::new(child))));
     let (notify_tx, notify_rx) = mpsc::unbounded_channel::<(String, Value)>();
     let client = std::sync::Arc::new(MspClient::new(shared, notify_tx));
@@ -1116,6 +1159,12 @@ async fn ensure_host(
             ));
         }
     };
+
+    state
+        .host_sandbox
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .insert(root.clone(), sandbox);
 
     // Keep the initialize capability beside the workspace-owned client. It
     // is intentionally advisory: unknown/missing values preserve the legacy
@@ -1213,13 +1262,14 @@ fn resolve_sidecar() -> Result<PathBuf, String> {
 fn spawn_sidecar(
     app: &AppHandle,
     root: &PathBuf,
+    sandbox: &HostSandboxMode,
 ) -> Result<(tauri::async_runtime::Receiver<CommandEvent>, CommandChild), String> {
     let bin = resolve_sidecar()?;
     let cmd = app
         .shell()
         .sidecar(&bin)
         .map_err(|e| format!("sidecar command failed for {}: {e}", bin.display()))?
-        .args(["serve"])
+        .args(sandbox.cli_args())
         .current_dir(root);
     cmd.spawn().map_err(|e| {
         format!(
@@ -2592,6 +2642,7 @@ async fn git_worktree_create_session(
     relative_path: String,
     base_ref: String,
     authorization_mode: Option<String>,
+    sandbox_mode: Option<String>,
     mcp_servers: Option<Value>,
 ) -> Result<WorktreeSessionResult, String> {
     let root = workspace_for_inspection(&state, &session_id)?;
@@ -2605,7 +2656,7 @@ async fn git_worktree_create_session(
     .await
     .map_err(|e| format!("git worktree create task failed: {e}"))??;
     let child_root = PathBuf::from(&created.path);
-    match start_session_at_workspace(app, state, child_root, authorization_mode, mcp_servers).await {
+    match start_session_at_workspace(app, state, child_root, authorization_mode, sandbox_mode, mcp_servers).await {
         Ok(session) => Ok(WorktreeSessionResult {
             worktree: created,
             session,
@@ -3560,9 +3611,10 @@ async fn start_session_at_workspace(
     state: State<'_, AppState>,
     root: PathBuf,
     authorization_mode: Option<String>,
+    sandbox_mode: Option<String>,
     mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
-    let client = ensure_host(&app, &state, &root).await?;
+    let client = ensure_host(&app, &state, &root, sandbox_mode.as_deref()).await?;
     let mut params = json!({
         "commandId": new_command_id(),
         "workspaceRoot": root.display().to_string(),
@@ -3641,10 +3693,11 @@ async fn start_session(
     state: State<'_, AppState>,
     workspace_path: Option<String>,
     authorization_mode: Option<String>,
+    sandbox_mode: Option<String>,
     mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
     let root = resolve_workspace(&state, workspace_path)?;
-    start_session_at_workspace(app, state, root, authorization_mode, mcp_servers).await
+    start_session_at_workspace(app, state, root, authorization_mode, sandbox_mode, mcp_servers).await
 }
 
 /// Create a server-side conversation branch from all completed turns.
@@ -3835,6 +3888,7 @@ async fn resume_session_inner(
     state: &State<'_, AppState>,
     session_id: String,
     workspace_path: String,
+    sandbox_mode: Option<String>,
     mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
     let _resume = state.resume_mutex.lock().await;
@@ -3845,7 +3899,7 @@ async fn resume_session_inner(
         return state.sessions.lock().map_err(|e| e.to_string())?.get(&session_id).cloned()
             .ok_or_else(|| "conversation metadata is unavailable".into());
     }
-    let client = ensure_host(app, state, &root).await?;
+    let client = ensure_host(app, state, &root, sandbox_mode.as_deref()).await?;
     resume_session_with_client(state, client, root, session_id, mcp_servers).await
 }
 
@@ -3855,9 +3909,10 @@ async fn resume_session(
     state: State<'_, AppState>,
     session_id: String,
     workspace_path: String,
+    sandbox_mode: Option<String>,
     mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
-    resume_session_inner(&app, &state, session_id, workspace_path, mcp_servers).await
+    resume_session_inner(&app, &state, session_id, workspace_path, sandbox_mode, mcp_servers).await
 }
 
 /// Read the folded durable item history for an attached conversation.
@@ -5001,6 +5056,38 @@ async fn kill_session(
 mod tests {
     use super::*;
 
+    #[test]
+    fn sandbox_mode_defaults_to_restricted_workspace_host() {
+        let mode = HostSandboxMode::parse(None).unwrap();
+        assert_eq!(mode, HostSandboxMode::Workspace);
+        assert_eq!(
+            mode.cli_args(),
+            vec!["serve", "--sandbox-network", "restricted"]
+        );
+    }
+
+    #[test]
+    fn sandbox_mode_maps_explicit_network_and_elevated_postures() {
+        assert_eq!(
+            HostSandboxMode::parse(Some("network")).unwrap().cli_args(),
+            vec!["serve", "--sandbox-network", "enabled"]
+        );
+        assert_eq!(
+            HostSandboxMode::parse(Some("elevated")).unwrap().cli_args(),
+            vec![
+                "serve",
+                "--disable-sandbox",
+                "--sandbox-network",
+                "enabled"
+            ]
+        );
+    }
+
+    #[test]
+    fn sandbox_mode_rejects_unknown_values() {
+        assert!(HostSandboxMode::parse(Some("full")).is_err());
+    }
+
     struct RecordingChild {
         writes: mpsc::UnboundedSender<Vec<u8>>,
         fail_write: bool,
@@ -5075,6 +5162,7 @@ mod tests {
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
             host_durability: Mutex::new(HashMap::new()),
+            host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
             desktop_control_allowed: Mutex::new(false),
             approvals: Mutex::new(HashMap::new()),
@@ -7477,6 +7565,7 @@ fn main() {
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
             host_durability: Mutex::new(HashMap::new()),
+            host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
             desktop_control_allowed: Mutex::new(false),
             approvals: Mutex::new(HashMap::new()),

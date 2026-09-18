@@ -1217,7 +1217,7 @@ export default function App() {
                     {activeProject !== null && (
                       <div
                         className="task-project-context"
-                        title="Project settings: the model is sent to the host; sandbox and network remain local preferences until the host contract is available."
+                        title="Project settings: the model and isolation posture are sent to a new workspace host; an existing host keeps its posture until restart."
                       >
                         <span>Project: {activeProject.name}</span>
                         <span>
@@ -1225,10 +1225,10 @@ export default function App() {
                             ? "Host default"
                             : activeProjectSettings.model}
                         </span>
-                        <span title="Saved locally; this host has no verified sandbox mutation contract">
+                        <span title="Applied when this workspace host starts; an existing host keeps its posture until restart">
                           Sandbox preference: {activeProjectSettings.sandbox}
                         </span>
-                        <span title="Saved locally; this host has no verified network mutation contract">
+                        <span title="Project network preference remains the approval policy; host network posture is selected at workspace startup">
                           Network preference: {activeProjectSettings.networkDefault}
                         </span>
                         <span>

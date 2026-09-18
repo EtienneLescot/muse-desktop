@@ -346,6 +346,7 @@ import {
 // w-settings (US-16 sandbox + US-31 providers): pure settings helpers
 // (dependency-free, unit-tested); scope-guard client for the path probe.
 import {
+  effectiveSandboxMode,
   PROVIDER_MAP_KEY,
   SETTINGS_KEY,
   parseModelList,
@@ -4097,6 +4098,7 @@ export function useMuseSessions(): UseMuseSessions {
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
         authorizationMode,
+        sandboxMode: effectiveSandboxMode(sandbox),
         mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
       });
       const requestedModelId = projectSettings?.model.trim();
@@ -4142,6 +4144,7 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [
       authorizationMode,
+      sandbox,
       refreshHostSkills,
       setConnectionState,
       setSessionModel,
@@ -4271,6 +4274,7 @@ export function useMuseSessions(): UseMuseSessions {
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
         workspacePath: session.workspace,
+        sandboxMode: effectiveSandboxMode(sandbox),
         mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
       });
       if (tombstoned.current?.has(id)) return;
@@ -4358,7 +4362,7 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, readHistoryEntries, refreshHostSkills, sessions, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState]);
+  }, [authorizationMode, readHistoryEntries, refreshHostSkills, sessions, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, sandbox]);
 
   const startSession = useCallback(async () => {
     return await startSessionRow(undefined, globalSettings);
@@ -4406,6 +4410,7 @@ export function useMuseSessions(): UseMuseSessions {
           relativePath: plan.path,
           baseRef: plan.base,
           authorizationMode,
+          sandboxMode: effectiveSandboxMode(sandbox),
           mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
         });
         setWorktrees((current) => [
@@ -4454,6 +4459,7 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [
       authorizationMode,
+      sandbox,
       refreshHostSkills,
       setConnectionState,
       setSessionModel,
