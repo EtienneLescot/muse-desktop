@@ -5573,6 +5573,147 @@ mod tests {
     }
 
     #[test]
+    fn generated_tauri_invoke_keeps_interleaved_session_approval_routes_isolated() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![send_input, approve])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client_a, mut frames_a) = fixture_client(false);
+        let (client_b, mut frames_b) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client_a.clone());
+        register_fixture_session(state.inner(), "session-b", "fixture-b", client_b.clone());
+
+        let responder_a_client = client_a.clone();
+        let responder_a = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let turn = fixture_frame(&mut frames_a).await;
+                assert_eq!(turn["method"], "turn/start");
+                assert_eq!(turn["params"]["sessionId"], "session-a");
+                responder_a_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": turn["id"],
+                        "result": {"status":"accepted", "turnId":"turn-a"}
+                    }))
+                    .await;
+
+                let approval = fixture_frame(&mut frames_a).await;
+                assert_eq!(approval["method"], "approval/decide");
+                assert_eq!(approval["params"]["sessionId"], "session-a");
+                responder_a_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": approval["id"],
+                        "result": {"terminal": true}
+                    }))
+                    .await;
+            });
+        });
+        let responder_b = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let turn = fixture_frame(&mut frames_b).await;
+                assert_eq!(turn["method"], "turn/start");
+                assert_eq!(turn["params"]["sessionId"], "session-b");
+                client_b
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": turn["id"],
+                        "result": {"status":"accepted", "turnId":"turn-b"}
+                    }))
+                    .await;
+            });
+        });
+
+        let invoke = |cmd: &str, body: Value| -> Value {
+            tauri::test::get_ipc_response(
+                &webview,
+                tauri::webview::InvokeRequest {
+                    cmd: cmd.into(),
+                    callback: tauri::ipc::CallbackFn(0),
+                    error: tauri::ipc::CallbackFn(1),
+                    url: if cfg!(any(windows, target_os = "android")) {
+                        "http://tauri.localhost"
+                    } else {
+                        "tauri://localhost"
+                    }
+                    .parse()
+                    .unwrap(),
+                    body: tauri::ipc::InvokeBody::Json(body),
+                    headers: Default::default(),
+                    invoke_key: tauri::test::INVOKE_KEY.to_string(),
+                },
+            )
+            .expect("Tauri invoke should succeed")
+            .deserialize::<Value>()
+            .expect("Tauri response should be JSON")
+        };
+
+        let sent_a = invoke(
+            "send_input",
+            json!({
+                "sessionId": "session-a",
+                "commandId": "command-a",
+                "text": "inspect A",
+                "inputParts": null
+            }),
+        );
+        let sent_b = invoke(
+            "send_input",
+            json!({
+                "sessionId": "session-b",
+                "commandId": "command-b",
+                "text": "inspect B",
+                "inputParts": null
+            }),
+        );
+        assert_eq!(sent_a["turnId"], "turn-a");
+        assert_eq!(sent_b["turnId"], "turn-b");
+
+        let mut emitted = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            emitted.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        for sid in ["session-a", "session-b"] {
+            route_notification_with_emit(
+                state.inner(),
+                "approval/requested",
+                &json!({
+                    "sessionId": sid,
+                    "approvalId": "same-approval",
+                    "currentRequirementId": format!("requirement-{sid}"),
+                    "subject": {"kind":"shell","command":"echo safe"}
+                }),
+                &mut emit,
+            );
+        }
+        assert_eq!(emitted.len(), 2);
+
+        let approved = invoke(
+            "approve",
+            json!({
+                "sessionId": "session-a",
+                "approvalId": "same-approval",
+                "choiceId": "allow-once"
+            }),
+        );
+        assert_eq!(approved, json!(true));
+        responder_a.join().expect("session A responder should finish");
+        responder_b.join().expect("session B responder should finish");
+
+        let approvals = state.inner().approvals.lock().unwrap();
+        assert!(!approvals.contains_key(&("session-a".to_string(), "same-approval".to_string())));
+        assert!(approvals.contains_key(&("session-b".to_string(), "same-approval".to_string())));
+        assert!(state.inner().sessions.lock().unwrap()["session-a"].running);
+        assert!(state.inner().sessions.lock().unwrap()["session-b"].running);
+    }
+
+    #[test]
     fn generated_tauri_invoke_answers_user_input_on_the_target_session() {
         let app = tauri::test::mock_builder()
             .manage(empty_state())
