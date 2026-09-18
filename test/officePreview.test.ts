@@ -57,6 +57,41 @@ test("PPTX preview keeps slide order and text", () => {
   assert.deepEqual(preview?.rows, [["1", "First slide"], ["2", "Second"]]);
 });
 
+test("ODT preview extracts headings and paragraphs", () => {
+  const data = archive({
+    "content.xml":
+      "<office:document-content><office:body><office:text><text:h>Title</text:h><text:p>Hello <text:span>world</text:span></text:p></office:text></office:body></office:document-content>",
+  });
+  const preview = officePreviewForFile("notes.odt", data);
+  assert.deepEqual(preview, {
+    kind: "table",
+    format: "odt",
+    columns: ["Paragraph"],
+    rows: [["Title"], ["Hello world"]],
+    truncated: false,
+  });
+});
+
+test("ODS preview extracts bounded rows and repeated cells", () => {
+  const data = archive({
+    "content.xml":
+      "<office:document-content><table:table><table:table-row><table:table-cell><text:p>Name</text:p></table:table-cell><table:table-cell><text:p>Age</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell table:number-columns-repeated=\"2\"><text:p>Ada</text:p></table:table-cell></table:table-row></table:table></office:document-content>",
+  });
+  const preview = officePreviewForFile("people.ods", data);
+  assert.equal(preview?.format, "ods");
+  assert.deepEqual(preview?.columns, ["Name", "Age"]);
+  assert.deepEqual(preview?.rows, [["Ada", "Ada"]]);
+});
+
+test("ODP preview extracts slide text in document order", () => {
+  const data = archive({
+    "content.xml":
+      "<office:document-content><draw:page><text:p>First</text:p><text:p>slide</text:p></draw:page><draw:page><text:p>Second</text:p></draw:page></office:document-content>",
+  });
+  const preview = officePreviewForFile("deck.odp", data);
+  assert.deepEqual(preview?.rows, [["1", "First slide"], ["2", "Second"]]);
+});
+
 test("office preview rejects malformed archives and unsupported files", () => {
   assert.equal(officePreviewForFile("notes.docx", "not-base64"), null);
   assert.equal(officePreviewForFile("notes.txt", "aGVsbG8="), null);

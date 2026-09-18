@@ -49,6 +49,9 @@ function mediaLabel(mediaType: string): string {
   if (mediaType.includes("wordprocessingml.document")) return "DOCX preview";
   if (mediaType.includes("spreadsheetml.sheet")) return "XLSX preview";
   if (mediaType.includes("presentationml.presentation")) return "PPTX preview";
+  if (mediaType.includes("opendocument.text")) return "ODT preview";
+  if (mediaType.includes("opendocument.spreadsheet")) return "ODS preview";
+  if (mediaType.includes("opendocument.presentation")) return "ODP preview";
   return "Image preview";
 }
 
@@ -125,6 +128,10 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
   const officePreview = preview?.mediaType && preview.base64Data
     ? officePreviewForFile(preview.path, preview.base64Data)
     : null;
+  const isOfficeContainer = preview?.mediaType
+    ? preview.mediaType.startsWith("application/vnd.openxmlformats")
+      || preview.mediaType.startsWith("application/vnd.oasis.opendocument")
+    : false;
 
   return (
     <section className="files-panel" aria-label="Workspace files">
@@ -211,7 +218,7 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
                   </button>
                 </span>
               </div>
-              {preview.mediaType.startsWith("application/vnd.openxmlformats") ? (
+              {isOfficeContainer ? (
                 officePreview ? (
                   <StructuredTable path={preview.path} preview={officePreview} />
                 ) : (
