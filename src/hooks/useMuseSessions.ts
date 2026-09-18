@@ -1807,6 +1807,7 @@ export function useMuseSessions(): UseMuseSessions {
       const events: unknown[] = [];
       let cursor: string | undefined;
       let previousCursor: string | undefined;
+      let reachedEnd = false;
       for (let page = 0; page < 8; page += 1) {
         const result = await invoke<unknown>("page_session_history", {
           sessionId,
@@ -1822,12 +1823,18 @@ export function useMuseSessions(): UseMuseSessions {
         const next = typeof envelope.nextCursor === "string" && envelope.nextCursor.trim().length > 0
           ? envelope.nextCursor.trim()
           : undefined;
-        if (next === undefined) break;
+        if (next === undefined) {
+          reachedEnd = true;
+          break;
+        }
         if (next === cursor || next === previousCursor) {
           throw new Error("view/page returned a repeated history cursor");
         }
         previousCursor = cursor;
         cursor = next;
+      }
+      if (!reachedEnd) {
+        throw new Error("view/page exceeded the bounded history page limit");
       }
       return historyEventsToLogEntries(events);
     }
