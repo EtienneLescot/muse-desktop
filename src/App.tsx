@@ -744,6 +744,13 @@ export default function App() {
             showArchived={false}
             activeId={page === "task" && !settingsOpen ? activeId : null}
             pendingCounts={pendingCounts}
+            pendingSendCount={pendingSends.length}
+            onOpenPendingSends={() => {
+              const first = pendingSends[0];
+              if (first === undefined) return;
+              openPage("task");
+              setActive(first.sessionId);
+            }}
             compactedIds={Object.keys(summaries)}
             onSelect={(id) => {
               openPage("task");
