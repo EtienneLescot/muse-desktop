@@ -152,6 +152,23 @@ export function browserDownloadFilename(url: string, suggested?: string): string
   return "muse-download";
 }
 
+/**
+ * Resolve a page-triggered download without crossing the page origin or
+ * leaving the http(s)-only browser boundary.
+ */
+export function normalizeSameOriginDownloadTarget(pageUrl: string, targetUrl: string): string | null {
+  const page = normalizeBrowserUrl(pageUrl);
+  if (page === null) return null;
+  try {
+    const pageOrigin = new URL(page);
+    const target = new URL(targetUrl, pageOrigin);
+    if (!/^https?:$/.test(target.protocol) || target.origin !== pageOrigin.origin) return null;
+    return target.toString();
+  } catch {
+    return null;
+  }
+}
+
 /** Validate and bound element metadata before it is persisted or sent. */
 export function normalizeBrowserElementAnchor(raw: unknown): BrowserElementAnchor | null {
   if (typeof raw !== "object" || raw === null) return null;

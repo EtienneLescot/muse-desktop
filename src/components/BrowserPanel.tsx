@@ -8,6 +8,7 @@ import {
   formatBrowserCaptureContext,
   formatBrowserObservation,
   normalizeBrowserObservation,
+  normalizeSameOriginDownloadTarget,
   normalizeBrowserUrl,
   createBrowserTab,
   loadBrowserTabs,
@@ -85,6 +86,7 @@ export function BrowserPanel({
   const captureImageRef = useRef<HTMLImageElement>(null);
   const captureDragRef = useRef<{ x: number; y: number } | null>(null);
   const selectionCleanupRef = useRef<(() => void) | null>(null);
+  const browserControlsAllowedRef = useRef(false);
 
   useEffect(() => {
     saveBrowserTabs(tabs);
@@ -141,13 +143,29 @@ export function BrowserPanel({
           // Cross-origin access is unavailable by design.
         }
       };
+      const syncPageDownload = (event: MouseEvent) => {
+        const target = event.target;
+        const anchor = target instanceof Element
+          ? target.closest("a[href]") as HTMLAnchorElement | null
+          : null;
+        if (anchor === null || !anchor.hasAttribute("download")) return;
+        event.preventDefault();
+        if (!browserControlsAllowedRef.current) {
+          setDownloadStatus("Allow computer-use for browser before saving a page download.");
+          return;
+        }
+        setElementAnchor(describeBrowserElement(anchor));
+        void downloadLink(anchor.href, anchor.getAttribute("download") ?? undefined);
+      };
       document.addEventListener("selectionchange", syncSelection);
       document.addEventListener("mouseup", syncSelection);
       document.addEventListener("click", syncElement, true);
+      document.addEventListener("click", syncPageDownload, true);
       selectionCleanupRef.current = () => {
         document.removeEventListener("selectionchange", syncSelection);
         document.removeEventListener("mouseup", syncSelection);
         document.removeEventListener("click", syncElement, true);
+        document.removeEventListener("click", syncPageDownload, true);
       };
     } catch {
       // The iframe is cross-origin; the explicit selection field remains the
@@ -253,23 +271,23 @@ export function BrowserPanel({
     }
   };
 
-  const downloadSelectedLink = async (): Promise<void> => {
-    if (!browserControlsAllowed) {
+  const downloadLink = async (link: string | undefined, suggested?: string): Promise<void> => {
+    if (!browserControlsAllowedRef.current) {
       setDownloadStatus("Allow computer-use for browser before saving a page link.");
       return;
     }
-    const link = elementAnchor?.href;
     if (!link || normalized === null) {
       setDownloadStatus("Select a link in the same-origin page before downloading it.");
       return;
     }
     try {
       const page = new URL(normalized);
-      const target = new URL(link);
-      if (target.origin !== page.origin) {
+      const targetUrl = normalizeSameOriginDownloadTarget(page.toString(), link);
+      if (targetUrl === null) {
         setDownloadStatus("For safety, downloads are limited to the current page origin.");
         return;
       }
+      const target = new URL(targetUrl);
       setDownloadStatus("Fetching the selected link…");
       let encoded: string;
       let contentType = "application/octet-stream";
@@ -308,7 +326,7 @@ export function BrowserPanel({
         }
         encoded = btoa(text);
       }
-      const filename = browserDownloadFilename(target.toString(), elementAnchor?.downloadName);
+      const filename = browserDownloadFilename(target.toString(), suggested ?? elementAnchor?.downloadName);
       if (isTauriRuntime()) {
         const [{ save }, { invoke }] = await Promise.all([
           import("@tauri-apps/plugin-dialog"),
@@ -337,6 +355,10 @@ export function BrowserPanel({
       const message = error instanceof Error ? error.message : String(error);
       setDownloadStatus(`Download failed: ${userFacingError(message)}`);
     }
+  };
+
+  const downloadSelectedLink = async (): Promise<void> => {
+    await downloadLink(elementAnchor?.href, elementAnchor?.downloadName);
   };
 
   const captureVisiblePage = async (): Promise<void> => {
@@ -608,6 +630,7 @@ export function BrowserPanel({
   const isAllowed = (app: string) =>
     permissions.find((p) => p.app === app)?.allowed === true;
   const browserControlsAllowed = isAllowed("browser");
+  browserControlsAllowedRef.current = browserControlsAllowed;
 
   return (
     <section className="browser-panel" aria-label="In-app browser">
