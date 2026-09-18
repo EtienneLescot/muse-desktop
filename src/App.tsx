@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
@@ -304,6 +304,8 @@ export default function App() {
   sessionsRef.current = sessions;
   const scheduleRunsRef = useRef(scheduleRuns);
   scheduleRunsRef.current = scheduleRuns;
+  const [pendingNotificationAction, setPendingNotificationAction] =
+    useState<NotificationActionPayload | null>(null);
   const [workPanel, setWorkPanel] = useState<
     "artifacts" | "browser" | "memory" | "tools" | "review" | "terminal" | "files" | null
   >(null);
@@ -343,31 +345,50 @@ export default function App() {
       settingsTrigger.current?.focus();
     }
   }, [settingsOpen]);
-  const openPage = (next: typeof page) => {
+  const openPage = useCallback((next: typeof page) => {
     setSettingsOpen(false);
     setPage(next);
-  };
+  }, []);
+
+  const routeNotificationAction = useCallback((payload: NotificationActionPayload): boolean => {
+    const route = resolveNotificationRoute(
+      payload,
+      sessionsRef.current.map((session) => session.session_id),
+      scheduleRunsRef.current.map((run) => run.id),
+    );
+    if (route?.kind === "task") {
+      openPage("task");
+      setActive(route.sessionId);
+      return true;
+    }
+    if (route?.kind === "automations") {
+      openPage("automations");
+      return true;
+    }
+    return false;
+  }, [openPage, setActive]);
+
+  // Native notification actions can be delivered while session/list and the
+  // native run ledger are still hydrating. Keep the bounded action until the
+  // existing SSOT contains its target instead of dropping the user's click.
+  useEffect(() => {
+    if (pendingNotificationAction === null) return;
+    if (routeNotificationAction(pendingNotificationAction)) {
+      setPendingNotificationAction(null);
+    }
+  }, [pendingNotificationAction, routeNotificationAction, sessions, scheduleRuns]);
+  useEffect(() => {
+    if (pendingNotificationAction === null) return;
+    const timeout = window.setTimeout(() => setPendingNotificationAction(null), 30_000);
+    return () => window.clearTimeout(timeout);
+  }, [pendingNotificationAction]);
 
   // M3-09: a native/web notification click carries only a bounded session or
   // run id. Resolve it through the existing session SSOT and focus the task;
   // no notification payload is treated as transcript content.
   useEffect(() => {
     const openFromAction = (payload: NotificationActionPayload) => {
-      const route = resolveNotificationRoute(
-        payload,
-        sessionsRef.current.map((session) => session.session_id),
-        scheduleRunsRef.current.map((run) => run.id),
-      );
-      if (route?.kind === "task") {
-        openPage("task");
-        setActive(route.sessionId);
-        return;
-      }
-      // A dispatch can fail before a session exists. Keep that notification
-      // actionable by opening the durable run inbox instead of dropping it.
-      if (route?.kind === "automations") {
-        openPage("automations");
-      }
+      if (!routeNotificationAction(payload)) setPendingNotificationAction(payload);
     };
     const onWebAction = (event: Event) => {
       const detail = (event as CustomEvent<NotificationActionPayload>).detail;
@@ -385,7 +406,7 @@ export default function App() {
       window.removeEventListener(NOTIFICATION_ACTION_EVENT, onWebAction);
       dispose?.();
     };
-  }, [setActive]);
+  }, [routeNotificationAction]);
   const newTask = () => {
     openPage("task");
     setActive(null);
