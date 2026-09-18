@@ -12,6 +12,7 @@ use std::process::Command;
 
 pub const SCHEMA: &str = "muse-desktop.scheduler-wakeup.v1";
 const TASK_NAME: &str = "Muse-Desktop\\AutomationWake";
+#[cfg(any(target_os = "macos", test))]
 const MAC_LABEL: &str = "com.muse.desktop.automation-wake";
 #[cfg(target_os = "linux")]
 const LINUX_SERVICE: &str = "muse-desktop-automation-wake.service";
@@ -87,6 +88,7 @@ fn launchd_uid() -> Result<String, String> {
     Ok(uid)
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn launchd_plist(executable: &Path, wake_at: u64) -> Result<String, String> {
     let command = executable
         .to_str()
@@ -151,6 +153,7 @@ fn systemd_user_dir() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join(".config/systemd/user"))
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn systemd_escape(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -159,6 +162,7 @@ fn systemd_escape(value: &str) -> String {
         .replace('\n', " ")
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn systemd_unit_files(executable: &Path, wake_at: u64) -> Result<(String, String), String> {
     let command = executable
         .to_str()
