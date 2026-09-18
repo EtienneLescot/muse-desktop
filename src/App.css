@@ -3208,6 +3208,38 @@ body.dark .composer textarea::placeholder {
   grid-column: 1 / -1;
   color: var(--warning, #c48721);
 }
+.orchestration-writer-result {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, var(--blue) 22%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 88%, var(--blue) 12%);
+}
+.orchestration-writer-result summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+.orchestration-writer-result p {
+  margin: 5px 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+.orchestration-writer-result blockquote {
+  max-height: 96px;
+  margin: 5px 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--text);
+  font-size: 0.68rem;
+}
+.orchestration-writer-result small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.64rem;
+}
 
 /* ---- US-12 + US-21 artifacts pane: right-side column next to the thread. */
 /* Later equal-specificity rule: session-view becomes a row (center + pane). */

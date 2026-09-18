@@ -9,10 +9,12 @@ import {
 import { loadWriterTargets, saveWriterTargets } from "../lib/writerTargets";
 import {
   buildWriterPrompt,
+  summarizeWriterLog,
   writerDispatchCanStart,
   writerDispatchIsActive,
   type WriterDispatchRecord,
 } from "../lib/writerDispatch";
+import type { LogEntry } from "../lib/persist";
 import {
   buildHandoffPlan,
   isHandoffPlanStale,
@@ -82,6 +84,8 @@ interface Props {
   onOpenWriterConversation?: (sessionId: string) => void;
   /** Latest host running projection, keyed by conversation id. */
   writerSessionRunning?: Readonly<Record<string, boolean>>;
+  /** Local transcript projection for dispatched writer conversations. */
+  writerLogs?: Readonly<Record<string, readonly LogEntry[]>>;
   /** Objective text captured from the parent sub-agent entry. */
   writerPrompts?: Readonly<Record<string, string>>;
   onInspectWorktree: (
@@ -121,6 +125,7 @@ export function OrchestrationPanel({
   onStopWriter,
   onOpenWriterConversation,
   writerSessionRunning,
+  writerLogs,
   writerPrompts,
   onInspectWorktree,
   onCheckReadiness,
@@ -230,19 +235,34 @@ export function OrchestrationPanel({
       let next = current;
       let changed = false;
       for (const [agent, dispatch] of Object.entries(current)) {
+        const observedResult = dispatch.sessionId === null
+          ? null
+          : summarizeWriterLog(writerLogs?.[dispatch.sessionId] ?? []);
         if (
           dispatch.status === "running" &&
           dispatch.sessionId !== null &&
           writerSessionRunning[dispatch.sessionId] === false
         ) {
           if (!changed) next = { ...current };
-          next[agent] = { ...dispatch, status: "complete" };
+          next[agent] = {
+            ...dispatch,
+            status: "complete",
+            result: observedResult,
+          };
+          changed = true;
+        } else if (
+          dispatch.status === "complete" &&
+          observedResult !== null &&
+          dispatch.result?.entryCount !== observedResult.entryCount
+        ) {
+          if (!changed) next = { ...current };
+          next[agent] = { ...dispatch, result: observedResult };
           changed = true;
         }
       }
       return changed ? next : current;
     });
-  }, [writerSessionRunning]);
+  }, [writerLogs, writerSessionRunning]);
 
   async function dispatchWriter(row: WriterQueueRow): Promise<void> {
     if (onDispatchWriter === undefined) return;
@@ -267,6 +287,7 @@ export function OrchestrationPanel({
         status: "starting",
         prompt,
         error: null,
+        result: null,
       },
     }));
     try {
@@ -280,6 +301,7 @@ export function OrchestrationPanel({
               status: "failed",
               prompt,
               error: "The writer conversation could not be started.",
+              result: null,
             }
           : {
               agent: row.agent,
@@ -287,6 +309,7 @@ export function OrchestrationPanel({
               status: "running",
               prompt,
               error: null,
+              result: null,
             },
       }));
     } catch (error) {
@@ -298,6 +321,7 @@ export function OrchestrationPanel({
           status: "failed",
           prompt,
           error: userFacingError(error, "The writer dispatch failed."),
+          result: null,
         },
       }));
     }
@@ -313,16 +337,24 @@ export function OrchestrationPanel({
     ) {
       return;
     }
+    const writerSessionId = dispatch.sessionId;
     setWriterDispatches((current) => ({
       ...current,
       [agent]: { ...dispatch, status: "stopping" },
     }));
     try {
-      await onStopWriter(dispatch.sessionId);
+      await onStopWriter(writerSessionId);
       setWriterDispatches((current) => {
         const latest = current[agent];
-        return latest?.sessionId === dispatch.sessionId
-          ? { ...current, [agent]: { ...latest, status: "complete" } }
+        return latest?.sessionId === writerSessionId
+          ? {
+              ...current,
+              [agent]: {
+                ...latest,
+                status: "complete",
+                result: summarizeWriterLog(writerLogs?.[writerSessionId] ?? []),
+              },
+            }
           : current;
       });
     } catch (error) {
@@ -587,6 +619,19 @@ export function OrchestrationPanel({
                   {dispatch?.status === "complete" ? ` · Complete` : ""}
                   {dispatch?.status === "failed" ? ` · Failed` : ""}
                 </span>
+                {dispatch?.result !== null && dispatch?.result !== undefined && (
+                  <details className="orchestration-writer-result">
+                    <summary>Observed writer result</summary>
+                    <p>
+                      {dispatch.result.entryCount} transcript entries · {dispatch.result.assistantMessages} assistant messages · {dispatch.result.toolEvents} tool events
+                      {dispatch.result.failures > 0 ? ` · ${dispatch.result.failures} failure${dispatch.result.failures === 1 ? "" : "s"}` : ""}
+                    </p>
+                    {dispatch.result.lastAssistantOutput !== null && (
+                      <blockquote>{dispatch.result.lastAssistantOutput}</blockquote>
+                    )}
+                    <small>Extracted from the local writer transcript; the host did not provide a structured result.</small>
+                  </details>
+                )}
                 {parsed.invalid.length > 0 && (
                   <small>Ignored invalid paths: {parsed.invalid.join(", ")}</small>
                 )}

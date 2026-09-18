@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildWriterPrompt,
+  summarizeWriterLog,
   writerDispatchCanStart,
   writerDispatchIsActive,
 } from "../src/lib/writerDispatch.ts";
@@ -35,5 +36,31 @@ describe("writer dispatch", () => {
     assert.equal(writerDispatchIsActive("stopping"), true);
     assert.equal(writerDispatchIsActive("complete"), false);
     assert.equal(writerDispatchIsActive("failed"), false);
+  });
+
+  it("summarizes observed writer output without claiming host structure", () => {
+    const result = summarizeWriterLog([
+      { id: "u", ts: 1, role: "user", text: "Do the work" },
+      { id: "t", ts: 2, role: "tool", text: "npm test" },
+      { id: "a", ts: 3, role: "assistant", text: "Finished the change" },
+      {
+        id: "e",
+        ts: 4,
+        role: "system",
+        text: "The host reported an error",
+        engineError: { kind: "host", message: "failed", retryable: false },
+      },
+    ]);
+    assert.deepEqual(result, {
+      entryCount: 4,
+      assistantMessages: 1,
+      toolEvents: 1,
+      failures: 1,
+      lastAssistantOutput: "Finished the change",
+    });
+  });
+
+  it("returns no summary before a writer transcript exists", () => {
+    assert.equal(summarizeWriterLog([]), null);
   });
 });

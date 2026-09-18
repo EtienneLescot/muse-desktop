@@ -1601,6 +1601,7 @@ export default function App() {
                               startSessionInWorkspace(record.path, activeProjectSettings)
                             }
                             writerPrompts={orchestrationWriterPrompts}
+                            writerLogs={logs}
                             writerSessionRunning={writerSessionRunning}
                             onDispatchWriter={async (record, prompt) => {
                               const sourceId = activeId;

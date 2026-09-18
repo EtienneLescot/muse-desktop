@@ -7,6 +7,7 @@
  * admitted the writer.
  */
 import type { WriterQueueStatus } from "./writerQueue";
+import type { LogEntry } from "./persist";
 
 export const MAX_WRITER_OBJECTIVE = 2_000;
 export const MAX_WRITER_PROMPT = 6_000;
@@ -18,17 +19,57 @@ export type WriterDispatchStatus =
   | "complete"
   | "failed";
 
+/**
+ * Local, extractive evidence from a writer transcript. This is deliberately
+ * not a host result: until MSP exposes a structured writer completion payload,
+ * Muse can only report what it has already observed in the child log.
+ */
+export interface WriterResultSummary {
+  entryCount: number;
+  assistantMessages: number;
+  toolEvents: number;
+  failures: number;
+  lastAssistantOutput: string | null;
+}
+
 export interface WriterDispatchRecord {
   agent: string;
   sessionId: string | null;
   status: WriterDispatchStatus;
   prompt: string;
   error: string | null;
+  result?: WriterResultSummary | null;
 }
 
 function clip(value: string, max: number): string {
   const trimmed = value.trim();
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+}
+
+/** Build a bounded, local summary from the writer's observed transcript. */
+export function summarizeWriterLog(
+  entries: readonly LogEntry[],
+): WriterResultSummary | null {
+  if (entries.length === 0) return null;
+  let lastAssistantOutput: string | null = null;
+  let assistantMessages = 0;
+  let toolEvents = 0;
+  let failures = 0;
+  for (const entry of entries) {
+    if (entry.role === "assistant") {
+      assistantMessages += 1;
+      if (entry.text.trim() !== "") lastAssistantOutput = clip(entry.text, 320);
+    }
+    if (entry.role === "tool") toolEvents += 1;
+    if (entry.engineError !== undefined) failures += 1;
+  }
+  return {
+    entryCount: entries.length,
+    assistantMessages,
+    toolEvents,
+    failures,
+    lastAssistantOutput,
+  };
 }
 
 /** Build an explicit, bounded task for the writer conversation. */
