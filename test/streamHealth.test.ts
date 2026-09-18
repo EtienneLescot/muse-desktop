@@ -111,6 +111,7 @@ describe("stream health", () => {
   it("maps transport events to safe progress hints", () => {
     assert.equal(streamEventLabel("thinking"), "reasoning update");
     assert.equal(streamEventLabel("approval/resolved"), "authorization resolved");
+    assert.equal(streamEventLabel("turn/stopped"), "turn stopped");
     assert.equal(streamEventLabel("history/reconciled"), "conversation synchronized");
     assert.equal(streamEventLabel("future/new_event"), "future new event");
     assert.equal(streamEventLabel(""), null);
