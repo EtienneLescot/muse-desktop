@@ -3493,6 +3493,10 @@ async fn resume_session_with_client(
     resume::validate(read.get("session").ok_or("session/read returned no conversation")?, &session_id, &root)?;
     // Register before resume: pending approval/input events may immediately
     // follow the response, before this awaiting task is scheduled again.
+    let mut resume_params = resume::params(&session_id, new_command_id());
+    if let Some(config) = mcp_session_config(mcp_servers)? {
+        resume_params["config"] = config;
+    }
     let mut meta = SessionMeta {
         session_id: session_id.clone(),
         workspace: root.display().to_string(),
@@ -3509,10 +3513,9 @@ async fn resume_session_with_client(
         granted_capabilities: session_granted_capabilities(&state, &root)?,
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
-    state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client)?;
-    let mut resume_params = resume::params(&session_id, new_command_id());
-    if let Some(config) = mcp_session_config(mcp_servers)? {
-        resume_params["config"] = config;
+    if let Err(error) = state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client) {
+        state.sessions.lock().map_err(|e| e.to_string())?.remove(&session_id);
+        return Err(error);
     }
     let result = client.request("session/resume", resume_params).await;
     match result {
@@ -3526,11 +3529,16 @@ async fn resume_session_with_client(
                     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
                     Ok(meta)
                 }
-                Err(error) => { state.hosts.lock().map_err(|e| e.to_string())?.forget(&session_id); Err(error) }
+                Err(error) => {
+                    state.hosts.lock().map_err(|e| e.to_string())?.forget(&session_id);
+                    state.sessions.lock().map_err(|e| e.to_string())?.remove(&session_id);
+                    Err(error)
+                }
             }
         }
         Err(error) => {
             state.hosts.lock().map_err(|e| e.to_string())?.forget(&session_id);
+            state.sessions.lock().map_err(|e| e.to_string())?.remove(&session_id);
             Err(format!("could not reconnect conversation: {error}"))
         }
     }
@@ -5968,6 +5976,71 @@ mod tests {
         assert_eq!(response.approval_mode.as_deref(), Some("promptUnmatched"));
         assert!(state.hosts.lock().unwrap().owns("durable-session", &client));
         assert_eq!(state.sessions.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn durable_resume_cleans_metadata_when_host_returns_invalid_resume() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        let root = std::env::current_dir().expect("test workspace").canonicalize().unwrap();
+        state.hosts.lock().unwrap().insert(root.clone(), client.clone());
+        state
+            .host_durability
+            .lock()
+            .unwrap()
+            .insert(root.clone(), "durable".to_string());
+
+        let responder_client = client.clone();
+        let responder_root = root.clone();
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let read = fixture_frame(&mut frames).await;
+                assert_eq!(read["method"], "session/read");
+                responder_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": read["id"],
+                        "result": {
+                            "session": {
+                                "sessionId": "broken-resume",
+                                "path": "durable.jsonl",
+                                "workspaceRoot": responder_root,
+                                "status": "idle"
+                            }
+                        }
+                    }))
+                    .await;
+
+                let resume = fixture_frame(&mut frames).await;
+                assert_eq!(resume["method"], "session/resume");
+                responder_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": resume["id"],
+                        "result": {}
+                    }))
+                    .await;
+            });
+        });
+
+        let error = tauri::async_runtime::block_on(resume_session_with_client(
+            &state,
+            client.clone(),
+            root,
+            "broken-resume".to_string(),
+            None,
+        ))
+        .expect_err("missing resume session should fail");
+
+        responder.join().expect("resume responder should finish");
+        assert!(error.contains("session/resume returned no conversation"), "{error}");
+        assert!(!state.hosts.lock().unwrap().owns("broken-resume", &client));
+        assert!(!state.sessions.lock().unwrap().contains_key("broken-resume"));
     }
 
     #[test]
