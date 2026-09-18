@@ -100,6 +100,7 @@ export default function App() {
     setWorkspace,
     sandbox,
     setSandbox,
+    restartHost,
     authorizationMode,
     setAuthorizationMode,
     providerId,
@@ -877,6 +878,7 @@ export default function App() {
               onPickWorkspace={setWorkspace}
               sandbox={sandbox}
               onSandboxChange={setSandbox}
+              onRestartHost={backendMissing ? undefined : () => restartHost(workspace)}
               authorizationMode={authorizationMode}
               onAuthorizationModeChange={setAuthorizationMode}
               reasoningEffort={globalSettings.reasoningEffort}

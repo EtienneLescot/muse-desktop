@@ -347,6 +347,7 @@ import {
 // (dependency-free, unit-tested); scope-guard client for the path probe.
 import {
   hostSandboxConfigForProject,
+  effectiveSandboxMode,
   PROVIDER_MAP_KEY,
   SETTINGS_KEY,
   parseModelList,
@@ -810,6 +811,8 @@ interface UseMuseSessions {
   /** w-settings: sandbox settings (persisted) + whole-object setter. */
   sandbox: SandboxSettings;
   setSandbox: (next: SandboxSettings) => void;
+  /** M2-02: explicitly restart the workspace host after a posture change. */
+  restartHost: (workspacePath?: string | null) => Promise<boolean>;
   /** Global tool-authorization posture (persisted locally). */
   authorizationMode: AuthorizationMode;
   setAuthorizationMode: (mode: AuthorizationMode) => void;
@@ -3790,6 +3793,31 @@ export function useMuseSessions(): UseMuseSessions {
   const setSandbox = useCallback((next: SandboxSettings) => {
     setSandboxState(parseSandboxSettings(next));
   }, []);
+
+  const restartHost = useCallback(async (workspacePath?: string | null): Promise<boolean> => {
+    if (!isTauriRuntime()) {
+      setError("Restarting a Muse host is available in the desktop app.");
+      return false;
+    }
+    const target = workspacePath?.trim() || workspace?.trim();
+    if (!target) {
+      setError("Pick a workspace folder before restarting the Muse host.");
+      return false;
+    }
+    try {
+      setError(null);
+      await invoke("restart_host", {
+        workspacePath: target,
+        sandboxMode: effectiveSandboxMode(sandbox),
+        sandboxDisableWrite: false,
+        sandboxDisableShell: false,
+      });
+      return true;
+    } catch (e) {
+      setError(`Host restart failed: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
+  }, [sandbox, workspace]);
 
   const setAuthorizationMode = useCallback((mode: AuthorizationMode) => {
     const next = parseAuthorizationMode(mode);
@@ -7666,6 +7694,7 @@ export function useMuseSessions(): UseMuseSessions {
     setActive,
     sandbox,
     setSandbox,
+    restartHost,
     authorizationMode,
     setAuthorizationMode,
     providerId,

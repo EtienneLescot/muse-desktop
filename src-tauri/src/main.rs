@@ -847,6 +847,18 @@ fn item_rich_content(item: &Value) -> Option<Vec<Value>> {
     (!content.is_empty()).then_some(content)
 }
 
+/// Result of an explicit workspace host restart. Restarting a host is a
+/// process-level operation because Muse fixes sandbox posture at `serve`
+/// startup; existing conversations keep their local transcript and must be
+/// reconnected explicitly when the host supports durable sessions.
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct HostRestartResult {
+    pub workspace: String,
+    pub restarted: bool,
+    pub disconnected_sessions: usize,
+}
+
 fn item_output_ref(item: &Value) -> Option<String> {
     let raw = item.get("outputRef").or_else(|| item.get("output_ref"))?;
     let value = raw
@@ -1223,6 +1235,148 @@ async fn ensure_host(
     cache_initialize_granted_capabilities(&mut host_capabilities, &root, &initialized);
 
     Ok(client)
+}
+
+/// Restart the workspace-owned host with an explicit sandbox posture.
+///
+/// Muse does not expose sandbox mutation over MSP, so changing the posture
+/// requires replacing the process. The renderer keeps conversation records
+/// and transcript data; this command only detaches the old native routes,
+/// clears volatile host state, emits a bounded disconnect event, and starts a
+/// fresh host. Durable conversations can then be reconnected explicitly.
+#[tauri::command]
+async fn restart_host(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    workspace_path: String,
+    sandbox_mode: Option<String>,
+    sandbox_disable_write: Option<bool>,
+    sandbox_disable_shell: Option<bool>,
+) -> Result<HostRestartResult, String> {
+    let root = resolve_workspace(&state, Some(workspace_path))?;
+    let requested_policy = HostSandboxPolicy::parse(
+        sandbox_mode.as_deref(),
+        sandbox_disable_write,
+        sandbox_disable_shell,
+    )?;
+    let old_client = {
+        let hosts = state
+            .hosts
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?;
+        hosts.workspace(&root)
+    };
+    let Some(old_client) = old_client else {
+        // No live process exists for this workspace. Treat the gesture as a
+        // normal explicit start so the requested posture is still applied.
+        ensure_host(
+            &app,
+            &state,
+            &root,
+            sandbox_mode.as_deref(),
+            sandbox_disable_write,
+            sandbox_disable_shell,
+        )
+        .await?;
+        let applied = state
+            .host_sandbox
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(&root)
+            .cloned();
+        if applied.as_ref() != Some(&requested_policy) {
+            return Err("workspace host posture changed concurrently; retry the restart".into());
+        }
+        return Ok(HostRestartResult {
+            workspace: root.display().to_string(),
+            restarted: false,
+            disconnected_sessions: 0,
+        });
+    };
+
+    let session_ids = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .remove(&old_client);
+
+    // Retire volatile host facts before spawning the replacement. The new
+    // handshake repopulates durability, capabilities and sandbox posture;
+    // keeping stale values here would make the renderer claim a grant from a
+    // process that no longer exists.
+    if let Ok(mut sandbox) = state.host_sandbox.lock() {
+        sandbox.remove(&root);
+    }
+    if let Ok(mut durability) = state.host_durability.lock() {
+        durability.remove(&root);
+    }
+    if let Ok(mut capabilities) = state.host_capabilities.lock() {
+        capabilities.remove(&root);
+    }
+
+    for session_id in &session_ids {
+        mark_running(&state, session_id, false);
+        emit(
+            &app,
+            "status",
+            session_id,
+            "host_exited",
+            "Muse host restarted; reconnect the conversation to continue.".to_string(),
+        );
+    }
+
+    // Pending approvals and item tables belong to the old process. The
+    // transcript remains in the renderer SSOT, but stale native requirements
+    // must never be offered to the replacement host.
+    if let Ok(mut approvals) = state.approvals.lock() {
+        approvals.retain(|_, approval| !session_ids.contains(&approval.session_id));
+    }
+    if let Ok(mut kinds) = state.item_kinds.lock() {
+        kinds.retain(|(sid, _), _| !session_ids.contains(sid));
+    }
+    if let Ok(mut refs) = state.item_output_refs.lock() {
+        refs.retain(|(sid, _), _| !session_ids.contains(sid));
+    }
+    if let Ok(mut metas) = state.subagent_meta.lock() {
+        metas.retain(|(sid, _), _| !session_ids.contains(sid));
+    }
+    if let Ok(mut seen) = state.item_deltas_seen.lock() {
+        seen.retain(|(sid, _)| !session_ids.contains(sid));
+    }
+    if let Ok(mut emitted) = state.item_fallback_emitted.lock() {
+        emitted.retain(|(sid, _)| !session_ids.contains(sid));
+    }
+    if let Ok(mut events) = state.event_buffer.lock() {
+        events.retain(|event| !session_ids.contains(&event.session_id));
+    }
+
+    old_client.shutdown().await;
+    // `ensure_host` owns the creation mutex. Do not hold a lock across this
+    // await: the old client is fully detached above, so a concurrent start is
+    // safe and the winner's posture becomes the process-level authority.
+    ensure_host(
+        &app,
+        &state,
+        &root,
+        sandbox_mode.as_deref(),
+        sandbox_disable_write,
+        sandbox_disable_shell,
+    )
+    .await?;
+    let applied = state
+        .host_sandbox
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&root)
+        .cloned();
+    if applied.as_ref() != Some(&requested_policy) {
+        return Err("workspace host posture changed concurrently; retry the restart".into());
+    }
+    Ok(HostRestartResult {
+        workspace: root.display().to_string(),
+        restarted: true,
+        disconnected_sessions: session_ids.len(),
+    })
 }
 
 fn tail_of(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>) -> String {
@@ -7697,6 +7851,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
+            restart_host,
             fork_session,
             set_approval_mode,
             resume_session,

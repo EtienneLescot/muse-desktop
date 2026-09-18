@@ -64,6 +64,8 @@ interface Props {
   onPickWorkspace: (path: string) => void;
   sandbox: SandboxSettings;
   onSandboxChange: (next: SandboxSettings) => void;
+  /** M2-02: apply a changed host posture by restarting the workspace host. */
+  onRestartHost?: () => Promise<boolean>;
   authorizationMode: AuthorizationMode;
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
   /** Global host reasoning effort used by new conversations. */
@@ -103,6 +105,7 @@ export function SettingsPanel({
   onPickWorkspace,
   sandbox,
   onSandboxChange,
+  onRestartHost,
   authorizationMode,
   onAuthorizationModeChange,
   reasoningEffort,
@@ -124,6 +127,8 @@ export function SettingsPanel({
   const [probe, setProbe] = useState("");
   const [probeResult, setProbeResult] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
+  const [restartingHost, setRestartingHost] = useState(false);
+  const [restartStatus, setRestartStatus] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [storageIssues, setStorageIssues] = useState<StorageIssue[]>(() =>
@@ -177,6 +182,24 @@ export function SettingsPanel({
 
   function pickMode(mode: SandboxMode): void {
     onSandboxChange({ ...sandbox, mode });
+    setRestartStatus(null);
+  }
+
+  async function restartWorkspaceHost(): Promise<void> {
+    if (onRestartHost === undefined || restartingHost) return;
+    if (!window.confirm(
+      "Restart the workspace host now? Active conversations will disconnect and keep their local transcript; reconnect them after the new host starts.",
+    )) return;
+    setRestartingHost(true);
+    setRestartStatus(null);
+    try {
+      const ok = await onRestartHost();
+      setRestartStatus(ok
+        ? "Host restarted. Reconnect any durable conversations to continue."
+        : "The host could not be restarted.");
+    } finally {
+      setRestartingHost(false);
+    }
   }
 
   function exportLocalData(): void {
@@ -504,6 +527,25 @@ export function SettingsPanel({
           {!canSelectMode(sandbox, sandbox.mode) &&
             " — permission required for this preference."}
         </p>
+        {onRestartHost !== undefined && workspace !== null && (
+          <div className="settings-host-restart">
+            <button
+              type="button"
+              className="settings-secondary-action"
+              onClick={() => void restartWorkspaceHost()}
+              disabled={restartingHost}
+            >
+              {restartingHost ? "Restarting host…" : "Restart workspace host"}
+            </button>
+            <span className="settings-note">
+              Apply the selected posture to the running host. Conversations
+              remain in Muse and can be reconnected explicitly.
+            </span>
+            {restartStatus !== null && (
+              <span className="settings-note" role="status">{restartStatus}</span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="settings-group">

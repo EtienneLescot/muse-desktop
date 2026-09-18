@@ -5349,6 +5349,18 @@ body.dark .composer textarea::placeholder {
   word-break: break-word;
 }
 
+.settings-host-restart {
+  display: grid;
+  gap: 5px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-host-restart button {
+  justify-self: flex-start;
+}
+
 .authorization-mode-list {
   display: grid;
   gap: 8px;
