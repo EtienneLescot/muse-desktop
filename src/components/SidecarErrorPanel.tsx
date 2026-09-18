@@ -7,6 +7,7 @@ import {
 import { userFacingError } from "../lib/errorCopy";
 import {
   startupCheckStatusLabel,
+  sanitizeStartupText,
   type StartupProbe,
   type StartupCheck,
 } from "../lib/startupProbe";
@@ -68,7 +69,7 @@ export function SidecarErrorPanel({
         <section className="startup-probe" aria-label="Environment check">
           <header>
             <h3>Environment check</h3>
-            <span className="muted">{startupProbe?.platform}</span>
+            <span className="muted">{startupProbe ? sanitizeStartupText(startupProbe.platform, 40) : ""}</span>
           </header>
           <ul>
             {checks.map(([label, check]) => (

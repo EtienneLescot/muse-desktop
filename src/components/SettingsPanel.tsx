@@ -19,6 +19,7 @@ import { WorkspacePicker } from "./WorkspacePicker";
 import {
   startupCheckStatusLabel,
   startupProbeRows,
+  sanitizeStartupText,
   type StartupProbe,
 } from "../lib/startupProbe";
 import type { ScopeVerdict } from "../lib/scope";
@@ -327,7 +328,7 @@ export function SettingsPanel({
             <header>
               <h3>Environment check</h3>
               <span className="muted">
-                {startupProbe.platform} · {new Date(startupProbe.checkedAt).toLocaleTimeString()}
+                {sanitizeStartupText(startupProbe.platform, 40)} · {new Date(startupProbe.checkedAt).toLocaleTimeString()}
               </span>
             </header>
             <ul>

@@ -5,6 +5,7 @@ import {
   startupProbeNeedsAttention,
   startupProbeRows,
   startupProbeSummary,
+  sanitizeStartupText,
   type StartupProbe,
 } from "../src/lib/startupProbe.ts";
 
@@ -59,4 +60,20 @@ test("startup probe summaries keep first-launch guidance textual", () => {
   };
   assert.equal(startupProbeNeedsAttention(ready), false);
   assert.equal(startupProbeSummary(ready), "3/3 checks ready");
+});
+
+test("startup probe display text removes invisible and replacement characters", () => {
+  assert.equal(
+    sanitizeStartupText("Muse\u{feff} CLI\u{200b} ready\u{fffd}"),
+    "Muse CLI ready",
+  );
+  const probe: StartupProbe = {
+    platform: "windows",
+    sidecar: check("blocked", "WSL\u{0} output\u{fffd}"),
+    wsl: null,
+    museCli: null,
+    workspace: null,
+    checkedAt: 1,
+  };
+  assert.equal(startupProbeRows(probe)[0]?.check.detail, "WSL output");
 });

@@ -19,6 +19,18 @@ export interface StartupProbeRow {
   check: StartupCheck;
 }
 
+const INVISIBLE_STARTUP_MARKERS = /[\u0000-\u001f\u007f-\u009f\u200b\u200c\u200d\u2060\ufeff\ufffd]/;
+
+/** Keep legacy/preview probe payloads readable without changing the SSOT. */
+export function sanitizeStartupText(value: string, maxChars = 240): string {
+  return Array.from(value ?? "")
+    .map((character) => (INVISIBLE_STARTUP_MARKERS.test(character) ? " " : character))
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxChars);
+}
+
 /** Stable text for the check state; colour remains a secondary cue. */
 export function startupCheckStatusLabel(status: StartupCheck["status"]): string {
   switch (status) {
@@ -36,10 +48,16 @@ export function startupCheckStatusLabel(status: StartupCheck["status"]): string 
 /** Convert an optional probe payload into a stable display order. */
 export function startupProbeRows(probe: StartupProbe): StartupProbeRow[] {
   return [
-    { label: "Sidecar", check: probe.sidecar },
-    ...(probe.wsl ? [{ label: "WSL", check: probe.wsl }] : []),
-    ...(probe.museCli ? [{ label: "Muse CLI", check: probe.museCli }] : []),
-    ...(probe.workspace ? [{ label: "Workspace", check: probe.workspace }] : []),
+    { label: "Sidecar", check: { ...probe.sidecar, detail: sanitizeStartupText(probe.sidecar.detail) } },
+    ...(probe.wsl
+      ? [{ label: "WSL", check: { ...probe.wsl, detail: sanitizeStartupText(probe.wsl.detail) } }]
+      : []),
+    ...(probe.museCli
+      ? [{ label: "Muse CLI", check: { ...probe.museCli, detail: sanitizeStartupText(probe.museCli.detail) } }]
+      : []),
+    ...(probe.workspace
+      ? [{ label: "Workspace", check: { ...probe.workspace, detail: sanitizeStartupText(probe.workspace.detail) } }]
+      : []),
   ];
 }
 
