@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { generateKeyPairSync } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -65,4 +66,42 @@ test("release manifest verification detects tampering and validates explicit fil
   const invalid = verifyReleaseManifest({ manifestPath, artifactPath: installer, sidecarPath: sidecar });
   assert.equal(invalid.valid, false);
   assert.match(invalid.errors.join(" "), /installer\.(bytes|sha256) mismatch/);
+});
+
+test("release manifest can be verified with an explicit Ed25519 trust key", async () => {
+  const root = await mkdtemp(join(tmpdir(), "muse-release-signature-"));
+  const installer = join(root, "Muse-Desktop_0.1.0_x64-setup.exe");
+  const sidecar = join(root, "muse-x86_64-pc-windows-msvc.exe");
+  const manifestPath = join(root, "release.manifest.json");
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  await writeFile(installer, Buffer.from("installer-bytes"));
+  await writeFile(sidecar, Buffer.from("sidecar-bytes"));
+  const manifest = buildReleaseManifest({
+    artifactPath: installer,
+    sidecarPath: sidecar,
+    version: "0.1.0",
+    target: "x86_64-pc-windows-msvc",
+    signingKey: privateKey,
+    keyId: "release-test",
+  });
+  await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
+  const valid = verifyReleaseManifest({
+    manifestPath,
+    artifactPath: installer,
+    sidecarPath: sidecar,
+    publicKey,
+    requireSignature: true,
+  });
+  assert.equal(valid.valid, true);
+  const tampered = { ...manifest, version: "0.1.1" };
+  await writeFile(manifestPath, `${JSON.stringify(tampered)}\n`, "utf8");
+  const invalid = verifyReleaseManifest({
+    manifestPath,
+    artifactPath: installer,
+    sidecarPath: sidecar,
+    publicKey,
+    requireSignature: true,
+  });
+  assert.equal(invalid.valid, false);
+  assert.match(invalid.errors.join(" "), /signature .* invalid/);
 });

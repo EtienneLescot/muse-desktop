@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 
 /** Verify a Muse release manifest against two explicitly supplied files. */
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { RELEASE_MANIFEST_SCHEMA } from "./release-manifest.mjs";
+import {
+  RELEASE_MANIFEST_SCHEMA,
+  RELEASE_SIGNATURE_ALGORITHM,
+  releaseManifestPayload,
+} from "./release-manifest.mjs";
 
 function digest(filePath) {
   const absolute = resolve(filePath);
@@ -35,7 +39,15 @@ function compareFile(label, expected, actual, errors) {
  * Verify a manifest without using paths stored inside it.
  * `artifactPath` and `sidecarPath` are always explicit caller inputs.
  */
-export function verifyReleaseManifest({ manifestPath, artifactPath, sidecarPath, version, target }) {
+export function verifyReleaseManifest({
+  manifestPath,
+  artifactPath,
+  sidecarPath,
+  version,
+  target,
+  publicKey,
+  requireSignature = false,
+}) {
   const errors = [];
   let manifest;
   try {
@@ -54,6 +66,34 @@ export function verifyReleaseManifest({ manifestPath, artifactPath, sidecarPath,
   if (manifest.product !== "Muse-Desktop") errors.push("unexpected release product");
   if (version !== undefined && manifest.version !== String(version).trim()) errors.push("release version mismatch");
   if (target !== undefined && manifest.target !== String(target).trim()) errors.push("release target mismatch");
+  const signature = manifest.signature;
+  if (signature === undefined || signature === null) {
+    if (requireSignature) errors.push("release signature is required");
+  } else if (
+    typeof signature !== "object" ||
+    signature.algorithm !== RELEASE_SIGNATURE_ALGORITHM ||
+    typeof signature.keyId !== "string" ||
+    typeof signature.value !== "string" ||
+    !signature.keyId.trim() ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(signature.value) ||
+    signature.value.length > 16_000
+  ) {
+    errors.push("release signature is malformed");
+  } else if (!publicKey) {
+    errors.push(`release signature ${signature.keyId} has no trusted public key`);
+  } else {
+    try {
+      const valid = verify(
+        null,
+        Buffer.from(releaseManifestPayload(manifest), "utf8"),
+        publicKey?.type === "public" ? publicKey : createPublicKey(publicKey),
+        Buffer.from(signature.value, "base64"),
+      );
+      if (!valid) errors.push(`release signature ${signature.keyId} is invalid`);
+    } catch (error) {
+      errors.push(`release signature could not be verified: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   for (const [label, filePath] of [["installer", artifactPath], ["sidecar", sidecarPath]]) {
     if (!filePath) {
       errors.push(`${label} path is required`);
@@ -77,8 +117,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const manifestPath = argument("--manifest");
   const artifactPath = argument("--artifact");
   const sidecarPath = argument("--sidecar");
+  const publicKeyPath = argument("--public-key");
+  const requireSignature = process.argv.includes("--require-signature");
   if (!manifestPath || !artifactPath || !sidecarPath) {
-    process.stderr.write("Usage: verify-release-manifest.mjs --manifest FILE --artifact FILE --sidecar FILE [--version VERSION] [--target TARGET]\n");
+    process.stderr.write("Usage: verify-release-manifest.mjs --manifest FILE --artifact FILE --sidecar FILE [--version VERSION] [--target TARGET] [--public-key FILE] [--require-signature]\n");
     process.exitCode = 2;
   } else {
     const result = verifyReleaseManifest({
@@ -87,6 +129,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       sidecarPath,
       version: argument("--version"),
       target: argument("--target"),
+      ...(publicKeyPath ? { publicKey: readFileSync(resolve(publicKeyPath), "utf8") } : {}),
+      requireSignature,
     });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (!result.valid) process.exitCode = 1;
