@@ -877,16 +877,17 @@ export default function App() {
                   projectError={projectError}
                   activeSessionId={activeId}
                   globalSettings={globalSettings}
-                  onCreate={(name, instructions, projectWorkspace) =>
-                    createProject(name, instructions, projectWorkspace)
+                  onCreate={(name, instructions, projectWorkspaces) =>
+                    createProject(name, instructions, projectWorkspaces)
                   }
                   onDelete={deleteProject}
                   onUpdate={updateProject}
                   onAttach={attachThread}
-                  onStartConversation={async (project) => {
-                    if (!project.workspace) return;
+                  onStartConversation={async (project, selectedWorkspace) => {
+                    const workspacePath = selectedWorkspace ?? project.workspace;
+                    if (!workspacePath) return;
                     await startSessionInWorkspace(
-                      project.workspace,
+                      workspacePath,
                       settingsFor(project.id),
                       project.id,
                     );
@@ -1085,8 +1086,8 @@ export default function App() {
                   const project = environment?.projectId
                     ? projects.find((candidate) => candidate.id === environment.projectId) ?? null
                     : null;
-                  const id = project?.workspace
-                    ? await startSessionInWorkspace(project.workspace, settingsFor(project.id), project.id)
+                  const id = project !== null && environment?.workspace
+                    ? await startSessionInWorkspace(environment.workspace, settingsFor(project.id), project.id)
                     : await startSession();
                   if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
                   // M0-03: honest result — when the first send fails the

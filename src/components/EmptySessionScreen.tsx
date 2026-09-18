@@ -91,7 +91,7 @@ export function EmptySessionScreen({
   }, [attachments]);
   const [environmentId, setEnvironmentId] = useState("default");
   const selectedEnvironment = environmentOptions.find(
-    (option) => option.projectId === environmentId,
+    (option) => option.optionId === environmentId,
   );
   const selectedWorkspace = selectedEnvironment?.workspace ?? workspace;
   const workspaceLabel = (path: string | null): string => {
@@ -200,7 +200,7 @@ export function EmptySessionScreen({
             Default workspace · {workspaceLabel(workspace)}
           </option>
           {environmentOptions.map((option) => (
-            <option key={option.projectId} value={option.projectId}>
+            <option key={option.optionId} value={option.optionId}>
               {option.projectName} · {workspaceLabel(option.workspace)}
             </option>
           ))}

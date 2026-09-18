@@ -1003,10 +1003,10 @@ interface UseMuseSessions {
   threadProjects: ThreadProjectMap;
   /** Last project refusal (quota / blank name); null when clean. */
   projectError: string | null;
-  createProject: (name: string, instructions?: string, workspace?: string) => void;
+  createProject: (name: string, instructions?: string, workspaces?: string[]) => void;
   /** Delete a project; its threads become ungrouped (no orphans). */
   deleteProject: (id: string) => void;
-  updateProject: (id: string, patch: { name?: string; instructions?: string; workspace?: string }) => void;
+  updateProject: (id: string, patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] }) => void;
   /** Attach a thread to a project (null detaches). */
   attachThread: (sessionId: string, projectId: string | null) => void;
   /** Project a thread is attached to (null = ungrouped/unknown). */
@@ -5660,8 +5660,8 @@ export function useMuseSessions(): UseMuseSessions {
   // US-3 + US-30 project actions. Creation past MAX_PROJECTS is refused
   // client-side with the explicit quota message in projectError.
   const createProject = useCallback(
-    (name: string, instructions?: string, workspacePath?: string) => {
-      const res = createProjectRow(projects, { name, instructions, workspace: workspacePath });
+    (name: string, instructions?: string, workspacePaths?: string[]) => {
+      const res = createProjectRow(projects, { name, instructions, workspaces: workspacePaths });
       setProjectError(res.error);
       if (res.project !== null) setProjects(res.projects);
     },
@@ -5677,7 +5677,7 @@ export function useMuseSessions(): UseMuseSessions {
     [projects, threadProjects],
   );
 
-  const updateProject = useCallback((id: string, patch: { name?: string; instructions?: string; workspace?: string }) => {
+  const updateProject = useCallback((id: string, patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] }) => {
     setProjects((cur) => updateProjectRow(cur, id, patch));
   }, []);
 

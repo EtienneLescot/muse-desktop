@@ -2829,6 +2829,46 @@ body.dark .composer textarea::placeholder {
   font-size: 12px;
 }
 
+.workspace-root-list {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-root-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.workspace-root-row .workspace-path {
+  min-width: 0;
+}
+
+.workspace-root-row button {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  font-size: 11px;
+}
+
+.project-start-root {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.project-start-root select {
+  max-width: 260px;
+}
+
 .project-create input[type="text"],
 .project-detail input[type="text"],
 .project-detail textarea,
