@@ -166,6 +166,7 @@ export default function App() {
     schedules,
     scheduleRuns,
     schedulerStatus,
+    schedulerWakeupStatus,
     notifications,
     notificationPermission,
     notificationsMuted,
@@ -969,6 +970,7 @@ export default function App() {
                   schedules={schedules}
                   runs={scheduleRuns}
                   schedulerStatus={schedulerStatus}
+                  schedulerWakeupStatus={schedulerWakeupStatus}
                   notifications={notifications}
                   notificationPermission={notificationPermission}
                   notificationsMuted={notificationsMuted}

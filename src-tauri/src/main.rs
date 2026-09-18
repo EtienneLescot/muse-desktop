@@ -35,6 +35,7 @@ mod startup;
 mod scheduler;
 mod scheduler_runs;
 mod scheduler_schedules;
+mod scheduler_wakeup;
 mod notification_ledger;
 mod outbox_ledger;
 mod workspace_watch;
@@ -2282,6 +2283,17 @@ fn scheduler_schedules_read(app: AppHandle) -> Result<Value, String> {
 fn scheduler_schedules_write(app: AppHandle, payload: String) -> Result<(), String> {
     let data_dir = scheduler_data_dir(&app)?;
     scheduler_schedules::write(&data_dir, &payload)
+}
+
+#[tauri::command]
+fn scheduler_wakeup_sync(
+    app: AppHandle,
+    wake_at: Option<u64>,
+) -> Result<scheduler_wakeup::WakeupResponse, String> {
+    let data_dir = scheduler_data_dir(&app)?;
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("cannot resolve Muse executable: {error}"))?;
+    scheduler_wakeup::sync(&data_dir, &executable, wake_at, scheduler::now_ms())
 }
 
 /// Read the renderer-owned notification inbox from app data.
@@ -7361,6 +7373,7 @@ fn main() {
             scheduler_runs_write,
             scheduler_schedules_read,
             scheduler_schedules_write,
+            scheduler_wakeup_sync,
             notifications_read,
             notifications_write,
             outbox_read,

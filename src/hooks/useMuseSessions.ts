@@ -279,6 +279,12 @@ import {
 export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
 import { loadNativeScheduleRuns, saveNativeScheduleRuns } from "../lib/scheduleRunLedger";
 import { loadNativeSchedules, mergeSchedules, saveNativeSchedules } from "../lib/scheduleLedger";
+import {
+  INITIAL_SCHEDULER_WAKEUP_STATUS,
+  nextSchedulerWakeAt,
+  syncNativeSchedulerWakeup,
+  type SchedulerWakeupStatus,
+} from "../lib/schedulerWakeup";
 import { buildScheduleRunSummary } from "../lib/runSummary";
 export type { ScheduleRunSummary } from "../lib/runSummary";
 import {
@@ -1050,6 +1056,8 @@ interface UseMuseSessions {
   scheduleRuns: ScheduleRun[];
   /** M3-07: live lease ownership shown by the Automations surface. */
   schedulerStatus: SchedulerRuntimeStatus;
+  /** M3-07: native one-shot wake-up status for the next schedule. */
+  schedulerWakeupStatus: SchedulerWakeupStatus;
   /** US-9: validate + append a schedule; returns the id, null on error. */
   createSchedule: (input: ScheduleInput) => string | null;
   /** US-9: enable/disable one schedule. */
@@ -1545,6 +1553,9 @@ export function useMuseSessions(): UseMuseSessions {
   );
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerRuntimeStatus>(
     () => INITIAL_SCHEDULER_RUNTIME_STATUS,
+  );
+  const [schedulerWakeupStatus, setSchedulerWakeupStatus] = useState<SchedulerWakeupStatus>(
+    () => INITIAL_SCHEDULER_WAKEUP_STATUS,
   );
   // The native app-data copy is hydrated once before any subsequent state
   // write. The renderer state remains the SSOT; this gate prevents a startup
@@ -2244,6 +2255,17 @@ export function useMuseSessions(): UseMuseSessions {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const wakeAt = nextSchedulerWakeAt(schedules);
+    void syncNativeSchedulerWakeup(wakeAt).then((status) => {
+      if (!cancelled) setSchedulerWakeupStatus(status);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [schedules]);
 
   useEffect(() => {
     saveReviewQueue(reviewQueue);
@@ -7596,6 +7618,7 @@ export function useMuseSessions(): UseMuseSessions {
     reviewQueue: pendingReviews(reviewQueue),
     scheduleRuns,
     schedulerStatus,
+    schedulerWakeupStatus,
     notifications,
     notificationPermission: notificationPermissionState,
     notificationsMuted: notificationPreferences.desktopMuted,

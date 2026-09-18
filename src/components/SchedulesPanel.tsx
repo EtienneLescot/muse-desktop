@@ -11,6 +11,7 @@ import {
 import { MAX_RUN_ATTEMPTS, type ScheduleRun } from "../lib/scheduleRuns";
 import type { MuseNotification, NotificationPermission } from "../lib/notifications";
 import type { SchedulerRuntimeStatus } from "../lib/schedulerLease";
+import type { SchedulerWakeupStatus } from "../lib/schedulerWakeup";
 import { userFacingError } from "../lib/errorCopy";
 
 interface SessionRef {
@@ -22,6 +23,7 @@ interface Props {
   schedules: Schedule[];
   runs: ScheduleRun[];
   schedulerStatus: SchedulerRuntimeStatus;
+  schedulerWakeupStatus: SchedulerWakeupStatus;
   notifications: MuseNotification[];
   notificationPermission: NotificationPermission;
   notificationsMuted: boolean;
@@ -121,6 +123,7 @@ export function SchedulesPanel({
   schedules,
   runs,
   schedulerStatus,
+  schedulerWakeupStatus,
   notifications,
   notificationPermission,
   notificationsMuted,
@@ -216,6 +219,20 @@ export function SchedulesPanel({
             ? "Not checked yet"
             : `Checked ${new Date(schedulerStatus.checkedAt).toLocaleTimeString()}`}
         </span>
+      </div>
+      <div
+        className="scheduler-wakeup-status"
+        data-supported={schedulerWakeupStatus.supported}
+        data-installed={schedulerWakeupStatus.installed}
+        role="status"
+      >
+        <strong>Native wake-up</strong>
+        <span>{schedulerWakeupStatus.message}</span>
+        {schedulerWakeupStatus.installed && schedulerWakeupStatus.wakeAt !== null && (
+          <time dateTime={new Date(schedulerWakeupStatus.wakeAt).toISOString()}>
+            {new Date(schedulerWakeupStatus.wakeAt).toLocaleString()}
+          </time>
+        )}
       </div>
       <h2 className="schedules-summary">
         New automation
