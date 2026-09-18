@@ -38,6 +38,9 @@
  * fresh session and records whether the host admits a no-op, reports that a
  * turn is missing/active, or does not expose the method. It never starts a
  * model turn or sends conversation content.
+ * The explicit `--exercise-queue` path admits two synthetic turns on each
+ * session, records the host disposition for the second one and reclaims it
+ * with `turn/unqueue` when the host actually queues it.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
@@ -52,6 +55,7 @@
  *   node scripts/native-smoke.mjs --exercise-reasoning
  *   node scripts/native-smoke.mjs --exercise-model
  *   node scripts/native-smoke.mjs --exercise-compaction
+ *   node scripts/native-smoke.mjs --exercise-queue
  *   node scripts/native-smoke.mjs --exercise-control --exercise-terminal
  *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
@@ -131,6 +135,10 @@ function exercisesModelPath() {
 
 function exercisesCompactionPath() {
   return process.argv.includes("--exercise-compaction");
+}
+
+function exercisesQueuePath() {
+  return process.argv.includes("--exercise-queue");
 }
 
 function exercisesTerminalPath() {
@@ -376,6 +384,7 @@ async function main() {
   const exerciseReasoning = exercisesReasoningPath();
   const exerciseModel = exercisesModelPath();
   const exerciseCompaction = exercisesCompactionPath();
+  const exerciseQueue = exercisesQueuePath();
   const exerciseTerminal = exercisesTerminalPath();
   if (exerciseTerminal && !exerciseControl) {
     fail("--exercise-terminal requires --exercise-control");
@@ -400,6 +409,7 @@ async function main() {
     const reasoningChecks = [];
     const modelChecks = [];
     const compactionChecks = [];
+    const queueChecks = [];
     let isolation = null;
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
@@ -730,6 +740,69 @@ async function main() {
       }
     }
     if (new Set(sessions).size !== sessions.length) fail("the two native hosts returned the same session id");
+    if (exerciseQueue) {
+      for (const [index, host] of hosts.entries()) {
+        const hostLabel = String.fromCharCode(65 + index);
+        const first = await host.request("turn/start", {
+          commandId: uuidv7(),
+          sessionId: sessions[index],
+          input: [{ type: "text", text: "Native queue smoke probe — first turn." }],
+        });
+        if (first?.status !== "accepted" || typeof first?.turnId !== "string" || first.turnId.length === 0) {
+          fail(`host-${hostLabel} did not accept the first queue probe`);
+        }
+        let second = null;
+        let secondError = null;
+        try {
+          second = await host.request("turn/start", {
+            commandId: uuidv7(),
+            sessionId: sessions[index],
+            input: [{ type: "text", text: "Native queue smoke probe — second turn." }],
+          });
+        } catch (error) {
+          secondError = error;
+        }
+        const disposition = typeof second?.disposition === "string"
+          ? second.disposition
+          : second?.status === "accepted"
+            ? "started"
+            : null;
+        let reclaimed = "not-applicable";
+        if (disposition === "queued" && typeof second?.turnId === "string") {
+          try {
+            const unqueued = await host.request("turn/unqueue", {
+              commandId: uuidv7(),
+              sessionId: sessions[index],
+              turnId: second.turnId,
+            });
+            if (unqueued?.status !== "accepted" || unqueued?.turnId !== second.turnId) {
+              fail(`host-${hostLabel} returned an incomplete queue reclaim result`);
+            }
+            reclaimed = "accepted";
+          } catch (error) {
+            if (error?.code === -32601 && error?.kind === "methodNotFound") reclaimed = "unsupported";
+            else throw error;
+          }
+        }
+        queueChecks.push({
+          host: hostLabel,
+          firstTurnId: first.turnId,
+          second: secondError === null
+            ? { status: second?.status ?? "unknown", disposition, ...(second?.turnId ? { turnId: second.turnId } : {}) }
+            : { status: "rejected", reason: secondError.reason ?? secondError.kind ?? "unknown" },
+          reclaimed,
+        });
+        try {
+          await host.request("turn/interrupt", {
+            commandId: uuidv7(),
+            sessionId: sessions[index],
+            retract: false,
+          });
+        } catch {
+          // A host may have completed the synthetic turn before cleanup.
+        }
+      }
+    }
     if (exerciseErrors) {
       // These requests never reach a model or touch a workspace. They prove
       // that the host's actionable category survives the child-process
@@ -833,6 +906,7 @@ async function main() {
       ...(exerciseReasoning ? { reasoningEffort: reasoningChecks } : {}),
       ...(exerciseModel ? { modelSelection: modelChecks } : {}),
       ...(exerciseCompaction ? { compaction: compactionChecks } : {}),
+      ...(exerciseQueue ? { queue: queueChecks } : {}),
     };
     if (reportPath !== null) {
       await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
