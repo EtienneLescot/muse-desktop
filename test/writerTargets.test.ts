@@ -40,4 +40,14 @@ describe("writer target persistence", () => {
     });
     assert.deepEqual(normalized, { "C:/valid": { agent: "src/a.ts" } });
   });
+
+  it("moves an edited workspace to the newest bounded-store position", () => {
+    const initial = {
+      "C:/old": { agent: "src/old.ts" },
+      "C:/recent": { agent: "src/recent.ts" },
+    };
+    const updated = updateWriterTargetStore(initial, "C:/old", { agent: "src/changed.ts" });
+    assert.deepEqual(Object.keys(updated), ["C:/recent", "C:/old"]);
+    assert.equal(updated["C:/old"]?.agent, "src/changed.ts");
+  });
 });

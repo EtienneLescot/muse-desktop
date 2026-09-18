@@ -71,6 +71,9 @@ export function updateWriterTargetStore(
   if (Object.keys(normalized).length === 0) {
     delete next[key];
   } else {
+    // Reinsert the workspace so the bounded store keeps recently edited
+    // repositories when the cap is reached.
+    delete next[key];
     next[key] = normalized;
   }
   return Object.fromEntries(Object.entries(next).slice(-MAX_WRITER_TARGET_WORKSPACES));
