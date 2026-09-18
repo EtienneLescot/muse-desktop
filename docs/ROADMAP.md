@@ -142,7 +142,8 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 
 - **M0-13a — vocabulaire commun** : `CapabilityBadge` et `capability.ts` distinguent `Available`, `Local`, `Manual` et `Not connected`, avec une raison consultable au survol, une prochaine étape explicite et un libellé accessible complet exposant l'état et sa portée. Les états restent informatifs et n'ajoutent pas de fausse confirmation.
 - **M0-13b — surfaces couvertes** : connecteurs (catalogue local), channels (transport absent), exports (local uniquement), worktrees (préparation manuelle), index workspace (local) et import CLI/IDE (manuel) affichent leur niveau réel.
-- **M0-13c — limite restante** : l'audit clic → effet réel des panneaux secondaires et du backend absent reste à exécuter ; aucune action d'installation ou de connexion n'est ajoutée par ce lot.
+- **M0-13c — audit des effets** : les panneaux Browser et Desktop control exposent aussi leur portée. Les actions d'aperçu, d'observation, de capture et d'insertion restent locales et explicites ; les fenêtres natives et les actions Muse n'apparaissent que lorsque le runtime ou le host les annonce, avec consentement séparé pour le contrôle.
+- **M0-13d — limite restante** : la qualification native du dialogue de consentement et des capacités annoncées reste séparée ; aucune action d'installation ou de connexion n'est ajoutée par ce lot.
 - **Validation** : tests unitaires du vocabulaire et build frontend verts.
 
 ### Livraison M0-14 — contrôles reproductibles (première passe)

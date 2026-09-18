@@ -32,6 +32,7 @@ import {
 } from "../lib/browserSkills";
 import type { HostSkill } from "../lib/hostSkills";
 import type { SkillInvocationProgress } from "../lib/skills";
+import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
   /** Conversation identity; browser navigation must not leak across sessions. */
@@ -747,7 +748,18 @@ export function BrowserPanel({
   return (
     <section className="browser-panel" aria-label="In-app browser">
       <details open>
-        <summary className="browser-title">Browser</summary>
+        <summary className="browser-title">
+          <span>Browser</span>
+          <span className="capability-line">
+            <CapabilityBadge
+              status="local"
+              reason={isTauriRuntime()
+                ? "The embedded preview runs locally; native windows and Muse actions remain explicit and depend on the desktop host."
+                : "The embedded preview runs locally in this browser; native windows and host actions require the desktop app."}
+            />
+            <span className="muted">Embedded preview</span>
+          </span>
+        </summary>
         <div className="browser-tabs" role="tablist" aria-label="Browser tabs">
           {tabs.map((tab) => {
             const host = tab.url ? new URL(tab.url).hostname.replace(/^www\./, "") : "New tab";

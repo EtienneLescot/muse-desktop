@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { BrowserAppPermission } from "../lib/browserAnnotate";
 import { isTauriRuntime } from "../lib/env";
+import { CapabilityBadge } from "./CapabilityBadge";
 import {
   DESKTOP_KEYS,
   DESKTOP_PERMISSION_APP,
@@ -353,6 +354,15 @@ export function DesktopControlPanel({
           <h2>Desktop control</h2>
           <p className="muted">
             Inspect visible windows and send one explicit action at a time.
+          </p>
+          <p className="muted capability-line">
+            <CapabilityBadge
+              status={status.supported ? "available" : "unavailable"}
+              reason={status.supported
+                ? "Windows desktop observation is connected; control actions still require explicit consent and an advertised host skill."
+                : status.reason}
+            />
+            {status.supported ? "Desktop runtime connected" : "Desktop runtime unavailable"}
           </p>
         </div>
         <button type="button" onClick={() => void refresh()} disabled={busy}>
