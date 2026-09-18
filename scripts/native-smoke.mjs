@@ -521,11 +521,14 @@ async function main() {
             if (changed?.status !== "accepted") {
               fail(`host-${index === 0 ? "A" : "B"} returned an incomplete reasoning effort result for ${reasoningEffort}`);
             }
-            const effective = changed?.effectiveReasoningEffort ?? changed?.reasoningEffort ?? reasoningEffort;
-            if (typeof effective !== "string" || effective.length === 0) {
-              fail(`host-${index === 0 ? "A" : "B"} returned no effective reasoning effort for ${reasoningEffort}`);
-            }
-            efforts.push({ requested: reasoningEffort, status: "accepted", effective });
+            const effective = changed?.effectiveReasoningEffort ?? changed?.reasoningEffort;
+            efforts.push({
+              requested: reasoningEffort,
+              status: "accepted",
+              ...(typeof effective === "string" && effective.length > 0
+                ? { effective }
+                : { effective: null, projection: "not-reported" }),
+            });
           } catch (error) {
             if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
             efforts.push({ requested: reasoningEffort, status: "unsupported" });
