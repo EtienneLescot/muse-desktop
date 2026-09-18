@@ -37,7 +37,7 @@ interface Props {
 }
 
 /** Apps offered a computer-use toggle (explicit opt-in, default denied). */
-const KNOWN_APPS = ["finder", "terminal", "editor"];
+const KNOWN_APPS = ["browser", "finder", "terminal", "editor"];
 
 /**
  * US-19 in-app browser (scoped): a sandboxed iframe renders the URL, and
@@ -200,6 +200,10 @@ export function BrowserPanel({
   };
 
   const clickSelectedElement = () => {
+    if (!browserControlsAllowed) {
+      setControlStatus("Allow computer-use for browser before clicking a page element.");
+      return;
+    }
     const element = selectedElement();
     if (element === null) {
       setControlStatus("Select an element in a same-origin page before clicking it.");
@@ -214,6 +218,10 @@ export function BrowserPanel({
   };
 
   const typeIntoSelectedElement = () => {
+    if (!browserControlsAllowed) {
+      setControlStatus("Allow computer-use for browser before typing into a page field.");
+      return;
+    }
     const value = typeText.trim();
     if (value.length === 0) {
       setControlStatus("Enter text before using Type into field.");
@@ -246,6 +254,10 @@ export function BrowserPanel({
   };
 
   const downloadSelectedLink = async (): Promise<void> => {
+    if (!browserControlsAllowed) {
+      setDownloadStatus("Allow computer-use for browser before saving a page link.");
+      return;
+    }
     const link = elementAnchor?.href;
     if (!link || normalized === null) {
       setDownloadStatus("Select a link in the same-origin page before downloading it.");
@@ -595,6 +607,7 @@ export function BrowserPanel({
 
   const isAllowed = (app: string) =>
     permissions.find((p) => p.app === app)?.allowed === true;
+  const browserControlsAllowed = isAllowed("browser");
 
   return (
     <section className="browser-panel" aria-label="In-app browser">
@@ -707,14 +720,19 @@ export function BrowserPanel({
             <button type="button" disabled={!renderable} onClick={observePage}>
               Observe page
             </button>
-            <button type="button" disabled={elementAnchor === null} onClick={clickSelectedElement}>
+            <button
+              type="button"
+              disabled={elementAnchor === null || !browserControlsAllowed}
+              onClick={clickSelectedElement}
+              title={browserControlsAllowed ? "Click the selected same-origin element" : "Allow computer-use for browser first"}
+            >
               Click selected element
             </button>
             <button
               type="button"
-              disabled={elementAnchor?.href === undefined}
+              disabled={elementAnchor?.href === undefined || !browserControlsAllowed}
               onClick={() => void downloadSelectedLink()}
-              title="Fetch and save the selected same-origin link"
+              title={browserControlsAllowed ? "Fetch and save the selected same-origin link" : "Allow computer-use for browser first"}
             >
               Save selected link
             </button>
@@ -724,9 +742,14 @@ export function BrowserPanel({
               placeholder="Text for selected field"
               value={typeText}
               onChange={(event) => setTypeText(event.target.value)}
-              disabled={elementAnchor === null}
+              disabled={elementAnchor === null || !browserControlsAllowed}
             />
-            <button type="button" disabled={elementAnchor === null || typeText.trim().length === 0} onClick={typeIntoSelectedElement}>
+            <button
+              type="button"
+              disabled={elementAnchor === null || !browserControlsAllowed || typeText.trim().length === 0}
+              onClick={typeIntoSelectedElement}
+              title={browserControlsAllowed ? "Type into the selected same-origin field" : "Allow computer-use for browser first"}
+            >
               Type into field
             </button>
           </div>

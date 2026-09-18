@@ -239,6 +239,7 @@ describe("anchored comments", () => {
 describe("computer-use permissions (default denied)", () => {
   it("denies unknown apps with no rows at all", () => {
     assert.equal(isBrowserActionAllowed([], "finder"), false);
+    assert.equal(isBrowserActionAllowed([], "browser"), false);
   });
 
   it("toggles one app without affecting others", () => {
