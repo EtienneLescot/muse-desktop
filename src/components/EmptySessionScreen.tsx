@@ -3,6 +3,8 @@ import { WorkspacePicker } from "./WorkspacePicker";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import type { AuthorizationMode } from "../lib/authorization";
+import { ReasoningEffortControl } from "./ReasoningEffortControl";
+import type { ReasoningEffort } from "../lib/reasoning";
 import type { ProjectWorkspaceOption } from "../lib/projects";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
 import { userFacingError } from "../lib/errorCopy";
@@ -38,6 +40,8 @@ interface Props {
   /** Global tool-authorization posture shown in the first-message composer. */
   authorizationMode: AuthorizationMode;
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
+  reasoningEffort: ReasoningEffort;
+  onReasoningEffortChange: (value: ReasoningEffort) => void;
 }
 
 export interface NewConversationEnvironment {
@@ -62,6 +66,8 @@ export function EmptySessionScreen({
   sidecarError,
   authorizationMode,
   onAuthorizationModeChange,
+  reasoningEffort,
+  onReasoningEffortChange,
 }: Props) {
   const welcomeDraftKey = "muse-desktop.welcome-draft";
   const [draft, setDraft] = useState(() => readSessionStorageString(welcomeDraftKey));
@@ -315,6 +321,11 @@ export function EmptySessionScreen({
           <AuthorizationModeControl
             mode={authorizationMode}
             onChange={onAuthorizationModeChange}
+            compact
+          />
+          <ReasoningEffortControl
+            value={reasoningEffort}
+            onChange={onReasoningEffortChange}
             compact
           />
           <small>

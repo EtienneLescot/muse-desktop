@@ -3635,6 +3635,38 @@ async fn set_model(
     Ok(())
 }
 
+/// US-31: apply the host-backed reasoning depth to a conversation. Keeping
+/// validation here makes the renderer preference fail closed and keeps the
+/// wire value aligned with the Muse Code schema.
+fn validate_reasoning_effort(value: String) -> Result<String, String> {
+    match value.as_str() {
+        "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "ultra" => Ok(value),
+        _ => Err(format!("unknown reasoning effort: {value}")),
+    }
+}
+
+#[tauri::command]
+async fn set_reasoning_effort(
+    state: State<'_, AppState>,
+    session_id: String,
+    reasoning_effort: String,
+) -> Result<(), String> {
+    let session_id = require_non_empty(&session_id, "sessionId")?;
+    let effort = validate_reasoning_effort(reasoning_effort)?;
+    let client = session_client(&state, &session_id)?;
+    client
+        .request(
+            "session/setReasoningEffort",
+            json!({
+                "commandId": new_command_id(),
+                "sessionId": session_id,
+                "reasoningEffort": effort,
+            }),
+        )
+        .await?;
+    Ok(())
+}
+
 /// Start one turn through the session-owned MSP client. Keeping the command
 /// body behind an `AppState` helper lets the supervisor fixture exercise the
 /// exact production payload and failure path without constructing a Tauri
@@ -5969,6 +6001,15 @@ mod tests {
     }
 
     #[test]
+    fn reasoning_effort_validation_matches_the_host_enum() {
+        for value in ["none", "minimal", "low", "medium", "high", "xhigh", "ultra"] {
+            assert_eq!(validate_reasoning_effort(value.to_string()).unwrap(), value);
+        }
+        let error = validate_reasoning_effort("maximum".to_string()).unwrap_err();
+        assert!(error.contains("unknown reasoning effort"));
+    }
+
+    #[test]
     fn compact_failures_map_to_user_sentences() {
         assert_eq!(
             describe_compact_failure("session/compact command c: missing_run"),
@@ -6114,6 +6155,7 @@ fn main() {
             probe_startup,
             list_models,
             set_model,
+            set_reasoning_effort,
             compact_session,
             poll_events,
             subagent_interrupt,

@@ -34,6 +34,7 @@ export const MSP_METHODS_SENT: MspMethod[] = [
   "skill/list" as unknown as MspMethod,
   "session/compact",
   "session/setModel",
+  "session/setReasoningEffort" as unknown as MspMethod,
   "session/userShell",
   "session/fork",
   "turn/start",

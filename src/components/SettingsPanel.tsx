@@ -36,6 +36,12 @@ import {
 } from "../lib/authorization";
 import { userFacingError } from "../lib/errorCopy";
 import {
+  REASONING_EFFORTS,
+  reasoningEffortDescription,
+  reasoningEffortLabel,
+  type ReasoningEffort,
+} from "../lib/reasoning";
+import {
   consumeStorageIssues,
   exportStorageSnapshot,
   inspectStorageSnapshot,
@@ -55,6 +61,9 @@ interface Props {
   onSandboxChange: (next: SandboxSettings) => void;
   authorizationMode: AuthorizationMode;
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
+  /** Global host reasoning effort used by new conversations. */
+  reasoningEffort: ReasoningEffort;
+  onReasoningEffortChange: (value: ReasoningEffort) => void;
   /** Provider id selected for the current project. */
   providerId: string;
   onProviderChange: (id: string) => void;
@@ -89,6 +98,8 @@ export function SettingsPanel({
   onSandboxChange,
   authorizationMode,
   onAuthorizationModeChange,
+  reasoningEffort,
+  onReasoningEffortChange,
   providerId,
   onProviderChange,
   liveModels,
@@ -400,6 +411,29 @@ export function SettingsPanel({
         <p className="settings-note authorization-status" role="status">
           Current posture: <strong>{authorizationModeLabel(authorizationMode)}</strong>
         </p>
+      </div>
+
+      <div className="settings-group">
+        <h3>Reasoning effort</h3>
+        <p className="settings-note">
+          Sets how much time Muse spends reasoning before responding. This is
+          applied to new conversations and can be overridden per project.
+        </p>
+        <label className="settings-label" htmlFor="settings-reasoning-effort">
+          Default effort
+        </label>
+        <select
+          id="settings-reasoning-effort"
+          value={reasoningEffort}
+          onChange={(event) => onReasoningEffortChange(event.target.value as ReasoningEffort)}
+          aria-label="Default reasoning effort"
+        >
+          {REASONING_EFFORTS.map((effort) => (
+            <option key={effort} value={effort}>
+              {reasoningEffortLabel(effort)} — {reasoningEffortDescription(effort)}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="settings-group">

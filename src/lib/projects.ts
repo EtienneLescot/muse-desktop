@@ -8,6 +8,12 @@
  * live state in ../hooks/useMuseSessions.
  */
 
+import {
+  DEFAULT_REASONING_EFFORT,
+  normalizeReasoningEffort,
+  type ReasoningEffort,
+} from "./reasoning.ts";
+
 /** One project: a named thread group with shared instructions. */
 export interface Project {
   id: string;
@@ -28,6 +34,8 @@ export interface ProjectSettings {
   sandbox: "read-only" | "workspace" | "full";
   networkDefault: "allow" | "prompt" | "deny";
   autoCompact: boolean;
+  /** Host-backed reasoning depth applied to subsequent turns. */
+  reasoningEffort: ReasoningEffort;
 }
 
 /** Global defaults a project inherits from when it overrides nothing. */
@@ -36,6 +44,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   sandbox: "workspace",
   networkDefault: "prompt",
   autoCompact: true,
+  reasoningEffort: DEFAULT_REASONING_EFFORT,
 };
 
 /** Sparse per-project override: only set keys diverge from global. */
@@ -278,7 +287,14 @@ export function resolveProjectSettings(
   global: ProjectSettings,
   override: ProjectSettingsOverride | undefined,
 ): ProjectSettings {
-  return { ...global, ...(override ?? {}) };
+  return {
+    ...global,
+    ...(override ?? {}),
+    reasoningEffort: normalizeReasoningEffort(
+      override?.reasoningEffort ?? global.reasoningEffort,
+      DEFAULT_REASONING_EFFORT,
+    ),
+  };
 }
 
 /**

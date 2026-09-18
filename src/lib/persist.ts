@@ -17,6 +17,7 @@ import type {
   ProjectSettings,
   ThreadProjectMap,
 } from "./projects.ts";
+import { normalizeReasoningEffort } from "./reasoning.ts";
 import type { WorktreeRecord } from "./worktrees.ts";
 import {
   readStorageJson,
@@ -369,7 +370,8 @@ function isValidGlobalSettings(s: unknown): s is ProjectSettings {
     typeof r.model === "string" &&
     (r.sandbox === "read-only" || r.sandbox === "workspace" || r.sandbox === "full") &&
     (r.networkDefault === "allow" || r.networkDefault === "prompt" || r.networkDefault === "deny") &&
-    typeof r.autoCompact === "boolean"
+    typeof r.autoCompact === "boolean" &&
+    (r.reasoningEffort === undefined || typeof r.reasoningEffort === "string")
   );
 }
 
@@ -378,7 +380,11 @@ export function loadGlobalSettings(
 ): ProjectSettings {
   const raw = read<unknown>(GLOBAL_SETTINGS_KEY, null);
   if (!isValidGlobalSettings(raw)) return fallback;
-  return raw;
+  return {
+    ...fallback,
+    ...raw,
+    reasoningEffort: normalizeReasoningEffort(raw.reasoningEffort, fallback.reasoningEffort),
+  };
 }
 
 export function saveGlobalSettings(settings: ProjectSettings): void {

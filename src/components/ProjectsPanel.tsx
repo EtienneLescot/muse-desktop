@@ -47,6 +47,7 @@ const SETTING_KEYS: (keyof ProjectSettings)[] = [
   "sandbox",
   "networkDefault",
   "autoCompact",
+  "reasoningEffort",
 ];
 
 function formatSetting(
@@ -548,6 +549,8 @@ function OverrideRow({
       onSet(next as ProjectSettings["sandbox"]);
     } else if (settingKey === "networkDefault") {
       onSet(next as ProjectSettings["networkDefault"]);
+    } else if (settingKey === "reasoningEffort") {
+      onSet(next as ProjectSettings["reasoningEffort"]);
     } else {
       onSet(next as boolean);
     }
@@ -588,6 +591,20 @@ function OverrideRow({
         <option value="allow">Allow</option>
         <option value="prompt">Ask</option>
         <option value="deny">Deny</option>
+      </select>
+    ) : settingKey === "reasoningEffort" ? (
+      <select
+        value={String(effectiveValue)}
+        onChange={onText}
+        aria-label={`Project reasoning effort (global ${globalValue})`}
+      >
+        <option value="none">None</option>
+        <option value="minimal">Minimal</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="xhigh">Very high</option>
+        <option value="ultra">Ultra</option>
       </select>
     ) : (
       <input
