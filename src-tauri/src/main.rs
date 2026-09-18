@@ -3084,6 +3084,15 @@ fn desktop_windows() -> Result<Vec<desktop_control::DesktopWindow>, String> {
     desktop_control::windows()
 }
 
+/// Read a bounded snapshot of visible child controls for one observed window.
+/// The snapshot is descriptive only; it never grants the host an input path.
+#[tauri::command]
+fn desktop_window_elements(
+    window_id: String,
+) -> Result<Vec<desktop_control::DesktopElement>, String> {
+    desktop_control::elements(&window_id)
+}
+
 #[tauri::command]
 fn desktop_focus_window(window_id: String) -> Result<(), String> {
     desktop_control::focus(&window_id)
@@ -7398,6 +7407,7 @@ fn main() {
             browser_download_fetch,
             desktop_control_status,
             desktop_windows,
+            desktop_window_elements,
             desktop_focus_window,
             desktop_send_text,
             desktop_press_key,

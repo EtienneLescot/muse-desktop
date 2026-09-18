@@ -6,12 +6,15 @@ import {
   DESKTOP_KEYS,
   DESKTOP_PERMISSION_APP,
   desktopWindowLabel,
+  desktopElementLabel,
   desktopCaptureAttachment,
   formatDesktopCaptureContext,
+  formatDesktopObservation,
   isDesktopControlAllowed,
   isDesktopPointInBounds,
   type DesktopControlStatus,
   type DesktopCapture,
+  type DesktopElement,
   type DesktopKey,
   type DesktopWindow,
 } from "../lib/desktopControl";
@@ -28,6 +31,7 @@ interface Props {
   permissions: BrowserAppPermission[];
   onSetPermission: (app: string, allowed: boolean) => void;
   onInsertCapture: (capture: DesktopCapture) => boolean;
+  onInsertContext: (context: string) => boolean;
   hostSkills?: readonly HostSkill[];
   skillProgress?: SkillInvocationProgress;
   onInvokeDesktopSkill?: (selector: string, args: string) => void;
@@ -44,6 +48,7 @@ export function DesktopControlPanel({
   permissions,
   onSetPermission,
   onInsertCapture,
+  onInsertContext,
   hostSkills = [],
   skillProgress,
   onInvokeDesktopSkill,
@@ -52,6 +57,8 @@ export function DesktopControlPanel({
   const [status, setStatus] = useState<DesktopControlStatus>(WEB_STATUS);
   const [windows, setWindows] = useState<DesktopWindow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [elements, setElements] = useState<DesktopElement[]>([]);
+  const [observing, setObserving] = useState(false);
   const [text, setText] = useState("");
   const [key, setKey] = useState<DesktopKey>("Enter");
   const [x, setX] = useState("0");
@@ -82,10 +89,12 @@ export function DesktopControlPanel({
       setStatus(nextStatus);
       if (!nextStatus.supported) {
         setWindows([]);
+        setElements([]);
         return;
       }
       const nextWindows = await invoke<DesktopWindow[]>("desktop_windows");
       setWindows(nextWindows);
+      setElements([]);
       setSelectedId((current) =>
         current !== null && nextWindows.some((window) => window.id === current)
           ? current
@@ -95,6 +104,33 @@ export function DesktopControlPanel({
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   }, []);
+
+  const observeSelectedWindow = useCallback(async () => {
+    if (!allowed || selected === null || !status.supported || !isTauriRuntime()) {
+      setError("Allow desktop control and choose a supported window first.");
+      return;
+    }
+    setObserving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const next = await invoke<DesktopElement[]>("desktop_window_elements", {
+        windowId: selected.id,
+      });
+      setElements(next);
+      setMessage(`Observed ${next.length} visible control${next.length === 1 ? "" : "s"}.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setObserving(false);
+    }
+  }, [allowed, selected, status.supported]);
+
+  const insertObservation = () => {
+    if (selected === null) return;
+    const context = formatDesktopObservation(selected, elements);
+    if (onInsertContext(context)) setMessage("Desktop observation added to the conversation draft.");
+  };
 
   useEffect(() => {
     void refresh();
@@ -362,7 +398,10 @@ export function DesktopControlPanel({
                 aria-selected={window.id === selectedId}
                 className={window.id === selectedId ? "is-selected" : ""}
                 key={window.id}
-                onClick={() => setSelectedId(window.id)}
+                onClick={() => {
+                  setSelectedId(window.id);
+                  setElements([]);
+                }}
               >
                 <strong>{window.title}</strong>
                 <span>{desktopWindowLabel(window)}</span>
@@ -383,6 +422,36 @@ export function DesktopControlPanel({
             >
               Focus window
             </button>
+
+            <div className="desktop-observation-block">
+              <div className="desktop-observation-heading">
+                <div>
+                  <strong>Observe visible controls</strong>
+                  <p className="muted">Read-only metadata from the selected window. No input is sent.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void observeSelectedWindow()}
+                  disabled={observing || busy || !allowed || selected === null}
+                >
+                  {observing ? "Observing…" : "Observe controls"}
+                </button>
+              </div>
+              {elements.length > 0 && (
+                <>
+                  <div className="desktop-element-list" role="list" aria-label="Observed desktop controls">
+                    {elements.slice(0, 40).map((element) => (
+                      <div className="desktop-element-row" role="listitem" key={element.id}>
+                        <strong>{element.title || element.className || "Unnamed control"}</strong>
+                        <span>{desktopElementLabel(element)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" onClick={insertObservation}>Add observation to prompt</button>
+                </>
+              )}
+              {elements.length === 0 && !observing && <span className="muted">No observation captured yet.</span>}
+            </div>
 
             <label>
               <span>Text</span>

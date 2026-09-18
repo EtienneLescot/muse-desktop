@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   desktopCaptureAttachment,
+  desktopElementLabel,
   desktopWindowLabel,
   formatDesktopCaptureContext,
+  formatDesktopObservation,
   isDesktopControlAllowed,
   isDesktopPointInBounds,
   type DesktopWindow,
+  type DesktopElement,
 } from "../src/lib/desktopControl.ts";
 import {
   buildDesktopSkillArguments,
@@ -41,6 +44,22 @@ test("desktop coordinates stay within the selected window", () => {
 
 test("desktop window labels keep title and bounded geometry visible", () => {
   assert.equal(desktopWindowLabel(windowFixture), "Editor · 800×600");
+});
+
+test("desktop observation keeps native controls bounded and attributable", () => {
+  const elements: DesktopElement[] = [{
+    id: "child",
+    title: "Run",
+    className: "Button",
+    bounds: { x: 12, y: 18, width: 80, height: 28 },
+    enabled: true,
+    visible: true,
+  }];
+  assert.equal(desktopElementLabel(elements[0]), "Run · 80×28 · enabled");
+  const context = formatDesktopObservation(windowFixture, elements);
+  assert.match(context, /\[Desktop observation\]/);
+  assert.match(context, /Run \[Button\]/);
+  assert.match(context, /read-only/);
 });
 
 test("desktop captures keep provenance and reject oversized payloads", () => {

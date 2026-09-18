@@ -1543,6 +1543,9 @@ export default function App() {
                           onInsertCapture={(capture) =>
                             prepareDesktopCapture(active.session_id, capture)
                           }
+                          onInsertContext={(context) =>
+                            prepareBrowserContext(active.session_id, context)
+                          }
                           hostSkills={hostSkillsBySession[active.session_id] ?? []}
                           skillProgress={skillInvocationsBySession[active.session_id]}
                           onInvokeDesktopSkill={(selector, args) =>

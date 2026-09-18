@@ -10,6 +10,7 @@ use serde::Serialize;
 
 pub const MAX_TEXT_CHARS: usize = 2_000;
 pub const MAX_WINDOWS: usize = 200;
+pub const MAX_ELEMENTS: usize = 300;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +26,20 @@ pub struct DesktopWindow {
     pub id: String,
     pub title: String,
     pub bounds: DesktopBounds,
+}
+
+/// A bounded, read-only snapshot of a visible child control. Bounds are
+/// relative to the selected top-level window so the renderer can reason about
+/// the surface without exposing process handles or document contents.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopElement {
+    pub id: String,
+    pub title: String,
+    pub class_name: String,
+    pub bounds: DesktopBounds,
+    pub enabled: bool,
+    pub visible: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -103,6 +118,12 @@ pub fn windows() -> Result<Vec<DesktopWindow>, String> {
 }
 
 #[cfg(not(windows))]
+pub fn elements(_id: &str) -> Result<Vec<DesktopElement>, String> {
+    unsupported()?;
+    unreachable!()
+}
+
+#[cfg(not(windows))]
 pub fn focus(_id: &str) -> Result<(), String> {
     unsupported()
 }
@@ -125,7 +146,7 @@ pub fn click(_id: &str, _x: i32, _y: i32) -> Result<(), String> {
 
 #[cfg(windows)]
 mod windows_impl {
-    use super::{DesktopBounds, DesktopKey, DesktopWindow, MAX_TEXT_CHARS, MAX_WINDOWS};
+    use super::{DesktopBounds, DesktopElement, DesktopKey, DesktopWindow, MAX_ELEMENTS, MAX_TEXT_CHARS, MAX_WINDOWS};
     use std::mem::size_of;
     use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, RECT, TRUE};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
@@ -134,8 +155,9 @@ mod windows_impl {
         VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_SPACE, VK_TAB, VK_UP,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible,
-        SetCursorPos, SetForegroundWindow,
+        EnumChildWindows, EnumWindows, GetClassNameW, GetWindowLongW, GetWindowRect,
+        GetWindowTextLengthW, GetWindowTextW, IsWindowVisible, SetCursorPos, SetForegroundWindow,
+        GWL_STYLE, WS_DISABLED,
     };
 
     fn id_for(hwnd: HWND) -> String {
@@ -166,6 +188,16 @@ mod windows_impl {
             .trim()
             .chars()
             .take(240)
+            .collect()
+    }
+
+    fn class_name(hwnd: HWND) -> String {
+        let mut buffer = vec![0u16; 128];
+        let copied = unsafe { GetClassNameW(hwnd, buffer.as_mut_ptr(), buffer.len() as i32) };
+        String::from_utf16_lossy(&buffer[..copied.max(0) as usize])
+            .trim()
+            .chars()
+            .take(80)
             .collect()
     }
 
@@ -216,6 +248,61 @@ mod windows_impl {
             return Err("Windows could not enumerate desktop windows".to_string());
         }
         Ok(rows)
+    }
+
+    struct ElementContext {
+        root: DesktopBounds,
+        rows: Vec<DesktopElement>,
+    }
+
+    unsafe extern "system" fn collect_child(hwnd: HWND, data: LPARAM) -> BOOL {
+        let context = unsafe { &mut *(data as *mut ElementContext) };
+        if context.rows.len() >= MAX_ELEMENTS || unsafe { IsWindowVisible(hwnd) } == 0 {
+            return TRUE;
+        }
+        let Some(screen_bounds) = bounds(hwnd) else {
+            return TRUE;
+        };
+        if screen_bounds.width <= 0 || screen_bounds.height <= 0 {
+            return TRUE;
+        }
+        let class_name = class_name(hwnd);
+        let title = title(hwnd);
+        if class_name.is_empty() && title.is_empty() {
+            return TRUE;
+        }
+        context.rows.push(DesktopElement {
+            id: id_for(hwnd),
+            title,
+            class_name,
+            bounds: DesktopBounds {
+                x: screen_bounds.x.saturating_sub(context.root.x),
+                y: screen_bounds.y.saturating_sub(context.root.y),
+                width: screen_bounds.width,
+                height: screen_bounds.height,
+            },
+            enabled: unsafe { (GetWindowLongW(hwnd, GWL_STYLE) as u32 & WS_DISABLED) == 0 },
+            visible: true,
+        });
+        TRUE
+    }
+
+    pub fn elements(id: &str) -> Result<Vec<DesktopElement>, String> {
+        let hwnd = parse_hwnd(id)?;
+        let Some(root) = bounds(hwnd) else {
+            return Err("desktop window bounds are unavailable".to_string());
+        };
+        let mut context = ElementContext {
+            root,
+            rows: Vec::with_capacity(48),
+        };
+        let result = unsafe {
+            EnumChildWindows(hwnd, Some(collect_child), &mut context as *mut _ as LPARAM)
+        };
+        if result == 0 {
+            return Err("Windows could not enumerate child controls".to_string());
+        }
+        Ok(context.rows)
     }
 
     pub fn focus(id: &str) -> Result<HWND, String> {
@@ -382,6 +469,11 @@ mod windows_impl {
 #[cfg(windows)]
 pub fn windows() -> Result<Vec<DesktopWindow>, String> {
     windows_impl::windows()
+}
+
+#[cfg(windows)]
+pub fn elements(id: &str) -> Result<Vec<DesktopElement>, String> {
+    windows_impl::elements(id)
 }
 
 #[cfg(windows)]
