@@ -103,6 +103,17 @@ function agentOf(e: LogEntry): string {
   return e.agentId ?? e.itemId ?? "agent";
 }
 
+/** Measure the mounted message including its vertical margins. The window
+ * uses this value only for entries outside the DOM; an unmeasured entry keeps
+ * the conservative estimate from streamWindow.ts. */
+function measureEntryBlockHeight(node: HTMLElement): number {
+  const rect = node.getBoundingClientRect();
+  const style = window.getComputedStyle(node);
+  const marginTop = Number.parseFloat(style.marginTop) || 0;
+  const marginBottom = Number.parseFloat(style.marginBottom) || 0;
+  return Math.max(1, Math.round(rect.height + marginTop + marginBottom));
+}
+
 /**
  * Conversation stream for one session. Consecutive assistant chunks are
  * coalesced by the hook into a single entry; sub-agent entries render as
@@ -156,7 +167,14 @@ export function StreamView({
   const [windowStart, setWindowStart] = useState(() =>
     initialStreamWindowStart(entries.length),
   );
+  const [measuredHeights, setMeasuredHeights] = useState<Record<number, number | undefined>>({});
   const windowStartsRef = useRef<Record<string, number>>({});
+  const measuredPaddingRef = useRef<{
+    start: number;
+    end: number;
+    top: number;
+    bottom: number;
+  } | null>(null);
   const windowSessionRef = useRef<string | null>(sessionId);
   const previousEntryCountRef = useRef(entries.length);
   const prependScrollRef = useRef<{
@@ -180,7 +198,7 @@ export function StreamView({
     ? entries.slice(safeWindowStart, safeWindowEnd)
     : entries;
   const windowPadding = streamWindowed
-    ? streamWindowPadding(entries.length, safeWindowStart, safeWindowEnd)
+    ? streamWindowPadding(entries.length, safeWindowStart, safeWindowEnd, undefined, measuredHeights)
     : { top: 0, bottom: 0 };
   const windowAnnouncement = streamWindowAnnouncement(
     safeWindowStart,
@@ -210,6 +228,8 @@ export function StreamView({
     prependScrollRef.current = null;
     jumpLatestRef.current = false;
     loadingOlderRef.current = false;
+    measuredPaddingRef.current = null;
+    setMeasuredHeights({});
     setWindowStart(next);
     setFindOpen(false);
     setFindQuery("");
@@ -275,6 +295,62 @@ export function StreamView({
       stream.scrollTop = stream.scrollHeight;
     }
   }, [safeWindowStart, windowStart]);
+
+  useLayoutEffect(() => {
+    if (!streamWindowed) {
+      measuredPaddingRef.current = null;
+      return;
+    }
+    const stream = streamRef.current;
+    const previous = measuredPaddingRef.current;
+    if (
+      stream !== null &&
+      previous !== null &&
+      previous.start === safeWindowStart &&
+      previous.end === safeWindowEnd
+    ) {
+      const topDelta = windowPadding.top - previous.top;
+      if (Math.abs(topDelta) > 0.5) stream.scrollTop += topDelta;
+    }
+    measuredPaddingRef.current = {
+      start: safeWindowStart,
+      end: safeWindowEnd,
+      top: windowPadding.top,
+      bottom: windowPadding.bottom,
+    };
+  }, [safeWindowEnd, safeWindowStart, streamWindowed, windowPadding.bottom, windowPadding.top]);
+
+  useLayoutEffect(() => {
+    if (!streamWindowed) return;
+    const stream = streamRef.current;
+    if (stream === null || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((observations) => {
+      const updates = new Map<number, number>();
+      for (const observation of observations) {
+        const node = observation.target as HTMLElement;
+        const rawIndex = node.dataset.entryIndex;
+        if (rawIndex === undefined) continue;
+        const index = Number(rawIndex);
+        if (!Number.isInteger(index) || index < 0) continue;
+        updates.set(index, measureEntryBlockHeight(node));
+      }
+      if (updates.size === 0) return;
+      setMeasuredHeights((current) => {
+        let next = current;
+        let changed = false;
+        for (const [index, height] of updates) {
+          if (Math.abs((current[index] ?? 0) - height) <= 0.5) continue;
+          if (!changed) next = { ...current };
+          next[index] = height;
+          changed = true;
+        }
+        return changed ? next : current;
+      });
+    });
+    const nodes = stream.querySelectorAll<HTMLElement>("[data-entry-index]");
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [safeWindowEnd, safeWindowStart, streamWindowed, visibleEntries.length]);
 
   useLayoutEffect(() => {
     if (findTarget === null) return;

@@ -8,10 +8,10 @@
 export const STREAM_WINDOW_THRESHOLD = 600;
 export const STREAM_WINDOW_SIZE = 160;
 export const STREAM_WINDOW_PAGE = 120;
-/** Conservative average used to keep the scrollbar proportional while older
- * entries are outside the DOM window. The real entries remain the source of
- * truth; this only reserves layout space. */
+/** Conservative average used before a rendered entry has been measured. */
 export const STREAM_ESTIMATED_ENTRY_HEIGHT = 96;
+
+export type StreamEntryHeights = Readonly<Record<number, number | undefined>>;
 
 export function shouldWindowStream(length: number): boolean {
   return length > STREAM_WINDOW_THRESHOLD;
@@ -32,16 +32,36 @@ export function streamWindowEnd(length: number, start: number): number {
   return Math.min(boundedLength, boundedStart + STREAM_WINDOW_SIZE);
 }
 
+function safeHeight(value: number | undefined, fallback: number): number {
+  return value !== undefined && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function measuredRangeHeight(
+  from: number,
+  to: number,
+  measuredHeights: StreamEntryHeights,
+  fallback: number,
+): number {
+  let height = 0;
+  for (let index = from; index < to; index += 1) {
+    height += safeHeight(measuredHeights[index], fallback);
+  }
+  return height;
+}
+
 /**
  * Reserve layout space for entries outside the bounded DOM window. Keeping
  * this calculation pure makes the scroll model testable without a browser
  * layout engine and avoids a scrollbar that represents only 160 entries.
+ * Measured block heights are used when available; entries not visited yet use
+ * the conservative estimate so the layout remains stable before measurement.
  */
 export function streamWindowPadding(
   length: number,
   start: number,
   end: number,
   entryHeight = STREAM_ESTIMATED_ENTRY_HEIGHT,
+  measuredHeights: StreamEntryHeights = {},
 ): { top: number; bottom: number } {
   const boundedLength = Number.isFinite(length) && length > 0 ? Math.floor(length) : 0;
   const boundedStart = Math.min(
@@ -52,12 +72,12 @@ export function streamWindowPadding(
     Math.max(boundedStart, Number.isFinite(end) ? Math.floor(end) : boundedStart),
     boundedLength,
   );
-  const height = Number.isFinite(entryHeight) && entryHeight > 0
+  const fallback = Number.isFinite(entryHeight) && entryHeight > 0
     ? entryHeight
     : STREAM_ESTIMATED_ENTRY_HEIGHT;
   return {
-    top: boundedStart * height,
-    bottom: (boundedLength - boundedEnd) * height,
+    top: measuredRangeHeight(0, boundedStart, measuredHeights, fallback),
+    bottom: measuredRangeHeight(boundedEnd, boundedLength, measuredHeights, fallback),
   };
 }
 

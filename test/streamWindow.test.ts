@@ -56,6 +56,20 @@ describe("bounded transcript window", () => {
     });
   });
 
+  it("uses measured entry heights without changing the fallback contract", () => {
+    assert.deepEqual(streamWindowPadding(8, 2, 5, 80, { 0: 120, 4: 140, 7: 40 }), {
+      top: 200,
+      bottom: 2 * 80 + 40,
+    });
+  });
+
+  it("ignores non-positive measured heights", () => {
+    assert.deepEqual(streamWindowPadding(4, 1, 3, 80, { 0: 0, 3: Number.NaN }), {
+      top: 80,
+      bottom: 80,
+    });
+  });
+
   it("clamps invalid padding inputs to a safe layout", () => {
     assert.deepEqual(streamWindowPadding(-1, 10, 2, 0), { top: 0, bottom: 0 });
     assert.deepEqual(streamWindowPadding(20, -4, 500, Number.NaN), {
