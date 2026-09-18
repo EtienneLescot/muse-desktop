@@ -6,11 +6,16 @@ import {
   desktopWindowLabel,
   formatDesktopCaptureContext,
   formatDesktopObservation,
+  sanitizeDesktopText,
   isDesktopControlAllowed,
   isDesktopPointInBounds,
   type DesktopWindow,
   type DesktopElement,
 } from "../src/lib/desktopControl.ts";
+
+test("desktop text removes replacement and invisible format markers", () => {
+  assert.equal(sanitizeDesktopText("Muse\u{feff} \u{200b}CLI\u{fffd} ready"), "Muse CLI ready");
+});
 import {
   buildDesktopSkillArguments,
   findDesktopSkill,
