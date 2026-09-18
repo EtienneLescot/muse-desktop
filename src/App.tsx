@@ -315,6 +315,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchIndex, setSearchIndex] = useState(0);
+  const [shareExportError, setShareExportError] = useState<string | null>(null);
   const searchTrigger = useRef<HTMLButtonElement>(null);
   const searchWasOpen = useRef(false);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
@@ -1644,6 +1645,7 @@ export default function App() {
                             sessionId={active.session_id}
                             mode={shareMode}
                             bundles={sessionBundles(active.session_id)}
+                            exportError={shareExportError}
                             onModeChange={setShareMode}
                             onShare={(format) =>
                               void shareSession(active.session_id, format)
@@ -1656,22 +1658,38 @@ export default function App() {
                                 // clipboard unavailable: the id stays visible for manual copy
                               }
                             }}
-                            onDownload={(b: ShareBundle) => {
+                            onDownload={async (b: ShareBundle) => {
                               const ext = b.format === "json" ? "json" : "md";
-                              const blob = new Blob([b.body], {
-                                type:
-                                  b.format === "json"
-                                    ? "application/json"
-                                    : "text/markdown",
-                              });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = `${b.bundleId}.${ext}`;
-                              document.body.appendChild(a);
-                              a.click();
-                              a.remove();
-                              URL.revokeObjectURL(url);
+                              const filename = `${b.bundleId}.${ext}`;
+                              try {
+                                setShareExportError(null);
+                                if (isTauriRuntime()) {
+                                  const target = await save({
+                                    title: "Save conversation export",
+                                    defaultPath: filename,
+                                    filters: [{
+                                      name: b.format === "json" ? "JSON" : "Markdown",
+                                      extensions: [ext],
+                                    }],
+                                  });
+                                  if (typeof target !== "string" || target.trim() === "") return;
+                                  await invoke("artifact_export", { path: target, content: b.body });
+                                  return;
+                                }
+                                const blob = new Blob([b.body], {
+                                  type: b.format === "json" ? "application/json" : "text/markdown",
+                                });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = filename;
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                URL.revokeObjectURL(url);
+                              } catch (error) {
+                                setShareExportError(`Export failed: ${userFacingError(error instanceof Error ? error.message : String(error))}`);
+                              }
                             }}
                           />{" "}
                           {channelsExperimental && (
