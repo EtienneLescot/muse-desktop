@@ -141,6 +141,21 @@ function finishApprovedTurn(session, pending, choiceId) {
   if (reasoning) {
     reasoning.status = "completed";
     notify("item/updated", { sessionId: session.sessionId, turnId: pending.turnId, item: reasoning });
+    // Keep one raw MSP-shaped snapshot in the fixture as well. Real hosts may
+    // nest the item and use protocol vocabulary that differs from the bridge's
+    // flattened aliases. The renderer must still close the thinking lane.
+    notify("item/updated", {
+      sessionId: session.sessionId,
+      turnId: pending.turnId,
+      item: {
+        itemId: reasoning.itemId,
+        turn_id: pending.turnId,
+        kind: "analysis",
+        status: "done",
+        content: reasoning.text,
+        revision: 2,
+      },
+    });
     notify("item/completed", { sessionId: session.sessionId, turnId: pending.turnId, item: reasoning });
   }
   const tool = item(session, pending.turnId, "toolCall", "git status --short\n(clean fixture workspace)");
@@ -149,6 +164,19 @@ function finishApprovedTurn(session, pending, choiceId) {
   tool.visibleOutput = "(clean fixture workspace)";
   notify("item/started", { sessionId: session.sessionId, turnId: pending.turnId, item: { ...tool, status: "inProgress" } });
   notify("item/completed", { sessionId: session.sessionId, turnId: pending.turnId, item: tool });
+  notify("item/updated", {
+    sessionId: session.sessionId,
+    turnId: pending.turnId,
+    item: {
+      itemId: tool.itemId,
+      turn_id: pending.turnId,
+      kind: "userShell",
+      status: "succeeded",
+      content: tool.visibleOutput,
+      command_text: tool.args,
+      revision: 1,
+    },
+  });
   const assistant = item(session, pending.turnId, "agentMessage", `Action approved (${choiceId}); the fixture turn resumed successfully.`);
   notify("item/started", { sessionId: session.sessionId, turnId: pending.turnId, item: assistant });
   notify("item/delta", {

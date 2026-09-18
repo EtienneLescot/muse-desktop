@@ -122,7 +122,28 @@ test("Muse fixture resumes a turn after a terminal approval", async () => {
 
     const resolved = await nextNotification(client, "approval/resolved");
     assert.equal((resolved.params as Frame).approvalId, requestParams.approvalId);
-    const completed = await nextNotification(client, "turn/completed");
+    let sawNestedReasoning = false;
+    let sawNestedShell = false;
+    let completed: Frame | undefined;
+    for (;;) {
+      const frame = await client.read();
+      if (frame.method === "item/updated") {
+        const item = ((frame.params as Frame).item ?? {}) as Frame;
+        if (item.kind === "analysis" && item.status === "done" && item.turn_id === turnId) {
+          sawNestedReasoning = true;
+        }
+        if (item.kind === "userShell" && item.status === "succeeded" && item.turn_id === turnId) {
+          sawNestedShell = true;
+        }
+      }
+      if (frame.method === "turn/completed") {
+        completed = frame;
+        break;
+      }
+    }
+    assert.equal(sawNestedReasoning, true);
+    assert.equal(sawNestedShell, true);
+    assert.ok(completed);
     assert.equal((completed.params as Frame).turnId, turnId);
 
     const after = await client.request(6, "approval/listPending", { sessionId });
