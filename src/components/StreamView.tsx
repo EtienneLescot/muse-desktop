@@ -10,6 +10,7 @@ import {
   prependStreamWindowStart,
   shouldWindowStream,
   streamWindowEnd,
+  streamWindowPadding,
 } from "../lib/streamWindow";
 import {
   classifyStreamHealth,
@@ -173,6 +174,9 @@ export function StreamView({
   const visibleEntries = streamWindowed
     ? entries.slice(safeWindowStart, safeWindowEnd)
     : entries;
+  const windowPadding = streamWindowed
+    ? streamWindowPadding(entries.length, safeWindowStart, safeWindowEnd)
+    : { top: 0, bottom: 0 };
   const windowAnnouncement = streamWindowAnnouncement(
     safeWindowStart,
     safeWindowEnd,
@@ -592,6 +596,13 @@ export function StreamView({
           </div>
         )}
       </div>
+      {streamWindowed && windowPadding.top > 0 && (
+        <div
+          className="stream-window-spacer"
+          aria-hidden="true"
+          style={{ height: `${windowPadding.top}px` }}
+        />
+      )}
       {streamWindowed && safeWindowStart > 0 && (
         <div className="stream-window-notice" role="status" aria-live="polite">
           <button type="button" onClick={loadOlderMessages}>
@@ -881,6 +892,13 @@ export function StreamView({
           </div>
         );
       })}
+      {streamWindowed && windowPadding.bottom > 0 && (
+        <div
+          className="stream-window-spacer"
+          aria-hidden="true"
+          style={{ height: `${windowPadding.bottom}px` }}
+        />
+      )}
       {health !== "idle" && (
         <div
           className={`stream-health stream-health-${health}`}

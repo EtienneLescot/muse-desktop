@@ -683,6 +683,13 @@ body.dark .avatar {
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 
+.stream-window-spacer {
+  width: 100%;
+  flex: 0 0 auto;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* M0-02: a calm, inline heartbeat for quiet turns. It sits in the stream so
    the explanation stays next to the latest message and never covers the
    conversation with a modal warning. */

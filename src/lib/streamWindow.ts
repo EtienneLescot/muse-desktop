@@ -8,6 +8,10 @@
 export const STREAM_WINDOW_THRESHOLD = 600;
 export const STREAM_WINDOW_SIZE = 160;
 export const STREAM_WINDOW_PAGE = 120;
+/** Conservative average used to keep the scrollbar proportional while older
+ * entries are outside the DOM window. The real entries remain the source of
+ * truth; this only reserves layout space. */
+export const STREAM_ESTIMATED_ENTRY_HEIGHT = 96;
 
 export function shouldWindowStream(length: number): boolean {
   return length > STREAM_WINDOW_THRESHOLD;
@@ -26,6 +30,35 @@ export function streamWindowEnd(length: number, start: number): number {
     boundedLength,
   );
   return Math.min(boundedLength, boundedStart + STREAM_WINDOW_SIZE);
+}
+
+/**
+ * Reserve layout space for entries outside the bounded DOM window. Keeping
+ * this calculation pure makes the scroll model testable without a browser
+ * layout engine and avoids a scrollbar that represents only 160 entries.
+ */
+export function streamWindowPadding(
+  length: number,
+  start: number,
+  end: number,
+  entryHeight = STREAM_ESTIMATED_ENTRY_HEIGHT,
+): { top: number; bottom: number } {
+  const boundedLength = Number.isFinite(length) && length > 0 ? Math.floor(length) : 0;
+  const boundedStart = Math.min(
+    Math.max(0, Number.isFinite(start) ? Math.floor(start) : 0),
+    boundedLength,
+  );
+  const boundedEnd = Math.min(
+    Math.max(boundedStart, Number.isFinite(end) ? Math.floor(end) : boundedStart),
+    boundedLength,
+  );
+  const height = Number.isFinite(entryHeight) && entryHeight > 0
+    ? entryHeight
+    : STREAM_ESTIMATED_ENTRY_HEIGHT;
+  return {
+    top: boundedStart * height,
+    bottom: (boundedLength - boundedEnd) * height,
+  };
 }
 
 /** Pick a saved start, or default to the newest window on first render. */
