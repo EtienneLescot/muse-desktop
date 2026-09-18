@@ -718,6 +718,58 @@ fn completed_item_text(item: &Value, kind: &str) -> Option<String> {
 const MAX_OUTPUT_REF_CHARS: usize = 4096;
 const MAX_OUTPUT_OFFSET_BYTES: u64 = 100 * 1024 * 1024;
 const MAX_OUTPUT_LENGTH_BYTES: u64 = 64 * 1024;
+const MAX_RICH_CONTENT_ITEMS: usize = 16;
+const MAX_RICH_CONTENT_TEXT: usize = 240;
+
+/// Forward only the bounded metadata required to render a host rich output.
+/// Bytes remain behind `outputRef` and are never echoed into the event stream.
+fn item_rich_content(item: &Value) -> Option<Vec<Value>> {
+    let raw = item
+        .get("modelVisibleContent")
+        .or_else(|| item.get("model_visible_content"))?
+        .as_array()?;
+    let content = raw
+        .iter()
+        .take(MAX_RICH_CONTENT_ITEMS)
+        .filter_map(|value| {
+            let object = value.as_object()?;
+            let text = |camel: &str, snake: &str| {
+                object
+                    .get(camel)
+                    .or_else(|| object.get(snake))
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty() && value.chars().count() <= MAX_RICH_CONTENT_TEXT)
+                    .map(str::to_string)
+            };
+            let kind = text("type", "type")?;
+            let media_type = text("mediaType", "media_type")?;
+            let path = text("path", "path")?;
+            let source_tool_name = text("sourceToolName", "source_tool_name")?;
+            let dimension = |camel: &str, snake: &str| {
+                object
+                    .get(camel)
+                    .or_else(|| object.get(snake))
+                    .and_then(Value::as_u64)
+                    .filter(|value| *value > 0 && *value <= 10_000)
+            };
+            let mut output = json!({
+                "type": kind,
+                "mediaType": media_type,
+                "path": path,
+                "sourceToolName": source_tool_name,
+            });
+            if let Some(width) = dimension("width", "width") {
+                output["width"] = json!(width);
+            }
+            if let Some(height) = dimension("height", "height") {
+                output["height"] = json!(height);
+            }
+            Some(output)
+        })
+        .collect::<Vec<_>>();
+    (!content.is_empty()).then_some(content)
+}
 
 fn item_output_ref(item: &Value) -> Option<String> {
     let raw = item.get("outputRef").or_else(|| item.get("output_ref"))?;
@@ -1401,6 +1453,7 @@ where
                         "itemKind": kind,
                         "commandText": item.get("commandText"),
                         "outputRef": item_output_ref(item),
+                        "richContent": item_rich_content(item),
                         "turnId": item.get("turnId"),
                     }).to_string(),
                 );
@@ -1599,6 +1652,7 @@ where
                                     "text": text,
                                     "commandText": item.and_then(|i| i.get("commandText")),
                                     "outputRef": output_ref,
+                                    "richContent": item.and_then(item_rich_content),
                                     "turnId": turn_id,
                                     "revision": item.and_then(|i| i.get("revision")),
                                     "status": item.and_then(|i| i.get("status")),
@@ -1620,6 +1674,7 @@ where
                                 "itemKind": kind,
                                 "commandText": item.and_then(|i| i.get("commandText")),
                                 "outputRef": output_ref,
+                                "richContent": item.and_then(item_rich_content),
                                 "turnId": turn_id,
                             })
                             .to_string(),
@@ -1658,7 +1713,7 @@ where
                                 lane,
                                 sid,
                                 lane,
-                                json!({"itemId": item_id, "text": text, "outputRef": output_ref}).to_string(),
+                                json!({"itemId": item_id, "text": text, "outputRef": output_ref, "richContent": item.and_then(item_rich_content)}).to_string(),
                             );
                         }
                         // A metadata-only, non-terminal update never emits a
@@ -6559,6 +6614,22 @@ mod tests {
         );
         assert_eq!(item_output_ref(&json!({"outputRef": ""})), None);
         assert_eq!(item_output_ref(&json!({"outputRef": "x".repeat(MAX_OUTPUT_REF_CHARS + 1)})), None);
+    }
+
+    #[test]
+    fn rich_content_metadata_is_bounded_and_normalized() {
+        let item = json!({
+            "modelVisibleContent": [
+                {"type": "image", "mediaType": "image/png", "path": "art/output.png", "sourceToolName": "image.generate", "width": 640, "height": 480},
+                {"type": "image", "mediaType": "image/png", "path": "missing-source", "sourceToolName": ""},
+                {"type": "image", "mediaType": "image/png", "path": "too-wide", "sourceToolName": "tool", "width": 20001}
+            ]
+        });
+        let result = item_rich_content(&item).expect("valid content items");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0]["mediaType"], "image/png");
+        assert_eq!(result[0]["width"], 640);
+        assert!(result[1].get("width").is_none());
     }
 
     #[test]

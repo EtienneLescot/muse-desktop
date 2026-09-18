@@ -31,6 +31,7 @@ import {
   saveWorkspace,
   type LogEntry,
   type LogRole,
+  type RichContent,
   type StoredSession,
 } from "../lib/persist";
 // M0-03 lossless send: outbox state machine + explicit SendResult (pure,
@@ -756,6 +757,8 @@ export interface ApprovalRequest {
 /** One bounded chunk returned by the host's lazy item output reader. */
 export interface ItemOutputChunk {
   content: string;
+  /** Base64 bytes when the host marks the output as binary. */
+  base64Data?: string;
   offsetBytes: number;
   nextOffsetBytes: number;
   byteLen: number;
@@ -1275,7 +1278,32 @@ function shortTitle(text: string): string {
  * Parse a stream-chunk payload: JSON `{itemId, text}` from the supervisor, or
  * raw text from older payloads. Never throws.
  */
-function parseChunk(payload: string): { itemId?: string; turnId?: string; outputRef?: string; text: string } {
+function parseRichContent(value: unknown): RichContent[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.slice(0, 16).flatMap((raw): RichContent[] => {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return [];
+    const item = raw as Record<string, unknown>;
+    const text = (key: string): string | undefined =>
+      typeof item[key] === "string" && (item[key] as string).trim().length > 0
+        ? (item[key] as string).trim().slice(0, 240)
+        : undefined;
+    const type = text("type");
+    const mediaType = text("mediaType") ?? text("media_type");
+    const path = text("path");
+    const sourceToolName = text("sourceToolName") ?? text("source_tool_name");
+    if (!type || !mediaType || !path || !sourceToolName) return [];
+    const dimension = (key: string): number | undefined => {
+      const n = item[key];
+      return typeof n === "number" && Number.isFinite(n) && n > 0 && n <= 10000 ? n : undefined;
+    };
+    const width = dimension("width");
+    const height = dimension("height");
+    return [{ type, mediaType, path, sourceToolName, ...(width === undefined ? {} : { width }), ...(height === undefined ? {} : { height }) }];
+  });
+  return items.length > 0 ? items : undefined;
+}
+
+function parseChunk(payload: string): { itemId?: string; turnId?: string; outputRef?: string; richContent?: RichContent[]; text: string } {
   const trimmed = payload.trim();
   if (trimmed.startsWith("{")) {
     try {
@@ -1288,7 +1316,8 @@ function parseChunk(payload: string): { itemId?: string; turnId?: string; output
         const outputRef = typeof obj.outputRef === "string" && obj.outputRef.trim().length > 0
           ? obj.outputRef.trim()
           : undefined;
-        return { itemId, turnId, outputRef, text: obj.text };
+        const richContent = parseRichContent(obj.richContent);
+        return { itemId, turnId, outputRef, ...(richContent ? { richContent } : {}), text: obj.text };
       }
     } catch {
       // fall through to raw text
@@ -2866,6 +2895,7 @@ export function useMuseSessions(): UseMuseSessions {
     role: "assistant" | "thinking" | "tool" = "assistant",
     turnId?: string,
     initialText = "",
+    richContent?: RichContent[],
   ): void {
     const stamp = { id: newId(), ts: Date.now() };
     setLogs((cur) => {
@@ -2875,6 +2905,7 @@ export function useMuseSessions(): UseMuseSessions {
         role,
         turnId,
         initialText,
+        richContent,
         stamp,
       });
       if (next === (cur[sessionId] ?? [])) return cur;
@@ -3127,7 +3158,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "output") {
       ensureSessionRow(sid, null);
-      const { itemId, turnId, outputRef, text } = parseChunk(payload);
+      const { itemId, turnId, outputRef, richContent, text } = parseChunk(payload);
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -3144,12 +3175,13 @@ export function useMuseSessions(): UseMuseSessions {
             text: log[i].text + text,
             itemId: itemId ?? log[i].itemId,
             ...(outputRef === undefined ? {} : { outputRef }),
+            ...(richContent === undefined ? {} : { richContent }),
           };
           next = [...log.slice(0, i), merged, ...log.slice(i + 1)];
         } else {
           next = [
             ...log,
-            { id: newId(), ts: Date.now(), role: "assistant" as LogRole, text, itemId, outputRef, open: true },
+            { id: newId(), ts: Date.now(), role: "assistant" as LogRole, text, itemId, outputRef, ...(richContent === undefined ? {} : { richContent }), open: true },
           ];
         }
         saveLog(sid, next);
@@ -3162,7 +3194,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "thinking") {
       ensureSessionRow(sid, null);
-      const { itemId, turnId, outputRef, text } = parseChunk(payload);
+      const { itemId, turnId, outputRef, richContent, text } = parseChunk(payload);
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -3179,7 +3211,7 @@ export function useMuseSessions(): UseMuseSessions {
           const prev = log[i];
           next = [
             ...log.slice(0, i),
-            { ...prev, text: prev.text + text, itemId: itemId ?? prev.itemId, ...(outputRef === undefined ? {} : { outputRef }) },
+            { ...prev, text: prev.text + text, itemId: itemId ?? prev.itemId, ...(outputRef === undefined ? {} : { outputRef }), ...(richContent === undefined ? {} : { richContent }) },
             ...log.slice(i + 1),
           ];
         } else {
@@ -3192,6 +3224,7 @@ export function useMuseSessions(): UseMuseSessions {
               text,
               itemId,
               outputRef,
+              ...(richContent === undefined ? {} : { richContent }),
               open: true,
             },
           ];
@@ -3206,7 +3239,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "shell_output") {
       ensureSessionRow(sid, null);
-      const { itemId, turnId, outputRef, text } = parseChunk(payload);
+      const { itemId, turnId, outputRef, richContent, text } = parseChunk(payload);
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -3220,13 +3253,13 @@ export function useMuseSessions(): UseMuseSessions {
           const separator = previous.text.length > 0 && text.length > 0 ? "\n" : "";
           next = [
             ...log.slice(0, i),
-            { ...previous, text: `${previous.text}${separator}${text}`, itemId: itemId ?? previous.itemId, ...(outputRef === undefined ? {} : { outputRef }) },
+            { ...previous, text: `${previous.text}${separator}${text}`, itemId: itemId ?? previous.itemId, ...(outputRef === undefined ? {} : { outputRef }), ...(richContent === undefined ? {} : { richContent }) },
             ...log.slice(i + 1),
           ];
         } else {
           next = [
             ...log,
-            { id: newId(), ts: Date.now(), role: "tool", text, itemId, outputRef, open: true },
+            { id: newId(), ts: Date.now(), role: "tool", text, itemId, outputRef, ...(richContent === undefined ? {} : { richContent }), open: true },
           ];
         }
         saveLog(sid, next);
@@ -3356,7 +3389,11 @@ export function useMuseSessions(): UseMuseSessions {
       }
       const itemId = typeof parsed?.itemId === "string" ? parsed.itemId : "";
       const text = typeof parsed?.text === "string" ? parsed.text : "";
-      if (itemId.length === 0 || text.length === 0) return;
+      const richContent = parseRichContent(parsed?.richContent);
+      const outputRef = typeof parsed?.outputRef === "string" && parsed.outputRef.trim().length > 0
+        ? parsed.outputRef.trim()
+        : undefined;
+      if (itemId.length === 0 || (text.length === 0 && richContent === undefined && outputRef === undefined)) return;
       const lane: "assistant" | "thinking" | "tool" = parsed?.lane === "thinking"
         ? "thinking"
         : parsed?.lane === "shell_output"
@@ -3369,9 +3406,6 @@ export function useMuseSessions(): UseMuseSessions {
         ? parsed.turnId
         : undefined;
       const commandText = typeof parsed?.commandText === "string" ? parsed.commandText : undefined;
-      const outputRef = typeof parsed?.outputRef === "string" && parsed.outputRef.trim().length > 0
-        ? parsed.outputRef.trim()
-        : undefined;
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -3384,6 +3418,7 @@ export function useMuseSessions(): UseMuseSessions {
           ...(turnId === undefined ? {} : { turnId }),
           ...(commandText === undefined ? {} : { commandText }),
           ...(outputRef === undefined ? {} : { outputRef }),
+          ...(richContent === undefined ? {} : { richContent }),
           ...(revision === undefined ? {} : { revision }),
           open: true,
           stamp: { id: newId(), ts: Date.now() },
@@ -3571,11 +3606,13 @@ export function useMuseSessions(): UseMuseSessions {
       let agentId: string | undefined;
       let itemRole: "assistant" | "thinking" | "tool" = "assistant";
       let initialText = "";
+      let richContent: RichContent[] | undefined;
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const rawId = obj.itemId ?? obj.id;
         if (typeof rawId === "string" && rawId.length > 0) itemId = rawId;
         if (typeof obj.turnId === "string" && obj.turnId.length > 0) turnId = obj.turnId;
+        richContent = parseRichContent(obj.richContent);
         const rawKind = obj.itemKind ?? obj.kind;
         if (typeof rawKind === "string") {
           if (isSubagentItemKind(rawKind)) {
@@ -3602,7 +3639,7 @@ export function useMuseSessions(): UseMuseSessions {
           cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
         );
       }
-      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId, initialText);
+      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId, initialText, richContent);
       return;
     }
     // status (and any future kinds): record + reflect liveness.
@@ -6747,22 +6784,31 @@ export function useMuseSessions(): UseMuseSessions {
         const rawContent = typeof value.content === "string" ? value.content : "";
         const encoding = typeof value.encoding === "string" ? value.encoding.toLowerCase() : "";
         let content = rawContent;
+        let base64Data: string | undefined;
         if (encoding === "base64" && typeof atob === "function") {
-          const binary = atob(rawContent);
-          const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-          content = typeof TextDecoder === "function"
-            ? new TextDecoder().decode(bytes)
-            : binary;
+          // Keep binary output opaque. TextDecoder would corrupt images and
+          // documents; the stream decides how to preview the media type.
+          try {
+            atob(rawContent);
+            base64Data = rawContent.replace(/\s+/g, "");
+            content = "";
+          } catch {
+            throw new Error("host returned invalid base64 output");
+          }
         }
         const returnedOffset = typeof value.offsetBytes === "number" && Number.isFinite(value.offsetBytes)
           ? Math.max(0, value.offsetBytes)
           : offset;
+        const inferredBinaryByteLen = base64Data === undefined
+          ? undefined
+          : Math.max(0, Math.floor(base64Data.length * 3 / 4) - (base64Data.endsWith("==") ? 2 : base64Data.endsWith("=") ? 1 : 0));
         const byteLen = typeof value.byteLen === "number" && Number.isFinite(value.byteLen)
           ? Math.max(0, value.byteLen)
-          : new TextEncoder().encode(content).byteLength;
+          : inferredBinaryByteLen ?? new TextEncoder().encode(content).byteLength;
         const eof = value.eof === true;
         return {
           content,
+          ...(base64Data === undefined ? {} : { base64Data }),
           offsetBytes: returnedOffset,
           nextOffsetBytes: returnedOffset + byteLen,
           byteLen,

@@ -9,7 +9,7 @@
  * coalesces into it, so no label ever leaks into the streamed content. The
  * "thinking…" label is rendered by StreamView, never stored in the log.
  */
-import type { LogEntry } from "./persist";
+import type { LogEntry, RichContent } from "./persist";
 
 /** Label rendered (never stored) for an open entry with no text yet. */
 export const REFLEXIVE_LABEL = "thinking…";
@@ -126,6 +126,7 @@ export interface ItemSnapshotUpdate {
   turnId?: string;
   commandText?: string;
   outputRef?: string;
+  richContent?: RichContent[];
   revision?: number;
   open?: boolean;
   stamp: PlaceholderStamp;
@@ -179,6 +180,7 @@ export function applyItemSnapshotUpdate(
     ...(update.turnId === undefined ? {} : { turnId: update.turnId }),
     ...(update.revision === undefined ? {} : { itemRevision: update.revision }),
     ...(update.outputRef === undefined ? {} : { outputRef: update.outputRef }),
+    ...(update.richContent === undefined ? {} : { richContent: update.richContent.map((item) => ({ ...item })) }),
     open: update.open ?? true,
   };
   if (index >= 0) {
@@ -212,10 +214,11 @@ export function upsertReflexivePlaceholder(
     role?: "assistant" | "thinking" | "tool";
     /** Optional visible seed (for example `$ command` in a user-shell item). */
     initialText?: string;
+    richContent?: RichContent[];
     stamp: PlaceholderStamp;
   },
 ): LogEntry[] {
-  const { itemId, turnId, agentId, role = "assistant", initialText = "", stamp } = opts;
+  const { itemId, turnId, agentId, role = "assistant", initialText = "", richContent, stamp } = opts;
   if (agentId !== undefined) {
     const i = lastIndex(
       log,
@@ -232,6 +235,7 @@ export function upsertReflexivePlaceholder(
         agentId,
         itemId,
         ...(turnId ? { turnId } : {}),
+        ...(richContent === undefined ? {} : { richContent: richContent.map((item) => ({ ...item })) }),
         open: true,
       },
     ];
@@ -262,7 +266,7 @@ export function upsertReflexivePlaceholder(
     if (live >= 0) return log;
     return [
       ...log,
-      { id: stamp.id, ts: stamp.ts, role: "thinking", text: "", itemId, ...(turnId ? { turnId } : {}), open: true },
+      { id: stamp.id, ts: stamp.ts, role: "thinking", text: "", itemId, ...(turnId ? { turnId } : {}), ...(richContent === undefined ? {} : { richContent: richContent.map((item) => ({ ...item })) }), open: true },
     ];
   }
   if (role === "tool") {
@@ -292,6 +296,7 @@ export function upsertReflexivePlaceholder(
         text: initialText,
         itemId,
         ...(turnId ? { turnId } : {}),
+        ...(richContent === undefined ? {} : { richContent: richContent.map((item) => ({ ...item })) }),
         open: true,
       },
     ];
@@ -305,7 +310,7 @@ export function upsertReflexivePlaceholder(
   }
   return [
     ...log,
-    { id: stamp.id, ts: stamp.ts, role: "assistant", text: initialText, itemId, ...(turnId ? { turnId } : {}), open: true },
+    { id: stamp.id, ts: stamp.ts, role: "assistant", text: initialText, itemId, ...(turnId ? { turnId } : {}), ...(richContent === undefined ? {} : { richContent: richContent.map((item) => ({ ...item })) }), open: true },
   ];
 }
 

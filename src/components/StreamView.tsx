@@ -151,6 +151,8 @@ export function StreamView({
   const [shown, setShown] = useState<Record<string, string>>({});
   const [loadedOutputs, setLoadedOutputs] = useState<Record<string, {
     content: string;
+    base64Data?: string;
+    mediaType?: string;
     nextOffsetBytes: number;
     byteLen: number;
     eof: boolean;
@@ -185,6 +187,25 @@ export function StreamView({
   } | null>(null);
   const jumpLatestRef = useRef(false);
   const loadingOlderRef = useRef(false);
+
+  function appendBase64(first: string | undefined, second: string): string {
+    if (!first) return second;
+    if (typeof atob !== "function" || typeof btoa !== "function") return `${first}${second}`;
+    try {
+      const left = atob(first);
+      const right = atob(second);
+      const bytes = new Uint8Array(left.length + right.length);
+      for (let i = 0; i < left.length; i++) bytes[i] = left.charCodeAt(i);
+      for (let i = 0; i < right.length; i++) bytes[left.length + i] = right.charCodeAt(i);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 0x8000, bytes.length)));
+      }
+      return btoa(binary);
+    } catch {
+      return `${first}${second}`;
+    }
+  }
 
   const streamWindowed = shouldWindowStream(entries.length);
   const maxWindowStart = maxStreamWindowStart(entries.length);
@@ -501,10 +522,17 @@ export function StreamView({
       setLoadedOutputs((cur) => {
         const current = cur[entry.id];
         const append = current !== undefined && chunk.offsetBytes >= current.nextOffsetBytes;
+        const binary = chunk.base64Data !== undefined;
         return {
           ...cur,
           [entry.id]: {
-            content: append ? `${current.content}${chunk.content}` : chunk.content,
+            content: binary ? (append ? current.content : "") : (append ? `${current.content}${chunk.content}` : chunk.content),
+            ...(binary
+              ? { base64Data: appendBase64(append ? current?.base64Data : undefined, chunk.base64Data!) }
+              : current?.base64Data === undefined ? {} : { base64Data: current.base64Data }),
+            ...((chunk.mediaType ?? entry.richContent?.[0]?.mediaType) === undefined
+              ? {}
+              : { mediaType: chunk.mediaType ?? entry.richContent?.[0]?.mediaType }),
             nextOffsetBytes: chunk.nextOffsetBytes,
             byteLen: (append ? current.byteLen : 0) + chunk.byteLen,
             eof: chunk.eof || chunk.byteLen === 0,
@@ -953,7 +981,22 @@ export function StreamView({
                 )}
               </pre>
             )}
-            {e.role === "tool" && e.outputRef && (
+            {e.richContent && e.richContent.length > 0 && (
+              <div className="rich-content-list" aria-label="Rich output">
+                {e.richContent.map((content, index) => (
+                  <div className="rich-content-meta" key={`${content.path}-${index}`}>
+                    <strong>{content.type}</strong>
+                    <span>{content.mediaType}</span>
+                    <span title={content.path}>{content.path}</span>
+                    <small>from {content.sourceToolName}</small>
+                    {(content.width !== undefined && content.height !== undefined) && (
+                      <small>{content.width}×{content.height}</small>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {e.outputRef && (e.role === "tool" || (e.richContent?.length ?? 0) > 0) && (
               <div className="tool-output-loader">
                 <button
                   type="button"
@@ -967,7 +1010,9 @@ export function StreamView({
                       ? "Output loaded"
                       : loadedOutputs[e.id]
                         ? "Load more output"
-                        : "Load full output"}
+                        : e.richContent && e.richContent.length > 0
+                          ? "Preview output"
+                          : "Load full output"}
                 </button>
                 {loadedOutputs[e.id] && (
                   <>
@@ -975,7 +1020,17 @@ export function StreamView({
                       {loadedOutputs[e.id].byteLen.toLocaleString()} bytes loaded
                       {loadedOutputs[e.id].eof ? " · complete" : " · more available"}
                     </span>
-                    <pre className="tool-output-content">{loadedOutputs[e.id].content}</pre>
+                    {loadedOutputs[e.id].base64Data && loadedOutputs[e.id].mediaType?.startsWith("image/") && loadedOutputs[e.id].eof ? (
+                      <img
+                        className="rich-content-preview"
+                        src={`data:${loadedOutputs[e.id].mediaType};base64,${loadedOutputs[e.id].base64Data}`}
+                        alt="Muse rich output preview"
+                      />
+                    ) : loadedOutputs[e.id].content.length > 0 ? (
+                      <pre className="tool-output-content">{loadedOutputs[e.id].content}</pre>
+                    ) : loadedOutputs[e.id].base64Data ? (
+                      <p className="muted">Binary output is still loading; preview appears when complete.</p>
+                    ) : null}
                   </>
                 )}
               </div>

@@ -89,6 +89,27 @@ describe("session history hydration", () => {
     assert.equal(entries[0].outputRef, "output://out-1");
   });
 
+  it("keeps bounded rich-content metadata beside a lazy output reference", () => {
+    const entries = historyItemsToLogEntries([
+      {
+        itemId: "tool-image",
+        kind: "toolCall",
+        tool: "image.generate",
+        visibleOutput: "Generated image",
+        outputRef: "output://image-1",
+        modelVisibleContent: [
+          { type: "image", mediaType: "image/png", path: "art/output.png", sourceToolName: "image.generate", width: 640, height: 480 },
+          { type: "image", mediaType: "image/png", path: "ignored-without-source", sourceToolName: "" },
+        ],
+        status: "completed",
+      },
+    ]);
+    assert.deepEqual(entries[0].richContent, [
+      { type: "image", mediaType: "image/png", path: "art/output.png", sourceToolName: "image.generate", width: 640, height: 480 },
+    ]);
+    assert.equal(entries[0].outputRef, "output://image-1");
+  });
+
   it("reconciles by item id and keeps local notes without duplicating user text", () => {
     const local = [
       { id: "local-user", ts: 1, role: "user" as const, text: "Hello" },

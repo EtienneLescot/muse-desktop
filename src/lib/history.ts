@@ -1,4 +1,4 @@
-import type { LogEntry, LogRole } from "./persist.ts";
+import type { LogEntry, LogRole, RichContent } from "./persist.ts";
 
 /** A folded item returned by MSP `session/read`. Unknown additive fields are ignored. */
 export interface SessionHistoryItem {
@@ -27,6 +27,7 @@ export interface SessionHistoryItem {
   commandText?: unknown;
   /** Opaque host reference for lazily loading a large tool output. */
   outputRef?: unknown;
+  modelVisibleContent?: unknown;
 }
 
 /** A durable notification returned by MSP `view/page`.
@@ -50,6 +51,31 @@ function outputReference(value: unknown): string | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const object = value as { uri?: unknown; id?: unknown };
   return stringValue(object.uri) ?? stringValue(object.id);
+}
+
+function richContent(value: unknown): RichContent[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.slice(0, 16).flatMap((raw): RichContent[] => {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return [];
+    const item = raw as Record<string, unknown>;
+    const text = (key: string): string | undefined =>
+      typeof item[key] === "string" && (item[key] as string).trim().length > 0
+        ? (item[key] as string).trim().slice(0, 240)
+        : undefined;
+    const type = text("type");
+    const mediaType = text("mediaType") ?? text("media_type");
+    const path = text("path");
+    const sourceToolName = text("sourceToolName") ?? text("source_tool_name");
+    if (!type || !mediaType || !path || !sourceToolName) return [];
+    const dimension = (key: string): number | undefined => {
+      const n = item[key];
+      return typeof n === "number" && Number.isFinite(n) && n > 0 && n <= 10000 ? n : undefined;
+    };
+    const width = dimension("width");
+    const height = dimension("height");
+    return [{ type, mediaType, path, sourceToolName, ...(width === undefined ? {} : { width }), ...(height === undefined ? {} : { height }) }];
+  });
+  return items.length > 0 ? items : undefined;
 }
 
 /** Normalize additive host aliases before choosing a transcript lane. */
@@ -164,7 +190,12 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
     const role = roleForKind(kind);
     if (role === null) return;
     const text = itemText(item, kind);
-    if (text.length === 0) return;
+    const metadata = richContent(item.modelVisibleContent);
+    const outputRef = outputReference(item.outputRef);
+    // Image/document items may intentionally carry no visible text. Keep the
+    // lane when the host supplied either a lazy output reference or rich
+    // metadata so the renderer can offer its preview affordance.
+    if (text.length === 0 && metadata === undefined && outputRef === undefined) return;
     const entry: LogEntry = {
       id: `history:${itemId}`,
       ts: timestamp(item, now + index),
@@ -172,7 +203,8 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
       text,
       itemId,
       ...(turnId === undefined ? {} : { turnId }),
-      ...(outputReference(item.outputRef) === undefined ? {} : { outputRef: outputReference(item.outputRef) }),
+      ...(outputRef === undefined ? {} : { outputRef }),
+      ...(metadata === undefined ? {} : { richContent: metadata }),
       open: item.status === "inProgress",
     };
     const revision = typeof item.revision === "number" && Number.isFinite(item.revision)

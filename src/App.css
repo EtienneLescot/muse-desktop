@@ -3208,6 +3208,44 @@ body.dark .composer textarea::placeholder {
   grid-column: 1 / -1;
   color: var(--warning, #c48721);
 }
+
+.rich-content-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.rich-content-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.rich-content-meta strong {
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.rich-content-meta span {
+  max-width: 34rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rich-content-preview {
+  display: block;
+  flex: 1 0 100%;
+  max-width: min(100%, 720px);
+  max-height: 520px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
 .orchestration-writer-result {
   grid-column: 1 / -1;
   margin: 2px 0 0;

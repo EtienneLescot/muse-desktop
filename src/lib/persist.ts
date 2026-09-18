@@ -54,6 +54,16 @@ export interface StoredSession {
 /** Reasoning is persisted separately so it can be disclosed in the stream. */
 export type LogRole = "user" | "assistant" | "thinking" | "subagent" | "system" | "tool";
 
+/** Bounded metadata for host-provided rich output (bytes stay behind outputRef). */
+export interface RichContent {
+  type: string;
+  mediaType: string;
+  path: string;
+  sourceToolName: string;
+  width?: number;
+  height?: number;
+}
+
 export interface LogEntry {
   id: string;
   ts: number;
@@ -69,6 +79,8 @@ export interface LogEntry {
   itemRevision?: number;
   /** Opaque host reference for lazily loading a large item output. */
   outputRef?: string;
+  /** Host-provided rich output metadata; payload bytes are never persisted here. */
+  richContent?: RichContent[];
   /** True while further stream chunks may still be appended. */
   open?: boolean;
   /** Drill-down into the child's own transcript (`session/read`). */
@@ -149,6 +161,20 @@ function isValidEntry(e: unknown): e is LogEntry {
           Number.isFinite((error as Record<string, unknown>).durationMs))));
   const validSubagentStatus =
     r.subagentStatus === undefined || isSubagentStatus(r.subagentStatus);
+  const validRichContent =
+    r.richContent === undefined ||
+    (Array.isArray(r.richContent) &&
+      r.richContent.length <= 16 &&
+      r.richContent.every((item) => {
+        if (typeof item !== "object" || item === null || Array.isArray(item)) return false;
+        const value = item as Record<string, unknown>;
+        const bounded = (key: string) =>
+          typeof value[key] === "string" && (value[key] as string).length > 0 && (value[key] as string).length <= 240;
+        const dimension = (key: string) =>
+          value[key] === undefined ||
+          (typeof value[key] === "number" && Number.isFinite(value[key]) && (value[key] as number) > 0 && (value[key] as number) <= 10000);
+        return bounded("type") && bounded("mediaType") && bounded("path") && bounded("sourceToolName") && dimension("width") && dimension("height");
+      }));
   return (
     typeof r.id === "string" &&
     typeof r.ts === "number" &&
@@ -160,6 +186,7 @@ function isValidEntry(e: unknown): e is LogEntry {
       r.role === "tool") &&
     typeof r.text === "string" &&
     (r.outputRef === undefined || (typeof r.outputRef === "string" && r.outputRef.length > 0 && r.outputRef.length <= 4096)) &&
+    validRichContent &&
     validSubagentStatus &&
     validEngineError
   );
