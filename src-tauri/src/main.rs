@@ -744,6 +744,49 @@ fn read_item_output_params(
 const MAX_VIEW_PAGE_CURSOR_CHARS: usize = 4096;
 const DEFAULT_VIEW_PAGE_LIMIT: u32 = 200;
 const MAX_VIEW_PAGE_LIMIT: u32 = 1000;
+const MAX_SESSION_LIST_CURSOR_CHARS: usize = 4096;
+const DEFAULT_SESSION_LIST_LIMIT: u32 = 200;
+const MAX_SESSION_LIST_PAGES: usize = 20;
+
+/// Build one bounded request for the host's cursor-paged `session/list`
+/// surface. The cursor is opaque to Muse and is only trimmed and size
+/// checked before being relayed to the host.
+fn session_list_params(cursor: Option<&str>) -> Result<Value, String> {
+    let mut params = json!({"limit": DEFAULT_SESSION_LIST_LIMIT});
+    if let Some(cursor) = cursor {
+        let cursor = require_non_empty(cursor, "cursor")?;
+        if cursor.chars().count() > MAX_SESSION_LIST_CURSOR_CHARS {
+            return Err(format!(
+                "session/list cursor exceeds {MAX_SESSION_LIST_CURSOR_CHARS} characters"
+            ));
+        }
+        params["cursor"] = json!(cursor);
+    }
+    Ok(params)
+}
+
+fn session_list_next_cursor(result: &Value) -> Result<Option<String>, String> {
+    let raw = result
+        .get("nextCursor")
+        .or_else(|| result.get("next_cursor"));
+    let Some(raw) = raw else { return Ok(None) };
+    if raw.is_null() {
+        return Ok(None);
+    }
+    let cursor = raw
+        .as_str()
+        .ok_or_else(|| "session/list nextCursor must be a string".to_string())?;
+    let cursor = cursor.trim();
+    if cursor.is_empty() {
+        return Ok(None);
+    }
+    if cursor.chars().count() > MAX_SESSION_LIST_CURSOR_CHARS {
+        return Err(format!(
+            "session/list nextCursor exceeds {MAX_SESSION_LIST_CURSOR_CHARS} characters"
+        ));
+    }
+    Ok(Some(cursor.to_string()))
+}
 
 /// Build the bounded request for the durable `view/page` history surface.
 /// `cursor` and `anchor` are opaque to the desktop: they are only trimmed and
@@ -3665,15 +3708,53 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
     let clients = state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.snapshot();
     let mut out = Vec::new();
     for (_, client) in clients {
-        let res = client.request("session/list", json!({})).await?;
-        if let Some(sessions) = res.get("sessions").and_then(Value::as_array) {
-            for s in sessions {
-                let Some(sid) = s.get("sessionId").or_else(|| s.get("id")).and_then(Value::as_str) else { continue };
-                if !state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.owns(sid, &client) { continue; }
-                if let Some(mut meta) = state.sessions.lock().map_err(|e| format!("state lock: {e}"))?.get(sid).cloned() {
-                    meta.running = s.get("status").and_then(Value::as_str) == Some("running");
-                    out.push(meta);
+        let mut cursor = None;
+        let mut seen_cursors = HashSet::new();
+        let mut seen_sessions = HashSet::new();
+        for page in 0..MAX_SESSION_LIST_PAGES {
+            let params = session_list_params(cursor.as_deref())?;
+            let res = client.request("session/list", params).await?;
+            if let Some(sessions) = res.get("sessions").and_then(Value::as_array) {
+                for s in sessions {
+                    let Some(sid) = s
+                        .get("sessionId")
+                        .or_else(|| s.get("id"))
+                        .and_then(Value::as_str)
+                    else {
+                        continue;
+                    };
+                    if !seen_sessions.insert(sid.to_string()) {
+                        continue;
+                    }
+                    if !state
+                        .hosts
+                        .lock()
+                        .map_err(|e| format!("state lock: {e}"))?
+                        .owns(sid, &client)
+                    {
+                        continue;
+                    }
+                    if let Some(mut meta) = state
+                        .sessions
+                        .lock()
+                        .map_err(|e| format!("state lock: {e}"))?
+                        .get(sid)
+                        .cloned()
+                    {
+                        meta.running = s.get("status").and_then(Value::as_str) == Some("running");
+                        out.push(meta);
+                    }
                 }
+            }
+            let Some(next) = session_list_next_cursor(&res)? else { break };
+            if !seen_cursors.insert(next.clone()) {
+                return Err("session/list returned a repeated cursor".to_string());
+            }
+            cursor = Some(next);
+            if page + 1 == MAX_SESSION_LIST_PAGES {
+                return Err(format!(
+                    "session/list exceeded the {MAX_SESSION_LIST_PAGES}-page restore limit"
+                ));
             }
         }
     }
@@ -5510,6 +5591,29 @@ mod tests {
         assert!(view_page_params(
             "session-a", Some(&"x".repeat(MAX_VIEW_PAGE_CURSOR_CHARS + 1)), None, None, None
         ).is_err());
+    }
+
+    #[test]
+    fn session_list_pagination_keeps_cursor_opaque_and_bounded() {
+        let first = session_list_params(None).unwrap();
+        assert_eq!(first["limit"], DEFAULT_SESSION_LIST_LIMIT);
+        assert!(first.get("cursor").is_none());
+
+        let next = session_list_params(Some(" cursor-2 ")).unwrap();
+        assert_eq!(next["cursor"], "cursor-2");
+        assert_eq!(
+            session_list_next_cursor(&json!({"nextCursor": " c-3 "})).unwrap(),
+            Some("c-3".to_string())
+        );
+        assert_eq!(
+            session_list_next_cursor(&json!({"next_cursor": null})).unwrap(),
+            None
+        );
+        assert!(session_list_next_cursor(&json!({"nextCursor": 42})).is_err());
+        assert!(session_list_params(Some(
+            &"x".repeat(MAX_SESSION_LIST_CURSOR_CHARS + 1)
+        ))
+        .is_err());
     }
 
     #[test]
