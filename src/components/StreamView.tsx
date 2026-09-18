@@ -63,6 +63,8 @@ interface Props {
   reconciling?: boolean;
   onReconcile?: () => void;
   onCancel?: () => void;
+  /** Close a conversation when a stop was accepted but never confirmed. */
+  onForceStop?: () => void;
   /** Retry the last user message when the host marks a turn retryable. */
   onRetryFailedTurn?: (entry: LogEntry) => Promise<void>;
   /** Start a server-side branch from this completed turn. */
@@ -121,6 +123,7 @@ export function StreamView({
   reconciling = false,
   onReconcile,
   onCancel,
+  onForceStop,
   onRetryFailedTurn,
   onForkFromEntry,
   controls,
@@ -451,7 +454,9 @@ export function StreamView({
       case "waiting-host":
         return "The turn is marked active, but no host event has reached this window yet.";
       case "stalled":
-        return `No host event for ${elapsed ?? "a while"}. Muse may still be working.${
+        return `${stopping
+          ? "The desktop host did not confirm the stop. Reconnect or close this conversation to clear it."
+          : `No host event for ${elapsed ?? "a while"}. Muse may still be working.`}${
           eventLabel ? ` Last event: ${eventLabel}.` : ""
         }`;
       case "idle":
@@ -875,9 +880,15 @@ export function StreamView({
                 </button>
               )}
               {onCancel && (
-                <button type="button" className="quiet" onClick={onCancel}>
-                  {health === "retrying" ? "Stop retry" : "Stop"}
-                </button>
+                stopping && health === "stalled" && onForceStop ? (
+                  <button type="button" className="quiet" onClick={onForceStop}>
+                    Close conversation
+                  </button>
+                ) : (
+                  <button type="button" className="quiet" onClick={onCancel}>
+                    {health === "retrying" ? "Stop retry" : "Stop"}
+                  </button>
+                )
               )}
             </span>
           )}

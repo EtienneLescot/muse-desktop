@@ -87,6 +87,18 @@ describe("stream health", () => {
 
   it("keeps an accepted stop request visible until the host confirms it", () => {
     assert.equal(classifyStreamHealth({ ...base, stopping: true }), "stopping");
+    assert.equal(
+      classifyStreamHealth({
+        ...base,
+        stopping: true,
+        now: base.lastEventAt + STREAM_STALE_AFTER_MS,
+      }),
+      "stalled",
+    );
+    assert.equal(
+      classifyStreamHealth({ ...base, stopping: true, lastEventAt: null }),
+      "stalled",
+    );
     assert.equal(streamHealthLabel("stopping"), "Stopping Muse");
   });
 

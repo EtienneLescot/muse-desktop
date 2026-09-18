@@ -1208,6 +1208,7 @@ export default function App() {
                     reconciling={reconcilingId === active.session_id}
                     onReconcile={() => void reconcileSession(active.session_id)}
                     onCancel={() => void cancelSession(active.session_id)}
+                    onForceStop={() => void killSession(active.session_id)}
                     onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
                     onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
                     controls={{

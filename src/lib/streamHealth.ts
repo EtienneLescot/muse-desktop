@@ -107,7 +107,15 @@ export function parseRetryScheduled(payload: string, scheduledAt = Date.now()): 
  * or input request never gets mislabeled as a stalled model.
  */
 export function classifyStreamHealth(input: StreamHealthInput): StreamHealth {
-  if (input.stopping) return "stopping";
+  if (input.stopping) {
+    // An interrupt acknowledgement is not a terminal event. Keep the calm
+    // stopping copy briefly, then expose the same recovery actions as any
+    // other stale stream instead of leaving the user in an endless spinner.
+    const elapsed = input.lastEventAt === null
+      ? STREAM_STALE_AFTER_MS
+      : Math.max(0, input.now - input.lastEventAt);
+    return elapsed >= STREAM_STALE_AFTER_MS ? "stalled" : "stopping";
+  }
   if (input.pendingApprovals > 0) return "waiting-approval";
   if (input.pendingInputs > 0) return "waiting-input";
   if (!input.running) return "idle";
