@@ -5284,24 +5284,30 @@ async fn cancel_session(
     app: AppHandle,
     state: State<'_, AppState>,
     session_id: String,
+    turn_id: Option<String>,
 ) -> Result<(), String> {
-    interrupt_session(&app, &state, &session_id).await
+    interrupt_session(&app, &state, &session_id, turn_id.as_deref()).await
 }
 
 /// Send the interrupt command without changing local turn state. Keeping the
 /// transport request separate makes the admission-only semantics testable
 /// without constructing a Tauri application handle.
-async fn request_interrupt(state: &AppState, session_id: &str) -> Result<Value, String> {
+async fn request_interrupt(
+    state: &AppState,
+    session_id: &str,
+    turn_id: Option<&str>,
+) -> Result<Value, String> {
     let client = session_client(state, session_id)?;
+    let mut params = json!({
+        "commandId": new_command_id(),
+        "sessionId": session_id,
+        "retract": false,
+    });
+    if let Some(turn_id) = turn_id.map(str::trim).filter(|value| !value.is_empty()) {
+        params["turnId"] = json!(turn_id);
+    }
     client
-        .request(
-            "turn/interrupt",
-            json!({
-                "commandId": new_command_id(),
-                "sessionId": session_id,
-                "retract": false,
-            }),
-        )
+        .request("turn/interrupt", params)
         .await
 }
 
@@ -5315,10 +5321,11 @@ async fn interrupt_session(
     app: &AppHandle,
     state: &State<'_, AppState>,
     session_id: &str,
+    turn_id: Option<&str>,
 ) -> Result<(), String> {
     // Clone the client out of the lock first: the std guard must never be
     // held across an await (it is !Send through the child handle).
-    let result = request_interrupt(state, session_id).await;
+    let result = request_interrupt(state, session_id, turn_id).await;
     match result {
         Ok(_) => Ok(()),
         Err(error) => {
@@ -5340,7 +5347,7 @@ async fn kill_session(
     // Retire ownership before accepting further notifications for this session.
     // The host process is shared by all sessions, so it is NOT killed here:
     // end the turn (best effort) and forget local records.
-    let _ = interrupt_session(&app, &state, &session_id).await;
+    let _ = interrupt_session(&app, &state, &session_id, None).await;
     if let Ok(mut hosts) = state.hosts.lock() { hosts.forget(&session_id); }
     if let Ok(mut sessions) = state.sessions.lock() {
         sessions.remove(&session_id);
@@ -5741,7 +5748,7 @@ mod tests {
 
         let request = tokio::spawn({
             let state = state.clone();
-            async move { request_interrupt(state.as_ref(), "session-a").await }
+            async move { request_interrupt(state.as_ref(), "session-a", None).await }
         });
         let frame = fixture_frame(&mut frames).await;
         assert_eq!(frame["method"], "turn/interrupt");
@@ -5862,6 +5869,31 @@ mod tests {
         assert_eq!(kind, "cancelled");
         assert!(payload.contains("\"terminal\":\"cancelled\""));
         assert!(payload.contains("\"turnId\":\"turn-a\""));
+    }
+
+    #[tokio::test]
+    async fn interrupt_request_can_target_the_active_turn() {
+        let state = Arc::new(empty_state());
+        let (client, mut frames) = fixture_client(false);
+        register_fixture_session(state.as_ref(), "session-a", "fixture-a", client.clone());
+
+        let request = tokio::spawn({
+            let state = state.clone();
+            async move { request_interrupt(state.as_ref(), "session-a", Some("turn-a")).await }
+        });
+        let frame = fixture_frame(&mut frames).await;
+        assert_eq!(frame["method"], "turn/interrupt");
+        assert_eq!(frame["params"]["sessionId"], "session-a");
+        assert_eq!(frame["params"]["turnId"], "turn-a");
+        client
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": frame["id"],
+                "result": {"status": "accepted", "turnId": "turn-a"}
+            }))
+            .await;
+
+        assert_eq!(request.await.unwrap().unwrap()["status"], "accepted");
     }
 
     #[test]

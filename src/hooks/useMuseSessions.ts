@@ -5789,7 +5789,14 @@ export function useMuseSessions(): UseMuseSessions {
     setStoppingBySession((cur) => ({ ...cur, [sessionId]: true }));
     try {
       setError(null);
-      await invoke("cancel_session", { sessionId });
+      // Scope the interrupt to the turn currently observed for this session.
+      // Older hosts accept the same command without `turnId`; the bridge only
+      // includes the field when a live turn identity is known.
+      const turnId = turnIdsRef.current[sessionId];
+      await invoke("cancel_session", {
+        sessionId,
+        ...(turnId === undefined ? {} : { turnId }),
+      });
       // The host owns the terminal state. Poll immediately so a queued
       // stopped event is reflected without waiting for the slow tick, while
       // preserving the open transcript until that event is observed.
