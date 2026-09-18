@@ -39,6 +39,11 @@ pub struct DesktopElement {
     pub class_name: String,
     pub semantic_role: String,
     pub automation_id: String,
+    /// A bounded UI Automation value for non-sensitive controls. Password and
+    /// credential-like controls never expose their contents; the renderer
+    /// receives `value_redacted` instead.
+    pub value: String,
+    pub value_redacted: bool,
     pub bounds: DesktopBounds,
     pub enabled: bool,
     pub visible: bool,
@@ -149,7 +154,10 @@ pub fn click(_id: &str, _x: i32, _y: i32) -> Result<(), String> {
 
 #[cfg(windows)]
 mod windows_impl {
-    use super::{DesktopBounds, DesktopElement, DesktopKey, DesktopWindow, MAX_ELEMENTS, MAX_TEXT_CHARS, MAX_WINDOWS};
+    use super::{
+        DesktopBounds, DesktopElement, DesktopKey, DesktopWindow, MAX_ELEMENTS, MAX_TEXT_CHARS,
+        MAX_WINDOWS,
+    };
     use std::mem::size_of;
     use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, RECT, TRUE};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
@@ -280,6 +288,8 @@ mod windows_impl {
             class_name,
             semantic_role: String::new(),
             automation_id: String::new(),
+            value: String::new(),
+            value_redacted: false,
             bounds: DesktopBounds {
                 x: screen_bounds.x.saturating_sub(context.root.x),
                 y: screen_bounds.y.saturating_sub(context.root.y),
@@ -324,23 +334,21 @@ mod windows_impl {
             CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
             COINIT_MULTITHREADED,
         };
-        use windows::Win32::UI::Accessibility::{
-            CUIAutomation, IUIAutomationTreeWalker,
-        };
+        use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomationTreeWalker};
 
         let init = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
         if init.is_err() {
             return Err("Windows UI Automation could not initialize".to_string());
         }
         let result = (|| {
-            let automation: windows::Win32::UI::Accessibility::IUIAutomation = unsafe {
-                CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
-            }
-            .map_err(|_| "Windows UI Automation is unavailable".to_string())?;
-            let root_element = unsafe {
-                automation.ElementFromHandle(windows::Win32::Foundation::HWND(hwnd))
-            }
-            .map_err(|_| "Windows UI Automation could not inspect this window".to_string())?;
+            let automation: windows::Win32::UI::Accessibility::IUIAutomation =
+                unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }
+                    .map_err(|_| "Windows UI Automation is unavailable".to_string())?;
+            let root_element =
+                unsafe { automation.ElementFromHandle(windows::Win32::Foundation::HWND(hwnd)) }
+                    .map_err(|_| {
+                        "Windows UI Automation could not inspect this window".to_string()
+                    })?;
             let walker: IUIAutomationTreeWalker = unsafe { automation.ControlViewWalker() }
                 .map_err(|_| "Windows UI Automation control view is unavailable".to_string())?;
             let mut rows = Vec::with_capacity(48);
@@ -354,10 +362,34 @@ mod windows_impl {
     fn bounded_bstr(value: windows::core::BSTR, max: usize) -> String {
         value
             .to_string()
-            .replace('\u{0}', "")
             .chars()
+            .map(|character| {
+                if character == '\u{0}' || character.is_control() {
+                    ' '
+                } else {
+                    character
+                }
+            })
             .take(max)
             .collect()
+    }
+
+    fn looks_sensitive(title: &str, class_name: &str, role: &str, automation_id: &str) -> bool {
+        let haystack = format!("{title} {class_name} {role} {automation_id}").to_ascii_lowercase();
+        [
+            "password",
+            "passcode",
+            "secret",
+            "token",
+            "api key",
+            "apikey",
+            "credential",
+            "one-time code",
+            "otp",
+            "pin",
+        ]
+        .iter()
+        .any(|marker| haystack.contains(marker))
     }
 
     fn collect_semantic_children(
@@ -399,6 +431,23 @@ mod windows_impl {
                     let automation_id = unsafe { element.CurrentAutomationId() }
                         .map(|value| bounded_bstr(value, 120))
                         .unwrap_or_default();
+                    let value_redacted = unsafe { element.CurrentIsPassword() }
+                        .map(|value| value.as_bool())
+                        .unwrap_or(false)
+                        || looks_sensitive(&title, &class_name, &semantic_role, &automation_id);
+                    let value = if value_redacted {
+                        String::new()
+                    } else {
+                        unsafe {
+                            element
+                                .GetCurrentPatternAs::<
+                                    windows::Win32::UI::Accessibility::IUIAutomationValuePattern,
+                                >(windows::Win32::UI::Accessibility::UIA_ValuePatternId)
+                        }
+                        .and_then(|pattern| unsafe { pattern.CurrentValue() })
+                        .map(|value| bounded_bstr(value, 500))
+                        .unwrap_or_default()
+                    };
                     rows.push(DesktopElement {
                         id: if native == 0 {
                             format!("uia:{}", rows.len())
@@ -409,6 +458,8 @@ mod windows_impl {
                         class_name,
                         semantic_role,
                         automation_id,
+                        value,
+                        value_redacted,
                         bounds: DesktopBounds {
                             x: rect.left.saturating_sub(root.x),
                             y: rect.top.saturating_sub(root.y),

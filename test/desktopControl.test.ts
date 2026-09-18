@@ -53,6 +53,8 @@ test("desktop observation keeps native controls bounded and attributable", () =>
     className: "Button",
     semanticRole: "button",
     automationId: "run-action",
+    value: "",
+    valueRedacted: false,
     bounds: { x: 12, y: 18, width: 80, height: 28 },
     enabled: true,
     visible: true,
@@ -65,6 +67,33 @@ test("desktop observation keeps native controls bounded and attributable", () =>
   assert.match(context, /role button/);
   assert.match(context, /automationId run-action/);
   assert.match(context, /read-only/);
+});
+
+test("desktop observation exposes safe values and marks protected ones without leaking them", () => {
+  const safe: DesktopElement = {
+    id: "field",
+    title: "Search",
+    className: "Edit",
+    semanticRole: "edit",
+    automationId: "search",
+    value: "Muse",
+    valueRedacted: false,
+    bounds: { x: 0, y: 0, width: 120, height: 24 },
+    enabled: true,
+    visible: true,
+    offscreen: false,
+  };
+  const secret: DesktopElement = {
+    ...safe,
+    id: "password",
+    title: "Password",
+    value: "",
+    valueRedacted: true,
+  };
+  assert.match(desktopElementLabel(safe), /value Muse/);
+  assert.match(desktopElementLabel(secret), /value hidden/);
+  assert.doesNotMatch(formatDesktopObservation({ ...windowFixture }, [secret]), /Muse/);
+  assert.match(formatDesktopObservation({ ...windowFixture }, [safe]), /value Muse/);
 });
 
 test("desktop captures keep provenance and reject oversized payloads", () => {

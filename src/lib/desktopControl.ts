@@ -28,6 +28,9 @@ export interface DesktopElement {
   className: string;
   semanticRole: string;
   automationId: string;
+  /** Bounded UIA value for non-sensitive controls; never populated for redacted values. */
+  value: string;
+  valueRedacted: boolean;
   bounds: DesktopBounds;
   enabled: boolean;
   visible: boolean;
@@ -78,7 +81,12 @@ export function desktopElementLabel(element: DesktopElement): string {
   const name = element.title || element.className || "Unnamed control";
   const state = element.enabled ? "enabled" : "disabled";
   const role = element.semanticRole ? ` · ${element.semanticRole}` : "";
-  return `${name} · ${element.bounds.width}×${element.bounds.height} · ${state}${role}`;
+  const value = element.valueRedacted
+    ? " · value hidden"
+    : element.value
+      ? ` · value ${element.value}`
+      : "";
+  return `${name} · ${element.bounds.width}×${element.bounds.height} · ${state}${role}${value}`;
 }
 
 /** Format native control metadata as explicitly observed, untrusted context. */
@@ -94,8 +102,13 @@ export function formatDesktopObservation(
     const bounds = `${element.bounds.x},${element.bounds.y} ${element.bounds.width}×${element.bounds.height}`;
     const role = element.semanticRole ? ` · role ${element.semanticRole}` : "";
     const automationId = element.automationId ? ` · automationId ${element.automationId}` : "";
+    const value = element.valueRedacted
+      ? " · value hidden"
+      : element.value
+        ? ` · value ${element.value.replace(/\s+/g, " ").trim().slice(0, 240)}`
+        : "";
     const visibility = element.offscreen ? " · offscreen" : "";
-    return `${index + 1}. ${name} [${element.className || "unknown"}] at ${bounds} · ${element.enabled ? "enabled" : "disabled"}${role}${automationId}${visibility}`;
+    return `${index + 1}. ${name} [${element.className || "unknown"}] at ${bounds} · ${element.enabled ? "enabled" : "disabled"}${role}${automationId}${value}${visibility}`;
   });
   const text = [
     "[Desktop observation]",
