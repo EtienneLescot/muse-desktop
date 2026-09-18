@@ -41,6 +41,7 @@ mod notification_ledger;
 mod outbox_ledger;
 mod desktop_control;
 mod workspace_watch;
+mod writer_lock;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -414,6 +415,9 @@ struct AppState {
     /// Process-level scheduler lease. The open native file handle makes the
     /// claim exclusive across separately launched app processes.
     scheduler_lease: Mutex<Option<scheduler::NativeLease>>,
+    /// Cross-process writer target leases. Handles stay open for the lease
+    /// lifetime so OS advisory locks release after a crashed process.
+    writer_locks: writer_lock::Registry,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -2845,6 +2849,26 @@ async fn git_worktree_inspect(
     tokio::task::spawn_blocking(move || git::inspect_worktree(&root, &path))
         .await
         .map_err(|e| format!("worktree inspect task failed: {e}"))?
+}
+
+/// Acquire OS advisory locks for all declared writer target paths. This guard
+/// complements the renderer lease and protects two Muse processes from
+/// dispatching overlapping writers in the same workspace.
+#[tauri::command]
+fn writer_lock_acquire(
+    state: State<'_, AppState>,
+    workspace: String,
+    agent: String,
+    target_paths: Vec<String>,
+    owner_id: String,
+) -> Result<writer_lock::AcquireResponse, String> {
+    writer_lock::acquire(&state.writer_locks, &workspace, &agent, &target_paths, &owner_id)
+}
+
+/// Release one writer lease. Releasing an unknown token is idempotent.
+#[tauri::command]
+fn writer_lock_release(state: State<'_, AppState>, token: String) -> Result<bool, String> {
+    writer_lock::release(&state.writer_locks, &token)
 }
 
 /// Run an explicitly requested setup command in a managed worktree. The
@@ -5519,6 +5543,7 @@ mod tests {
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             workspace_watchers: Mutex::new(HashMap::new()),
             scheduler_lease: Mutex::new(None),
+            writer_locks: writer_lock::Registry::default(),
         }
     }
 
@@ -7922,6 +7947,7 @@ fn main() {
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             workspace_watchers: Mutex::new(HashMap::new()),
             scheduler_lease: Mutex::new(None),
+            writer_locks: writer_lock::Registry::default(),
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
@@ -7962,6 +7988,8 @@ fn main() {
             git_worktree_create_session,
             git_worktree_remove,
             git_worktree_inspect,
+            writer_lock_acquire,
+            writer_lock_release,
             worktree_setup_run,
             worktree_setup_readiness,
             worktree_setup_cancel,
@@ -8058,6 +8086,7 @@ fn main() {
                         native.release();
                     }
                 };
+                writer_lock::release_all(&state.writer_locks);
             }
         });
 }

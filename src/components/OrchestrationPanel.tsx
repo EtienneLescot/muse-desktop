@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { fanoutLanes, fanoutQueueNote } from "../lib/fanout";
 import {
   parseWriterPaths,
@@ -17,8 +18,8 @@ import {
 import {
   acquireWriterLock,
   releaseWriterLock,
-  releaseWriterLocksForWorkspace,
 } from "../lib/writerLocks";
+import { isTauriRuntime } from "../lib/env";
 import type { LogEntry } from "../lib/persist";
 import {
   buildHandoffPlan,
@@ -162,6 +163,7 @@ export function OrchestrationPanel({
   );
   const [writerDispatches, setWriterDispatches] = useState<Record<string, WriterDispatchRecord>>({});
   const writerLocksByAgent = useRef<Record<string, string>>({});
+  const nativeWriterLocksByAgent = useRef<Record<string, string>>({});
   const writerTargetsWorkspace = useRef(workspace);
   const [setupCommand, setSetupCommand] = useState("");
   const [envAllowlistText, setEnvAllowlistText] = useState("");
@@ -193,6 +195,16 @@ export function OrchestrationPanel({
   );
   const retentionWorkspace = useRef(workspace);
 
+  function releaseWriterLease(agent: string): void {
+    releaseWriterLock(writerLocksByAgent.current[agent]);
+    delete writerLocksByAgent.current[agent];
+    const nativeToken = nativeWriterLocksByAgent.current[agent];
+    delete nativeWriterLocksByAgent.current[agent];
+    if (nativeToken !== undefined && isTauriRuntime()) {
+      void invoke<boolean>("writer_lock_release", { token: nativeToken }).catch(() => false);
+    }
+  }
+
   useEffect(() => {
     // The declaration is workspace-scoped. On a workspace switch, hydrate
     // first and skip the write pass so the previous workspace cannot leak
@@ -208,9 +220,10 @@ export function OrchestrationPanel({
   useEffect(() => {
     // Release process-local leases when this panel changes workspace or unmounts.
     return () => {
-      for (const token of Object.values(writerLocksByAgent.current)) releaseWriterLock(token);
+      for (const agent of Object.keys(writerLocksByAgent.current)) releaseWriterLease(agent);
+      for (const agent of Object.keys(nativeWriterLocksByAgent.current)) releaseWriterLease(agent);
       writerLocksByAgent.current = {};
-      releaseWriterLocksForWorkspace(workspace);
+      nativeWriterLocksByAgent.current = {};
     };
   }, [workspace]);
 
@@ -282,8 +295,7 @@ export function OrchestrationPanel({
             status: "complete",
             result: observedResult,
           };
-          releaseWriterLock(writerLocksByAgent.current[agent]);
-          delete writerLocksByAgent.current[agent];
+          releaseWriterLease(agent);
           changed = true;
         } else if (
           dispatch.status === "complete" &&
@@ -333,6 +345,53 @@ export function OrchestrationPanel({
       return;
     }
     writerLocksByAgent.current[row.agent] = lease.lock.token;
+    if (isTauriRuntime()) {
+      try {
+        const native = await invoke<{
+          granted: boolean;
+          token: string | null;
+          conflicts: Array<{ agent: string; targetPath: string }>;
+        }>("writer_lock_acquire", {
+          workspace,
+          agent: row.agent,
+          targetPaths: row.targetPaths,
+          ownerId: lease.lock.token,
+        });
+        if (!native.granted || native.token === null) {
+          releaseWriterLease(row.agent);
+          const owners = native.conflicts.map((conflict) => conflict.agent).join(", ");
+          setWriterDispatches((current) => ({
+            ...current,
+            [row.agent]: {
+              agent: row.agent,
+              sessionId: null,
+              status: "failed",
+              prompt,
+              error: owners.length > 0
+                ? `Target files are locked by ${owners}.`
+                : "The native writer lock could not be acquired.",
+              result: null,
+            },
+          }));
+          return;
+        }
+        nativeWriterLocksByAgent.current[row.agent] = native.token;
+      } catch (error) {
+        releaseWriterLease(row.agent);
+        setWriterDispatches((current) => ({
+          ...current,
+          [row.agent]: {
+            agent: row.agent,
+            sessionId: null,
+            status: "failed",
+            prompt,
+            error: userFacingError(error, "Native writer locking is unavailable."),
+            result: null,
+          },
+        }));
+        return;
+      }
+    }
     setWriterDispatches((current) => ({
       ...current,
       [row.agent]: {
@@ -367,12 +426,10 @@ export function OrchestrationPanel({
             },
       }));
       if (result === null) {
-        releaseWriterLock(writerLocksByAgent.current[row.agent]);
-        delete writerLocksByAgent.current[row.agent];
+        releaseWriterLease(row.agent);
       }
     } catch (error) {
-      releaseWriterLock(writerLocksByAgent.current[row.agent]);
-      delete writerLocksByAgent.current[row.agent];
+      releaseWriterLease(row.agent);
       setWriterDispatches((current) => ({
         ...current,
         [row.agent]: {
@@ -404,8 +461,7 @@ export function OrchestrationPanel({
     }));
     try {
       await onStopWriter(writerSessionId);
-      releaseWriterLock(writerLocksByAgent.current[agent]);
-      delete writerLocksByAgent.current[agent];
+      releaseWriterLease(agent);
       setWriterDispatches((current) => {
         const latest = current[agent];
         return latest?.sessionId === writerSessionId
