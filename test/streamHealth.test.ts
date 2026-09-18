@@ -5,6 +5,7 @@ import {
   classifyStreamHealth,
   formatElapsed,
   parseRetryScheduled,
+  resumeRecoveryDelay,
   shouldAcceptRetryScheduled,
   streamEventLabel,
   streamHealthLabel,
@@ -83,6 +84,12 @@ describe("stream health", () => {
       "stalled",
     );
     assert.equal(streamHealthLabel("resuming"), "Muse is resuming");
+  });
+
+  it("bounds one silent resume recovery read at the liveness threshold", () => {
+    assert.equal(resumeRecoveryDelay(10_000, 10_000), STREAM_STALE_AFTER_MS);
+    assert.equal(resumeRecoveryDelay(10_000, 25_000), 0);
+    assert.equal(resumeRecoveryDelay(Number.NaN, 25_000), null);
   });
 
   it("keeps an accepted stop request visible until the host confirms it", () => {

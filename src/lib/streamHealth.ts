@@ -10,6 +10,16 @@
 /** A quiet stream becomes actionable after this interval. */
 export const STREAM_STALE_AFTER_MS = 15_000;
 
+/**
+ * Return the remaining grace period before an accepted decision should get
+ * one silent recovery read. Invalid timestamps fail closed by disabling the
+ * timer rather than scheduling an unbounded retry loop.
+ */
+export function resumeRecoveryDelay(requestedAt: number, now = Date.now()): number | null {
+  if (!Number.isFinite(requestedAt) || !Number.isFinite(now)) return null;
+  return Math.max(0, STREAM_STALE_AFTER_MS - Math.max(0, now - requestedAt));
+}
+
 export type StreamHealth =
   | "idle"
   | "working"

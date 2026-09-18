@@ -160,8 +160,8 @@ import {
 import { statusLogText } from "../lib/statusLog";
 import {
   parseRetryScheduled,
+  resumeRecoveryDelay,
   shouldAcceptRetryScheduled,
-  STREAM_STALE_AFTER_MS,
   type RetryScheduled,
 } from "../lib/streamHealth";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
@@ -4000,7 +4000,8 @@ export function useMuseSessions(): UseMuseSessions {
       const existing = timers[sessionId];
       if (existing?.requestedAt === pending.requestedAt) continue;
       if (existing !== undefined) clearTimeout(existing.timer);
-      const delay = Math.max(0, STREAM_STALE_AFTER_MS - Math.max(0, Date.now() - pending.requestedAt));
+      const delay = resumeRecoveryDelay(pending.requestedAt);
+      if (delay === null) continue;
       const timer = setTimeout(() => {
         delete timers[sessionId];
         if (!aliveRef.current) return;
