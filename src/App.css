@@ -2411,7 +2411,7 @@ body.dark .composer textarea::placeholder {
 
 .startup-probe li {
   display: grid;
-  grid-template-columns: 8px 80px minmax(0, 1fr);
+  grid-template-columns: 8px 80px 92px minmax(0, 1fr);
   align-items: center;
   gap: 7px;
   min-width: 0;
@@ -2437,6 +2437,21 @@ body.dark .composer textarea::placeholder {
 .startup-probe-label {
   color: var(--text);
   font-weight: 600;
+}
+
+.startup-probe-status {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.startup-probe li[data-status="ready"] .startup-probe-status {
+  color: var(--green);
+}
+
+.startup-probe li[data-status="missing"] .startup-probe-status,
+.startup-probe li[data-status="blocked"] .startup-probe-status {
+  color: var(--danger);
 }
 
 .startup-probe-detail {

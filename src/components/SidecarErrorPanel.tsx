@@ -5,7 +5,11 @@ import {
   type SidecarErrorKind,
 } from "../lib/sidecarError";
 import { userFacingError } from "../lib/errorCopy";
-import type { StartupProbe, StartupCheck } from "../lib/startupProbe";
+import {
+  startupCheckStatusLabel,
+  type StartupProbe,
+  type StartupCheck,
+} from "../lib/startupProbe";
 
 interface Props {
   kind: SidecarErrorKind;
@@ -71,6 +75,7 @@ export function SidecarErrorPanel({
               <li key={label} data-status={check.status}>
                 <span className="startup-probe-dot" aria-hidden="true" />
                 <span className="startup-probe-label">{label}</span>
+                <span className="startup-probe-status">{startupCheckStatusLabel(check.status)}</span>
                 <span className="startup-probe-detail">{check.detail || check.status}</span>
               </li>
             ))}

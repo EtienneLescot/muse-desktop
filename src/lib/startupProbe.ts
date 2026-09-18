@@ -19,6 +19,20 @@ export interface StartupProbeRow {
   check: StartupCheck;
 }
 
+/** Stable text for the check state; colour remains a secondary cue. */
+export function startupCheckStatusLabel(status: StartupCheck["status"]): string {
+  switch (status) {
+    case "ready":
+      return "Ready";
+    case "missing":
+      return "Needs attention";
+    case "blocked":
+      return "Blocked";
+    case "unknown":
+      return "Not verified";
+  }
+}
+
 /** Convert an optional probe payload into a stable display order. */
 export function startupProbeRows(probe: StartupProbe): StartupProbeRow[] {
   return [

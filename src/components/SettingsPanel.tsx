@@ -16,7 +16,11 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
-import { startupProbeRows, type StartupProbe } from "../lib/startupProbe";
+import {
+  startupCheckStatusLabel,
+  startupProbeRows,
+  type StartupProbe,
+} from "../lib/startupProbe";
 import type { ScopeVerdict } from "../lib/scope";
 import {
   CONFIGURED_PROVIDERS,
@@ -328,6 +332,7 @@ export function SettingsPanel({
                 <li key={label} data-status={check.status}>
                   <span className="startup-probe-dot" aria-hidden="true" />
                   <span className="startup-probe-label">{label}</span>
+                  <span className="startup-probe-status">{startupCheckStatusLabel(check.status)}</span>
                   <span className="startup-probe-detail" title={check.detail}>
                     {check.detail || check.status}
                   </span>

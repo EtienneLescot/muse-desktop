@@ -158,7 +158,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Travail :** diagnostic sans secrets de WSL/distribution, binaire, version, dossier accessible et authentification. Afficher étapes de correction et bouton Réessayer. Distinguer UI Windows native et moteur WSL ; pas d'installation implicite non maîtrisée.
 
-**État au 17/09/2026 :** `probe_startup` exécute une sonde native read-only et bornée (sidecar, WSL, `~/.local/bin/muse`, workspace), réutilisée par le panneau de récupération après un échec ou un changement de dossier. Le résultat reste structuré par check et ne lit aucune credential ; la guidance existante conserve la correction manuelle.
+**État au 18/09/2026 :** `probe_startup` exécute une sonde native read-only et bornée (sidecar, WSL, `~/.local/bin/muse`, workspace), réutilisée par le panneau de récupération après un échec ou un changement de dossier. Le résultat reste structuré par check et ne lit aucune credential ; la guidance existante conserve la correction manuelle. Le panneau et Settings affichent désormais un libellé textuel pour chaque état afin que la compréhension ne dépende pas de la couleur (`Ready`, `Needs attention`, `Blocked`, `Not verified`).
 
 **Complément livré :** sur Windows, `npm run dev:clean:windows` appelle `scripts/dev-clean.ps1`. Il ne termine que les arbres dont l'exécutable ou la ligne de commande appartient à ce checkout, purge le cache Vite local et exécute `tauri dev` avec le renderer attaché. Cela rend le chemin de relance reproductible sans transformer le binaire packagé en serveur de développement.
 
