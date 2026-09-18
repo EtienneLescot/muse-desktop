@@ -177,6 +177,7 @@ export default function App() {
     enableNotifications,
     setNotificationsMuted,
     markNotificationRead,
+    markAllNotificationsRead,
     reviewQueue,
     createSchedule,
     setScheduleEnabled,
@@ -1003,6 +1004,7 @@ export default function App() {
                   onEnableNotifications={enableNotifications}
                   onSetNotificationsMuted={setNotificationsMuted}
                   onMarkNotificationRead={markNotificationRead}
+                  onMarkAllNotificationsRead={markAllNotificationsRead}
                   onOpenNotification={(notification) => {
                     const route = resolveNotificationRoute(
                       { sessionId: notification.sessionId, runId: notification.runId },

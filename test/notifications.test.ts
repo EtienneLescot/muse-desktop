@@ -9,6 +9,7 @@ import {
   loadNotifications,
   loadNotificationPreferences,
   mergeNotifications,
+  markAllNotificationsRead,
   markNotificationRead,
   notificationActionPayload,
   resolveNotificationRoute,
@@ -60,6 +61,16 @@ describe("M3-09 notification records", () => {
     assert.equal(unreadNotificationCount(appended), 1);
     const read = markNotificationRead(appended, notification.id);
     assert.equal(unreadNotificationCount(read), 0);
+  });
+
+  it("marks the entire inbox as read without changing its order", () => {
+    const first = buildRunNotification(run(), 3000) as MuseNotification;
+    const second = buildInputNotification({ sessionId: "session-1", inputId: "input-1" }, 4000);
+    const rows = [first, { ...second, unread: false }];
+    const read = markAllNotificationsRead(rows);
+    assert.deepEqual(read.map((item) => item.id), rows.map((item) => item.id));
+    assert.equal(unreadNotificationCount(read), 0);
+    assert.equal(read[1]?.body, second.body);
   });
 
   it("creates one attention notification per approval or input request", () => {

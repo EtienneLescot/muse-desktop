@@ -47,6 +47,7 @@ interface Props {
   onEnableNotifications: () => Promise<NotificationPermission>;
   onSetNotificationsMuted: (muted: boolean) => void;
   onMarkNotificationRead: (id: string) => void;
+  onMarkAllNotificationsRead: () => void;
   onOpenNotification: (notification: MuseNotification) => void;
 }
 
@@ -147,6 +148,7 @@ export function SchedulesPanel({
   onEnableNotifications,
   onSetNotificationsMuted,
   onMarkNotificationRead,
+  onMarkAllNotificationsRead,
   onOpenNotification,
 }: Props) {
   const [name, setName] = useState("");
@@ -535,7 +537,19 @@ export function SchedulesPanel({
       <div className="schedule-notifications" aria-label="Automation notifications">
         <div className="schedule-notifications-head">
           <h3>Notifications</h3>
-          {unreadNotifications > 0 && <span className="schedules-count">{unreadNotifications}</span>}
+          {unreadNotifications > 0 && (
+            <>
+              <span className="schedules-count">{unreadNotifications}</span>
+              <button
+                type="button"
+                className="notification-mark-all"
+                onClick={onMarkAllNotificationsRead}
+                title="Mark all notifications as read"
+              >
+                Mark all read
+              </button>
+            </>
+          )}
         </div>
         {notificationPermission === "granted" ? (
           <div className="notification-permission-row">

@@ -196,6 +196,13 @@ export function markNotificationRead(
   return notifications.map((item) => item.id === id ? { ...item, unread: false } : item);
 }
 
+/** Mark every notification as read while preserving ordering and provenance. */
+export function markAllNotificationsRead(
+  notifications: MuseNotification[],
+): MuseNotification[] {
+  return notifications.map((item) => item.unread === true ? { ...item, unread: false } : item);
+}
+
 export function unreadNotificationCount(notifications: MuseNotification[]): number {
   return notifications.filter((item) => item.unread === true).length;
 }

@@ -316,6 +316,7 @@ import {
   loadNotificationPreferences,
   mergeNotifications,
   markNotificationRead as markNotificationReadRow,
+  markAllNotificationsRead as markAllNotificationsReadRows,
   notificationPermission as readNotificationPermission,
   requestNotificationPermission,
   saveNotificationPreferences,
@@ -1099,6 +1100,7 @@ interface UseMuseSessions {
   enableNotifications: () => Promise<NotificationPermission>;
   setNotificationsMuted: (muted: boolean) => void;
   markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
   /** US-9: approve a review entry → sent as normal turn input. */
   approveReview: (id: string) => Promise<void>;
   /** US-9: discard a pending review entry. */
@@ -2466,6 +2468,10 @@ export function useMuseSessions(): UseMuseSessions {
 
   const markNotificationRead = useCallback((id: string): void => {
     setNotifications((cur) => markNotificationReadRow(cur, id));
+  }, []);
+
+  const markAllNotificationsRead = useCallback((): void => {
+    setNotifications((cur) => markAllNotificationsReadRows(cur));
   }, []);
 
   // US-9 client-side scheduler: no workflow/* MSP endpoint exists, so a
@@ -7785,6 +7791,7 @@ export function useMuseSessions(): UseMuseSessions {
     enableNotifications,
     setNotificationsMuted,
     markNotificationRead,
+    markAllNotificationsRead,
     createSchedule: createScheduleCb,
     setScheduleEnabled: setScheduleEnabledCb,
     deleteSchedule: deleteScheduleCb,

@@ -4832,6 +4832,18 @@ body.dark .composer textarea::placeholder {
   font-weight: 600;
 }
 
+.notification-mark-all {
+  margin-left: auto;
+  color: var(--blue);
+  border-color: transparent;
+  font-size: 0.72rem;
+  padding: 3px 5px;
+}
+
+.notification-mark-all:hover {
+  border-color: var(--line);
+}
+
 .run-filter {
   margin-left: auto;
   min-height: 28px;
