@@ -532,6 +532,7 @@ import {
   mergeHistoryLog,
 } from "../lib/history";
 import { parseBranchObservation } from "../lib/branch";
+import { parseStreamChunk } from "../lib/streamChunks";
 
 const GIT_STATUS_CAPTURE_TIMEOUT_MS = 1500;
 
@@ -1359,26 +1360,20 @@ function parseRichContent(value: unknown): RichContent[] | undefined {
 }
 
 function parseChunk(payload: string): { itemId?: string; turnId?: string; outputRef?: string; richContent?: RichContent[]; text: string } {
-  const trimmed = payload.trim();
-  if (trimmed.startsWith("{")) {
+  const parsed = parseStreamChunk(payload);
+  let richContent: RichContent[] | undefined;
+  if (payload.trim().startsWith("{")) {
     try {
-      const obj = JSON.parse(trimmed) as Record<string, unknown>;
-      if (typeof obj.text === "string") {
-        const itemId = typeof obj.itemId === "string" ? obj.itemId : undefined;
-        const turnId = typeof obj.turnId === "string" && obj.turnId.trim().length > 0
-          ? obj.turnId.trim()
-          : undefined;
-        const outputRef = typeof obj.outputRef === "string" && obj.outputRef.trim().length > 0
-          ? obj.outputRef.trim()
-          : undefined;
-        const richContent = parseRichContent(obj.richContent);
-        return { itemId, turnId, outputRef, ...(richContent ? { richContent } : {}), text: obj.text };
-      }
+      const obj = JSON.parse(payload.trim()) as Record<string, unknown>;
+      const nested = typeof obj.item === "object" && obj.item !== null && !Array.isArray(obj.item)
+        ? obj.item as Record<string, unknown>
+        : null;
+      richContent = parseRichContent(obj.richContent ?? nested?.richContent);
     } catch {
-      // fall through to raw text
+      // The stream parser already preserves a plain-text fallback.
     }
   }
-  return { text: payload };
+  return { ...parsed, ...(richContent ? { richContent } : {}) };
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
