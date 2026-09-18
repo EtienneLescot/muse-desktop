@@ -49,6 +49,9 @@ import { promisify } from "node:util";
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const PROCESS_EXIT_TIMEOUT_MS = 2_000;
+const SESSION_LIST_LIMIT = 200;
+const SESSION_LIST_MAX_PAGES = 20;
+const SESSION_LIST_MAX_CURSOR_CHARS = 4_096;
 const execFileAsync = promisify(execFile);
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_BINARY = join(
@@ -368,20 +371,42 @@ async function main() {
       if (exerciseHistory) {
         let sessionList = "available";
         let sessionCount = 0;
+        let sessionListPages = 0;
         let sessionListHasCursor = false;
         try {
-          const listed = await host.request("session/list", { limit: 200 });
-          if (listed === null || typeof listed !== "object") {
-            fail(`host-${index === 0 ? "A" : "B"} returned no session list envelope`);
+          let cursor;
+          const seenCursors = new Set();
+          for (let page = 0; page < SESSION_LIST_MAX_PAGES; page += 1) {
+            const listed = await host.request("session/list", {
+              limit: SESSION_LIST_LIMIT,
+              ...(cursor === undefined ? {} : { cursor }),
+            });
+            if (listed === null || typeof listed !== "object") {
+              fail(`host-${index === 0 ? "A" : "B"} returned no session list envelope`);
+            }
+            if (listed.sessions !== undefined && !Array.isArray(listed.sessions)) {
+              fail(`host-${index === 0 ? "A" : "B"} returned invalid session list rows`);
+            }
+            sessionCount += Array.isArray(listed.sessions) ? listed.sessions.length : 0;
+            sessionListPages += 1;
+            const rawCursor = listed.nextCursor ?? listed.next_cursor;
+            if (rawCursor === undefined || rawCursor === null || (typeof rawCursor === "string" && rawCursor.trim().length === 0)) {
+              break;
+            }
+            if (typeof rawCursor !== "string" || rawCursor.trim().length > SESSION_LIST_MAX_CURSOR_CHARS) {
+              fail(`host-${index === 0 ? "A" : "B"} returned an invalid session list cursor`);
+            }
+            const nextCursor = rawCursor.trim();
+            if (seenCursors.has(nextCursor)) {
+              fail(`host-${index === 0 ? "A" : "B"} returned a repeated session list cursor`);
+            }
+            seenCursors.add(nextCursor);
+            sessionListHasCursor = true;
+            cursor = nextCursor;
+            if (page + 1 === SESSION_LIST_MAX_PAGES) {
+              fail(`host-${index === 0 ? "A" : "B"} exceeded the bounded session list page limit`);
+            }
           }
-          if (listed.sessions !== undefined && !Array.isArray(listed.sessions)) {
-            fail(`host-${index === 0 ? "A" : "B"} returned invalid session list rows`);
-          }
-          sessionCount = Array.isArray(listed.sessions) ? listed.sessions.length : 0;
-          if (listed.nextCursor !== undefined && listed.nextCursor !== null && typeof listed.nextCursor !== "string") {
-            fail(`host-${index === 0 ? "A" : "B"} returned an invalid session list cursor`);
-          }
-          sessionListHasCursor = typeof listed.nextCursor === "string" && listed.nextCursor.trim().length > 0;
         } catch (error) {
           if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
           sessionList = "unsupported";
@@ -410,6 +435,7 @@ async function main() {
           host: String.fromCharCode(65 + index),
           sessionList,
           sessionCount,
+          sessionListPages,
           sessionListHasCursor,
           viewPage,
           eventCount,
