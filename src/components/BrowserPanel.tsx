@@ -495,6 +495,7 @@ export function BrowserPanel({
         requestGeneration !== captureGenerationRef.current ||
         !browserCaptureMatchesPage(requestUrl, currentUrlRef.current)
       ) {
+        setCaptureStatus("Capture discarded because the browser page changed. Capture it again on the current page.");
         return;
       }
       if (browserCaptureAttachment(next) === null) {
