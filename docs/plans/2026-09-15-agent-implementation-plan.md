@@ -582,6 +582,8 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 **Code :** SharePanel/sharing.ts et nouveau service distant ; dépend décision d'hébergement/auth. Créer snapshot avec données explicitement incluses, permissions/token, durée et révocation ; secrets exclus. **Acceptation :** second client, lien révoqué, export incomplet et erreur de publication ; aucune URL annoncée avant création réelle.
 
+**État au 18/09/2026 :** l'export local Markdown/JSON est maintenant sauvegardable via le dialogue natif dans le desktop, avec repli téléchargement dans le preview web et erreur visible en cas d'échec. Le bundle reste explicitement local et révocable uniquement dans le profil ; aucune URL publique n'est fabriquée. Reste le service d'hébergement, l'identité, la durée de vie et la révocation observables depuis un second client.
+
 ### M4-07 — Remote/cloud
 
 **Code :** abstraction HostConnection et service distant à concevoir ; dépend M0-01/02/06 et M2. Séparer exécution sur ordinateur distant connecté et environnement cloud provisionné. Auth, découverte, événements reconnectables, transfert d'artefacts et contrôle de versions. **Acceptation :** déconnexion/reprise sans doublons, host indisponible, commande ciblée et destruction explicite d'environnement.
