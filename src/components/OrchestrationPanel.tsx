@@ -285,7 +285,7 @@ export function OrchestrationPanel({
           ? null
           : summarizeWriterLog(writerLogs?.[dispatch.sessionId] ?? []);
         if (
-          dispatch.status === "running" &&
+          (dispatch.status === "running" || dispatch.status === "stopping") &&
           dispatch.sessionId !== null &&
           writerSessionRunning[dispatch.sessionId] === false
         ) {
@@ -461,7 +461,8 @@ export function OrchestrationPanel({
     }));
     try {
       await onStopWriter(writerSessionId);
-      releaseWriterLease(agent);
+      const terminal = writerSessionRunning?.[writerSessionId] === false;
+      if (terminal) releaseWriterLease(agent);
       setWriterDispatches((current) => {
         const latest = current[agent];
         return latest?.sessionId === writerSessionId
@@ -469,8 +470,12 @@ export function OrchestrationPanel({
               ...current,
               [agent]: {
                 ...latest,
-                status: "complete",
-                result: summarizeWriterLog(writerLogs?.[writerSessionId] ?? []),
+                // The acknowledgement is not a terminal host event. Keep
+                // the target lease until the running projection settles.
+                status: terminal ? "complete" : "stopping",
+                result: terminal
+                  ? summarizeWriterLog(writerLogs?.[writerSessionId] ?? [])
+                  : latest.result,
               },
             }
           : current;
@@ -480,7 +485,7 @@ export function OrchestrationPanel({
         ...current,
         [agent]: {
           ...dispatch,
-          status: "failed",
+          status: "running",
           error: userFacingError(error, "The writer could not be stopped."),
         },
       }));
