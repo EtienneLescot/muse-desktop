@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  createOutboxWriteQueue,
   mergeOutboxStores,
   normalizeOutboxStore,
 } from "../src/lib/outboxLedger.ts";
@@ -47,5 +48,23 @@ describe("native outbox ledger merge", () => {
     });
     assert.deepEqual(Object.keys(raw), ["session-1"]);
     assert.deepEqual(raw["session-1"]?.map((item) => item.clientMessageId), ["ok"]);
+  });
+
+  it("serializes mirror writes and coalesces a burst to the newest snapshot", async () => {
+    const started: string[] = [];
+    const release: Array<() => void> = [];
+    const queue = createOutboxWriteQueue(async (store) => {
+      started.push(store["session-1"]?.[0]?.clientMessageId ?? "empty");
+      await new Promise<void>((resolve) => release.push(resolve));
+    });
+
+    queue({ "session-1": [entry("first")] });
+    queue({ "session-1": [entry("second")] });
+    queue({ "session-1": [entry("third")] });
+    assert.deepEqual(started, ["first"]);
+    release.shift()?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(started, ["first", "third"]);
+    release.shift()?.();
   });
 });

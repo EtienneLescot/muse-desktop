@@ -91,3 +91,44 @@ export async function saveNativeOutbox(store: OutboxStore): Promise<boolean | nu
     return false;
   }
 }
+
+/**
+ * Serialize native mirror writes and coalesce bursts to the newest snapshot.
+ *
+ * React can publish several outbox states in one turn (for example when an
+ * acknowledgement and a retry race during hydration).  Letting every
+ * invoke run independently would allow an older, slower write to overwrite
+ * the newest state on disk.  The queue keeps the hook's SSOT authoritative
+ * while ensuring the native mirror only commits snapshots in order.
+ */
+export function createOutboxWriteQueue(
+  write: (store: OutboxStore) => Promise<unknown>,
+): (store: OutboxStore) => void {
+  let pending: OutboxStore | null = null;
+  let draining = false;
+
+  const drain = async () => {
+    if (draining) return;
+    draining = true;
+    try {
+      while (pending !== null) {
+        const next = pending;
+        pending = null;
+        try {
+          await write(next);
+        } catch {
+          // A failed mirror must never break the renderer's live outbox. The
+          // next state remains eligible for a subsequent invocation.
+        }
+      }
+    } finally {
+      draining = false;
+      if (pending !== null) void drain();
+    }
+  };
+
+  return (store) => {
+    pending = store;
+    void drain();
+  };
+}

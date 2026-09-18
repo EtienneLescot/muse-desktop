@@ -53,6 +53,7 @@ import {
 } from "../lib/outbox";
 export type { OutboxEntry, SendResult } from "../lib/outbox";
 import {
+  createOutboxWriteQueue,
   loadNativeOutbox,
   mergeOutboxStores,
   saveNativeOutbox,
@@ -1801,6 +1802,10 @@ export function useMuseSessions(): UseMuseSessions {
   // StrictMode remounts: recovery is idempotent (failed entries are kept,
   // accepted ones are pruned defensively).
   const nativeOutboxHydratedRef = useRef(!isTauriRuntime());
+  const nativeOutboxWriterRef = useRef<((store: OutboxStore) => void) | null>(null);
+  if (nativeOutboxWriterRef.current === null && isTauriRuntime()) {
+    nativeOutboxWriterRef.current = createOutboxWriteQueue(saveNativeOutbox);
+  }
   const [outbox, setOutbox] = useState<Record<string, OutboxEntry[]>>(() => {
     const restored: Record<string, OutboxEntry[]> = {};
     for (const s of loadSessions()) {
@@ -1827,7 +1832,10 @@ export function useMuseSessions(): UseMuseSessions {
     void loadNativeOutbox().then((nativeStore) => {
       if (cancelled) return;
       nativeOutboxHydratedRef.current = true;
-      if (nativeStore === null) return;
+      if (nativeStore === null) {
+        nativeOutboxWriterRef.current?.(outboxRef.current);
+        return;
+      }
       setOutbox((current) => {
         const merged = mergeOutboxStores(current, nativeStore);
         const recovered: OutboxStore = {};
@@ -1846,7 +1854,7 @@ export function useMuseSessions(): UseMuseSessions {
   }, []);
 
   useEffect(() => {
-    if (nativeOutboxHydratedRef.current) void saveNativeOutbox(outbox);
+    if (nativeOutboxHydratedRef.current) nativeOutboxWriterRef.current?.(outbox);
   }, [outbox]);
 
   /**
