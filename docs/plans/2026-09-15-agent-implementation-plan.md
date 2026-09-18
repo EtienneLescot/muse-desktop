@@ -309,7 +309,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 ### M1-12 — Recherche et organisation
 
-**État au 16/09/2026 :** la recherche parcourt les métadonnées et les journaux locaux avec extrait contextualisé ; les conversations peuvent être épinglées, réordonnées dans leur niveau et marquées non lues, avec conservation au redémarrage. La virtualisation des très longues listes reste ouverte après mesure.
+**État au 18/09/2026 :** la recherche parcourt les métadonnées et les journaux locaux avec extrait contextualisé ; les conversations peuvent être épinglées, réordonnées dans leur niveau et marquées non lues, avec conservation au redémarrage. Le renommage met à jour immédiatement la projection locale et tente `session/rename` côté host avec un nom borné à 120 caractères, sans bloquer un sidecar ancien qui ne connaît pas encore ce RPC. La virtualisation des très longues listes reste ouverte après mesure.
 
 ### M1-10 — Steering et file de messages
 

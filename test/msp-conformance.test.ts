@@ -25,6 +25,7 @@ describe("msp conformance surface", () => {
       "session/setModel",
       "session/setReasoningEffort",
       "item/readOutput",
+      "session/rename",
       "session/userShell",
       "session/fork",
       "session/setApprovalMode",

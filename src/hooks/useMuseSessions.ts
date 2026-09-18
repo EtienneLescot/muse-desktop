@@ -5462,8 +5462,14 @@ export function useMuseSessions(): UseMuseSessions {
   // thread moves selection to the first remaining active thread.
   const renameSession = useCallback((sessionId: string, title: string) => {
     const next = title.trim().slice(0, 120);
-    if (next) setSessions(cur => cur.map(s => s.session_id === sessionId ? { ...s, title: next } : s));
-  }, []);
+    if (!next) return;
+    setSessions(cur => cur.map(s => s.session_id === sessionId ? { ...s, title: next } : s));
+    if (isTauriRuntime() && connectedIds.includes(sessionId)) {
+      void invoke("rename_session", { sessionId, name: next }).catch((e) => {
+        setError(`rename conversation failed: ${String(e)}`);
+      });
+    }
+  }, [connectedIds]);
 
   const archiveSession = useCallback(
     (sessionId: string) => {

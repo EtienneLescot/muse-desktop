@@ -3760,6 +3760,36 @@ async fn set_reasoning_effort(
     Ok(())
 }
 
+const MAX_SESSION_TITLE_CHARS: usize = 120;
+
+fn rename_session_params(session_id: &str, name: &str) -> Result<Value, String> {
+    let session_id = require_non_empty(session_id, "sessionId")?;
+    let name = require_non_empty(name, "name")?;
+    if name.chars().count() > MAX_SESSION_TITLE_CHARS {
+        return Err(format!("name exceeds {MAX_SESSION_TITLE_CHARS} characters"));
+    }
+    Ok(json!({
+        "commandId": new_command_id(),
+        "sessionId": session_id,
+        "name": name,
+    }))
+}
+
+/// Keep a conversation title durable in the host when the sidecar exposes
+/// `session/rename`; the renderer still persists its own projection locally.
+#[tauri::command]
+async fn rename_session(
+    state: State<'_, AppState>,
+    session_id: String,
+    name: String,
+) -> Result<(), String> {
+    let params = rename_session_params(&session_id, &name)?;
+    session_client(&state, &session_id)?
+        .request("session/rename", params)
+        .await?;
+    Ok(())
+}
+
 /// Start one turn through the session-owned MSP client. Keeping the command
 /// body behind an `AppState` helper lets the supervisor fixture exercise the
 /// exact production payload and failure path without constructing a Tauri
@@ -5371,6 +5401,18 @@ mod tests {
     }
 
     #[test]
+    fn rename_session_params_trim_and_bound_the_host_title() {
+        let params = rename_session_params(" session-a ", "  Project notes  ").unwrap();
+        assert_eq!(params["sessionId"], "session-a");
+        assert_eq!(params["name"], "Project notes");
+        assert!(params["commandId"].as_str().is_some_and(|id| !id.is_empty()));
+        assert!(rename_session_params("session-a", " ").is_err());
+        assert!(rename_session_params(
+            "session-a", &"x".repeat(MAX_SESSION_TITLE_CHARS + 1)
+        ).is_err());
+    }
+
+    #[test]
     fn item_output_reference_is_trimmed_and_bounded() {
         assert_eq!(item_output_ref(&json!({"outputRef": " output://a "})), Some("output://a".to_string()));
         assert_eq!(item_output_ref(&json!({"output_ref": "output://b"})), Some("output://b".to_string()));
@@ -6292,6 +6334,7 @@ fn main() {
             list_models,
             set_model,
             set_reasoning_effort,
+            rename_session,
             compact_session,
             poll_events,
             subagent_interrupt,
