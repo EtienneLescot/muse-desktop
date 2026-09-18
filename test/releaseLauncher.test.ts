@@ -1,10 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildInstallerInvocation,
+  runInstallerHandoff,
   runReleaseLauncher,
   stopAndWaitForProcess,
   waitForProcessExit,
 } from "../scripts/release-launcher.mjs";
+
+test("buildInstallerInvocation keeps NSIS arguments shell-free", () => {
+  assert.deepEqual(
+    buildInstallerInvocation("C:/releases/Muse-Desktop-1.1.0.exe", ["/D=TARGET=C:/Muse"], "win32"),
+    { executable: "C:\\releases\\Muse-Desktop-1.1.0.exe", args: ["/D=TARGET=C:/Muse"] },
+  );
+});
+
+test("buildInstallerInvocation delegates MSI to Windows Installer", () => {
+  assert.deepEqual(
+    buildInstallerInvocation("C:/releases/Muse-Desktop-1.1.0.msi", ["/passive"], "win32"),
+    { executable: "msiexec.exe", args: ["/i", "C:\\releases\\Muse-Desktop-1.1.0.msi", "/passive"] },
+  );
+  assert.throws(() => buildInstallerInvocation("Muse.msi", [], "linux"), /require Windows/);
+});
+
+test("buildInstallerInvocation rejects unsupported installer formats", () => {
+  assert.throws(() => buildInstallerInvocation("C:/releases/Muse.zip", [], "win32"), /NSIS .exe or Windows .msi/);
+});
 
 test("waitForProcessExit polls until the process disappears", async () => {
   let calls = 0;
@@ -74,4 +95,25 @@ test("runReleaseLauncher rolls back when the restarted app cannot launch", async
     /start failed/,
   );
   assert.equal(rollbacks, 1);
+});
+
+test("runInstallerHandoff stops Muse before launching the installer", async () => {
+  const events: string[] = [];
+  let alive = true;
+  const result = await runInstallerHandoff({
+    pid: 4245,
+    installerPath: "C:/releases/Muse-Desktop-1.1.0.exe",
+    isAlive: async () => alive,
+    requestStop: async (pid) => {
+      events.push(`stop:${pid}`);
+      alive = false;
+    },
+    launch: async (options) => {
+      events.push(`launch:${options.installerPath}`);
+      return { installerPath: options.installerPath, executable: options.installerPath, args: [], pid: 4246 };
+    },
+  });
+  assert.equal(result.schema, "muse-desktop.release-installer.v1");
+  assert.deepEqual(events, ["stop:4245", "launch:C:/releases/Muse-Desktop-1.1.0.exe"]);
+  assert.equal(result.installer.pid, 4246);
 });

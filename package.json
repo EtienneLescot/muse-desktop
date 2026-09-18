@@ -10,6 +10,7 @@
     "smoke:native": "node scripts/native-smoke.mjs",
     "release:update": "node scripts/release-update.mjs",
     "release:launch": "node scripts/release-launcher.mjs",
+    "release:installer": "node scripts/release-launcher.mjs installer",
     "preview": "vite preview",
     "tauri": "tauri",
     "dev:clean": "sh scripts/dev-clean.sh",

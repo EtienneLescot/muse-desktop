@@ -21,6 +21,7 @@ import {
 } from "./release-update.mjs";
 
 export const RELEASE_LAUNCH_SCHEMA = "muse-desktop.release-launch.v1";
+export const RELEASE_INSTALLER_SCHEMA = "muse-desktop.release-installer.v1";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_POLL_MS = 100;
 
@@ -124,6 +125,79 @@ export async function launchInstalledApp(
 }
 
 /**
+ * Build the platform installer invocation without passing a command through a
+ * shell. NSIS executables receive their explicit arguments directly; MSI is
+ * handed to Windows Installer through `msiexec /i`.
+ */
+export function buildInstallerInvocation(installerPath, args = [], platform = process.platform) {
+  const file = checkedExecutable(installerPath);
+  if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string")) {
+    throw new Error("installer args must be an array of strings");
+  }
+  const extension = file.toLowerCase().slice(file.lastIndexOf("."));
+  if (extension === ".msi") {
+    if (platform !== "win32") throw new Error("MSI installers require Windows");
+    return { executable: "msiexec.exe", args: ["/i", file, ...args] };
+  }
+  if (extension === ".exe") return { executable: file, args: [...args] };
+  throw new Error("installer must be an NSIS .exe or Windows .msi file");
+}
+
+/** Start an installer handoff after the running app has exited. */
+export async function launchInstaller(
+  { installerPath, args = [], spawnProcess = spawn, platform = process.platform } = {},
+) {
+  const invocation = buildInstallerInvocation(installerPath, args, platform);
+  if (platform === "win32" && invocation.executable !== "msiexec.exe") {
+    await access(installerPath, constants.X_OK).catch(() => {
+      throw new Error(`installer is not accessible: ${installerPath}`);
+    });
+  } else if (invocation.executable !== "msiexec.exe") {
+    await access(invocation.executable, constants.X_OK).catch(() => {
+      throw new Error(`installer is not accessible: ${installerPath}`);
+    });
+  }
+  const child = spawnProcess(invocation.executable, invocation.args, {
+    shell: false,
+    detached: true,
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  if (typeof child?.unref === "function") child.unref();
+  return {
+    installerPath: resolve(installerPath),
+    executable: invocation.executable,
+    args: invocation.args,
+    pid: Number.isSafeInteger(child?.pid) ? child.pid : null,
+  };
+}
+
+/** Stop Muse, then hand control to a verified Windows installer. */
+export async function runInstallerHandoff({
+  pid,
+  installerPath,
+  args = [],
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  pollMs = DEFAULT_POLL_MS,
+  isAlive = defaultIsAlive,
+  requestStop = defaultRequestStop,
+  launch = launchInstaller,
+} = {}) {
+  if (typeof installerPath !== "string" || installerPath.trim().length === 0) {
+    throw new Error("installerPath is required");
+  }
+  const stop = pid === undefined || pid === null
+    ? { pid: null, alreadyExited: true }
+    : await stopAndWaitForProcess(pid, { timeoutMs, pollMs, isAlive, requestStop });
+  const launched = await launch({ installerPath, args });
+  return {
+    schema: RELEASE_INSTALLER_SCHEMA,
+    stopped: stop,
+    installer: launched,
+  };
+}
+
+/**
  * Stop, swap and restart a release. The caller must explicitly permit a
  * stopped app with `pid: undefined` when it is running this out of band.
  */
@@ -203,8 +277,24 @@ function repeatedArgument(name) {
 }
 
 async function cli() {
-  if (process.argv[2] !== "run") {
-    throw new Error("usage: release-launcher.mjs run --staged DIR --slots-root DIR --executable FILE [--pid PID] [--arg VALUE] …");
+  const command = process.argv[2];
+  if (command === "installer") {
+    const pid = argument("--pid");
+    if (pid === undefined && !process.argv.includes("--allow-stopped")) {
+      throw new Error("--pid is required unless --allow-stopped is provided");
+    }
+    const result = await runInstallerHandoff({
+      pid: pid === undefined ? undefined : checkedPid(pid),
+      installerPath: requireArgument("--installer"),
+      args: repeatedArgument("--arg"),
+      timeoutMs: argument("--timeout-ms"),
+      pollMs: argument("--poll-ms"),
+    });
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    return;
+  }
+  if (command !== "run") {
+    throw new Error("usage: release-launcher.mjs run --staged DIR --slots-root DIR --executable FILE [--pid PID] [--arg VALUE] … | installer --installer FILE [--pid PID]");
   }
   const pid = argument("--pid");
   if (pid === undefined && !process.argv.includes("--allow-stopped")) {
