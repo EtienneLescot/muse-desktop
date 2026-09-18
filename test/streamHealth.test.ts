@@ -5,6 +5,7 @@ import {
   classifyStreamHealth,
   formatElapsed,
   parseRetryScheduled,
+  shouldAcceptRetryScheduled,
   streamEventLabel,
   streamHealthLabel,
 } from "../src/lib/streamHealth.ts";
@@ -117,5 +118,20 @@ describe("stream health", () => {
     });
     assert.equal(parseRetryScheduled(JSON.stringify({ delayMs: "later" }), 123), null);
     assert.equal(parseRetryScheduled("not-json", 123), null);
+  });
+
+  it("rejects retry metadata from a different or completed turn", () => {
+    const retry = {
+      delayMs: 1000,
+      attempt: 2,
+      maxAttempts: 3,
+      reason: null,
+      turnId: "turn-2",
+      scheduledAt: 123,
+    };
+    assert.equal(shouldAcceptRetryScheduled(retry, "turn-1"), false);
+    assert.equal(shouldAcceptRetryScheduled(retry, undefined, "turn-2"), false);
+    assert.equal(shouldAcceptRetryScheduled(retry, "turn-2"), true);
+    assert.equal(shouldAcceptRetryScheduled({ ...retry, turnId: undefined }), true);
   });
 });
