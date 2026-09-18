@@ -12,7 +12,7 @@ import { pathToFileURL } from "node:url";
 
 export const RELEASE_MANIFEST_SCHEMA = "muse-desktop.release-manifest.v1";
 
-function fileDigest(filePath) {
+export function fileDigest(filePath) {
   const absolute = resolve(filePath);
   const stats = statSync(absolute);
   if (!stats.isFile()) throw new Error(`release input is not a file: ${absolute}`);
