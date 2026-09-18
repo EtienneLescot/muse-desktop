@@ -5789,6 +5789,84 @@ mod tests {
     }
 
     #[test]
+    fn generated_tauri_invoke_restores_unknown_session_list_rows() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![restore_sessions])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        let root = PathBuf::from("fixture-a");
+        state.hosts.lock().unwrap().insert(root.clone(), client.clone());
+        state
+            .host_durability
+            .lock()
+            .unwrap()
+            .insert(root.clone(), "durable".to_string());
+        state
+            .host_capabilities
+            .lock()
+            .unwrap()
+            .insert(root, vec!["userShell".to_string()]);
+
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames).await;
+                assert_eq!(frame["method"], "session/list");
+                assert_eq!(frame["params"]["limit"], DEFAULT_SESSION_LIST_LIMIT);
+                client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": frame["id"],
+                        "result": {
+                            "sessions": [{
+                                "sessionId": "restored-session",
+                                "status": "running",
+                                "approvalMode": {"mode": "promptUnmatched"}
+                            }]
+                        }
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "restore_sessions".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({})),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("restore_sessions invoke should succeed")
+        .deserialize::<Value>()
+        .expect("restore_sessions response should be JSON");
+
+        responder.join().expect("session list responder should finish");
+        assert_eq!(response[0]["session_id"], "restored-session");
+        assert_eq!(response[0]["workspace"], "fixture-a");
+        assert_eq!(response[0]["session_durability"], "durable");
+        assert_eq!(response[0]["approval_mode"], "promptUnmatched");
+        assert_eq!(response[0]["granted_capabilities"][0], "userShell");
+        assert_eq!(state.sessions.lock().unwrap().len(), 1);
+    }
+
+    #[test]
     fn rename_session_params_trim_and_bound_the_host_title() {
         let params = rename_session_params(" session-a ", "  Project notes  ").unwrap();
         assert_eq!(params["sessionId"], "session-a");
