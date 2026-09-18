@@ -337,6 +337,18 @@ fn truncate(s: &str, n: usize) -> String {
     format!("{}…", &s[..end])
 }
 
+/// Keep a host turn anchor small and stable before it crosses the native
+/// bridge. The renderer uses this identifier to reattach the thinking lane
+/// after an approval resolves, so dropping it would leave the turn looking
+/// permanently stuck even though the host resumed it.
+fn bounded_turn_id(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| truncate(value, 160))
+}
+
 /// Keep host diagnostics useful without persisting command prompts, bearer
 /// tokens or common secret-shaped values. This is deliberately conservative:
 /// normal prose is retained, while values following an obvious secret key
@@ -1725,15 +1737,24 @@ where
                 // permission to resume. The renderer's parser fails closed
                 // for this explicit sentinel.
                 .unwrap_or("unknown");
+            let turn_id = bounded_turn_id(
+                p.get("turnId")
+                    .or_else(|| p.get("turn_id"))
+                    .or_else(|| p.get("resolution").and_then(|r| r.get("turnId")))
+                    .or_else(|| p.get("resolution").and_then(|r| r.get("turn_id"))),
+            );
+            let mut payload = json!({
+                "approvalId": approval_id,
+                "decision": decision,
+                "terminal": true,
+            });
+            if let Some(turn_id) = turn_id {
+                payload["turnId"] = Value::String(turn_id);
+            }
             emit_fn("status",
                 sid,
                 method,
-                json!({
-                    "approvalId": approval_id,
-                    "decision": decision,
-                    "terminal": true,
-                })
-                .to_string(),
+                payload.to_string(),
             );
         }
         "turn/started" => emit_fn("status",
@@ -5242,6 +5263,47 @@ mod tests {
         assert_eq!(kind, "approval/resolved");
         assert!(payload.contains("\"decision\":\"unknown\""));
         assert!(payload.contains("\"terminal\":true"));
+    }
+
+    #[test]
+    fn approval_resolution_preserves_bounded_turn_identity() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "approval/resolved",
+            &json!({
+                "sessionId": "session-a",
+                "approvalId": "approval-a",
+                "resolution": {"decision": "approved", "turn_id": "turn-a"}
+            }),
+            &mut emit,
+        );
+
+        let (_, sid, kind, payload) = events.last().expect("approval resolution event");
+        assert_eq!(sid, "session-a");
+        assert_eq!(kind, "approval/resolved");
+        let payload: Value = serde_json::from_str(payload).expect("valid status payload");
+        assert_eq!(payload["decision"], "approved");
+        assert_eq!(payload["turnId"], "turn-a");
+
+        let oversized = "x".repeat(300);
+        let mut oversized_events = Vec::new();
+        let mut oversized_emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            oversized_events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "approval/resolved",
+            &json!({"sessionId":"session-a","approvalId":"approval-a","decision":"approved","turnId":oversized}),
+            &mut oversized_emit,
+        );
+        let payload: Value = serde_json::from_str(&oversized_events.last().unwrap().3)
+            .expect("valid bounded status payload");
+        assert_eq!(payload["turnId"].as_str().unwrap().chars().count(), 161);
     }
 
     #[tokio::test]

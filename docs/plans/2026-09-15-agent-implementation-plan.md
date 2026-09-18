@@ -102,7 +102,7 @@ Créer des fixtures minimales pour succès, refus, timeout, événements entrela
 
 **Travail :** indexer par session + identifiant + génération, conserver le token opaque du serveur, retirer seulement sur règlement confirmé. Réconcilier snapshot et notifications de reprise ; les anciennes décisions ne doivent pas agir sur une nouvelle demande. Garder la réponse éditée si refus de validation.
 
-**Tranche livrée :** après `session/resume`, le hook appelle `list_pending_requests` (`approval/listPending`) et remplace uniquement les cartes de la session concernée. Les payloads approval et user input sont repassés par les parseurs existants ; les tokens opaques restent dans le registre Rust et les événements réémis par le host restent idempotents côté UI.
+**Tranche livrée :** après `session/resume`, le hook appelle `list_pending_requests` (`approval/listPending`) et remplace uniquement les cartes de la session concernée. Les payloads approval et user input sont repassés par les parseurs existants ; les tokens opaques restent dans le registre Rust et les événements réémis par le host restent idempotents côté UI. Le bridge de résolution relaye aussi un `turnId` borné, y compris dans les variantes snake_case et imbriquées, afin que le renderer rattache la reprise au tour qui attendait l'autorisation.
 
 **Limite native observée :** le sidecar Windows 1.3.0 utilisé par le smoke ne sert pas `approval/listPending` (`methodNotFound`). Le panneau conserve les événements reçus et montre l'erreur bornée lors d'une synchronisation explicite ; la réémission réelle d'une demande après incident nécessite une version de host qualifiée ou un contrat de compatibilité documenté.
 
