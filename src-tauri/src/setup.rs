@@ -226,6 +226,7 @@ fn read_pipe<R: Read + Send + 'static>(mut reader: R) -> thread::JoinHandle<Vec<
 }
 
 /// Run one explicit setup command in a managed worktree.
+#[cfg(test)]
 pub fn run(root: &Path, path: &str, command: &str) -> Result<SetupResult, String> {
     run_with_cancel(root, path, command, None)
 }
@@ -233,6 +234,7 @@ pub fn run(root: &Path, path: &str, command: &str) -> Result<SetupResult, String
 /// Run setup with an optional cancellation flag owned by the supervisor.
 /// Cancellation is cooperative at the polling boundary and kills the child
 /// process before returning a terminal result.
+#[cfg(test)]
 pub fn run_with_cancel(
     root: &Path,
     path: &str,
