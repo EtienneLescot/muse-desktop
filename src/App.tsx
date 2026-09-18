@@ -1159,7 +1159,23 @@ export default function App() {
             )}
             {sidecarKind !== null
               ? sidecarPanel
-              : error && <div className="error-banner">{userFacingError(error)}</div>}
+              : error && (
+                <div className="error-banner" role="alert">
+                  <span>{userFacingError(error)}</span>
+                  {error.toLowerCase().includes("restart the workspace host") && !backendMissing && (
+                    <button
+                      type="button"
+                      className="error-banner-action"
+                      onClick={() => {
+                        if (!window.confirm("Restart the workspace host? Active conversations will disconnect and can reconnect when the host supports durable sessions.")) return;
+                        void restartHost(workspace);
+                      }}
+                    >
+                      Restart workspace host
+                    </button>
+                  )}
+                </div>
+              )}
             {active === null ? (
               <EmptySessionScreen
                 workspace={workspace}
