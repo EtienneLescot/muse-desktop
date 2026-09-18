@@ -5107,6 +5107,102 @@ mod tests {
         assert!(stderr_tail.lock().unwrap()[0].contains("unparsable frame"));
     }
 
+    struct FixtureProcessChild {
+        child: Option<std::process::Child>,
+        stdin: std::process::ChildStdin,
+    }
+
+    impl msp::ChildTransport for FixtureProcessChild {
+        fn write(&mut self, buf: &[u8]) -> Result<(), String> {
+            use std::io::Write;
+            self.stdin.write_all(buf).map_err(|error| error.to_string())
+        }
+
+        fn kill(mut self: Box<Self>) -> Result<(), String> {
+            if let Some(mut child) = self.child.take() {
+                child.kill().map_err(|error| error.to_string())?;
+                let _ = child.wait();
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn real_fixture_child_round_trips_through_stdout_pump() {
+        use std::io::Read;
+        use std::process::{Command, Stdio};
+
+        let mut command = if cfg!(windows) {
+            let script = r#"$null = [Console]::In.ReadLine(); [Console]::Out.WriteLine('{"jsonrpc":"2.0","method":"turn/started","params":{"sessionId":"fixture-session"}}'); [Console]::Out.Write('{"jsonrpc":"2.0","id":1,"result":{"models":[{"id":"fixture-model"}]}}'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 5"#;
+            let mut command = Command::new("powershell.exe");
+            command.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script]);
+            command
+        } else {
+            let script = "read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/started\",\"params\":{\"sessionId\":\"fixture-session\"}}'; printf '%s' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"models\":[{\"id\":\"fixture-model\"}]}}'";
+            let mut command = Command::new("sh");
+            command.args(["-c", script]);
+            command
+        };
+        let mut process = command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("fixture child should spawn");
+        let stdin = process.stdin.take().expect("fixture stdin");
+        let mut stdout = process.stdout.take().expect("fixture stdout");
+        let child = FixtureProcessChild { child: Some(process), stdin };
+        let (notify_tx, mut notify_rx) = mpsc::unbounded_channel();
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let (events_tx, events_rx) = tauri::async_runtime::channel(16);
+        let pump = tokio::spawn(consume_command_events(events_rx, client.clone(), stderr_tail.clone()));
+
+        let feeder = std::thread::spawn(move || {
+            let mut chunk = [0u8; 7];
+            loop {
+                match stdout.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(size) => {
+                        if events_tx
+                            .blocking_send(CommandEvent::Stdout(chunk[..size].to_vec()))
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = events_tx.blocking_send(CommandEvent::Error(error.to_string()));
+                        break;
+                    }
+                }
+            }
+            let _ = events_tx.blocking_send(CommandEvent::Terminated(TerminatedPayload {
+                code: Some(0),
+                signal: None,
+            }));
+        });
+
+        let result = client.request("model/list", Value::Null).await.expect("fixture response");
+        assert_eq!(result["models"][0]["id"], "fixture-model");
+        let (method, params) = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            notify_rx.recv(),
+        )
+        .await
+        .expect("fixture notification timeout")
+        .expect("fixture notification channel closed");
+        assert_eq!(method, "turn/started");
+        assert_eq!(params["sessionId"], "fixture-session");
+
+        assert!(matches!(pump.await.expect("pump join"), PumpExit::Terminated(_)));
+        feeder.join().expect("fixture feeder join");
+        assert!(stderr_tail.lock().unwrap().is_empty());
+    }
+
     #[tokio::test]
     async fn command_event_pump_handles_shell_errors_and_closed_channel() {
         let (tx, rx) = tauri::async_runtime::channel(16);
