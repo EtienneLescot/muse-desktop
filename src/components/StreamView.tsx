@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { LogEntry } from "../lib/persist";
+import type { ItemOutputChunk } from "../hooks/useMuseSessions";
 import { REFLEXIVE_LABEL } from "../lib/phase";
 import { subagentSummary } from "../lib/subagent";
 import {
@@ -40,6 +41,7 @@ export interface SubagentControls {
   onFollowup: (agentId: string, task: string) => void;
   onReadResult: (agentId: string) => Promise<string | null>;
   onDrilldown: (entry: LogEntry) => Promise<string | null>;
+  onReadOutput: (entry: LogEntry, offsetBytes?: number) => Promise<ItemOutputChunk | null>;
 }
 
 interface Props {
@@ -131,6 +133,13 @@ export function StreamView({
   const [followupFor, setFollowupFor] = useState<string | null>(null);
   const [followupText, setFollowupText] = useState("");
   const [shown, setShown] = useState<Record<string, string>>({});
+  const [loadedOutputs, setLoadedOutputs] = useState<Record<string, {
+    content: string;
+    nextOffsetBytes: number;
+    byteLen: number;
+    eof: boolean;
+    loading: boolean;
+  }>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [retryingFailure, setRetryingFailure] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
@@ -344,6 +353,39 @@ export function StreamView({
       if (text !== null) setShown((cur) => ({ ...cur, [entry.id]: text }));
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function runOutput(entry: LogEntry): Promise<void> {
+    if (!controls || !entry.outputRef) return;
+    const previous = loadedOutputs[entry.id];
+    if (previous?.loading || previous?.eof) return;
+    setLoadedOutputs((cur) => ({
+      ...cur,
+      [entry.id]: { ...(cur[entry.id] ?? { content: "", nextOffsetBytes: 0, byteLen: 0, eof: false }), loading: true },
+    }));
+    try {
+      const chunk = await controls.onReadOutput(entry, previous?.nextOffsetBytes ?? 0);
+      if (!chunk) return;
+      setLoadedOutputs((cur) => {
+        const current = cur[entry.id];
+        const append = current !== undefined && chunk.offsetBytes >= current.nextOffsetBytes;
+        return {
+          ...cur,
+          [entry.id]: {
+            content: append ? `${current.content}${chunk.content}` : chunk.content,
+            nextOffsetBytes: chunk.nextOffsetBytes,
+            byteLen: (append ? current.byteLen : 0) + chunk.byteLen,
+            eof: chunk.eof || chunk.byteLen === 0,
+            loading: false,
+          },
+        };
+      });
+    } finally {
+      setLoadedOutputs((cur) => {
+        const current = cur[entry.id];
+        return current?.loading ? { ...cur, [entry.id]: { ...current, loading: false } } : cur;
+      });
     }
   }
 
@@ -765,6 +807,33 @@ export function StreamView({
                   <span className="caret" aria-hidden="true" />
                 )}
               </pre>
+            )}
+            {e.role === "tool" && e.outputRef && (
+              <div className="tool-output-loader">
+                <button
+                  type="button"
+                  className="tool-output-button"
+                  onClick={() => void runOutput(e)}
+                  disabled={loadedOutputs[e.id]?.loading || loadedOutputs[e.id]?.eof}
+                >
+                  {loadedOutputs[e.id]?.loading
+                    ? "Loading output…"
+                    : loadedOutputs[e.id]?.eof
+                      ? "Output loaded"
+                      : loadedOutputs[e.id]
+                        ? "Load more output"
+                        : "Load full output"}
+                </button>
+                {loadedOutputs[e.id] && (
+                  <>
+                    <span className="tool-output-meta">
+                      {loadedOutputs[e.id].byteLen.toLocaleString()} bytes loaded
+                      {loadedOutputs[e.id].eof ? " · complete" : " · more available"}
+                    </span>
+                    <pre className="tool-output-content">{loadedOutputs[e.id].content}</pre>
+                  </>
+                )}
+              </div>
             )}
             <div className="msg-footer">
               <span className="ts">{timeOf(e.ts)}</span>

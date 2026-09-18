@@ -720,6 +720,16 @@ export interface ApprovalRequest {
   choices: ApprovalChoice[];
 }
 
+/** One bounded chunk returned by the host's lazy item output reader. */
+export interface ItemOutputChunk {
+  content: string;
+  offsetBytes: number;
+  nextOffsetBytes: number;
+  byteLen: number;
+  eof: boolean;
+  mediaType?: string;
+}
+
 /** A turn admitted to the host queue and still reclaimable. */
 export interface QueuedTurn {
   session_id: string;
@@ -1091,6 +1101,8 @@ interface UseMuseSessions {
   subagentReadResult: (sessionId: string, agentId: string) => Promise<string | null>;
   /** Drill-down via `session/read`; explicit error when unavailable. */
   subagentDrilldown: (sessionId: string, childSessionId: string | undefined) => Promise<string | null>;
+  /** M1-06: load one bounded chunk of a large host-owned item output. */
+  readItemOutput: (sessionId: string, entry: LogEntry, offsetBytes?: number) => Promise<ItemOutputChunk | null>;
   /** w-integrations US-24/US-26: installed connector entries. */
   connectors: ConnectorEntry[];
   /** w-integrations US-24: hot-listed tools (re-read, no restart). */
@@ -1222,7 +1234,7 @@ function shortTitle(text: string): string {
  * Parse a stream-chunk payload: JSON `{itemId, text}` from the supervisor, or
  * raw text from older payloads. Never throws.
  */
-function parseChunk(payload: string): { itemId?: string; turnId?: string; text: string } {
+function parseChunk(payload: string): { itemId?: string; turnId?: string; outputRef?: string; text: string } {
   const trimmed = payload.trim();
   if (trimmed.startsWith("{")) {
     try {
@@ -1232,7 +1244,10 @@ function parseChunk(payload: string): { itemId?: string; turnId?: string; text: 
         const turnId = typeof obj.turnId === "string" && obj.turnId.trim().length > 0
           ? obj.turnId.trim()
           : undefined;
-        return { itemId, turnId, text: obj.text };
+        const outputRef = typeof obj.outputRef === "string" && obj.outputRef.trim().length > 0
+          ? obj.outputRef.trim()
+          : undefined;
+        return { itemId, turnId, outputRef, text: obj.text };
       }
     } catch {
       // fall through to raw text
@@ -2846,7 +2861,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "output") {
       ensureSessionRow(sid, null);
-      const { itemId, turnId, text } = parseChunk(payload);
+      const { itemId, turnId, outputRef, text } = parseChunk(payload);
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -2858,12 +2873,17 @@ export function useMuseSessions(): UseMuseSessions {
         const i = lastOpenIndex(log, "assistant", undefined, itemId);
         let next: LogEntry[];
         if (i >= 0) {
-          const merged = { ...log[i], text: log[i].text + text, itemId: itemId ?? log[i].itemId };
+          const merged = {
+            ...log[i],
+            text: log[i].text + text,
+            itemId: itemId ?? log[i].itemId,
+            ...(outputRef === undefined ? {} : { outputRef }),
+          };
           next = [...log.slice(0, i), merged, ...log.slice(i + 1)];
         } else {
           next = [
             ...log,
-            { id: newId(), ts: Date.now(), role: "assistant" as LogRole, text, itemId, open: true },
+            { id: newId(), ts: Date.now(), role: "assistant" as LogRole, text, itemId, outputRef, open: true },
           ];
         }
         saveLog(sid, next);
@@ -2876,7 +2896,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "thinking") {
       ensureSessionRow(sid, null);
-      const { itemId, turnId, text } = parseChunk(payload);
+      const { itemId, turnId, outputRef, text } = parseChunk(payload);
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -2893,7 +2913,7 @@ export function useMuseSessions(): UseMuseSessions {
           const prev = log[i];
           next = [
             ...log.slice(0, i),
-            { ...prev, text: prev.text + text, itemId: itemId ?? prev.itemId },
+            { ...prev, text: prev.text + text, itemId: itemId ?? prev.itemId, ...(outputRef === undefined ? {} : { outputRef }) },
             ...log.slice(i + 1),
           ];
         } else {
@@ -2905,6 +2925,7 @@ export function useMuseSessions(): UseMuseSessions {
               role: "thinking" as LogRole,
               text,
               itemId,
+              outputRef,
               open: true,
             },
           ];
@@ -2919,7 +2940,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "shell_output") {
       ensureSessionRow(sid, null);
-      const { itemId, turnId, text } = parseChunk(payload);
+      const { itemId, turnId, outputRef, text } = parseChunk(payload);
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -2933,13 +2954,13 @@ export function useMuseSessions(): UseMuseSessions {
           const separator = previous.text.length > 0 && text.length > 0 ? "\n" : "";
           next = [
             ...log.slice(0, i),
-            { ...previous, text: `${previous.text}${separator}${text}`, itemId: itemId ?? previous.itemId },
+            { ...previous, text: `${previous.text}${separator}${text}`, itemId: itemId ?? previous.itemId, ...(outputRef === undefined ? {} : { outputRef }) },
             ...log.slice(i + 1),
           ];
         } else {
           next = [
             ...log,
-            { id: newId(), ts: Date.now(), role: "tool", text, itemId, open: true },
+            { id: newId(), ts: Date.now(), role: "tool", text, itemId, outputRef, open: true },
           ];
         }
         saveLog(sid, next);
@@ -3082,6 +3103,9 @@ export function useMuseSessions(): UseMuseSessions {
         ? parsed.turnId
         : undefined;
       const commandText = typeof parsed?.commandText === "string" ? parsed.commandText : undefined;
+      const outputRef = typeof parsed?.outputRef === "string" && parsed.outputRef.trim().length > 0
+        ? parsed.outputRef.trim()
+        : undefined;
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -3093,6 +3117,7 @@ export function useMuseSessions(): UseMuseSessions {
           text,
           ...(turnId === undefined ? {} : { turnId }),
           ...(commandText === undefined ? {} : { commandText }),
+          ...(outputRef === undefined ? {} : { outputRef }),
           ...(revision === undefined ? {} : { revision }),
           open: true,
           stamp: { id: newId(), ts: Date.now() },
@@ -6345,6 +6370,60 @@ export function useMuseSessions(): UseMuseSessions {
     [kickPoll],
   );
 
+  const readItemOutput = useCallback(
+    async (sessionId: string, entry: LogEntry, offsetBytes = 0): Promise<ItemOutputChunk | null> => {
+      if (!entry.itemId || !entry.outputRef) {
+        setError("item output is unavailable: this item has no host output reference");
+        return null;
+      }
+      try {
+        setError(null);
+        const offset = Math.max(0, Math.floor(offsetBytes));
+        const result = await invoke<unknown>("read_item_output", {
+          sessionId,
+          itemId: entry.itemId,
+          outputRef: entry.outputRef,
+          offsetBytes: offset,
+          lengthBytes: 64 * 1024,
+        });
+        const value = typeof result === "object" && result !== null
+          ? result as Record<string, unknown>
+          : {};
+        const rawContent = typeof value.content === "string" ? value.content : "";
+        const encoding = typeof value.encoding === "string" ? value.encoding.toLowerCase() : "";
+        let content = rawContent;
+        if (encoding === "base64" && typeof atob === "function") {
+          const binary = atob(rawContent);
+          const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+          content = typeof TextDecoder === "function"
+            ? new TextDecoder().decode(bytes)
+            : binary;
+        }
+        const returnedOffset = typeof value.offsetBytes === "number" && Number.isFinite(value.offsetBytes)
+          ? Math.max(0, value.offsetBytes)
+          : offset;
+        const byteLen = typeof value.byteLen === "number" && Number.isFinite(value.byteLen)
+          ? Math.max(0, value.byteLen)
+          : new TextEncoder().encode(content).byteLength;
+        const eof = value.eof === true;
+        return {
+          content,
+          offsetBytes: returnedOffset,
+          nextOffsetBytes: returnedOffset + byteLen,
+          byteLen,
+          eof,
+          ...(typeof value.mediaType === "string" && value.mediaType.length > 0
+            ? { mediaType: value.mediaType }
+            : {}),
+        };
+      } catch (e) {
+        setError(`read_item_output failed: ${String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
+
   const beginGitRequest = useCallback((sessionId: string): number => {
     const next = (gitRequestSeq.current[sessionId] ?? 0) + 1;
     gitRequestSeq.current[sessionId] = next;
@@ -7279,6 +7358,7 @@ export function useMuseSessions(): UseMuseSessions {
     subagentFollowup,
     subagentReadResult,
     subagentDrilldown,
+    readItemOutput,
     connectors,
     connectorTools,
     probeLocalMcp,

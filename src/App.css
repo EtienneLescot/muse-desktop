@@ -880,6 +880,51 @@ body.dark .avatar {
   padding: 8px 12px;
 }
 
+.tool-output-loader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.tool-output-button {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 48%, var(--line));
+  border-radius: 999px;
+  color: var(--blue);
+  background: color-mix(in srgb, var(--surface) 88%, var(--blue) 12%);
+  font-size: 0.78rem;
+}
+
+.tool-output-button:disabled {
+  opacity: 0.68;
+  cursor: default;
+}
+
+.tool-output-meta {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.tool-output-content {
+  flex: 1 0 100%;
+  max-height: 360px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-code);
+  font-size: 0.78rem;
+}
+
 /* M0-07: terminal engine failures stay calm and inspectable. The stable
    category/retry posture is visible in the summary; the host message remains
    available in the disclosure for support without flooding the transcript. */

@@ -25,6 +25,8 @@ export interface SessionHistoryItem {
   commandId?: unknown;
   /** `userShell`: command text is part of the durable item, alongside output. */
   commandText?: unknown;
+  /** Opaque host reference for lazily loading a large tool output. */
+  outputRef?: unknown;
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -151,6 +153,7 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
       text,
       itemId,
       ...(turnId === undefined ? {} : { turnId }),
+      ...(stringValue(item.outputRef) === undefined ? {} : { outputRef: stringValue(item.outputRef) }),
       open: item.status === "inProgress",
     };
     const revision = typeof item.revision === "number" && Number.isFinite(item.revision)
