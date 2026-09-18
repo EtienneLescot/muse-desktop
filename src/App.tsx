@@ -92,6 +92,7 @@ export default function App() {
     activeRecoveryNotice,
     activeResumePending,
     activeRetryScheduled,
+    turnCompletionBySession,
     stoppingBySession,
     activeConnectionState,
     queuedTurns,
@@ -1691,6 +1692,7 @@ export default function App() {
                             writerPrompts={orchestrationWriterPrompts}
                             writerLogs={logs}
                             writerSessionRunning={writerSessionRunning}
+                            writerCompletions={turnCompletionBySession}
                             onDispatchWriter={async (record, prompt) => {
                               const sourceId = activeId;
                               try {

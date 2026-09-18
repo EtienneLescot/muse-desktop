@@ -21,6 +21,7 @@ import {
 } from "../lib/writerLocks";
 import { isTauriRuntime } from "../lib/env";
 import type { LogEntry } from "../lib/persist";
+import type { TurnCompletionDetails } from "../lib/engineError";
 import {
   buildHandoffPlan,
   isHandoffPlanStale,
@@ -102,6 +103,8 @@ interface Props {
   writerSessionRunning?: Readonly<Record<string, boolean>>;
   /** Local transcript projection for dispatched writer conversations. */
   writerLogs?: Readonly<Record<string, readonly LogEntry[]>>;
+  /** Host-authored terminal result for dispatched writer conversations. */
+  writerCompletions?: Readonly<Record<string, TurnCompletionDetails>>;
   /** Objective text captured from the parent sub-agent entry. */
   writerPrompts?: Readonly<Record<string, string>>;
   onInspectWorktree: (
@@ -144,6 +147,7 @@ export function OrchestrationPanel({
   onOpenWriterConversation,
   writerSessionRunning,
   writerLogs,
+  writerCompletions,
   writerPrompts,
   onInspectWorktree,
   onCheckReadiness,
@@ -784,6 +788,9 @@ export function OrchestrationPanel({
             const plan = plans.find((item) => item.agent === row.agent);
             const record = plan === undefined ? undefined : recordFor(plan);
             const dispatch = writerDispatches[row.agent];
+            const hostCompletion = dispatch?.sessionId === null || dispatch?.sessionId === undefined
+              ? undefined
+              : writerCompletions?.[dispatch.sessionId];
             const statusLabel: Record<WriterQueueStatus, string> = {
               blocked: "Create its worktree first",
               needsPaths: "Declare target files",
@@ -816,7 +823,7 @@ export function OrchestrationPanel({
                   {dispatch?.status === "complete" ? ` · Complete` : ""}
                   {dispatch?.status === "failed" ? ` · Failed` : ""}
                 </span>
-                {dispatch?.result !== null && dispatch?.result !== undefined && (
+                {hostCompletion === undefined && dispatch?.result !== null && dispatch?.result !== undefined && (
                   <details className="orchestration-writer-result">
                     <summary>Observed writer result</summary>
                     <p>
@@ -827,6 +834,19 @@ export function OrchestrationPanel({
                       <blockquote>{dispatch.result.lastAssistantOutput}</blockquote>
                     )}
                     <small>Extracted from the local writer transcript; the host did not provide a structured result.</small>
+                  </details>
+                )}
+                {hostCompletion !== undefined && (
+                  <details className="orchestration-writer-result" open>
+                    <summary>Host writer result</summary>
+                    <p>
+                      {hostCompletion.error !== null
+                        ? `Failed · ${hostCompletion.error.message}`
+                        : hostCompletion.resultPreview ?? "The host confirmed completion without a summary."}
+                    </p>
+                    {hostCompletion.turnId !== undefined && (
+                      <small>Turn {hostCompletion.turnId.slice(0, 12)} · structured completion from the host</small>
+                    )}
                   </details>
                 )}
                 {parsed.invalid.length > 0 && (

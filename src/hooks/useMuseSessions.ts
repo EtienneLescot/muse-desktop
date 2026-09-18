@@ -723,6 +723,9 @@ export interface ResumePending {
   source: "approval" | "input";
 }
 
+/** Latest bounded terminal result supplied by the host for each session. */
+export type SessionTurnCompletion = import("../lib/engineError").TurnCompletionDetails;
+
 /** One buffered backend event with its sequence number (poll transport). */
 interface DrainedEvent extends MuseEvent {
   seq: number;
@@ -799,6 +802,8 @@ interface UseMuseSessions {
   /** Host-provided retry backoff, kept live beside the conversation stream. */
   retryScheduledBySession: Record<string, RetryScheduled>;
   activeRetryScheduled: RetryScheduled | null;
+  /** M2-08: host-authored terminal result, when the protocol provides one. */
+  turnCompletionBySession: Record<string, SessionTurnCompletion>;
   /** M0-04: cancellation accepted by the host, awaiting terminal status. */
   stoppingBySession: Record<string, boolean>;
   /** M0-02: connection lifecycle, separate from turn execution state. */
@@ -1544,6 +1549,9 @@ export function useMuseSessions(): UseMuseSessions {
   }>>({});
   const [retryScheduledBySession, setRetryScheduledBySession] = useState<
     Record<string, RetryScheduled>
+  >({});
+  const [turnCompletionBySession, setTurnCompletionBySession] = useState<
+    Record<string, SessionTurnCompletion>
   >({});
   // A cancel request is not the same thing as a confirmed stopped status.
   // Keep this renderer-only state separate from the persisted session row so
@@ -2989,6 +2997,15 @@ export function useMuseSessions(): UseMuseSessions {
     });
   }
 
+  function clearTurnCompletion(sessionId: string): void {
+    setTurnCompletionBySession((cur) => {
+      if (!(sessionId in cur)) return cur;
+      const next = { ...cur };
+      delete next[sessionId];
+      return next;
+    });
+  }
+
   /** M3-08: settle an admitted scheduled turn when the host actually stops. */
   function settleScheduleRunsForSession(
     sessionId: string,
@@ -3719,6 +3736,9 @@ export function useMuseSessions(): UseMuseSessions {
       // placeholder instead of closing it (US-10).
       ensurePlaceholder(sid);
     } else if (isStoppedKind(kind)) {
+      if (completion !== null) {
+        setTurnCompletionBySession((cur) => ({ ...cur, [sid]: completion }));
+      }
       if (completion?.turnId !== undefined) {
         lastTerminalTurnIdsRef.current[sid] = completion.turnId;
         // Older hosts may omit item/completed. Preserve the exact turn anchor
@@ -4921,6 +4941,9 @@ export function useMuseSessions(): UseMuseSessions {
           "a send is already in progress for this conversation",
         );
       }
+      // A new logical turn supersedes the previous terminal result. Keep the
+      // host completion scoped to the turn that produced it.
+      clearTurnCompletion(sessionId);
       const clientMessageId = retryKey ?? newId();
       const prior =
         retryKey !== undefined
@@ -7724,6 +7747,7 @@ export function useMuseSessions(): UseMuseSessions {
     activeResumePending,
     retryScheduledBySession,
     activeRetryScheduled,
+    turnCompletionBySession,
     stoppingBySession,
     connectionBySession,
     activeConnectionState,
