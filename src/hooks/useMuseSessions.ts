@@ -6202,10 +6202,10 @@ export function useMuseSessions(): UseMuseSessions {
     const schedule = () => {
       if (disposed) return;
       timer = setTimeout(() => {
-        void poll().finally(schedule);
+        void poll().catch(() => undefined).finally(schedule);
       }, 5000);
     };
-    void poll().finally(schedule);
+    void poll().catch(() => undefined).finally(schedule);
     return () => {
       disposed = true;
       if (timer !== null) clearTimeout(timer);

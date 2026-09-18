@@ -107,7 +107,7 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
       if (disposed) return;
       refresh = window.setTimeout(() => {
         if (disposed) return;
-        void onList(sessionId, state.path || ".").finally(schedule);
+        void onList(sessionId, state.path || ".").catch(() => undefined).finally(schedule);
       }, 30_000);
     };
     schedule();

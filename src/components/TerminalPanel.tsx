@@ -55,7 +55,7 @@ export function TerminalPanel({
     let timer: number | null = null;
     const read = () => {
       if (disposed) return;
-      void onRead(terminalId).finally(() => {
+      void onRead(terminalId).catch(() => undefined).finally(() => {
         if (!disposed) timer = window.setTimeout(read, 180);
       });
     };
