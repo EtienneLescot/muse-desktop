@@ -170,6 +170,7 @@ import {
   findRetryPrompt,
   parseTurnCompletion,
   type EngineErrorDetails,
+  type TurnCompletionDetails,
 } from "../lib/engineError";
 import { statusLogText } from "../lib/statusLog";
 import {
@@ -724,7 +725,7 @@ export interface ResumePending {
 }
 
 /** Latest bounded terminal result supplied by the host for each session. */
-export type SessionTurnCompletion = import("../lib/engineError").TurnCompletionDetails;
+export type SessionTurnCompletion = TurnCompletionDetails;
 
 /** One buffered backend event with its sequence number (poll transport). */
 interface DrainedEvent extends MuseEvent {
