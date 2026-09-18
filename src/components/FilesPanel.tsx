@@ -101,10 +101,20 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
 
   useEffect(() => {
     if (state.observedAt === null || state.loading) return undefined;
-    const refresh = window.setInterval(() => {
-      void onList(sessionId, state.path || ".");
-    }, 30_000);
-    return () => window.clearInterval(refresh);
+    let disposed = false;
+    let refresh: number | null = null;
+    const schedule = () => {
+      if (disposed) return;
+      refresh = window.setTimeout(() => {
+        if (disposed) return;
+        void onList(sessionId, state.path || ".").finally(schedule);
+      }, 30_000);
+    };
+    schedule();
+    return () => {
+      disposed = true;
+      if (refresh !== null) window.clearTimeout(refresh);
+    };
   }, [onList, sessionId, state.loading, state.observedAt, state.path]);
 
   const currentPath = state.path || ".";

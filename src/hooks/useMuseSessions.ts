@@ -6173,6 +6173,7 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     if (!isTauriRuntime() || mcpRunningIds.length === 0) return;
     let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async () => {
       if (disposed || mcpPollBusyRef.current) return;
       mcpPollBusyRef.current = true;
@@ -6196,11 +6197,16 @@ export function useMuseSessions(): UseMuseSessions {
         mcpPollBusyRef.current = false;
       }
     };
-    void poll();
-    const timer = setInterval(() => void poll(), 5000);
+    const schedule = () => {
+      if (disposed) return;
+      timer = setTimeout(() => {
+        void poll().finally(schedule);
+      }, 5000);
+    };
+    void poll().finally(schedule);
     return () => {
       disposed = true;
-      clearInterval(timer);
+      if (timer !== null) clearTimeout(timer);
     };
   }, [applyPersistentMcpProbe, mcpRunningIds]);
 
