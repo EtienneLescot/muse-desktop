@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   browserCaptureAttachment,
+  browserCapturePreviewSize,
   browserDownloadFilename,
   describeBrowserElement,
   IMAGE_GENERATION_NOTE,
@@ -101,6 +102,7 @@ export function BrowserPanel({
   const [appName, setAppName] = useState("");
   const [capture, setCapture] = useState<BrowserCapture | null>(null);
   const [captureRegion, setCaptureRegion] = useState<BrowserCaptureRegion | null>(null);
+  const [captureZoom, setCaptureZoom] = useState(1);
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
   const [pageObservation, setPageObservation] = useState<ReturnType<typeof normalizeBrowserObservation>>(null);
@@ -486,6 +488,7 @@ export function BrowserPanel({
       }
       setCapture(next);
       setCaptureRegion(null);
+      setCaptureZoom(1);
       setCaptureStatus("Capture ready. Review it, then add it to the composer.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -552,6 +555,7 @@ export function BrowserPanel({
       }
       setCapture(next);
       setCaptureRegion(null);
+      setCaptureZoom(1);
       setCaptureStatus("Region cropped. Review it, then add it to the composer.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -574,6 +578,7 @@ export function BrowserPanel({
     setControlStatus(null);
     setCapture(null);
     setCaptureRegion(null);
+    setCaptureZoom(1);
     setCaptureStatus(null);
     setTypeText("");
     setFrameKey((key) => key + 1);
@@ -744,6 +749,9 @@ export function BrowserPanel({
       .finally(() => setStoppingHostSkill(false));
   };
   browserControlsAllowedRef.current = browserControlsAllowed;
+  const capturePreview = capture === null
+    ? null
+    : browserCapturePreviewSize(capture.width, capture.height, captureZoom);
 
   return (
     <section className="browser-panel" aria-label="In-app browser">
@@ -1014,50 +1022,80 @@ export function BrowserPanel({
             </button>
             {capture !== null && (
               <>
-                <div className="browser-capture-canvas">
-                  <img
-                    ref={captureImageRef}
-                    className="browser-capture-preview"
-                    src={capture.dataUrl}
-                    alt="Captured browser page preview; drag to select a region"
-                    onPointerDown={(event) => {
-                      const point = capturePoint(event);
-                      if (point === null) return;
-                      event.currentTarget.setPointerCapture(event.pointerId);
-                      captureDragRef.current = point;
-                      setCaptureRegion({ ...point, width: 0, height: 0 });
-                    }}
-                    onPointerMove={(event) => {
-                      const start = captureDragRef.current;
-                      const point = capturePoint(event);
-                      if (start === null || point === null) return;
-                      setCaptureRegion({
-                        x: Math.min(start.x, point.x),
-                        y: Math.min(start.y, point.y),
-                        width: Math.abs(point.x - start.x),
-                        height: Math.abs(point.y - start.y),
-                      });
-                    }}
-                    onPointerUp={(event) => {
-                      captureDragRef.current = null;
-                      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                        event.currentTarget.releasePointerCapture(event.pointerId);
-                      }
-                    }}
-                  />
-                  {captureRegion !== null && captureRegion.width > 1 && captureRegion.height > 1 && (
-                    <span
-                      className="browser-capture-region"
-                      aria-hidden="true"
-                      style={{
-                        left: `${(captureRegion.x / capture.width) * 100}%`,
-                        top: `${(captureRegion.y / capture.height) * 100}%`,
-                        width: `${(captureRegion.width / capture.width) * 100}%`,
-                        height: `${(captureRegion.height / capture.height) * 100}%`,
-                      }}
-                    />
-                  )}
-                </div>
+                {capturePreview !== null && (
+                  <>
+                    <div className="browser-capture-zoom">
+                      <label htmlFor="browser-capture-zoom">Preview zoom</label>
+                      <input
+                        id="browser-capture-zoom"
+                        type="range"
+                        min="1"
+                        max="2.5"
+                        step="0.1"
+                        value={captureZoom}
+                        onChange={(event) => setCaptureZoom(Number(event.currentTarget.value))}
+                        aria-label="Capture preview zoom"
+                      />
+                      <output>{Math.round(capturePreview.zoom * 100)}%</output>
+                      {captureZoom !== 1 && (
+                        <button type="button" className="quiet" onClick={() => setCaptureZoom(1)}>
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <div className="browser-capture-viewport">
+                      <div
+                        className="browser-capture-canvas"
+                        style={{ width: `${capturePreview.width}px`, height: `${capturePreview.height}px` }}
+                      >
+                        <img
+                          ref={captureImageRef}
+                          className="browser-capture-preview"
+                          src={capture.dataUrl}
+                          width={capturePreview.width}
+                          height={capturePreview.height}
+                          alt="Captured browser page preview; drag to select a region"
+                          onPointerDown={(event) => {
+                            const point = capturePoint(event);
+                            if (point === null) return;
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                            captureDragRef.current = point;
+                            setCaptureRegion({ ...point, width: 0, height: 0 });
+                          }}
+                          onPointerMove={(event) => {
+                            const start = captureDragRef.current;
+                            const point = capturePoint(event);
+                            if (start === null || point === null) return;
+                            setCaptureRegion({
+                              x: Math.min(start.x, point.x),
+                              y: Math.min(start.y, point.y),
+                              width: Math.abs(point.x - start.x),
+                              height: Math.abs(point.y - start.y),
+                            });
+                          }}
+                          onPointerUp={(event) => {
+                            captureDragRef.current = null;
+                            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                              event.currentTarget.releasePointerCapture(event.pointerId);
+                            }
+                          }}
+                        />
+                        {captureRegion !== null && captureRegion.width > 1 && captureRegion.height > 1 && (
+                          <span
+                            className="browser-capture-region"
+                            aria-hidden="true"
+                            style={{
+                              left: `${(captureRegion.x / capture.width) * 100}%`,
+                              top: `${(captureRegion.y / capture.height) * 100}%`,
+                              width: `${(captureRegion.width / capture.width) * 100}%`,
+                              height: `${(captureRegion.height / capture.height) * 100}%`,
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
                 <span className="muted browser-capture-help">Drag on the preview to crop a region.</span>
                 {captureRegion !== null && captureRegion.width > 1 && captureRegion.height > 1 && (
                   <button type="button" onClick={() => void cropCapture()}>
@@ -1067,7 +1105,7 @@ export function BrowserPanel({
                 <button type="button" onClick={addCaptureToPrompt}>
                   Add screenshot to prompt
                 </button>
-                <button type="button" className="quiet" onClick={() => { setCapture(null); setCaptureRegion(null); }}>
+                <button type="button" className="quiet" onClick={() => { setCapture(null); setCaptureRegion(null); setCaptureZoom(1); }}>
                   Remove capture
                 </button>
               </>

@@ -88,6 +88,12 @@ export const MAX_BROWSER_CAPTURE_BYTES = 5 * 1024 * 1024;
 /** Maximum bytes an explicit browser link download may write to disk. */
 export const MAX_BROWSER_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 
+/** Stable bounds for the local capture preview. The image itself stays in
+ * source pixels; zoom only changes its review size before cropping. */
+export const BROWSER_CAPTURE_PREVIEW_MAX_WIDTH = 560;
+export const BROWSER_CAPTURE_PREVIEW_MAX_HEIGHT = 320;
+export const BROWSER_CAPTURE_PREVIEW_MAX_ZOOM = 2.5;
+
 /** One explicit visual capture from a browser surface. */
 export interface BrowserCaptureRegion {
   x: number;
@@ -112,6 +118,41 @@ export interface BrowserCapture {
   region?: BrowserCaptureRegion;
   sourceWidth?: number;
   sourceHeight?: number;
+}
+
+export interface BrowserCapturePreviewSize {
+  width: number;
+  height: number;
+  /** Fit scale used before the user-selected review zoom. */
+  scale: number;
+  zoom: number;
+}
+
+/**
+ * Resolve explicit preview dimensions for a captured image.
+ *
+ * Keeping the dimensions explicit makes pointer-based crop coordinates match
+ * the rendered image even when the review viewport is scrolled at higher
+ * zoom. Invalid inputs return null so callers can fail closed without
+ * manufacturing dimensions for an unusable capture.
+ */
+export function browserCapturePreviewSize(
+  sourceWidth: number,
+  sourceHeight: number,
+  zoom = 1,
+  maxWidth = BROWSER_CAPTURE_PREVIEW_MAX_WIDTH,
+  maxHeight = BROWSER_CAPTURE_PREVIEW_MAX_HEIGHT,
+): BrowserCapturePreviewSize | null {
+  if (![sourceWidth, sourceHeight, zoom, maxWidth, maxHeight].every(Number.isFinite)) return null;
+  if (sourceWidth <= 0 || sourceHeight <= 0 || maxWidth <= 0 || maxHeight <= 0) return null;
+  const boundedZoom = Math.min(BROWSER_CAPTURE_PREVIEW_MAX_ZOOM, Math.max(1, zoom));
+  const scale = Math.min(1, maxWidth / sourceWidth, maxHeight / sourceHeight);
+  return {
+    width: Math.max(1, Math.round(sourceWidth * scale * boundedZoom)),
+    height: Math.max(1, Math.round(sourceHeight * scale * boundedZoom)),
+    scale,
+    zoom: boundedZoom,
+  };
 }
 
 const MAX_BROWSER_ELEMENT_FIELD = 320;

@@ -19,6 +19,7 @@ import {
   BROWSER_TABS_KEY,
   browserTabsStorageKey,
   browserCaptureAttachment,
+  browserCapturePreviewSize,
   browserDownloadFilename,
   normalizeSameOriginTarget,
   createBrowserAnnotation,
@@ -74,6 +75,32 @@ describe("browser URL normalization", () => {
     assert.equal(normalizeBrowserUrl("file:///etc/passwd"), null);
     assert.equal(isRenderableBrowserUrl("javascript:alert(1)"), false);
     assert.equal(isRenderableBrowserUrl("example.com"), true);
+  });
+});
+
+describe("browser capture preview sizing", () => {
+  it("fits a capture into the review viewport while preserving its ratio", () => {
+    assert.deepEqual(browserCapturePreviewSize(1280, 720), {
+      width: 560,
+      height: 315,
+      scale: 0.4375,
+      zoom: 1,
+    });
+    assert.deepEqual(browserCapturePreviewSize(1280, 720, 2), {
+      width: 1120,
+      height: 630,
+      scale: 0.4375,
+      zoom: 2,
+    });
+  });
+
+  it("bounds zoom and rejects unusable dimensions", () => {
+    assert.equal(browserCapturePreviewSize(0, 720), null);
+    assert.equal(browserCapturePreviewSize(1280, 720, Number.NaN), null);
+    const bounded = browserCapturePreviewSize(100, 100, 99);
+    assert.equal(bounded?.zoom, 2.5);
+    assert.equal(bounded?.width, 250);
+    assert.equal(bounded?.height, 250);
   });
 });
 
