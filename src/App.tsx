@@ -89,6 +89,7 @@ export default function App() {
     approvals,
     activeApprovals,
     activeStreamActivity,
+    activeRecoveryNotice,
     activeResumePending,
     activeRetryScheduled,
     stoppingBySession,
@@ -1311,6 +1312,7 @@ export default function App() {
                     stopping={stoppingBySession[active.session_id] === true}
                     lastEventAt={activeStreamActivity?.lastEventAt ?? null}
                     lastEventKind={activeStreamActivity?.lastEventKind ?? null}
+                    recoveryNotice={activeRecoveryNotice}
                     resumePendingAt={activeResumePending?.requestedAt ?? null}
                     retryScheduled={activeRetryScheduled}
                     pendingApprovals={activeApprovals.length}

@@ -10,6 +10,16 @@
 /** A quiet stream becomes actionable after this interval. */
 export const STREAM_STALE_AFTER_MS = 15_000;
 
+/** Why a bounded recovery attempt could not provide durable progress. */
+export type StreamRecoveryNotice = "unsupported" | "failed";
+
+/** Stable, product-facing copy for a recovery notice. */
+export function streamRecoveryDetail(notice: StreamRecoveryNotice): string {
+  return notice === "unsupported"
+    ? "This host does not expose durable recovery yet. Your local transcript is safe; keep the host open for live progress."
+    : "Muse could not refresh the host state. Try again or reconnect before sending another message.";
+}
+
 /**
  * Return the remaining grace period before an accepted decision should get
  * one silent recovery read. Invalid timestamps fail closed by disabling the

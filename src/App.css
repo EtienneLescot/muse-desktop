@@ -809,6 +809,37 @@ body.dark .avatar {
   background: var(--blue);
 }
 
+.stream-recovery-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 96%, var(--blue) 4%);
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.stream-recovery-note span {
+  min-width: 0;
+}
+
+.stream-recovery-note button {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--blue) 42%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blue) 10%, var(--surface));
+  color: var(--text);
+  font-size: 0.72rem;
+}
+
 @keyframes stream-health-pulse {
   50% {
     opacity: 0.45;

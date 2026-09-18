@@ -8,6 +8,7 @@ import {
   resumeRecoveryDelay,
   shouldAcceptRetryScheduled,
   streamEventLabel,
+  streamRecoveryDetail,
   streamHealthLabel,
 } from "../src/lib/streamHealth.ts";
 
@@ -19,6 +20,12 @@ describe("stream health", () => {
     pendingInputs: 0,
     now: 10_000,
   };
+
+  it("keeps recovery limitations calm and explicit", () => {
+    assert.match(streamRecoveryDetail("unsupported"), /does not expose durable recovery/);
+    assert.match(streamRecoveryDetail("unsupported"), /local transcript is safe/);
+    assert.match(streamRecoveryDetail("failed"), /could not refresh the host state/);
+  });
 
   it("prioritizes explicit approval and input waits", () => {
     assert.equal(classifyStreamHealth({ ...base, pendingApprovals: 1 }), "waiting-approval");

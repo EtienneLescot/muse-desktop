@@ -177,6 +177,7 @@ import {
   resumeRecoveryDelay,
   shouldAcceptRetryScheduled,
   type RetryScheduled,
+  type StreamRecoveryNotice,
 } from "../lib/streamHealth";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
 // endpoint exists); children surface as `subagent` entries as usual.
@@ -789,6 +790,9 @@ interface UseMuseSessions {
   /** M0-02: latest live event used to explain quiet/stalled turns. */
   streamActivityBySession: Record<string, StreamActivity>;
   activeStreamActivity: StreamActivity | null;
+  /** M0-02: bounded recovery outcome shown next to stale/resuming liveness. */
+  recoveryNoticeBySession: Record<string, StreamRecoveryNotice>;
+  activeRecoveryNotice: StreamRecoveryNotice | null;
   /** M0-02/M0-05: explicit bridge state after a permission or input decision. */
   resumePendingBySession: Record<string, ResumePending>;
   activeResumePending: ResumePending | null;
@@ -1524,6 +1528,9 @@ export function useMuseSessions(): UseMuseSessions {
   // host activity.
   const [streamActivityBySession, setStreamActivityBySession] = useState<
     Record<string, StreamActivity>
+  >({});
+  const [recoveryNoticeBySession, setRecoveryNoticeBySession] = useState<
+    Record<string, StreamRecoveryNotice>
   >({});
   const [resumePendingBySession, setResumePendingBySession] = useState<
     Record<string, ResumePending>
@@ -2867,6 +2874,12 @@ export function useMuseSessions(): UseMuseSessions {
           ...cur,
           [sessionId]: { lastEventAt: at, lastEventKind: kind },
         };
+      });
+      setRecoveryNoticeBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
       });
     },
     [],
@@ -4247,6 +4260,10 @@ export function useMuseSessions(): UseMuseSessions {
       }
       kickPoll();
     } catch (e) {
+      setRecoveryNoticeBySession((cur) => ({
+        ...cur,
+        [id]: isMethodUnavailable(e) ? "unsupported" : "failed",
+      }));
       if (!options.silent) {
         setError(`Sync failed: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -5806,6 +5823,12 @@ export function useMuseSessions(): UseMuseSessions {
         return next;
       });
       setStreamActivityBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
+      setRecoveryNoticeBySession((cur) => {
         if (!(sessionId in cur)) return cur;
         const next = { ...cur };
         delete next[sessionId];
@@ -7673,6 +7696,9 @@ export function useMuseSessions(): UseMuseSessions {
   const activeStreamActivity = activeId === null
     ? null
     : (streamActivityBySession[activeId] ?? null);
+  const activeRecoveryNotice = activeId === null
+    ? null
+    : (recoveryNoticeBySession[activeId] ?? null);
   const activeResumePending = activeId === null
     ? null
     : (resumePendingBySession[activeId] ?? null);
@@ -7692,6 +7718,8 @@ export function useMuseSessions(): UseMuseSessions {
     activeApprovals,
     streamActivityBySession,
     activeStreamActivity,
+    recoveryNoticeBySession,
+    activeRecoveryNotice,
     resumePendingBySession,
     activeResumePending,
     retryScheduledBySession,

@@ -19,8 +19,10 @@ import {
   classifyStreamHealth,
   formatElapsed,
   streamEventLabel,
+  streamRecoveryDetail,
   streamHealthLabel,
   type RetryScheduled,
+  type StreamRecoveryNotice,
   type StreamHealth,
 } from "../lib/streamHealth";
 import {
@@ -176,6 +178,8 @@ interface Props {
   lastEventAt?: number | null;
   /** Last transport event observed, used only for a compact progress hint. */
   lastEventKind?: string | null;
+  /** Bounded result of a host recovery read, kept outside the transcript. */
+  recoveryNotice?: StreamRecoveryNotice | null;
   /** A permission/input decision was accepted; awaiting the next host event. */
   resumePendingAt?: number | null;
   /** Host-provided retry backoff shown while the next attempt is pending. */
@@ -251,6 +255,7 @@ export function StreamView({
   stopping = false,
   lastEventAt = null,
   lastEventKind = null,
+  recoveryNotice = null,
   resumePendingAt = null,
   retryScheduled = null,
   pendingApprovals = 0,
@@ -1263,6 +1268,16 @@ export function StreamView({
                 )
               )}
             </span>
+          )}
+        </div>
+      )}
+      {recoveryNotice !== null && (
+        <div className="stream-recovery-note" role="status" aria-live="polite">
+          <span>{streamRecoveryDetail(recoveryNotice)}</span>
+          {onReconcile && (
+            <button type="button" onClick={onReconcile} disabled={reconciling}>
+              {reconciling ? "Checking…" : "Try again"}
+            </button>
           )}
         </div>
       )}
