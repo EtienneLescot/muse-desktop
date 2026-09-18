@@ -4,7 +4,9 @@
 //! the next occurrence. The launched application performs the normal SSOT
 //! due check; this module never executes a schedule or a prompt itself.
 
-use chrono::{Datelike, SecondsFormat, TimeZone, Timelike, Utc};
+use chrono::{SecondsFormat, Utc};
+#[cfg(any(target_os = "macos", test))]
+use chrono::{Datelike, TimeZone, Timelike};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
