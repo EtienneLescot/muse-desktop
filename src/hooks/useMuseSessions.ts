@@ -778,6 +778,11 @@ interface UseMuseSessions {
   refreshModels: (sessionId?: string) => Promise<void>;
   /** US-31: model-picker gesture on one session, then reload the catalog. */
   setSessionModel: (sessionId: string, modelId: string) => Promise<void>;
+  /** Host-backed reasoning picker for one session. */
+  setSessionReasoningEffort: (
+    sessionId: string,
+    reasoningEffort: ProjectSettings["reasoningEffort"],
+  ) => Promise<boolean>;
   /** w-settings: route a path through the scope-guard prompt path. */
   checkPathScope: (path: string) => Promise<ScopeVerdict>;
   /** M2-03: create a real Git worktree from a validated orchestration plan. */
@@ -3565,6 +3570,25 @@ export function useMuseSessions(): UseMuseSessions {
     [liveModels, refreshModels],
   );
 
+  const setSessionReasoningEffort = useCallback(
+    async (
+      sessionId: string,
+      reasoningEffort: ProjectSettings["reasoningEffort"],
+    ): Promise<boolean> => {
+      try {
+        await invoke("set_reasoning_effort", { sessionId, reasoningEffort });
+        setError(null);
+        return true;
+      } catch (e) {
+        setError(
+          `set reasoning effort failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        return false;
+      }
+    },
+    [],
+  );
+
   // w-settings: out-of-scope attempts (path outside cwd) route to the
   // existing scope-guard prompt path — the backend `check_scope` verdict,
   // with an error-banner prompt when access is denied.
@@ -3768,6 +3792,9 @@ export function useMuseSessions(): UseMuseSessions {
       if (modelId && modelId !== "default") {
         await setSessionModel(meta.session_id, modelId);
       }
+      if (projectSettings?.reasoningEffort !== undefined) {
+        await setSessionReasoningEffort(meta.session_id, projectSettings.reasoningEffort);
+      }
       void refreshHostSkills(meta.session_id);
       return meta.session_id;
     } catch (e) {
@@ -3775,7 +3802,14 @@ export function useMuseSessions(): UseMuseSessions {
       return null;
     }
     },
-    [authorizationMode, refreshHostSkills, setConnectionState, setSessionModel, workspace],
+    [
+      authorizationMode,
+      refreshHostSkills,
+      setConnectionState,
+      setSessionModel,
+      setSessionReasoningEffort,
+      workspace,
+    ],
   );
 
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
@@ -4027,6 +4061,9 @@ export function useMuseSessions(): UseMuseSessions {
         setActiveId(meta.session_id);
         const modelId = projectSettings?.model.trim();
         if (modelId && modelId !== "default") await setSessionModel(meta.session_id, modelId);
+        if (projectSettings?.reasoningEffort !== undefined) {
+          await setSessionReasoningEffort(meta.session_id, projectSettings.reasoningEffort);
+        }
         void refreshHostSkills(meta.session_id);
         return result.worktree;
       } catch (e) {
@@ -4034,7 +4071,13 @@ export function useMuseSessions(): UseMuseSessions {
         return null;
       }
     },
-    [authorizationMode, refreshHostSkills, setConnectionState, setSessionModel],
+    [
+      authorizationMode,
+      refreshHostSkills,
+      setConnectionState,
+      setSessionModel,
+      setSessionReasoningEffort,
+    ],
   );
 
   const [forkingId, setForkingId] = useState<string | null>(null);
@@ -7133,6 +7176,7 @@ export function useMuseSessions(): UseMuseSessions {
     modelsError,
     refreshModels,
     setSessionModel,
+    setSessionReasoningEffort,
     checkPathScope,
     createWorktree,
     createWorktreeSession,

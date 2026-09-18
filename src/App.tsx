@@ -52,6 +52,7 @@ import { BrowserPanel } from "./components/BrowserPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
 import { searchConversations } from "./lib/conversationSearch";
+import { reasoningEffortLabel } from "./lib/reasoning";
 import { WindowControls, dragWindow } from "./components/WindowControls";
 import { readStorageString, writeStorageString } from "./lib/storage.ts";
 import {
@@ -105,6 +106,7 @@ export default function App() {
     modelsError,
     refreshModels,
     setSessionModel,
+    setSessionReasoningEffort,
     checkPathScope,
     createWorktree,
     createWorktreeSession,
@@ -819,6 +821,8 @@ export default function App() {
               onSandboxChange={setSandbox}
               authorizationMode={authorizationMode}
               onAuthorizationModeChange={setAuthorizationMode}
+              reasoningEffort={globalSettings.reasoningEffort}
+              onReasoningEffortChange={(value) => setGlobalSettings({ reasoningEffort: value })}
               providerId={providerId}
               onProviderChange={setProviderId}
               liveModels={liveModels}
@@ -1094,6 +1098,8 @@ export default function App() {
                 sidecarError={sidecarPanel}
                 authorizationMode={authorizationMode}
                 onAuthorizationModeChange={setAuthorizationMode}
+                reasoningEffort={globalSettings.reasoningEffort}
+                onReasoningEffortChange={(value) => setGlobalSettings({ reasoningEffort: value })}
               />
             ) : (
               <div className="session-view">
@@ -1141,6 +1147,9 @@ export default function App() {
                         </span>
                         <span title="Saved locally; this host has no verified network mutation contract">
                           Network preference: {activeProjectSettings.networkDefault}
+                        </span>
+                        <span>
+                          Reasoning: {reasoningEffortLabel(activeProjectSettings.reasoningEffort)}
                         </span>
                       </div>
                     )}
@@ -1315,6 +1324,15 @@ export default function App() {
                     onMemoryInsertConsumed={() => setMemoryInsert(null)}
                     authorizationMode={authorizationMode}
                     onAuthorizationModeChange={setAuthorizationMode}
+                    reasoningEffort={activeProjectSettings.reasoningEffort}
+                    onReasoningEffortChange={(value) => {
+                      if (activeProject !== null) {
+                        setProjectOverride(activeProject.id, "reasoningEffort", value);
+                      } else {
+                        setGlobalSettings({ reasoningEffort: value });
+                      }
+                      void setSessionReasoningEffort(active.session_id, value);
+                    }}
                   />
                 </div>
                 {workPanel && (

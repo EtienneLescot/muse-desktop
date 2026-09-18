@@ -30,6 +30,8 @@ import { userFacingError } from "../lib/errorCopy";
 import type { SendResult } from "../lib/outbox";
 import type { AuthorizationMode } from "../lib/authorization";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
+import { ReasoningEffortControl } from "./ReasoningEffortControl";
+import type { ReasoningEffort } from "../lib/reasoning";
 import {
   attachmentKey,
   buildTurnInputParts,
@@ -84,6 +86,9 @@ interface Props {
   /** Global tool-authorization posture shown beside the send controls. */
   authorizationMode: AuthorizationMode;
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
+  /** Host-backed reasoning effort shown beside authorization and model. */
+  reasoningEffort: ReasoningEffort;
+  onReasoningEffortChange: (value: ReasoningEffort) => void;
 }
 
 interface RecentMention {
@@ -156,6 +161,8 @@ export function Composer({
   onMemoryInsertConsumed,
   authorizationMode,
   onAuthorizationModeChange,
+  reasoningEffort,
+  onReasoningEffortChange,
 }: Props) {
   const draftStorageKey = `muse-desktop.draft.${draftKey}`;
   const [text, setText] = useState(() => readSessionStorageString(draftStorageKey));
@@ -941,6 +948,11 @@ export function Composer({
             <AuthorizationModeControl
               mode={authorizationMode}
               onChange={onAuthorizationModeChange}
+              compact
+            />
+            <ReasoningEffortControl
+              value={reasoningEffort}
+              onChange={onReasoningEffortChange}
               compact
             />
             <div className="composer-model">{modelControl}</div>
