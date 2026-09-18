@@ -11,7 +11,7 @@
  * All writes are confined to these keys; nothing is written outside them.
  */
 
-import { MAX_OUTBOX_ENTRIES, type OutboxEntry } from "./outbox.ts";
+import { normalizeOutboxEntries, MAX_OUTBOX_ENTRIES, type OutboxEntry } from "./outbox.ts";
 import type {
   Project,
   ProjectSettings,
@@ -406,31 +406,9 @@ export function saveGlobalSettings(settings: ProjectSettings): void {
  */
 const outboxKey = (sessionId: string) => `muse-desktop.outbox.v1.${sessionId}`;
 
-function isValidOutboxEntry(e: unknown): e is OutboxEntry {
-  if (typeof e !== "object" || e === null) return false;
-  const r = e as Record<string, unknown>;
-  return (
-    typeof r.clientMessageId === "string" &&
-    r.clientMessageId.length > 0 &&
-    (r.serverCommandId === undefined ||
-      (typeof r.serverCommandId === "string" && r.serverCommandId.length > 0)) &&
-    typeof r.sessionId === "string" &&
-    r.sessionId.length > 0 &&
-    typeof r.text === "string" &&
-    typeof r.outgoingText === "string" &&
-    (r.state === "sending" || r.state === "accepted" || r.state === "failed") &&
-    (r.error === null || typeof r.error === "string") &&
-    typeof r.ambiguous === "boolean" &&
-    typeof r.createdAt === "number" &&
-    typeof r.updatedAt === "number" &&
-    typeof r.attempts === "number"
-  );
-}
-
 export function loadOutbox(sessionId: string): OutboxEntry[] {
   const raw = read<unknown>(outboxKey(sessionId), []);
-  if (!Array.isArray(raw)) return [];
-  return raw.filter(isValidOutboxEntry).slice(-MAX_OUTBOX_ENTRIES);
+  return normalizeOutboxEntries(raw);
 }
 
 export function saveOutbox(sessionId: string, entries: OutboxEntry[]): void {

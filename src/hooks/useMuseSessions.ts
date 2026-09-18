@@ -52,6 +52,12 @@ import {
   type SendResult,
 } from "../lib/outbox";
 export type { OutboxEntry, SendResult } from "../lib/outbox";
+import {
+  loadNativeOutbox,
+  mergeOutboxStores,
+  saveNativeOutbox,
+  type OutboxStore,
+} from "../lib/outboxLedger";
 import type { ComposerAttachment, TurnInputPart } from "../lib/attachments";
 export type { TurnInputPart } from "../lib/attachments";
 // Input-prompt helpers live in ../lib/input (dependency-free, unit-tested).
@@ -1794,6 +1800,7 @@ export function useMuseSessions(): UseMuseSessions {
   // then verifies the server before retransmitting). Lazy init survives
   // StrictMode remounts: recovery is idempotent (failed entries are kept,
   // accepted ones are pruned defensively).
+  const nativeOutboxHydratedRef = useRef(!isTauriRuntime());
   const [outbox, setOutbox] = useState<Record<string, OutboxEntry[]>>(() => {
     const restored: Record<string, OutboxEntry[]> = {};
     for (const s of loadSessions()) {
@@ -1813,6 +1820,34 @@ export function useMuseSessions(): UseMuseSessions {
   // Latest outbox for the render-detached send path (same pattern as logsRef).
   const outboxRef = useRef<Record<string, OutboxEntry[]>>({});
   outboxRef.current = outbox;
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    void loadNativeOutbox().then((nativeStore) => {
+      if (cancelled) return;
+      nativeOutboxHydratedRef.current = true;
+      if (nativeStore === null) return;
+      setOutbox((current) => {
+        const merged = mergeOutboxStores(current, nativeStore);
+        const recovered: OutboxStore = {};
+        for (const [sessionId, entries] of Object.entries(merged)) {
+          const live = recoverInterrupted(entries, Date.now()).entries
+            .filter((entry) => entry.state !== "accepted");
+          if (live.length > 0) recovered[sessionId] = live;
+          saveOutbox(sessionId, live);
+        }
+        return recovered;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (nativeOutboxHydratedRef.current) void saveNativeOutbox(outbox);
+  }, [outbox]);
 
   /**
    * Read the host's folded history, falling back to the durable cursor-paged

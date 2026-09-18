@@ -36,6 +36,7 @@ mod scheduler;
 mod scheduler_runs;
 mod scheduler_schedules;
 mod notification_ledger;
+mod outbox_ledger;
 mod workspace_watch;
 use hosts::Hosts;
 
@@ -2239,6 +2240,13 @@ fn scheduler_runs_write(app: AppHandle, payload: String) -> Result<(), String> {
     scheduler_runs::write(&data_dir, &payload)
 }
 
+fn outbox_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join("outbox"))
+        .map_err(|error| format!("cannot resolve outbox data directory: {error}"))
+}
+
 /// Read the renderer-owned schedule definitions from app data. The native
 /// copy is a durability mirror; validation and dispatch remain in the hook.
 #[tauri::command]
@@ -2268,6 +2276,21 @@ fn notifications_read(app: AppHandle) -> Result<Value, String> {
 fn notifications_write(app: AppHandle, payload: String) -> Result<(), String> {
     let data_dir = notification_data_dir(&app)?;
     notification_ledger::write(&data_dir, &payload)
+}
+
+/// Read the bounded renderer send outbox from app data.
+#[tauri::command]
+fn outbox_read(app: AppHandle) -> Result<Value, String> {
+    let data_dir = outbox_data_dir(&app)?;
+    let bytes = outbox_ledger::read(&data_dir)?;
+    serde_json::from_slice(&bytes).map_err(|_| "outbox ledger is not valid JSON".to_string())
+}
+
+/// Atomically mirror the renderer send outbox under app data.
+#[tauri::command]
+fn outbox_write(app: AppHandle, payload: String) -> Result<(), String> {
+    let data_dir = outbox_data_dir(&app)?;
+    outbox_ledger::write(&data_dir, &payload)
 }
 
 /// Apply one selected hunk after checking the exact Review observation.
@@ -7278,6 +7301,8 @@ fn main() {
             scheduler_schedules_write,
             notifications_read,
             notifications_write,
+            outbox_read,
+            outbox_write,
             open_native_browser,
             close_native_browser,
         ])
