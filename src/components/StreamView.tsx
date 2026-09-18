@@ -159,7 +159,12 @@ export function StreamView({
   const windowStartsRef = useRef<Record<string, number>>({});
   const windowSessionRef = useRef<string | null>(sessionId);
   const previousEntryCountRef = useRef(entries.length);
-  const prependScrollRef = useRef<{ top: number; height: number } | null>(null);
+  const prependScrollRef = useRef<{
+    index: number;
+    offset: number;
+    top: number;
+    height: number;
+  } | null>(null);
   const jumpLatestRef = useRef(false);
   const loadingOlderRef = useRef(false);
 
@@ -250,7 +255,18 @@ export function StreamView({
     const anchor = prependScrollRef.current;
     const stream = streamRef.current;
     if (anchor !== null && stream !== null) {
-      stream.scrollTop = anchor.top + (stream.scrollHeight - anchor.height);
+      const anchorEntry = stream.querySelector<HTMLElement>(
+        `[data-entry-index="${anchor.index}"]`,
+      );
+      if (anchorEntry !== null) {
+        const streamRect = stream.getBoundingClientRect();
+        const nextOffset = anchorEntry.getBoundingClientRect().top - streamRect.top;
+        stream.scrollTop += nextOffset - anchor.offset;
+      } else {
+        // Keep the previous height-based fallback for an unexpected page
+        // replacement where the original entry is no longer mounted.
+        stream.scrollTop = anchor.top + (stream.scrollHeight - anchor.height);
+      }
       prependScrollRef.current = null;
       loadingOlderRef.current = false;
     }
@@ -303,7 +319,15 @@ export function StreamView({
     if (!streamWindowed || safeWindowStart <= 0 || loadingOlderRef.current) return;
     const stream = streamRef.current;
     if (stream !== null) {
+      const anchorEntry = stream.querySelector<HTMLElement>(
+        `[data-entry-index="${safeWindowStart}"]`,
+      );
+      const streamRect = stream.getBoundingClientRect();
       prependScrollRef.current = {
+        index: safeWindowStart,
+        offset: anchorEntry === null
+          ? stream.scrollTop
+          : anchorEntry.getBoundingClientRect().top - streamRect.top,
         top: stream.scrollTop,
         height: stream.scrollHeight,
       };
