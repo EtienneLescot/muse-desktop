@@ -843,6 +843,7 @@ export default function App() {
               liveModels={liveModels}
               modelsError={modelsError}
               activeSessionId={activeId}
+              selectedModelId={active?.model_id ?? null}
               onRefreshModels={() => void refreshModels(activeId ?? undefined)}
               onSelectModel={(modelId) => {
                 if (activeId !== null) void setSessionModel(activeId, modelId);
@@ -1333,8 +1334,9 @@ export default function App() {
                           onClick={() => setSettingsOpen(true)}
                           aria-label="Model settings"
                         >
-                          {liveModels?.find((model) => model.isActive)
-                            ?.displayLabel || "Model"}
+                          {liveModels?.find((model) => model.isActive)?.displayLabel ||
+                            active.model_id ||
+                            "Model"}
                         </button>
                         <span>Local</span>
                       </>

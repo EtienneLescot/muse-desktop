@@ -3660,6 +3660,9 @@ export function useMuseSessions(): UseMuseSessions {
           providerId: target?.providerId ?? null,
           profileId: target?.profileId ?? null,
         });
+        setSessions((current) => current.map((session) =>
+          session.session_id === sessionId ? { ...session, model_id: modelId } : session,
+        ));
         setModelsError(null);
       } catch (e) {
         setError(
@@ -3867,6 +3870,7 @@ export function useMuseSessions(): UseMuseSessions {
         authorizationMode,
         mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
       });
+      const requestedModelId = projectSettings?.model.trim();
       const record: MuseSession = {
         session_id: meta.session_id,
         workspace: meta.workspace,
@@ -3874,6 +3878,9 @@ export function useMuseSessions(): UseMuseSessions {
         createdAt: Date.now(),
         running: meta.running,
         ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+        ...(requestedModelId && requestedModelId !== "default"
+          ? { model_id: requestedModelId }
+          : {}),
       };
       setGrantedCapabilitiesBySession((cur) => ({
         ...cur,
@@ -3890,7 +3897,7 @@ export function useMuseSessions(): UseMuseSessions {
       // The host only accepts model changes through session/setModel. Apply a
       // concrete project/global model after admission; `default` deliberately
       // leaves the engine's own default untouched.
-      const modelId = projectSettings?.model.trim();
+      const modelId = requestedModelId;
       if (modelId && modelId !== "default") {
         await setSessionModel(meta.session_id, modelId);
       }
@@ -4177,6 +4184,7 @@ export function useMuseSessions(): UseMuseSessions {
           result.worktree,
         ]);
         const meta = result.session;
+        const requestedModelId = projectSettings?.model.trim();
         const record: MuseSession = {
           session_id: meta.session_id,
           workspace: meta.workspace,
@@ -4184,6 +4192,9 @@ export function useMuseSessions(): UseMuseSessions {
           createdAt: Date.now(),
           running: meta.running,
           ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+          ...(requestedModelId && requestedModelId !== "default"
+            ? { model_id: requestedModelId }
+            : {}),
         };
         setGrantedCapabilitiesBySession((cur) => ({
           ...cur,
@@ -4200,7 +4211,7 @@ export function useMuseSessions(): UseMuseSessions {
         ]);
         setLogs((current) => (current[meta.session_id] ? current : { ...current, [meta.session_id]: [] }));
         setActiveId(meta.session_id);
-        const modelId = projectSettings?.model.trim();
+        const modelId = requestedModelId;
         if (modelId && modelId !== "default") await setSessionModel(meta.session_id, modelId);
         if (projectSettings?.reasoningEffort !== undefined) {
           await setSessionReasoningEffort(meta.session_id, projectSettings.reasoningEffort);
@@ -4253,6 +4264,7 @@ export function useMuseSessions(): UseMuseSessions {
           title: `Branch of ${source.title || source.session_id.slice(0, 8)}`,
           createdAt: Date.now(),
           running: meta.running,
+          ...(source.model_id ? { model_id: source.model_id } : {}),
           ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);

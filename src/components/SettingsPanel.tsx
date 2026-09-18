@@ -77,6 +77,8 @@ interface Props {
   modelsError: string | null;
   /** Active session id; null disables the live pick (needs a target). */
   activeSessionId: string | null;
+  /** Last model requested locally when the host omits an active projection. */
+  selectedModelId?: string | null;
   /** Reload the catalog (host-flagged active row follows the session). */
   onRefreshModels: () => void;
   /** Model-picker gesture on the active session (`session/setModel`). */
@@ -109,6 +111,7 @@ export function SettingsPanel({
   liveModels,
   modelsError,
   activeSessionId,
+  selectedModelId = null,
   onRefreshModels,
   onSelectModel,
   onExportDiagnostics,
@@ -654,13 +657,18 @@ export function SettingsPanel({
             </label>
             <select
               id="settings-model"
-              value={liveModels.find((m) => m.isActive)?.modelId ?? ""}
+              value={liveModels.find((m) => m.isActive)?.modelId ?? selectedModelId ?? ""}
               onChange={(e) => {
                 if (e.target.value.length > 0) onSelectModel(e.target.value);
               }}
               disabled={activeSessionId === null}
               aria-label="Model for the active conversation"
             >
+              {selectedModelId !== null && !liveModels.some((m) => m.modelId === selectedModelId) && (
+                <option value={selectedModelId} disabled>
+                  Saved selection: {selectedModelId} (not in current catalog)
+                </option>
+              )}
               {liveModels.map((m) => (
                 <option key={m.modelId} value={m.modelId}>
                   {m.displayLabel}

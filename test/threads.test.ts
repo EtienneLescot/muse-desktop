@@ -214,6 +214,20 @@ describe("US-5 archive / restore", () => {
     ]);
     assert.equal(loadSessions()[0].session_durability, "ephemeral");
   });
+
+  it("persists a requested model when the host omits its active projection", () => {
+    fakeStorage();
+    saveSessions([
+      {
+        session_id: "modelled",
+        workspace: "/w",
+        title: "modelled",
+        createdAt: 1,
+        model_id: "muse-spark-1.3",
+      },
+    ]);
+    assert.equal(loadSessions()[0].model_id, "muse-spark-1.3");
+  });
 });
 
 describe("US-5 keyboard cycling", () => {
