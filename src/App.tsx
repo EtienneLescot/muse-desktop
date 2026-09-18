@@ -1127,7 +1127,7 @@ export default function App() {
               </div>
             )}
             {sidecarKind !== null
-              ? active !== null && sidecarPanel
+              ? sidecarPanel
               : error && <div className="error-banner">{userFacingError(error)}</div>}
             {active === null ? (
               <EmptySessionScreen
