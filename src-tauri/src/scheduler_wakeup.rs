@@ -4,7 +4,7 @@
 //! the next occurrence. The launched application performs the normal SSOT
 //! due check; this module never executes a schedule or a prompt itself.
 
-use chrono::{SecondsFormat, Utc};
+use chrono::{Datelike, SecondsFormat, TimeZone, Timelike, Utc};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -72,11 +72,6 @@ fn xml_escape(value: &str) -> String {
 }
 
 #[cfg(target_os = "macos")]
-fn seconds_until(wake_at: u64, now: u64) -> u64 {
-    wake_at.saturating_sub(now).saturating_add(999) / 1_000
-}
-
-#[cfg(target_os = "macos")]
 fn launchd_uid() -> Result<String, String> {
     let output = Command::new("id")
         .arg("-u")
@@ -92,24 +87,37 @@ fn launchd_uid() -> Result<String, String> {
     Ok(uid)
 }
 
-fn launchd_plist(executable: &Path, delay_seconds: u64) -> Result<String, String> {
+fn launchd_plist(executable: &Path, wake_at: u64) -> Result<String, String> {
     let command = executable
         .to_str()
         .ok_or_else(|| "scheduler executable path is not valid UTF-8".to_string())?;
+    let local = Utc
+        .timestamp_millis_opt(wake_at as i64)
+        .single()
+        .ok_or_else(|| "scheduler wake-up time cannot be represented".to_string())?
+        .with_timezone(&chrono::Local);
     Ok(format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>{label}</string>
   <key>ProgramArguments</key><array><string>{command}</string><string>--automation-wakeup</string></array>
-  <key>StartInterval</key><integer>{delay}</integer>
+  <key>StartCalendarInterval</key><dict>
+    <key>Month</key><integer>{month}</integer>
+    <key>Day</key><integer>{day}</integer>
+    <key>Hour</key><integer>{hour}</integer>
+    <key>Minute</key><integer>{minute}</integer>
+  </dict>
   <key>RunAtLoad</key><false/>
   <key>ProcessType</key><string>Background</string>
 </dict></plist>
 "#,
         label = xml_escape(MAC_LABEL),
         command = xml_escape(command),
-        delay = delay_seconds.max(60),
+        month = local.month(),
+        day = local.day(),
+        hour = local.hour(),
+        minute = local.minute(),
     ))
 }
 
@@ -299,7 +307,7 @@ pub fn sync(
             fs::create_dir_all(parent)
                 .map_err(|error| format!("launchd wake-up directory unavailable: {error}"))?;
         }
-        let plist = launchd_plist(executable, seconds_until(wake_at.unwrap(), now))?;
+        let plist = launchd_plist(executable, wake_at.unwrap())?;
         fs::write(&plist_path, plist)
             .map_err(|error| format!("launchd wake-up definition could not be written: {error}"))?;
         let path = plist_path
@@ -389,10 +397,11 @@ mod tests {
     fn launchd_plist_is_one_shot_and_escapes_command() {
         let plist = launchd_plist(
             Path::new("/Applications/Muse & Desktop.app/Contents/MacOS/Muse"),
-            61,
+            1_735_689_600_000,
         )
         .unwrap();
-        assert!(plist.contains("StartInterval</key><integer>61</integer>"));
+        assert!(plist.contains("StartCalendarInterval</key>"));
+        assert!(plist.contains("<key>Month</key><integer>1</integer>"));
         assert!(plist.contains("Muse &amp; Desktop"));
         assert!(plist.contains("--automation-wakeup"));
     }
