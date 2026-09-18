@@ -300,6 +300,8 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  const scheduleRunsRef = useRef(scheduleRuns);
+  scheduleRunsRef.current = scheduleRuns;
   const [workPanel, setWorkPanel] = useState<
     "artifacts" | "browser" | "memory" | "tools" | "review" | "terminal" | "files" | null
   >(null);
@@ -349,11 +351,16 @@ export default function App() {
   // no notification payload is treated as transcript content.
   useEffect(() => {
     const openFromAction = (payload: NotificationActionPayload) => {
-      if (!payload.sessionId || !sessionsRef.current.some((session) => session.session_id === payload.sessionId)) {
+      if (payload.sessionId && sessionsRef.current.some((session) => session.session_id === payload.sessionId)) {
+        openPage("task");
+        setActive(payload.sessionId);
         return;
       }
-      openPage("task");
-      setActive(payload.sessionId);
+      // A dispatch can fail before a session exists. Keep that notification
+      // actionable by opening the durable run inbox instead of dropping it.
+      if (payload.runId && scheduleRunsRef.current.some((run) => run.id === payload.runId)) {
+        openPage("automations");
+      }
     };
     const onWebAction = (event: Event) => {
       const detail = (event as CustomEvent<NotificationActionPayload>).detail;
@@ -944,6 +951,8 @@ export default function App() {
                     if (notification.sessionId) {
                       openPage("task");
                       setActive(notification.sessionId);
+                    } else if (notification.runId) {
+                      openPage("automations");
                     }
                   }}
                   onOpenRun={(run) => {

@@ -550,9 +550,9 @@ export function SchedulesPanel({
                 <span className="notification-body">{notification.body}</span>
                 <span className="muted notification-meta">{describeNotificationTime(notification.createdAt)}</span>
                 <div className="sched-actions">
-                  {notification.sessionId && (
-                    <button type="button" onClick={() => onOpenNotification(notification)} title="Open conversation">
-                      Open conversation
+                  {(notification.sessionId || notification.runId) && (
+                    <button type="button" onClick={() => onOpenNotification(notification)} title={notification.sessionId ? "Open conversation" : "Open automation run"}>
+                      {notification.sessionId ? "Open conversation" : "Open run"}
                     </button>
                   )}
                   {notification.unread && (
