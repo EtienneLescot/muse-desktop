@@ -272,12 +272,16 @@ import { loadNativeScheduleRuns, saveNativeScheduleRuns } from "../lib/scheduleR
 import { buildScheduleRunSummary } from "../lib/runSummary";
 export type { ScheduleRunSummary } from "../lib/runSummary";
 import {
+  INITIAL_SCHEDULER_RUNTIME_STATUS,
   releaseSchedulerLease,
   releaseNativeSchedulerLease,
   renewSchedulerLease,
   renewNativeSchedulerLease,
+  schedulerRuntimeErrorStatus,
+  schedulerRuntimeStatusFromProbe,
   tryAcquireSchedulerLease,
   tryAcquireNativeSchedulerLease,
+  type SchedulerRuntimeStatus,
 } from "../lib/schedulerLease";
 import {
   appendNotification,
@@ -1026,6 +1030,8 @@ interface UseMuseSessions {
   reviewQueue: ReviewItem[];
   /** M3-06: durable scheduled execution records. */
   scheduleRuns: ScheduleRun[];
+  /** M3-07: live lease ownership shown by the Automations surface. */
+  schedulerStatus: SchedulerRuntimeStatus;
   /** US-9: validate + append a schedule; returns the id, null on error. */
   createSchedule: (input: ScheduleInput) => string | null;
   /** US-9: enable/disable one schedule. */
@@ -1506,6 +1512,9 @@ export function useMuseSessions(): UseMuseSessions {
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
   const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() =>
     recoverScheduleRuns(loadScheduleRuns(), Date.now()),
+  );
+  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerRuntimeStatus>(
+    () => INITIAL_SCHEDULER_RUNTIME_STATUS,
   );
   // The native app-data copy is hydrated once before any subsequent state
   // write. The renderer state remains the SSOT; this gate prevents a startup
@@ -2314,6 +2323,7 @@ export function useMuseSessions(): UseMuseSessions {
       schedulerLeaseMode.current = nativeClaim === null
         ? (acquired ? "local" : "none")
         : (acquired ? "native" : "none");
+      setSchedulerStatus(schedulerRuntimeStatusFromProbe(nativeClaim, acquired, Date.now()));
       if (!acquired) return;
       if (nativeClaim === null) {
         renewSchedulerLease(owner, Date.now());
@@ -2385,6 +2395,7 @@ export function useMuseSessions(): UseMuseSessions {
       }
       }).catch(() => {
         schedulerLeaseMode.current = "none";
+        setSchedulerStatus(schedulerRuntimeErrorStatus(Date.now()));
       }).finally(() => {
         schedulerCheckInFlight.current = false;
       });
@@ -7375,6 +7386,7 @@ export function useMuseSessions(): UseMuseSessions {
     schedules,
     reviewQueue: pendingReviews(reviewQueue),
     scheduleRuns,
+    schedulerStatus,
     notifications,
     notificationPermission: notificationPermissionState,
     notificationsMuted: notificationPreferences.desktopMuted,

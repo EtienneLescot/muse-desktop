@@ -4383,6 +4383,65 @@ body.dark .composer textarea::placeholder {
   padding: 6px 8px;
 }
 
+.scheduler-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  background: color-mix(in srgb, var(--bg) 75%, var(--surface));
+}
+
+.scheduler-status-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.scheduler-status[data-mode="native"] .scheduler-status-dot,
+.scheduler-status[data-mode="local"] .scheduler-status-dot {
+  background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 16%, transparent);
+}
+
+.scheduler-status[data-mode="waiting"] .scheduler-status-dot {
+  background: var(--amber, #e6a23c);
+}
+
+.scheduler-status[data-mode="error"] .scheduler-status-dot {
+  background: var(--danger);
+}
+
+.scheduler-status-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.scheduler-status-copy strong {
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.scheduler-status-copy span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.scheduler-status-time {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
 .schedules-summary {
   cursor: pointer;
   font-weight: 700;

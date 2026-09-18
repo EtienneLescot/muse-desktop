@@ -9,6 +9,7 @@ import {
 } from "../lib/schedules";
 import { MAX_RUN_ATTEMPTS, type ScheduleRun } from "../lib/scheduleRuns";
 import type { MuseNotification, NotificationPermission } from "../lib/notifications";
+import type { SchedulerRuntimeStatus } from "../lib/schedulerLease";
 import { userFacingError } from "../lib/errorCopy";
 
 interface SessionRef {
@@ -19,6 +20,7 @@ interface SessionRef {
 interface Props {
   schedules: Schedule[];
   runs: ScheduleRun[];
+  schedulerStatus: SchedulerRuntimeStatus;
   notifications: MuseNotification[];
   notificationPermission: NotificationPermission;
   notificationsMuted: boolean;
@@ -73,6 +75,13 @@ function describeRunStatus(status: ScheduleRun["status"]): string {
   return "Queued";
 }
 
+function describeSchedulerMode(mode: SchedulerRuntimeStatus["mode"]): string {
+  if (mode === "native") return "Native scheduler active";
+  if (mode === "local") return "Local scheduler active";
+  if (mode === "error") return "Scheduler check unavailable";
+  return "Waiting for scheduler";
+}
+
 function describeNotificationTime(createdAt: number): string {
   return new Date(createdAt).toLocaleString();
 }
@@ -102,6 +111,7 @@ function describeRunTarget(run: ScheduleRun, sessions: SessionRef[]): string {
 export function SchedulesPanel({
   schedules,
   runs,
+  schedulerStatus,
   notifications,
   notificationPermission,
   notificationsMuted,
@@ -186,6 +196,18 @@ export function SchedulesPanel({
 
   return (
     <section className="schedules" aria-label="Automations">
+      <div className="scheduler-status" data-mode={schedulerStatus.mode} role="status" aria-live="polite">
+        <span className="scheduler-status-dot" aria-hidden="true" />
+        <div className="scheduler-status-copy">
+          <strong>{describeSchedulerMode(schedulerStatus.mode)}</strong>
+          <span>{schedulerStatus.message}</span>
+        </div>
+        <span className="scheduler-status-time">
+          {schedulerStatus.checkedAt === null
+            ? "Not checked yet"
+            : `Checked ${new Date(schedulerStatus.checkedAt).toLocaleTimeString()}`}
+        </span>
+      </div>
       <h2 className="schedules-summary">
         New automation
         {schedules.length > 0 && (

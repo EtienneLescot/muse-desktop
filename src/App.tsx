@@ -164,6 +164,7 @@ export default function App() {
     projectForSession,
     schedules,
     scheduleRuns,
+    schedulerStatus,
     notifications,
     notificationPermission,
     notificationsMuted,
@@ -914,6 +915,7 @@ export default function App() {
                 <SchedulesPanel
                   schedules={schedules}
                   runs={scheduleRuns}
+                  schedulerStatus={schedulerStatus}
                   notifications={notifications}
                   notificationPermission={notificationPermission}
                   notificationsMuted={notificationsMuted}
