@@ -364,7 +364,22 @@ mod windows_impl {
             .to_string()
             .chars()
             .map(|character| {
-                if character == '\u{0}' || character.is_control() {
+                if character == '\u{0}'
+                    || character == '\u{fffd}'
+                    || character.is_control()
+                    // UI Automation providers can include invisible format
+                    // markers in names and document ranges. Keep observation
+                    // text copyable and comparable without changing visible
+                    // punctuation or accents.
+                    || matches!(
+                        character,
+                        '\u{200b}'
+                            | '\u{200c}'
+                            | '\u{200d}'
+                            | '\u{2060}'
+                            | '\u{feff}'
+                    )
+                {
                     ' '
                 } else {
                     character

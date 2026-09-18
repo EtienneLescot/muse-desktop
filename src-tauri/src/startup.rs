@@ -75,7 +75,20 @@ fn clip_detail(raw: &str) -> String {
         .map(|character| {
             if character == '\n' {
                 '\n'
-            } else if character == '\u{fffd}' || character.is_control() {
+            } else if character == '\u{fffd}'
+                || character.is_control()
+                // Console tools occasionally leave zero-width and BOM
+                // markers in otherwise valid output. They are invisible in
+                // the UI but make copied diagnostics look corrupted.
+                || matches!(
+                    character,
+                    '\u{200b}'
+                        | '\u{200c}'
+                        | '\u{200d}'
+                        | '\u{2060}'
+                        | '\u{feff}'
+                )
+            {
                 ' '
             } else {
                 character
@@ -324,6 +337,14 @@ mod tests {
     #[test]
     fn removes_replacement_and_control_characters_from_details() {
         assert_eq!(clip_detail("\u{0}WSL\u{fffd} ready\nnext"), "WSL ready");
+    }
+
+    #[test]
+    fn removes_invisible_format_markers_from_details() {
+        assert_eq!(
+            clip_detail("Muse\u{feff} CLI\u{200b} ready"),
+            "Muse CLI ready"
+        );
     }
 
     #[test]
