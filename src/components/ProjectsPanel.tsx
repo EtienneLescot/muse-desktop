@@ -131,8 +131,10 @@ export function ProjectsPanel({
     }
   }
 
-  async function checkProjectWorkspaces(project: Project): Promise<void> {
-    const roots = projectWorkspaces(project);
+  async function checkProjectWorkspaces(project: Project, requestedRoots?: readonly string[]): Promise<void> {
+    const roots = (requestedRoots ?? projectWorkspaces(project))
+      .map((root) => root.trim())
+      .filter((root, index, all) => root.length > 0 && all.indexOf(root) === index);
     if (roots.length === 0 || checkingWorkspaceId !== null) return;
     setCheckingWorkspaceId(project.id);
     try {
@@ -260,7 +262,7 @@ export function ProjectsPanel({
             }}
             onSetOverride={(key, value) => onSetOverride(p.id, key, value)}
             checkingWorkspace={checkingWorkspaceId === p.id}
-            onCheckWorkspace={() => void checkProjectWorkspaces(p)}
+            onCheckWorkspace={(paths) => void checkProjectWorkspaces(p, paths)}
             workspaceObservations={Object.fromEntries(
               projectWorkspaces(p).map((root) => [root, workspaceChecks[`${p.id}:${root}`]]),
             )}
@@ -347,7 +349,7 @@ interface ProjectRowProps {
   ) => void;
   workspaceObservations: Readonly<Record<string, WorkspaceRootObservation | undefined>>;
   checkingWorkspace: boolean;
-  onCheckWorkspace: () => void;
+  onCheckWorkspace: (paths: string[]) => void;
 }
 
 function ProjectRow({
@@ -472,7 +474,7 @@ function ProjectRow({
               <button type="button" onClick={() => setDraftWorkspaces([])}>Clear all</button>
             )}
             {hasWorkspace && (
-              <button type="button" onClick={onCheckWorkspace} disabled={checkingWorkspace}>
+              <button type="button" onClick={() => onCheckWorkspace(draftWorkspaces)} disabled={checkingWorkspace}>
                 {checkingWorkspace ? "Checking folders…" : "Check folders"}
               </button>
             )}
