@@ -4,6 +4,7 @@ import {
   isApprovalDecisionAccepted,
   isSelectedApprovalAccepted,
   parseApprovalResolution,
+  shouldCloseApprovalLane,
 } from "../src/lib/approvalResolution.ts";
 
 describe("approval resolution payloads", () => {
@@ -69,5 +70,11 @@ describe("approval resolution payloads", () => {
     assert.equal(isSelectedApprovalAccepted(approvals, "session-a", "request-1", "allow"), true);
     assert.equal(isSelectedApprovalAccepted(approvals, "session-b", "request-1", "allow"), true);
     assert.equal(isSelectedApprovalAccepted(approvals, "session-a", "missing", "allow"), true);
+  });
+
+  it("keeps a resumed lane open for legacy approval stage updates", () => {
+    assert.equal(shouldCloseApprovalLane(false, false), true);
+    assert.equal(shouldCloseApprovalLane(true, false), false);
+    assert.equal(shouldCloseApprovalLane(false, true), false);
   });
 });

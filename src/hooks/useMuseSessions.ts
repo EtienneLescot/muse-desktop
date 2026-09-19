@@ -380,6 +380,7 @@ import {
 import {
   isSelectedApprovalAccepted,
   parseApprovalResolution,
+  shouldCloseApprovalLane,
 } from "../lib/approvalResolution";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
@@ -1574,6 +1575,8 @@ export function useMuseSessions(): UseMuseSessions {
   const [resumePendingBySession, setResumePendingBySession] = useState<
     Record<string, ResumePending>
   >({});
+  const resumePendingBySessionRef = useRef<Record<string, ResumePending>>({});
+  resumePendingBySessionRef.current = resumePendingBySession;
   // One bounded recovery read per accepted decision. The host remains the
   // authority; this only prevents a quiet post-approval turn from waiting
   // forever for a notification that was dropped or never emitted.
@@ -3010,10 +3013,12 @@ export function useMuseSessions(): UseMuseSessions {
   }
 
   function markResumePending(sessionId: string, source: ResumePending["source"]): void {
-    setResumePendingBySession((cur) => ({
-      ...cur,
-      [sessionId]: { requestedAt: Date.now(), source },
-    }));
+    const pending = { requestedAt: Date.now(), source };
+    resumePendingBySessionRef.current = {
+      ...resumePendingBySessionRef.current,
+      [sessionId]: pending,
+    };
+    setResumePendingBySession((cur) => ({ ...cur, [sessionId]: pending }));
     // A successful decision means the host accepted work again even when an
     // older/reconnected session snapshot still says idle. Let the liveness
     // row represent that bridge until the next terminal or progress event.
@@ -3026,6 +3031,10 @@ export function useMuseSessions(): UseMuseSessions {
   }
 
   function clearResumePending(sessionId: string): void {
+    if (!(sessionId in resumePendingBySessionRef.current)) return;
+    const nextRef = { ...resumePendingBySessionRef.current };
+    delete nextRef[sessionId];
+    resumePendingBySessionRef.current = nextRef;
     setResumePendingBySession((cur) => {
       if (!(sessionId in cur)) return cur;
       const next = { ...cur };
@@ -3613,7 +3622,9 @@ export function useMuseSessions(): UseMuseSessions {
         // The first approval pauses the assistant lane. Later stage updates
         // must leave the resumed placeholder open while the next choice is
         // presented, otherwise the UI appears blank between clicks.
-        closeOpenBlocks(sid);
+        if (shouldCloseApprovalLane(updated, resumePendingBySessionRef.current[sid] !== undefined)) {
+          closeOpenBlocks(sid);
+        }
       }
       return;
     }
