@@ -9,6 +9,8 @@ import {
   type GitPushResult,
   type GitReviewState,
   type GitStatusSnapshot,
+  compareGitTurnSnapshot,
+  type GitTurnSnapshot,
 } from "../lib/git";
 import {
   anchorMatchesDiff,
@@ -30,6 +32,7 @@ import { userFacingError } from "../lib/errorCopy";
 interface Props {
   sessionId: string;
   review: GitReviewState;
+  lastTurnSnapshot: GitTurnSnapshot | null;
   onRefreshStatus: (sessionId: string) => Promise<GitStatusSnapshot | null>;
   onLoadDiff: (
     sessionId: string,
@@ -97,6 +100,7 @@ const SCOPES: Array<[GitDiffScope, string]> = [
 export function ReviewPanel({
   sessionId,
   review,
+  lastTurnSnapshot,
   onRefreshStatus,
   onLoadDiff,
   onStageFiles,
@@ -231,6 +235,13 @@ export function ReviewPanel({
   const bulkStageCount = selectedFileRows.filter((file) => file.unstaged || file.untracked).length;
   const bulkUnstageCount = selectedFileRows.filter((file) => file.staged).length;
   const bulkDiscardCount = selectedFileRows.filter((file) => file.unstaged && !file.untracked).length;
+  const lastTurnComparison = useMemo(
+    () =>
+      lastTurnSnapshot !== null && review.status !== null
+        ? compareGitTurnSnapshot(lastTurnSnapshot, review.status)
+        : null,
+    [lastTurnSnapshot, review.status],
+  );
 
   useEffect(() => {
     const first = review.diff?.files[0]?.path ?? null;
@@ -690,6 +701,59 @@ export function ReviewPanel({
               </span>
             )}
           </div>
+
+          {lastTurnSnapshot !== null && (
+            <section className="review-last-turn" aria-label="Last turn repository snapshot">
+              <div className="review-last-turn-head">
+                <div>
+                  <span className="eyebrow">LAST TURN SNAPSHOT</span>
+                  <strong>
+                    {lastTurnSnapshot.phase === "failed"
+                      ? "Turn admission failed"
+                      : lastTurnSnapshot.phase === "queued"
+                        ? "Turn queued"
+                        : lastTurnSnapshot.phase === "completed"
+                          ? "Turn completed"
+                          : lastTurnSnapshot.phase === "running"
+                            ? "Turn in progress"
+                            : "Baseline captured"}
+                  </strong>
+                </div>
+                <time dateTime={new Date(lastTurnSnapshot.capturedAt).toISOString()}>
+                  {new Date(lastTurnSnapshot.capturedAt).toLocaleTimeString(undefined, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </time>
+              </div>
+              {lastTurnComparison === null ? (
+                <p className="muted">Refresh the repository to compare the current state.</p>
+              ) : lastTurnComparison.changed ? (
+                <>
+                  <p>
+                    {lastTurnComparison.changedPaths.length > 0
+                      ? `${lastTurnComparison.changedPaths.length} file${lastTurnComparison.changedPaths.length === 1 ? "" : "s"} changed since this turn started.`
+                      : lastTurnComparison.headChanged
+                        ? "HEAD changed since this turn started."
+                        : "Repository changes detected since this turn started."}
+                  </p>
+                  {lastTurnComparison.changedPaths.length > 0 && (
+                    <ul className="review-last-turn-files" aria-label="Files changed since last turn">
+                      {lastTurnComparison.changedPaths.slice(0, 8).map((path) => (
+                        <li key={path}><code>{path}</code></li>
+                      ))}
+                    </ul>
+                  )}
+                  {lastTurnComparison.changedPaths.length > 8 && (
+                    <span className="muted">and {lastTurnComparison.changedPaths.length - 8} more…</span>
+                  )}
+                </>
+              ) : (
+                <p className="muted">No repository changes observed since this turn started.</p>
+              )}
+            </section>
+          )}
 
           {review.status.files.length === 0 ? (
             <p className="muted review-empty">Working tree clean.</p>

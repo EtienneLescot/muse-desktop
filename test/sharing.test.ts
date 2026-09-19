@@ -34,6 +34,9 @@ import {
   setShareMode,
   shareThread,
   shouldAutoShare,
+  MAX_SHARE_ENTRIES,
+  MAX_SHARE_ENTRY_CHARS,
+  MAX_SHARE_BUNDLES,
   type ShareState,
 } from "../src/lib/sharing.ts";
 import {
@@ -121,6 +124,77 @@ describe("share bundles (US-27)", () => {
     const loaded = loadShareState();
     assert.equal(loaded.mode, "auto");
     assert.equal(resolveBundle(loaded, shared.bundle.bundleId)?.format, "json");
+  });
+
+  it("redacts credential-shaped values and records export safeguards", () => {
+    const shared = shareThread(emptyShareState(), "s1", "T", [
+      { role: "user", text: "Authorization: Bearer top-secret-value", ts: 1 },
+      { role: "tool", text: "token=abc123", ts: 2 },
+      { role: "assistant", text: "sk-live-1234567890abcdef", ts: 3 },
+    ], "json", { now: 4, rand: () => 0.5 });
+    assert.ok(shared !== null);
+    assert.equal(shared.bundle.redacted, true);
+    assert.match(shared.bundle.body, /\[redacted\]/);
+    assert.doesNotMatch(shared.bundle.body, /top-secret-value/);
+    assert.doesNotMatch(shared.bundle.body, /sk-live-1234567890abcdef/);
+    const parsed = JSON.parse(shared.bundle.body) as { safeguards: { redacted: boolean } };
+    assert.equal(parsed.safeguards.redacted, true);
+  });
+
+  it("bounds large snapshots without dropping the newest entry", () => {
+    const log = Array.from({ length: MAX_SHARE_ENTRIES + 2 }, (_, i) => ({
+      role: "assistant",
+      text: `entry-${i}`,
+      ts: i,
+    }));
+    log.push({ role: "assistant", text: "x".repeat(MAX_SHARE_ENTRY_CHARS + 100), ts: 9999 });
+    const shared = shareThread(emptyShareState(), "s1", "T", log, "json", {
+      now: 8,
+      rand: () => 0.6,
+    });
+    assert.ok(shared !== null);
+    assert.equal(shared.bundle.truncated, true);
+    assert.ok((shared.bundle.omittedEntries ?? 0) >= 2);
+    const parsed = JSON.parse(shared.bundle.body) as {
+      safeguards: { truncated: boolean };
+      entries: Array<{ text: string }>;
+    };
+    assert.equal(parsed.safeguards.truncated, true);
+    assert.match(parsed.entries.at(-1)?.text ?? "", /entry truncated/);
+  });
+
+  it("retains only the newest local bundles, including revocation history", () => {
+    let state = emptyShareState();
+    for (let i = 0; i < MAX_SHARE_BUNDLES + 5; i += 1) {
+      const created = shareThread(state, "s1", `T${i}`, LOG, "markdown", {
+        now: i,
+        rand: () => i / (MAX_SHARE_BUNDLES + 6),
+      });
+      assert.ok(created !== null);
+      state = created.state;
+    }
+    assert.equal(Object.keys(state.bundles).length, MAX_SHARE_BUNDLES);
+    assert.equal(Math.min(...Object.values(state.bundles).map((bundle) => bundle.createdAt)), 5);
+  });
+
+  it("bounds and validates state at the persistence boundary", () => {
+    fakeStorage();
+    const shared = shareThread(emptyShareState(), "s1", "T", LOG, "markdown", {
+      now: 9,
+      rand: () => 0.7,
+    });
+    assert.ok(shared !== null);
+    saveShareState({
+      mode: "invalid" as ShareState["mode"],
+      bundles: {
+        ...shared.state.bundles,
+        bad: { bundleId: "bad" } as never,
+      },
+    });
+    const loaded = loadShareState();
+    assert.equal(loaded.mode, "manual");
+    assert.equal(loaded.bundles.bad, undefined);
+    assert.equal(Object.keys(loaded.bundles).length, 1);
   });
 });
 

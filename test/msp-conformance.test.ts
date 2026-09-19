@@ -18,6 +18,7 @@ describe("msp conformance surface", () => {
       "initialize",
       "session/start",
       "session/read",
+      "view/page",
       "session/resume",
       "session/list",
       "model/list",
@@ -69,6 +70,7 @@ describe("msp conformance surface", () => {
       "approval/requested",
       "userInput/requested",
       "turn/completed",
+      "turn/stopped",
       "session/contextUsage",
       "session/approvalModeChanged",
     ] as const) {

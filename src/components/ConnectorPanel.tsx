@@ -74,6 +74,10 @@ interface Props {
   onForgetRemoteCredential: (id: string) => Promise<void>;
   authorizationMode: AuthorizationMode;
   workspace: string | null;
+  /** Active conversation that can explicitly be reconnected with this config. */
+  activeSessionId?: string | null;
+  canReconnectActive?: boolean;
+  onReconnectActive?: (sessionId: string) => Promise<void>;
 }
 
 type PendingConnectorCall =
@@ -124,6 +128,9 @@ export function ConnectorPanel({
   onForgetRemoteCredential,
   authorizationMode,
   workspace,
+  activeSessionId = null,
+  canReconnectActive = false,
+  onReconnectActive,
 }: Props) {
   const [remoteName, setRemoteName] = useState("");
   const [remoteUrl, setRemoteUrl] = useState("");
@@ -151,6 +158,7 @@ export function ConnectorPanel({
     message: string;
     tone: "success" | "error";
   } | null>(null);
+  const [reconnectingActive, setReconnectingActive] = useState(false);
   const installedIds = new Set(installed.map((e) => e.id));
 
   async function executeLocalCall(
@@ -241,6 +249,30 @@ export function ConnectorPanel({
         />{" "}
         Curated catalog plus an explicit local MCP probe.
       </p>
+      {activeSessionId !== null && canReconnectActive && onReconnectActive && (
+        <section className="connector-session-apply" aria-label="Apply connectors to active conversation">
+          <div>
+            <strong>Active conversation</strong>
+            <p className="muted">
+              Connector opt-ins apply to new sessions by default. Reconnect this conversation to apply the current configuration now.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={reconnectingActive}
+            onClick={async () => {
+              setReconnectingActive(true);
+              try {
+                await onReconnectActive(activeSessionId);
+              } finally {
+                setReconnectingActive(false);
+              }
+            }}
+          >
+            {reconnectingActive ? "Reconnecting…" : "Reconnect with current connectors"}
+          </button>
+        </section>
+      )}
       <section className="local-mcp" aria-label="Local MCP server">
         <h4>Local MCP server</h4>
         <p className="muted">

@@ -16,6 +16,9 @@
  * or the host's explicit ceiling rejection.
  * The explicit `--exercise-isolation` path kills host B after setup and
  * verifies that host A still answers a read-only request.
+ * The explicit `--exercise-cut-during-turn` path accepts a turn on host B,
+ * closes that sidecar before a terminal notification, and verifies that host
+ * A remains reachable. It is a transport/isolation proof, not a model test.
  * The explicit `--exercise-user-shell` path negotiates the `userShell`
  * capability, admits a harmless command in each workspace and observes the
  * corresponding shell item without sending a model turn.
@@ -23,6 +26,24 @@
  * pending approval/input snapshot. This is the native reconciliation half of
  * M0-02/M0-05; it deliberately does not claim a cold resume because the
  * bundled sidecar currently reports ephemeral session durability.
+ * The explicit `--exercise-history` path probes the bounded `session/list`
+ * and `view/page` reads used by the renderer's restore fallback. Unsupported
+ * methods are reported as such rather than treated as a successful proof.
+ * The explicit `--exercise-terminal` path tightens `--exercise-control` by
+ * requiring a terminal turn notification after the interrupt acknowledgement.
+ * The explicit `--exercise-reasoning` path applies the supported reasoning
+ * effort values to each ephemeral session and records the host's effective
+ * projection without starting a model turn.
+ * The explicit `--exercise-model` path selects one model from `model/list`,
+ * applies it to each ephemeral session and re-reads the catalogue to check
+ * whether the host projects the active model.
+ * The explicit `--exercise-compaction` path probes `session/compact` on a
+ * fresh session and records whether the host admits a no-op, reports that a
+ * turn is missing/active, or does not expose the method. It never starts a
+ * model turn or sends conversation content.
+ * The explicit `--exercise-queue` path admits two synthetic turns on each
+ * session, records the host disposition for the second one and reclaims it
+ * with `turn/unqueue` when the host actually queues it.
  *
  * Usage:
  *   node scripts/native-smoke.mjs
@@ -31,11 +52,18 @@
  *   node scripts/native-smoke.mjs --exercise-errors
  *   node scripts/native-smoke.mjs --exercise-approval
  *   node scripts/native-smoke.mjs --exercise-isolation
+ *   node scripts/native-smoke.mjs --exercise-cut-during-turn
  *   node scripts/native-smoke.mjs --exercise-user-shell
  *   node scripts/native-smoke.mjs --exercise-reconnect
+ *   node scripts/native-smoke.mjs --exercise-history
+ *   node scripts/native-smoke.mjs --exercise-reasoning
+ *   node scripts/native-smoke.mjs --exercise-model
+ *   node scripts/native-smoke.mjs --exercise-compaction
+ *   node scripts/native-smoke.mjs --exercise-queue
+ *   node scripts/native-smoke.mjs --exercise-control --exercise-terminal
  *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -45,6 +73,9 @@ import { promisify } from "node:util";
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const PROCESS_EXIT_TIMEOUT_MS = 2_000;
+const SESSION_LIST_LIMIT = 200;
+const SESSION_LIST_MAX_PAGES = 20;
+const SESSION_LIST_MAX_CURSOR_CHARS = 4_096;
 const execFileAsync = promisify(execFile);
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_BINARY = join(
@@ -86,12 +117,59 @@ function exercisesIsolationPath() {
   return process.argv.includes("--exercise-isolation");
 }
 
+function exercisesCutDuringTurnPath() {
+  return process.argv.includes("--exercise-cut-during-turn");
+}
+
 function exercisesUserShellPath() {
   return process.argv.includes("--exercise-user-shell");
 }
 
 function exercisesReconnectPath() {
   return process.argv.includes("--exercise-reconnect");
+}
+
+function exercisesHistoryPath() {
+  return process.argv.includes("--exercise-history");
+}
+
+function exercisesReasoningPath() {
+  return process.argv.includes("--exercise-reasoning");
+}
+
+function exercisesModelPath() {
+  return process.argv.includes("--exercise-model");
+}
+
+function exercisesCompactionPath() {
+  return process.argv.includes("--exercise-compaction");
+}
+
+function exercisesQueuePath() {
+  return process.argv.includes("--exercise-queue");
+}
+
+function exercisesTerminalPath() {
+  return process.argv.includes("--exercise-terminal");
+}
+
+async function waitForTerminalNotification(host, turnId, label, required) {
+  for (const method of ["turn/completed", "turn/retracted", "turn/stopped"]) {
+    try {
+      const params = await host.waitForNotification(
+        method,
+        (candidate) => candidate?.turnId === turnId,
+        2_500,
+      );
+      return { method, params };
+    } catch {
+      // Compatible hosts use different terminal aliases. Keep probing the
+      // allowlisted forms, but never treat an interrupt acknowledgement as a
+      // terminal state by itself.
+    }
+  }
+  if (required) fail(`${label} did not emit a terminal notification for ${turnId}`);
+  return { method: null, params: null };
 }
 
 function fail(message) {
@@ -308,8 +386,18 @@ async function main() {
   const exerciseErrors = exercisesErrorPath();
   const exerciseApproval = exercisesApprovalPath();
   const exerciseIsolation = exercisesIsolationPath();
+  const exerciseCutDuringTurn = exercisesCutDuringTurnPath();
   const exerciseUserShell = exercisesUserShellPath();
   const exerciseReconnect = exercisesReconnectPath();
+  const exerciseHistory = exercisesHistoryPath();
+  const exerciseReasoning = exercisesReasoningPath();
+  const exerciseModel = exercisesModelPath();
+  const exerciseCompaction = exercisesCompactionPath();
+  const exerciseQueue = exercisesQueuePath();
+  const exerciseTerminal = exercisesTerminalPath();
+  if (exerciseTerminal && !exerciseControl) {
+    fail("--exercise-terminal requires --exercise-control");
+  }
   const reportPath = reportArgument();
   const roots = await Promise.all([
     mkdtemp(join(tmpdir(), "muse-native-smoke-a-")),
@@ -326,6 +414,12 @@ async function main() {
     const approvalModes = [];
     const userShellChecks = [];
     const reconnectChecks = [];
+    const historyChecks = [];
+    const reasoningChecks = [];
+    const modelChecks = [];
+    const compactionChecks = [];
+    const queueChecks = [];
+    const cutDuringTurnChecks = [];
     let isolation = null;
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
@@ -355,6 +449,79 @@ async function main() {
       const sessionId = session?.sessionId ?? session?.id;
       if (typeof sessionId !== "string" || sessionId.length === 0) fail(`host-${index === 0 ? "A" : "B"} did not return a session id`);
       sessions.push(sessionId);
+      if (exerciseHistory) {
+        let sessionList = "available";
+        let sessionCount = 0;
+        let sessionListPages = 0;
+        let sessionListHasCursor = false;
+        try {
+          let cursor;
+          const seenCursors = new Set();
+          for (let page = 0; page < SESSION_LIST_MAX_PAGES; page += 1) {
+            const listed = await host.request("session/list", {
+              limit: SESSION_LIST_LIMIT,
+              ...(cursor === undefined ? {} : { cursor }),
+            });
+            if (listed === null || typeof listed !== "object") {
+              fail(`host-${index === 0 ? "A" : "B"} returned no session list envelope`);
+            }
+            if (listed.sessions !== undefined && !Array.isArray(listed.sessions)) {
+              fail(`host-${index === 0 ? "A" : "B"} returned invalid session list rows`);
+            }
+            sessionCount += Array.isArray(listed.sessions) ? listed.sessions.length : 0;
+            sessionListPages += 1;
+            const rawCursor = listed.nextCursor ?? listed.next_cursor;
+            if (rawCursor === undefined || rawCursor === null || (typeof rawCursor === "string" && rawCursor.trim().length === 0)) {
+              break;
+            }
+            if (typeof rawCursor !== "string" || rawCursor.trim().length > SESSION_LIST_MAX_CURSOR_CHARS) {
+              fail(`host-${index === 0 ? "A" : "B"} returned an invalid session list cursor`);
+            }
+            const nextCursor = rawCursor.trim();
+            if (seenCursors.has(nextCursor)) {
+              fail(`host-${index === 0 ? "A" : "B"} returned a repeated session list cursor`);
+            }
+            seenCursors.add(nextCursor);
+            sessionListHasCursor = true;
+            cursor = nextCursor;
+            if (page + 1 === SESSION_LIST_MAX_PAGES) {
+              fail(`host-${index === 0 ? "A" : "B"} exceeded the bounded session list page limit`);
+            }
+          }
+        } catch (error) {
+          if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+          sessionList = "unsupported";
+        }
+        let viewPage = "available";
+        let eventCount = 0;
+        try {
+          const page = await host.request("view/page", {
+            sessionId,
+            direction: "forward",
+            limit: 200,
+          });
+          if (page === null || typeof page !== "object") {
+            fail(`host-${index === 0 ? "A" : "B"} returned no view page envelope`);
+          }
+          const events = page.events ?? page.items;
+          if (events !== undefined && !Array.isArray(events)) {
+            fail(`host-${index === 0 ? "A" : "B"} returned invalid view page rows`);
+          }
+          eventCount = Array.isArray(events) ? events.length : 0;
+        } catch (error) {
+          if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+          viewPage = "unsupported";
+        }
+        historyChecks.push({
+          host: String.fromCharCode(65 + index),
+          sessionList,
+          sessionCount,
+          sessionListPages,
+          sessionListHasCursor,
+          viewPage,
+          eventCount,
+        });
+      }
       if (exerciseApproval) {
         const startupMode = session?.approvalMode?.mode;
         if (typeof startupMode !== "string" || startupMode.length === 0) {
@@ -383,6 +550,112 @@ async function main() {
       }
       const catalogue = await host.request("model/list");
       if (catalogue === null || typeof catalogue !== "object") fail(`host-${index === 0 ? "A" : "B"} returned no model catalogue`);
+      if (exerciseModel) {
+        const models = Array.isArray(catalogue.models)
+          ? catalogue.models
+          : Array.isArray(catalogue.items)
+            ? catalogue.items
+            : [];
+        const candidate = models.find((model) => {
+          const id = model?.modelId ?? model?.model_id ?? model?.id;
+          return typeof id === "string" && id.trim().length > 0;
+        });
+        if (!candidate) {
+          modelChecks.push({ host: String.fromCharCode(65 + index), status: "no-model" });
+        } else {
+          const modelId = String(candidate.modelId ?? candidate.model_id ?? candidate.id).trim();
+          try {
+            const changed = await host.request("session/setModel", {
+              commandId: uuidv7(),
+              sessionId,
+              model: { modelId },
+            });
+            if (changed?.status !== "accepted") {
+              fail(`host-${index === 0 ? "A" : "B"} returned an incomplete model result for ${modelId}`);
+            }
+            const refreshed = await host.request("model/list");
+            const refreshedModels = Array.isArray(refreshed?.models)
+              ? refreshed.models
+              : Array.isArray(refreshed?.items)
+                ? refreshed.items
+                : [];
+            const active = refreshedModels.find((model) => {
+              const id = model?.modelId ?? model?.model_id ?? model?.id;
+              return id === modelId;
+            });
+            modelChecks.push({
+              host: String.fromCharCode(65 + index),
+              requested: modelId,
+              status: "accepted",
+              ...(typeof active?.isActive === "boolean"
+                ? { active: active.isActive, projection: "reported" }
+                : { active: null, projection: "not-reported" }),
+            });
+          } catch (error) {
+            if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+            modelChecks.push({ host: String.fromCharCode(65 + index), requested: modelId, status: "unsupported" });
+          }
+        }
+      }
+      if (exerciseReasoning) {
+        const efforts = [];
+        for (const reasoningEffort of ["none", "high", "ultra"]) {
+          try {
+            const changed = await host.request("session/setReasoningEffort", {
+              commandId: uuidv7(),
+              sessionId,
+              reasoningEffort,
+            });
+            if (changed?.status !== "accepted") {
+              fail(`host-${index === 0 ? "A" : "B"} returned an incomplete reasoning effort result for ${reasoningEffort}`);
+            }
+            const effective = changed?.effectiveReasoningEffort ?? changed?.reasoningEffort;
+            efforts.push({
+              requested: reasoningEffort,
+              status: "accepted",
+              ...(typeof effective === "string" && effective.length > 0
+                ? { effective }
+                : { effective: null, projection: "not-reported" }),
+            });
+          } catch (error) {
+            if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+            efforts.push({ requested: reasoningEffort, status: "unsupported" });
+            break;
+          }
+        }
+        reasoningChecks.push({ host: String.fromCharCode(65 + index), efforts });
+      }
+      if (exerciseCompaction) {
+        const hostLabel = String.fromCharCode(65 + index);
+        try {
+          const compacted = await host.request("session/compact", {
+            commandId: uuidv7(),
+            sessionId,
+          });
+          if (compacted === null || typeof compacted !== "object") {
+            fail(`host-${hostLabel} returned no compaction envelope`);
+          }
+          const status = compacted.status;
+          if (status !== "accepted" && status !== "noop") {
+            fail(`host-${hostLabel} returned an unknown compaction status`);
+          }
+          compactionChecks.push({ host: hostLabel, status });
+        } catch (error) {
+          if (error?.code === -32601 && error?.kind === "methodNotFound") {
+            compactionChecks.push({ host: hostLabel, status: "unsupported" });
+          } else if (error?.code === -32030 && error?.kind === "commandRejected") {
+            if (error.reason === "missing_run") {
+              compactionChecks.push({ host: hostLabel, status: "missing-run" });
+            } else if (error.reason === "run_active") {
+              compactionChecks.push({ host: hostLabel, status: "run-active" });
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
+      }
       if (exerciseReconnect) {
         // These are the same point-in-time reads used by the renderer after a
         // reconnect. Keep the result intentionally small: the smoke proves
@@ -477,6 +750,69 @@ async function main() {
       }
     }
     if (new Set(sessions).size !== sessions.length) fail("the two native hosts returned the same session id");
+    if (exerciseQueue) {
+      for (const [index, host] of hosts.entries()) {
+        const hostLabel = String.fromCharCode(65 + index);
+        const first = await host.request("turn/start", {
+          commandId: uuidv7(),
+          sessionId: sessions[index],
+          input: [{ type: "text", text: "Native queue smoke probe — first turn." }],
+        });
+        if (first?.status !== "accepted" || typeof first?.turnId !== "string" || first.turnId.length === 0) {
+          fail(`host-${hostLabel} did not accept the first queue probe`);
+        }
+        let second = null;
+        let secondError = null;
+        try {
+          second = await host.request("turn/start", {
+            commandId: uuidv7(),
+            sessionId: sessions[index],
+            input: [{ type: "text", text: "Native queue smoke probe — second turn." }],
+          });
+        } catch (error) {
+          secondError = error;
+        }
+        const disposition = typeof second?.disposition === "string"
+          ? second.disposition
+          : second?.status === "accepted"
+            ? "started"
+            : null;
+        let reclaimed = "not-applicable";
+        if (disposition === "queued" && typeof second?.turnId === "string") {
+          try {
+            const unqueued = await host.request("turn/unqueue", {
+              commandId: uuidv7(),
+              sessionId: sessions[index],
+              turnId: second.turnId,
+            });
+            if (unqueued?.status !== "accepted" || unqueued?.turnId !== second.turnId) {
+              fail(`host-${hostLabel} returned an incomplete queue reclaim result`);
+            }
+            reclaimed = "accepted";
+          } catch (error) {
+            if (error?.code === -32601 && error?.kind === "methodNotFound") reclaimed = "unsupported";
+            else throw error;
+          }
+        }
+        queueChecks.push({
+          host: hostLabel,
+          firstTurnId: first.turnId,
+          second: secondError === null
+            ? { status: second?.status ?? "unknown", disposition, ...(second?.turnId ? { turnId: second.turnId } : {}) }
+            : { status: "rejected", reason: secondError.reason ?? secondError.kind ?? "unknown" },
+          reclaimed,
+        });
+        try {
+          await host.request("turn/interrupt", {
+            commandId: uuidv7(),
+            sessionId: sessions[index],
+            retract: false,
+          });
+        } catch {
+          // A host may have completed the synthetic turn before cleanup.
+        }
+      }
+    }
     if (exerciseErrors) {
       // These requests never reach a model or touch a workspace. They prove
       // that the host's actionable category survives the child-process
@@ -526,11 +862,48 @@ async function main() {
           retract: false,
         }),
       ));
+      const terminals = await Promise.all(hosts.map((host, index) =>
+        waitForTerminalNotification(host, turnIds[index], `host-${index === 0 ? "A" : "B"}`, exerciseTerminal),
+      ));
       interrupted.forEach((result, index) => {
         if (result?.status !== "accepted" || result?.turnId !== turnIds[index]) {
           fail(`host-${index === 0 ? "A" : "B"} did not acknowledge interruption of ${turnIds[index]}`);
         }
-        controls.push({ host: String.fromCharCode(65 + index), turnId: turnIds[index], status: "interrupted" });
+        if (terminals[index]?.params?.turnId !== undefined && terminals[index].params.turnId !== turnIds[index]) {
+          fail(`host-${index === 0 ? "A" : "B"} emitted a mismatched terminal turn`);
+        }
+        controls.push({
+          host: String.fromCharCode(65 + index),
+          turnId: turnIds[index],
+          status: "interrupted",
+          ...(terminals[index].method === null
+            ? { terminalNotification: "unsupported" }
+            : { terminalMethod: terminals[index].method }),
+        });
+      });
+    }
+    if (exerciseCutDuringTurn) {
+      // Admit a real turn on B, then close only B before it can report a
+      // terminal event. The surviving host must keep its own route alive.
+      const turn = await hosts[1].request("turn/start", {
+        commandId: uuidv7(),
+        sessionId: sessions[1],
+        input: [{ type: "text", text: "Native cut-during-turn smoke probe." }],
+      });
+      if (turn?.status !== "accepted" || typeof turn?.turnId !== "string" || turn.turnId.length === 0) {
+        fail("host-B did not accept the cut-during-turn probe");
+      }
+      await hosts[1].close();
+      const catalogue = await hosts[0].request("model/list");
+      if (catalogue === null || typeof catalogue !== "object") {
+        fail("host-A stopped answering after host-B was cut during a turn");
+      }
+      cutDuringTurnChecks.push({
+        killedHost: "B",
+        turnId: turn.turnId,
+        terminalNotification: "not-observed-before-close",
+        survivingHost: "A",
+        survivingModelCatalogue: "available",
       });
     }
     if (exerciseIsolation) {
@@ -563,8 +936,15 @@ async function main() {
       ...(exerciseIsolation ? { isolation } : {}),
       ...(exerciseUserShell ? { userShell: userShellChecks } : {}),
       ...(exerciseReconnect ? { reconnect: reconnectChecks } : {}),
+      ...(exerciseHistory ? { history: historyChecks } : {}),
+      ...(exerciseReasoning ? { reasoningEffort: reasoningChecks } : {}),
+      ...(exerciseModel ? { modelSelection: modelChecks } : {}),
+      ...(exerciseCompaction ? { compaction: compactionChecks } : {}),
+      ...(exerciseQueue ? { queue: queueChecks } : {}),
+      ...(exerciseCutDuringTurn ? { cutDuringTurn: cutDuringTurnChecks } : {}),
     };
     if (reportPath !== null) {
+      await mkdir(dirname(reportPath), { recursive: true });
       await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
     }
     process.stdout.write(`${JSON.stringify(report)}\n`);

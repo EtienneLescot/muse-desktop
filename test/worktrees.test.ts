@@ -130,7 +130,7 @@ describe("multi-worktree inspection summary", () => {
       "task-b": { repoRoot: "C:/repo", path: records[1].path, branch: "task-b", head: "b", clean: false, conflicted: false, fileCount: 2, observedAt: 2 },
       "task-c": { repoRoot: "C:/repo", path: records[2].path, branch: "task-c", head: "c", clean: false, conflicted: true, fileCount: 1, observedAt: 2 },
     });
-    assert.deepEqual(summary, { total: 3, inspected: 3, clean: 1, changed: 2, conflicted: 1 });
+    assert.deepEqual(summary, { total: 3, inspected: 3, clean: 1, changed: 2, conflicted: 1, attached: 0 });
   });
 });
 
@@ -187,6 +187,9 @@ describe("M2-06 retention policy", () => {
     assert.match(dirty.reason, /Protected/);
     const active = retentionDecision(record, { repoRoot: record.repoRoot, path: record.path, branch: record.branch, head: "abc", clean: true, conflicted: false, fileCount: 0, activeSignals: ["index lock"], observedAt: 1 }, { maxAgeDays: 7 }, 8 * 86_400_000);
     assert.match(active.reason, /active operation/);
+    const attached = retentionDecision(record, { repoRoot: record.repoRoot, path: record.path, branch: record.branch, head: "abc", clean: true, conflicted: false, fileCount: 0, attachedSessionCount: 1, observedAt: 1 }, { maxAgeDays: 7 }, 8 * 86_400_000);
+    assert.match(attached.reason, /conversation/);
+    assert.equal(attached.eligible, false);
     const eligible = retentionDecision(record, { repoRoot: record.repoRoot, path: record.path, branch: record.branch, head: "abc", clean: true, conflicted: false, fileCount: 0, observedAt: 1 }, { maxAgeDays: 7 }, 8 * 86_400_000);
     assert.equal(eligible.eligible, true);
     assert.equal(normalizeRetentionDays("0"), null);

@@ -16,7 +16,12 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { WorkspacePicker } from "./WorkspacePicker";
-import { startupProbeRows, type StartupProbe } from "../lib/startupProbe";
+import {
+  startupCheckStatusLabel,
+  startupProbeRows,
+  sanitizeStartupText,
+  type StartupProbe,
+} from "../lib/startupProbe";
 import type { ScopeVerdict } from "../lib/scope";
 import {
   CONFIGURED_PROVIDERS,
@@ -51,6 +56,14 @@ import {
   type StorageIssue,
   type StorageSnapshotPreview,
 } from "../lib/storage";
+import {
+  HOST_CONNECTIONS_KEY,
+  createHostConnection,
+  parseHostConnections,
+  serializeHostConnections,
+  type HostConnectionConfig,
+  type HostEnvironmentType,
+} from "../lib/hostConnection";
 
 interface Props {
   /** Absolute workspace root; null while none is picked. */
@@ -59,6 +72,8 @@ interface Props {
   onPickWorkspace: (path: string) => void;
   sandbox: SandboxSettings;
   onSandboxChange: (next: SandboxSettings) => void;
+  /** M2-02: apply a changed host posture by restarting the workspace host. */
+  onRestartHost?: () => Promise<boolean>;
   authorizationMode: AuthorizationMode;
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
   /** Global host reasoning effort used by new conversations. */
@@ -73,6 +88,8 @@ interface Props {
   modelsError: string | null;
   /** Active session id; null disables the live pick (needs a target). */
   activeSessionId: string | null;
+  /** Last model requested locally when the host omits an active projection. */
+  selectedModelId?: string | null;
   /** Reload the catalog (host-flagged active row follows the session). */
   onRefreshModels: () => void;
   /** Model-picker gesture on the active session (`session/setModel`). */
@@ -96,6 +113,7 @@ export function SettingsPanel({
   onPickWorkspace,
   sandbox,
   onSandboxChange,
+  onRestartHost,
   authorizationMode,
   onAuthorizationModeChange,
   reasoningEffort,
@@ -105,6 +123,7 @@ export function SettingsPanel({
   liveModels,
   modelsError,
   activeSessionId,
+  selectedModelId = null,
   onRefreshModels,
   onSelectModel,
   onExportDiagnostics,
@@ -116,6 +135,8 @@ export function SettingsPanel({
   const [probe, setProbe] = useState("");
   const [probeResult, setProbeResult] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
+  const [restartingHost, setRestartingHost] = useState(false);
+  const [restartStatus, setRestartStatus] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [storageIssues, setStorageIssues] = useState<StorageIssue[]>(() =>
@@ -144,6 +165,76 @@ export function SettingsPanel({
   } | null>(null);
   const [selectedRecoveryKeys, setSelectedRecoveryKeys] = useState<string[]>([]);
 
+  const [hostConnections, setHostConnections] = useState<HostConnectionConfig[]>(() => {
+    try {
+      const raw = localStorage.getItem(HOST_CONNECTIONS_KEY);
+      if (!raw) {
+        return [
+          {
+            id: "local-default",
+            label: "Local sidecar (Default)",
+            type: "local",
+            endpoint: "local://sidecar",
+            authType: "none",
+            workspaceRoot: workspace || "",
+            hasCredential: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ];
+      }
+      return parseHostConnections(JSON.parse(raw)).connections;
+    } catch {
+      return [];
+    }
+  });
+  const [newHostLabel, setNewHostLabel] = useState("");
+  const [newHostType, setNewHostType] = useState<HostEnvironmentType>("remote-ssh");
+  const [newHostEndpoint, setNewHostEndpoint] = useState("");
+  const [hostAddError, setHostAddError] = useState<string | null>(null);
+
+  function handleAddHost() {
+    setHostAddError(null);
+    const res = createHostConnection({
+      label: newHostLabel,
+      type: newHostType,
+      endpoint: newHostEndpoint,
+    });
+    if (!res.config) {
+      setHostAddError(res.error || "Failed to add host");
+      return;
+    }
+    const updated = [...hostConnections, res.config];
+    setHostConnections(updated);
+    try {
+      localStorage.setItem(
+        HOST_CONNECTIONS_KEY,
+        serializeHostConnections({
+          schema: "muse-desktop.host-connections.v1",
+          activeConnectionId: updated[0]?.id ?? null,
+          connections: updated,
+        }),
+      );
+    } catch {}
+    setNewHostLabel("");
+    setNewHostEndpoint("");
+  }
+
+  function handleRemoveHost(id: string) {
+    const updated = hostConnections.filter((h) => h.id !== id);
+    setHostConnections(updated);
+    try {
+      localStorage.setItem(
+        HOST_CONNECTIONS_KEY,
+        serializeHostConnections({
+          schema: "muse-desktop.host-connections.v1",
+          activeConnectionId: updated[0]?.id ?? null,
+          connections: updated,
+        }),
+      );
+    } catch {}
+  }
+
   const effective = effectiveSandboxMode(sandbox);
 
   async function runProbe(): Promise<void> {
@@ -169,6 +260,24 @@ export function SettingsPanel({
 
   function pickMode(mode: SandboxMode): void {
     onSandboxChange({ ...sandbox, mode });
+    setRestartStatus(null);
+  }
+
+  async function restartWorkspaceHost(): Promise<void> {
+    if (onRestartHost === undefined || restartingHost) return;
+    if (!window.confirm(
+      "Restart the workspace host now? Active conversations will disconnect and keep their local transcript; reconnect them after the new host starts.",
+    )) return;
+    setRestartingHost(true);
+    setRestartStatus(null);
+    try {
+      const ok = await onRestartHost();
+      setRestartStatus(ok
+        ? "Host restarted. Reconnect any durable conversations to continue."
+        : "The host could not be restarted.");
+    } finally {
+      setRestartingHost(false);
+    }
   }
 
   function exportLocalData(): void {
@@ -214,7 +323,11 @@ export function SettingsPanel({
         return;
       }
       setRecoveryPreview({ serialized, snapshot });
-      setSelectedRecoveryKeys(snapshot.entries.filter((entry) => !entry.existing).map((entry) => entry.key));
+      setSelectedRecoveryKeys(
+        snapshot.entries
+          .filter((entry) => !entry.existing && entry.kind === "durable")
+          .map((entry) => entry.key),
+      );
       setExportStatus(
         snapshot.errors.length > 0
           ? `Recovery snapshot ready with ${snapshot.errors.length} warnings. Choose entries to restore.`
@@ -316,7 +429,7 @@ export function SettingsPanel({
             <header>
               <h3>Environment check</h3>
               <span className="muted">
-                {startupProbe.platform} · {new Date(startupProbe.checkedAt).toLocaleTimeString()}
+                {sanitizeStartupText(startupProbe.platform, 40)} · {new Date(startupProbe.checkedAt).toLocaleTimeString()}
               </span>
             </header>
             <ul>
@@ -324,6 +437,7 @@ export function SettingsPanel({
                 <li key={label} data-status={check.status}>
                   <span className="startup-probe-dot" aria-hidden="true" />
                   <span className="startup-probe-label">{label}</span>
+                  <span className="startup-probe-status">{startupCheckStatusLabel(check.status)}</span>
                   <span className="startup-probe-detail" title={check.detail}>
                     {check.detail || check.status}
                   </span>
@@ -439,8 +553,9 @@ export function SettingsPanel({
       <div className="settings-group">
         <h3>Isolation preferences</h3>
         <p className="settings-note">
-          These preferences do not yet change the isolation of the running
-          engine.
+          Applied when a new Muse host starts for a workspace. Project
+          overrides can tighten this posture; an existing host keeps its
+          current posture until it is restarted.
         </p>
         <label className="settings-label" htmlFor="settings-sandbox-mode">
           Isolation (workspace by default)
@@ -490,6 +605,25 @@ export function SettingsPanel({
           {!canSelectMode(sandbox, sandbox.mode) &&
             " — permission required for this preference."}
         </p>
+        {onRestartHost !== undefined && workspace !== null && (
+          <div className="settings-host-restart">
+            <button
+              type="button"
+              className="settings-secondary-action"
+              onClick={() => void restartWorkspaceHost()}
+              disabled={restartingHost}
+            >
+              {restartingHost ? "Restarting host…" : "Restart workspace host"}
+            </button>
+            <span className="settings-note">
+              Apply the selected posture to the running host. Conversations
+              remain in Muse and can be reconnected explicitly.
+            </span>
+            {restartStatus !== null && (
+              <span className="settings-note" role="status">{restartStatus}</span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="settings-group">
@@ -537,7 +671,7 @@ export function SettingsPanel({
               <span className="muted">{recoveryPreview.snapshot.entries.length} entries</span>
             </div>
             <p className="settings-note">
-              New entries are selected by default. Existing entries stay unchecked until you explicitly choose to replace them.
+              New durable data is selected by default. UI state and existing entries stay unchecked until you explicitly choose to restore or replace them.
             </p>
             <div className="settings-recovery-list">
               {recoveryPreview.snapshot.entries.map((entry) => (
@@ -553,7 +687,7 @@ export function SettingsPanel({
                   <span>
                     <code>{entry.key}</code>
                     <small>
-                      {entry.existing ? "Replace existing" : "Add new"}
+                      {entry.kind === "ui" ? "UI state" : "Durable data"} · {entry.existing ? "Replace existing" : "Add new"}
                       {entry.parseError ? " · raw value" : ""}
                     </small>
                   </span>
@@ -645,13 +779,18 @@ export function SettingsPanel({
             </label>
             <select
               id="settings-model"
-              value={liveModels.find((m) => m.isActive)?.modelId ?? ""}
+              value={liveModels.find((m) => m.isActive)?.modelId ?? selectedModelId ?? ""}
               onChange={(e) => {
                 if (e.target.value.length > 0) onSelectModel(e.target.value);
               }}
               disabled={activeSessionId === null}
               aria-label="Model for the active conversation"
             >
+              {selectedModelId !== null && !liveModels.some((m) => m.modelId === selectedModelId) && (
+                <option value={selectedModelId} disabled>
+                  Saved selection: {selectedModelId} (not in current catalog)
+                </option>
+              )}
               {liveModels.map((m) => (
                 <option key={m.modelId} value={m.modelId}>
                   {m.displayLabel}
@@ -667,6 +806,87 @@ export function SettingsPanel({
             )}
           </>
         )}
+      </div>
+      <div className="settings-group">
+        <h3>Execution environments (Local / Remote / Cloud)</h3>
+        <p className="settings-note">
+          Manage local sidecar, remote SSH devboxes, and cloud runner environments.
+        </p>
+        <ul className="settings-host-list" style={{ listStyle: "none", padding: 0, margin: "8px 0" }}>
+          {hostConnections.map((h) => (
+            <li
+              key={h.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "8px 0",
+                borderBottom: "1px solid var(--border-subtle)",
+              }}
+            >
+              <div>
+                <strong>{h.label}</strong>{" "}
+                <span className="settings-note">
+                  ({h.type} — <code>{h.endpoint}</code>)
+                </span>
+              </div>
+              {h.type !== "local" && (
+                <button
+                  type="button"
+                  className="settings-link"
+                  onClick={() => handleRemoveHost(h.id)}
+                  aria-label={`Remove ${h.label}`}
+                >
+                  Remove
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+        <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+          <label className="settings-label" htmlFor="new-host-label">
+            Add environment
+          </label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input
+              id="new-host-label"
+              type="text"
+              placeholder="Label (e.g. Remote GPU)"
+              value={newHostLabel}
+              onChange={(e) => setNewHostLabel(e.target.value)}
+              style={{ flex: 1, minWidth: 140 }}
+            />
+            <select
+              value={newHostType}
+              onChange={(e) => setNewHostType(e.target.value as HostEnvironmentType)}
+              aria-label="Environment type"
+            >
+              <option value="remote-ssh">Remote SSH</option>
+              <option value="cloud-runner">Cloud Runner</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Endpoint (e.g. ssh://user@host:22)"
+              value={newHostEndpoint}
+              onChange={(e) => setNewHostEndpoint(e.target.value)}
+              style={{ flex: 2, minWidth: 200 }}
+              aria-label="Host endpoint"
+            />
+            <button
+              type="button"
+              className="button-primary"
+              onClick={handleAddHost}
+              disabled={!newHostLabel.trim() || !newHostEndpoint.trim()}
+            >
+              Add environment
+            </button>
+          </div>
+          {hostAddError && (
+            <p className="settings-note" style={{ color: "var(--danger)" }}>
+              {hostAddError}
+            </p>
+          )}
+        </div>
       </div>
     </section>
   );

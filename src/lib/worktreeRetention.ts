@@ -65,6 +65,13 @@ export function retentionDecision(
   if ((inspection.activeSignals?.length ?? 0) > 0 || inspection.branchReferencedElsewhere === true) {
     return { eligible: false, ageDays: null, reason: "Protected: Git reports an active operation or another checkout using this branch." };
   }
+  if ((inspection.attachedSessionCount ?? 0) > 0) {
+    return {
+      eligible: false,
+      ageDays: null,
+      reason: `Protected: ${inspection.attachedSessionCount} Muse conversation${inspection.attachedSessionCount === 1 ? " is" : "s are"} still attached to this checkout.`,
+    };
+  }
   const ageDays = Math.max(0, Math.floor((Math.max(now, record.createdAt) - record.createdAt) / 86_400_000));
   if (ageDays < policy.maxAgeDays) {
     return {

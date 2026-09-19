@@ -11,6 +11,8 @@ import {
   readSessionStorageString,
   removeStorageKey,
   removeSessionStorageKey,
+  storageDataKind,
+  storageSnapshotChecksum,
   subscribeStorageIssues,
   writeStorageJson,
   writeStorageString,
@@ -127,9 +129,12 @@ describe("defensive storage facade", () => {
       format: string;
       version: number;
       entries: Record<string, unknown>;
+      metadata: Record<string, unknown>;
+      checksum: string;
     };
     assert.equal(snapshot.format, "muse-desktop-storage");
     assert.equal(snapshot.version, 1);
+    assert.equal(snapshot.checksum, storageSnapshotChecksum(snapshot.entries, snapshot.metadata));
     assert.deepEqual(snapshot.entries["muse-desktop.sessions.v1"], [{ session_id: "s1" }]);
     assert.deepEqual(snapshot.entries["muse-desktop.corrupt.v1"], {
       raw: "{broken",
@@ -232,9 +237,9 @@ describe("defensive storage facade", () => {
     });
     const preview = inspectStorageSnapshot(snapshot);
     assert.deepEqual(preview.entries, [
-      { key: "muse-desktop.live.v1", existing: true, parseError: false },
-      { key: "muse-desktop.new.v1", existing: false, parseError: false },
-      { key: "muse-desktop.corrupt.v1", existing: false, parseError: true },
+      { key: "muse-desktop.live.v1", existing: true, parseError: false, kind: "durable" },
+      { key: "muse-desktop.new.v1", existing: false, parseError: false, kind: "durable" },
+      { key: "muse-desktop.corrupt.v1", existing: false, parseError: true, kind: "durable" },
     ]);
     assert.match(preview.errors.join(" "), /non-namespaced/);
 
@@ -249,6 +254,72 @@ describe("defensive storage facade", () => {
     assert.deepEqual(JSON.parse(values.get("muse-desktop.new.v1") ?? "{}"), { restored: true });
     assert.equal(values.has("muse-desktop.corrupt.v1"), false);
     assert.equal(result.skipped, 3);
+  });
+
+  it("rejects a damaged checksum before preview or restore", () => {
+    const { values } = fakeStorage();
+    const snapshot = JSON.stringify({
+      format: "muse-desktop-storage",
+      version: 1,
+      entries: { "muse-desktop.sessions.v1": [{ session_id: "s1" }] },
+      metadata: { "muse-desktop.sessions.v1": { kind: "durable" } },
+      checksum: "fnv1a-00000000",
+    });
+    const preview = inspectStorageSnapshot(snapshot);
+    assert.deepEqual(preview.entries, []);
+    assert.match(preview.errors.join(" "), /checksum mismatch/);
+    const imported = importStorageSnapshot(snapshot, "muse-desktop.", true);
+    assert.equal(imported.imported, 0);
+    assert.match(imported.errors.join(" "), /checksum mismatch/);
+    assert.equal(values.size, 0);
+  });
+
+  it("accepts legacy recovery snapshots without a checksum", () => {
+    const { values } = fakeStorage();
+    const snapshot = JSON.stringify({
+      format: "muse-desktop-storage",
+      version: 1,
+      entries: { "muse-desktop.sessions.v1": [{ session_id: "legacy" }] },
+    });
+    const imported = importStorageSnapshot(snapshot, "muse-desktop.", true);
+    assert.equal(imported.imported, 1);
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.sessions.v1") ?? "[]"), [
+      { session_id: "legacy" },
+    ]);
+  });
+
+  it("classifies UI state so recovery does not resurrect stale pointers", () => {
+    assert.equal(storageDataKind("muse-desktop.sessions.v1"), "durable");
+    assert.equal(storageDataKind("muse-desktop.log.v1.session-1"), "durable");
+    assert.equal(storageDataKind("muse-desktop.active.v1"), "ui");
+    assert.equal(storageDataKind("muse-desktop.draft.session-1"), "ui");
+    assert.equal(storageDataKind("muse-desktop.scheduler-lease.v1"), "ui");
+    assert.equal(storageDataKind("muse-desktop.stream-position.v1"), "ui");
+  });
+
+  it("reads kind metadata from exported snapshots and falls back for old files", () => {
+    const { values } = fakeStorage({
+      "muse-desktop.sessions.v1": JSON.stringify([{ session_id: "s1" }]),
+      "muse-desktop.active.v1": JSON.stringify("s1"),
+    });
+    const snapshot = JSON.stringify({
+      format: "muse-desktop-storage",
+      version: 1,
+      metadata: {
+        "muse-desktop.custom.v1": { kind: "ui" },
+      },
+      entries: {
+        "muse-desktop.custom.v1": { value: true },
+        "muse-desktop.theme.v1": "dark",
+      },
+    });
+    const preview = inspectStorageSnapshot(snapshot);
+    assert.equal(preview.entries[0]?.kind, "ui");
+    assert.equal(preview.entries[1]?.kind, "ui");
+    const exported = JSON.parse(exportStorageSnapshot());
+    assert.equal(exported.metadata["muse-desktop.sessions.v1"].kind, "durable");
+    assert.equal(exported.metadata["muse-desktop.active.v1"].kind, "ui");
+    assert.equal(values.size, 2);
   });
 
   it("copies known legacy keys without overwriting current data", () => {

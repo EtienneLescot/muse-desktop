@@ -21,6 +21,7 @@ import {
   WEB_SEARCH_DEFAULT_NOTE,
   canSelectMode,
   effectiveSandboxMode,
+  hostSandboxConfigForProject,
   isOutsideWorkspace,
   isRelaxedSandbox,
   isSandboxMode,
@@ -115,6 +116,41 @@ describe("sandbox settings", () => {
     assert.equal(isSandboxMode("elevated"), true);
     assert.equal(isSandboxMode("root"), false);
     assert.equal(isSandboxMode(null), false);
+  });
+
+  it("projects global permission gates and project overrides into host flags", () => {
+    assert.deepEqual(
+      hostSandboxConfigForProject({ mode: "network", networkAllowed: true, elevatedAllowed: false }),
+      { mode: "network", disableWrite: false, disableShell: false },
+    );
+    assert.deepEqual(
+      hostSandboxConfigForProject(DEFAULT_SANDBOX, {
+        sandbox: "read-only",
+        networkDefault: "allow",
+      }),
+      { mode: "workspace", disableWrite: true, disableShell: true },
+    );
+    assert.deepEqual(
+      hostSandboxConfigForProject(
+        { mode: "network", networkAllowed: true, elevatedAllowed: false },
+        { sandbox: "workspace", networkDefault: "allow" },
+      ),
+      { mode: "network", disableWrite: false, disableShell: false },
+    );
+    assert.deepEqual(
+      hostSandboxConfigForProject(
+        { mode: "elevated", networkAllowed: true, elevatedAllowed: true },
+        { sandbox: "full", networkDefault: "deny" },
+      ),
+      { mode: "elevated", disableWrite: false, disableShell: false },
+    );
+    assert.deepEqual(
+      hostSandboxConfigForProject(
+        { mode: "network", networkAllowed: true, elevatedAllowed: false },
+        { sandbox: "full", networkDefault: "allow" },
+      ),
+      { mode: "network", disableWrite: false, disableShell: false },
+    );
   });
 
   it("web-search default note says off by default", () => {

@@ -22,6 +22,8 @@ export interface Project {
   createdAt: number;
   /** Optional canonical folder used when starting conversations in a project. */
   workspace?: string;
+  /** Additional project roots. `workspace` remains the legacy primary root. */
+  workspaces?: string[];
   /** True once the user has explicitly reviewed the optional folder choice. */
   workspaceReviewed?: boolean;
   /** Per-project settings override (US-30); absent keys inherit global. */
@@ -111,8 +113,34 @@ function isValidProject(p: unknown): p is Project {
     typeof r.instructions === "string" &&
     typeof r.createdAt === "number" &&
     (r.workspace === undefined || typeof r.workspace === "string")
+    && (r.workspaces === undefined || (
+      Array.isArray(r.workspaces) &&
+      r.workspaces.every((root) => typeof root === "string")
+    ))
     && (r.workspaceReviewed === undefined || typeof r.workspaceReviewed === "boolean")
   );
+}
+
+/** Normalize project roots while preserving order and removing duplicates. */
+export function normalizeProjectWorkspaces(
+  workspaces: string[] | undefined,
+  legacyWorkspace?: string,
+): string[] {
+  const candidates = [legacyWorkspace ?? "", ...(workspaces ?? [])];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const candidate of candidates) {
+    const root = candidate.trim();
+    if (root.length === 0 || seen.has(root)) continue;
+    seen.add(root);
+    result.push(root);
+  }
+  return result;
+}
+
+/** All roots for a project, including the pre-multi-root `workspace` field. */
+export function projectWorkspaces(project: Project): string[] {
+  return normalizeProjectWorkspaces(project.workspaces, project.workspace);
 }
 
 /** Drop corrupt rows from a restored project list (never throws). */
@@ -129,7 +157,7 @@ export function sanitizeProjects(raw: unknown): Project[] {
 export function projectsNeedingWorkspace(projects: Project[]): Project[] {
   return projects.filter(
     (project) =>
-      (project.workspace ?? "").trim().length === 0 &&
+      projectWorkspaces(project).length === 0 &&
       project.workspaceReviewed !== true,
   );
 }
@@ -143,20 +171,22 @@ export interface ProjectWorkspaceOption {
   projectId: string;
   projectName: string;
   workspace: string;
+  /** Stable value used by the new-conversation environment selector. */
+  optionId: string;
+  /** Zero-based root position within the project. */
+  rootIndex: number;
 }
 
 export function projectWorkspaceOptions(
   projects: Project[],
 ): ProjectWorkspaceOption[] {
-  return projects.flatMap((project) => {
-    const workspace = project.workspace?.trim() ?? "";
-    if (workspace.length === 0) return [];
-    return [{
-      projectId: project.id,
-      projectName: project.name,
-      workspace,
-    }];
-  });
+  return projects.flatMap((project) => projectWorkspaces(project).map((workspace, rootIndex) => ({
+    projectId: project.id,
+    projectName: project.name,
+    workspace,
+    optionId: `${project.id}:${rootIndex}`,
+    rootIndex,
+  })));
 }
 
 /**
@@ -165,7 +195,7 @@ export function projectWorkspaceOptions(
  */
 export function createProject(
   projects: Project[],
-  draft: { name: string; instructions?: string; workspace?: string; id?: string },
+  draft: { name: string; instructions?: string; workspace?: string; workspaces?: string[]; id?: string },
 ): CreateResult {
   const name = draft.name.trim();
   if (name.length === 0) {
@@ -174,13 +204,15 @@ export function createProject(
   if (projects.length >= MAX_PROJECTS) {
     return { projects, project: null, error: PROJECT_LIMIT_MESSAGE };
   }
+  const roots = normalizeProjectWorkspaces(draft.workspaces, draft.workspace);
   const project: Project = {
     id: draft.id ?? makeId(),
     name,
     instructions: (draft.instructions ?? "").trim(),
     createdAt: Date.now(),
     workspaceReviewed: true,
-    ...(draft.workspace?.trim() ? { workspace: draft.workspace.trim() } : {}),
+    ...(roots[0] ? { workspace: roots[0] } : {}),
+    ...(roots.length > 1 ? { workspaces: roots } : {}),
   };
   return { projects: [...projects, project], project, error: null };
 }
@@ -203,7 +235,7 @@ export function deleteProject(
 export function updateProject(
   projects: Project[],
   id: string,
-  patch: { name?: string; instructions?: string; workspace?: string },
+  patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] },
 ): Project[] {
   return projects.map((p) => {
     if (p.id !== id) return p;
@@ -211,17 +243,21 @@ export function updateProject(
       patch.name !== undefined && patch.name.trim().length > 0
         ? patch.name.trim()
         : p.name;
+    const roots = patch.workspaces !== undefined
+      ? normalizeProjectWorkspaces(patch.workspaces)
+      : patch.workspace !== undefined
+        ? normalizeProjectWorkspaces(undefined, patch.workspace)
+        : projectWorkspaces(p);
     return {
       ...p,
       name,
       instructions:
         patch.instructions !== undefined ? patch.instructions.trim() : p.instructions,
-      ...(patch.workspace !== undefined
+      ...(patch.workspace !== undefined || patch.workspaces !== undefined
         ? {
             workspaceReviewed: true,
-            ...(patch.workspace.trim()
-              ? { workspace: patch.workspace.trim() }
-              : { workspace: undefined }),
+            ...(roots[0] ? { workspace: roots[0] } : { workspace: undefined }),
+            ...(roots.length > 1 ? { workspaces: roots } : { workspaces: undefined }),
           }
         : {}),
     };

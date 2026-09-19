@@ -4,13 +4,14 @@ import {
   capabilityAccessibleLabel,
   capabilityDescription,
   capabilityLabel,
+  capabilityNextStep,
   type CapabilityStatus,
 } from "../src/lib/capability.ts";
 
 test("capability badges expose their state and reason to assistive tech", () => {
   assert.equal(
     capabilityAccessibleLabel("manual", "Run the prepared command when ready."),
-    "Manual: Run the prepared command when ready.",
+    "Manual: Run the prepared command when ready. Next: Choose the input or run the prepared step yourself.",
   );
   assert.match(capabilityAccessibleLabel("unavailable"), /^Not connected:/);
 });
@@ -38,5 +39,12 @@ describe("capability status vocabulary", () => {
     );
     assert.match(capabilityDescription("manual"), /manually/);
     assert.equal(capabilityDescription("local", "  "), "This capability runs locally and does not call a remote service.");
+  });
+
+  it("keeps the next action explicit for every capability state", () => {
+    assert.match(capabilityNextStep("available"), /Use this capability/);
+    assert.match(capabilityNextStep("local"), /locally/);
+    assert.match(capabilityNextStep("manual"), /yourself/);
+    assert.match(capabilityNextStep("unavailable"), /Connect/);
   });
 });

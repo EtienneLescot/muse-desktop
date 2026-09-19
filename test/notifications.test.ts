@@ -6,11 +6,14 @@ import {
   buildApprovalNotification,
   buildInputNotification,
   buildRunNotification,
+  filterNotifications,
   loadNotifications,
   loadNotificationPreferences,
   mergeNotifications,
+  markAllNotificationsRead,
   markNotificationRead,
   notificationActionPayload,
+  resolveNotificationRoute,
   NOTIFICATION_PREFERENCES_KEY,
   saveNotifications,
   saveNotificationPreferences,
@@ -51,6 +54,25 @@ describe("M3-09 notification records", () => {
     assert.equal(buildRunNotification({ ...completed, status: "running" }), null);
   });
 
+  it("carries explicit run issues and next steps as bounded notification facts", () => {
+    const completed = {
+      ...run("completed"),
+      resultSummary: {
+        headline: "Review finished",
+        totalItems: 4,
+        assistantMessages: 1,
+        toolEvents: 1,
+        filesMentioned: [],
+        decisions: [],
+        issues: ["Issues: dependency is stale", "Issues: dependency is stale", " ", "x".repeat(400)],
+        nextSteps: ["Next steps: update the lockfile", "Next steps: update the lockfile"],
+      },
+    };
+    const notification = buildRunNotification(completed, 3000);
+    assert.deepEqual(notification?.issues, ["dependency is stale", "x".repeat(220) + "…"]);
+    assert.deepEqual(notification?.nextSteps, ["update the lockfile"]);
+  });
+
   it("deduplicates records and keeps unread count independent from runs", () => {
     const notification = buildRunNotification(run(), 3000) as MuseNotification;
     const same = { ...notification, id: "another-id" };
@@ -59,6 +81,25 @@ describe("M3-09 notification records", () => {
     assert.equal(unreadNotificationCount(appended), 1);
     const read = markNotificationRead(appended, notification.id);
     assert.equal(unreadNotificationCount(read), 0);
+  });
+
+  it("filters unread rows newest first without mutating the inbox", () => {
+    const older = buildRunNotification(run(), 3000) as MuseNotification;
+    const newer = { ...buildInputNotification({ sessionId: "session-1", inputId: "input-1" }, 4000), unread: false };
+    const rows = [older, newer];
+    assert.deepEqual(filterNotifications(rows, "all").map((item) => item.id), [newer.id, older.id]);
+    assert.deepEqual(filterNotifications(rows, "unread").map((item) => item.id), [older.id]);
+    assert.deepEqual(rows.map((item) => item.id), [older.id, newer.id]);
+  });
+
+  it("marks the entire inbox as read without changing its order", () => {
+    const first = buildRunNotification(run(), 3000) as MuseNotification;
+    const second = buildInputNotification({ sessionId: "session-1", inputId: "input-1" }, 4000);
+    const rows = [first, { ...second, unread: false }];
+    const read = markAllNotificationsRead(rows);
+    assert.deepEqual(read.map((item) => item.id), rows.map((item) => item.id));
+    assert.equal(unreadNotificationCount(read), 0);
+    assert.equal(read[1]?.body, second.body);
   });
 
   it("creates one attention notification per approval or input request", () => {
@@ -91,6 +132,22 @@ describe("M3-09 notification records", () => {
     });
   });
 
+  it("routes validated clicks to the session first, then the automation inbox", () => {
+    assert.deepEqual(
+      resolveNotificationRoute(
+        { sessionId: "session-1", runId: "run-1" },
+        ["session-1"],
+        ["run-1"],
+      ),
+      { kind: "task", sessionId: "session-1" },
+    );
+    assert.deepEqual(
+      resolveNotificationRoute({ sessionId: "missing", runId: "run-1" }, [], ["run-1"]),
+      { kind: "automations", runId: "run-1" },
+    );
+    assert.equal(resolveNotificationRoute({ sessionId: "missing", runId: "unknown" }, [], []), null);
+  });
+
   it("round-trips valid records and drops malformed local storage entries", () => {
     fakeStorage();
     const notification = buildRunNotification(run("failed"), 3000) as MuseNotification;
@@ -102,6 +159,19 @@ describe("M3-09 notification records", () => {
       { nope: true },
     ]));
     assert.deepEqual(loadNotifications(), [notification]);
+  });
+
+  it("bounds facts when restoring older or untrusted inbox records", () => {
+    fakeStorage();
+    const notification = buildRunNotification(run(), 3000) as MuseNotification;
+    localStorage.setItem("muse-desktop.notifications.v1", JSON.stringify([{
+      ...notification,
+      issues: Array.from({ length: 20 }, (_, index) => `issue-${index}`),
+      nextSteps: Array.from({ length: 20 }, (_, index) => `step-${index}`),
+    }]));
+    const restored = loadNotifications()[0];
+    assert.equal(restored?.issues?.length, 6);
+    assert.equal(restored?.nextSteps?.length, 4);
   });
 
   it("merges native and web inbox copies by dedupe key", () => {

@@ -15,6 +15,7 @@ describe("user-facing lifecycle status copy", () => {
   it("drops protocol housekeeping and unknown payloads", () => {
     assert.equal(statusLogText("started", '{"turnId":"secret"}'), null);
     assert.equal(statusLogText("running", "thinking"), null);
+    assert.equal(statusLogText("stopped", '{"terminal":"stopped"}'), null);
     assert.equal(statusLogText("future/hostStatus", '{"internal":"value"}'), null);
   });
 

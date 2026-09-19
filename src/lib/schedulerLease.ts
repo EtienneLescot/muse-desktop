@@ -26,6 +26,61 @@ export interface NativeSchedulerLeaseResult {
   native: boolean;
 }
 
+export type SchedulerRuntimeMode = "native" | "local" | "waiting" | "error";
+
+/** Renderer-only projection used by Automations to explain who can dispatch. */
+export interface SchedulerRuntimeStatus {
+  mode: SchedulerRuntimeMode;
+  checkedAt: number | null;
+  message: string;
+}
+
+export const INITIAL_SCHEDULER_RUNTIME_STATUS: SchedulerRuntimeStatus = {
+  mode: "waiting",
+  checkedAt: null,
+  message: "Checking for an available scheduler…",
+};
+
+/**
+ * Convert the lease probe result into a small, user-facing status. Keeping
+ * this pure makes the renderer projection testable and avoids leaking native
+ * command details into the Automations panel.
+ */
+export function schedulerRuntimeStatusFromProbe(
+  nativeClaim: boolean | null,
+  acquired: boolean,
+  checkedAt: number,
+): SchedulerRuntimeStatus {
+  if (!Number.isFinite(checkedAt)) return INITIAL_SCHEDULER_RUNTIME_STATUS;
+  if (!acquired) {
+    return {
+      mode: "waiting",
+      checkedAt,
+      message: "Another Muse window is running automations. This window will retry automatically.",
+    };
+  }
+  if (nativeClaim === true) {
+    return {
+      mode: "native",
+      checkedAt,
+      message: "This desktop instance owns the native scheduler lease.",
+    };
+  }
+  return {
+    mode: "local",
+    checkedAt,
+    message: "This window owns the local scheduler lease. Keep Muse open for automations to run.",
+  };
+}
+
+export function schedulerRuntimeErrorStatus(checkedAt: number): SchedulerRuntimeStatus {
+  return {
+    mode: "error",
+    checkedAt: Number.isFinite(checkedAt) ? checkedAt : null,
+    message: "The scheduler could not be checked. Muse will retry automatically.",
+  };
+}
+
 /**
  * Ask the native supervisor for a process-level lease. `null` means this
  * runtime does not expose the command (web preview or an older build), so

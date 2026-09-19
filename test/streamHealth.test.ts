@@ -5,8 +5,10 @@ import {
   classifyStreamHealth,
   formatElapsed,
   parseRetryScheduled,
+  resumeRecoveryDelay,
   shouldAcceptRetryScheduled,
   streamEventLabel,
+  streamRecoveryDetail,
   streamHealthLabel,
 } from "../src/lib/streamHealth.ts";
 
@@ -18,6 +20,12 @@ describe("stream health", () => {
     pendingInputs: 0,
     now: 10_000,
   };
+
+  it("keeps recovery limitations calm and explicit", () => {
+    assert.match(streamRecoveryDetail("unsupported"), /does not expose durable recovery/);
+    assert.match(streamRecoveryDetail("unsupported"), /local transcript is safe/);
+    assert.match(streamRecoveryDetail("failed"), /could not refresh the host state/);
+  });
 
   it("prioritizes explicit approval and input waits", () => {
     assert.equal(classifyStreamHealth({ ...base, pendingApprovals: 1 }), "waiting-approval");
@@ -85,8 +93,26 @@ describe("stream health", () => {
     assert.equal(streamHealthLabel("resuming"), "Muse is resuming");
   });
 
+  it("bounds one silent resume recovery read at the liveness threshold", () => {
+    assert.equal(resumeRecoveryDelay(10_000, 10_000), STREAM_STALE_AFTER_MS);
+    assert.equal(resumeRecoveryDelay(10_000, 25_000), 0);
+    assert.equal(resumeRecoveryDelay(Number.NaN, 25_000), null);
+  });
+
   it("keeps an accepted stop request visible until the host confirms it", () => {
     assert.equal(classifyStreamHealth({ ...base, stopping: true }), "stopping");
+    assert.equal(
+      classifyStreamHealth({
+        ...base,
+        stopping: true,
+        now: base.lastEventAt + STREAM_STALE_AFTER_MS,
+      }),
+      "stalled",
+    );
+    assert.equal(
+      classifyStreamHealth({ ...base, stopping: true, lastEventAt: null }),
+      "stalled",
+    );
     assert.equal(streamHealthLabel("stopping"), "Stopping Muse");
   });
 
@@ -99,6 +125,7 @@ describe("stream health", () => {
   it("maps transport events to safe progress hints", () => {
     assert.equal(streamEventLabel("thinking"), "reasoning update");
     assert.equal(streamEventLabel("approval/resolved"), "authorization resolved");
+    assert.equal(streamEventLabel("turn/stopped"), "turn stopped");
     assert.equal(streamEventLabel("history/reconciled"), "conversation synchronized");
     assert.equal(streamEventLabel("future/new_event"), "future new event");
     assert.equal(streamEventLabel(""), null);

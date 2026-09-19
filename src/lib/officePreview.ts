@@ -1,5 +1,5 @@
 /**
- * Bounded previews for the three common Office Open XML containers.
+ * Bounded previews for common Office Open XML and OpenDocument containers.
  *
  * This is a read-only inspection helper. It never evaluates macros, formulas,
  * relationships or embedded media. XML is treated as text and only a small
@@ -18,7 +18,7 @@ export const MAX_OFFICE_ENTRY_BYTES = MAX_OFFICE_XML_CHARS * 4;
 export const MAX_OFFICE_ARCHIVE_BYTES = MAX_OFFICE_ENTRY_BYTES * 2;
 export const MAX_OFFICE_ARCHIVE_ENTRIES = 500;
 
-export type OfficeFormat = "docx" | "xlsx" | "pptx";
+export type OfficeFormat = "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp";
 
 export interface OfficePreview {
   kind: "table";
@@ -31,7 +31,9 @@ export interface OfficePreview {
 function extension(path: string): OfficeFormat | null {
   const name = path.split(/[\\/]/).pop() ?? path;
   const value = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
-  return value === "docx" || value === "xlsx" || value === "pptx" ? value : null;
+  return value === "docx" || value === "xlsx" || value === "pptx" || value === "odt" || value === "ods" || value === "odp"
+    ? value
+    : null;
 }
 
 function decodeBase64(value: string): Uint8Array | null {
@@ -189,15 +191,85 @@ function parsePptx(archive: Record<string, Uint8Array>): OfficePreview | null {
   return boundedRows(rows, "pptx", ["Slide", "Text"], truncated);
 }
 
+function odfTextTags(xml: string, tag: string): string[] {
+  const pattern = new RegExp("<" + tag + "\\b[^>]*>([\\s\\S]*?)<\\/" + tag + ">", "gi");
+  return Array.from(xml.matchAll(pattern), (match) =>
+    decodeXmlText((match[1] ?? "").replace(/<[^>]+>/g, " ")),
+  ).filter((text) => text.length > 0);
+}
+
+function parseOdt(archive: Record<string, Uint8Array>): OfficePreview | null {
+  const xml = xmlPart(archive, "content.xml");
+  if (!xml) return null;
+  const rows = Array.from(xml.matchAll(/<(?:text:)?(?:h|p)\b[^>]*>([\s\S]*?)<\/(?:text:)?(?:h|p)>/gi), (match) => [
+    decodeXmlText((match[1] ?? "").replace(/<[^>]+>/g, " ")),
+  ]).filter((row) => row[0].length > 0);
+  return boundedRows(rows, "odt", ["Paragraph"]);
+}
+
+function parseOds(archive: Record<string, Uint8Array>): OfficePreview | null {
+  const xml = xmlPart(archive, "content.xml");
+  if (!xml) return null;
+  const rows: string[][] = [];
+  let truncated = false;
+  for (const rowMatch of xml.matchAll(/<table:table-row\b([^>]*)>([\s\S]*?)<\/table:table-row>/gi)) {
+    const cells: string[] = [];
+    for (const cellMatch of (rowMatch[2] ?? "").matchAll(/<table:table-cell\b([^>]*)>([\s\S]*?)<\/table:table-cell>/gi)) {
+      const attributes = cellMatch[1] ?? "";
+      const body = cellMatch[2] ?? "";
+      const repeated = Math.min(
+        MAX_OFFICE_PREVIEW_COLUMNS,
+        Math.max(1, Number.parseInt(/table:number-columns-repeated\s*=\s*["'](\d+)["']/i.exec(attributes)?.[1] ?? "1", 10) || 1),
+      );
+      const text = odfTextTags(body, "text:p").join(" ");
+      for (let index = 0; index < repeated; index += 1) {
+        if (cells.length >= MAX_OFFICE_PREVIEW_COLUMNS) {
+          truncated = true;
+          break;
+        }
+        cells.push(text);
+      }
+    }
+    const repeatedRows = Math.max(
+      1,
+      Number.parseInt(/table:number-rows-repeated\s*=\s*["'](\d+)["']/i.exec(rowMatch[1] ?? "")?.[1] ?? "1", 10) || 1,
+    );
+    const rowsToAdd = Math.min(repeatedRows, MAX_OFFICE_PREVIEW_ROWS + 1 - rows.length);
+    for (let repetition = 0; repetition < rowsToAdd; repetition += 1) {
+      if (cells.some((cell) => cell.length > 0)) rows.push([...cells]);
+    }
+    if (repeatedRows > rowsToAdd || rows.length >= MAX_OFFICE_PREVIEW_ROWS + 1) {
+      truncated = true;
+      break;
+    }
+  }
+  if (rows.length === 0) return null;
+  const header = rows.shift() ?? [];
+  return boundedRows(rows, "ods", header, truncated);
+}
+
+function parseOdp(archive: Record<string, Uint8Array>): OfficePreview | null {
+  const xml = xmlPart(archive, "content.xml");
+  if (!xml) return null;
+  const rows: string[][] = [];
+  for (const [index, pageMatch] of Array.from(xml.matchAll(/<draw:page\b[^>]*>([\s\S]*?)<\/draw:page>/gi)).entries()) {
+    const text = odfTextTags(pageMatch[1] ?? "", "text:p").join(" ");
+    if (text) rows.push([String(index + 1), text]);
+    if (rows.length >= MAX_OFFICE_PREVIEW_ROWS) break;
+  }
+  return boundedRows(rows, "odp", ["Slide", "Text"], rows.length >= MAX_OFFICE_PREVIEW_ROWS);
+}
+
 function isPreviewPart(format: OfficeFormat, name: string): boolean {
   if (format === "docx") return name === "word/document.xml";
   if (format === "xlsx") {
     return name === "xl/sharedStrings.xml" || /^xl\/worksheets\/sheet\d+\.xml$/i.test(name);
   }
-  return /^ppt\/slides\/slide\d+\.xml$/i.test(name);
+  if (format === "pptx") return /^ppt\/slides\/slide\d+\.xml$/i.test(name);
+  return name === "content.xml";
 }
 
-/** Parse one bounded DOCX/XLSX/PPTX payload into a safe table preview. */
+/** Parse one bounded office payload into a safe table preview. */
 export function officePreviewForFile(path: string, base64Data: string): OfficePreview | null {
   const format = extension(path);
   if (!format) return null;
@@ -238,5 +310,8 @@ export function officePreviewForFile(path: string, base64Data: string): OfficePr
   if (rejectedEntry || Object.keys(archive).length > MAX_OFFICE_ARCHIVE_ENTRIES) return null;
   if (format === "docx") return parseDocx(archive);
   if (format === "xlsx") return parseXlsx(archive);
-  return parsePptx(archive);
+  if (format === "pptx") return parsePptx(archive);
+  if (format === "odt") return parseOdt(archive);
+  if (format === "ods") return parseOds(archive);
+  return parseOdp(archive);
 }

@@ -1,11 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { fanoutLanes, fanoutQueueNote } from "../lib/fanout";
 import {
   parseWriterPaths,
   planWriterQueue,
+  type WriterQueueRow,
   type WriterQueueStatus,
 } from "../lib/writerQueue";
-import { buildHandoffPlan, type HandoffPlan } from "../lib/handoff";
+import { loadWriterTargets, saveWriterTargets } from "../lib/writerTargets";
+import {
+  buildWriterPrompt,
+  summarizeWriterLog,
+  writerDispatchCanStart,
+  writerDispatchIsActive,
+  type WriterDispatchRecord,
+} from "../lib/writerDispatch";
+import {
+  acquireWriterLock,
+  releaseWriterLock,
+} from "../lib/writerLocks";
+import { isTauriRuntime } from "../lib/env";
+import type { LogEntry } from "../lib/persist";
+import type { TurnCompletionDetails } from "../lib/engineError";
+import {
+  buildHandoffPlan,
+  isHandoffPlanStale,
+  type HandoffInput,
+  type HandoffDirection,
+  type HandoffPlan,
+} from "../lib/handoff";
 import type { GitStatusSnapshot } from "../lib/git";
 import {
   compareHeadHashes,
@@ -53,6 +76,13 @@ interface Props {
   onCreateConversationWorktree: (
     plan: WorktreePlan,
   ) => Promise<WorktreeRecord | null>;
+  /** Create a worktree, run the explicit setup command, then open it. */
+  onCreateSetupConversationWorktree: (
+    plan: WorktreePlan,
+    command: string,
+    envAllowlist: string[],
+    onCreated?: (record: WorktreeRecord) => void,
+  ) => Promise<WorktreeRecord | null>;
   worktrees: WorktreeRecord[];
   cleanupIntents: WorktreeCleanupIntent[];
   onRemoveWorktree: (
@@ -61,6 +91,22 @@ interface Props {
   ) => Promise<boolean>;
   /** Open a new conversation rooted at a created worktree. */
   onOpenWorktree: (record: WorktreeRecord) => Promise<string | null>;
+  /** Open a reviewed worktree conversation with an editable handoff note. */
+  onOpenHandoffWorktree?: (record: WorktreeRecord, plan: HandoffPlan) => Promise<string | null>;
+  /** Explicitly dispatch one admitted writer into its worktree conversation. */
+  onDispatchWriter?: (record: WorktreeRecord, prompt: string) => Promise<{ sessionId: string } | null>;
+  /** Stop a dispatched writer without changing another conversation. */
+  onStopWriter?: (sessionId: string) => Promise<void>;
+  /** Open the writer conversation that owns a dispatch result. */
+  onOpenWriterConversation?: (sessionId: string) => void;
+  /** Latest host running projection, keyed by conversation id. */
+  writerSessionRunning?: Readonly<Record<string, boolean>>;
+  /** Local transcript projection for dispatched writer conversations. */
+  writerLogs?: Readonly<Record<string, readonly LogEntry[]>>;
+  /** Host-authored terminal result for dispatched writer conversations. */
+  writerCompletions?: Readonly<Record<string, TurnCompletionDetails>>;
+  /** Objective text captured from the parent sub-agent entry. */
+  writerPrompts?: Readonly<Record<string, string>>;
   onInspectWorktree: (
     sessionId: string,
     record: WorktreeRecord,
@@ -90,10 +136,19 @@ export function OrchestrationPanel({
   workspace,
   onCreateWorktree,
   onCreateConversationWorktree,
+  onCreateSetupConversationWorktree,
   worktrees,
   cleanupIntents,
   onRemoveWorktree,
   onOpenWorktree,
+  onOpenHandoffWorktree,
+  onDispatchWriter,
+  onStopWriter,
+  onOpenWriterConversation,
+  writerSessionRunning,
+  writerLogs,
+  writerCompletions,
+  writerPrompts,
   onInspectWorktree,
   onCheckReadiness,
   onRunSetup,
@@ -107,11 +162,18 @@ export function OrchestrationPanel({
   const [creating, setCreating] = useState<string | null>(null);
   const [openingBranch, setOpeningBranch] = useState<string | null>(null);
   const [removingBranch, setRemovingBranch] = useState<string | null>(null);
-  const [writerTargets, setWriterTargets] = useState<Record<string, string>>({});
+  const [writerTargets, setWriterTargets] = useState<Record<string, string>>(() =>
+    loadWriterTargets(workspace),
+  );
+  const [writerDispatches, setWriterDispatches] = useState<Record<string, WriterDispatchRecord>>({});
+  const writerLocksByAgent = useRef<Record<string, string>>({});
+  const nativeWriterLocksByAgent = useRef<Record<string, string>>({});
+  const writerTargetsWorkspace = useRef(workspace);
   const [setupCommand, setSetupCommand] = useState("");
   const [envAllowlistText, setEnvAllowlistText] = useState("");
   const [setupError, setSetupError] = useState<string | null>(null);
   const [setupRunning, setSetupRunning] = useState<string | null>(null);
+  const setupAndOpenRecordRef = useRef<WorktreeRecord | null>(null);
   const [setupProfiles, setSetupProfiles] = useState<SetupProfile[]>(() =>
     loadSetupProfiles(workspace),
   );
@@ -122,6 +184,9 @@ export function OrchestrationPanel({
   >({});
   const [handoffByBranch, setHandoffByBranch] = useState<
     Record<string, HandoffPlan>
+  >({});
+  const [handoffDirectionByBranch, setHandoffDirectionByBranch] = useState<
+    Record<string, HandoffDirection>
   >({});
   const [inspectionByBranch, setInspectionByBranch] = useState<
     Record<string, WorktreeInspection>
@@ -134,11 +199,45 @@ export function OrchestrationPanel({
   );
   const retentionWorkspace = useRef(workspace);
 
+  function releaseWriterLease(agent: string): void {
+    releaseWriterLock(writerLocksByAgent.current[agent]);
+    delete writerLocksByAgent.current[agent];
+    const nativeToken = nativeWriterLocksByAgent.current[agent];
+    delete nativeWriterLocksByAgent.current[agent];
+    if (nativeToken !== undefined && isTauriRuntime()) {
+      void invoke<boolean>("writer_lock_release", { token: nativeToken }).catch(() => false);
+    }
+  }
+
+  useEffect(() => {
+    // The declaration is workspace-scoped. On a workspace switch, hydrate
+    // first and skip the write pass so the previous workspace cannot leak
+    // into the new one.
+    if (writerTargetsWorkspace.current !== workspace) {
+      writerTargetsWorkspace.current = workspace;
+      setWriterTargets(loadWriterTargets(workspace));
+      return;
+    }
+    saveWriterTargets(workspace, writerTargets);
+  }, [workspace, writerTargets]);
+
+  useEffect(() => {
+    // Release process-local leases when this panel changes workspace or unmounts.
+    return () => {
+      for (const agent of Object.keys(writerLocksByAgent.current)) releaseWriterLease(agent);
+      for (const agent of Object.keys(nativeWriterLocksByAgent.current)) releaseWriterLease(agent);
+      writerLocksByAgent.current = {};
+      nativeWriterLocksByAgent.current = {};
+    };
+  }, [workspace]);
+
   useEffect(() => {
     setSetupProfiles(loadSetupProfiles(workspace));
     setSelectedProfileId("");
     setProfileName("");
     setEnvAllowlistText("");
+    setHandoffByBranch({});
+    setHandoffDirectionByBranch({});
     retentionWorkspace.current = workspace;
     setRetentionPolicy(loadWorktreeRetention(workspace));
   }, [workspace]);
@@ -176,6 +275,227 @@ export function OrchestrationPanel({
       ),
     [plans, worktrees, workspace, writerTargets],
   );
+  const activeWriterDispatches = Object.values(writerDispatches).filter((dispatch) =>
+    writerDispatchIsActive(dispatch.status),
+  ).length;
+
+  useEffect(() => {
+    if (writerSessionRunning === undefined) return;
+    setWriterDispatches((current) => {
+      let next = current;
+      let changed = false;
+      for (const [agent, dispatch] of Object.entries(current)) {
+        const observedResult = dispatch.sessionId === null
+          ? null
+          : summarizeWriterLog(writerLogs?.[dispatch.sessionId] ?? []);
+        if (
+          (dispatch.status === "running" || dispatch.status === "stopping") &&
+          dispatch.sessionId !== null &&
+          writerSessionRunning[dispatch.sessionId] === false
+        ) {
+          if (!changed) next = { ...current };
+          next[agent] = {
+            ...dispatch,
+            status: "complete",
+            result: observedResult,
+          };
+          releaseWriterLease(agent);
+          changed = true;
+        } else if (
+          dispatch.status === "complete" &&
+          observedResult !== null &&
+          dispatch.result?.entryCount !== observedResult.entryCount
+        ) {
+          if (!changed) next = { ...current };
+          next[agent] = { ...dispatch, result: observedResult };
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [writerLogs, writerSessionRunning]);
+
+  async function dispatchWriter(row: WriterQueueRow): Promise<void> {
+    if (onDispatchWriter === undefined) return;
+    const plan = plans.find((item) => item.agent === row.agent);
+    const record = plan === undefined ? undefined : recordFor(plan);
+    if (
+      record === undefined ||
+      !writerDispatchCanStart(row.status, activeWriterDispatches, writerQueue.lanes)
+    ) {
+      return;
+    }
+    const prompt = buildWriterPrompt(
+      row.agent,
+      row.targetPaths,
+      writerPrompts?.[row.agent],
+    );
+    const lease = acquireWriterLock(workspace, row.agent, row.targetPaths);
+    if (lease.lock === null) {
+      const owners = lease.conflicts.map((conflict) => conflict.agent).join(", ");
+      setWriterDispatches((current) => ({
+        ...current,
+        [row.agent]: {
+          agent: row.agent,
+          sessionId: null,
+          status: "failed",
+          prompt,
+          error: owners.length > 0
+            ? `Target files are currently leased by ${owners}.`
+            : "A writer lease requires a workspace and declared target files.",
+          result: null,
+        },
+      }));
+      return;
+    }
+    writerLocksByAgent.current[row.agent] = lease.lock.token;
+    if (isTauriRuntime()) {
+      try {
+        const native = await invoke<{
+          granted: boolean;
+          token: string | null;
+          conflicts: Array<{ agent: string; targetPath: string }>;
+        }>("writer_lock_acquire", {
+          workspace,
+          agent: row.agent,
+          targetPaths: row.targetPaths,
+          ownerId: lease.lock.token,
+        });
+        if (!native.granted || native.token === null) {
+          releaseWriterLease(row.agent);
+          const owners = native.conflicts.map((conflict) => conflict.agent).join(", ");
+          setWriterDispatches((current) => ({
+            ...current,
+            [row.agent]: {
+              agent: row.agent,
+              sessionId: null,
+              status: "failed",
+              prompt,
+              error: owners.length > 0
+                ? `Target files are locked by ${owners}.`
+                : "The native writer lock could not be acquired.",
+              result: null,
+            },
+          }));
+          return;
+        }
+        nativeWriterLocksByAgent.current[row.agent] = native.token;
+      } catch (error) {
+        releaseWriterLease(row.agent);
+        setWriterDispatches((current) => ({
+          ...current,
+          [row.agent]: {
+            agent: row.agent,
+            sessionId: null,
+            status: "failed",
+            prompt,
+            error: userFacingError(error, "Native writer locking is unavailable."),
+            result: null,
+          },
+        }));
+        return;
+      }
+    }
+    setWriterDispatches((current) => ({
+      ...current,
+      [row.agent]: {
+        agent: row.agent,
+        sessionId: null,
+        status: "starting",
+        prompt,
+        error: null,
+        result: null,
+      },
+    }));
+    try {
+      const result = await onDispatchWriter(record, prompt);
+      setWriterDispatches((current) => ({
+        ...current,
+        [row.agent]: result === null
+          ? {
+              agent: row.agent,
+              sessionId: null,
+              status: "failed",
+              prompt,
+              error: "The writer conversation could not be started.",
+              result: null,
+            }
+          : {
+              agent: row.agent,
+              sessionId: result.sessionId,
+              status: "running",
+              prompt,
+              error: null,
+              result: null,
+            },
+      }));
+      if (result === null) {
+        releaseWriterLease(row.agent);
+      }
+    } catch (error) {
+      releaseWriterLease(row.agent);
+      setWriterDispatches((current) => ({
+        ...current,
+        [row.agent]: {
+          agent: row.agent,
+          sessionId: null,
+          status: "failed",
+          prompt,
+          error: userFacingError(error, "The writer dispatch failed."),
+          result: null,
+        },
+      }));
+    }
+  }
+
+  async function stopWriter(agent: string): Promise<void> {
+    const dispatch = writerDispatches[agent];
+    if (
+      dispatch === undefined ||
+      dispatch.sessionId === null ||
+      dispatch.status !== "running" ||
+      onStopWriter === undefined
+    ) {
+      return;
+    }
+    const writerSessionId = dispatch.sessionId;
+    setWriterDispatches((current) => ({
+      ...current,
+      [agent]: { ...dispatch, status: "stopping" },
+    }));
+    try {
+      await onStopWriter(writerSessionId);
+      const terminal = writerSessionRunning?.[writerSessionId] === false;
+      if (terminal) releaseWriterLease(agent);
+      setWriterDispatches((current) => {
+        const latest = current[agent];
+        return latest?.sessionId === writerSessionId
+          ? {
+              ...current,
+              [agent]: {
+                ...latest,
+                // The acknowledgement is not a terminal host event. Keep
+                // the target lease until the running projection settles.
+                status: terminal ? "complete" : "stopping",
+                result: terminal
+                  ? summarizeWriterLog(writerLogs?.[writerSessionId] ?? [])
+                  : latest.result,
+              },
+            }
+          : current;
+      });
+    } catch (error) {
+      setWriterDispatches((current) => ({
+        ...current,
+        [agent]: {
+          ...dispatch,
+          status: "running",
+          error: userFacingError(error, "The writer could not be stopped."),
+        },
+      }));
+    }
+  }
+
   if (plans.length === 0) return null;
 
   function onCompare(): void {
@@ -202,6 +522,43 @@ export function OrchestrationPanel({
     setCreating(plan.agent);
     await onCreateConversationWorktree(plan);
     setCreating(null);
+  }
+
+  async function createSetupAndOpen(plan: WorktreePlan): Promise<void> {
+    if (creating !== null || recordFor(plan) !== undefined) return;
+    const validation = validateSetupCommand(setupCommand);
+    if (validation !== null) {
+      setSetupError(validation);
+      return;
+    }
+    const env = parseSetupEnvAllowlist(envAllowlistText);
+    if (env.error !== null) {
+      setSetupError(env.error);
+      return;
+    }
+    setSetupError(null);
+    setCreating(plan.agent);
+    setSetupRunning(null);
+    setupAndOpenRecordRef.current = null;
+    await onCreateSetupConversationWorktree(
+      plan,
+      setupCommand.trim(),
+      env.names,
+      (record) => {
+        setupAndOpenRecordRef.current = record;
+        setSetupRunning(plan.branch);
+      },
+    );
+    setupAndOpenRecordRef.current = null;
+    setSetupRunning(null);
+    setCreating(null);
+  }
+
+  async function cancelSetupAndOpen(): Promise<void> {
+    const record = setupAndOpenRecordRef.current;
+    if (record === null || setupRunning === null) return;
+    setSetupError(null);
+    await onCancelSetup(sessionId, record);
   }
 
   async function runSetup(record: WorktreeRecord): Promise<void> {
@@ -274,10 +631,30 @@ export function OrchestrationPanel({
     setEnvAllowlistText("");
   }
 
-  function prepareHandoff(record: WorktreeRecord): void {
+  function handoffInputFor(
+    record: WorktreeRecord,
+    direction: HandoffDirection = handoffDirectionByBranch[record.branch] ?? "local-to-worktree",
+  ): HandoffInput {
+    const inspection = inspectionByBranch[record.branch];
+    if (direction === "worktree-to-local") {
+      const targetFiles = sourceStatus?.files ?? [];
+      return {
+        direction,
+        sourceWorkspace: record.path,
+        sourceBranch: inspection?.branch ?? record.branch,
+        sourceChangedFiles: inspection?.fileCount ?? 0,
+        sourceConflictedFiles: inspection?.conflicted ? 1 : 0,
+        sourceStatusObserved: inspection !== undefined,
+        targetPath: workspace,
+        targetBranch: sourceStatus?.branch ?? "local",
+        targetExists: true,
+        targetDirty: sourceStatus === null ? undefined : targetFiles.length > 0,
+        targetBranchInUse: false,
+      };
+    }
     const sourceFiles = sourceStatus?.files ?? [];
-    const plan = buildHandoffPlan({
-      direction: "local-to-worktree",
+    return {
+      direction,
       sourceWorkspace: workspace,
       sourceBranch: sourceStatus?.branch ?? null,
       sourceChangedFiles: sourceFiles.length,
@@ -286,8 +663,25 @@ export function OrchestrationPanel({
       targetPath: record.path,
       targetBranch: record.branch,
       targetExists: true,
-    });
+      targetDirty: inspection === undefined ? undefined : !inspection.clean,
+      targetIgnoredFiles: inspection?.ignoredFileCount,
+      targetBranchInUse: inspection?.branchReferencedElsewhere,
+    };
+  }
+
+  function prepareHandoff(record: WorktreeRecord): void {
+    const plan = buildHandoffPlan(handoffInputFor(record));
     setHandoffByBranch((current) => ({ ...current, [record.branch]: plan }));
+  }
+
+  function changeHandoffDirection(record: WorktreeRecord, direction: HandoffDirection): void {
+    setHandoffDirectionByBranch((current) => ({ ...current, [record.branch]: direction }));
+    setHandoffByBranch((current) => {
+      if (!(record.branch in current)) return current;
+      const next = { ...current };
+      delete next[record.branch];
+      return next;
+    });
   }
 
   async function inspect(record: WorktreeRecord): Promise<void> {
@@ -323,6 +717,14 @@ export function OrchestrationPanel({
     if (openingBranch !== null) return;
     setOpeningBranch(record.branch);
     await onOpenWorktree(record);
+    setOpeningBranch(null);
+  }
+
+  async function openHandoffWorktree(record: WorktreeRecord, plan: HandoffPlan): Promise<void> {
+    if (openingBranch !== null || isHandoffPlanStale(plan, handoffInputFor(record, plan.direction)) || !plan.ready) return;
+    if (onOpenHandoffWorktree === undefined) return;
+    setOpeningBranch(record.branch);
+    await onOpenHandoffWorktree(record, plan);
     setOpeningBranch(null);
   }
 
@@ -369,6 +771,7 @@ export function OrchestrationPanel({
         <p className="orchestration-inspection-summary" aria-live="polite">
           {inspectionSummary.inspected}/{inspectionSummary.total} inspected · {inspectionSummary.clean} clean · {inspectionSummary.changed} with changes
           {inspectionSummary.conflicted > 0 ? ` · ${inspectionSummary.conflicted} conflicted` : ""}
+          {inspectionSummary.attached > 0 ? ` · ${inspectionSummary.attached} attached` : ""}
         </p>
       )}
       {queueNote !== null && <p className="muted">{queueNote}</p>}
@@ -383,6 +786,12 @@ export function OrchestrationPanel({
         <ul>
           {writerQueue.rows.map((row) => {
             const parsed = parseWriterPaths(writerTargets[row.agent] ?? "");
+            const plan = plans.find((item) => item.agent === row.agent);
+            const record = plan === undefined ? undefined : recordFor(plan);
+            const dispatch = writerDispatches[row.agent];
+            const hostCompletion = dispatch?.sessionId === null || dispatch?.sessionId === undefined
+              ? undefined
+              : writerCompletions?.[dispatch.sessionId];
             const statusLabel: Record<WriterQueueStatus, string> = {
               blocked: "Create its worktree first",
               needsPaths: "Declare target files",
@@ -407,9 +816,90 @@ export function OrchestrationPanel({
                     spellCheck={false}
                   />
                 </label>
-                <span>{statusLabel[row.status]}</span>
+                <span>
+                  {statusLabel[row.status]}
+                  {dispatch?.status === "starting" ? ` · Starting…` : ""}
+                  {dispatch?.status === "running" ? ` · Running` : ""}
+                  {dispatch?.status === "stopping" ? ` · Stopping…` : ""}
+                  {dispatch?.status === "complete" ? ` · Complete` : ""}
+                  {dispatch?.status === "failed" ? ` · Failed` : ""}
+                </span>
+                {hostCompletion === undefined && dispatch?.result !== null && dispatch?.result !== undefined && (
+                  <details className="orchestration-writer-result">
+                    <summary>Observed writer result</summary>
+                    <p>
+                      {dispatch.result.entryCount} transcript entries · {dispatch.result.assistantMessages} assistant messages · {dispatch.result.toolEvents} tool events
+                      {dispatch.result.failures > 0 ? ` · ${dispatch.result.failures} failure${dispatch.result.failures === 1 ? "" : "s"}` : ""}
+                    </p>
+                    {dispatch.result.lastAssistantOutput !== null && (
+                      <blockquote>{dispatch.result.lastAssistantOutput}</blockquote>
+                    )}
+                    <small>Extracted from the local writer transcript; the host did not provide a structured result.</small>
+                  </details>
+                )}
+                {hostCompletion !== undefined && (
+                  <details className="orchestration-writer-result" open>
+                    <summary>Host writer result</summary>
+                    <p>
+                      {hostCompletion.error !== null
+                        ? `Failed · ${hostCompletion.error.message}`
+                        : hostCompletion.resultPreview ?? "The host confirmed completion without a summary."}
+                    </p>
+                    {hostCompletion.resultIssues && hostCompletion.resultIssues.length > 0 && (
+                      <div className="writer-result-facts writer-result-issues">
+                        <strong>Issues observed</strong>
+                        <ul>
+                          {hostCompletion.resultIssues.map((issue) => <li key={issue}>{issue}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {hostCompletion.resultNextSteps && hostCompletion.resultNextSteps.length > 0 && (
+                      <div className="writer-result-facts writer-result-next">
+                        <strong>Next steps</strong>
+                        <ul>
+                          {hostCompletion.resultNextSteps.map((step) => <li key={step}>{step}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {hostCompletion.turnId !== undefined && (
+                      <small>Turn {hostCompletion.turnId.slice(0, 12)} · structured completion from the host</small>
+                    )}
+                  </details>
+                )}
                 {parsed.invalid.length > 0 && (
                   <small>Ignored invalid paths: {parsed.invalid.join(", ")}</small>
+                )}
+                {onDispatchWriter !== undefined && record !== undefined &&
+                  (row.status === "ready" || row.status === "queued") && (
+                    <button
+                      type="button"
+                      disabled={!writerDispatchCanStart(row.status, activeWriterDispatches, writerQueue.lanes) || dispatch?.status === "starting" || dispatch?.status === "running" || dispatch?.status === "stopping"}
+                      onClick={() => void dispatchWriter(row)}
+                    >
+                      {dispatch?.status === "complete" || dispatch?.status === "failed"
+                        ? "Dispatch again"
+                        : dispatch?.status === "starting"
+                          ? `Starting…`
+                          : "Dispatch writer"}
+                    </button>
+                  )}
+                {dispatch?.sessionId !== null && dispatch?.sessionId !== undefined &&
+                  onOpenWriterConversation !== undefined && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenWriterConversation(dispatch.sessionId as string)}
+                    >
+                      Open conversation
+                    </button>
+                  )}
+                {dispatch?.sessionId !== null && dispatch?.sessionId !== undefined &&
+                  dispatch.status === "running" && onStopWriter !== undefined && (
+                    <button type="button" onClick={() => void stopWriter(row.agent)}>
+                      Stop writer
+                    </button>
+                  )}
+                {dispatch?.error !== null && dispatch?.error !== undefined && (
+                  <small role="alert">{dispatch.error}</small>
                 )}
               </li>
             );
@@ -595,6 +1085,17 @@ export function OrchestrationPanel({
                     Run setup
                   </button>
                 )}
+                <select
+                  aria-label={`Handoff direction for ${p.agent}`}
+                  value={handoffDirectionByBranch[p.branch] ?? "local-to-worktree"}
+                  onChange={(event) => {
+                    const record = recordFor(p);
+                    if (record) changeHandoffDirection(record, event.target.value as HandoffDirection);
+                  }}
+                >
+                  <option value="local-to-worktree">Local → Worktree</option>
+                  <option value="worktree-to-local">Worktree → Local</option>
+                </select>
                 <button
                   type="button"
                   onClick={() => {
@@ -625,13 +1126,21 @@ export function OrchestrationPanel({
                     <pre>{setupByBranch[p.branch].output || "(no output)"}</pre>
                   </details>
                 )}
-                {handoffByBranch[p.branch] && (
+                {handoffByBranch[p.branch] && (() => {
+                  const plan = handoffByBranch[p.branch];
+                  const stale = isHandoffPlanStale(plan, handoffInputFor(recordFor(p)!, plan.direction));
+                  return (
                   <details className="orchestration-handoff">
                     <summary>
-                      Handoff plan · {handoffByBranch[p.branch].ready ? "reviewable" : "blocked"}
+                      Handoff plan · {stale ? "refresh required" : plan.ready ? "reviewable" : "blocked"}
                     </summary>
+                    {stale && (
+                      <p className="orchestration-handoff-stale" role="status">
+                        Git or inspection inputs changed since this plan was prepared. Prepare the handoff again before relying on these checks.
+                      </p>
+                    )}
                     <ul>
-                      {handoffByBranch[p.branch].checks.map((item) => (
+                      {plan.checks.map((item) => (
                         <li key={item.id} data-status={item.status}>
                           <strong>{item.label}</strong>
                           <span>{item.detail}</span>
@@ -639,10 +1148,22 @@ export function OrchestrationPanel({
                       ))}
                     </ul>
                     <ol>
-                      {handoffByBranch[p.branch].steps.map((step) => <li key={step}>{step}</li>)}
+                      {plan.steps.map((step) => <li key={step}>{step}</li>)}
                     </ol>
+                    {onOpenHandoffWorktree !== undefined && !stale && plan.ready && (
+                      <button
+                        type="button"
+                        onClick={() => void openHandoffWorktree(recordFor(p)!, plan)}
+                        disabled={openingBranch !== null}
+                        title="Open a new worktree conversation with this handoff note in the composer"
+                      >
+                        {openingBranch === p.branch ? "Opening…" : "Open with handoff context"}
+                      </button>
+                    )}
+                    <small className="muted">Prepared {new Date(plan.createdAt).toLocaleTimeString()}</small>
                   </details>
-                )}
+                  );
+                })()}
                 {inspectionByBranch[p.branch] && (
                   <details className="orchestration-inspection">
                     <summary>
@@ -653,12 +1174,18 @@ export function OrchestrationPanel({
                     </summary>
                     <p>
                       {inspectionByBranch[p.branch].fileCount} changed file(s)
+                      {(inspectionByBranch[p.branch].ignoredFileCount ?? 0) > 0
+                        ? ` · ${inspectionByBranch[p.branch].ignoredFileCount} ignored file(s)`
+                        : ""}
                       {inspectionByBranch[p.branch].conflicted ? " · conflicts present" : ""}
                       {(inspectionByBranch[p.branch].activeSignals?.length ?? 0) > 0
                         ? ` · ${inspectionByBranch[p.branch].activeSignals?.join(", ")}`
                         : ""}
                       {inspectionByBranch[p.branch].branchReferencedElsewhere
                         ? " · branch checked out elsewhere"
+                        : ""}
+                      {(inspectionByBranch[p.branch].attachedSessionCount ?? 0) > 0
+                        ? ` · ${inspectionByBranch[p.branch].attachedSessionCount} Muse conversation(s) attached`
                         : ""}
                       {` · observed ${new Date(inspectionByBranch[p.branch].observedAt).toLocaleTimeString()}`}
                     </p>
@@ -703,6 +1230,16 @@ export function OrchestrationPanel({
               </>
             ) : (
               <>
+                <button
+                  type="button"
+                  onClick={() => void (setupRunning === p.branch ? cancelSetupAndOpen() : createSetupAndOpen(p))}
+                  disabled={setupRunning !== p.branch && (creating !== null || setupCommand.trim().length === 0)}
+                  title={setupRunning === p.branch
+                    ? "Cancel setup and remove the new worktree"
+                    : "Create the worktree, run the explicit setup command, and open its conversation"}
+                >
+                  {setupRunning === p.branch ? "Cancel setup & open" : creating === p.agent ? "Setting up & opening…" : "Setup & open"}
+                </button>
                 <button
                   type="button"
                   onClick={() => void createAndOpen(p)}

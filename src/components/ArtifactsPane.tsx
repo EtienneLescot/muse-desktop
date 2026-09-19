@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   buildThreadRecap,
+  MAX_VERSIONS_PER_ARTIFACT,
   type Artifact,
   type ArtifactLogEntry,
   type ArtifactVersion,
@@ -19,6 +20,14 @@ interface Props {
     artifactId: string,
     v: number,
     comment: string,
+    anchorQuote?: string,
+  ) => void;
+  /** Save an edited version as the next entry in the artifact history. */
+  onEdit: (
+    sessionId: string,
+    artifactId: string,
+    v: number,
+    text: string,
   ) => void;
   /** Export one exact version using a native save dialog or browser download. */
   onExport: (artifact: Artifact, version: ArtifactVersion) => Promise<boolean>;
@@ -41,11 +50,15 @@ export function ArtifactsPane({
   artifacts,
   onRestore,
   onComment,
+  onEdit,
   onExport,
 }: Props) {
   const [tab, setTab] = useState<Tab>("summary");
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [selectedQuotes, setSelectedQuotes] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<Record<string, boolean>>({});
+  const [editDrafts, setEditDrafts] = useState<Record<string, string>>({});
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState<Record<string, boolean>>({});
@@ -154,6 +167,9 @@ export function ArtifactsPane({
               if (ver === undefined) return null;
               const draftKey = `${a.id}:${ver.v}`;
               const draft = drafts[draftKey] ?? ver.comment;
+              const selectedQuote = selectedQuotes[draftKey] ?? ver.commentAnchor?.quote ?? "";
+              const isEditing = editing[draftKey] === true;
+              const editDraft = editDrafts[draftKey] ?? ver.text;
               return (
                 <section key={a.id} className="artifact-card">
                   <header className="artifact-head">
@@ -226,6 +242,18 @@ export function ArtifactsPane({
                     >
                       {exporting === draftKey ? "Exporting…" : "Export"}
                     </button>
+                    <button
+                      type="button"
+                      className="artifact-edit"
+                      aria-pressed={isEditing}
+                      onClick={() => {
+                        setEditing((cur) => ({ ...cur, [draftKey]: true }));
+                        setEditDrafts((cur) => ({ ...cur, [draftKey]: ver.text }));
+                      }}
+                      title="Edit this artifact and save it as a new version"
+                    >
+                      Edit
+                    </button>
                     {a.kind === "doc" && (
                       <button
                         type="button"
@@ -243,15 +271,77 @@ export function ArtifactsPane({
                       </button>
                     )}
                   </div>
-                  {a.kind === "doc" && previewing[draftKey] === true ? (
-                    <div className="artifact-document-preview" aria-label={`Preview of ${a.title}`}>
+                  {isEditing ? (
+                    <div className="artifact-editor">
+                      <textarea
+                        className="artifact-edit-input"
+                        aria-label={`Edit ${a.title} version ${ver.v}`}
+                        value={editDraft}
+                        onChange={(e) =>
+                          setEditDrafts((cur) => ({
+                            ...cur,
+                            [draftKey]: e.target.value,
+                          }))
+                        }
+                        rows={Math.min(24, Math.max(8, editDraft.split("\n").length + 1))}
+                      />
+                      <div className="artifact-editor-actions">
+                        <button
+                          type="button"
+                          className="artifact-save-edit"
+                          disabled={editDraft === ver.text}
+                          onClick={() => {
+                            onEdit(sessionId, a.id, ver.v, editDraft);
+                            setSelected((cur) => ({
+                              ...cur,
+                              [a.id]: Math.min(MAX_VERSIONS_PER_ARTIFACT, a.versions.length + 1),
+                            }));
+                            setEditing((cur) => ({ ...cur, [draftKey]: false }));
+                            setExportMessage(`Saved ${a.title} as a new version.`);
+                          }}
+                        >
+                          Save as new version
+                        </button>
+                        <button
+                          type="button"
+                          className="artifact-cancel-edit"
+                          onClick={() => setEditing((cur) => ({ ...cur, [draftKey]: false }))}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : a.kind === "doc" && previewing[draftKey] === true ? (
+                    <div
+                      className="artifact-document-preview"
+                      aria-label={`Preview of ${a.title}`}
+                      onMouseUp={(event) => {
+                        const text = window.getSelection()?.toString().trim() ?? "";
+                        if (text.length > 0 && event.currentTarget.contains(window.getSelection()?.anchorNode ?? null)) {
+                          setSelectedQuotes((cur) => ({ ...cur, [draftKey]: text.slice(0, 240) }));
+                        }
+                      }}
+                    >
                       <MessageContent text={ver.text} />
                     </div>
                   ) : (
-                    <pre className="artifact-code">{ver.text}</pre>
+                    <pre
+                      className="artifact-code"
+                      onMouseUp={(event) => {
+                        const text = window.getSelection()?.toString().trim() ?? "";
+                        if (text.length > 0 && event.currentTarget.contains(window.getSelection()?.anchorNode ?? null)) {
+                          setSelectedQuotes((cur) => ({ ...cur, [draftKey]: text.slice(0, 240) }));
+                        }
+                      }}
+                    >{ver.text}</pre>
                   )}
                   <label className="artifact-comment-label">
                     Note v{ver.v}
+                    {selectedQuote.length > 0 && (
+                      <span className="artifact-comment-anchor" title={selectedQuote}>
+                        Anchored to “{selectedQuote}”
+                      </span>
+                    )}
                     <input
                       type="text"
                       className="artifact-comment"
@@ -264,8 +354,8 @@ export function ArtifactsPane({
                         }))
                       }
                       onBlur={() => {
-                        if (draft !== ver.comment)
-                          onComment(sessionId, a.id, ver.v, draft);
+                        if (draft !== ver.comment || selectedQuote !== (ver.commentAnchor?.quote ?? ""))
+                          onComment(sessionId, a.id, ver.v, draft, selectedQuote);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {

@@ -18,6 +18,7 @@ import {
   PROJECT_LIMIT_MESSAGE,
   projectOfThread,
   projectWorkspaceOptions,
+  projectWorkspaces,
   projectsNeedingWorkspace,
   parseWorkspaceRootObservation,
   resolveProjectSettings,
@@ -79,6 +80,22 @@ describe("US-3 project creation", () => {
     });
     assert.equal(res.error, null);
     assert.equal(res.project?.workspace, "C:\\work\\docs");
+  });
+
+  it("keeps multiple trimmed roots in stable order", () => {
+    const res = createProject([], {
+      name: "Monorepo",
+      workspaces: [" C:\\work\\frontend ", "C:\\work\\frontend", "D:\\work\\backend"],
+    });
+    assert.equal(res.error, null);
+    assert.deepEqual(projectWorkspaces(res.project as Project), [
+      "C:\\work\\frontend",
+      "D:\\work\\backend",
+    ]);
+    assert.deepEqual(res.project?.workspaces, [
+      "C:\\work\\frontend",
+      "D:\\work\\backend",
+    ]);
   });
 
   it("refuses a blank name", () => {
@@ -143,6 +160,18 @@ describe("US-3 thread attach / detach", () => {
     const cleared = updateProject(set, "p0", { workspace: "   " });
     assert.equal(cleared[0].workspace, undefined);
     assert.equal(cleared[0].workspaceReviewed, true);
+  });
+
+  it("updates multiple roots without resurrecting removed folders", () => {
+    const projects = fill(1);
+    const updated = updateProject(projects, "p0", {
+      workspaces: [" C:\\one ", "D:\\two"],
+    });
+    assert.deepEqual(projectWorkspaces(updated[0]), ["C:\\one", "D:\\two"]);
+    const cleared = updateProject(updated, "p0", { workspaces: [] });
+    assert.deepEqual(projectWorkspaces(cleared[0]), []);
+    assert.equal(cleared[0].workspace, undefined);
+    assert.equal(cleared[0].workspaces, undefined);
   });
 });
 
@@ -259,7 +288,32 @@ describe("M2-01 new conversation environments", () => {
       { id: "empty", name: "Empty", instructions: "", createdAt: 3, workspace: "   " },
     ];
     assert.deepEqual(projectWorkspaceOptions(projects), [
-      { projectId: "rooted", projectName: "Website", workspace: "C:\\work\\site" },
+      {
+        projectId: "rooted",
+        projectName: "Website",
+        workspace: "C:\\work\\site",
+        optionId: "rooted:0",
+        rootIndex: 0,
+      },
+    ]);
+  });
+
+  it("exposes every project root as a distinct new-conversation environment", () => {
+    const projects: Project[] = [{
+      id: "mono",
+      name: "Monorepo",
+      instructions: "",
+      createdAt: 1,
+      workspace: "C:\\work\\front",
+      workspaces: ["C:\\work\\front", "D:\\work\\back"],
+    }];
+    assert.deepEqual(projectWorkspaceOptions(projects).map((option) => option.optionId), [
+      "mono:0",
+      "mono:1",
+    ]);
+    assert.deepEqual(projectWorkspaceOptions(projects).map((option) => option.workspace), [
+      "C:\\work\\front",
+      "D:\\work\\back",
     ]);
   });
 });

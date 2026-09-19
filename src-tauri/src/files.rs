@@ -226,6 +226,9 @@ fn preview_media_type(path: &Path) -> Option<&'static str> {
         "docx" => Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         "xlsx" => Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         "pptx" => Some("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+        "odt" => Some("application/vnd.oasis.opendocument.text"),
+        "ods" => Some("application/vnd.oasis.opendocument.spreadsheet"),
+        "odp" => Some("application/vnd.oasis.opendocument.presentation"),
         _ => None,
     }
 }
@@ -369,6 +372,11 @@ mod tests {
         );
         assert!(office.binary);
         assert!(office.base64_data.is_some());
+        fs::write(root.join("notes.odt"), [80u8, 75, 3, 4, 0]).unwrap();
+        let odf = read(&root, "notes.odt", None).unwrap();
+        assert_eq!(odf.media_type.as_deref(), Some("application/vnd.oasis.opendocument.text"));
+        assert!(odf.binary);
+        assert!(odf.base64_data.is_some());
         let _ = fs::remove_dir_all(root);
     }
 

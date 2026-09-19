@@ -49,6 +49,9 @@ function mediaLabel(mediaType: string): string {
   if (mediaType.includes("wordprocessingml.document")) return "DOCX preview";
   if (mediaType.includes("spreadsheetml.sheet")) return "XLSX preview";
   if (mediaType.includes("presentationml.presentation")) return "PPTX preview";
+  if (mediaType.includes("opendocument.text")) return "ODT preview";
+  if (mediaType.includes("opendocument.spreadsheet")) return "ODS preview";
+  if (mediaType.includes("opendocument.presentation")) return "ODP preview";
   return "Image preview";
 }
 
@@ -101,10 +104,20 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
 
   useEffect(() => {
     if (state.observedAt === null || state.loading) return undefined;
-    const refresh = window.setInterval(() => {
-      void onList(sessionId, state.path || ".");
-    }, 30_000);
-    return () => window.clearInterval(refresh);
+    let disposed = false;
+    let refresh: number | null = null;
+    const schedule = () => {
+      if (disposed) return;
+      refresh = window.setTimeout(() => {
+        if (disposed) return;
+        void onList(sessionId, state.path || ".").catch(() => undefined).finally(schedule);
+      }, 30_000);
+    };
+    schedule();
+    return () => {
+      disposed = true;
+      if (refresh !== null) window.clearTimeout(refresh);
+    };
   }, [onList, sessionId, state.loading, state.observedAt, state.path]);
 
   const currentPath = state.path || ".";
@@ -115,6 +128,10 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
   const officePreview = preview?.mediaType && preview.base64Data
     ? officePreviewForFile(preview.path, preview.base64Data)
     : null;
+  const isOfficeContainer = preview?.mediaType
+    ? preview.mediaType.startsWith("application/vnd.openxmlformats")
+      || preview.mediaType.startsWith("application/vnd.oasis.opendocument")
+    : false;
 
   return (
     <section className="files-panel" aria-label="Workspace files">
@@ -201,7 +218,7 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
                   </button>
                 </span>
               </div>
-              {preview.mediaType.startsWith("application/vnd.openxmlformats") ? (
+              {isOfficeContainer ? (
                 officePreview ? (
                   <StructuredTable path={preview.path} preview={officePreview} />
                 ) : (

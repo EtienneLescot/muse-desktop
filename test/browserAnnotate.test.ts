@@ -17,8 +17,12 @@ import {
   BROWSER_ANNOTATIONS_KEY,
   BROWSER_PERMS_KEY,
   BROWSER_TABS_KEY,
+  browserTabsStorageKey,
   browserCaptureAttachment,
+  browserCaptureMatchesPage,
+  browserCapturePreviewSize,
   browserDownloadFilename,
+  normalizeSameOriginTarget,
   createBrowserAnnotation,
   normalizeBrowserElementAnchor,
   formatBrowserObservation,
@@ -72,6 +76,40 @@ describe("browser URL normalization", () => {
     assert.equal(normalizeBrowserUrl("file:///etc/passwd"), null);
     assert.equal(isRenderableBrowserUrl("javascript:alert(1)"), false);
     assert.equal(isRenderableBrowserUrl("example.com"), true);
+  });
+});
+
+describe("browser capture preview sizing", () => {
+  it("fits a capture into the review viewport while preserving its ratio", () => {
+    assert.deepEqual(browserCapturePreviewSize(1280, 720), {
+      width: 560,
+      height: 315,
+      scale: 0.4375,
+      zoom: 1,
+    });
+    assert.deepEqual(browserCapturePreviewSize(1280, 720, 2), {
+      width: 1120,
+      height: 630,
+      scale: 0.4375,
+      zoom: 2,
+    });
+  });
+
+  it("bounds zoom and rejects unusable dimensions", () => {
+    assert.equal(browserCapturePreviewSize(0, 720), null);
+    assert.equal(browserCapturePreviewSize(1280, 720, Number.NaN), null);
+    const bounded = browserCapturePreviewSize(100, 100, 99);
+    assert.equal(bounded?.zoom, 2.5);
+    assert.equal(bounded?.width, 250);
+    assert.equal(bounded?.height, 250);
+  });
+});
+
+describe("browser capture freshness", () => {
+  it("matches equivalent normalized URLs and rejects a changed page", () => {
+    assert.equal(browserCaptureMatchesPage("example.com/docs", "https://example.com/docs"), true);
+    assert.equal(browserCaptureMatchesPage("https://example.com/docs", "https://example.com/other"), false);
+    assert.equal(browserCaptureMatchesPage("javascript:alert(1)", "https://example.com/docs"), false);
   });
 });
 
@@ -239,6 +277,22 @@ describe("anchored comments", () => {
 describe("computer-use permissions (default denied)", () => {
   it("denies unknown apps with no rows at all", () => {
     assert.equal(isBrowserActionAllowed([], "finder"), false);
+    assert.equal(isBrowserActionAllowed([], "browser"), false);
+  });
+
+  it("keeps page-triggered downloads same-origin and http(s)-only", () => {
+    assert.equal(
+      normalizeSameOriginTarget("https://example.com/docs/start", "/files/report.csv"),
+      "https://example.com/files/report.csv",
+    );
+    assert.equal(
+      normalizeSameOriginTarget("https://example.com/docs/start", "https://cdn.example.net/report.csv"),
+      null,
+    );
+    assert.equal(
+      normalizeSameOriginTarget("https://example.com/docs/start", "javascript:alert(1)"),
+      null,
+    );
   });
 
   it("toggles one app without affecting others", () => {
@@ -287,6 +341,19 @@ describe("browser persistence", () => {
     assert.deepEqual(back[0].history, ["https://example.com/", "https://example.com/current"]);
     assert.equal(back[0].historyIndex, 1);
     assert.ok(!store.getItem(BROWSER_TABS_KEY)?.includes("javascript:"));
+  });
+
+  it("isolates tab history by conversation", () => {
+    saveBrowserTabs([
+      { id: "tab-a", url: "https://a.example/", history: ["https://a.example/"], historyIndex: 0 },
+    ], "session-a");
+    saveBrowserTabs([
+      { id: "tab-b", url: "https://b.example/", history: ["https://b.example/"], historyIndex: 0 },
+    ], "session-b");
+    assert.notEqual(browserTabsStorageKey("session-a"), browserTabsStorageKey("session-b"));
+    assert.deepEqual(loadBrowserTabs("session-a").map((tab) => tab.id), ["tab-a"]);
+    assert.deepEqual(loadBrowserTabs("session-b").map((tab) => tab.id), ["tab-b"]);
+    assert.deepEqual(loadBrowserTabs("session-c"), []);
   });
 
   it("round-trips annotations under the muse-desktop.* key", () => {

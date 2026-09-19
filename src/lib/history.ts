@@ -1,4 +1,4 @@
-import type { LogEntry, LogRole } from "./persist.ts";
+import type { LogEntry, LogRole, RichContent } from "./persist.ts";
 
 /** A folded item returned by MSP `session/read`. Unknown additive fields are ignored. */
 export interface SessionHistoryItem {
@@ -8,6 +8,7 @@ export interface SessionHistoryItem {
   status?: unknown;
   revision?: unknown;
   text?: unknown;
+  content?: unknown;
   displayText?: unknown;
   summary?: unknown;
   visibleOutput?: unknown;
@@ -27,10 +28,78 @@ export interface SessionHistoryItem {
   commandText?: unknown;
   /** Opaque host reference for lazily loading a large tool output. */
   outputRef?: unknown;
+  modelVisibleContent?: unknown;
+}
+
+/** A durable notification returned by MSP `view/page`.
+ *
+ * The protocol intentionally keeps the event method beside its params. We
+ * only use the item lifecycle events here; session/turn bookkeeping remains
+ * owned by the live event reducer and must never become transcript noise.
+ */
+export interface PagedHistoryEvent {
+  method?: unknown;
+  params?: unknown;
 }
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/** Normalize flat session/read rows and raw MSP wrappers to one item shape. */
+function normalizeHistoryItem(raw: unknown): SessionHistoryItem | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  const outer = raw as Record<string, unknown>;
+  const nested = typeof outer.item === "object" && outer.item !== null && !Array.isArray(outer.item)
+    ? outer.item as Record<string, unknown>
+    : null;
+  const item = nested === null ? { ...outer } : { ...outer, ...nested };
+  const aliases: Array<[string, string]> = [
+    ["itemId", "item_id"],
+    ["turnId", "turn_id"],
+    ["commandText", "command_text"],
+    ["outputRef", "output_ref"],
+    ["modelVisibleContent", "model_visible_content"],
+    ["recordedAt", "recorded_at"],
+  ];
+  for (const [canonical, alias] of aliases) {
+    if (item[canonical] === undefined && item[alias] !== undefined) item[canonical] = item[alias];
+  }
+  if (item.kind === undefined) item.kind = item.itemKind ?? item.type;
+  return item as SessionHistoryItem;
+}
+
+function outputReference(value: unknown): string | undefined {
+  const direct = stringValue(value);
+  if (direct !== undefined) return direct;
+  if (typeof value !== "object" || value === null) return undefined;
+  const object = value as { uri?: unknown; id?: unknown };
+  return stringValue(object.uri) ?? stringValue(object.id);
+}
+
+function richContent(value: unknown): RichContent[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.slice(0, 16).flatMap((raw): RichContent[] => {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return [];
+    const item = raw as Record<string, unknown>;
+    const text = (key: string): string | undefined =>
+      typeof item[key] === "string" && (item[key] as string).trim().length > 0
+        ? (item[key] as string).trim().slice(0, 240)
+        : undefined;
+    const type = text("type");
+    const mediaType = text("mediaType") ?? text("media_type");
+    const path = text("path");
+    const sourceToolName = text("sourceToolName") ?? text("source_tool_name");
+    if (!type || !mediaType || !path || !sourceToolName) return [];
+    const dimension = (key: string): number | undefined => {
+      const n = item[key];
+      return typeof n === "number" && Number.isFinite(n) && n > 0 && n <= 10000 ? n : undefined;
+    };
+    const width = dimension("width");
+    const height = dimension("height");
+    return [{ type, mediaType, path, sourceToolName, ...(width === undefined ? {} : { width }), ...(height === undefined ? {} : { height }) }];
+  });
+  return items.length > 0 ? items : undefined;
 }
 
 /** Normalize additive host aliases before choosing a transcript lane. */
@@ -64,12 +133,14 @@ function itemText(item: SessionHistoryItem, kind: string): string {
       const parts = item.summary.filter((part): part is string => typeof part === "string");
       if (parts.length > 0) return parts.join("\n\n");
     }
-    return stringValue(item.text) ?? stringValue(item.fallbackText) ?? "";
+    return stringValue(item.text) ?? stringValue(item.content) ?? stringValue(item.fallbackText) ?? "";
   }
   if (kind === "toolCall" || kind === "userShell") {
     const output =
       stringValue(item.visibleOutput) ??
       stringValue(item.message) ??
+      stringValue(item.text) ??
+      stringValue(item.content) ??
       stringValue(item.fallbackText);
     if (kind === "userShell") {
       const command = stringValue(item.commandText);
@@ -96,6 +167,7 @@ function itemText(item: SessionHistoryItem, kind: string): string {
   return (
     stringValue(item.displayText) ??
     stringValue(item.text) ??
+    stringValue(item.content) ??
     stringValue(item.message) ??
     stringValue(item.fallbackText) ??
     ""
@@ -135,8 +207,8 @@ function timestamp(item: SessionHistoryItem, fallback: number): number {
 export function historyItemsToLogEntries(items: unknown[], now = Date.now()): LogEntry[] {
   const entries: LogEntry[] = [];
   items.forEach((raw, index) => {
-    if (typeof raw !== "object" || raw === null) return;
-    const item = raw as SessionHistoryItem;
+    const item = normalizeHistoryItem(raw);
+    if (item === null) return;
     const rawKind = stringValue(item.kind);
     const itemId = stringValue(item.itemId);
     const turnId = stringValue(item.turnId);
@@ -145,7 +217,13 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
     const role = roleForKind(kind);
     if (role === null) return;
     const text = itemText(item, kind);
-    if (text.length === 0) return;
+    const metadata = richContent(item.modelVisibleContent);
+    const outputRef = outputReference(item.outputRef);
+    // Image/document items may intentionally carry no visible text. Keep the
+    // lane when the host supplied either a lazy output reference or rich
+    // metadata so the renderer can offer its preview affordance.
+    if (text.length === 0 && metadata === undefined && outputRef === undefined) return;
+    const normalizedStatus = stringValue(item.status)?.trim().replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase().replace(/[\s-]+/g, "_");
     const entry: LogEntry = {
       id: `history:${itemId}`,
       ts: timestamp(item, now + index),
@@ -153,8 +231,9 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
       text,
       itemId,
       ...(turnId === undefined ? {} : { turnId }),
-      ...(stringValue(item.outputRef) === undefined ? {} : { outputRef: stringValue(item.outputRef) }),
-      open: item.status === "inProgress",
+      ...(outputRef === undefined ? {} : { outputRef }),
+      ...(metadata === undefined ? {} : { richContent: metadata }),
+      open: normalizedStatus === "in_progress" || normalizedStatus === "running" || normalizedStatus === "started",
     };
     const revision = typeof item.revision === "number" && Number.isFinite(item.revision)
       ? item.revision
@@ -178,6 +257,50 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
     entries.push(entry);
   });
   return entries;
+}
+
+/**
+ * Convert the durable item lifecycle events served by `view/page` into the
+ * same folded item projection used by `session/read`.
+ *
+ * A page can contain multiple revisions of one item (for example an open
+ * `item/started` followed by `item/updated` and `item/completed`). Keep the
+ * highest revision, while retaining arrival order for items whose revision is
+ * absent on an older compatible host. This function is deliberately pure so
+ * paging and gap-recovery tests can exercise it without a browser runtime.
+ */
+export function historyEventsToLogEntries(events: unknown[], now = Date.now()): LogEntry[] {
+  const byItem = new Map<string, { item: SessionHistoryItem; index: number; revision?: number }>();
+  events.forEach((raw, index) => {
+    if (typeof raw !== "object" || raw === null) return;
+    const event = raw as PagedHistoryEvent;
+    const method = typeof event.method === "string" ? event.method : "";
+    if (method !== "item/started" && method !== "item/updated" && method !== "item/completed") return;
+    if (typeof event.params !== "object" || event.params === null) return;
+    const params = event.params as Record<string, unknown>;
+    if (typeof params.item !== "object" || params.item === null) return;
+    const item = normalizeHistoryItem(params.item);
+    if (item === null) return;
+    const itemId = stringValue(item.itemId);
+    if (itemId === undefined) return;
+    const revision = typeof item.revision === "number" && Number.isFinite(item.revision)
+      ? item.revision
+      : undefined;
+    const previous = byItem.get(itemId);
+    if (
+      previous !== undefined &&
+      previous.revision !== undefined &&
+      revision !== undefined &&
+      revision <= previous.revision
+    ) return;
+    byItem.set(itemId, { item, index, revision });
+  });
+  return historyItemsToLogEntries(
+    [...byItem.values()]
+      .sort((a, b) => a.index - b.index)
+      .map(({ item }) => item),
+    now,
+  );
 }
 
 /** Read inline items from either the normal history envelope or a snapshot. */

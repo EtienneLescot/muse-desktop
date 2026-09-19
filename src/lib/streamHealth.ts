@@ -10,6 +10,26 @@
 /** A quiet stream becomes actionable after this interval. */
 export const STREAM_STALE_AFTER_MS = 15_000;
 
+/** Why a bounded recovery attempt could not provide durable progress. */
+export type StreamRecoveryNotice = "unsupported" | "failed";
+
+/** Stable, product-facing copy for a recovery notice. */
+export function streamRecoveryDetail(notice: StreamRecoveryNotice): string {
+  return notice === "unsupported"
+    ? "This host does not expose durable recovery yet. Your local transcript is safe; keep the host open for live progress."
+    : "Muse could not refresh the host state. Try again or reconnect before sending another message.";
+}
+
+/**
+ * Return the remaining grace period before an accepted decision should get
+ * one silent recovery read. Invalid timestamps fail closed by disabling the
+ * timer rather than scheduling an unbounded retry loop.
+ */
+export function resumeRecoveryDelay(requestedAt: number, now = Date.now()): number | null {
+  if (!Number.isFinite(requestedAt) || !Number.isFinite(now)) return null;
+  return Math.max(0, STREAM_STALE_AFTER_MS - Math.max(0, now - requestedAt));
+}
+
 export type StreamHealth =
   | "idle"
   | "working"
@@ -107,7 +127,15 @@ export function parseRetryScheduled(payload: string, scheduledAt = Date.now()): 
  * or input request never gets mislabeled as a stalled model.
  */
 export function classifyStreamHealth(input: StreamHealthInput): StreamHealth {
-  if (input.stopping) return "stopping";
+  if (input.stopping) {
+    // An interrupt acknowledgement is not a terminal event. Keep the calm
+    // stopping copy briefly, then expose the same recovery actions as any
+    // other stale stream instead of leaving the user in an endless spinner.
+    const elapsed = input.lastEventAt === null
+      ? STREAM_STALE_AFTER_MS
+      : Math.max(0, input.now - input.lastEventAt);
+    return elapsed >= STREAM_STALE_AFTER_MS ? "stalled" : "stopping";
+  }
   if (input.pendingApprovals > 0) return "waiting-approval";
   if (input.pendingInputs > 0) return "waiting-input";
   if (!input.running) return "idle";
@@ -182,6 +210,7 @@ export function streamEventLabel(kind: string | null | undefined): string | null
     subagent_event: "sub-agent update",
     "turn/completed": "turn completed",
     "turn/retracted": "turn cancelled",
+    "turn/stopped": "turn stopped",
     "turn/retryscheduled": "retry scheduled",
     host_exited: "host disconnected",
   };

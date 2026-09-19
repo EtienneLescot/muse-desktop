@@ -10,6 +10,7 @@ import {
   dropOutbox,
   loadActiveId,
   loadGlobalSettings,
+  loadGitTurnSnapshot,
   loadLog,
   loadOutbox,
   loadProjects,
@@ -21,6 +22,7 @@ import {
   newId,
   saveActiveId,
   saveGlobalSettings,
+  saveGitTurnSnapshot,
   saveLog,
   saveOutbox,
   saveProjects,
@@ -29,8 +31,10 @@ import {
   saveTombstones,
   saveWorktrees,
   saveWorkspace,
+  dropGitTurnSnapshot,
   type LogEntry,
   type LogRole,
+  type RichContent,
   type StoredSession,
 } from "../lib/persist";
 // M0-03 lossless send: outbox state machine + explicit SendResult (pure,
@@ -52,6 +56,13 @@ import {
   type SendResult,
 } from "../lib/outbox";
 export type { OutboxEntry, SendResult } from "../lib/outbox";
+import {
+  createOutboxWriteQueue,
+  loadNativeOutbox,
+  mergeOutboxStores,
+  saveNativeOutbox,
+  type OutboxStore,
+} from "../lib/outboxLedger";
 import type { ComposerAttachment, TurnInputPart } from "../lib/attachments";
 export type { TurnInputPart } from "../lib/attachments";
 // Input-prompt helpers live in ../lib/input (dependency-free, unit-tested).
@@ -96,6 +107,11 @@ import {
   type BrowserCapture,
   type BrowserElementAnchor,
 } from "../lib/browserAnnotate";
+import {
+  desktopCaptureAttachment,
+  formatDesktopCaptureContext,
+  type DesktopCapture,
+} from "../lib/desktopControl";
 export type {
   BrowserAnnotation,
   BrowserAppPermission,
@@ -122,6 +138,8 @@ import {
   applyItemSnapshotUpdate,
   dropEmptyPlaceholders,
   isItemStartKind,
+  itemSnapshotIsTerminal,
+  itemSnapshotLane,
   isRunningKind,
   isStoppedKind,
   isSubagentItemKind,
@@ -149,6 +167,7 @@ import {
   parseTokenUsage,
   saveSummary,
   type ContextUsage,
+  type ServerCompactionState,
   type ThreadSummary,
 } from "../lib/compact";
 import {
@@ -156,12 +175,15 @@ import {
   findRetryPrompt,
   parseTurnCompletion,
   type EngineErrorDetails,
+  type TurnCompletionDetails,
 } from "../lib/engineError";
 import { statusLogText } from "../lib/statusLog";
 import {
   parseRetryScheduled,
+  resumeRecoveryDelay,
   shouldAcceptRetryScheduled,
   type RetryScheduled,
+  type StreamRecoveryNotice,
 } from "../lib/streamHealth";
 // US-7 fan-out: `/fanout` becomes one parent-turn prompt (no spawn
 // endpoint exists); children surface as `subagent` entries as usual.
@@ -269,15 +291,27 @@ import {
 } from "../lib/scheduleRuns";
 export type { ScheduleRun, ScheduleRunStatus } from "../lib/scheduleRuns";
 import { loadNativeScheduleRuns, saveNativeScheduleRuns } from "../lib/scheduleRunLedger";
-import { buildScheduleRunSummary } from "../lib/runSummary";
+import { loadNativeSchedules, mergeSchedules, saveNativeSchedules } from "../lib/scheduleLedger";
+import {
+  createSchedulerWakeupQueue,
+  INITIAL_SCHEDULER_WAKEUP_STATUS,
+  nextSchedulerWakeAt,
+  syncNativeSchedulerWakeup,
+  type SchedulerWakeupStatus,
+} from "../lib/schedulerWakeup";
+import { buildScheduleRunSummary, mergeScheduleRunSummary } from "../lib/runSummary";
 export type { ScheduleRunSummary } from "../lib/runSummary";
 import {
+  INITIAL_SCHEDULER_RUNTIME_STATUS,
   releaseSchedulerLease,
   releaseNativeSchedulerLease,
   renewSchedulerLease,
   renewNativeSchedulerLease,
+  schedulerRuntimeErrorStatus,
+  schedulerRuntimeStatusFromProbe,
   tryAcquireSchedulerLease,
   tryAcquireNativeSchedulerLease,
+  type SchedulerRuntimeStatus,
 } from "../lib/schedulerLease";
 import {
   appendNotification,
@@ -289,6 +323,7 @@ import {
   loadNotificationPreferences,
   mergeNotifications,
   markNotificationRead as markNotificationReadRow,
+  markAllNotificationsRead as markAllNotificationsReadRows,
   notificationPermission as readNotificationPermission,
   requestNotificationPermission,
   saveNotificationPreferences,
@@ -298,12 +333,18 @@ import {
   type NotificationPermission,
 } from "../lib/notifications";
 export type { MuseNotification, NotificationPermission } from "../lib/notifications";
-import { loadNativeNotifications, saveNativeNotifications } from "../lib/notificationLedger";
+import {
+  createNotificationWriteQueue,
+  loadNativeNotifications,
+  saveNativeNotifications,
+} from "../lib/notificationLedger";
+import { createLatestWriteQueue } from "../lib/writeQueue";
 // US-12 + US-21 versioned artifacts + thread recap: extraction, versioning
 // and per-thread persistence live in ../lib/artifacts (dependency-free,
 // unit-tested); restore reuses the US-4 composer prefill below.
 import {
   dropArtifacts,
+  editArtifactVersion,
   findVersionText,
   loadArtifacts,
   mergeAssistantBlocks,
@@ -314,6 +355,8 @@ import {
 // w-settings (US-16 sandbox + US-31 providers): pure settings helpers
 // (dependency-free, unit-tested); scope-guard client for the path probe.
 import {
+  hostSandboxConfigForProject,
+  effectiveSandboxMode,
   PROVIDER_MAP_KEY,
   SETTINGS_KEY,
   parseModelList,
@@ -337,10 +380,12 @@ import {
 import {
   isSelectedApprovalAccepted,
   parseApprovalResolution,
+  shouldCloseApprovalLane,
 } from "../lib/approvalResolution";
 import { checkScope, type ScopeVerdict } from "../lib/scope";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
-import { reconnectErrorMessage } from "../lib/errorCopy";
+import { reconnectErrorMessage, userFacingError } from "../lib/errorCopy";
+import { forkFailureMessage } from "../lib/fork";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
 import {
@@ -478,15 +523,39 @@ import {
   type GitPushResult,
   type GitReviewState,
   type GitStatusSnapshot,
+  type GitTurnSnapshot,
 } from "../lib/git";
 import { formatTerminalContext } from "../lib/terminalContext";
 import { formatWorkspaceFileContext } from "../lib/fileContext";
 import {
   extractHistoryItems,
+  historyEventsToLogEntries,
   historyItemsToLogEntries,
   mergeHistoryLog,
 } from "../lib/history";
 import { parseBranchObservation } from "../lib/branch";
+import { parseStreamChunk } from "../lib/streamChunks";
+
+const GIT_STATUS_CAPTURE_TIMEOUT_MS = 1500;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(
+      () => reject(new Error("operation timed out")),
+      timeoutMs,
+    );
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 
 /** One session: persisted metadata + live running flag. */
@@ -526,7 +595,13 @@ export interface IndexApi {
   setIndexQuery: (q: string) => void;
 }
 
-export type { GitDiffScope, GitDiffSnapshot, GitReviewState, GitStatusSnapshot } from "../lib/git";
+export type {
+  GitDiffScope,
+  GitDiffSnapshot,
+  GitReviewState,
+  GitStatusSnapshot,
+  GitTurnSnapshot,
+} from "../lib/git";
 
 /** M1-05: persistent terminal session owned by a conversation workspace. */
 export interface TerminalInfo {
@@ -685,6 +760,9 @@ export interface ResumePending {
   source: "approval" | "input";
 }
 
+/** Latest bounded terminal result supplied by the host for each session. */
+export type SessionTurnCompletion = TurnCompletionDetails;
+
 /** One buffered backend event with its sequence number (poll transport). */
 interface DrainedEvent extends MuseEvent {
   seq: number;
@@ -723,6 +801,8 @@ export interface ApprovalRequest {
 /** One bounded chunk returned by the host's lazy item output reader. */
 export interface ItemOutputChunk {
   content: string;
+  /** Base64 bytes when the host marks the output as binary. */
+  base64Data?: string;
   offsetBytes: number;
   nextOffsetBytes: number;
   byteLen: number;
@@ -750,12 +830,17 @@ interface UseMuseSessions {
   /** M0-02: latest live event used to explain quiet/stalled turns. */
   streamActivityBySession: Record<string, StreamActivity>;
   activeStreamActivity: StreamActivity | null;
+  /** M0-02: bounded recovery outcome shown next to stale/resuming liveness. */
+  recoveryNoticeBySession: Record<string, StreamRecoveryNotice>;
+  activeRecoveryNotice: StreamRecoveryNotice | null;
   /** M0-02/M0-05: explicit bridge state after a permission or input decision. */
   resumePendingBySession: Record<string, ResumePending>;
   activeResumePending: ResumePending | null;
   /** Host-provided retry backoff, kept live beside the conversation stream. */
   retryScheduledBySession: Record<string, RetryScheduled>;
   activeRetryScheduled: RetryScheduled | null;
+  /** M2-08: host-authored terminal result, when the protocol provides one. */
+  turnCompletionBySession: Record<string, SessionTurnCompletion>;
   /** M0-04: cancellation accepted by the host, awaiting terminal status. */
   stoppingBySession: Record<string, boolean>;
   /** M0-02: connection lifecycle, separate from turn execution state. */
@@ -773,6 +858,8 @@ interface UseMuseSessions {
   /** w-settings: sandbox settings (persisted) + whole-object setter. */
   sandbox: SandboxSettings;
   setSandbox: (next: SandboxSettings) => void;
+  /** M2-02: explicitly restart the workspace host after a posture change. */
+  restartHost: (workspacePath?: string | null) => Promise<boolean>;
   /** Global tool-authorization posture (persisted locally). */
   authorizationMode: AuthorizationMode;
   setAuthorizationMode: (mode: AuthorizationMode) => void;
@@ -842,7 +929,7 @@ interface UseMuseSessions {
   reconnectSession: (id: string) => Promise<void>;
   reconnectingId: string | null;
   /** M0-02: reconcile durable history and pending actions without a restart. */
-  reconcileSession: (id: string) => Promise<void>;
+  reconcileSession: (id: string, options?: { silent?: boolean }) => Promise<void>;
   reconcilingId: string | null;
   connectedIds: string[];
   /** M1-06: capability negotiated with each workspace host. */
@@ -897,6 +984,8 @@ interface UseMuseSessions {
   newFromSummary: (sourceId: string) => Promise<void>;
   /** US-4: prefill text for the composer after `newFromSummary`. */
   prefill: string | null;
+  /** Put an explicit user-editable note into the active composer. */
+  prefillComposer: (text: string) => void;
   clearPrefill: () => void;
   /** M4-02: one captured browser image waiting for the active composer. */
   prefillAttachment: ComposerAttachment | null;
@@ -904,6 +993,8 @@ interface UseMuseSessions {
   clearPrefillAttachment: () => void;
   /** US-4: host occupancy per session (`session/contextUsage` triple). */
   usageBySession: Record<string, ContextUsage>;
+  /** US-4: renderer-only lifecycle for the host compaction gesture. */
+  serverCompactionBySession: Record<string, ServerCompactionState>;
   /** US-4: server context gesture (`session/compact`), user-clicked only. */
   serverCompact: (sessionId: string) => Promise<void>;
   /** US-12 + US-21: versioned artifacts per thread (extracted blocks). */
@@ -911,11 +1002,15 @@ interface UseMuseSessions {
   /** US-21: 1-click restore — copy the version text via US-4 prefill. */
   restoreArtifact: (sessionId: string, artifactId: string, v: number) => void;
   /** US-21: anchored per-version comment (persisted). */
-  commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string) => void;
+  commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string, anchorQuote?: string) => void;
+  /** Save a local artifact edit as the next version, preserving history. */
+  editArtifact: (sessionId: string, artifactId: string, v: number, text: string) => void;
   /** US-23 opt-in local index (panel state + folder-pick indexing). */
   index: IndexApi;
   /** M1-01/M1-03: Git status/diff snapshots and guarded Review mutations. */
   gitReview: (sessionId: string) => GitReviewState;
+  /** M1-01: explicit Git baseline captured before the latest logical turn. */
+  gitTurnSnapshot: (sessionId: string) => GitTurnSnapshot | null;
   refreshGitStatus: (sessionId: string) => Promise<GitStatusSnapshot | null>;
   loadGitDiff: (
     sessionId: string,
@@ -1002,10 +1097,10 @@ interface UseMuseSessions {
   threadProjects: ThreadProjectMap;
   /** Last project refusal (quota / blank name); null when clean. */
   projectError: string | null;
-  createProject: (name: string, instructions?: string, workspace?: string) => void;
+  createProject: (name: string, instructions?: string, workspaces?: string[]) => void;
   /** Delete a project; its threads become ungrouped (no orphans). */
   deleteProject: (id: string) => void;
-  updateProject: (id: string, patch: { name?: string; instructions?: string; workspace?: string }) => void;
+  updateProject: (id: string, patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] }) => void;
   /** Attach a thread to a project (null detaches). */
   attachThread: (sessionId: string, projectId: string | null) => void;
   /** Project a thread is attached to (null = ungrouped/unknown). */
@@ -1025,6 +1120,10 @@ interface UseMuseSessions {
   reviewQueue: ReviewItem[];
   /** M3-06: durable scheduled execution records. */
   scheduleRuns: ScheduleRun[];
+  /** M3-07: live lease ownership shown by the Automations surface. */
+  schedulerStatus: SchedulerRuntimeStatus;
+  /** M3-07: native one-shot wake-up status for the next schedule. */
+  schedulerWakeupStatus: SchedulerWakeupStatus;
   /** US-9: validate + append a schedule; returns the id, null on error. */
   createSchedule: (input: ScheduleInput) => string | null;
   /** US-9: enable/disable one schedule. */
@@ -1051,6 +1150,7 @@ interface UseMuseSessions {
   enableNotifications: () => Promise<NotificationPermission>;
   setNotificationsMuted: (muted: boolean) => void;
   markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
   /** US-9: approve a review entry → sent as normal turn input. */
   approveReview: (id: string) => Promise<void>;
   /** US-9: discard a pending review entry. */
@@ -1078,6 +1178,8 @@ interface UseMuseSessions {
   prepareBrowserContext: (sessionId: string, context: string) => boolean;
   /** M4-02: insert a captured page image and its provenance into the composer. */
   prepareBrowserCapture: (sessionId: string, capture: BrowserCapture) => boolean;
+  /** M4-04: insert an explicitly captured desktop surface into the composer. */
+  prepareDesktopCapture: (sessionId: string, capture: DesktopCapture) => boolean;
   /** US-19: remove an anchored comment by id. */
   removeBrowserAnnotation: (id: string) => void;
   /** US-19: computer-use per-app permissions (default denied). */
@@ -1198,6 +1300,8 @@ interface UseMuseSessions {
   /** M3-04: refresh bounded SKILL.md discovery for the selected workspace. */
   scanSkills: (workspacePath?: string | null) => Promise<SkillScanSummary | null>;
   error: string | null;
+  /** Set a bounded user-facing orchestration error from a composite action. */
+  setError: (message: string | null) => void;
   /** TEMPORARY dev diagnosis: backend events received by this window. */
   evtCount: number;
   /** True when the Tauri backend is unreachable (plain-browser preview). */
@@ -1234,26 +1338,46 @@ function shortTitle(text: string): string {
  * Parse a stream-chunk payload: JSON `{itemId, text}` from the supervisor, or
  * raw text from older payloads. Never throws.
  */
-function parseChunk(payload: string): { itemId?: string; turnId?: string; outputRef?: string; text: string } {
-  const trimmed = payload.trim();
-  if (trimmed.startsWith("{")) {
+function parseRichContent(value: unknown): RichContent[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.slice(0, 16).flatMap((raw): RichContent[] => {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return [];
+    const item = raw as Record<string, unknown>;
+    const text = (key: string): string | undefined =>
+      typeof item[key] === "string" && (item[key] as string).trim().length > 0
+        ? (item[key] as string).trim().slice(0, 240)
+        : undefined;
+    const type = text("type");
+    const mediaType = text("mediaType") ?? text("media_type");
+    const path = text("path");
+    const sourceToolName = text("sourceToolName") ?? text("source_tool_name");
+    if (!type || !mediaType || !path || !sourceToolName) return [];
+    const dimension = (key: string): number | undefined => {
+      const n = item[key];
+      return typeof n === "number" && Number.isFinite(n) && n > 0 && n <= 10000 ? n : undefined;
+    };
+    const width = dimension("width");
+    const height = dimension("height");
+    return [{ type, mediaType, path, sourceToolName, ...(width === undefined ? {} : { width }), ...(height === undefined ? {} : { height }) }];
+  });
+  return items.length > 0 ? items : undefined;
+}
+
+function parseChunk(payload: string): { itemId?: string; turnId?: string; outputRef?: string; richContent?: RichContent[]; text: string } {
+  const parsed = parseStreamChunk(payload);
+  let richContent: RichContent[] | undefined;
+  if (payload.trim().startsWith("{")) {
     try {
-      const obj = JSON.parse(trimmed) as Record<string, unknown>;
-      if (typeof obj.text === "string") {
-        const itemId = typeof obj.itemId === "string" ? obj.itemId : undefined;
-        const turnId = typeof obj.turnId === "string" && obj.turnId.trim().length > 0
-          ? obj.turnId.trim()
-          : undefined;
-        const outputRef = typeof obj.outputRef === "string" && obj.outputRef.trim().length > 0
-          ? obj.outputRef.trim()
-          : undefined;
-        return { itemId, turnId, outputRef, text: obj.text };
-      }
+      const obj = JSON.parse(payload.trim()) as Record<string, unknown>;
+      const nested = typeof obj.item === "object" && obj.item !== null && !Array.isArray(obj.item)
+        ? obj.item as Record<string, unknown>
+        : null;
+      richContent = parseRichContent(obj.richContent ?? nested?.richContent);
     } catch {
-      // fall through to raw text
+      // The stream parser already preserves a plain-text fallback.
     }
   }
-  return { text: payload };
+  return { ...parsed, ...(richContent ? { richContent } : {}) };
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -1410,6 +1534,11 @@ function parsePendingSnapshot(
   return { approvals, inputs };
 }
 
+function isMethodUnavailable(error: unknown): boolean {
+  const detail = error instanceof Error ? error.message : String(error);
+  return /(?:-32601|method\s*not\s*found|methodnotfound)/i.test(detail);
+}
+
 /**
  * Session-multiplexing hook.
  *
@@ -1440,11 +1569,26 @@ export function useMuseSessions(): UseMuseSessions {
   const [streamActivityBySession, setStreamActivityBySession] = useState<
     Record<string, StreamActivity>
   >({});
+  const [recoveryNoticeBySession, setRecoveryNoticeBySession] = useState<
+    Record<string, StreamRecoveryNotice>
+  >({});
   const [resumePendingBySession, setResumePendingBySession] = useState<
     Record<string, ResumePending>
   >({});
+  const resumePendingBySessionRef = useRef<Record<string, ResumePending>>({});
+  resumePendingBySessionRef.current = resumePendingBySession;
+  // One bounded recovery read per accepted decision. The host remains the
+  // authority; this only prevents a quiet post-approval turn from waiting
+  // forever for a notification that was dropped or never emitted.
+  const resumeReconcileTimersRef = useRef<Record<string, {
+    requestedAt: number;
+    timer: ReturnType<typeof setTimeout>;
+  }>>({});
   const [retryScheduledBySession, setRetryScheduledBySession] = useState<
     Record<string, RetryScheduled>
+  >({});
+  const [turnCompletionBySession, setTurnCompletionBySession] = useState<
+    Record<string, SessionTurnCompletion>
   >({});
   // A cancel request is not the same thing as a confirmed stopped status.
   // Keep this renderer-only state separate from the persisted session row so
@@ -1497,18 +1641,45 @@ export function useMuseSessions(): UseMuseSessions {
   // US-9 automations: restored once (survive restarts via localStorage),
   // written through on every change (effect below).
   const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
+  const nativeSchedulesHydratedRef = useRef(!isTauriRuntime());
+  const nativeScheduleWriterRef = useRef<((rows: Schedule[]) => void) | null>(null);
+  if (nativeScheduleWriterRef.current === null && isTauriRuntime()) {
+    nativeScheduleWriterRef.current = createLatestWriteQueue(saveNativeSchedules);
+  }
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(() => loadReviewQueue());
   const [scheduleRuns, setScheduleRuns] = useState<ScheduleRun[]>(() =>
     recoverScheduleRuns(loadScheduleRuns(), Date.now()),
   );
+  const [nativeScheduleRunsReady, setNativeScheduleRunsReady] = useState(!isTauriRuntime());
+  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerRuntimeStatus>(
+    () => INITIAL_SCHEDULER_RUNTIME_STATUS,
+  );
+  const [schedulerWakeupStatus, setSchedulerWakeupStatus] = useState<SchedulerWakeupStatus>(
+    () => INITIAL_SCHEDULER_WAKEUP_STATUS,
+  );
+  const nativeSchedulerWakeupWriterRef = useRef<((wakeAt: number | null) => Promise<SchedulerWakeupStatus>) | null>(null);
+  if (nativeSchedulerWakeupWriterRef.current === null) {
+    nativeSchedulerWakeupWriterRef.current = createSchedulerWakeupQueue(syncNativeSchedulerWakeup);
+  }
   // The native app-data copy is hydrated once before any subsequent state
   // write. The renderer state remains the SSOT; this gate prevents a startup
   // localStorage render from overwriting a newer native snapshot.
   const nativeScheduleRunsHydratedRef = useRef(!isTauriRuntime());
+  const nativeScheduleRunsWriterRef = useRef<((rows: ScheduleRun[]) => void) | null>(null);
+  if (nativeScheduleRunsWriterRef.current === null && isTauriRuntime()) {
+    nativeScheduleRunsWriterRef.current = createLatestWriteQueue(saveNativeScheduleRuns);
+  }
   const [notifications, setNotifications] = useState<MuseNotification[]>(() => loadNotifications());
+  const [nativeNotificationsReady, setNativeNotificationsReady] = useState(!isTauriRuntime());
+  const notificationsRef = useRef<MuseNotification[]>([]);
+  notificationsRef.current = notifications;
   // As with schedule runs, native inbox hydration happens before the first
   // desktop write so a webview reload cannot erase unread attention items.
   const nativeNotificationsHydratedRef = useRef(!isTauriRuntime());
+  const nativeNotificationWriterRef = useRef<((rows: MuseNotification[]) => void) | null>(null);
+  if (nativeNotificationWriterRef.current === null && isTauriRuntime()) {
+    nativeNotificationWriterRef.current = createNotificationWriteQueue(saveNativeNotifications);
+  }
   const [notificationPreferences, setNotificationPreferences] = useState(() => loadNotificationPreferences());
   const [notificationPermissionState, setNotificationPermissionState] = useState<NotificationPermission>(
     () => readNotificationPermission(),
@@ -1724,6 +1895,18 @@ export function useMuseSessions(): UseMuseSessions {
   const [gitReviewBySession, setGitReviewBySession] = useState<
     Record<string, GitReviewState>
   >({});
+  const [gitTurnSnapshotsBySession, setGitTurnSnapshotsBySession] = useState<
+    Record<string, GitTurnSnapshot>
+  >(() => {
+    const restored: Record<string, GitTurnSnapshot> = {};
+    for (const session of loadSessions()) {
+      const snapshot = loadGitTurnSnapshot(session.session_id);
+      if (snapshot !== null) restored[session.session_id] = snapshot;
+    }
+    return restored;
+  });
+  const gitTurnSnapshotsRef = useRef<Record<string, GitTurnSnapshot>>({});
+  gitTurnSnapshotsRef.current = gitTurnSnapshotsBySession;
   const gitRequestSeq = useRef<Record<string, number>>({});
   // M1-05: PTYs are backend-owned and survive work-panel unmounts. The hook
   // mirrors only the UI metadata and bounded output tail for the active window.
@@ -1765,6 +1948,11 @@ export function useMuseSessions(): UseMuseSessions {
   // then verifies the server before retransmitting). Lazy init survives
   // StrictMode remounts: recovery is idempotent (failed entries are kept,
   // accepted ones are pruned defensively).
+  const nativeOutboxHydratedRef = useRef(!isTauriRuntime());
+  const nativeOutboxWriterRef = useRef<((store: OutboxStore) => void) | null>(null);
+  if (nativeOutboxWriterRef.current === null && isTauriRuntime()) {
+    nativeOutboxWriterRef.current = createOutboxWriteQueue(saveNativeOutbox);
+  }
   const [outbox, setOutbox] = useState<Record<string, OutboxEntry[]>>(() => {
     const restored: Record<string, OutboxEntry[]> = {};
     for (const s of loadSessions()) {
@@ -1784,6 +1972,86 @@ export function useMuseSessions(): UseMuseSessions {
   // Latest outbox for the render-detached send path (same pattern as logsRef).
   const outboxRef = useRef<Record<string, OutboxEntry[]>>({});
   outboxRef.current = outbox;
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    void loadNativeOutbox().then((nativeStore) => {
+      if (cancelled) return;
+      nativeOutboxHydratedRef.current = true;
+      if (nativeStore === null) {
+        nativeOutboxWriterRef.current?.(outboxRef.current);
+        return;
+      }
+      setOutbox((current) => {
+        const merged = mergeOutboxStores(current, nativeStore);
+        const recovered: OutboxStore = {};
+        for (const [sessionId, entries] of Object.entries(merged)) {
+          const live = recoverInterrupted(entries, Date.now()).entries
+            .filter((entry) => entry.state !== "accepted");
+          if (live.length > 0) recovered[sessionId] = live;
+          saveOutbox(sessionId, live);
+        }
+        return recovered;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (nativeOutboxHydratedRef.current) nativeOutboxWriterRef.current?.(outbox);
+  }, [outbox]);
+
+  /**
+   * Read the host's folded history, falling back to the durable cursor-paged
+   * view when an older/newer host does not expose `session/read`. Paging is
+   * bounded by both page size and total pages so a malformed or endlessly
+   * advancing cursor cannot stall reconciliation. The returned projection is
+   * always the same LogEntry shape consumed by the renderer SSOT.
+   */
+  const readHistoryEntries = useCallback(async (sessionId: string): Promise<LogEntry[]> => {
+    try {
+      const history = await invoke<unknown>("read_session_history", { sessionId });
+      return historyItemsToLogEntries(extractHistoryItems(history));
+    } catch (error) {
+      if (!isMethodUnavailable(error)) throw error;
+      const events: unknown[] = [];
+      let cursor: string | undefined;
+      let previousCursor: string | undefined;
+      let reachedEnd = false;
+      for (let page = 0; page < 8; page += 1) {
+        const result = await invoke<unknown>("page_session_history", {
+          sessionId,
+          direction: "forward",
+          limit: 500,
+          ...(cursor === undefined ? {} : { cursor }),
+        });
+        if (typeof result !== "object" || result === null) {
+          throw new Error("view/page returned an invalid history envelope");
+        }
+        const envelope = result as { events?: unknown; nextCursor?: unknown };
+        if (Array.isArray(envelope.events)) events.push(...envelope.events);
+        const next = typeof envelope.nextCursor === "string" && envelope.nextCursor.trim().length > 0
+          ? envelope.nextCursor.trim()
+          : undefined;
+        if (next === undefined) {
+          reachedEnd = true;
+          break;
+        }
+        if (next === cursor || next === previousCursor) {
+          throw new Error("view/page returned a repeated history cursor");
+        }
+        previousCursor = cursor;
+        cursor = next;
+      }
+      if (!reachedEnd) {
+        throw new Error("view/page exceeded the bounded history page limit");
+      }
+      return historyEventsToLogEntries(events);
+    }
+  }, []);
 
   // One drain of the backend event buffer, shared by the periodic tick and
   // the immediate post-send kick. Stable across renders: it only touches refs
@@ -1828,8 +2096,7 @@ export function useMuseSessions(): UseMuseSessions {
               // still provides a useful recovery and the stale action remains.
             }
             try {
-              const history = await invoke<unknown>("read_session_history", { sessionId });
-              const remote = historyItemsToLogEntries(extractHistoryItems(history));
+              const remote = await readHistoryEntries(sessionId);
               if (remote.length === 0) return;
               const local = logsRef.current[sessionId] ?? loadLog(sessionId);
               const merged = mergeHistoryLog(local, remote);
@@ -1847,7 +2114,7 @@ export function useMuseSessions(): UseMuseSessions {
     } catch (err) {
       if (aliveRef.current) setError(`event poll failed: ${String(err)}`);
     }
-  }, []);
+  }, [readHistoryEntries]);
 
   // Immediate drain right after the backend acknowledges new work: without
   // this the next tick can be a full slow interval away, so the first paint
@@ -2032,14 +2299,6 @@ export function useMuseSessions(): UseMuseSessions {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollOnce]);
 
-  // Run the read-only first-launch probe whenever the selected workspace
-  // changes. It never blocks boot and intentionally does not surface a
-  // second global error when an older bundle does not expose the command.
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-    void probeStartup(workspace);
-  }, [probeStartup, workspace]);
-
   // Write-through persistence.
   useEffect(() => {
     if (!historyReady) return;
@@ -2084,6 +2343,39 @@ export function useMuseSessions(): UseMuseSessions {
   // US-9 write-through persistence (best-effort localStorage, like the rest).
   useEffect(() => {
     saveSchedules(schedules);
+    if (nativeSchedulesHydratedRef.current) {
+      nativeScheduleWriterRef.current?.(schedules);
+    }
+  }, [schedules]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    void loadNativeSchedules().then((nativeSchedules) => {
+      if (cancelled) return;
+      if (nativeSchedules !== null) {
+        setSchedules((current) => mergeSchedules(current, nativeSchedules));
+      } else {
+        nativeScheduleWriterRef.current?.(schedulesRef.current);
+      }
+      nativeSchedulesHydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const wakeAt = nextSchedulerWakeAt(schedules);
+    const syncWakeup = nativeSchedulerWakeupWriterRef.current;
+    if (syncWakeup === null) return;
+    void syncWakeup(wakeAt).then((status) => {
+      if (!cancelled) setSchedulerWakeupStatus(status);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [schedules]);
 
   useEffect(() => {
@@ -2093,7 +2385,7 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveScheduleRuns(scheduleRuns);
     if (nativeScheduleRunsHydratedRef.current) {
-      void saveNativeScheduleRuns(scheduleRuns);
+      nativeScheduleRunsWriterRef.current?.(scheduleRuns);
     }
   }, [scheduleRuns]);
 
@@ -2104,8 +2396,11 @@ export function useMuseSessions(): UseMuseSessions {
       if (cancelled) return;
       if (nativeRuns !== null) {
         setScheduleRuns((current) => mergeScheduleRuns(current, nativeRuns));
+      } else {
+        nativeScheduleRunsWriterRef.current?.(scheduleRunsRef.current);
       }
       nativeScheduleRunsHydratedRef.current = true;
+      setNativeScheduleRunsReady(true);
     });
     return () => {
       cancelled = true;
@@ -2115,7 +2410,7 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveNotifications(notifications);
     if (nativeNotificationsHydratedRef.current) {
-      void saveNativeNotifications(notifications);
+      nativeNotificationWriterRef.current?.(notifications);
     }
   }, [notifications]);
 
@@ -2126,8 +2421,11 @@ export function useMuseSessions(): UseMuseSessions {
       if (cancelled) return;
       if (nativeNotifications !== null) {
         setNotifications((current) => mergeNotifications(current, nativeNotifications));
+      } else {
+        nativeNotificationWriterRef.current?.(notificationsRef.current);
       }
       nativeNotificationsHydratedRef.current = true;
+      setNativeNotificationsReady(true);
     });
     return () => {
       cancelled = true;
@@ -2143,6 +2441,7 @@ export function useMuseSessions(): UseMuseSessions {
   // historical completion as a desktop toast.
   const observedTerminalRuns = useRef<Set<string> | null>(null);
   useEffect(() => {
+    if (!nativeScheduleRunsReady) return;
     const terminal = new Set(
       scheduleRuns
         .filter((run) => run.status === "completed" || run.status === "failed")
@@ -2164,12 +2463,13 @@ export function useMuseSessions(): UseMuseSessions {
     if (built.length > 0) {
       setNotifications((cur) => built.reduce(appendNotification, cur));
     }
-  }, [scheduleRuns]);
+  }, [nativeScheduleRunsReady, scheduleRuns]);
 
   // Desktop toasts are best-effort. The in-app notification list remains the
   // source of truth when the browser API is denied or unavailable.
   const deliveredNotificationIds = useRef<Set<string> | null>(null);
   useEffect(() => {
+    if (!nativeNotificationsReady) return;
     if (deliveredNotificationIds.current === null) {
       deliveredNotificationIds.current = new Set(notifications.map((item) => item.id));
       return;
@@ -2179,7 +2479,7 @@ export function useMuseSessions(): UseMuseSessions {
       deliveredNotificationIds.current.add(item.id);
       if (!notificationPreferences.desktopMuted) void deliverDesktopNotification(item);
     }
-  }, [notifications, notificationPreferences.desktopMuted]);
+  }, [nativeNotificationsReady, notifications, notificationPreferences.desktopMuted]);
 
   // Approval and answerable-input prompts are attention notifications. They
   // are in-memory host state, so an app restart does not replay stale prompts.
@@ -2234,10 +2534,14 @@ export function useMuseSessions(): UseMuseSessions {
     setNotifications((cur) => markNotificationReadRow(cur, id));
   }, []);
 
+  const markAllNotificationsRead = useCallback((): void => {
+    setNotifications((cur) => markAllNotificationsReadRows(cur));
+  }, []);
+
   // US-9 client-side scheduler: no workflow/* MSP endpoint exists, so a
-  // bounded UI-side interval admits due schedules. Ask mode enters review;
+  // bounded UI-side scheduler admits due schedules. Ask mode enters review;
   // workspace/YOLO mode creates a run record and dispatches automatically.
-  // Refs stay fresh where interval-closure deps would go stale.
+  // Refs stay fresh where timeout-closure deps would go stale.
   const schedulesRef = useRef(schedules);
   schedulesRef.current = schedules;
   const reviewQueueRef = useRef(reviewQueue);
@@ -2247,19 +2551,21 @@ export function useMuseSessions(): UseMuseSessions {
   const schedulerLeaseOwner = useRef(`scheduler-${newId()}`);
   const schedulerLeaseMode = useRef<"native" | "local" | "none">("none");
   const schedulerCheckInFlight = useRef(false);
+  const schedulerCheckPromise = useRef<Promise<void> | null>(null);
   const scheduledExecutorRef = useRef<((item: ReviewItem, run: ScheduleRun) => Promise<void>) | null>(null);
   useEffect(() => {
-    const check = () => {
-      if (schedulerCheckInFlight.current) return;
+    const check = (): Promise<void> => {
+      if (schedulerCheckInFlight.current) return schedulerCheckPromise.current ?? Promise.resolve();
       schedulerCheckInFlight.current = true;
       const owner = schedulerLeaseOwner.current;
-      void tryAcquireNativeSchedulerLease(owner).then((nativeClaim) => {
+      const task = tryAcquireNativeSchedulerLease(owner).then((nativeClaim) => {
       const acquired = nativeClaim === null
         ? tryAcquireSchedulerLease(owner, Date.now())
         : nativeClaim;
       schedulerLeaseMode.current = nativeClaim === null
         ? (acquired ? "local" : "none")
         : (acquired ? "native" : "none");
+      setSchedulerStatus(schedulerRuntimeStatusFromProbe(nativeClaim, acquired, Date.now()));
       if (!acquired) return;
       if (nativeClaim === null) {
         renewSchedulerLease(owner, Date.now());
@@ -2331,12 +2637,26 @@ export function useMuseSessions(): UseMuseSessions {
       }
       }).catch(() => {
         schedulerLeaseMode.current = "none";
+        setSchedulerStatus(schedulerRuntimeErrorStatus(Date.now()));
       }).finally(() => {
         schedulerCheckInFlight.current = false;
+        schedulerCheckPromise.current = null;
       });
+      schedulerCheckPromise.current = task;
+      return task;
     };
-    check();
-    const timer = setInterval(check, 15000);
+    // Keep one adaptive timeout rather than setInterval: a suspended webview
+    // can otherwise accumulate callbacks and race the lease/reconciliation
+    // path when it becomes visible again.
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleNextCheck = () => {
+      if (stopped) return;
+      timer = setTimeout(() => {
+        void check().finally(scheduleNextCheck);
+      }, 15000);
+    };
+    void check().finally(scheduleNextCheck);
     // A suspended renderer can miss several interval ticks. Re-check as soon
     // as the window becomes usable again so the persisted missed-run policy
     // is applied promptly instead of waiting for the next 15 s tick.
@@ -2347,7 +2667,8 @@ export function useMuseSessions(): UseMuseSessions {
     window.addEventListener("pageshow", wake);
     document.addEventListener("visibilitychange", wake);
     return () => {
-      clearInterval(timer);
+      stopped = true;
+      if (timer !== null) clearTimeout(timer);
       window.removeEventListener("focus", wake);
       window.removeEventListener("pageshow", wake);
       document.removeEventListener("visibilitychange", wake);
@@ -2463,21 +2784,63 @@ export function useMuseSessions(): UseMuseSessions {
   const [usageBySession, setUsageBySession] = useState<
     Record<string, ContextUsage>
   >({});
+  const [serverCompactionBySession, setServerCompactionBySession] = useState<
+    Record<string, ServerCompactionState>
+  >({});
+  const serverCompactionRef = useRef<Record<string, ServerCompactionState>>({});
+  serverCompactionRef.current = serverCompactionBySession;
+
+  const settleServerCompaction = useCallback(
+    (sessionId: string, state: ServerCompactionState): void => {
+      serverCompactionRef.current = {
+        ...serverCompactionRef.current,
+        [sessionId]: state,
+      };
+      setServerCompactionBySession(serverCompactionRef.current);
+      if (state.status === "idle") return;
+      window.setTimeout(() => {
+        if (serverCompactionRef.current[sessionId]?.status !== state.status) return;
+        const next = { ...serverCompactionRef.current };
+        delete next[sessionId];
+        serverCompactionRef.current = next;
+        setServerCompactionBySession(next);
+      }, state.status === "pending" ? 20_000 : 8_000);
+    },
+    [],
+  );
 
   // US-4 server half: the real context gesture (`session/compact`).
   // User-clicked only — async host work is never fired automatically.
   // The ack is admission-only; `noop` is a success. Rejections carry the
   // friendly sentence mapped in Rust (`missing_run`, `run_active`).
   const serverCompact = useCallback(async (sessionId: string) => {
+    if (serverCompactionRef.current[sessionId]?.status === "pending") return;
+    settleServerCompaction(sessionId, { status: "pending" });
     let status: string;
     try {
       status = await invoke<string>("compact_session", { sessionId });
     } catch (e) {
-      setError(
+      const message = userFacingError(
         `server compact failed: ${e instanceof Error ? e.message : String(e)}`,
+        "Engine compaction could not be completed.",
       );
+      settleServerCompaction(sessionId, { status: "error", message });
+      const note: LogEntry = {
+        id: newId(),
+        ts: Date.now(),
+        role: "system",
+        text: `Server compaction failed — ${message}`,
+      };
+      setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
+      appendLog(sessionId, [note]);
       return;
     }
+    const outcome: ServerCompactionState = status === "noop"
+      ? { status: "noop" }
+      : status === "accepted"
+        ? { status: "accepted" }
+        : { status: "error", message: "The host returned an unknown compaction result." };
+    settleServerCompaction(sessionId, outcome);
     const note: LogEntry = {
       id: newId(),
       ts: Date.now(),
@@ -2485,7 +2848,9 @@ export function useMuseSessions(): UseMuseSessions {
       text:
         status === "noop"
           ? "Server compaction: nothing to compact (noop)."
-          : "Server compaction accepted — the host is working in the background.",
+          : status === "accepted"
+            ? "Server compaction accepted — the host is working in the background."
+            : "Server compaction failed — the host returned an unknown result.",
     };
     setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
     appendLog(sessionId, [note]);
@@ -2567,6 +2932,12 @@ export function useMuseSessions(): UseMuseSessions {
           [sessionId]: { lastEventAt: at, lastEventKind: kind },
         };
       });
+      setRecoveryNoticeBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
     },
     [],
   );
@@ -2600,6 +2971,7 @@ export function useMuseSessions(): UseMuseSessions {
     role: "assistant" | "thinking" | "tool" = "assistant",
     turnId?: string,
     initialText = "",
+    richContent?: RichContent[],
   ): void {
     const stamp = { id: newId(), ts: Date.now() };
     setLogs((cur) => {
@@ -2609,6 +2981,7 @@ export function useMuseSessions(): UseMuseSessions {
         role,
         turnId,
         initialText,
+        richContent,
         stamp,
       });
       if (next === (cur[sessionId] ?? [])) return cur;
@@ -2640,10 +3013,12 @@ export function useMuseSessions(): UseMuseSessions {
   }
 
   function markResumePending(sessionId: string, source: ResumePending["source"]): void {
-    setResumePendingBySession((cur) => ({
-      ...cur,
-      [sessionId]: { requestedAt: Date.now(), source },
-    }));
+    const pending = { requestedAt: Date.now(), source };
+    resumePendingBySessionRef.current = {
+      ...resumePendingBySessionRef.current,
+      [sessionId]: pending,
+    };
+    setResumePendingBySession((cur) => ({ ...cur, [sessionId]: pending }));
     // A successful decision means the host accepted work again even when an
     // older/reconnected session snapshot still says idle. Let the liveness
     // row represent that bridge until the next terminal or progress event.
@@ -2656,6 +3031,10 @@ export function useMuseSessions(): UseMuseSessions {
   }
 
   function clearResumePending(sessionId: string): void {
+    if (!(sessionId in resumePendingBySessionRef.current)) return;
+    const nextRef = { ...resumePendingBySessionRef.current };
+    delete nextRef[sessionId];
+    resumePendingBySessionRef.current = nextRef;
     setResumePendingBySession((cur) => {
       if (!(sessionId in cur)) return cur;
       const next = { ...cur };
@@ -2666,6 +3045,15 @@ export function useMuseSessions(): UseMuseSessions {
 
   function clearRetryScheduled(sessionId: string): void {
     setRetryScheduledBySession((cur) => {
+      if (!(sessionId in cur)) return cur;
+      const next = { ...cur };
+      delete next[sessionId];
+      return next;
+    });
+  }
+
+  function clearTurnCompletion(sessionId: string): void {
+    setTurnCompletionBySession((cur) => {
       if (!(sessionId in cur)) return cur;
       const next = { ...cur };
       delete next[sessionId];
@@ -2684,7 +3072,7 @@ export function useMuseSessions(): UseMuseSessions {
     );
     const preview = lastAssistant?.text.trim().replace(/\s+/g, " ").slice(0, 320);
     const resultSummary = outcome.status === "completed"
-      ? buildScheduleRunSummary(sessionId, log)
+      ? mergeScheduleRunSummary(buildScheduleRunSummary(sessionId, log), outcome.resultFacts)
       : undefined;
     setScheduleRuns((cur) => {
       return settleRunsForSession(cur, sessionId, {
@@ -2861,7 +3249,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "output") {
       ensureSessionRow(sid, null);
-      const { itemId, turnId, outputRef, text } = parseChunk(payload);
+      const { itemId, turnId, outputRef, richContent, text } = parseChunk(payload);
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -2878,12 +3266,13 @@ export function useMuseSessions(): UseMuseSessions {
             text: log[i].text + text,
             itemId: itemId ?? log[i].itemId,
             ...(outputRef === undefined ? {} : { outputRef }),
+            ...(richContent === undefined ? {} : { richContent }),
           };
           next = [...log.slice(0, i), merged, ...log.slice(i + 1)];
         } else {
           next = [
             ...log,
-            { id: newId(), ts: Date.now(), role: "assistant" as LogRole, text, itemId, outputRef, open: true },
+            { id: newId(), ts: Date.now(), role: "assistant" as LogRole, text, itemId, outputRef, ...(richContent === undefined ? {} : { richContent }), open: true },
           ];
         }
         saveLog(sid, next);
@@ -2896,7 +3285,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "thinking") {
       ensureSessionRow(sid, null);
-      const { itemId, turnId, outputRef, text } = parseChunk(payload);
+      const { itemId, turnId, outputRef, richContent, text } = parseChunk(payload);
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -2913,7 +3302,7 @@ export function useMuseSessions(): UseMuseSessions {
           const prev = log[i];
           next = [
             ...log.slice(0, i),
-            { ...prev, text: prev.text + text, itemId: itemId ?? prev.itemId, ...(outputRef === undefined ? {} : { outputRef }) },
+            { ...prev, text: prev.text + text, itemId: itemId ?? prev.itemId, ...(outputRef === undefined ? {} : { outputRef }), ...(richContent === undefined ? {} : { richContent }) },
             ...log.slice(i + 1),
           ];
         } else {
@@ -2926,6 +3315,7 @@ export function useMuseSessions(): UseMuseSessions {
               text,
               itemId,
               outputRef,
+              ...(richContent === undefined ? {} : { richContent }),
               open: true,
             },
           ];
@@ -2940,7 +3330,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "shell_output") {
       ensureSessionRow(sid, null);
-      const { itemId, turnId, outputRef, text } = parseChunk(payload);
+      const { itemId, turnId, outputRef, richContent, text } = parseChunk(payload);
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -2954,13 +3344,13 @@ export function useMuseSessions(): UseMuseSessions {
           const separator = previous.text.length > 0 && text.length > 0 ? "\n" : "";
           next = [
             ...log.slice(0, i),
-            { ...previous, text: `${previous.text}${separator}${text}`, itemId: itemId ?? previous.itemId, ...(outputRef === undefined ? {} : { outputRef }) },
+            { ...previous, text: `${previous.text}${separator}${text}`, itemId: itemId ?? previous.itemId, ...(outputRef === undefined ? {} : { outputRef }), ...(richContent === undefined ? {} : { richContent }) },
             ...log.slice(i + 1),
           ];
         } else {
           next = [
             ...log,
-            { id: newId(), ts: Date.now(), role: "tool", text, itemId, outputRef, open: true },
+            { id: newId(), ts: Date.now(), role: "tool", text, itemId, outputRef, ...(richContent === undefined ? {} : { richContent }), open: true },
           ];
         }
         saveLog(sid, next);
@@ -3088,24 +3478,32 @@ export function useMuseSessions(): UseMuseSessions {
       } catch {
         return;
       }
-      const itemId = typeof parsed?.itemId === "string" ? parsed.itemId : "";
-      const text = typeof parsed?.text === "string" ? parsed.text : "";
-      if (itemId.length === 0 || text.length === 0) return;
-      const lane: "assistant" | "thinking" | "tool" = parsed?.lane === "thinking"
-        ? "thinking"
-        : parsed?.lane === "shell_output"
-          ? "tool"
-          : "assistant";
-      const revision = typeof parsed?.revision === "number" && Number.isFinite(parsed.revision)
-        ? parsed.revision
+      if (parsed === null) return;
+      const nested = parsed?.item && typeof parsed.item === "object"
+        ? parsed.item as Record<string, unknown>
+        : null;
+      const itemIdValue = parsed?.itemId ?? parsed?.id ?? nested?.itemId ?? nested?.id;
+      const itemId = typeof itemIdValue === "string" ? itemIdValue : "";
+      const textValue = parsed?.text ?? parsed?.content ?? nested?.text ?? nested?.content;
+      const text = typeof textValue === "string" ? textValue : "";
+      const richContent = parseRichContent(parsed?.richContent ?? nested?.richContent);
+      const outputRefValue = parsed?.outputRef ?? parsed?.output_ref ?? nested?.outputRef ?? nested?.output_ref;
+      const outputRef = typeof outputRefValue === "string" && outputRefValue.trim().length > 0
+        ? outputRefValue.trim()
         : undefined;
-      const turnId = typeof parsed?.turnId === "string" && parsed.turnId.length > 0
-        ? parsed.turnId
+      const terminalSnapshot = itemSnapshotIsTerminal(parsed);
+      if (itemId.length === 0 || (!terminalSnapshot && text.length === 0 && richContent === undefined && outputRef === undefined)) return;
+      const lane = itemSnapshotLane(parsed);
+      const revisionValue = parsed?.revision ?? nested?.revision;
+      const revision = typeof revisionValue === "number" && Number.isFinite(revisionValue)
+        ? revisionValue
         : undefined;
-      const commandText = typeof parsed?.commandText === "string" ? parsed.commandText : undefined;
-      const outputRef = typeof parsed?.outputRef === "string" && parsed.outputRef.trim().length > 0
-        ? parsed.outputRef.trim()
+      const turnIdValue = parsed?.turnId ?? parsed?.turn_id ?? nested?.turnId ?? nested?.turn_id;
+      const turnId = typeof turnIdValue === "string" && turnIdValue.length > 0
+        ? turnIdValue
         : undefined;
+      const commandTextValue = parsed?.commandText ?? parsed?.command_text ?? nested?.commandText ?? nested?.command_text;
+      const commandText = typeof commandTextValue === "string" ? commandTextValue : undefined;
       if (turnId !== undefined) {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
@@ -3118,8 +3516,9 @@ export function useMuseSessions(): UseMuseSessions {
           ...(turnId === undefined ? {} : { turnId }),
           ...(commandText === undefined ? {} : { commandText }),
           ...(outputRef === undefined ? {} : { outputRef }),
+          ...(richContent === undefined ? {} : { richContent }),
           ...(revision === undefined ? {} : { revision }),
-          open: true,
+          open: !terminalSnapshot,
           stamp: { id: newId(), ts: Date.now() },
         });
         if (next === cur[sid]) return cur;
@@ -3223,7 +3622,9 @@ export function useMuseSessions(): UseMuseSessions {
         // The first approval pauses the assistant lane. Later stage updates
         // must leave the resumed placeholder open while the next choice is
         // presented, otherwise the UI appears blank between clicks.
-        closeOpenBlocks(sid);
+        if (shouldCloseApprovalLane(updated, resumePendingBySessionRef.current[sid] !== undefined)) {
+          closeOpenBlocks(sid);
+        }
       }
       return;
     }
@@ -3305,11 +3706,13 @@ export function useMuseSessions(): UseMuseSessions {
       let agentId: string | undefined;
       let itemRole: "assistant" | "thinking" | "tool" = "assistant";
       let initialText = "";
+      let richContent: RichContent[] | undefined;
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const rawId = obj.itemId ?? obj.id;
         if (typeof rawId === "string" && rawId.length > 0) itemId = rawId;
         if (typeof obj.turnId === "string" && obj.turnId.length > 0) turnId = obj.turnId;
+        richContent = parseRichContent(obj.richContent);
         const rawKind = obj.itemKind ?? obj.kind;
         if (typeof rawKind === "string") {
           if (isSubagentItemKind(rawKind)) {
@@ -3336,7 +3739,7 @@ export function useMuseSessions(): UseMuseSessions {
           cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
         );
       }
-      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId, initialText);
+      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId, initialText, richContent);
       return;
     }
     // status (and any future kinds): record + reflect liveness.
@@ -3397,6 +3800,28 @@ export function useMuseSessions(): UseMuseSessions {
       // placeholder instead of closing it (US-10).
       ensurePlaceholder(sid);
     } else if (isStoppedKind(kind)) {
+      if (completion !== null) {
+        setTurnCompletionBySession((cur) => ({ ...cur, [sid]: completion }));
+        setGitTurnSnapshotsBySession((cur) => {
+          const previous = cur[sid];
+          if (!previous) return cur;
+          if (
+            previous.turnId !== null &&
+            completion.turnId !== undefined &&
+            previous.turnId !== completion.turnId
+          ) {
+            return cur;
+          }
+          const phase: GitTurnSnapshot["phase"] = completion.error ? "failed" : "completed";
+          const next: GitTurnSnapshot = {
+            ...previous,
+            phase,
+            ...(completion.turnId ? { turnId: completion.turnId } : {}),
+          };
+          saveGitTurnSnapshot(sid, next);
+          return { ...cur, [sid]: next };
+        });
+      }
       if (completion?.turnId !== undefined) {
         lastTerminalTurnIdsRef.current[sid] = completion.turnId;
         // Older hosts may omit item/completed. Preserve the exact turn anchor
@@ -3419,7 +3844,18 @@ export function useMuseSessions(): UseMuseSessions {
         ? { status: "failed", error: failure.message, retryable: failure.retryable }
         : kind === "host_exited"
           ? { status: "failed", error: "host exited before the scheduled turn completed", retryable: false }
-          : { status: "completed" });
+          : {
+              status: "completed",
+              ...(completion?.resultPreview ? { resultPreview: completion.resultPreview } : {}),
+              ...(completion?.resultIssues || completion?.resultNextSteps
+                ? {
+                    resultFacts: {
+                      ...(completion.resultIssues ? { issues: completion.resultIssues } : {}),
+                      ...(completion.resultNextSteps ? { nextSteps: completion.resultNextSteps } : {}),
+                    },
+                  }
+                : {}),
+            });
     }
     const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated" || kind === "approval_mode_changed";
     if (kind === "approval/resolved") {
@@ -3491,6 +3927,31 @@ export function useMuseSessions(): UseMuseSessions {
   const setSandbox = useCallback((next: SandboxSettings) => {
     setSandboxState(parseSandboxSettings(next));
   }, []);
+
+  const restartHost = useCallback(async (workspacePath?: string | null): Promise<boolean> => {
+    if (!isTauriRuntime()) {
+      setError("Restarting a Muse host is available in the desktop app.");
+      return false;
+    }
+    const target = workspacePath?.trim() || workspace?.trim();
+    if (!target) {
+      setError("Pick a workspace folder before restarting the Muse host.");
+      return false;
+    }
+    try {
+      setError(null);
+      await invoke("restart_host", {
+        workspacePath: target,
+        sandboxMode: effectiveSandboxMode(sandbox),
+        sandboxDisableWrite: false,
+        sandboxDisableShell: false,
+      });
+      return true;
+    } catch (e) {
+      setError(`Host restart failed: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
+  }, [sandbox, workspace]);
 
   const setAuthorizationMode = useCallback((mode: AuthorizationMode) => {
     const next = parseAuthorizationMode(mode);
@@ -3583,6 +4044,9 @@ export function useMuseSessions(): UseMuseSessions {
           providerId: target?.providerId ?? null,
           profileId: target?.profileId ?? null,
         });
+        setSessions((current) => current.map((session) =>
+          session.session_id === sessionId ? { ...session, model_id: modelId } : session,
+        ));
         setModelsError(null);
       } catch (e) {
         setError(
@@ -3774,6 +4238,7 @@ export function useMuseSessions(): UseMuseSessions {
     async (
       workspaceOverride?: string,
       projectSettings?: ProjectSettings,
+      projectSandboxSettings?: ProjectSettings,
     ): Promise<string | null> => {
     try {
       setError(null);
@@ -3785,11 +4250,16 @@ export function useMuseSessions(): UseMuseSessions {
         setError("Pick a workspace folder first.");
         return null;
       }
+      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSandboxSettings);
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
         authorizationMode,
+        sandboxMode: sandboxConfig.mode,
+        sandboxDisableWrite: sandboxConfig.disableWrite,
+        sandboxDisableShell: sandboxConfig.disableShell,
         mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
       });
+      const requestedModelId = projectSettings?.model.trim();
       const record: MuseSession = {
         session_id: meta.session_id,
         workspace: meta.workspace,
@@ -3797,6 +4267,9 @@ export function useMuseSessions(): UseMuseSessions {
         createdAt: Date.now(),
         running: meta.running,
         ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+        ...(requestedModelId && requestedModelId !== "default"
+          ? { model_id: requestedModelId }
+          : {}),
       };
       setGrantedCapabilitiesBySession((cur) => ({
         ...cur,
@@ -3813,7 +4286,7 @@ export function useMuseSessions(): UseMuseSessions {
       // The host only accepts model changes through session/setModel. Apply a
       // concrete project/global model after admission; `default` deliberately
       // leaves the engine's own default untouched.
-      const modelId = projectSettings?.model.trim();
+      const modelId = requestedModelId;
       if (modelId && modelId !== "default") {
         await setSessionModel(meta.session_id, modelId);
       }
@@ -3829,6 +4302,7 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [
       authorizationMode,
+      sandbox,
       refreshHostSkills,
       setConnectionState,
       setSessionModel,
@@ -3846,15 +4320,17 @@ export function useMuseSessions(): UseMuseSessions {
    * can leave the host healthy, and reattaching it would add unnecessary
    * lifecycle churn. All results flow back through the hook's SSOT.
    */
-  const reconcileSession = useCallback(async (id: string): Promise<void> => {
+  const reconcileSession = useCallback(async (
+    id: string,
+    options: { silent?: boolean } = {},
+  ): Promise<void> => {
     if (!isTauriRuntime()) return;
     const session = sessions.find((candidate) => candidate.session_id === id);
     if (!session) return;
     setReconcilingId(id);
-    setError(null);
+    if (!options.silent) setError(null);
     try {
-      const history = await invoke<unknown>("read_session_history", { sessionId: id });
-      const remote = historyItemsToLogEntries(extractHistoryItems(history));
+      const remote = await readHistoryEntries(id);
       // A history snapshot containing only the original user message is not
       // proof that the host resumed. Require a durable assistant/tool/reasoning
       // item before clearing the post-decision liveness marker.
@@ -3895,11 +4371,55 @@ export function useMuseSessions(): UseMuseSessions {
       }
       kickPoll();
     } catch (e) {
-      setError(`Sync failed: ${e instanceof Error ? e.message : String(e)}`);
+      setRecoveryNoticeBySession((cur) => ({
+        ...cur,
+        [id]: isMethodUnavailable(e) ? "unsupported" : "failed",
+      }));
+      if (!options.silent) {
+        setError(`Sync failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
     } finally {
       setReconcilingId(null);
     }
-  }, [kickPoll, reconcileQueueSnapshot, sessions, touchStreamActivity]);
+  }, [kickPoll, readHistoryEntries, reconcileQueueSnapshot, sessions, touchStreamActivity]);
+
+  // A decision can be accepted while a host notification is lost or while an
+  // older host simply stays quiet. Once the same liveness threshold is
+  // reached, perform one bounded read of history and pending requests. This
+  // is recovery only: it never invents a completion or clears the bridge
+  // unless the host returns a durable progress item.
+  useEffect(() => {
+    const timers = resumeReconcileTimersRef.current;
+    for (const [sessionId, entry] of Object.entries(timers)) {
+      const pending = resumePendingBySession[sessionId];
+      if (pending === undefined || pending.requestedAt !== entry.requestedAt) {
+        clearTimeout(entry.timer);
+        delete timers[sessionId];
+      }
+    }
+    for (const [sessionId, pending] of Object.entries(resumePendingBySession)) {
+      const existing = timers[sessionId];
+      if (existing?.requestedAt === pending.requestedAt) continue;
+      if (existing !== undefined) clearTimeout(existing.timer);
+      const delay = resumeRecoveryDelay(pending.requestedAt);
+      if (delay === null) continue;
+      const timer = setTimeout(() => {
+        delete timers[sessionId];
+        if (!aliveRef.current) return;
+        const current = resumePendingBySession[sessionId];
+        if (current?.requestedAt !== pending.requestedAt) return;
+        void reconcileSession(sessionId, { silent: true });
+      }, delay);
+      timers[sessionId] = { requestedAt: pending.requestedAt, timer };
+    }
+  }, [reconcileSession, resumePendingBySession]);
+
+  useEffect(() => () => {
+    for (const entry of Object.values(resumeReconcileTimersRef.current)) {
+      clearTimeout(entry.timer);
+    }
+    resumeReconcileTimersRef.current = {};
+  }, [settleServerCompaction]);
 
   const reconnectSession = useCallback(async (id: string) => {
     const session = sessions.find((s) => s.session_id === id);
@@ -3913,9 +4433,16 @@ export function useMuseSessions(): UseMuseSessions {
     setConnectionState(id, "connecting");
     setError(null);
     try {
+      const projectSettings = threadProjects[id] !== undefined
+        ? settingsForThread(globalSettings, projects, threadProjects, id)
+        : undefined;
+      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSettings);
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
         workspacePath: session.workspace,
+        sandboxMode: sandboxConfig.mode,
+        sandboxDisableWrite: sandboxConfig.disableWrite,
+        sandboxDisableShell: sandboxConfig.disableShell,
         mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
       });
       if (tombstoned.current?.has(id)) return;
@@ -3953,10 +4480,7 @@ export function useMuseSessions(): UseMuseSessions {
       // point-in-time and never re-emits pending requests; resume remains the
       // sole path that re-attaches the live session and restarts polling.
       try {
-        const history = await invoke<unknown>("read_session_history", {
-          sessionId: id,
-        });
-        const remote = historyItemsToLogEntries(extractHistoryItems(history));
+        const remote = await readHistoryEntries(id);
         if (remote.length > 0) {
           const local = logsRef.current[id] ?? loadLog(id);
           const merged = mergeHistoryLog(local, remote);
@@ -4006,10 +4530,10 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, refreshHostSkills, sessions, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState]);
+  }, [authorizationMode, globalSettings, projects, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, sandbox]);
 
   const startSession = useCallback(async () => {
-    return await startSessionRow(undefined, globalSettings);
+    return await startSessionRow(undefined, globalSettings, undefined);
   }, [globalSettings, startSessionRow]);
 
   const startSessionInWorkspace = useCallback(
@@ -4018,7 +4542,12 @@ export function useMuseSessions(): UseMuseSessions {
       projectSettings?: ProjectSettings,
       projectId?: string,
     ) => {
-      const sessionId = await startSessionRow(workspacePath, projectSettings);
+      const sessionSettings = projectSettings ?? globalSettings;
+      const sessionId = await startSessionRow(
+        workspacePath,
+        sessionSettings,
+        projectSettings,
+      );
       if (sessionId === null || projectId === undefined) return sessionId;
       // Attach before the caller can send the first turn. The ref is updated
       // synchronously so the send path uses the same project instructions and
@@ -4033,7 +4562,7 @@ export function useMuseSessions(): UseMuseSessions {
       setThreadProjects(next);
       return sessionId;
     },
-    [startSessionRow],
+    [globalSettings, startSessionRow],
   );
 
   const createWorktreeSession = useCallback(
@@ -4048,12 +4577,17 @@ export function useMuseSessions(): UseMuseSessions {
       }
       try {
         setError(null);
+        const sessionSettings = projectSettings ?? globalSettings;
+        const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSettings);
         const result = await invoke<BackendWorktreeSessionResult>("git_worktree_create_session", {
           sessionId,
           branch: plan.branch,
           relativePath: plan.path,
           baseRef: plan.base,
           authorizationMode,
+          sandboxMode: sandboxConfig.mode,
+          sandboxDisableWrite: sandboxConfig.disableWrite,
+          sandboxDisableShell: sandboxConfig.disableShell,
           mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current),
         });
         setWorktrees((current) => [
@@ -4061,6 +4595,7 @@ export function useMuseSessions(): UseMuseSessions {
           result.worktree,
         ]);
         const meta = result.session;
+        const requestedModelId = sessionSettings.model.trim();
         const record: MuseSession = {
           session_id: meta.session_id,
           workspace: meta.workspace,
@@ -4068,6 +4603,9 @@ export function useMuseSessions(): UseMuseSessions {
           createdAt: Date.now(),
           running: meta.running,
           ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+          ...(requestedModelId && requestedModelId !== "default"
+            ? { model_id: requestedModelId }
+            : {}),
         };
         setGrantedCapabilitiesBySession((cur) => ({
           ...cur,
@@ -4084,10 +4622,10 @@ export function useMuseSessions(): UseMuseSessions {
         ]);
         setLogs((current) => (current[meta.session_id] ? current : { ...current, [meta.session_id]: [] }));
         setActiveId(meta.session_id);
-        const modelId = projectSettings?.model.trim();
+        const modelId = requestedModelId;
         if (modelId && modelId !== "default") await setSessionModel(meta.session_id, modelId);
-        if (projectSettings?.reasoningEffort !== undefined) {
-          await setSessionReasoningEffort(meta.session_id, projectSettings.reasoningEffort);
+        if (sessionSettings.reasoningEffort !== undefined) {
+          await setSessionReasoningEffort(meta.session_id, sessionSettings.reasoningEffort);
         }
         void refreshHostSkills(meta.session_id);
         return result.worktree;
@@ -4098,6 +4636,8 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [
       authorizationMode,
+      sandbox,
+      globalSettings,
       refreshHostSkills,
       setConnectionState,
       setSessionModel,
@@ -4137,6 +4677,7 @@ export function useMuseSessions(): UseMuseSessions {
           title: `Branch of ${source.title || source.session_id.slice(0, 8)}`,
           createdAt: Date.now(),
           running: meta.running,
+          ...(source.model_id ? { model_id: source.model_id } : {}),
           ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
@@ -4151,16 +4692,23 @@ export function useMuseSessions(): UseMuseSessions {
         setLogs((current) => ({ ...current, [meta.session_id]: inherited }));
         if (inherited.length > 0) appendLog(meta.session_id, inherited);
         setActiveId(meta.session_id);
+        // A fork is a new host session, so the renderer-side copy of the
+        // requested model must be applied through the same session/setModel
+        // path as a normal start. Without this, Settings/Composer showed the
+        // inherited model while the host silently used its default.
+        if (source.model_id && source.model_id !== "default") {
+          await setSessionModel(meta.session_id, source.model_id);
+        }
         void refreshHostSkills(meta.session_id);
         return meta.session_id;
       } catch (error) {
-        setError(`Fork failed: ${error instanceof Error ? error.message : String(error)}`);
+        setError(forkFailureMessage(error));
         return null;
       } finally {
         setForkingId(null);
       }
     },
-    [forkingId, refreshHostSkills, sessions, setConnectionState],
+    [forkingId, refreshHostSkills, sessions, setConnectionState, setSessionModel],
   );
 
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
@@ -4433,6 +4981,49 @@ export function useMuseSessions(): UseMuseSessions {
   // while other sessions keep sending freely.
   const inFlightSends = useRef<Set<string>>(new Set());
 
+  /** Capture an explicit repository baseline before a new logical turn. */
+  const captureGitTurnSnapshot = useCallback(
+    async (sessionId: string, clientMessageId: string): Promise<void> => {
+      if (!isTauriRuntime()) return;
+      try {
+        const status = await withTimeout(
+          invoke<GitStatusSnapshot>("git_status", { sessionId }),
+          GIT_STATUS_CAPTURE_TIMEOUT_MS,
+        );
+        const snapshot: GitTurnSnapshot = {
+          clientMessageId,
+          turnId: null,
+          capturedAt: Date.now(),
+          phase: "captured",
+          status,
+        };
+        saveGitTurnSnapshot(sessionId, snapshot);
+        setGitTurnSnapshotsBySession((current) => ({ ...current, [sessionId]: snapshot }));
+      } catch {
+        // A non-Git workspace must not block a conversation send. Review will
+        // simply omit the explicit last-turn card until a status is available.
+      }
+    },
+    [],
+  );
+
+  const updateGitTurnSnapshot = useCallback(
+    (
+      sessionId: string,
+      update: Partial<Pick<GitTurnSnapshot, "turnId" | "phase">>,
+    ): void => {
+      setGitTurnSnapshotsBySession((current) => {
+        const previous = current[sessionId];
+        if (!previous) return current;
+        const next = { ...previous, ...update };
+        saveGitTurnSnapshot(sessionId, next);
+        gitTurnSnapshotsRef.current = { ...current, [sessionId]: next };
+        return { ...current, [sessionId]: next };
+      });
+    },
+    [],
+  );
+
   /** Outbox state + disk for one session (functional update, no stale read). */
   function updateOutbox(
     sessionId: string,
@@ -4484,6 +5075,9 @@ export function useMuseSessions(): UseMuseSessions {
           "a send is already in progress for this conversation",
         );
       }
+      // A new logical turn supersedes the previous terminal result. Keep the
+      // host completion scoped to the turn that produced it.
+      clearTurnCompletion(sessionId);
       const clientMessageId = retryKey ?? newId();
       const prior =
         retryKey !== undefined
@@ -4662,6 +5256,12 @@ export function useMuseSessions(): UseMuseSessions {
             : "Sending expanded instructions",
         });
       }
+      // A retry keeps the original baseline; a fresh logical turn captures
+      // the repository state before admission so Review can report concrete
+      // files changed during that turn without reading assistant text.
+      if (prior === null) {
+        await captureGitTurnSnapshot(sessionId, clientMessageId);
+      }
       inFlightSends.current.add(sessionId);
       let requestPending = false;
       let underlyingSettled = false;
@@ -4742,6 +5342,10 @@ export function useMuseSessions(): UseMuseSessions {
               ? admission.turnId
               : undefined;
             if (admission.disposition === "queued") {
+              updateGitTurnSnapshot(sessionId, {
+                phase: "queued",
+                ...(admissionTurnId ? { turnId: admissionTurnId } : {}),
+              });
               if (typeof admission.turnId === "string" && admission.turnId.length > 0) {
                 const queued: QueuedTurn = {
                   session_id: sessionId,
@@ -4773,6 +5377,12 @@ export function useMuseSessions(): UseMuseSessions {
                 },
               ]);
             }
+          }
+          if (admissionDisposition !== "queued" && admissionDisposition !== "steered") {
+            updateGitTurnSnapshot(sessionId, {
+              phase: "running",
+              ...(admissionTurnId ? { turnId: admissionTurnId } : {}),
+            });
           }
           acked = true;
           if (skillInvocation !== null) {
@@ -4812,6 +5422,7 @@ export function useMuseSessions(): UseMuseSessions {
           });
         }
         setError(failure);
+        updateGitTurnSnapshot(sessionId, { phase: "failed" });
         if (!ambiguous) {
           // Definitive refusal: the turn never started, so withdraw the
           // reflexive placeholder; the entry stays retryable (same key).
@@ -4832,7 +5443,16 @@ export function useMuseSessions(): UseMuseSessions {
         }
       }
     },
-    [kickPoll, doCompact, touchStreamActivity, workspace, startSkillInvocation, updateSkillInvocation],
+    [
+      captureGitTurnSnapshot,
+      kickPoll,
+      doCompact,
+      touchStreamActivity,
+      workspace,
+      startSkillInvocation,
+      updateSkillInvocation,
+      updateGitTurnSnapshot,
+    ],
   );
 
   const steerInput = useCallback(
@@ -5045,6 +5665,10 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const clearPrefill = useCallback(() => setPrefill(null), []);
+  const prefillComposer = useCallback((text: string) => {
+    const bounded = text.trim().slice(0, 8_000);
+    if (bounded.length > 0) setPrefill(bounded);
+  }, []);
 
   /**
    * US-21: 1-click restore — the version text goes through the US-4
@@ -5064,11 +5688,25 @@ export function useMuseSessions(): UseMuseSessions {
 
   /** US-21: anchored per-version comment (state + disk). */
   const commentArtifact = useCallback(
-    (sessionId: string, artifactId: string, v: number, comment: string) => {
+    (sessionId: string, artifactId: string, v: number, comment: string, anchorQuote?: string) => {
       setArtifacts((cur) => {
         const list = cur[sessionId] ?? [];
-        const next = setVersionComment(list, artifactId, v, comment);
+        const next = setVersionComment(list, artifactId, v, comment, anchorQuote);
         if (JSON.stringify(next) === JSON.stringify(list)) return cur;
+        saveArtifacts(sessionId, next);
+        return { ...cur, [sessionId]: next };
+      });
+    },
+    [],
+  );
+
+  /** US-21: local artifact edits become a new persisted version. */
+  const editArtifact = useCallback(
+    (sessionId: string, artifactId: string, v: number, text: string) => {
+      setArtifacts((cur) => {
+        const list = cur[sessionId] ?? [];
+        const next = editArtifactVersion(list, artifactId, v, text);
+        if (next === list || JSON.stringify(next) === JSON.stringify(list)) return cur;
         saveArtifacts(sessionId, next);
         return { ...cur, [sessionId]: next };
       });
@@ -5324,7 +5962,14 @@ export function useMuseSessions(): UseMuseSessions {
     setStoppingBySession((cur) => ({ ...cur, [sessionId]: true }));
     try {
       setError(null);
-      await invoke("cancel_session", { sessionId });
+      // Scope the interrupt to the turn currently observed for this session.
+      // Older hosts accept the same command without `turnId`; the bridge only
+      // includes the field when a live turn identity is known.
+      const turnId = turnIdsRef.current[sessionId];
+      await invoke("cancel_session", {
+        sessionId,
+        ...(turnId === undefined ? {} : { turnId }),
+      });
       // The host owns the terminal state. Poll immediately so a queued
       // stopped event is reflected without waiting for the slow tick, while
       // preserving the open transcript until that event is observed.
@@ -5387,6 +6032,12 @@ export function useMuseSessions(): UseMuseSessions {
         delete next[sessionId];
         return next;
       });
+      setRecoveryNoticeBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       setRetryScheduledBySession((cur) => {
         if (!(sessionId in cur)) return cur;
         const next = { ...cur };
@@ -5403,6 +6054,13 @@ export function useMuseSessions(): UseMuseSessions {
       dropLog(sessionId);
       // M0-03: a deleted thread takes its retryable sends with it.
       dropOutbox(sessionId);
+      dropGitTurnSnapshot(sessionId);
+      setGitTurnSnapshotsBySession((cur) => {
+        if (!(sessionId in cur)) return cur;
+        const next = { ...cur };
+        delete next[sessionId];
+        return next;
+      });
       setOutbox((cur) => {
         if (!(sessionId in cur)) return cur;
         const next = { ...cur };
@@ -5610,8 +6268,8 @@ export function useMuseSessions(): UseMuseSessions {
   // US-3 + US-30 project actions. Creation past MAX_PROJECTS is refused
   // client-side with the explicit quota message in projectError.
   const createProject = useCallback(
-    (name: string, instructions?: string, workspacePath?: string) => {
-      const res = createProjectRow(projects, { name, instructions, workspace: workspacePath });
+    (name: string, instructions?: string, workspacePaths?: string[]) => {
+      const res = createProjectRow(projects, { name, instructions, workspaces: workspacePaths });
       setProjectError(res.error);
       if (res.project !== null) setProjects(res.projects);
     },
@@ -5627,7 +6285,7 @@ export function useMuseSessions(): UseMuseSessions {
     [projects, threadProjects],
   );
 
-  const updateProject = useCallback((id: string, patch: { name?: string; instructions?: string; workspace?: string }) => {
+  const updateProject = useCallback((id: string, patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] }) => {
     setProjects((cur) => updateProjectRow(cur, id, patch));
   }, []);
 
@@ -5791,6 +6449,22 @@ export function useMuseSessions(): UseMuseSessions {
     [sessions],
   );
 
+  const prepareDesktopCapture = useCallback(
+    (sessionId: string, capture: DesktopCapture): boolean => {
+      const target = sessions.find((session) => session.session_id === sessionId);
+      const attachment = desktopCaptureAttachment(capture);
+      const context = formatDesktopCaptureContext(capture);
+      if (target === undefined || attachment === null || context.length === 0) {
+        setError("desktop capture unavailable: the image or session is invalid");
+        return false;
+      }
+      setPrefill((current) => (current ? `${current}\n\n${context}` : context));
+      setPrefillAttachmentState({ sessionId, attachment });
+      return true;
+    },
+    [sessions],
+  );
+
   const clearPrefillAttachment = useCallback(() => {
     setPrefillAttachmentState(null);
   }, []);
@@ -5832,6 +6506,7 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     if (!isTauriRuntime() || mcpRunningIds.length === 0) return;
     let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async () => {
       if (disposed || mcpPollBusyRef.current) return;
       mcpPollBusyRef.current = true;
@@ -5855,11 +6530,16 @@ export function useMuseSessions(): UseMuseSessions {
         mcpPollBusyRef.current = false;
       }
     };
-    void poll();
-    const timer = setInterval(() => void poll(), 5000);
+    const schedule = () => {
+      if (disposed) return;
+      timer = setTimeout(() => {
+        void poll().catch(() => undefined).finally(schedule);
+      }, 5000);
+    };
+    void poll().catch(() => undefined).finally(schedule);
     return () => {
       disposed = true;
-      clearInterval(timer);
+      if (timer !== null) clearTimeout(timer);
     };
   }, [applyPersistentMcpProbe, mcpRunningIds]);
 
@@ -6398,22 +7078,31 @@ export function useMuseSessions(): UseMuseSessions {
         const rawContent = typeof value.content === "string" ? value.content : "";
         const encoding = typeof value.encoding === "string" ? value.encoding.toLowerCase() : "";
         let content = rawContent;
+        let base64Data: string | undefined;
         if (encoding === "base64" && typeof atob === "function") {
-          const binary = atob(rawContent);
-          const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-          content = typeof TextDecoder === "function"
-            ? new TextDecoder().decode(bytes)
-            : binary;
+          // Keep binary output opaque. TextDecoder would corrupt images and
+          // documents; the stream decides how to preview the media type.
+          try {
+            atob(rawContent);
+            base64Data = rawContent.replace(/\s+/g, "");
+            content = "";
+          } catch {
+            throw new Error("host returned invalid base64 output");
+          }
         }
         const returnedOffset = typeof value.offsetBytes === "number" && Number.isFinite(value.offsetBytes)
           ? Math.max(0, value.offsetBytes)
           : offset;
+        const inferredBinaryByteLen = base64Data === undefined
+          ? undefined
+          : Math.max(0, Math.floor(base64Data.length * 3 / 4) - (base64Data.endsWith("==") ? 2 : base64Data.endsWith("=") ? 1 : 0));
         const byteLen = typeof value.byteLen === "number" && Number.isFinite(value.byteLen)
           ? Math.max(0, value.byteLen)
-          : new TextEncoder().encode(content).byteLength;
+          : inferredBinaryByteLen ?? new TextEncoder().encode(content).byteLength;
         const eof = value.eof === true;
         return {
           content,
+          ...(base64Data === undefined ? {} : { base64Data }),
           offsetBytes: returnedOffset,
           nextOffsetBytes: returnedOffset + byteLen,
           byteLen,
@@ -6522,6 +7211,12 @@ export function useMuseSessions(): UseMuseSessions {
     (sessionId: string): GitReviewState =>
       gitReviewBySession[sessionId] ?? EMPTY_GIT_REVIEW,
     [gitReviewBySession],
+  );
+
+  const gitTurnSnapshot = useCallback(
+    (sessionId: string): GitTurnSnapshot | null =>
+      gitTurnSnapshotsBySession[sessionId] ?? null,
+    [gitTurnSnapshotsBySession],
   );
 
   const stageGitFiles = useCallback(
@@ -7218,6 +7913,9 @@ export function useMuseSessions(): UseMuseSessions {
   const activeStreamActivity = activeId === null
     ? null
     : (streamActivityBySession[activeId] ?? null);
+  const activeRecoveryNotice = activeId === null
+    ? null
+    : (recoveryNoticeBySession[activeId] ?? null);
   const activeResumePending = activeId === null
     ? null
     : (resumePendingBySession[activeId] ?? null);
@@ -7237,10 +7935,13 @@ export function useMuseSessions(): UseMuseSessions {
     activeApprovals,
     streamActivityBySession,
     activeStreamActivity,
+    recoveryNoticeBySession,
+    activeRecoveryNotice,
     resumePendingBySession,
     activeResumePending,
     retryScheduledBySession,
     activeRetryScheduled,
+    turnCompletionBySession,
     stoppingBySession,
     connectionBySession,
     activeConnectionState,
@@ -7253,6 +7954,7 @@ export function useMuseSessions(): UseMuseSessions {
     setActive,
     sandbox,
     setSandbox,
+    restartHost,
     authorizationMode,
     setAuthorizationMode,
     providerId,
@@ -7298,6 +8000,7 @@ export function useMuseSessions(): UseMuseSessions {
     addBrowserAnnotation: addBrowserAnnotationCb,
     prepareBrowserContext,
     prepareBrowserCapture,
+    prepareDesktopCapture,
     removeBrowserAnnotation: removeBrowserAnnotationCb,
     browserPermissions,
     setBrowserAppPermission: setBrowserAppPermissionCb,
@@ -7325,6 +8028,8 @@ export function useMuseSessions(): UseMuseSessions {
     schedules,
     reviewQueue: pendingReviews(reviewQueue),
     scheduleRuns,
+    schedulerStatus,
+    schedulerWakeupStatus,
     notifications,
     notificationPermission: notificationPermissionState,
     notificationsMuted: notificationPreferences.desktopMuted,
@@ -7332,6 +8037,7 @@ export function useMuseSessions(): UseMuseSessions {
     enableNotifications,
     setNotificationsMuted,
     markNotificationRead,
+    markAllNotificationsRead,
     createSchedule: createScheduleCb,
     setScheduleEnabled: setScheduleEnabledCb,
     deleteSchedule: deleteScheduleCb,
@@ -7398,9 +8104,11 @@ export function useMuseSessions(): UseMuseSessions {
     summaries,
     compactSession: doCompact,
     usageBySession,
+    serverCompactionBySession,
     serverCompact,
     newFromSummary,
     prefill,
+    prefillComposer,
     clearPrefill,
     prefillAttachment: prefillAttachmentState?.attachment ?? null,
     prefillAttachmentSessionId: prefillAttachmentState?.sessionId ?? null,
@@ -7408,8 +8116,10 @@ export function useMuseSessions(): UseMuseSessions {
     artifacts,
     restoreArtifact,
     commentArtifact,
+    editArtifact,
     index,
     gitReview,
+    gitTurnSnapshot,
     refreshGitStatus,
     loadGitDiff,
     stageGitFiles,
@@ -7436,6 +8146,7 @@ export function useMuseSessions(): UseMuseSessions {
     unwatchWorkspaceFiles,
     openWorkspacePath,
     error,
+    setError: (message) => setError(message),
     evtCount,
     dismissQueuedTurn,
     startupProbe,

@@ -56,6 +56,34 @@ export interface OutboxEntry {
   attempts: number;
 }
 
+/** Cap per-session outbox length (oldest pruned, cf. log/tombstone caps). */
+export const MAX_OUTBOX_ENTRIES = 50;
+
+/** Defensively validate one persisted entry before it can be retried. */
+export function isValidOutboxEntry(value: unknown): value is OutboxEntry {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.clientMessageId === "string" && row.clientMessageId.length > 0 &&
+    (row.serverCommandId === undefined ||
+      (typeof row.serverCommandId === "string" && row.serverCommandId.length > 0)) &&
+    typeof row.sessionId === "string" && row.sessionId.length > 0 &&
+    typeof row.text === "string" && typeof row.outgoingText === "string" &&
+    (row.state === "sending" || row.state === "accepted" || row.state === "failed") &&
+    (row.error === null || typeof row.error === "string") &&
+    typeof row.ambiguous === "boolean" &&
+    typeof row.createdAt === "number" && Number.isFinite(row.createdAt) &&
+    typeof row.updatedAt === "number" && Number.isFinite(row.updatedAt) &&
+    typeof row.attempts === "number" && Number.isFinite(row.attempts);
+}
+
+/** Normalize untrusted local/native JSON, dropping accepted rows. */
+export function normalizeOutboxEntries(raw: unknown): OutboxEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isValidOutboxEntry)
+    .filter((entry) => entry.state !== "accepted")
+    .slice(-MAX_OUTBOX_ENTRIES);
+}
+
 /** Explicit result of one send attempt (M0-03: sends never vanish). */
 export interface SendResult {
   /** True when the supervisor acknowledged the send (admission ack). */
@@ -174,9 +202,6 @@ export function findOutbox(
 export function failedOutbox(list: OutboxEntry[]): OutboxEntry[] {
   return list.filter((e) => e.state === "failed");
 }
-
-/** Cap per-session outbox length (oldest pruned, cf. log/tombstone caps). */
-export const MAX_OUTBOX_ENTRIES = 50;
 
 export function capOutbox(list: OutboxEntry[]): OutboxEntry[] {
   return list.slice(-MAX_OUTBOX_ENTRIES);

@@ -28,9 +28,12 @@ import {
   type ScheduleRun,
 } from "../src/lib/scheduleRuns.ts";
 import {
+  INITIAL_SCHEDULER_RUNTIME_STATUS,
   releaseSchedulerLease,
   renewSchedulerLease,
   SCHEDULER_LEASE_KEY,
+  schedulerRuntimeErrorStatus,
+  schedulerRuntimeStatusFromProbe,
   tryAcquireSchedulerLease,
 } from "../src/lib/schedulerLease.ts";
 
@@ -242,6 +245,22 @@ describe("M3-06 schedule run ledger", () => {
 });
 
 describe("M3-07 scheduler lease", () => {
+  it("projects native, local, waiting and error states for the Automations UI", () => {
+    assert.deepEqual(INITIAL_SCHEDULER_RUNTIME_STATUS, {
+      mode: "waiting",
+      checkedAt: null,
+      message: "Checking for an available scheduler…",
+    });
+    assert.equal(schedulerRuntimeStatusFromProbe(true, true, 1000).mode, "native");
+    assert.match(schedulerRuntimeStatusFromProbe(true, true, 1000).message, /native scheduler lease/);
+    assert.equal(schedulerRuntimeStatusFromProbe(null, true, 1000).mode, "local");
+    assert.match(schedulerRuntimeStatusFromProbe(null, true, 1000).message, /Keep Muse open/);
+    assert.equal(schedulerRuntimeStatusFromProbe(false, false, 1000).mode, "waiting");
+    assert.match(schedulerRuntimeStatusFromProbe(false, false, 1000).message, /Another Muse window/);
+    assert.equal(schedulerRuntimeErrorStatus(1000).mode, "error");
+    assert.equal(schedulerRuntimeStatusFromProbe(true, true, Number.NaN), INITIAL_SCHEDULER_RUNTIME_STATUS);
+  });
+
   it("allows one live owner, renews it, and lets another owner recover after expiry", () => {
     fakeStorage();
     assert.equal(tryAcquireSchedulerLease("window-a", 1000), true);

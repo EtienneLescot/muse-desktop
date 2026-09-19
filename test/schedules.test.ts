@@ -22,6 +22,7 @@ import {
   enqueueRunNow,
   isScheduleDue,
   isValidTimeZone,
+  nextScheduleOccurrence,
   loadReviewQueue,
   loadSchedules,
   parseCron,
@@ -234,6 +235,24 @@ describe("US-9 due → captured review/run context", () => {
     assert.equal(isScheduleDue(list[0], 5000), false);
     const r = enqueueDue(list, [], 5000);
     assert.equal(r.added.length, 0);
+  });
+
+  it("projects the next occurrence from the same durable cursor as dispatch", () => {
+    const oneShot = sched([], onceInput(), 1000)[0];
+    assert.equal(nextScheduleOccurrence(oneShot), 2000);
+    assert.equal(nextScheduleOccurrence({ ...oneShot, lastFiredAt: 2000 }), null);
+    assert.equal(nextScheduleOccurrence({ ...oneShot, enabled: false }), null);
+
+    const cron = sched([], onceInput({ trigger: { kind: "cron", cron: "0 9 * * *" } }),
+      new Date(2026, 0, 5, 8, 0, 0).getTime())[0];
+    assert.equal(
+      nextScheduleOccurrence(cron),
+      new Date(2026, 0, 5, 9, 0, 0).getTime(),
+    );
+    assert.equal(
+      nextScheduleOccurrence({ ...cron, lastFiredAt: new Date(2026, 0, 5, 9, 0, 0).getTime() }),
+      new Date(2026, 0, 6, 9, 0, 0).getTime(),
+    );
   });
 
   it("a cron schedule enqueues per occurrence, not per tick", () => {

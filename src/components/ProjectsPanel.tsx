@@ -1,8 +1,9 @@
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   diffProjectSettings,
   MAX_PROJECTS,
+  projectWorkspaces,
   projectsNeedingWorkspace,
   threadsInProject,
   type Project,
@@ -18,14 +19,14 @@ interface ProjectsPanelProps {
   projectError: string | null;
   activeSessionId: string | null;
   globalSettings: ProjectSettings;
-  onCreate: (name: string, instructions: string, workspace?: string) => void;
+  onCreate: (name: string, instructions: string, workspaces?: string[]) => void;
   onDelete: (id: string) => void;
   onUpdate: (
     id: string,
-    patch: { name?: string; instructions?: string; workspace?: string },
+    patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] },
   ) => void;
   onAttach: (sessionId: string, projectId: string | null) => void;
-  onStartConversation: (project: Project) => Promise<void>;
+  onStartConversation: (project: Project, workspace?: string) => Promise<void>;
   onSetGlobal: (patch: Partial<ProjectSettings>) => void;
   onSetOverride: (
     projectId: string,
@@ -82,7 +83,7 @@ export function ProjectsPanel({
 }: ProjectsPanelProps) {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [workspacePath, setWorkspacePath] = useState("");
+  const [workspacePaths, setWorkspacePaths] = useState<string[]>([]);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [migrationBusy, setMigrationBusy] = useState(false);
   const [migrationError, setMigrationError] = useState<string | null>(null);
@@ -97,8 +98,13 @@ export function ProjectsPanel({
         setWorkspaceError("The folder picker is available in the desktop app.");
         return;
       }
-      const selected = await open({ directory: true, multiple: false });
-      if (typeof selected === "string" && selected.length > 0) setWorkspacePath(selected);
+      const selected = await open({ directory: true, multiple: true });
+      const picked = Array.isArray(selected)
+        ? selected
+        : typeof selected === "string" ? [selected] : [];
+      if (picked.length > 0) {
+        setWorkspacePaths((current) => Array.from(new Set([...current, ...picked.map((path) => path.trim()).filter(Boolean)])));
+      }
     } catch (error) {
       setWorkspaceError(userFacingError(`folder picker failed: ${String(error)}`));
     }
@@ -125,14 +131,19 @@ export function ProjectsPanel({
     }
   }
 
-  async function checkProjectWorkspace(project: Project): Promise<void> {
-    const path = project.workspace?.trim();
-    if (!path || checkingWorkspaceId !== null) return;
+  async function checkProjectWorkspaces(project: Project, requestedRoots?: readonly string[]): Promise<void> {
+    const roots = (requestedRoots ?? projectWorkspaces(project))
+      .map((root) => root.trim())
+      .filter((root, index, all) => root.length > 0 && all.indexOf(root) === index);
+    if (roots.length === 0 || checkingWorkspaceId !== null) return;
     setCheckingWorkspaceId(project.id);
     try {
-      const observation = await onCheckWorkspace(path);
-      if (observation !== null) {
-        setWorkspaceChecks((current) => ({ ...current, [project.id]: observation }));
+      for (const path of roots) {
+        const observation = await onCheckWorkspace(path);
+        if (observation !== null) {
+          const key = `${project.id}:${path}`;
+          setWorkspaceChecks((current) => ({ ...current, [key]: observation }));
+        }
       }
     } finally {
       setCheckingWorkspaceId(null);
@@ -141,10 +152,10 @@ export function ProjectsPanel({
 
   function submit(): void {
     if (name.trim().length === 0) return;
-    onCreate(name, instructions, workspacePath || undefined);
+    onCreate(name, instructions, workspacePaths.length > 0 ? workspacePaths : undefined);
     setName("");
     setInstructions("");
-    setWorkspacePath("");
+    setWorkspacePaths([]);
   }
 
   return (
@@ -193,13 +204,15 @@ export function ProjectsPanel({
         />
         <div className="project-workspace-picker">
           <button type="button" onClick={() => void pickWorkspace()}>
-            {workspacePath ? "Change folder" : "Choose project folder"}
+            {workspacePaths.length > 0 ? "Add project folders" : "Choose project folders"}
           </button>
-          <span title={workspacePath}>
-            {workspacePath || "No project folder (uses default)"}
+          <span title={workspacePaths.join("\n")}>
+            {workspacePaths.length > 0
+              ? `${workspacePaths.length} folder${workspacePaths.length === 1 ? "" : "s"} selected`
+              : "No project folder (uses default)"}
           </span>
-          {workspacePath && (
-            <button type="button" onClick={() => setWorkspacePath("")}>Clear</button>
+          {workspacePaths.length > 0 && (
+            <button type="button" onClick={() => setWorkspacePaths([])}>Clear</button>
           )}
         </div>
         {workspaceError && <p className="project-error" role="alert">{workspaceError}</p>}
@@ -240,7 +253,7 @@ export function ProjectsPanel({
             effective={settingsFor(p.id)}
             onDelete={() => onDelete(p.id)}
             onUpdate={(patch) => onUpdate(p.id, patch)}
-            onStartConversation={() => onStartConversation(p)}
+            onStartConversation={(workspace) => onStartConversation(p, workspace)}
             onAttachActive={() => {
               if (activeSessionId !== null) onAttach(activeSessionId, p.id);
             }}
@@ -248,9 +261,11 @@ export function ProjectsPanel({
               if (activeSessionId !== null) onAttach(activeSessionId, null);
             }}
             onSetOverride={(key, value) => onSetOverride(p.id, key, value)}
-            workspaceObservation={workspaceChecks[p.id]}
             checkingWorkspace={checkingWorkspaceId === p.id}
-            onCheckWorkspace={() => void checkProjectWorkspace(p)}
+            onCheckWorkspace={(paths) => void checkProjectWorkspaces(p, paths)}
+            workspaceObservations={Object.fromEntries(
+              projectWorkspaces(p).map((root) => [root, workspaceChecks[`${p.id}:${root}`]]),
+            )}
           />
         ))}
       </ul>
@@ -324,17 +339,17 @@ interface ProjectRowProps {
   globalSettings: ProjectSettings;
   effective: ProjectSettings;
   onDelete: () => void;
-  onUpdate: (patch: { name?: string; instructions?: string; workspace?: string }) => void;
-  onStartConversation: () => Promise<void>;
+  onUpdate: (patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] }) => void;
+  onStartConversation: (workspace?: string) => Promise<void>;
   onAttachActive: () => void;
   onDetachActive: () => void;
   onSetOverride: (
     key: keyof ProjectSettings,
     value: ProjectSettings[keyof ProjectSettings] | undefined,
   ) => void;
-  workspaceObservation?: WorkspaceRootObservation;
+  workspaceObservations: Readonly<Record<string, WorkspaceRootObservation | undefined>>;
   checkingWorkspace: boolean;
-  onCheckWorkspace: () => void;
+  onCheckWorkspace: (paths: string[]) => void;
 }
 
 function ProjectRow({
@@ -350,7 +365,7 @@ function ProjectRow({
   onAttachActive,
   onDetachActive,
   onSetOverride,
-  workspaceObservation,
+  workspaceObservations,
   checkingWorkspace,
   onCheckWorkspace,
 }: ProjectRowProps) {
@@ -358,15 +373,22 @@ function ProjectRow({
   const [draftInstructions, setDraftInstructions] = useState(
     project.instructions,
   );
-  const [draftWorkspace, setDraftWorkspace] = useState(project.workspace ?? "");
+  const [draftWorkspaces, setDraftWorkspaces] = useState(() => projectWorkspaces(project));
+  const [selectedWorkspace, setSelectedWorkspace] = useState(() => projectWorkspaces(project)[0] ?? "");
+  useEffect(() => {
+    const roots = projectWorkspaces(project);
+    setDraftWorkspaces(roots);
+    setSelectedWorkspace((current) => roots.includes(current) ? current : roots[0] ?? "");
+  }, [project.id, project.workspace, project.workspaces?.join("\u0000")]);
   const diff = diffProjectSettings(globalSettings, project.settings);
   const dirty =
     draftName.trim() !== project.name ||
     draftInstructions.trim() !== project.instructions ||
-    draftWorkspace.trim() !== (project.workspace ?? "");
+    JSON.stringify(draftWorkspaces) !== JSON.stringify(projectWorkspaces(project));
+  const hasWorkspace = draftWorkspaces.length > 0;
 
   return (
-    <li className={`project-item${project.workspace?.trim() ? "" : " project-item-unrooted"}`}>
+    <li className={`project-item${hasWorkspace ? "" : " project-item-unrooted"}`}>
       <details>
         <summary>
           <span className="project-name">{project.name}</span>
@@ -378,7 +400,7 @@ function ProjectRow({
               override
             </span>
           )}
-          {!project.workspace?.trim() && <span className="project-root-flag">folder needed</span>}
+          {!hasWorkspace && <span className="project-root-flag">folder needed</span>}
         </summary>
         <div className="project-detail">
           <label className="project-setting">
@@ -401,48 +423,60 @@ function ProjectRow({
             />
           </label>
           <div className="project-setting project-workspace-setting">
-            <span>Folder</span>
-            <span className="workspace-path" title={draftWorkspace}>
-              {draftWorkspace || "No project folder (uses default)"}
-            </span>
+            <span>Folders</span>
+            <ul className="workspace-root-list" aria-label={`Folders for project ${project.name}`}>
+              {draftWorkspaces.length === 0 && <li className="workspace-path">No project folder (uses default)</li>}
+            {draftWorkspaces.map((root, index) => {
+              const observation = workspaceObservations[root];
+              return (
+                <li className="workspace-root-row" key={`${root}-${index}`}>
+                  <span className="workspace-path" title={root}>{root}</span>
+                  {observation && (
+                    <span
+                      className={`workspace-health workspace-health-${observation.exists && observation.isDirectory ? "ready" : "missing"}`}
+                      role="status"
+                      title={observation.reason}
+                    >
+                      {observation.exists
+                        ? observation.isDirectory
+                          ? "Available"
+                          : "Not a folder"
+                        : "Missing"}
+                    </span>
+                  )}
+                  <button type="button" onClick={() => setDraftWorkspaces((current) => current.filter((_, i) => i !== index))}>
+                    Remove
+                  </button>
+                </li>
+              );
+            })}
+            </ul>
             <button
               type="button"
               onClick={async () => {
                 try {
                   if (!("__TAURI_INTERNALS__" in window)) return;
-                  const selected = await open({ directory: true, multiple: false });
-                  if (typeof selected === "string" && selected.length > 0) {
-                    setDraftWorkspace(selected);
+                  const selected = await open({ directory: true, multiple: true });
+                  const picked = Array.isArray(selected)
+                    ? selected
+                    : typeof selected === "string" ? [selected] : [];
+                  if (picked.length > 0) {
+                    setDraftWorkspaces((current) => Array.from(new Set([...current, ...picked.map((path) => path.trim()).filter(Boolean)])));
                   }
                 } catch {
                   // Keep the current value when the native picker is cancelled or unavailable.
                 }
               }}
             >
-              {draftWorkspace ? "Change" : "Choose"}
+              {draftWorkspaces.length > 0 ? "Add folder" : "Choose folders"}
             </button>
-            {draftWorkspace && (
-              <button type="button" onClick={() => setDraftWorkspace("")}>
-                Clear
-              </button>
+            {draftWorkspaces.length > 0 && (
+              <button type="button" onClick={() => setDraftWorkspaces([])}>Clear all</button>
             )}
-            {project.workspace?.trim() && (
-              <button type="button" onClick={onCheckWorkspace} disabled={checkingWorkspace}>
-                {checkingWorkspace ? "Checking…" : "Check folder"}
+            {hasWorkspace && (
+              <button type="button" onClick={() => onCheckWorkspace(draftWorkspaces)} disabled={checkingWorkspace}>
+                {checkingWorkspace ? "Checking folders…" : "Check folders"}
               </button>
-            )}
-            {workspaceObservation && (
-              <span
-                className={`workspace-health workspace-health-${workspaceObservation.exists && workspaceObservation.isDirectory ? "ready" : "missing"}`}
-                role="status"
-                title={workspaceObservation.reason}
-              >
-                {workspaceObservation.exists
-                  ? workspaceObservation.isDirectory
-                    ? "Available"
-                    : "Not a folder"
-                  : "Missing"}
-              </span>
             )}
           </div>
           <div className="project-actions">
@@ -451,7 +485,7 @@ function ProjectRow({
                 onUpdate({
                   name: draftName,
                   instructions: draftInstructions,
-                  workspace: draftWorkspace,
+                  workspaces: draftWorkspaces,
                 })
               }
               disabled={!dirty}
@@ -459,13 +493,28 @@ function ProjectRow({
             >
               Save
             </button>
-            {project.workspace && (
+            {hasWorkspace && (
+              <>
+                <label className="project-start-root">
+                  <span>Start in</span>
+                  <select
+                    value={selectedWorkspace}
+                    onChange={(event) => setSelectedWorkspace(event.target.value)}
+                    aria-label={`Conversation folder for ${project.name}`}
+                  >
+                    {draftWorkspaces.map((root) => (
+                      <option key={root} value={root}>{root}</option>
+                    ))}
+                  </select>
+                </label>
               <button
-                onClick={() => void onStartConversation()}
+                onClick={() => void onStartConversation(selectedWorkspace)}
+                disabled={dirty}
                 title="Start a conversation in this project folder"
               >
                 New conversation here
               </button>
+              </>
             )}
             {hasActiveThread &&
               (activeAttached ? (

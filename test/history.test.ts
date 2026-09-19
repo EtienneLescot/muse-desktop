@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { historyItemsToLogEntries, mergeHistoryLog } from "../src/lib/history.ts";
+import { historyEventsToLogEntries, historyItemsToLogEntries, mergeHistoryLog } from "../src/lib/history.ts";
 
 describe("session history hydration", () => {
   it("maps durable item kinds to the live conversation lanes", () => {
@@ -32,6 +32,35 @@ describe("session history hydration", () => {
     ]);
   });
 
+  it("normalizes nested MSP snapshots and terminal status aliases", () => {
+    const entries = historyItemsToLogEntries([
+      {
+        item: {
+          item_id: "r-nested",
+          turn_id: "turn-1",
+          kind: "analysis",
+          status: "done",
+          content: "The workspace is ready.",
+        },
+      },
+      {
+        item: {
+          item_id: "s-nested",
+          turn_id: "turn-1",
+          kind: "userShell",
+          status: "succeeded",
+          command_text: "git status --short",
+          content: "clean",
+        },
+      },
+    ], 1000);
+    assert.deepEqual(entries.map((entry) => [entry.itemId, entry.role, entry.text, entry.open]), [
+      ["r-nested", "thinking", "The workspace is ready.", false],
+      ["s-nested", "tool", "$ git status --short\nclean", false],
+    ]);
+    assert.equal(entries[0].turnId, "turn-1");
+  });
+
   it("keeps a durable user-shell command paired with its completed output", () => {
     const entries = historyItemsToLogEntries([
       {
@@ -59,6 +88,78 @@ describe("session history hydration", () => {
       },
     ]);
     assert.equal(entries[0].outputRef, "output://shell-large");
+  });
+
+  it("folds paged item events to the newest revision and ignores bookkeeping", () => {
+    const entries = historyEventsToLogEntries([
+      { method: "turn/started", params: { viewCursor: "1" } },
+      { method: "item/started", params: { item: { itemId: "a1", kind: "agentMessage", revision: 1, text: "partial", status: "inProgress" } } },
+      { method: "item/updated", params: { item: { itemId: "a1", kind: "agentMessage", revision: 2, text: "complete", status: "completed" } } },
+      { method: "item/updated", params: { item: { itemId: "a1", kind: "agentMessage", revision: 1, text: "stale" } } },
+      { method: "item/completed", params: { item: { itemId: "u1", kind: "userMessage", revision: 1, displayText: "Hello", status: "completed" } } },
+    ], 1000);
+    assert.deepEqual(entries.map((entry) => [entry.itemId, entry.role, entry.text, entry.open]), [
+      ["a1", "assistant", "complete", false],
+      ["u1", "user", "Hello", false],
+    ]);
+  });
+
+  it("folds a nested paged snapshot with snake_case ids", () => {
+    const entries = historyEventsToLogEntries([
+      {
+        method: "item/updated",
+        params: {
+          item: {
+            item: {
+              item_id: "paged-analysis",
+              turn_id: "turn-paged",
+              kind: "analysis",
+              status: "done",
+              content: "Durable reasoning",
+              revision: 3,
+            },
+          },
+        },
+      },
+    ], 1000);
+    assert.deepEqual(entries.map((entry) => [entry.itemId, entry.role, entry.text, entry.open, entry.turnId]), [
+      ["paged-analysis", "thinking", "Durable reasoning", false, "turn-paged"],
+    ]);
+  });
+
+  it("accepts the structured host output reference returned by view/page", () => {
+    const entries = historyItemsToLogEntries([
+      {
+        itemId: "tool-1",
+        kind: "toolCall",
+        tool: "bash",
+        visibleOutput: "summary",
+        outputRef: { id: "out-1", uri: "output://out-1", availability: "available" },
+        status: "completed",
+      },
+    ]);
+    assert.equal(entries[0].outputRef, "output://out-1");
+  });
+
+  it("keeps bounded rich-content metadata beside a lazy output reference", () => {
+    const entries = historyItemsToLogEntries([
+      {
+        itemId: "tool-image",
+        kind: "toolCall",
+        tool: "image.generate",
+        visibleOutput: "Generated image",
+        outputRef: "output://image-1",
+        modelVisibleContent: [
+          { type: "image", mediaType: "image/png", path: "art/output.png", sourceToolName: "image.generate", width: 640, height: 480 },
+          { type: "image", mediaType: "image/png", path: "ignored-without-source", sourceToolName: "" },
+        ],
+        status: "completed",
+      },
+    ]);
+    assert.deepEqual(entries[0].richContent, [
+      { type: "image", mediaType: "image/png", path: "art/output.png", sourceToolName: "image.generate", width: 640, height: 480 },
+    ]);
+    assert.equal(entries[0].outputRef, "output://image-1");
   });
 
   it("reconciles by item id and keeps local notes without duplicating user text", () => {

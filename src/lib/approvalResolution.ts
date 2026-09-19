@@ -66,6 +66,15 @@ export function isSelectedApprovalAccepted(
   return choice === undefined ? true : isApprovalDecisionAccepted(choice.decision);
 }
 
+/**
+ * Legacy hosts omit the `updated` marker on a later approval stage. Once the
+ * user has accepted the previous stage, closing the open lane would erase the
+ * visible resume bridge and make the conversation look stuck in thinking.
+ */
+export function shouldCloseApprovalLane(updated: boolean, resumePending: boolean): boolean {
+  return !updated && !resumePending;
+}
+
 /** Parse a host approval status without exposing its raw payload to the UI. */
 export function parseApprovalResolution(payload: string): ApprovalResolution {
   try {

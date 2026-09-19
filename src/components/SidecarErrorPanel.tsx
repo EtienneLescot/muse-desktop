@@ -5,7 +5,12 @@ import {
   type SidecarErrorKind,
 } from "../lib/sidecarError";
 import { userFacingError } from "../lib/errorCopy";
-import type { StartupProbe, StartupCheck } from "../lib/startupProbe";
+import {
+  startupCheckStatusLabel,
+  sanitizeStartupText,
+  startupProbeRows,
+  type StartupProbe,
+} from "../lib/startupProbe";
 
 interface Props {
   kind: SidecarErrorKind;
@@ -31,7 +36,8 @@ export function SidecarErrorPanel({
   startupProbe,
 }: Props) {
   const [pickerError, setPickerError] = useState<string | null>(null);
-  const recoverySteps = startupRecoverySteps(kind, message);
+  const safeMessage = sanitizeStartupText(message, 4_000);
+  const recoverySteps = startupRecoverySteps(kind, safeMessage);
 
   async function pickWorkspace() {
     try {
@@ -43,14 +49,9 @@ export function SidecarErrorPanel({
     }
   }
 
-  const checks: Array<[string, StartupCheck]> = startupProbe === null || startupProbe === undefined
-    ? []
-    : [
-        ["Sidecar", startupProbe.sidecar],
-        ...(startupProbe.wsl ? [["WSL", startupProbe.wsl] as [string, StartupCheck]] : []),
-        ...(startupProbe.museCli ? [["Muse CLI", startupProbe.museCli] as [string, StartupCheck]] : []),
-        ...(startupProbe.workspace ? [["Workspace", startupProbe.workspace] as [string, StartupCheck]] : []),
-      ];
+  // Keep recovery and settings surfaces on the same sanitized probe projection.
+  // Native/WSL output may contain control markers or replacement characters.
+  const checks = startupProbe ? startupProbeRows(startupProbe) : [];
 
   return (
     <div className="sidecar-error" role="alert">
@@ -59,18 +60,19 @@ export function SidecarErrorPanel({
           ? "Sidecar binary not found"
           : "Could not start the Muse sidecar"}
       </h2>
-      <p className="sidecar-error-message">{message}</p>
+      <p className="sidecar-error-message">{safeMessage || "The Muse sidecar could not start."}</p>
       {checks.length > 0 && (
         <section className="startup-probe" aria-label="Environment check">
           <header>
             <h3>Environment check</h3>
-            <span className="muted">{startupProbe?.platform}</span>
+            <span className="muted">{startupProbe ? sanitizeStartupText(startupProbe.platform, 40) : ""}</span>
           </header>
           <ul>
-            {checks.map(([label, check]) => (
+            {checks.map(({ label, check }) => (
               <li key={label} data-status={check.status}>
                 <span className="startup-probe-dot" aria-hidden="true" />
                 <span className="startup-probe-label">{label}</span>
+                <span className="startup-probe-status">{startupCheckStatusLabel(check.status)}</span>
                 <span className="startup-probe-detail">{check.detail || check.status}</span>
               </li>
             ))}
@@ -110,7 +112,7 @@ export function SidecarErrorPanel({
               <ul className="sidecar-error-paths">
                 {triedPaths.map((p) => (
                   <li key={p}>
-                    <code>{p}</code>
+                    <code>{sanitizeStartupText(p, 500)}</code>
                   </li>
                 ))}
               </ul>

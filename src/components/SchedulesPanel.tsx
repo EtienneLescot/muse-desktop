@@ -6,9 +6,12 @@ import {
   type ScheduleAuthorizationMode,
   type ScheduleMissedPolicy,
   type ThreadReuse,
+  nextScheduleOccurrence,
 } from "../lib/schedules";
 import { MAX_RUN_ATTEMPTS, type ScheduleRun } from "../lib/scheduleRuns";
-import type { MuseNotification, NotificationPermission } from "../lib/notifications";
+import { filterNotifications, type MuseNotification, type NotificationFilter, type NotificationPermission } from "../lib/notifications";
+import type { SchedulerRuntimeStatus } from "../lib/schedulerLease";
+import type { SchedulerWakeupStatus } from "../lib/schedulerWakeup";
 import { userFacingError } from "../lib/errorCopy";
 
 interface SessionRef {
@@ -19,6 +22,8 @@ interface SessionRef {
 interface Props {
   schedules: Schedule[];
   runs: ScheduleRun[];
+  schedulerStatus: SchedulerRuntimeStatus;
+  schedulerWakeupStatus: SchedulerWakeupStatus;
   notifications: MuseNotification[];
   notificationPermission: NotificationPermission;
   notificationsMuted: boolean;
@@ -42,6 +47,7 @@ interface Props {
   onEnableNotifications: () => Promise<NotificationPermission>;
   onSetNotificationsMuted: (muted: boolean) => void;
   onMarkNotificationRead: (id: string) => void;
+  onMarkAllNotificationsRead: () => void;
   onOpenNotification: (notification: MuseNotification) => void;
 }
 
@@ -73,6 +79,21 @@ function describeRunStatus(status: ScheduleRun["status"]): string {
   return "Queued";
 }
 
+function describeNextSchedule(s: Schedule, now = Date.now()): string {
+  if (!s.enabled) return "Disabled";
+  const next = nextScheduleOccurrence(s);
+  if (next === null) return "No further runs";
+  if (next <= now) return "Due now";
+  return `Next ${new Date(next).toLocaleString()}${s.timeZone ? ` · ${s.timeZone}` : ""}`;
+}
+
+function describeSchedulerMode(mode: SchedulerRuntimeStatus["mode"]): string {
+  if (mode === "native") return "Native scheduler active";
+  if (mode === "local") return "Local scheduler active";
+  if (mode === "error") return "Scheduler check unavailable";
+  return "Waiting for scheduler";
+}
+
 function describeNotificationTime(createdAt: number): string {
   return new Date(createdAt).toLocaleString();
 }
@@ -102,6 +123,8 @@ function describeRunTarget(run: ScheduleRun, sessions: SessionRef[]): string {
 export function SchedulesPanel({
   schedules,
   runs,
+  schedulerStatus,
+  schedulerWakeupStatus,
   notifications,
   notificationPermission,
   notificationsMuted,
@@ -125,6 +148,7 @@ export function SchedulesPanel({
   onEnableNotifications,
   onSetNotificationsMuted,
   onMarkNotificationRead,
+  onMarkAllNotificationsRead,
   onOpenNotification,
 }: Props) {
   const [name, setName] = useState("");
@@ -137,6 +161,8 @@ export function SchedulesPanel({
   const [missedPolicy, setMissedPolicy] = useState<ScheduleMissedPolicy>("latest");
   const [formError, setFormError] = useState<string | null>(null);
   const [runFilter, setRunFilter] = useState<RunFilter>("all");
+  const [notificationFilter, setNotificationFilter] = useState<NotificationFilter>("all");
+  const [notificationsExpanded, setNotificationsExpanded] = useState(false);
   const localTimeZone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     [],
@@ -152,6 +178,13 @@ export function SchedulesPanel({
     })
     .slice(-8)
     .reverse(), [runFilter, runs]);
+  const filteredNotifications = useMemo(
+    () => filterNotifications(notifications, notificationFilter),
+    [notificationFilter, notifications],
+  );
+  const visibleNotifications = notificationsExpanded
+    ? filteredNotifications
+    : filteredNotifications.slice(0, 6);
 
   function submit(): void {
     const input: ScheduleInput = {
@@ -186,6 +219,32 @@ export function SchedulesPanel({
 
   return (
     <section className="schedules" aria-label="Automations">
+      <div className="scheduler-status" data-mode={schedulerStatus.mode} role="status" aria-live="polite">
+        <span className="scheduler-status-dot" aria-hidden="true" />
+        <div className="scheduler-status-copy">
+          <strong>{describeSchedulerMode(schedulerStatus.mode)}</strong>
+          <span>{schedulerStatus.message}</span>
+        </div>
+        <span className="scheduler-status-time">
+          {schedulerStatus.checkedAt === null
+            ? "Not checked yet"
+            : `Checked ${new Date(schedulerStatus.checkedAt).toLocaleTimeString()}`}
+        </span>
+      </div>
+      <div
+        className="scheduler-wakeup-status"
+        data-supported={schedulerWakeupStatus.supported}
+        data-installed={schedulerWakeupStatus.installed}
+        role="status"
+      >
+        <strong>Native wake-up</strong>
+        <span>{schedulerWakeupStatus.message}</span>
+        {schedulerWakeupStatus.installed && schedulerWakeupStatus.wakeAt !== null && (
+          <time dateTime={new Date(schedulerWakeupStatus.wakeAt).toISOString()}>
+            {new Date(schedulerWakeupStatus.wakeAt).toLocaleString()}
+          </time>
+        )}
+      </div>
       <h2 className="schedules-summary">
         New automation
         {schedules.length > 0 && (
@@ -293,6 +352,7 @@ export function SchedulesPanel({
                   {describeSchedule(s)}
                 </span>
               </div>
+              <div className="muted sched-next">{describeNextSchedule(s)}</div>
               <div className="muted sched-target">
                 → {describeReuse(s.threadReuse, sessions)}
               </div>
@@ -373,6 +433,8 @@ export function SchedulesPanel({
                       {run.resultSummary.assistantMessages} response{run.resultSummary.assistantMessages === 1 ? "" : "s"}
                       {run.resultSummary.toolEvents > 0 ? ` · ${run.resultSummary.toolEvents} tool event${run.resultSummary.toolEvents === 1 ? "" : "s"}` : ""}
                       {run.resultSummary.filesMentioned.length > 0 ? ` · ${run.resultSummary.filesMentioned.length} file${run.resultSummary.filesMentioned.length === 1 ? "" : "s"}` : ""}
+                      {run.resultSummary.nextSteps && run.resultSummary.nextSteps.length > 0 ? ` · ${run.resultSummary.nextSteps.length} next step${run.resultSummary.nextSteps.length === 1 ? "" : "s"}` : ""}
+                      {run.resultSummary.issues && run.resultSummary.issues.length > 0 ? ` · ${run.resultSummary.issues.length} issue${run.resultSummary.issues.length === 1 ? "" : "s"}` : ""}
                     </span>
                   </div>
                 )}
@@ -421,6 +483,18 @@ export function SchedulesPanel({
                           <ul>{run.resultSummary.decisions.slice(0, 4).map((decision) => <li key={decision}>{decision}</li>)}</ul>
                         </div>
                       )}
+                      {run.resultSummary.nextSteps && run.resultSummary.nextSteps.length > 0 && (
+                        <div className="run-summary-next">
+                          <span className="run-detail-label">Next steps observed</span>
+                          <ul>{run.resultSummary.nextSteps.map((step) => <li key={step}>{step}</li>)}</ul>
+                        </div>
+                      )}
+                      {run.resultSummary.issues && run.resultSummary.issues.length > 0 && (
+                        <div className="run-summary-issues">
+                          <span className="run-detail-label">Issues observed</span>
+                          <ul>{run.resultSummary.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
+                        </div>
+                      )}
                     </div>
                   )}
                   {run.error && (
@@ -431,11 +505,13 @@ export function SchedulesPanel({
                   )}
                 </details>
                 <div className="sched-actions">
-                  {run.sessionId && (
-                    <button type="button" onClick={() => onOpenRun(run)} title="Open conversation">
-                      Open conversation
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => onOpenRun(run)}
+                    title={run.sessionId ? "Open conversation" : "Open automation run"}
+                  >
+                    {run.sessionId ? "Open conversation" : "Open run"}
+                  </button>
                   {run.unread && (
                     <button type="button" onClick={() => onMarkRunRead(run.id)} title="Mark run as read">
                       Mark read
@@ -484,7 +560,31 @@ export function SchedulesPanel({
       <div className="schedule-notifications" aria-label="Automation notifications">
         <div className="schedule-notifications-head">
           <h3>Notifications</h3>
-          {unreadNotifications > 0 && <span className="schedules-count">{unreadNotifications}</span>}
+          {unreadNotifications > 0 && (
+            <>
+              <span className="schedules-count">{unreadNotifications}</span>
+              <button
+                type="button"
+                className="notification-mark-all"
+                onClick={onMarkAllNotificationsRead}
+                title="Mark all notifications as read"
+              >
+                Mark all read
+              </button>
+            </>
+          )}
+          <select
+            className="notification-filter"
+            aria-label="Notification filter"
+            value={notificationFilter}
+            onChange={(event) => {
+              setNotificationFilter(event.currentTarget.value as NotificationFilter);
+              setNotificationsExpanded(false);
+            }}
+          >
+            <option value="all">All ({notifications.length})</option>
+            <option value="unread">Unread ({unreadNotifications})</option>
+          </select>
         </div>
         {notificationPermission === "granted" ? (
           <div className="notification-permission-row">
@@ -505,22 +605,42 @@ export function SchedulesPanel({
             {notificationPermission === "denied" ? "Enable notifications in system settings" : "Enable desktop notifications"}
           </button>
         )}
-        {notifications.length === 0 ? (
-          <p className="muted notification-empty">Completed and failed automations will appear here.</p>
+        {filteredNotifications.length === 0 ? (
+          <p className="muted notification-empty">
+            {notificationFilter === "unread" ? "No unread notifications." : "Completed and failed automations will appear here."}
+          </p>
         ) : (
-          <ul className="notification-list">
-            {notifications.slice(-6).reverse().map((notification) => (
+          <>
+            <ul className="notification-list">
+            {visibleNotifications.map((notification) => (
               <li key={notification.id} className="notification-item" data-unread={notification.unread === true}>
                 <div className="notification-item-head">
                   <strong className="notification-title">{notification.title}</strong>
                   {notification.unread && <span className="run-unread">New</span>}
                 </div>
                 <span className="notification-body">{notification.body}</span>
+                {(notification.issues?.length || notification.nextSteps?.length) ? (
+                  <details className="notification-facts">
+                    <summary>Result details</summary>
+                    {notification.issues && notification.issues.length > 0 && (
+                      <div className="notification-fact-group">
+                        <span className="run-detail-label">Issues</span>
+                        <ul>{notification.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
+                      </div>
+                    )}
+                    {notification.nextSteps && notification.nextSteps.length > 0 && (
+                      <div className="notification-fact-group">
+                        <span className="run-detail-label">Next steps</span>
+                        <ul>{notification.nextSteps.map((step) => <li key={step}>{step}</li>)}</ul>
+                      </div>
+                    )}
+                  </details>
+                ) : null}
                 <span className="muted notification-meta">{describeNotificationTime(notification.createdAt)}</span>
                 <div className="sched-actions">
-                  {notification.sessionId && (
-                    <button type="button" onClick={() => onOpenNotification(notification)} title="Open conversation">
-                      Open conversation
+                  {(notification.sessionId || notification.runId) && (
+                    <button type="button" onClick={() => onOpenNotification(notification)} title={notification.sessionId ? "Open conversation" : "Open automation run"}>
+                      {notification.sessionId ? "Open conversation" : "Open run"}
                     </button>
                   )}
                   {notification.unread && (
@@ -531,7 +651,17 @@ export function SchedulesPanel({
                 </div>
               </li>
             ))}
-          </ul>
+            </ul>
+            {filteredNotifications.length > 6 && (
+              <button
+                type="button"
+                className="notification-show-more"
+                onClick={() => setNotificationsExpanded((expanded) => !expanded)}
+              >
+                {notificationsExpanded ? "Show latest 6" : `Show all ${filteredNotifications.length}`}
+              </button>
+            )}
+          </>
         )}
       </div>
     </section>

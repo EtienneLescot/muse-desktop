@@ -59,10 +59,14 @@ export interface WorktreeInspection {
   clean: boolean;
   conflicted: boolean;
   fileCount: number;
+  /** Ignored files are not changes, but may hide generated setup artifacts. */
+  ignoredFileCount?: number;
   /** Conservative Git lock/in-progress markers; empty does not prove idle. */
   activeSignals?: string[];
   /** The inspected branch was also reported by another linked worktree. */
   branchReferencedElsewhere?: boolean;
+  /** Muse conversations still attached to this checkout in the native app. */
+  attachedSessionCount?: number;
   observedAt: number;
 }
 
@@ -73,6 +77,7 @@ export interface WorktreeInspectionSummary {
   clean: number;
   changed: number;
   conflicted: number;
+  attached: number;
 }
 
 export function summarizeWorktreeInspections(
@@ -82,6 +87,7 @@ export function summarizeWorktreeInspections(
   let clean = 0;
   let changed = 0;
   let conflicted = 0;
+  let attached = 0;
   let inspected = 0;
   for (const record of records) {
     const inspection = inspections[record.branch];
@@ -90,8 +96,9 @@ export function summarizeWorktreeInspections(
     if (inspection.conflicted) conflicted += 1;
     if (inspection.clean) clean += 1;
     else changed += 1;
+    if ((inspection.attachedSessionCount ?? 0) > 0) attached += 1;
   }
-  return { total: records.length, inspected, clean, changed, conflicted };
+  return { total: records.length, inspected, clean, changed, conflicted, attached };
 }
 
 export const MAX_SETUP_COMMAND_CHARS = 2_000;

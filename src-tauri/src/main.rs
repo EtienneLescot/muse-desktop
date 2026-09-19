@@ -25,6 +25,7 @@ mod git;
 mod terminal;
 mod files;
 mod artifact_export;
+mod output_export;
 mod browser_download;
 mod setup;
 mod mcp;
@@ -34,8 +35,13 @@ mod skills;
 mod startup;
 mod scheduler;
 mod scheduler_runs;
+mod scheduler_schedules;
+mod scheduler_wakeup;
 mod notification_ledger;
+mod outbox_ledger;
+mod desktop_control;
 mod workspace_watch;
+mod writer_lock;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -75,6 +81,114 @@ pub struct SessionMeta {
     /// native user-shell action disabled until a fresh handshake proves it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub granted_capabilities: Option<Vec<String>>,
+}
+
+/// Sandbox posture selected when a workspace-owned Muse host is spawned.
+/// Muse fixes this posture for the lifetime of `muse serve`; it cannot be
+/// changed through MSP for an already running host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum HostSandboxMode {
+    Workspace,
+    Network,
+    Elevated,
+}
+
+impl HostSandboxMode {
+    fn parse(raw: Option<&str>) -> Result<Self, String> {
+        match raw.unwrap_or("workspace").trim().to_ascii_lowercase().as_str() {
+            "workspace" => Ok(Self::Workspace),
+            "network" => Ok(Self::Network),
+            "elevated" => Ok(Self::Elevated),
+            other => Err(format!("unsupported sandbox mode `{other}`")),
+        }
+    }
+
+    fn cli_args(&self) -> Vec<&'static str> {
+        match self {
+            // Workspace mode keeps writes and shell execution available in
+            // the selected root while restricting network access.
+            Self::Workspace => vec!["serve", "--sandbox-network", "restricted"],
+            Self::Network => vec!["serve", "--sandbox-network", "enabled"],
+            // Elevated is an explicit product permission and opts out of the
+            // Muse sandbox while retaining explicit network access.
+            Self::Elevated => vec![
+                "serve",
+                "--disable-sandbox",
+                "--sandbox-network",
+                "enabled",
+            ],
+        }
+    }
+}
+
+/// Concrete flags for one workspace-owned host. Project settings are folded
+/// into this value before spawn; the running host cannot mutate them later.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HostSandboxPolicy {
+    mode: HostSandboxMode,
+    disable_write: bool,
+    disable_shell: bool,
+}
+
+impl HostSandboxPolicy {
+    fn parse(
+        raw_mode: Option<&str>,
+        disable_write: Option<bool>,
+        disable_shell: Option<bool>,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            mode: HostSandboxMode::parse(raw_mode)?,
+            disable_write: disable_write.unwrap_or(false),
+            disable_shell: disable_shell.unwrap_or(false),
+        })
+    }
+
+    fn cli_args(&self) -> Vec<&'static str> {
+        let mut args = self.mode.cli_args();
+        if self.disable_write {
+            args.push("--disable-write");
+        }
+        if self.disable_shell {
+            args.push("--disable-shell");
+        }
+        args
+    }
+
+    /// Stable, user-facing summary used when a workspace host cannot satisfy
+    /// a different project posture without being restarted.
+    fn summary(&self) -> String {
+        let mode = match self.mode {
+            HostSandboxMode::Workspace => "workspace",
+            HostSandboxMode::Network => "network",
+            HostSandboxMode::Elevated => "elevated",
+        };
+        let mut restrictions = Vec::new();
+        if self.disable_write {
+            restrictions.push("read-only writes");
+        }
+        if self.disable_shell {
+            restrictions.push("shell disabled");
+        }
+        if restrictions.is_empty() {
+            mode.to_string()
+        } else {
+            format!("{mode} ({})", restrictions.join(", "))
+        }
+    }
+}
+
+fn sandbox_policy_conflict(
+    current: &HostSandboxPolicy,
+    requested: &HostSandboxPolicy,
+) -> Option<String> {
+    if current == requested {
+        return None;
+    }
+    Some(format!(
+        "workspace host already uses sandbox posture {}; restart the workspace host before starting this conversation with {}",
+        current.summary(),
+        requested.summary(),
+    ))
 }
 
 /// One buffered backend event with its sequence number (poll transport).
@@ -252,10 +366,17 @@ struct AppState {
     sessions: Mutex<HashMap<String, SessionMeta>>,
     /// Host-level initialize facts, keyed by canonical workspace root.
     host_durability: Mutex<HashMap<PathBuf, String>>,
+    /// Sandbox posture used to spawn each workspace-owned host. This is a
+    /// process-lifetime fact because Muse does not negotiate it over MSP.
+    host_sandbox: Mutex<HashMap<PathBuf, HostSandboxPolicy>>,
     /// Host-level capability grants, keyed by canonical workspace root.
     /// Capabilities are fixed for a connection lifetime and never inferred
     /// from the renderer's authorization posture.
     host_capabilities: Mutex<HashMap<PathBuf, Vec<String>>>,
+    /// Volatile native gate for computer-use actions. The renderer owns the
+    /// persisted product preference; this flag is reset on launch and must be
+    /// explicitly synchronized by the current webview before any action.
+    desktop_control_allowed: Mutex<bool>,
     approvals: Mutex<HashMap<(String, String), PendingApproval>>,
     /// (session_id, item_id) -> MSP item kind (`agentMessage`, `subagent`,
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
@@ -294,6 +415,9 @@ struct AppState {
     /// Process-level scheduler lease. The open native file handle makes the
     /// claim exclusive across separately launched app processes.
     scheduler_lease: Mutex<Option<scheduler::NativeLease>>,
+    /// Cross-process writer target leases. Handles stay open for the lease
+    /// lifetime so OS advisory locks release after a crashed process.
+    writer_locks: writer_lock::Registry,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -333,6 +457,18 @@ fn truncate(s: &str, n: usize) -> String {
         end -= 1;
     }
     format!("{}…", &s[..end])
+}
+
+/// Keep a host turn anchor small and stable before it crosses the native
+/// bridge. The renderer uses this identifier to reattach the thinking lane
+/// after an approval resolves, so dropping it would leave the turn looking
+/// permanently stuck even though the host resumed it.
+fn bounded_turn_id(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| truncate(value, 160))
 }
 
 /// Keep host diagnostics useful without persisting command prompts, bearer
@@ -406,8 +542,36 @@ fn redact_diagnostic(input: &str) -> String {
     truncate(&out, DIAGNOSTIC_LINE_LIMIT)
 }
 
-const NATIVE_BROWSER_LABEL: &str = "muse-browser";
+const NATIVE_BROWSER_LABEL_PREFIX: &str = "muse-browser-";
 const MAX_BROWSER_URL_CHARS: usize = 4096;
+const MAX_BROWSER_SESSION_CHARS: usize = 128;
+
+fn validate_native_browser_session(raw: &str) -> Result<String, String> {
+    let session = raw.trim();
+    if session.is_empty() {
+        return Err("browser session id must not be empty".to_string());
+    }
+    if session.chars().count() > MAX_BROWSER_SESSION_CHARS {
+        return Err(format!(
+            "browser session id is limited to {MAX_BROWSER_SESSION_CHARS} characters"
+        ));
+    }
+    if session.chars().any(char::is_control) {
+        return Err("browser session id contains an invalid control character".to_string());
+    }
+    Ok(session.to_string())
+}
+
+/// Derive a stable, label-safe native window id without putting a conversation
+/// id in the platform window registry or title.
+fn native_browser_label(session_id: &str) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in session_id.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{NATIVE_BROWSER_LABEL_PREFIX}{hash:016x}")
+}
 
 /// Normalize and validate a URL before it is handed to a native webview.
 /// The renderer performs the same normalization for its preview, but this
@@ -445,9 +609,19 @@ fn validate_native_browser_url(raw: &str) -> Result<Url, String> {
 /// Open a verified URL in one dedicated native webview window. Reusing the
 /// label keeps the browser surface single-instance and predictable.
 #[tauri::command]
-async fn open_native_browser(app: AppHandle, url: String) -> Result<String, String> {
+async fn open_native_browser(app: AppHandle, url: String, session_id: String) -> Result<String, String> {
     let parsed = validate_native_browser_url(&url)?;
-    if let Some(window) = app.get_webview_window(NATIVE_BROWSER_LABEL) {
+    let session = validate_native_browser_session(&session_id)?;
+    let label = native_browser_label(&session);
+    // Keep one native surface and one private profile per active conversation.
+    // Closing stale surfaces also prevents a browser window from visually
+    // following the wrong conversation after a sidebar switch.
+    for (existing_label, window) in app.webview_windows() {
+        if existing_label.starts_with(NATIVE_BROWSER_LABEL_PREFIX) && existing_label != label {
+            let _ = window.close();
+        }
+    }
+    if let Some(window) = app.get_webview_window(&label) {
         window
             .navigate(parsed)
             .map_err(|e| format!("could not navigate native browser: {e}"))?;
@@ -461,10 +635,11 @@ async fn open_native_browser(app: AppHandle, url: String) -> Result<String, Stri
     }
     WebviewWindowBuilder::new(
         &app,
-        NATIVE_BROWSER_LABEL,
+        &label,
         WebviewUrl::External(parsed),
     )
-    .title("Muse Browser")
+    .title(format!("Muse Browser · {}", session.chars().take(8).collect::<String>()))
+    .incognito(true)
     .inner_size(1180.0, 800.0)
     .min_inner_size(720.0, 480.0)
     .build()
@@ -476,8 +651,10 @@ async fn open_native_browser(app: AppHandle, url: String) -> Result<String, Stri
 /// idempotent so a user closing the window manually and then pressing the
 /// panel action does not surface a protocol error.
 #[tauri::command]
-fn close_native_browser(app: AppHandle) -> Result<bool, String> {
-    let Some(window) = app.get_webview_window(NATIVE_BROWSER_LABEL) else {
+fn close_native_browser(app: AppHandle, session_id: String) -> Result<bool, String> {
+    let session = validate_native_browser_session(&session_id)?;
+    let label = native_browser_label(&session);
+    let Some(window) = app.get_webview_window(&label) else {
         return Ok(false);
     };
     window
@@ -698,12 +875,78 @@ fn completed_item_text(item: &Value, kind: &str) -> Option<String> {
 const MAX_OUTPUT_REF_CHARS: usize = 4096;
 const MAX_OUTPUT_OFFSET_BYTES: u64 = 100 * 1024 * 1024;
 const MAX_OUTPUT_LENGTH_BYTES: u64 = 64 * 1024;
+const MAX_RICH_CONTENT_ITEMS: usize = 16;
+const MAX_RICH_CONTENT_TEXT: usize = 240;
+
+/// Forward only the bounded metadata required to render a host rich output.
+/// Bytes remain behind `outputRef` and are never echoed into the event stream.
+fn item_rich_content(item: &Value) -> Option<Vec<Value>> {
+    let raw = item
+        .get("modelVisibleContent")
+        .or_else(|| item.get("model_visible_content"))?
+        .as_array()?;
+    let content = raw
+        .iter()
+        .take(MAX_RICH_CONTENT_ITEMS)
+        .filter_map(|value| {
+            let object = value.as_object()?;
+            let text = |camel: &str, snake: &str| {
+                object
+                    .get(camel)
+                    .or_else(|| object.get(snake))
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty() && value.chars().count() <= MAX_RICH_CONTENT_TEXT)
+                    .map(str::to_string)
+            };
+            let kind = text("type", "type")?;
+            let media_type = text("mediaType", "media_type")?;
+            let path = text("path", "path")?;
+            let source_tool_name = text("sourceToolName", "source_tool_name")?;
+            let dimension = |camel: &str, snake: &str| {
+                object
+                    .get(camel)
+                    .or_else(|| object.get(snake))
+                    .and_then(Value::as_u64)
+                    .filter(|value| *value > 0 && *value <= 10_000)
+            };
+            let mut output = json!({
+                "type": kind,
+                "mediaType": media_type,
+                "path": path,
+                "sourceToolName": source_tool_name,
+            });
+            if let Some(width) = dimension("width", "width") {
+                output["width"] = json!(width);
+            }
+            if let Some(height) = dimension("height", "height") {
+                output["height"] = json!(height);
+            }
+            Some(output)
+        })
+        .collect::<Vec<_>>();
+    (!content.is_empty()).then_some(content)
+}
+
+/// Result of an explicit workspace host restart. Restarting a host is a
+/// process-level operation because Muse fixes sandbox posture at `serve`
+/// startup; existing conversations keep their local transcript and must be
+/// reconnected explicitly when the host supports durable sessions.
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct HostRestartResult {
+    pub workspace: String,
+    pub restarted: bool,
+    pub disconnected_sessions: usize,
+}
 
 fn item_output_ref(item: &Value) -> Option<String> {
-    item.get("outputRef")
-        .or_else(|| item.get("output_ref"))
-        .and_then(Value::as_str)
-        .map(str::trim)
+    let raw = item.get("outputRef").or_else(|| item.get("output_ref"))?;
+    let value = raw
+        .as_str()
+        .or_else(|| raw.get("uri").and_then(Value::as_str))
+        .or_else(|| raw.get("id").and_then(Value::as_str))?;
+    Some(value.trim())
         .filter(|value| !value.is_empty())
         .filter(|value| value.chars().count() <= MAX_OUTPUT_REF_CHARS)
         .map(str::to_string)
@@ -737,6 +980,140 @@ fn read_item_output_params(
         "offsetBytes": offset,
         "lengthBytes": length,
     }))
+}
+
+const MAX_VIEW_PAGE_CURSOR_CHARS: usize = 4096;
+const DEFAULT_VIEW_PAGE_LIMIT: u32 = 200;
+const MAX_VIEW_PAGE_LIMIT: u32 = 1000;
+const MAX_SESSION_LIST_CURSOR_CHARS: usize = 4096;
+const DEFAULT_SESSION_LIST_LIMIT: u32 = 200;
+const MAX_SESSION_LIST_PAGES: usize = 20;
+
+/// Build one bounded request for the host's cursor-paged `session/list`
+/// surface. The cursor is opaque to Muse and is only trimmed and size
+/// checked before being relayed to the host.
+fn session_list_params(cursor: Option<&str>) -> Result<Value, String> {
+    let mut params = json!({"limit": DEFAULT_SESSION_LIST_LIMIT});
+    if let Some(cursor) = cursor {
+        let cursor = require_non_empty(cursor, "cursor")?;
+        if cursor.chars().count() > MAX_SESSION_LIST_CURSOR_CHARS {
+            return Err(format!(
+                "session/list cursor exceeds {MAX_SESSION_LIST_CURSOR_CHARS} characters"
+            ));
+        }
+        params["cursor"] = json!(cursor);
+    }
+    Ok(params)
+}
+
+fn session_list_next_cursor(result: &Value) -> Result<Option<String>, String> {
+    let raw = result
+        .get("nextCursor")
+        .or_else(|| result.get("next_cursor"));
+    let Some(raw) = raw else { return Ok(None) };
+    if raw.is_null() {
+        return Ok(None);
+    }
+    let cursor = raw
+        .as_str()
+        .ok_or_else(|| "session/list nextCursor must be a string".to_string())?;
+    let cursor = cursor.trim();
+    if cursor.is_empty() {
+        return Ok(None);
+    }
+    if cursor.chars().count() > MAX_SESSION_LIST_CURSOR_CHARS {
+        return Err(format!(
+            "session/list nextCursor exceeds {MAX_SESSION_LIST_CURSOR_CHARS} characters"
+        ));
+    }
+    Ok(Some(cursor.to_string()))
+}
+
+/// Extract only a host-authored textual completion preview. Structured result
+/// objects are intentionally reduced to their documented summary-like fields;
+/// arbitrary JSON is never copied into the renderer transcript.
+fn completion_preview(value: &Value) -> Option<String> {
+    completion_preview_at(value, 0)
+}
+
+fn completion_preview_at(value: &Value, depth: u8) -> Option<String> {
+    if depth > 2 {
+        return None;
+    }
+    match value {
+        Value::String(text) if !text.trim().is_empty() => Some(text.clone()),
+        Value::Object(object) => ["resultPreview", "summary", "output", "text", "message", "headline"]
+            .iter()
+            .find_map(|key| object.get(*key).and_then(|nested| completion_preview_at(nested, depth + 1))),
+        _ => None,
+    }
+}
+
+fn session_meta_from_list_row(
+    root: &Path,
+    session: &Value,
+    session_durability: Option<String>,
+    granted_capabilities: Option<Vec<String>>,
+) -> Option<SessionMeta> {
+    let session_id = session
+        .get("sessionId")
+        .or_else(|| session.get("id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|id| !id.is_empty())?;
+    Some(SessionMeta {
+        session_id: session_id.to_string(),
+        workspace: root.display().to_string(),
+        running: session.get("status").and_then(Value::as_str) == Some("running"),
+        session_durability,
+        approval_mode: session_approval_mode(session),
+        granted_capabilities,
+    })
+}
+
+/// Build the bounded request for the durable `view/page` history surface.
+/// `cursor` and `anchor` are opaque to the desktop: they are only trimmed and
+/// size-checked before being relayed to the host. The two fields are mutually
+/// exclusive according to MSP, so callers cannot accidentally mix a cold
+/// anchor with a continuation cursor.
+fn view_page_params(
+    session_id: &str,
+    cursor: Option<&str>,
+    direction: Option<&str>,
+    anchor: Option<&str>,
+    limit: Option<u32>,
+) -> Result<Value, String> {
+    let session_id = require_non_empty(session_id, "sessionId")?;
+    if cursor.is_some() && anchor.is_some() {
+        return Err("view/page cursor and anchor are mutually exclusive".to_string());
+    }
+    let clean_opaque = |value: &str, label: &str| -> Result<String, String> {
+        let value = require_non_empty(value, label)?;
+        if value.chars().count() > MAX_VIEW_PAGE_CURSOR_CHARS {
+            return Err(format!("{label} exceeds {MAX_VIEW_PAGE_CURSOR_CHARS} characters"));
+        }
+        Ok(value)
+    };
+    let direction = direction.unwrap_or("forward").trim();
+    if direction != "forward" && direction != "backward" {
+        return Err("view/page direction must be forward or backward".to_string());
+    }
+    let limit = limit.unwrap_or(DEFAULT_VIEW_PAGE_LIMIT);
+    if limit == 0 || limit > MAX_VIEW_PAGE_LIMIT {
+        return Err(format!("view/page limit must be between 1 and {MAX_VIEW_PAGE_LIMIT}"));
+    }
+    let mut params = json!({
+        "sessionId": session_id,
+        "direction": direction,
+        "limit": limit,
+    });
+    if let Some(cursor) = cursor {
+        params["cursor"] = json!(clean_opaque(cursor, "cursor")?);
+    }
+    if let Some(anchor) = anchor {
+        params["anchor"] = json!(clean_opaque(anchor, "anchor")?);
+    }
+    Ok(params)
 }
 
 fn initialize_session_durability(result: &Value) -> Option<String> {
@@ -855,15 +1232,39 @@ async fn ensure_host(
     app: &AppHandle,
     state: &State<'_, AppState>,
     root: &PathBuf,
+    sandbox_mode: Option<&str>,
+    sandbox_disable_write: Option<bool>,
+    sandbox_disable_shell: Option<bool>,
 ) -> Result<std::sync::Arc<MspClient>, String> {
     // Serialize creation: without this, two concurrent `start_session` calls
     // both pass the check below and spawn two hosts (loser shut down, its
     // in-flight requests failing spuriously).
     let _creation = state.host_mutex.lock().await;
+    let sandbox = HostSandboxPolicy::parse(
+        sandbox_mode,
+        sandbox_disable_write,
+        sandbox_disable_shell,
+    )?;
     if let Some(client) = state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.workspace(root) {
+        // Muse fixes sandbox posture at `serve` time. Reusing a live host
+        // with a different requested policy would silently weaken a project
+        // setting, so fail closed and direct the user to the explicit restart
+        // action in Settings. Hosts from older builds without a cached
+        // posture remain compatible; their effective posture is unknown.
+        let current = state
+            .host_sandbox
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(root)
+            .cloned();
+        if let Some(current) = current {
+            if let Some(conflict) = sandbox_policy_conflict(&current, &sandbox) {
+                return Err(conflict);
+            }
+        }
         return Ok(client);
     }
-    let (rx, child) = spawn_sidecar(app, root)?;
+    let (rx, child) = spawn_sidecar(app, root, &sandbox)?;
     let shared: SharedChild = std::sync::Arc::new(tokio::sync::Mutex::new(Some(Box::new(child))));
     let (notify_tx, notify_rx) = mpsc::unbounded_channel::<(String, Value)>();
     let client = std::sync::Arc::new(MspClient::new(shared, notify_tx));
@@ -908,6 +1309,12 @@ async fn ensure_host(
         }
     };
 
+    state
+        .host_sandbox
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .insert(root.clone(), sandbox);
+
     // Keep the initialize capability beside the workspace-owned client. It
     // is intentionally advisory: unknown/missing values preserve the legacy
     // reconnect path, while an explicit `ephemeral` value is enforced by the
@@ -925,6 +1332,148 @@ async fn ensure_host(
     cache_initialize_granted_capabilities(&mut host_capabilities, &root, &initialized);
 
     Ok(client)
+}
+
+/// Restart the workspace-owned host with an explicit sandbox posture.
+///
+/// Muse does not expose sandbox mutation over MSP, so changing the posture
+/// requires replacing the process. The renderer keeps conversation records
+/// and transcript data; this command only detaches the old native routes,
+/// clears volatile host state, emits a bounded disconnect event, and starts a
+/// fresh host. Durable conversations can then be reconnected explicitly.
+#[tauri::command]
+async fn restart_host(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    workspace_path: String,
+    sandbox_mode: Option<String>,
+    sandbox_disable_write: Option<bool>,
+    sandbox_disable_shell: Option<bool>,
+) -> Result<HostRestartResult, String> {
+    let root = resolve_workspace(&state, Some(workspace_path))?;
+    let requested_policy = HostSandboxPolicy::parse(
+        sandbox_mode.as_deref(),
+        sandbox_disable_write,
+        sandbox_disable_shell,
+    )?;
+    let old_client = {
+        let hosts = state
+            .hosts
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?;
+        hosts.workspace(&root)
+    };
+    let Some(old_client) = old_client else {
+        // No live process exists for this workspace. Treat the gesture as a
+        // normal explicit start so the requested posture is still applied.
+        ensure_host(
+            &app,
+            &state,
+            &root,
+            sandbox_mode.as_deref(),
+            sandbox_disable_write,
+            sandbox_disable_shell,
+        )
+        .await?;
+        let applied = state
+            .host_sandbox
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(&root)
+            .cloned();
+        if applied.as_ref() != Some(&requested_policy) {
+            return Err("workspace host posture changed concurrently; retry the restart".into());
+        }
+        return Ok(HostRestartResult {
+            workspace: root.display().to_string(),
+            restarted: false,
+            disconnected_sessions: 0,
+        });
+    };
+
+    let session_ids = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .remove(&old_client);
+
+    // Retire volatile host facts before spawning the replacement. The new
+    // handshake repopulates durability, capabilities and sandbox posture;
+    // keeping stale values here would make the renderer claim a grant from a
+    // process that no longer exists.
+    if let Ok(mut sandbox) = state.host_sandbox.lock() {
+        sandbox.remove(&root);
+    }
+    if let Ok(mut durability) = state.host_durability.lock() {
+        durability.remove(&root);
+    }
+    if let Ok(mut capabilities) = state.host_capabilities.lock() {
+        capabilities.remove(&root);
+    }
+
+    for session_id in &session_ids {
+        mark_running(&state, session_id, false);
+        emit(
+            &app,
+            "status",
+            session_id,
+            "host_exited",
+            "Muse host restarted; reconnect the conversation to continue.".to_string(),
+        );
+    }
+
+    // Pending approvals and item tables belong to the old process. The
+    // transcript remains in the renderer SSOT, but stale native requirements
+    // must never be offered to the replacement host.
+    if let Ok(mut approvals) = state.approvals.lock() {
+        approvals.retain(|_, approval| !session_ids.contains(&approval.session_id));
+    }
+    if let Ok(mut kinds) = state.item_kinds.lock() {
+        kinds.retain(|(sid, _), _| !session_ids.contains(sid));
+    }
+    if let Ok(mut refs) = state.item_output_refs.lock() {
+        refs.retain(|(sid, _), _| !session_ids.contains(sid));
+    }
+    if let Ok(mut metas) = state.subagent_meta.lock() {
+        metas.retain(|(sid, _), _| !session_ids.contains(sid));
+    }
+    if let Ok(mut seen) = state.item_deltas_seen.lock() {
+        seen.retain(|(sid, _)| !session_ids.contains(sid));
+    }
+    if let Ok(mut emitted) = state.item_fallback_emitted.lock() {
+        emitted.retain(|(sid, _)| !session_ids.contains(sid));
+    }
+    if let Ok(mut events) = state.event_buffer.lock() {
+        events.retain(|event| !session_ids.contains(&event.session_id));
+    }
+
+    old_client.shutdown().await;
+    // `ensure_host` owns the creation mutex. Do not hold a lock across this
+    // await: the old client is fully detached above, so a concurrent start is
+    // safe and the winner's posture becomes the process-level authority.
+    ensure_host(
+        &app,
+        &state,
+        &root,
+        sandbox_mode.as_deref(),
+        sandbox_disable_write,
+        sandbox_disable_shell,
+    )
+    .await?;
+    let applied = state
+        .host_sandbox
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&root)
+        .cloned();
+    if applied.as_ref() != Some(&requested_policy) {
+        return Err("workspace host posture changed concurrently; retry the restart".into());
+    }
+    Ok(HostRestartResult {
+        workspace: root.display().to_string(),
+        restarted: true,
+        disconnected_sessions: session_ids.len(),
+    })
 }
 
 fn tail_of(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>) -> String {
@@ -1004,13 +1553,14 @@ fn resolve_sidecar() -> Result<PathBuf, String> {
 fn spawn_sidecar(
     app: &AppHandle,
     root: &PathBuf,
+    sandbox: &HostSandboxPolicy,
 ) -> Result<(tauri::async_runtime::Receiver<CommandEvent>, CommandChild), String> {
     let bin = resolve_sidecar()?;
     let cmd = app
         .shell()
         .sidecar(&bin)
         .map_err(|e| format!("sidecar command failed for {}: {e}", bin.display()))?
-        .args(["serve"])
+        .args(sandbox.cli_args())
         .current_dir(root);
     cmd.spawn().map_err(|e| {
         format!(
@@ -1245,6 +1795,7 @@ where
                         "itemKind": kind,
                         "commandText": item.get("commandText"),
                         "outputRef": item_output_ref(item),
+                        "richContent": item_rich_content(item),
                         "turnId": item.get("turnId"),
                     }).to_string(),
                 );
@@ -1443,6 +1994,7 @@ where
                                     "text": text,
                                     "commandText": item.and_then(|i| i.get("commandText")),
                                     "outputRef": output_ref,
+                                    "richContent": item.and_then(item_rich_content),
                                     "turnId": turn_id,
                                     "revision": item.and_then(|i| i.get("revision")),
                                     "status": item.and_then(|i| i.get("status")),
@@ -1464,6 +2016,7 @@ where
                                 "itemKind": kind,
                                 "commandText": item.and_then(|i| i.get("commandText")),
                                 "outputRef": output_ref,
+                                "richContent": item.and_then(item_rich_content),
                                 "turnId": turn_id,
                             })
                             .to_string(),
@@ -1502,7 +2055,7 @@ where
                                 lane,
                                 sid,
                                 lane,
-                                json!({"itemId": item_id, "text": text, "outputRef": output_ref}).to_string(),
+                                json!({"itemId": item_id, "text": text, "outputRef": output_ref, "richContent": item.and_then(item_rich_content)}).to_string(),
                             );
                         }
                         // A metadata-only, non-terminal update never emits a
@@ -1587,15 +2140,24 @@ where
                 // permission to resume. The renderer's parser fails closed
                 // for this explicit sentinel.
                 .unwrap_or("unknown");
+            let turn_id = bounded_turn_id(
+                p.get("turnId")
+                    .or_else(|| p.get("turn_id"))
+                    .or_else(|| p.get("resolution").and_then(|r| r.get("turnId")))
+                    .or_else(|| p.get("resolution").and_then(|r| r.get("turn_id"))),
+            );
+            let mut payload = json!({
+                "approvalId": approval_id,
+                "decision": decision,
+                "terminal": true,
+            });
+            if let Some(turn_id) = turn_id {
+                payload["turnId"] = Value::String(turn_id);
+            }
             emit_fn("status",
                 sid,
                 method,
-                json!({
-                    "approvalId": approval_id,
-                    "decision": decision,
-                    "terminal": true,
-                })
-                .to_string(),
+                payload.to_string(),
             );
         }
         "turn/started" => emit_fn("status",
@@ -1614,30 +2176,36 @@ where
             // error object instead of flattening it into a message string.
             // Older hosts may omit fields; nulls keep the envelope additive
             // and let the renderer fall back to the legacy reason.
-            emit_fn("status",
-                sid,
-                terminal,
-                json!({
-                    "terminal": terminal,
-                    "turnId": p.get("turnId"),
-                    "reason": p.get("reason"),
-                    "error": p.get("error"),
-                    "durationMs": p.get("durationMs"),
-                })
-                .to_string(),
-            );
+            let mut payload = json!({
+                "terminal": terminal,
+                "turnId": p.get("turnId"),
+                "reason": p.get("reason"),
+                "error": p.get("error"),
+                "durationMs": p.get("durationMs"),
+            });
+            // Hosts may already have a concise result. Preserve only string
+            // preview fields and bound them before they cross the native
+            // bridge; the renderer applies its own final presentation bound.
+            if let Some(object) = payload.as_object_mut() {
+                for key in ["result", "resultPreview", "output", "summary", "text"] {
+                    if let Some(value) = p.get(key).and_then(completion_preview) {
+                        object.insert(key.to_string(), Value::String(truncate(&value, 319)));
+                    }
+                }
+            }
+            emit_fn("status", sid, terminal, payload.to_string());
         }
-        "turn/retracted" => {
-            // Retraction is the host's terminal confirmation for an accepted
-            // interrupt. Keep the product status stable (`cancelled`) and
-            // retain the turn anchor so the renderer closes only this turn.
+        "turn/retracted" | "turn/stopped" => {
+            // Retraction and stopped are host terminal confirmations for an
+            // accepted interrupt. Preserve the turn anchor so the renderer
+            // closes only this turn while keeping the host's terminal kind.
             mark_running(state, sid, false);
             emit_fn(
                 "status",
                 sid,
-                "cancelled",
+                if method == "turn/stopped" { "stopped" } else { "cancelled" },
                 json!({
-                    "terminal": "cancelled",
+                    "terminal": if method == "turn/stopped" { "stopped" } else { "cancelled" },
                     "turnId": p.get("turnId"),
                     "reason": p.get("reason"),
                 })
@@ -1825,6 +2393,28 @@ fn workspace_for_inspection(state: &State<'_, AppState>, session_id: &str) -> Re
         .map(|meta| PathBuf::from(&meta.workspace))
         .filter(|root| !root.as_os_str().is_empty())
         .ok_or_else(|| "conversation workspace is unavailable".to_string())
+}
+
+/// Count renderer-visible sessions whose native workspace is this managed
+/// checkout. Cleanup treats an attached conversation as a live reference even
+/// when its current turn is idle: the session can still issue a new turn and
+/// the host process keeps the checkout as its working directory.
+fn attached_sessions_for_worktree(state: &AppState, path: &str) -> usize {
+    let Ok(candidate) = Path::new(path).canonicalize() else {
+        return 0;
+    };
+    let Ok(sessions) = state.sessions.lock() else {
+        return 0;
+    };
+    sessions
+        .values()
+        .filter(|session| {
+            Path::new(&session.workspace)
+                .canonicalize()
+                .map(|workspace| workspace == candidate)
+                .unwrap_or(false)
+        })
+        .count()
 }
 
 /// Read the real Git state for the workspace owned by this conversation.
@@ -2096,6 +2686,40 @@ fn scheduler_runs_write(app: AppHandle, payload: String) -> Result<(), String> {
     scheduler_runs::write(&data_dir, &payload)
 }
 
+fn outbox_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join("outbox"))
+        .map_err(|error| format!("cannot resolve outbox data directory: {error}"))
+}
+
+/// Read the renderer-owned schedule definitions from app data. The native
+/// copy is a durability mirror; validation and dispatch remain in the hook.
+#[tauri::command]
+fn scheduler_schedules_read(app: AppHandle) -> Result<Value, String> {
+    let data_dir = scheduler_data_dir(&app)?;
+    let bytes = scheduler_schedules::read(&data_dir)?;
+    serde_json::from_slice(&bytes).map_err(|_| "schedules ledger is not valid JSON".to_string())
+}
+
+/// Atomically mirror bounded schedule definitions under app data.
+#[tauri::command]
+fn scheduler_schedules_write(app: AppHandle, payload: String) -> Result<(), String> {
+    let data_dir = scheduler_data_dir(&app)?;
+    scheduler_schedules::write(&data_dir, &payload)
+}
+
+#[tauri::command]
+fn scheduler_wakeup_sync(
+    app: AppHandle,
+    wake_at: Option<u64>,
+) -> Result<scheduler_wakeup::WakeupResponse, String> {
+    let data_dir = scheduler_data_dir(&app)?;
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("cannot resolve Muse executable: {error}"))?;
+    scheduler_wakeup::sync(&data_dir, &executable, wake_at, scheduler::now_ms())
+}
+
 /// Read the renderer-owned notification inbox from app data.
 #[tauri::command]
 fn notifications_read(app: AppHandle) -> Result<Value, String> {
@@ -2109,6 +2733,21 @@ fn notifications_read(app: AppHandle) -> Result<Value, String> {
 fn notifications_write(app: AppHandle, payload: String) -> Result<(), String> {
     let data_dir = notification_data_dir(&app)?;
     notification_ledger::write(&data_dir, &payload)
+}
+
+/// Read the bounded renderer send outbox from app data.
+#[tauri::command]
+fn outbox_read(app: AppHandle) -> Result<Value, String> {
+    let data_dir = outbox_data_dir(&app)?;
+    let bytes = outbox_ledger::read(&data_dir)?;
+    serde_json::from_slice(&bytes).map_err(|_| "outbox ledger is not valid JSON".to_string())
+}
+
+/// Atomically mirror the renderer send outbox under app data.
+#[tauri::command]
+fn outbox_write(app: AppHandle, payload: String) -> Result<(), String> {
+    let data_dir = outbox_data_dir(&app)?;
+    outbox_ledger::write(&data_dir, &payload)
 }
 
 /// Apply one selected hunk after checking the exact Review observation.
@@ -2257,6 +2896,12 @@ async fn git_worktree_remove(
     path: String,
 ) -> Result<(), String> {
     let root = workspace_for_inspection(&state, &session_id)?;
+    let attached = attached_sessions_for_worktree(state.inner(), &path);
+    if attached > 0 {
+        return Err(format!(
+            "worktree has {attached} Muse conversation(s) attached; close them before removal"
+        ));
+    }
     tokio::task::spawn_blocking(move || git::remove_worktree(&root, &path))
         .await
         .map_err(|e| format!("worktree remove task failed: {e}"))?
@@ -2270,9 +2915,32 @@ async fn git_worktree_inspect(
     path: String,
 ) -> Result<git::GitWorktreeInspection, String> {
     let root = workspace_for_inspection(&state, &session_id)?;
-    tokio::task::spawn_blocking(move || git::inspect_worktree(&root, &path))
+    let inspected_path = path.clone();
+    let mut inspection = tokio::task::spawn_blocking(move || git::inspect_worktree(&root, &path))
         .await
-        .map_err(|e| format!("worktree inspect task failed: {e}"))?
+        .map_err(|e| format!("worktree inspect task failed: {e}"))??;
+    inspection.attached_session_count = attached_sessions_for_worktree(state.inner(), &inspected_path);
+    Ok(inspection)
+}
+
+/// Acquire OS advisory locks for all declared writer target paths. This guard
+/// complements the renderer lease and protects two Muse processes from
+/// dispatching overlapping writers in the same workspace.
+#[tauri::command]
+fn writer_lock_acquire(
+    state: State<'_, AppState>,
+    workspace: String,
+    agent: String,
+    target_paths: Vec<String>,
+    owner_id: String,
+) -> Result<writer_lock::AcquireResponse, String> {
+    writer_lock::acquire(&state.writer_locks, &workspace, &agent, &target_paths, &owner_id)
+}
+
+/// Release one writer lease. Releasing an unknown token is idempotent.
+#[tauri::command]
+fn writer_lock_release(state: State<'_, AppState>, token: String) -> Result<bool, String> {
+    writer_lock::release(&state.writer_locks, &token)
 }
 
 /// Run an explicitly requested setup command in a managed worktree. The
@@ -2316,6 +2984,9 @@ async fn git_worktree_create_session(
     relative_path: String,
     base_ref: String,
     authorization_mode: Option<String>,
+    sandbox_mode: Option<String>,
+    sandbox_disable_write: Option<bool>,
+    sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
 ) -> Result<WorktreeSessionResult, String> {
     let root = workspace_for_inspection(&state, &session_id)?;
@@ -2329,7 +3000,16 @@ async fn git_worktree_create_session(
     .await
     .map_err(|e| format!("git worktree create task failed: {e}"))??;
     let child_root = PathBuf::from(&created.path);
-    match start_session_at_workspace(app, state, child_root, authorization_mode, mcp_servers).await {
+    match start_session_at_workspace(
+        app,
+        state,
+        child_root,
+        authorization_mode,
+        sandbox_mode,
+        sandbox_disable_write,
+        sandbox_disable_shell,
+        mcp_servers,
+    ).await {
         Ok(session) => Ok(WorktreeSessionResult {
             worktree: created,
             session,
@@ -2852,6 +3532,132 @@ async fn browser_download_fetch(
     browser_download::fetch_same_origin(&page_url, &target_url).await
 }
 
+/// Report whether this build has an OS-backed desktop-control runtime. The
+/// renderer still requires an explicit per-app consent row before calling any
+/// mutating command; this status only describes platform capability.
+#[tauri::command]
+fn desktop_control_status() -> desktop_control::DesktopControlStatus {
+    desktop_control::status()
+}
+
+/// Write one explicitly selected completed host output to a local binary file.
+/// The renderer obtains the destination from the native save dialog; the
+/// backend validates it again and bounds the decoded payload before writing.
+#[tauri::command]
+async fn output_export(path: String, data: String) -> Result<(), String> {
+    let target = PathBuf::from(path.trim());
+    tokio::task::spawn_blocking(move || output_export::write_base64(&target, &data))
+        .await
+        .map_err(|e| format!("output export task failed: {e}"))?
+}
+
+fn require_desktop_control_permission(allowed: bool) -> Result<(), String> {
+    if allowed {
+        Ok(())
+    } else {
+        Err("desktop control requires explicit Allow desktop control consent".to_string())
+    }
+}
+
+/// Synchronize the renderer's persisted checkbox into a volatile native gate.
+/// The value is intentionally not persisted here: reopening the app requires
+/// the current webview to reassert consent before input can be injected.
+#[tauri::command]
+fn set_desktop_control_permission(
+    state: State<'_, AppState>,
+    allowed: bool,
+) -> Result<(), String> {
+    *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())? = allowed;
+    Ok(())
+}
+
+/// Enumerate visible, titled top-level windows. The result is read-only and
+/// bounded by the native module; no process command line or document content
+/// is exposed to the renderer.
+#[tauri::command]
+fn desktop_windows() -> Result<Vec<desktop_control::DesktopWindow>, String> {
+    desktop_control::windows()
+}
+
+/// Read a bounded snapshot of visible child controls for one observed window.
+/// The snapshot is descriptive only; it never grants the host an input path.
+#[tauri::command]
+fn desktop_window_elements(
+    state: State<'_, AppState>,
+    window_id: String,
+) -> Result<Vec<desktop_control::DesktopElement>, String> {
+    let allowed = *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
+    require_desktop_control_permission(allowed)?;
+    desktop_control::elements(&window_id)
+}
+
+#[tauri::command]
+fn desktop_focus_window(state: State<'_, AppState>, window_id: String) -> Result<(), String> {
+    let allowed = *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
+    require_desktop_control_permission(allowed)?;
+    desktop_control::focus(&window_id)
+}
+
+#[tauri::command]
+fn desktop_send_text(
+    state: State<'_, AppState>,
+    window_id: String,
+    text: String,
+) -> Result<usize, String> {
+    let allowed = *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
+    require_desktop_control_permission(allowed)?;
+    if text.chars().count() > desktop_control::MAX_TEXT_CHARS {
+        return Err(format!(
+            "desktop text is limited to {} characters",
+            desktop_control::MAX_TEXT_CHARS
+        ));
+    }
+    desktop_control::send_text(&window_id, &text)
+}
+
+#[tauri::command]
+fn desktop_press_key(
+    state: State<'_, AppState>,
+    window_id: String,
+    key: String,
+) -> Result<(), String> {
+    let allowed = *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
+    require_desktop_control_permission(allowed)?;
+    let parsed = desktop_control::DesktopKey::parse(&key)
+        .ok_or_else(|| "unsupported desktop key".to_string())?;
+    desktop_control::press_key(&window_id, parsed)
+}
+
+#[tauri::command]
+fn desktop_click(
+    state: State<'_, AppState>,
+    window_id: String,
+    x: i32,
+    y: i32,
+) -> Result<(), String> {
+    let allowed = *state
+        .desktop_control_allowed
+        .lock()
+        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
+    require_desktop_control_permission(allowed)?;
+    desktop_control::click(&window_id, x, y)
+}
+
 /// Probe local prerequisites for the first-launch recovery screen. This is a
 /// read-only, bounded check: it never starts a sidecar or changes WSL/Muse.
 #[tauri::command]
@@ -3158,9 +3964,19 @@ async fn start_session_at_workspace(
     state: State<'_, AppState>,
     root: PathBuf,
     authorization_mode: Option<String>,
+    sandbox_mode: Option<String>,
+    sandbox_disable_write: Option<bool>,
+    sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
-    let client = ensure_host(&app, &state, &root).await?;
+    let client = ensure_host(
+        &app,
+        &state,
+        &root,
+        sandbox_mode.as_deref(),
+        sandbox_disable_write,
+        sandbox_disable_shell,
+    ).await?;
     let mut params = json!({
         "commandId": new_command_id(),
         "workspaceRoot": root.display().to_string(),
@@ -3239,10 +4055,22 @@ async fn start_session(
     state: State<'_, AppState>,
     workspace_path: Option<String>,
     authorization_mode: Option<String>,
+    sandbox_mode: Option<String>,
+    sandbox_disable_write: Option<bool>,
+    sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
     let root = resolve_workspace(&state, workspace_path)?;
-    start_session_at_workspace(app, state, root, authorization_mode, mcp_servers).await
+    start_session_at_workspace(
+        app,
+        state,
+        root,
+        authorization_mode,
+        sandbox_mode,
+        sandbox_disable_write,
+        sandbox_disable_shell,
+        mcp_servers,
+    ).await
 }
 
 /// Create a server-side conversation branch from all completed turns.
@@ -3355,23 +4183,13 @@ async fn set_approval_mode(
 }
 
 /// Explicitly attach a saved durable session; never create a replacement ID.
-#[tauri::command]
-async fn resume_session(
-    app: AppHandle,
-    state: State<'_, AppState>,
+async fn resume_session_with_client(
+    state: &State<'_, AppState>,
+    client: Arc<MspClient>,
+    root: PathBuf,
     session_id: String,
-    workspace_path: String,
     mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
-    let _resume = state.resume_mutex.lock().await;
-    let root = resolve_workspace(&state, Some(workspace_path))?;
-    if session_client(&state, &session_id).is_ok() {
-        let owner_root = state.hosts.lock().map_err(|e| e.to_string())?.session_workspace(&session_id)?;
-        if owner_root != root { return Err("conversation belongs to a different workspace".into()); }
-        return state.sessions.lock().map_err(|e| e.to_string())?.get(&session_id).cloned()
-            .ok_or_else(|| "conversation metadata is unavailable".into());
-    }
-    let client = ensure_host(&app, &state, &root).await?;
     if state
         .host_durability
         .lock()
@@ -3387,6 +4205,10 @@ async fn resume_session(
     resume::validate(read.get("session").ok_or("session/read returned no conversation")?, &session_id, &root)?;
     // Register before resume: pending approval/input events may immediately
     // follow the response, before this awaiting task is scheduled again.
+    let mut resume_params = resume::params(&session_id, new_command_id());
+    if let Some(config) = mcp_session_config(mcp_servers)? {
+        resume_params["config"] = config;
+    }
     let mut meta = SessionMeta {
         session_id: session_id.clone(),
         workspace: root.display().to_string(),
@@ -3403,10 +4225,9 @@ async fn resume_session(
         granted_capabilities: session_granted_capabilities(&state, &root)?,
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
-    state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client)?;
-    let mut resume_params = resume::params(&session_id, new_command_id());
-    if let Some(config) = mcp_session_config(mcp_servers)? {
-        resume_params["config"] = config;
+    if let Err(error) = state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client) {
+        state.sessions.lock().map_err(|e| e.to_string())?.remove(&session_id);
+        return Err(error);
     }
     let result = client.request("session/resume", resume_params).await;
     match result {
@@ -3420,14 +4241,71 @@ async fn resume_session(
                     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
                     Ok(meta)
                 }
-                Err(error) => { state.hosts.lock().map_err(|e| e.to_string())?.forget(&session_id); Err(error) }
+                Err(error) => {
+                    state.hosts.lock().map_err(|e| e.to_string())?.forget(&session_id);
+                    state.sessions.lock().map_err(|e| e.to_string())?.remove(&session_id);
+                    Err(error)
+                }
             }
         }
         Err(error) => {
             state.hosts.lock().map_err(|e| e.to_string())?.forget(&session_id);
+            state.sessions.lock().map_err(|e| e.to_string())?.remove(&session_id);
             Err(format!("could not reconnect conversation: {error}"))
         }
     }
+}
+
+async fn resume_session_inner(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    session_id: String,
+    workspace_path: String,
+    sandbox_mode: Option<String>,
+    sandbox_disable_write: Option<bool>,
+    sandbox_disable_shell: Option<bool>,
+    mcp_servers: Option<Value>,
+) -> Result<SessionMeta, String> {
+    let _resume = state.resume_mutex.lock().await;
+    let root = resolve_workspace(state, Some(workspace_path))?;
+    if session_client(state, &session_id).is_ok() {
+        let owner_root = state.hosts.lock().map_err(|e| e.to_string())?.session_workspace(&session_id)?;
+        if owner_root != root { return Err("conversation belongs to a different workspace".into()); }
+        return state.sessions.lock().map_err(|e| e.to_string())?.get(&session_id).cloned()
+            .ok_or_else(|| "conversation metadata is unavailable".into());
+    }
+    let client = ensure_host(
+        app,
+        state,
+        &root,
+        sandbox_mode.as_deref(),
+        sandbox_disable_write,
+        sandbox_disable_shell,
+    ).await?;
+    resume_session_with_client(state, client, root, session_id, mcp_servers).await
+}
+
+#[tauri::command]
+async fn resume_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    workspace_path: String,
+    sandbox_mode: Option<String>,
+    sandbox_disable_write: Option<bool>,
+    sandbox_disable_shell: Option<bool>,
+    mcp_servers: Option<Value>,
+) -> Result<SessionMeta, String> {
+    resume_session_inner(
+        &app,
+        &state,
+        session_id,
+        workspace_path,
+        sandbox_mode,
+        sandbox_disable_write,
+        sandbox_disable_shell,
+        mcp_servers,
+    ).await
 }
 
 /// Read the folded durable item history for an attached conversation.
@@ -3456,6 +4334,31 @@ async fn read_session_history(
         .ok_or("session/read returned no conversation")?;
     resume::validate(session, &session_id, &root)?;
     Ok(read.get("history").cloned().unwrap_or_else(|| json!({"items": []})))
+}
+
+/// Read durable history through the cursor-paged `view/page` surface. This is
+/// the compatibility fallback for hosts that expose the paged view but do
+/// not serve the larger `session/read` envelope. The renderer folds only the
+/// item lifecycle events and keeps the opaque cursor in the bridge boundary.
+#[tauri::command]
+async fn page_session_history(
+    state: State<'_, AppState>,
+    session_id: String,
+    cursor: Option<String>,
+    direction: Option<String>,
+    anchor: Option<String>,
+    limit: Option<u32>,
+) -> Result<Value, String> {
+    let params = view_page_params(
+        &session_id,
+        cursor.as_deref(),
+        direction.as_deref(),
+        anchor.as_deref(),
+        limit,
+    )?;
+    session_client(&state, &session_id)?
+        .request("view/page", params)
+        .await
 }
 
 /// Read one bounded chunk of host-owned output for a completed or streaming
@@ -3588,16 +4491,86 @@ fn poll_events(state: State<'_, AppState>, since: Option<u64>) -> Result<PollRes
 async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>, String> {
     let clients = state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.snapshot();
     let mut out = Vec::new();
-    for (_, client) in clients {
-        let res = client.request("session/list", json!({})).await?;
-        if let Some(sessions) = res.get("sessions").and_then(Value::as_array) {
-            for s in sessions {
-                let Some(sid) = s.get("sessionId").or_else(|| s.get("id")).and_then(Value::as_str) else { continue };
-                if !state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.owns(sid, &client) { continue; }
-                if let Some(mut meta) = state.sessions.lock().map_err(|e| format!("state lock: {e}"))?.get(sid).cloned() {
-                    meta.running = s.get("status").and_then(Value::as_str) == Some("running");
+    for (root, client) in clients {
+        let session_durability = state
+            .host_durability
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(&root)
+            .cloned();
+        let granted_capabilities = session_granted_capabilities(&state, &root)?;
+        let mut cursor = None;
+        let mut seen_cursors = HashSet::new();
+        let mut seen_sessions = HashSet::new();
+        for page in 0..MAX_SESSION_LIST_PAGES {
+            let params = session_list_params(cursor.as_deref())?;
+            let res = client.request("session/list", params).await?;
+            if let Some(sessions) = res.get("sessions").and_then(Value::as_array) {
+                for s in sessions {
+                    let Some(sid) = s
+                        .get("sessionId")
+                        .or_else(|| s.get("id"))
+                        .and_then(Value::as_str)
+                    else {
+                        continue;
+                    };
+                    if !seen_sessions.insert(sid.to_string()) {
+                        continue;
+                    }
+                    // A session listed by a workspace-owned host can be
+                    // admitted after a desktop restart. If another live host
+                    // already owns the same id, fail closed and keep that
+                    // existing route instead of stealing it.
+                    let bound = {
+                        let mut hosts = state
+                            .hosts
+                            .lock()
+                            .map_err(|e| format!("state lock: {e}"))?;
+                        hosts.owns(sid, &client) || hosts.bind(sid, &root, &client).is_ok()
+                    };
+                    if !bound {
+                        continue;
+                    }
+                    let Some(listed) = session_meta_from_list_row(
+                        &root,
+                        s,
+                        session_durability.clone(),
+                        granted_capabilities.clone(),
+                    ) else {
+                        continue;
+                    };
+                    let mut sessions = state
+                        .sessions
+                        .lock()
+                        .map_err(|e| format!("state lock: {e}"))?;
+                    let meta = if let Some(existing) = sessions.get_mut(sid) {
+                        existing.running = listed.running;
+                        if listed.approval_mode.is_some() {
+                            existing.approval_mode = listed.approval_mode.clone();
+                        }
+                        if listed.session_durability.is_some() {
+                            existing.session_durability = listed.session_durability.clone();
+                        }
+                        if listed.granted_capabilities.is_some() {
+                            existing.granted_capabilities = listed.granted_capabilities.clone();
+                        }
+                        existing.clone()
+                    } else {
+                        sessions.insert(listed.session_id.clone(), listed.clone());
+                        listed
+                    };
                     out.push(meta);
                 }
+            }
+            let Some(next) = session_list_next_cursor(&res)? else { break };
+            if !seen_cursors.insert(next.clone()) {
+                return Err("session/list returned a repeated cursor".to_string());
+            }
+            cursor = Some(next);
+            if page + 1 == MAX_SESSION_LIST_PAGES {
+                return Err(format!(
+                    "session/list exceeded the {MAX_SESSION_LIST_PAGES}-page restore limit"
+                ));
             }
         }
     }
@@ -4383,24 +5356,30 @@ async fn cancel_session(
     app: AppHandle,
     state: State<'_, AppState>,
     session_id: String,
+    turn_id: Option<String>,
 ) -> Result<(), String> {
-    interrupt_session(&app, &state, &session_id).await
+    interrupt_session(&app, &state, &session_id, turn_id.as_deref()).await
 }
 
 /// Send the interrupt command without changing local turn state. Keeping the
 /// transport request separate makes the admission-only semantics testable
 /// without constructing a Tauri application handle.
-async fn request_interrupt(state: &AppState, session_id: &str) -> Result<Value, String> {
+async fn request_interrupt(
+    state: &AppState,
+    session_id: &str,
+    turn_id: Option<&str>,
+) -> Result<Value, String> {
     let client = session_client(state, session_id)?;
+    let mut params = json!({
+        "commandId": new_command_id(),
+        "sessionId": session_id,
+        "retract": false,
+    });
+    if let Some(turn_id) = turn_id.map(str::trim).filter(|value| !value.is_empty()) {
+        params["turnId"] = json!(turn_id);
+    }
     client
-        .request(
-            "turn/interrupt",
-            json!({
-                "commandId": new_command_id(),
-                "sessionId": session_id,
-                "retract": false,
-            }),
-        )
+        .request("turn/interrupt", params)
         .await
 }
 
@@ -4414,10 +5393,11 @@ async fn interrupt_session(
     app: &AppHandle,
     state: &State<'_, AppState>,
     session_id: &str,
+    turn_id: Option<&str>,
 ) -> Result<(), String> {
     // Clone the client out of the lock first: the std guard must never be
     // held across an await (it is !Send through the child handle).
-    let result = request_interrupt(state, session_id).await;
+    let result = request_interrupt(state, session_id, turn_id).await;
     match result {
         Ok(_) => Ok(()),
         Err(error) => {
@@ -4439,7 +5419,7 @@ async fn kill_session(
     // Retire ownership before accepting further notifications for this session.
     // The host process is shared by all sessions, so it is NOT killed here:
     // end the turn (best effort) and forget local records.
-    let _ = interrupt_session(&app, &state, &session_id).await;
+    let _ = interrupt_session(&app, &state, &session_id, None).await;
     if let Ok(mut hosts) = state.hosts.lock() { hosts.forget(&session_id); }
     if let Ok(mut sessions) = state.sessions.lock() {
         sessions.remove(&session_id);
@@ -4475,6 +5455,81 @@ async fn kill_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sandbox_mode_defaults_to_restricted_workspace_host() {
+        let mode = HostSandboxMode::parse(None).unwrap();
+        assert_eq!(mode, HostSandboxMode::Workspace);
+        assert_eq!(
+            mode.cli_args(),
+            vec!["serve", "--sandbox-network", "restricted"]
+        );
+    }
+
+    #[test]
+    fn sandbox_mode_maps_explicit_network_and_elevated_postures() {
+        assert_eq!(
+            HostSandboxMode::parse(Some("network")).unwrap().cli_args(),
+            vec!["serve", "--sandbox-network", "enabled"]
+        );
+        assert_eq!(
+            HostSandboxMode::parse(Some("elevated")).unwrap().cli_args(),
+            vec![
+                "serve",
+                "--disable-sandbox",
+                "--sandbox-network",
+                "enabled"
+            ]
+        );
+    }
+
+    #[test]
+    fn sandbox_mode_rejects_unknown_values() {
+        assert!(HostSandboxMode::parse(Some("full")).is_err());
+    }
+
+    #[test]
+    fn sandbox_policy_adds_project_read_only_flags() {
+        let policy = HostSandboxPolicy::parse(Some("workspace"), Some(true), Some(true)).unwrap();
+        assert_eq!(
+            policy.cli_args(),
+            vec![
+                "serve",
+                "--sandbox-network",
+                "restricted",
+                "--disable-write",
+                "--disable-shell",
+            ]
+        );
+    }
+
+    #[test]
+    fn sandbox_policy_keeps_legacy_flags_when_project_options_are_absent() {
+        let policy = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
+        assert_eq!(policy.cli_args(), vec!["serve", "--sandbox-network", "enabled"]);
+    }
+
+    #[test]
+    fn sandbox_policy_summary_explains_restart_conflicts_without_raw_debug() {
+        let workspace = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
+        assert_eq!(workspace.summary(), "workspace");
+        let read_only = HostSandboxPolicy::parse(Some("workspace"), Some(true), Some(true)).unwrap();
+        assert_eq!(read_only.summary(), "workspace (read-only writes, shell disabled)");
+        let elevated = HostSandboxPolicy::parse(Some("elevated"), None, None).unwrap();
+        assert_eq!(elevated.summary(), "elevated");
+    }
+
+    #[test]
+    fn sandbox_policy_conflict_is_stable_and_allows_matching_hosts() {
+        let current = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
+        let same = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
+        assert_eq!(sandbox_policy_conflict(&current, &same), None);
+        let requested = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
+        assert_eq!(
+            sandbox_policy_conflict(&current, &requested).as_deref(),
+            Some("workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with network")
+        );
+    }
 
     struct RecordingChild {
         writes: mpsc::UnboundedSender<Vec<u8>>,
@@ -4550,7 +5605,9 @@ mod tests {
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
             host_durability: Mutex::new(HashMap::new()),
+            host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
+            desktop_control_allowed: Mutex::new(false),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -4565,6 +5622,7 @@ mod tests {
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             workspace_watchers: Mutex::new(HashMap::new()),
             scheduler_lease: Mutex::new(None),
+            writer_locks: writer_lock::Registry::default(),
         }
     }
 
@@ -4762,7 +5820,7 @@ mod tests {
 
         let request = tokio::spawn({
             let state = state.clone();
-            async move { request_interrupt(state.as_ref(), "session-a").await }
+            async move { request_interrupt(state.as_ref(), "session-a", None).await }
         });
         let frame = fixture_frame(&mut frames).await;
         assert_eq!(frame["method"], "turn/interrupt");
@@ -4791,6 +5849,65 @@ mod tests {
         );
         assert!(!state.sessions.lock().unwrap()["session-a"].running);
         assert_eq!(events.last().map(|event| event.2.as_str()), Some("cancelled"));
+    }
+
+    #[test]
+    fn completed_turn_preserves_bounded_host_result_preview() {
+        let state = empty_state();
+        state.sessions.lock().unwrap().insert(
+            "session-a".to_string(),
+            SessionMeta {
+                session_id: "session-a".to_string(),
+                workspace: "C:/fixture".to_string(),
+                running: true,
+                session_durability: None,
+                approval_mode: None,
+                granted_capabilities: None,
+            },
+        );
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "turn/completed",
+            &json!({
+                "sessionId": "session-a",
+                "turnId": "turn-a",
+                "terminal": "completed",
+                "result": "x".repeat(500),
+            }),
+            &mut emit,
+        );
+
+        let payload = events
+            .last()
+            .map(|event| serde_json::from_str::<Value>(&event.3).expect("status payload"))
+            .expect("terminal event");
+        let preview = payload["result"].as_str().expect("result preview");
+        assert_eq!(preview.chars().count(), 320);
+        assert!(preview.ends_with('…'));
+
+        let mut structured_events = Vec::new();
+        let mut structured_emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            structured_events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "turn/completed",
+            &json!({
+                "sessionId": "session-a",
+                "terminal": "completed",
+                "result": {"summary": "Files are ready."},
+            }),
+            &mut structured_emit,
+        );
+        let structured = structured_events
+            .last()
+            .map(|event| serde_json::from_str::<Value>(&event.3).expect("structured status payload"))
+            .expect("structured terminal event");
+        assert_eq!(structured["result"], Value::String("Files are ready.".to_string()));
     }
 
     #[test]
@@ -4826,6 +5943,64 @@ mod tests {
         assert!(payload.contains("\"turnId\":\"turn-a\""));
     }
 
+    #[tokio::test]
+    async fn interrupt_request_can_target_the_active_turn() {
+        let state = Arc::new(empty_state());
+        let (client, mut frames) = fixture_client(false);
+        register_fixture_session(state.as_ref(), "session-a", "fixture-a", client.clone());
+
+        let request = tokio::spawn({
+            let state = state.clone();
+            async move { request_interrupt(state.as_ref(), "session-a", Some("turn-a")).await }
+        });
+        let frame = fixture_frame(&mut frames).await;
+        assert_eq!(frame["method"], "turn/interrupt");
+        assert_eq!(frame["params"]["sessionId"], "session-a");
+        assert_eq!(frame["params"]["turnId"], "turn-a");
+        client
+            .ingest(json!({
+                "jsonrpc": "2.0",
+                "id": frame["id"],
+                "result": {"status": "accepted", "turnId": "turn-a"}
+            }))
+            .await;
+
+        assert_eq!(request.await.unwrap().unwrap()["status"], "accepted");
+    }
+
+    #[test]
+    fn turn_stopped_is_terminal_stop() {
+        let state = empty_state();
+        state.sessions.lock().unwrap().insert(
+            "session-a".to_string(),
+            SessionMeta {
+                session_id: "session-a".to_string(),
+                workspace: "C:/fixture".to_string(),
+                running: true,
+                session_durability: None,
+                approval_mode: None,
+                granted_capabilities: None,
+            },
+        );
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "turn/stopped",
+            &json!({"sessionId":"session-a","turnId":"turn-a","reason":"interrupted"}),
+            &mut emit,
+        );
+
+        assert!(!state.sessions.lock().unwrap()["session-a"].running);
+        let (_, sid, kind, payload) = events.last().expect("terminal status event");
+        assert_eq!(sid, "session-a");
+        assert_eq!(kind, "stopped");
+        assert!(payload.contains("\"terminal\":\"stopped\""));
+        assert!(payload.contains("\"turnId\":\"turn-a\""));
+    }
+
     #[test]
     fn approval_resolution_without_decision_fails_closed() {
         let state = empty_state();
@@ -4845,6 +6020,47 @@ mod tests {
         assert_eq!(kind, "approval/resolved");
         assert!(payload.contains("\"decision\":\"unknown\""));
         assert!(payload.contains("\"terminal\":true"));
+    }
+
+    #[test]
+    fn approval_resolution_preserves_bounded_turn_identity() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "approval/resolved",
+            &json!({
+                "sessionId": "session-a",
+                "approvalId": "approval-a",
+                "resolution": {"decision": "approved", "turn_id": "turn-a"}
+            }),
+            &mut emit,
+        );
+
+        let (_, sid, kind, payload) = events.last().expect("approval resolution event");
+        assert_eq!(sid, "session-a");
+        assert_eq!(kind, "approval/resolved");
+        let payload: Value = serde_json::from_str(payload).expect("valid status payload");
+        assert_eq!(payload["decision"], "approved");
+        assert_eq!(payload["turnId"], "turn-a");
+
+        let oversized = "x".repeat(300);
+        let mut oversized_events = Vec::new();
+        let mut oversized_emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            oversized_events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        route_notification_with_emit(
+            &state,
+            "approval/resolved",
+            &json!({"sessionId":"session-a","approvalId":"approval-a","decision":"approved","turnId":oversized}),
+            &mut oversized_emit,
+        );
+        let payload: Value = serde_json::from_str(&oversized_events.last().unwrap().3)
+            .expect("valid bounded status payload");
+        assert_eq!(payload["turnId"].as_str().unwrap().chars().count(), 161);
     }
 
     #[tokio::test]
@@ -4894,6 +6110,102 @@ mod tests {
 
         ingest_stdout_chunk(&client, &mut out_buf, &stderr_tail, b"not-json\n").await;
         assert!(stderr_tail.lock().unwrap()[0].contains("unparsable frame"));
+    }
+
+    struct FixtureProcessChild {
+        child: Option<std::process::Child>,
+        stdin: std::process::ChildStdin,
+    }
+
+    impl msp::ChildTransport for FixtureProcessChild {
+        fn write(&mut self, buf: &[u8]) -> Result<(), String> {
+            use std::io::Write;
+            self.stdin.write_all(buf).map_err(|error| error.to_string())
+        }
+
+        fn kill(mut self: Box<Self>) -> Result<(), String> {
+            if let Some(mut child) = self.child.take() {
+                child.kill().map_err(|error| error.to_string())?;
+                let _ = child.wait();
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn real_fixture_child_round_trips_through_stdout_pump() {
+        use std::io::Read;
+        use std::process::{Command, Stdio};
+
+        let mut command = if cfg!(windows) {
+            let script = r#"$null = [Console]::In.ReadLine(); [Console]::Out.WriteLine('{"jsonrpc":"2.0","method":"turn/started","params":{"sessionId":"fixture-session"}}'); [Console]::Out.Write('{"jsonrpc":"2.0","id":1,"result":{"models":[{"id":"fixture-model"}]}}'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 5"#;
+            let mut command = Command::new("powershell.exe");
+            command.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script]);
+            command
+        } else {
+            let script = "read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/started\",\"params\":{\"sessionId\":\"fixture-session\"}}'; printf '%s' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"models\":[{\"id\":\"fixture-model\"}]}}'";
+            let mut command = Command::new("sh");
+            command.args(["-c", script]);
+            command
+        };
+        let mut process = command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("fixture child should spawn");
+        let stdin = process.stdin.take().expect("fixture stdin");
+        let mut stdout = process.stdout.take().expect("fixture stdout");
+        let child = FixtureProcessChild { child: Some(process), stdin };
+        let (notify_tx, mut notify_rx) = mpsc::unbounded_channel();
+        let client = Arc::new(MspClient::new(
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(child)))),
+            notify_tx,
+        ));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let (events_tx, events_rx) = tauri::async_runtime::channel(16);
+        let pump = tokio::spawn(consume_command_events(events_rx, client.clone(), stderr_tail.clone()));
+
+        let feeder = std::thread::spawn(move || {
+            let mut chunk = [0u8; 7];
+            loop {
+                match stdout.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(size) => {
+                        if events_tx
+                            .blocking_send(CommandEvent::Stdout(chunk[..size].to_vec()))
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = events_tx.blocking_send(CommandEvent::Error(error.to_string()));
+                        break;
+                    }
+                }
+            }
+            let _ = events_tx.blocking_send(CommandEvent::Terminated(TerminatedPayload {
+                code: Some(0),
+                signal: None,
+            }));
+        });
+
+        let result = client.request("model/list", Value::Null).await.expect("fixture response");
+        assert_eq!(result["models"][0]["id"], "fixture-model");
+        let (method, params) = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            notify_rx.recv(),
+        )
+        .await
+        .expect("fixture notification timeout")
+        .expect("fixture notification channel closed");
+        assert_eq!(method, "turn/started");
+        assert_eq!(params["sessionId"], "fixture-session");
+
+        assert!(matches!(pump.await.expect("pump join"), PumpExit::Terminated(_)));
+        feeder.join().expect("fixture feeder join");
+        assert!(stderr_tail.lock().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -5168,8 +6480,10 @@ mod tests {
         let state = app.state::<AppState>();
         register_fixture_session(state.inner(), "session-a", "fixture-a", client_a.clone());
         register_fixture_session(state.inner(), "session-b", "fixture-b", client_b);
-        let mut emitted = Vec::new();
-        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+        let emitted_count;
+        {
+            let mut emitted = Vec::new();
+            let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
             emitted.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
         };
         for (sid, requirement) in [("session-a", "req-a"), ("session-b", "req-b")] {
@@ -5185,7 +6499,9 @@ mod tests {
                 &mut emit,
             );
         }
-        assert_eq!(emitted.len(), 2);
+        emitted_count = emitted.len();
+        }
+        assert_eq!(emitted_count, 2);
 
         let responder = std::thread::spawn(move || {
             tauri::async_runtime::block_on(async move {
@@ -5235,6 +6551,310 @@ mod tests {
         let approvals = state.inner().approvals.lock().unwrap();
         assert!(!approvals.contains_key(&("session-a".to_string(), "same-approval".to_string())));
         assert!(approvals.contains_key(&("session-b".to_string(), "same-approval".to_string())));
+    }
+
+    #[test]
+    fn generated_tauri_invoke_keeps_interleaved_session_approval_routes_isolated() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![send_input, approve])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client_a, mut frames_a) = fixture_client(false);
+        let (client_b, mut frames_b) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client_a.clone());
+        register_fixture_session(state.inner(), "session-b", "fixture-b", client_b.clone());
+
+        let responder_a_client = client_a.clone();
+        let responder_a = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let turn = fixture_frame(&mut frames_a).await;
+                assert_eq!(turn["method"], "turn/start");
+                assert_eq!(turn["params"]["sessionId"], "session-a");
+                responder_a_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": turn["id"],
+                        "result": {"status":"accepted", "turnId":"turn-a"}
+                    }))
+                    .await;
+
+                let approval = fixture_frame(&mut frames_a).await;
+                assert_eq!(approval["method"], "approval/decide");
+                assert_eq!(approval["params"]["sessionId"], "session-a");
+                responder_a_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": approval["id"],
+                        "result": {"terminal": true}
+                    }))
+                    .await;
+            });
+        });
+        let responder_b = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let turn = fixture_frame(&mut frames_b).await;
+                assert_eq!(turn["method"], "turn/start");
+                assert_eq!(turn["params"]["sessionId"], "session-b");
+                client_b
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": turn["id"],
+                        "result": {"status":"accepted", "turnId":"turn-b"}
+                    }))
+                    .await;
+            });
+        });
+
+        let invoke = |cmd: &str, body: Value| -> Value {
+            tauri::test::get_ipc_response(
+                &webview,
+                tauri::webview::InvokeRequest {
+                    cmd: cmd.into(),
+                    callback: tauri::ipc::CallbackFn(0),
+                    error: tauri::ipc::CallbackFn(1),
+                    url: if cfg!(any(windows, target_os = "android")) {
+                        "http://tauri.localhost"
+                    } else {
+                        "tauri://localhost"
+                    }
+                    .parse()
+                    .unwrap(),
+                    body: tauri::ipc::InvokeBody::Json(body),
+                    headers: Default::default(),
+                    invoke_key: tauri::test::INVOKE_KEY.to_string(),
+                },
+            )
+            .expect("Tauri invoke should succeed")
+            .deserialize::<Value>()
+            .expect("Tauri response should be JSON")
+        };
+
+        let sent_a = invoke(
+            "send_input",
+            json!({
+                "sessionId": "session-a",
+                "commandId": "command-a",
+                "text": "inspect A",
+                "inputParts": null
+            }),
+        );
+        let sent_b = invoke(
+            "send_input",
+            json!({
+                "sessionId": "session-b",
+                "commandId": "command-b",
+                "text": "inspect B",
+                "inputParts": null
+            }),
+        );
+        assert_eq!(sent_a["turnId"], "turn-a");
+        assert_eq!(sent_b["turnId"], "turn-b");
+
+        let mut emitted = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            emitted.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        for sid in ["session-a", "session-b"] {
+            route_notification_with_emit(
+                state.inner(),
+                "approval/requested",
+                &json!({
+                    "sessionId": sid,
+                    "approvalId": "same-approval",
+                    "currentRequirementId": format!("requirement-{sid}"),
+                    "subject": {"kind":"shell","command":"echo safe"}
+                }),
+                &mut emit,
+            );
+        }
+        assert_eq!(emitted.len(), 2);
+
+        let approved = invoke(
+            "approve",
+            json!({
+                "sessionId": "session-a",
+                "approvalId": "same-approval",
+                "choiceId": "allow-once"
+            }),
+        );
+        assert_eq!(approved, json!(true));
+        responder_a.join().expect("session A responder should finish");
+        responder_b.join().expect("session B responder should finish");
+
+        let approvals = state.inner().approvals.lock().unwrap();
+        assert!(!approvals.contains_key(&("session-a".to_string(), "same-approval".to_string())));
+        assert!(approvals.contains_key(&("session-b".to_string(), "same-approval".to_string())));
+        assert!(state.inner().sessions.lock().unwrap()["session-a"].running);
+        assert!(state.inner().sessions.lock().unwrap()["session-b"].running);
+    }
+
+    #[test]
+    fn two_sessions_isolate_failure_when_host_b_disconnects_during_turn() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![send_input, approve])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client_a, mut frames_a) = fixture_client(false);
+        let (client_b, mut frames_b) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client_a.clone());
+        register_fixture_session(state.inner(), "session-b", "fixture-b", client_b.clone());
+
+        let responder_a_client = client_a.clone();
+        let responder_a = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let turn = fixture_frame(&mut frames_a).await;
+                assert_eq!(turn["method"], "turn/start");
+                assert_eq!(turn["params"]["sessionId"], "session-a");
+                responder_a_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": turn["id"],
+                        "result": {"status":"accepted", "turnId":"turn-a"}
+                    }))
+                    .await;
+
+                let approval = fixture_frame(&mut frames_a).await;
+                assert_eq!(approval["method"], "approval/decide");
+                assert_eq!(approval["params"]["sessionId"], "session-a");
+                responder_a_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": approval["id"],
+                        "result": {"terminal": true}
+                    }))
+                    .await;
+            });
+        });
+
+        let responder_b_client = client_b.clone();
+        let responder_b = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let turn = fixture_frame(&mut frames_b).await;
+                assert_eq!(turn["method"], "turn/start");
+                assert_eq!(turn["params"]["sessionId"], "session-b");
+                responder_b_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": turn["id"],
+                        "result": {"status":"accepted", "turnId":"turn-b"}
+                    }))
+                    .await;
+            });
+        });
+
+        let invoke = |cmd: &str, body: Value| -> Value {
+            tauri::test::get_ipc_response(
+                &webview,
+                tauri::webview::InvokeRequest {
+                    cmd: cmd.into(),
+                    callback: tauri::ipc::CallbackFn(0),
+                    error: tauri::ipc::CallbackFn(1),
+                    url: if cfg!(any(windows, target_os = "android")) {
+                        "http://tauri.localhost"
+                    } else {
+                        "tauri://localhost"
+                    }
+                    .parse()
+                    .unwrap(),
+                    body: tauri::ipc::InvokeBody::Json(body),
+                    headers: Default::default(),
+                    invoke_key: tauri::test::INVOKE_KEY.to_string(),
+                },
+            )
+            .expect("Tauri invoke should succeed")
+            .deserialize::<Value>()
+            .expect("Tauri response should be JSON")
+        };
+
+        let sent_a = invoke(
+            "send_input",
+            json!({
+                "sessionId": "session-a",
+                "commandId": "command-a",
+                "text": "inspect A",
+                "inputParts": null
+            }),
+        );
+        let sent_b = invoke(
+            "send_input",
+            json!({
+                "sessionId": "session-b",
+                "commandId": "command-b",
+                "text": "inspect B",
+                "inputParts": null
+            }),
+        );
+        assert_eq!(sent_a["turnId"], "turn-a");
+        assert_eq!(sent_b["turnId"], "turn-b");
+
+        let mut emitted = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            emitted.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        for sid in ["session-a", "session-b"] {
+            route_notification_with_emit(
+                state.inner(),
+                "approval/requested",
+                &json!({
+                    "sessionId": sid,
+                    "approvalId": "same-approval",
+                    "currentRequirementId": format!("requirement-{sid}"),
+                    "subject": {"kind":"shell","command":"echo safe"}
+                }),
+                &mut emit,
+            );
+        }
+        assert_eq!(emitted.len(), 2);
+
+        // Host B disconnects abruptly while approval is open
+        let removed_b = state.inner().hosts.lock().unwrap().remove(&client_b);
+        assert_eq!(removed_b, vec!["session-b".to_string()]);
+        mark_running(state.inner(), "session-b", false);
+
+        // Host A resolves approval without interference
+        let approved = invoke(
+            "approve",
+            json!({
+                "sessionId": "session-a",
+                "approvalId": "same-approval",
+                "choiceId": "allow-once"
+            }),
+        );
+        assert_eq!(approved, json!(true));
+        responder_a.join().expect("session A responder should finish");
+        responder_b.join().expect("session B responder should finish");
+
+        // Complete A's turn
+        let mut emit_done = |_: &str, _: &str, _: &str, _: String| {};
+        route_notification_with_emit(
+            state.inner(),
+            "turn/completed",
+            &json!({"sessionId":"session-a","turnId":"turn-a","terminal":"completed"}),
+            &mut emit_done,
+        );
+
+        assert!(!state.inner().sessions.lock().unwrap()["session-a"].running);
+        assert!(!state.inner().sessions.lock().unwrap()["session-b"].running);
+
+        let approvals = state.inner().approvals.lock().unwrap();
+        assert!(!approvals.contains_key(&("session-a".to_string(), "same-approval".to_string())));
+        assert!(approvals.contains_key(&("session-b".to_string(), "same-approval".to_string())));
+
+        // Host A's session is still bound to client A, while session B is unbound
+        assert!(state.inner().hosts.lock().unwrap().session("session-a").is_ok());
+        assert!(state.inner().hosts.lock().unwrap().session("session-b").is_err());
     }
 
     #[test]
@@ -5401,6 +7021,314 @@ mod tests {
     }
 
     #[test]
+    fn view_page_params_keep_opaque_cursor_contract_bounded() {
+        let params = view_page_params(
+            " session-a ",
+            Some(" cursor-1 "),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(params["sessionId"], "session-a");
+        assert_eq!(params["cursor"], "cursor-1");
+        assert_eq!(params["direction"], "forward");
+        assert_eq!(params["limit"], DEFAULT_VIEW_PAGE_LIMIT);
+
+        let anchored = view_page_params(
+            "session-a",
+            None,
+            Some("backward"),
+            Some("latestCompaction"),
+            Some(MAX_VIEW_PAGE_LIMIT),
+        )
+        .unwrap();
+        assert_eq!(anchored["direction"], "backward");
+        assert_eq!(anchored["anchor"], "latestCompaction");
+        assert!(view_page_params("session-a", Some("c"), None, Some("a"), None).is_err());
+        assert!(view_page_params("session-a", None, Some("sideways"), None, None).is_err());
+        assert!(view_page_params("session-a", None, None, None, Some(0)).is_err());
+        assert!(view_page_params(
+            "session-a", None, None, None, Some(MAX_VIEW_PAGE_LIMIT + 1)
+        ).is_err());
+        assert!(view_page_params(
+            "session-a", Some(&"x".repeat(MAX_VIEW_PAGE_CURSOR_CHARS + 1)), None, None, None
+        ).is_err());
+    }
+
+    #[test]
+    fn session_list_pagination_keeps_cursor_opaque_and_bounded() {
+        let first = session_list_params(None).unwrap();
+        assert_eq!(first["limit"], DEFAULT_SESSION_LIST_LIMIT);
+        assert!(first.get("cursor").is_none());
+
+        let next = session_list_params(Some(" cursor-2 ")).unwrap();
+        assert_eq!(next["cursor"], "cursor-2");
+        assert_eq!(
+            session_list_next_cursor(&json!({"nextCursor": " c-3 "})).unwrap(),
+            Some("c-3".to_string())
+        );
+        assert_eq!(
+            session_list_next_cursor(&json!({"next_cursor": null})).unwrap(),
+            None
+        );
+        assert!(session_list_next_cursor(&json!({"nextCursor": 42})).is_err());
+        assert!(session_list_params(Some(
+            &"x".repeat(MAX_SESSION_LIST_CURSOR_CHARS + 1)
+        ))
+        .is_err());
+    }
+
+    #[test]
+    fn session_list_rows_rehydrate_unknown_durable_sessions() {
+        let meta = session_meta_from_list_row(
+            Path::new("C:/workspace"),
+            &json!({
+                "sessionId": "session-restored",
+                "status": "running",
+                "approvalMode": {"mode": "promptUnmatched"}
+            }),
+            Some("durable".to_string()),
+            Some(vec!["userShell".to_string()]),
+        )
+        .unwrap();
+        assert_eq!(meta.session_id, "session-restored");
+        assert_eq!(meta.workspace, "C:/workspace");
+        assert!(meta.running);
+        assert_eq!(meta.session_durability.as_deref(), Some("durable"));
+        assert_eq!(meta.approval_mode.as_deref(), Some("promptUnmatched"));
+        assert_eq!(meta.granted_capabilities, Some(vec!["userShell".to_string()]));
+        assert!(session_meta_from_list_row(Path::new("C:/workspace"), &json!({}), None, None).is_none());
+    }
+
+    #[test]
+    fn generated_tauri_invoke_restores_unknown_session_list_rows() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![restore_sessions])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        let root = PathBuf::from("fixture-a");
+        state.hosts.lock().unwrap().insert(root.clone(), client.clone());
+        state
+            .host_durability
+            .lock()
+            .unwrap()
+            .insert(root.clone(), "durable".to_string());
+        state
+            .host_capabilities
+            .lock()
+            .unwrap()
+            .insert(root, vec!["userShell".to_string()]);
+
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames).await;
+                assert_eq!(frame["method"], "session/list");
+                assert_eq!(frame["params"]["limit"], DEFAULT_SESSION_LIST_LIMIT);
+                client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": frame["id"],
+                        "result": {
+                            "sessions": [{
+                                "sessionId": "restored-session",
+                                "status": "running",
+                                "approvalMode": {"mode": "promptUnmatched"}
+                            }]
+                        }
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "restore_sessions".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({})),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("restore_sessions invoke should succeed")
+        .deserialize::<Value>()
+        .expect("restore_sessions response should be JSON");
+
+        responder.join().expect("session list responder should finish");
+        assert_eq!(response[0]["session_id"], "restored-session");
+        assert_eq!(response[0]["workspace"], "fixture-a");
+        assert_eq!(response[0]["session_durability"], "durable");
+        assert_eq!(response[0]["approval_mode"], "promptUnmatched");
+        assert_eq!(response[0]["granted_capabilities"][0], "userShell");
+        assert_eq!(state.sessions.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn durable_resume_attaches_after_read_without_replaying_history() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        let root = std::env::current_dir().expect("test workspace").canonicalize().unwrap();
+        let responder_root = root.clone();
+        state.hosts.lock().unwrap().insert(root.clone(), client.clone());
+        state
+            .host_durability
+            .lock()
+            .unwrap()
+            .insert(root.clone(), "durable".to_string());
+
+        let responder_client = client.clone();
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let read = fixture_frame(&mut frames).await;
+                assert_eq!(read["method"], "session/read");
+                assert_eq!(read["params"]["sessionId"], "durable-session");
+                assert_eq!(read["params"]["excludeItems"], true);
+                responder_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": read["id"],
+                        "result": {
+                            "session": {
+                                "sessionId": "durable-session",
+                                "path": "durable.jsonl",
+                                "workspaceRoot": responder_root.clone(),
+                                "status": "idle",
+                                "approvalMode": {"mode": "promptUnmatched"}
+                            },
+                            "history": {"items": [{"kind": "agentMessage", "text": "must not be replayed here"}]}
+                        }
+                    }))
+                    .await;
+
+                let resume = fixture_frame(&mut frames).await;
+                assert_eq!(resume["method"], "session/resume");
+                assert_eq!(resume["params"]["sessionId"], "durable-session");
+                assert_eq!(resume["params"]["excludeItems"], true);
+                assert!(resume["params"]["commandId"].as_str().is_some());
+                responder_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": resume["id"],
+                        "result": {
+                            "session": {
+                                "sessionId": "durable-session",
+                                "path": "durable.jsonl",
+                                "workspaceRoot": responder_root,
+                                "status": "running",
+                                "approvalMode": {"mode": "promptUnmatched"}
+                            }
+                        }
+                    }))
+                    .await;
+            });
+        });
+
+        let response = tauri::async_runtime::block_on(resume_session_with_client(
+            &state,
+            client.clone(),
+            root.clone(),
+            "durable-session".to_string(),
+            None,
+        ))
+        .expect("durable resume should succeed");
+
+        responder.join().expect("resume responder should finish");
+        assert_eq!(response.session_id, "durable-session");
+        assert_eq!(response.workspace, root.display().to_string());
+        assert!(response.running);
+        assert_eq!(response.session_durability.as_deref(), Some("durable"));
+        assert_eq!(response.approval_mode.as_deref(), Some("promptUnmatched"));
+        assert!(state.hosts.lock().unwrap().owns("durable-session", &client));
+        assert_eq!(state.sessions.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn durable_resume_cleans_metadata_when_host_returns_invalid_resume() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        let root = std::env::current_dir().expect("test workspace").canonicalize().unwrap();
+        state.hosts.lock().unwrap().insert(root.clone(), client.clone());
+        state
+            .host_durability
+            .lock()
+            .unwrap()
+            .insert(root.clone(), "durable".to_string());
+
+        let responder_client = client.clone();
+        let responder_root = root.clone();
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let read = fixture_frame(&mut frames).await;
+                assert_eq!(read["method"], "session/read");
+                responder_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": read["id"],
+                        "result": {
+                            "session": {
+                                "sessionId": "broken-resume",
+                                "path": "durable.jsonl",
+                                "workspaceRoot": responder_root,
+                                "status": "idle"
+                            }
+                        }
+                    }))
+                    .await;
+
+                let resume = fixture_frame(&mut frames).await;
+                assert_eq!(resume["method"], "session/resume");
+                responder_client
+                    .ingest(json!({
+                        "jsonrpc": "2.0",
+                        "id": resume["id"],
+                        "result": {}
+                    }))
+                    .await;
+            });
+        });
+
+        let error = tauri::async_runtime::block_on(resume_session_with_client(
+            &state,
+            client.clone(),
+            root,
+            "broken-resume".to_string(),
+            None,
+        ))
+        .expect_err("missing resume session should fail");
+
+        responder.join().expect("resume responder should finish");
+        assert!(error.contains("session/resume returned no conversation"), "{error}");
+        assert!(!state.hosts.lock().unwrap().owns("broken-resume", &client));
+        assert!(!state.sessions.lock().unwrap().contains_key("broken-resume"));
+    }
+
+    #[test]
     fn rename_session_params_trim_and_bound_the_host_title() {
         let params = rename_session_params(" session-a ", "  Project notes  ").unwrap();
         assert_eq!(params["sessionId"], "session-a");
@@ -5416,8 +7344,28 @@ mod tests {
     fn item_output_reference_is_trimmed_and_bounded() {
         assert_eq!(item_output_ref(&json!({"outputRef": " output://a "})), Some("output://a".to_string()));
         assert_eq!(item_output_ref(&json!({"output_ref": "output://b"})), Some("output://b".to_string()));
+        assert_eq!(
+            item_output_ref(&json!({"outputRef": {"id": "out-1", "uri": "output://out-1"}})),
+            Some("output://out-1".to_string())
+        );
         assert_eq!(item_output_ref(&json!({"outputRef": ""})), None);
         assert_eq!(item_output_ref(&json!({"outputRef": "x".repeat(MAX_OUTPUT_REF_CHARS + 1)})), None);
+    }
+
+    #[test]
+    fn rich_content_metadata_is_bounded_and_normalized() {
+        let item = json!({
+            "modelVisibleContent": [
+                {"type": "image", "mediaType": "image/png", "path": "art/output.png", "sourceToolName": "image.generate", "width": 640, "height": 480},
+                {"type": "image", "mediaType": "image/png", "path": "missing-source", "sourceToolName": ""},
+                {"type": "image", "mediaType": "image/png", "path": "too-wide", "sourceToolName": "tool", "width": 20001}
+            ]
+        });
+        let result = item_rich_content(&item).expect("valid content items");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0]["mediaType"], "image/png");
+        assert_eq!(result[0]["width"], 640);
+        assert!(result[1].get("width").is_none());
     }
 
     #[test]
@@ -6100,6 +8048,23 @@ mod tests {
     }
 
     #[test]
+    fn native_browser_session_labels_are_private_and_stable() {
+        assert_eq!(validate_native_browser_session(" session-a ").unwrap(), "session-a");
+        assert_eq!(native_browser_label("session-a"), native_browser_label("session-a"));
+        assert_ne!(native_browser_label("session-a"), native_browser_label("session-b"));
+        assert!(native_browser_label("session-a").starts_with(NATIVE_BROWSER_LABEL_PREFIX));
+    }
+
+    #[test]
+    fn native_browser_session_rejects_empty_control_and_oversized_ids() {
+        for value in ["", "   ", "session\nwith-control"] {
+            assert!(validate_native_browser_session(value).is_err(), "accepted {value:?}");
+        }
+        let oversized = "s".repeat(MAX_BROWSER_SESSION_CHARS + 1);
+        assert!(validate_native_browser_session(&oversized).is_err());
+    }
+
+    #[test]
     fn input_payload_drops_bad_modes_but_keeps_good() {
         let mut p = sample_prompt();
         p["questions"][0]["selection"]["mode"] = json!("ranked");
@@ -6233,6 +8198,33 @@ mod tests {
         // Items without identity contribute nothing (no empty announce).
         assert!(extract_subagent_meta(&json!({"kind": "subagent"})).is_none());
     }
+
+    #[test]
+    fn attached_worktree_sessions_are_counted_even_when_idle() {
+        let path = std::env::temp_dir().join(format!("muse-attached-{}", new_command_id()));
+        std::fs::create_dir_all(&path).unwrap();
+        let state = empty_state();
+        state.sessions.lock().unwrap().insert(
+            "session-attached".to_string(),
+            SessionMeta {
+                session_id: "session-attached".to_string(),
+                workspace: path.display().to_string(),
+                running: false,
+                session_durability: None,
+                approval_mode: None,
+                granted_capabilities: None,
+            },
+        );
+        assert_eq!(attached_sessions_for_worktree(&state, &path.display().to_string()), 1);
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn desktop_control_gate_requires_explicit_consent() {
+        assert!(require_desktop_control_permission(true).is_ok());
+        let error = require_desktop_control_permission(false).unwrap_err();
+        assert!(error.contains("Allow desktop control"));
+    }
 }
 
 fn main() {
@@ -6246,7 +8238,9 @@ fn main() {
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
             host_durability: Mutex::new(HashMap::new()),
+            host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
+            desktop_control_allowed: Mutex::new(false),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -6261,13 +8255,16 @@ fn main() {
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             workspace_watchers: Mutex::new(HashMap::new()),
             scheduler_lease: Mutex::new(None),
+            writer_locks: writer_lock::Registry::default(),
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
+            restart_host,
             fork_session,
             set_approval_mode,
             resume_session,
             read_session_history,
+            page_session_history,
             read_item_output,
             read_queue_snapshot,
             list_pending_requests,
@@ -6299,6 +8296,8 @@ fn main() {
             git_worktree_create_session,
             git_worktree_remove,
             git_worktree_inspect,
+            writer_lock_acquire,
+            writer_lock_release,
             worktree_setup_run,
             worktree_setup_readiness,
             worktree_setup_cancel,
@@ -6328,8 +8327,17 @@ fn main() {
             files_unwatch,
             file_open,
             artifact_export,
+            output_export,
             browser_download_write,
             browser_download_fetch,
+            desktop_control_status,
+            set_desktop_control_permission,
+            desktop_windows,
+            desktop_window_elements,
+            desktop_focus_window,
+            desktop_send_text,
+            desktop_press_key,
+            desktop_click,
             probe_startup,
             list_models,
             set_model,
@@ -6350,8 +8358,13 @@ fn main() {
             scheduler_release,
             scheduler_runs_read,
             scheduler_runs_write,
+            scheduler_schedules_read,
+            scheduler_schedules_write,
+            scheduler_wakeup_sync,
             notifications_read,
             notifications_write,
+            outbox_read,
+            outbox_write,
             open_native_browser,
             close_native_browser,
         ])
@@ -6381,6 +8394,7 @@ fn main() {
                         native.release();
                     }
                 };
+                writer_lock::release_all(&state.writer_locks);
             }
         });
 }

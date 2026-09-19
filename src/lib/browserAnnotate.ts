@@ -88,6 +88,12 @@ export const MAX_BROWSER_CAPTURE_BYTES = 5 * 1024 * 1024;
 /** Maximum bytes an explicit browser link download may write to disk. */
 export const MAX_BROWSER_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 
+/** Stable bounds for the local capture preview. The image itself stays in
+ * source pixels; zoom only changes its review size before cropping. */
+export const BROWSER_CAPTURE_PREVIEW_MAX_WIDTH = 560;
+export const BROWSER_CAPTURE_PREVIEW_MAX_HEIGHT = 320;
+export const BROWSER_CAPTURE_PREVIEW_MAX_ZOOM = 2.5;
+
 /** One explicit visual capture from a browser surface. */
 export interface BrowserCaptureRegion {
   x: number;
@@ -112,6 +118,48 @@ export interface BrowserCapture {
   region?: BrowserCaptureRegion;
   sourceWidth?: number;
   sourceHeight?: number;
+}
+
+export interface BrowserCapturePreviewSize {
+  width: number;
+  height: number;
+  /** Fit scale used before the user-selected review zoom. */
+  scale: number;
+  zoom: number;
+}
+
+/**
+ * Resolve explicit preview dimensions for a captured image.
+ *
+ * Keeping the dimensions explicit makes pointer-based crop coordinates match
+ * the rendered image even when the review viewport is scrolled at higher
+ * zoom. Invalid inputs return null so callers can fail closed without
+ * manufacturing dimensions for an unusable capture.
+ */
+export function browserCapturePreviewSize(
+  sourceWidth: number,
+  sourceHeight: number,
+  zoom = 1,
+  maxWidth = BROWSER_CAPTURE_PREVIEW_MAX_WIDTH,
+  maxHeight = BROWSER_CAPTURE_PREVIEW_MAX_HEIGHT,
+): BrowserCapturePreviewSize | null {
+  if (![sourceWidth, sourceHeight, zoom, maxWidth, maxHeight].every(Number.isFinite)) return null;
+  if (sourceWidth <= 0 || sourceHeight <= 0 || maxWidth <= 0 || maxHeight <= 0) return null;
+  const boundedZoom = Math.min(BROWSER_CAPTURE_PREVIEW_MAX_ZOOM, Math.max(1, zoom));
+  const scale = Math.min(1, maxWidth / sourceWidth, maxHeight / sourceHeight);
+  return {
+    width: Math.max(1, Math.round(sourceWidth * scale * boundedZoom)),
+    height: Math.max(1, Math.round(sourceHeight * scale * boundedZoom)),
+    scale,
+    zoom: boundedZoom,
+  };
+}
+
+/** Return true only when a capture still belongs to the page being shown. */
+export function browserCaptureMatchesPage(captureUrl: string, pageUrl: string): boolean {
+  const capture = normalizeBrowserUrl(captureUrl);
+  const page = normalizeBrowserUrl(pageUrl);
+  return capture !== null && page !== null && capture === page;
 }
 
 const MAX_BROWSER_ELEMENT_FIELD = 320;
@@ -150,6 +198,23 @@ export function browserDownloadFilename(url: string, suggested?: string): string
     // here for previews and tests that only need a stable filename.
   }
   return "muse-download";
+}
+
+/**
+ * Resolve a page target without crossing the page origin or leaving the
+ * http(s)-only browser boundary.
+ */
+export function normalizeSameOriginTarget(pageUrl: string, targetUrl: string): string | null {
+  const page = normalizeBrowserUrl(pageUrl);
+  if (page === null) return null;
+  try {
+    const pageOrigin = new URL(page);
+    const target = new URL(targetUrl, pageOrigin);
+    if (!/^https?:$/.test(target.protocol) || target.origin !== pageOrigin.origin) return null;
+    return target.toString();
+  } catch {
+    return null;
+  }
 }
 
 /** Validate and bound element metadata before it is persisted or sent. */
@@ -454,9 +519,25 @@ export function createBrowserTab(): BrowserTab {
   return { id: `tab-${makeId()}`, url: "", history: [], historyIndex: -1 };
 }
 
+/**
+ * Scope navigation state to one conversation without putting the raw session
+ * id in a storage key. The FNV-1a projection is deterministic, bounded and
+ * keeps two sessions from ever sharing a tab history by accident.
+ */
+export function browserTabsStorageKey(sessionId?: string): string {
+  const normalized = sessionId?.trim() ?? "";
+  if (!normalized) return BROWSER_TABS_KEY;
+  let hash = 0x811c9dc5;
+  for (const character of normalized) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${BROWSER_TABS_KEY}.session.${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
 /** Load navigation state while dropping malformed or unsafe URLs. */
-export function loadBrowserTabs(): BrowserTab[] {
-  const raw = read<unknown>(BROWSER_TABS_KEY, []);
+export function loadBrowserTabs(sessionId?: string): BrowserTab[] {
+  const raw = read<unknown>(browserTabsStorageKey(sessionId), []);
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
   const tabs: BrowserTab[] = [];
@@ -471,7 +552,7 @@ export function loadBrowserTabs(): BrowserTab[] {
 }
 
 /** Persist only the bounded navigation projection; never page cookies/state. */
-export function saveBrowserTabs(tabs: BrowserTab[]): void {
+export function saveBrowserTabs(tabs: BrowserTab[], sessionId?: string): void {
   const seen = new Set<string>();
   const safe: BrowserTab[] = [];
   for (const candidate of tabs) {
@@ -481,7 +562,7 @@ export function saveBrowserTabs(tabs: BrowserTab[]): void {
     safe.push(tab);
     if (safe.length >= MAX_BROWSER_TABS) break;
   }
-  write(BROWSER_TABS_KEY, safe);
+  write(browserTabsStorageKey(sessionId), safe);
 }
 
 export function loadBrowserAnnotations(): BrowserAnnotation[] {

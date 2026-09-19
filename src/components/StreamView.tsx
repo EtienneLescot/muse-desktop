@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 import type { LogEntry } from "../lib/persist";
+import { isTauriRuntime } from "../lib/env";
 import type { ItemOutputChunk } from "../hooks/useMuseSessions";
 import { REFLEXIVE_LABEL } from "../lib/phase";
 import { subagentSummary } from "../lib/subagent";
@@ -10,13 +13,16 @@ import {
   prependStreamWindowStart,
   shouldWindowStream,
   streamWindowEnd,
+  streamWindowPadding,
 } from "../lib/streamWindow";
 import {
   classifyStreamHealth,
   formatElapsed,
   streamEventLabel,
+  streamRecoveryDetail,
   streamHealthLabel,
   type RetryScheduled,
+  type StreamRecoveryNotice,
   type StreamHealth,
 } from "../lib/streamHealth";
 import {
@@ -25,11 +31,132 @@ import {
   type TranscriptHit,
 } from "../lib/transcriptSearch";
 import { streamEntryA11y, streamWindowAnnouncement } from "../lib/streamA11y";
+import { streamNavigationTarget } from "../lib/streamNavigation";
 import {
   isTerminalSubagentStatus,
   subagentStatusLabel,
 } from "../lib/subagent";
+import { officePreviewForFile, type OfficePreview } from "../lib/officePreview";
 import { MessageContent } from "./MessageContent";
+import { loadStreamPosition, saveStreamPosition } from "../lib/streamPosition";
+
+const MAX_INLINE_RICH_PDF_BYTES = 5 * 1024 * 1024;
+
+function outputDownloadName(entry: LogEntry, mediaType?: string): string {
+  const source = entry.richContent?.[0]?.path ?? "muse-output";
+  const basename = source.split(/[\\/]/).pop() ?? "muse-output";
+  const safe = basename.replace(/[<>:\"/\\|?*\u0000-\u001f]/g, "-").trim().slice(0, 120) || "muse-output";
+  if (safe.includes(".")) return safe;
+  const extension = mediaTypeExtension(mediaType);
+  return extension ? `${safe}.${extension.replace(/[^a-z0-9.+-]/gi, "")}` : `${safe}.txt`;
+}
+
+function mediaTypeExtension(mediaType?: string): string | undefined {
+  const normalized = mediaType?.toLowerCase().split(";", 1)[0];
+  if (!normalized) return undefined;
+  if (normalized.startsWith("image/")) return normalized.slice(6);
+  const known: Record<string, string> = {
+    "application/pdf": "pdf",
+    "application/json": "json",
+    "text/csv": "csv",
+    "text/markdown": "md",
+    "text/plain": "txt",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/vnd.oasis.opendocument.text": "odt",
+    "application/vnd.oasis.opendocument.spreadsheet": "ods",
+    "application/vnd.oasis.opendocument.presentation": "odp",
+  };
+  return known[normalized];
+}
+
+function isWorkspaceRelativePath(value: string): boolean {
+  const path = value.trim();
+  return path.length > 0
+    && !/^[a-z][a-z0-9+.-]*:\/\//i.test(path)
+    && !/^(?:[a-z]:[\\/]|[\\/]{1,2})/i.test(path);
+}
+
+function downloadLoadedOutput(entry: LogEntry, loaded: { content: string; base64Data?: string; mediaType?: string }): void {
+  if (typeof document === "undefined" || typeof URL === "undefined" || typeof Blob === "undefined") return;
+  let blob: Blob;
+  if (loaded.base64Data !== undefined) {
+    if (typeof atob !== "function") return;
+    try {
+      const binary = atob(loaded.base64Data);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      blob = new Blob([bytes], { type: loaded.mediaType ?? "application/octet-stream" });
+    } catch {
+      return;
+    }
+  } else {
+    blob = new Blob([loaded.content], { type: "text/plain;charset=utf-8" });
+  }
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = outputDownloadName(entry, loaded.mediaType);
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function utf8Base64(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+async function saveLoadedOutput(
+  entry: LogEntry,
+  loaded: { content: string; base64Data?: string; mediaType?: string },
+): Promise<void> {
+  const filename = outputDownloadName(entry, loaded.mediaType);
+  if (!isTauriRuntime()) {
+    downloadLoadedOutput(entry, loaded);
+    return;
+  }
+  const target = await save({
+    title: "Save Muse output",
+    defaultPath: filename,
+  });
+  if (typeof target !== "string" || target.trim() === "") return;
+  const data = loaded.base64Data ?? utf8Base64(loaded.content);
+  await invoke("output_export", { path: target, data });
+}
+
+function RichOfficeTable({ preview }: { preview: OfficePreview }) {
+  return (
+    <div className="file-structured-preview" role="region" aria-label={preview.format.toUpperCase() + " output preview"}>
+      <div className="file-structured-meta">
+        <span>{preview.format.toUpperCase()} · {preview.rows.length} rows</span>
+        {preview.truncated && <span>Preview limited for safety</span>}
+      </div>
+      <div className="file-structured-scroll">
+        <table>
+          <caption className="sr-only">Structured preview of rich output</caption>
+          <thead>
+            <tr>
+              {preview.columns.map((column, index) => <th scope="col" key={column + "-" + index}>{column}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {preview.rows.map((row, rowIndex) => (
+              <tr key={"output-row-" + rowIndex}>
+                {preview.columns.map((_, columnIndex) => (
+                  <td key={"output-cell-" + rowIndex + "-" + columnIndex}>{row[columnIndex] ?? ""}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 /** US-6 controls for one sub-agent block. Read-result and drill-down resolve
  *  to display text (also logged as system lines by the hook); the rest are
@@ -52,6 +179,8 @@ interface Props {
   lastEventAt?: number | null;
   /** Last transport event observed, used only for a compact progress hint. */
   lastEventKind?: string | null;
+  /** Bounded result of a host recovery read, kept outside the transcript. */
+  recoveryNotice?: StreamRecoveryNotice | null;
   /** A permission/input decision was accepted; awaiting the next host event. */
   resumePendingAt?: number | null;
   /** Host-provided retry backoff shown while the next attempt is pending. */
@@ -63,10 +192,14 @@ interface Props {
   reconciling?: boolean;
   onReconcile?: () => void;
   onCancel?: () => void;
+  /** Close a conversation when a stop was accepted but never confirmed. */
+  onForceStop?: () => void;
   /** Retry the last user message when the host marks a turn retryable. */
   onRetryFailedTurn?: (entry: LogEntry) => Promise<void>;
   /** Start a server-side branch from this completed turn. */
   onForkFromEntry?: (turnId: string) => void;
+  /** Open a verified workspace output with the system default application. */
+  onOpenWorkspacePath?: (path: string) => Promise<void>;
   controls?: SubagentControls;
 }
 
@@ -99,6 +232,17 @@ function agentOf(e: LogEntry): string {
   return e.agentId ?? e.itemId ?? "agent";
 }
 
+/** Measure the mounted message including its vertical margins. The window
+ * uses this value only for entries outside the DOM; an unmeasured entry keeps
+ * the conservative estimate from streamWindow.ts. */
+function measureEntryBlockHeight(node: HTMLElement): number {
+  const rect = node.getBoundingClientRect();
+  const style = window.getComputedStyle(node);
+  const marginTop = Number.parseFloat(style.marginTop) || 0;
+  const marginBottom = Number.parseFloat(style.marginBottom) || 0;
+  return Math.max(1, Math.round(rect.height + marginTop + marginBottom));
+}
+
 /**
  * Conversation stream for one session. Consecutive assistant chunks are
  * coalesced by the hook into a single entry; sub-agent entries render as
@@ -112,6 +256,7 @@ export function StreamView({
   stopping = false,
   lastEventAt = null,
   lastEventKind = null,
+  recoveryNotice = null,
   resumePendingAt = null,
   retryScheduled = null,
   pendingApprovals = 0,
@@ -121,8 +266,10 @@ export function StreamView({
   reconciling = false,
   onReconcile,
   onCancel,
+  onForceStop,
   onRetryFailedTurn,
   onForkFromEntry,
+  onOpenWorkspacePath,
   controls,
 }: Props) {
   const streamRef = useRef<HTMLDivElement>(null);
@@ -135,11 +282,14 @@ export function StreamView({
   const [shown, setShown] = useState<Record<string, string>>({});
   const [loadedOutputs, setLoadedOutputs] = useState<Record<string, {
     content: string;
+    base64Data?: string;
+    mediaType?: string;
     nextOffsetBytes: number;
     byteLen: number;
     eof: boolean;
     loading: boolean;
   }>>({});
+  const [outputError, setOutputError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [retryingFailure, setRetryingFailure] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
@@ -151,12 +301,55 @@ export function StreamView({
   const [windowStart, setWindowStart] = useState(() =>
     initialStreamWindowStart(entries.length),
   );
+  const [measuredHeights, setMeasuredHeights] = useState<Record<number, number | undefined>>({});
   const windowStartsRef = useRef<Record<string, number>>({});
+  const measuredPaddingRef = useRef<{
+    start: number;
+    end: number;
+    top: number;
+    bottom: number;
+  } | null>(null);
   const windowSessionRef = useRef<string | null>(sessionId);
   const previousEntryCountRef = useRef(entries.length);
-  const prependScrollRef = useRef<{ top: number; height: number } | null>(null);
+  const prependScrollRef = useRef<{
+    index: number;
+    offset: number;
+    top: number;
+    height: number;
+  } | null>(null);
   const jumpLatestRef = useRef(false);
   const loadingOlderRef = useRef(false);
+  const persistViewportTimerRef = useRef<number | null>(null);
+
+  function scheduleViewportPersistence(id: string | null, top: number, start: number): void {
+    if (id === null || !Number.isFinite(top) || !Number.isFinite(start)) return;
+    if (persistViewportTimerRef.current !== null) {
+      window.clearTimeout(persistViewportTimerRef.current);
+    }
+    persistViewportTimerRef.current = window.setTimeout(() => {
+      persistViewportTimerRef.current = null;
+      saveStreamPosition(id, top, start);
+    }, 180);
+  }
+
+  function appendBase64(first: string | undefined, second: string): string {
+    if (!first) return second;
+    if (typeof atob !== "function" || typeof btoa !== "function") return `${first}${second}`;
+    try {
+      const left = atob(first);
+      const right = atob(second);
+      const bytes = new Uint8Array(left.length + right.length);
+      for (let i = 0; i < left.length; i++) bytes[i] = left.charCodeAt(i);
+      for (let i = 0; i < right.length; i++) bytes[left.length + i] = right.charCodeAt(i);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 0x8000, bytes.length)));
+      }
+      return btoa(binary);
+    } catch {
+      return `${first}${second}`;
+    }
+  }
 
   const streamWindowed = shouldWindowStream(entries.length);
   const maxWindowStart = maxStreamWindowStart(entries.length);
@@ -169,10 +362,17 @@ export function StreamView({
   const visibleEntries = streamWindowed
     ? entries.slice(safeWindowStart, safeWindowEnd)
     : entries;
+  const windowPadding = streamWindowed
+    ? streamWindowPadding(entries.length, safeWindowStart, safeWindowEnd, undefined, measuredHeights)
+    : { top: 0, bottom: 0 };
   const windowAnnouncement = streamWindowAnnouncement(
     safeWindowStart,
     safeWindowEnd,
     entries.length,
+  );
+  const visibleEntrySignature = useMemo(
+    () => visibleEntries.map((entry) => entry.id).join("\u001f"),
+    [visibleEntries],
   );
   const findHits = useMemo(
     () => searchTranscript(entries, findQuery),
@@ -191,17 +391,35 @@ export function StreamView({
   useEffect(() => {
     const key = sessionId ?? "";
     const saved = windowStartsRef.current[key];
-    const next = initialStreamWindowStart(entries.length, saved);
+    const persisted = loadStreamPosition(sessionId);
+    const next = initialStreamWindowStart(entries.length, saved ?? persisted?.windowStart);
     windowSessionRef.current = sessionId;
     previousEntryCountRef.current = entries.length;
     prependScrollRef.current = null;
     jumpLatestRef.current = false;
     loadingOlderRef.current = false;
+    measuredPaddingRef.current = null;
+    setMeasuredHeights({});
     setWindowStart(next);
     setFindOpen(false);
     setFindQuery("");
     setFindTarget(null);
     setFindSelection(null);
+    if (sessionId !== null && scrollTopsRef.current[key] === undefined && persisted !== null) {
+      scrollTopsRef.current[key] = persisted.scrollTop;
+    }
+  }, [sessionId]);
+
+  useEffect(() => () => {
+    if (persistViewportTimerRef.current !== null) {
+      window.clearTimeout(persistViewportTimerRef.current);
+      persistViewportTimerRef.current = null;
+    }
+    if (sessionId === null) return;
+    const key = sessionId;
+    const top = scrollTopsRef.current[key];
+    const start = windowStartsRef.current[key] ?? 0;
+    if (top !== undefined) saveStreamPosition(key, top, start);
   }, [sessionId]);
 
   useEffect(() => {
@@ -242,7 +460,18 @@ export function StreamView({
     const anchor = prependScrollRef.current;
     const stream = streamRef.current;
     if (anchor !== null && stream !== null) {
-      stream.scrollTop = anchor.top + (stream.scrollHeight - anchor.height);
+      const anchorEntry = stream.querySelector<HTMLElement>(
+        `[data-entry-index="${anchor.index}"]`,
+      );
+      if (anchorEntry !== null) {
+        const streamRect = stream.getBoundingClientRect();
+        const nextOffset = anchorEntry.getBoundingClientRect().top - streamRect.top;
+        stream.scrollTop += nextOffset - anchor.offset;
+      } else {
+        // Keep the previous height-based fallback for an unexpected page
+        // replacement where the original entry is no longer mounted.
+        stream.scrollTop = anchor.top + (stream.scrollHeight - anchor.height);
+      }
       prependScrollRef.current = null;
       loadingOlderRef.current = false;
     }
@@ -251,6 +480,62 @@ export function StreamView({
       stream.scrollTop = stream.scrollHeight;
     }
   }, [safeWindowStart, windowStart]);
+
+  useLayoutEffect(() => {
+    if (!streamWindowed) {
+      measuredPaddingRef.current = null;
+      return;
+    }
+    const stream = streamRef.current;
+    const previous = measuredPaddingRef.current;
+    if (
+      stream !== null &&
+      previous !== null &&
+      previous.start === safeWindowStart &&
+      previous.end === safeWindowEnd
+    ) {
+      const topDelta = windowPadding.top - previous.top;
+      if (Math.abs(topDelta) > 0.5) stream.scrollTop += topDelta;
+    }
+    measuredPaddingRef.current = {
+      start: safeWindowStart,
+      end: safeWindowEnd,
+      top: windowPadding.top,
+      bottom: windowPadding.bottom,
+    };
+  }, [safeWindowEnd, safeWindowStart, streamWindowed, windowPadding.bottom, windowPadding.top]);
+
+  useLayoutEffect(() => {
+    if (!streamWindowed) return;
+    const stream = streamRef.current;
+    if (stream === null || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((observations) => {
+      const updates = new Map<number, number>();
+      for (const observation of observations) {
+        const node = observation.target as HTMLElement;
+        const rawIndex = node.dataset.entryIndex;
+        if (rawIndex === undefined) continue;
+        const index = Number(rawIndex);
+        if (!Number.isInteger(index) || index < 0) continue;
+        updates.set(index, measureEntryBlockHeight(node));
+      }
+      if (updates.size === 0) return;
+      setMeasuredHeights((current) => {
+        let next = current;
+        let changed = false;
+        for (const [index, height] of updates) {
+          if (Math.abs((current[index] ?? 0) - height) <= 0.5) continue;
+          if (!changed) next = { ...current };
+          next[index] = height;
+          changed = true;
+        }
+        return changed ? next : current;
+      });
+    });
+    const nodes = stream.querySelectorAll<HTMLElement>("[data-entry-index]");
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [safeWindowEnd, safeWindowStart, streamWindowed, visibleEntrySignature]);
 
   useLayoutEffect(() => {
     if (findTarget === null) return;
@@ -283,6 +568,11 @@ export function StreamView({
   }, [sessionId]);
 
   useEffect(() => {
+    if (sessionId === null || streamRef.current === null) return;
+    scheduleViewportPersistence(sessionId, streamRef.current.scrollTop, safeWindowStart);
+  }, [safeWindowStart, sessionId]);
+
+  useEffect(() => {
     // Streaming can update this list many times per second. Instant
     // alignment avoids stacking smooth-scroll animations and keeps the
     // latest token visible without starving input/paint work.
@@ -295,7 +585,15 @@ export function StreamView({
     if (!streamWindowed || safeWindowStart <= 0 || loadingOlderRef.current) return;
     const stream = streamRef.current;
     if (stream !== null) {
+      const anchorEntry = stream.querySelector<HTMLElement>(
+        `[data-entry-index="${safeWindowStart}"]`,
+      );
+      const streamRect = stream.getBoundingClientRect();
       prependScrollRef.current = {
+        index: safeWindowStart,
+        offset: anchorEntry === null
+          ? stream.scrollTop
+          : anchorEntry.getBoundingClientRect().top - streamRect.top,
         top: stream.scrollTop,
         height: stream.scrollHeight,
       };
@@ -336,7 +634,27 @@ export function StreamView({
       setWindowStart(maxWindowStart);
     }
     if (sessionId !== null) scrollTopsRef.current[sessionId] = el.scrollTop;
+    scheduleViewportPersistence(sessionId, el.scrollTop, safeWindowStart);
     setAwayFromBottom(!stickRef.current);
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>): void {
+    // The transcript itself is focusable so keyboard users can navigate a
+    // long conversation without first finding an individual message.
+    if (e.target !== e.currentTarget) return;
+    const target = streamNavigationTarget(
+      e.key,
+      e.currentTarget.clientHeight,
+      e.currentTarget.scrollTop,
+      e.currentTarget.scrollHeight - e.currentTarget.clientHeight,
+    );
+    if (target === null) return;
+    e.preventDefault();
+    if (e.key === "End") {
+      jumpToLatest();
+      return;
+    }
+    e.currentTarget.scrollTo({ top: target, behavior: "auto" });
   }
 
   async function runResult(
@@ -370,10 +688,17 @@ export function StreamView({
       setLoadedOutputs((cur) => {
         const current = cur[entry.id];
         const append = current !== undefined && chunk.offsetBytes >= current.nextOffsetBytes;
+        const binary = chunk.base64Data !== undefined;
         return {
           ...cur,
           [entry.id]: {
-            content: append ? `${current.content}${chunk.content}` : chunk.content,
+            content: binary ? (append ? current.content : "") : (append ? `${current.content}${chunk.content}` : chunk.content),
+            ...(binary
+              ? { base64Data: appendBase64(append ? current?.base64Data : undefined, chunk.base64Data!) }
+              : current?.base64Data === undefined ? {} : { base64Data: current.base64Data }),
+            ...((chunk.mediaType ?? entry.richContent?.[0]?.mediaType) === undefined
+              ? {}
+              : { mediaType: chunk.mediaType ?? entry.richContent?.[0]?.mediaType }),
             nextOffsetBytes: chunk.nextOffsetBytes,
             byteLen: (append ? current.byteLen : 0) + chunk.byteLen,
             eof: chunk.eof || chunk.byteLen === 0,
@@ -451,7 +776,9 @@ export function StreamView({
       case "waiting-host":
         return "The turn is marked active, but no host event has reached this window yet.";
       case "stalled":
-        return `No host event for ${elapsed ?? "a while"}. Muse may still be working.${
+        return `${stopping
+          ? "The desktop host did not confirm the stop. Reconnect or close this conversation to clear it."
+          : `No host event for ${elapsed ?? "a while"}. Muse may still be working.`}${
           eventLabel ? ` Last event: ${eventLabel}.` : ""
         }`;
       case "idle":
@@ -464,11 +791,16 @@ export function StreamView({
       ref={streamRef}
       className="stream"
       onScroll={onScroll}
+      onKeyDown={onKeyDown}
+      tabIndex={0}
       role="log"
       aria-live="off"
       aria-label="Conversation messages"
+      aria-keyshortcuts="Home End PageUp PageDown"
       aria-busy={running || reconciling}
       data-entry-count={entries.length}
+      data-window-start={safeWindowStart}
+      data-window-end={safeWindowEnd}
     >
       {streamWindowed && (
         <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -562,6 +894,13 @@ export function StreamView({
           </div>
         )}
       </div>
+      {streamWindowed && windowPadding.top > 0 && (
+        <div
+          className="stream-window-spacer"
+          aria-hidden="true"
+          style={{ height: `${windowPadding.top}px` }}
+        />
+      )}
       {streamWindowed && safeWindowStart > 0 && (
         <div className="stream-window-notice" role="status" aria-live="polite">
           <button type="button" onClick={loadOlderMessages}>
@@ -581,6 +920,14 @@ export function StreamView({
       {visibleEntries.map((e, visibleIndex) => {
         const entryIndex = safeWindowStart + visibleIndex;
         const entryA11y = streamEntryA11y(roleLabel(e), entryIndex, entries.length);
+        const loadedOutput = loadedOutputs[e.id];
+        const richPath = e.richContent?.[0]?.path ?? "";
+        const richMediaType = loadedOutput?.mediaType ?? e.richContent?.[0]?.mediaType ?? "";
+        const richOfficePreview = loadedOutput?.eof && loadedOutput.base64Data &&
+          (richMediaType.startsWith("application/vnd.openxmlformats")
+            || richMediaType.startsWith("application/vnd.oasis.opendocument"))
+          ? officePreviewForFile(richPath, loadedOutput.base64Data)
+          : null;
         // US-10 reflexive phase: an open entry with no text yet (send just
         // happened, or `item/started` arrived before the first delta) shows
         // a plain muted label. The label is rendered, never stored: the
@@ -808,7 +1155,22 @@ export function StreamView({
                 )}
               </pre>
             )}
-            {e.role === "tool" && e.outputRef && (
+            {e.richContent && e.richContent.length > 0 && (
+              <div className="rich-content-list" aria-label="Rich output">
+                {e.richContent.map((content, index) => (
+                  <div className="rich-content-meta" key={`${content.path}-${index}`}>
+                    <strong>{content.type}</strong>
+                    <span>{content.mediaType}</span>
+                    <span title={content.path}>{content.path}</span>
+                    <small>from {content.sourceToolName}</small>
+                    {(content.width !== undefined && content.height !== undefined) && (
+                      <small>{content.width}×{content.height}</small>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {e.outputRef && (e.role === "tool" || (e.richContent?.length ?? 0) > 0) && (
               <div className="tool-output-loader">
                 <button
                   type="button"
@@ -822,15 +1184,63 @@ export function StreamView({
                       ? "Output loaded"
                       : loadedOutputs[e.id]
                         ? "Load more output"
-                        : "Load full output"}
+                        : e.richContent && e.richContent.length > 0
+                          ? "Preview output"
+                          : "Load full output"}
                 </button>
-                {loadedOutputs[e.id] && (
+                {loadedOutput && (
                   <>
                     <span className="tool-output-meta">
-                      {loadedOutputs[e.id].byteLen.toLocaleString()} bytes loaded
-                      {loadedOutputs[e.id].eof ? " · complete" : " · more available"}
+                      {loadedOutput.byteLen.toLocaleString()} bytes loaded
+                      {loadedOutput.eof ? " · complete" : " · more available"}
                     </span>
-                    <pre className="tool-output-content">{loadedOutputs[e.id].content}</pre>
+                    {loadedOutput.eof && (loadedOutput.content.length > 0 || loadedOutput.base64Data) && (
+                      <button
+                        type="button"
+                        className="tool-output-button"
+                        onClick={() => {
+                          setOutputError(null);
+                          void saveLoadedOutput(e, loadedOutput).catch((error) => {
+                            setOutputError(error instanceof Error ? error.message : String(error));
+                          });
+                        }}
+                      >
+                        Save output
+                      </button>
+                    )}
+                    {loadedOutput.eof && onOpenWorkspacePath && e.richContent?.[0]?.path && isWorkspaceRelativePath(e.richContent[0].path) && (
+                      <button
+                        type="button"
+                        className="tool-output-button"
+                        onClick={() => void onOpenWorkspacePath(e.richContent![0].path)}
+                        title="Open the verified workspace output with the system default application"
+                      >
+                        Open in app
+                      </button>
+                    )}
+                    {outputError && <span className="error">{outputError}</span>}
+                    {loadedOutput.base64Data && loadedOutput.mediaType?.startsWith("image/") && loadedOutput.eof ? (
+                      <img
+                        className="rich-content-preview"
+                        src={"data:" + loadedOutput.mediaType + ";base64," + loadedOutput.base64Data}
+                        alt="Muse rich output preview"
+                      />
+                    ) : loadedOutput.base64Data && loadedOutput.mediaType === "application/pdf" && loadedOutput.eof && loadedOutput.byteLen <= MAX_INLINE_RICH_PDF_BYTES ? (
+                      <object
+                        className="rich-content-pdf-preview"
+                        data={"data:application/pdf;base64," + loadedOutput.base64Data}
+                        type="application/pdf"
+                        aria-label="Muse PDF output preview"
+                      >
+                        <p className="muted">This WebView cannot render the PDF. Use Download output.</p>
+                      </object>
+                    ) : richOfficePreview ? (
+                      <RichOfficeTable preview={richOfficePreview} />
+                    ) : loadedOutput.content.length > 0 ? (
+                      <pre className="tool-output-content">{loadedOutput.content}</pre>
+                    ) : loadedOutput.base64Data ? (
+                      <p className="muted">Binary output is still loading; preview appears when complete.</p>
+                    ) : null}
                   </>
                 )}
               </div>
@@ -851,6 +1261,13 @@ export function StreamView({
           </div>
         );
       })}
+      {streamWindowed && windowPadding.bottom > 0 && (
+        <div
+          className="stream-window-spacer"
+          aria-hidden="true"
+          style={{ height: `${windowPadding.bottom}px` }}
+        />
+      )}
       {health !== "idle" && (
         <div
           className={`stream-health stream-health-${health}`}
@@ -875,11 +1292,27 @@ export function StreamView({
                 </button>
               )}
               {onCancel && (
-                <button type="button" className="quiet" onClick={onCancel}>
-                  {health === "retrying" ? "Stop retry" : "Stop"}
-                </button>
+                stopping && health === "stalled" && onForceStop ? (
+                  <button type="button" className="quiet" onClick={onForceStop}>
+                    Close conversation
+                  </button>
+                ) : (
+                  <button type="button" className="quiet" onClick={onCancel}>
+                    {health === "retrying" ? "Stop retry" : "Stop"}
+                  </button>
+                )
               )}
             </span>
+          )}
+        </div>
+      )}
+      {recoveryNotice !== null && (
+        <div className="stream-recovery-note" role="status" aria-live="polite">
+          <span>{streamRecoveryDetail(recoveryNotice)}</span>
+          {onReconcile && (
+            <button type="button" onClick={onReconcile} disabled={reconciling}>
+              {reconciling ? "Checking…" : "Try again"}
+            </button>
           )}
         </div>
       )}

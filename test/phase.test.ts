@@ -11,9 +11,12 @@ import {
   applyItemSnapshotUpdate,
   dropEmptyPlaceholders,
   isItemStartKind,
+  itemSnapshotIsTerminal,
+  itemSnapshotLane,
   isRunningKind,
   isStoppedKind,
   isSubagentItemKind,
+  isTerminalItemStatus,
   isThinkingItemKind,
   normalizeKind,
   phaseForKind,
@@ -90,6 +93,7 @@ describe("isStoppedKind", () => {
       "idle",
       "turn/completed",
       "turn/retracted",
+      "turn/stopped",
     ]) {
       assert.equal(isStoppedKind(k), true, k);
     }
@@ -143,6 +147,34 @@ describe("isThinkingItemKind", () => {
       assert.equal(isThinkingItemKind(k), true, k);
     }
     assert.equal(isThinkingItemKind("agentMessage"), false);
+  });
+});
+
+describe("isTerminalItemStatus", () => {
+  it("recognizes terminal item snapshot statuses", () => {
+    assert.equal(isTerminalItemStatus("completed"), true);
+    assert.equal(isTerminalItemStatus("item/done"), true);
+    assert.equal(isTerminalItemStatus("succeeded"), true);
+    assert.equal(isTerminalItemStatus("timed_out"), true);
+    assert.equal(isTerminalItemStatus("inProgress"), false);
+    assert.equal(isTerminalItemStatus(null), false);
+  });
+});
+
+describe("item snapshot normalization", () => {
+  it("keeps reasoning and shell snapshots in their dedicated lanes", () => {
+    assert.equal(itemSnapshotLane({ item: { kind: "reasoning" } }), "thinking");
+    assert.equal(itemSnapshotLane({ itemKind: "analysis" }), "thinking");
+    assert.equal(itemSnapshotLane({ item: { kind: "userShell" } }), "tool");
+    assert.equal(itemSnapshotLane({ lane: "shell_output", kind: "assistant" }), "tool");
+    assert.equal(itemSnapshotLane({ kind: "agentMessage" }), "assistant");
+  });
+
+  it("recognizes terminal flags from flat and nested host snapshots", () => {
+    assert.equal(itemSnapshotIsTerminal({ open: false }), true);
+    assert.equal(itemSnapshotIsTerminal({ completed: true }), true);
+    assert.equal(itemSnapshotIsTerminal({ item: { status: "done" } }), true);
+    assert.equal(itemSnapshotIsTerminal({ status: "inProgress", item: { status: "inProgress" } }), false);
   });
 });
 
@@ -235,6 +267,33 @@ describe("applyItemSnapshotUpdate", () => {
       open: true,
       stamp,
     }), updated);
+  });
+
+  it("closes a visible lane when the host sends an empty terminal snapshot", () => {
+    const live = [entry({ role: "thinking", itemId: "r-empty", text: "last visible step", open: true, itemRevision: 2 })];
+    const closed = applyItemSnapshotUpdate(live, {
+      itemId: "r-empty",
+      role: "thinking",
+      text: "",
+      revision: 3,
+      open: false,
+      stamp,
+    });
+    assert.equal(closed.length, 1);
+    assert.equal(closed[0].text, "last visible step");
+    assert.equal(closed[0].open, false);
+    assert.equal(closed[0].itemRevision, 3);
+  });
+
+  it("ignores an empty snapshot for an unknown item", () => {
+    const log = [entry({ role: "assistant", text: "kept" })];
+    assert.equal(applyItemSnapshotUpdate(log, {
+      itemId: "missing",
+      role: "thinking",
+      text: "",
+      open: false,
+      stamp,
+    }), log);
   });
 
   it("keeps a user-shell command paired with replaced output", () => {

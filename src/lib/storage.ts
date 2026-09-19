@@ -249,6 +249,7 @@ export function removeStorageKey(key: string): boolean {
 export function exportStorageSnapshot(prefix = "muse-desktop."): string {
   const store = storage();
   const entries: Record<string, unknown> = {};
+  const metadata: Record<string, { kind: StorageDataKind }> = {};
   if (store === null) {
     record(prefix, "unavailable", "local storage is unavailable");
   } else {
@@ -275,6 +276,7 @@ export function exportStorageSnapshot(prefix = "muse-desktop."): string {
         continue;
       }
       if (raw === null) continue;
+      metadata[key] = { kind: storageDataKind(key) };
       try {
         entries[key] = JSON.parse(raw);
       } catch {
@@ -293,6 +295,8 @@ export function exportStorageSnapshot(prefix = "muse-desktop."): string {
       version: 1,
       exportedAt: new Date().toISOString(),
       entries,
+      metadata,
+      checksum: storageSnapshotChecksum(entries, metadata),
     },
     null,
     2,
@@ -309,6 +313,72 @@ export interface StorageSnapshotEntry {
   key: string;
   existing: boolean;
   parseError: boolean;
+  /** Durable product data is safe to select by default; UI state is opt-in. */
+  kind: StorageDataKind;
+}
+
+/** Canonicalize recovery data so key ordering does not affect its checksum. */
+function canonicalRecoveryValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalRecoveryValue);
+  if (typeof value !== "object" || value === null) return value;
+  return Object.keys(value as Record<string, unknown>)
+    .sort()
+    .reduce<Record<string, unknown>>((result, key) => {
+      result[key] = canonicalRecoveryValue((value as Record<string, unknown>)[key]);
+      return result;
+    }, {});
+}
+
+/** Lightweight damage detector for explicit local recovery files. */
+export function storageSnapshotChecksum(entries: unknown, metadata: unknown): string {
+  const input = JSON.stringify({
+    entries: canonicalRecoveryValue(entries),
+    metadata: canonicalRecoveryValue(metadata),
+  });
+  let hash = 2_166_136_261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function recoveryChecksumError(
+  snapshot: Record<string, unknown>,
+  entries: unknown,
+  metadata: unknown,
+): string | null {
+  if (snapshot.checksum === undefined) return null;
+  if (typeof snapshot.checksum !== "string") return "Recovery snapshot checksum is invalid.";
+  return snapshot.checksum === storageSnapshotChecksum(entries, metadata)
+    ? null
+    : "Recovery snapshot checksum mismatch; the file may be damaged.";
+}
+
+export type StorageDataKind = "durable" | "ui";
+
+/**
+ * Classify persisted keys before recovery. UI state is intentionally narrow:
+ * restoring it can resurrect a stale selection, draft, browser tab or lease
+ * without restoring the session it pointed at.
+ */
+export function storageDataKind(key: string): StorageDataKind {
+  const normalized = key.trim().toLowerCase();
+  if (
+    normalized === "muse-desktop.active.v1" ||
+    normalized === "muse-desktop.theme.v1" ||
+    normalized === "muse-desktop.welcome-draft" ||
+    normalized === "muse-desktop.scheduler-lease.v1" ||
+    normalized === "muse-desktop.stream-position.v1" ||
+    normalized === "muse-desktop.storage-migrations.v1" ||
+    normalized.includes(".draft.") ||
+    normalized.includes(".attachment-draft.") ||
+    normalized.includes(".mentions.") ||
+    normalized === "muse-desktop.browser.tabs.v1"
+  ) {
+    return "ui";
+  }
+  return "durable";
 }
 
 export interface StorageSnapshotPreview {
@@ -352,6 +422,11 @@ export function inspectStorageSnapshot(
   }
   const entries: StorageSnapshotEntry[] = [];
   const errors: string[] = [];
+  const metadata = typeof snapshot.metadata === "object" && snapshot.metadata !== null
+    ? snapshot.metadata as Record<string, unknown>
+    : {};
+  const checksumError = recoveryChecksumError(snapshot, values, metadata);
+  if (checksumError !== null) return { entries: [], errors: [checksumError] };
   const store = storage();
   if (store === null) {
     record(prefix, "unavailable", "local storage is unavailable");
@@ -373,7 +448,12 @@ export function inspectStorageSnapshot(
     const parseError = typeof value === "object" && value !== null &&
       (value as Record<string, unknown>).parseError === true &&
       typeof (value as Record<string, unknown>).raw === "string";
-    entries.push({ key, existing, parseError });
+    const meta = metadata[key];
+    const kind = typeof meta === "object" && meta !== null &&
+      (meta as Record<string, unknown>).kind === "ui"
+      ? "ui"
+      : storageDataKind(key);
+    entries.push({ key, existing, parseError, kind });
   }
   return { entries, errors };
 }
@@ -498,6 +578,11 @@ export function importStorageSnapshot(
   if (typeof entries !== "object" || entries === null || Array.isArray(entries)) {
     return { ...result, errors: ["Recovery snapshot has no valid entries map."] };
   }
+  const metadata = typeof snapshot.metadata === "object" && snapshot.metadata !== null
+    ? snapshot.metadata
+    : {};
+  const checksumError = recoveryChecksumError(snapshot, entries, metadata);
+  if (checksumError !== null) return { ...result, errors: [checksumError] };
   const store = storage();
   if (store === null) {
     record(prefix, "unavailable", "local storage is unavailable");

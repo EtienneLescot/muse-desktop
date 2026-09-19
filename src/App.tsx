@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
@@ -35,6 +35,7 @@ import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
 import { userFacingError } from "./lib/errorCopy";
 import { isTauriRuntime } from "./lib/env";
+import { formatHandoffContext } from "./lib/handoff";
 import type { Artifact, ArtifactVersion } from "./lib/artifacts";
 import {
   parseWorkspaceRootObservation,
@@ -49,6 +50,7 @@ import {
 } from "./lib/a11y";
 import { IndexPanel } from "./components/IndexPanel";
 import { BrowserPanel } from "./components/BrowserPanel";
+import { DesktopControlPanel } from "./components/DesktopControlPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
 import { searchConversations } from "./lib/conversationSearch";
@@ -57,6 +59,7 @@ import { WindowControls, dragWindow } from "./components/WindowControls";
 import { readStorageString, writeStorageString } from "./lib/storage.ts";
 import {
   NOTIFICATION_ACTION_EVENT,
+  resolveNotificationRoute,
   subscribeNotificationActions,
   type NotificationActionPayload,
 } from "./lib/notifications";
@@ -86,8 +89,10 @@ export default function App() {
     approvals,
     activeApprovals,
     activeStreamActivity,
+    activeRecoveryNotice,
     activeResumePending,
     activeRetryScheduled,
+    turnCompletionBySession,
     stoppingBySession,
     activeConnectionState,
     queuedTurns,
@@ -98,6 +103,7 @@ export default function App() {
     setWorkspace,
     sandbox,
     setSandbox,
+    restartHost,
     authorizationMode,
     setAuthorizationMode,
     providerId,
@@ -164,6 +170,8 @@ export default function App() {
     projectForSession,
     schedules,
     scheduleRuns,
+    schedulerStatus,
+    schedulerWakeupStatus,
     notifications,
     notificationPermission,
     notificationsMuted,
@@ -171,6 +179,7 @@ export default function App() {
     enableNotifications,
     setNotificationsMuted,
     markNotificationRead,
+    markAllNotificationsRead,
     reviewQueue,
     createSchedule,
     setScheduleEnabled,
@@ -233,9 +242,11 @@ export default function App() {
     summaries,
     compactSession,
     usageBySession,
+    serverCompactionBySession,
     serverCompact,
     newFromSummary,
     prefill,
+    prefillComposer,
     clearPrefill,
     prefillAttachment,
     prefillAttachmentSessionId,
@@ -243,8 +254,10 @@ export default function App() {
     artifacts,
     restoreArtifact,
     commentArtifact,
+    editArtifact,
     index,
     gitReview,
+    gitTurnSnapshot,
     refreshGitStatus,
     loadGitDiff,
     stageGitFiles,
@@ -274,6 +287,7 @@ export default function App() {
     addBrowserAnnotation,
     prepareBrowserContext,
     prepareBrowserCapture,
+    prepareDesktopCapture,
     removeBrowserAnnotation,
     browserPermissions,
     setBrowserAppPermission,
@@ -286,6 +300,7 @@ export default function App() {
     backendMissing,
     startupProbe,
     probeStartup,
+    setError,
   } = useMuseSessions();
 
   // US-20: one `@mem/…` token the panel asked the composer to insert.
@@ -299,12 +314,17 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  const scheduleRunsRef = useRef(scheduleRuns);
+  scheduleRunsRef.current = scheduleRuns;
+  const [pendingNotificationAction, setPendingNotificationAction] =
+    useState<NotificationActionPayload | null>(null);
   const [workPanel, setWorkPanel] = useState<
-    "artifacts" | "browser" | "memory" | "tools" | "review" | "terminal" | "files" | null
+    "artifacts" | "browser" | "desktop" | "memory" | "tools" | "review" | "terminal" | "files" | null
   >(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchIndex, setSearchIndex] = useState(0);
+  const [shareExportError, setShareExportError] = useState<string | null>(null);
   const searchTrigger = useRef<HTMLButtonElement>(null);
   const searchWasOpen = useRef(false);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
@@ -338,21 +358,50 @@ export default function App() {
       settingsTrigger.current?.focus();
     }
   }, [settingsOpen]);
-  const openPage = (next: typeof page) => {
+  const openPage = useCallback((next: typeof page) => {
     setSettingsOpen(false);
     setPage(next);
-  };
+  }, []);
+
+  const routeNotificationAction = useCallback((payload: NotificationActionPayload): boolean => {
+    const route = resolveNotificationRoute(
+      payload,
+      sessionsRef.current.map((session) => session.session_id),
+      scheduleRunsRef.current.map((run) => run.id),
+    );
+    if (route?.kind === "task") {
+      openPage("task");
+      setActive(route.sessionId);
+      return true;
+    }
+    if (route?.kind === "automations") {
+      openPage("automations");
+      return true;
+    }
+    return false;
+  }, [openPage, setActive]);
+
+  // Native notification actions can be delivered while session/list and the
+  // native run ledger are still hydrating. Keep the bounded action until the
+  // existing SSOT contains its target instead of dropping the user's click.
+  useEffect(() => {
+    if (pendingNotificationAction === null) return;
+    if (routeNotificationAction(pendingNotificationAction)) {
+      setPendingNotificationAction(null);
+    }
+  }, [pendingNotificationAction, routeNotificationAction, sessions, scheduleRuns]);
+  useEffect(() => {
+    if (pendingNotificationAction === null) return;
+    const timeout = window.setTimeout(() => setPendingNotificationAction(null), 30_000);
+    return () => window.clearTimeout(timeout);
+  }, [pendingNotificationAction]);
 
   // M3-09: a native/web notification click carries only a bounded session or
   // run id. Resolve it through the existing session SSOT and focus the task;
   // no notification payload is treated as transcript content.
   useEffect(() => {
     const openFromAction = (payload: NotificationActionPayload) => {
-      if (!payload.sessionId || !sessionsRef.current.some((session) => session.session_id === payload.sessionId)) {
-        return;
-      }
-      openPage("task");
-      setActive(payload.sessionId);
+      if (!routeNotificationAction(payload)) setPendingNotificationAction(payload);
     };
     const onWebAction = (event: Event) => {
       const detail = (event as CustomEvent<NotificationActionPayload>).detail;
@@ -370,7 +419,7 @@ export default function App() {
       window.removeEventListener(NOTIFICATION_ACTION_EVENT, onWebAction);
       dispose?.();
     };
-  }, [setActive]);
+  }, [routeNotificationAction]);
   const newTask = () => {
     openPage("task");
     setActive(null);
@@ -453,6 +502,23 @@ export default function App() {
     }
     return seen;
   }, [activeLog]);
+
+  const orchestrationWriterPrompts = useMemo(() => {
+    const prompts: Record<string, string> = {};
+    for (const entry of activeLog) {
+      if (entry.role !== "subagent" || typeof entry.agentId !== "string") continue;
+      const objective =
+        typeof entry.objective === "string" && entry.objective.trim() !== ""
+          ? entry.objective
+          : entry.text;
+      if (objective.trim() !== "") prompts[entry.agentId] = objective.slice(0, 2_000);
+    }
+    return prompts;
+  }, [activeLog]);
+  const writerSessionRunning = useMemo(
+    () => Object.fromEntries(sessions.map((session) => [session.session_id, session.running])),
+    [sessions],
+  );
 
   // US-32: one polite live region announces stream running/stopped
   // transitions plus approval/input arrivals (not every render).
@@ -682,6 +748,13 @@ export default function App() {
             showArchived={false}
             activeId={page === "task" && !settingsOpen ? activeId : null}
             pendingCounts={pendingCounts}
+            pendingSendCount={pendingSends.length}
+            onOpenPendingSends={() => {
+              const first = pendingSends[0];
+              if (first === undefined) return;
+              openPage("task");
+              setActive(first.sessionId);
+            }}
             compactedIds={Object.keys(summaries)}
             onSelect={(id) => {
               openPage("task");
@@ -820,6 +893,7 @@ export default function App() {
               onPickWorkspace={setWorkspace}
               sandbox={sandbox}
               onSandboxChange={setSandbox}
+              onRestartHost={backendMissing ? undefined : () => restartHost(workspace)}
               authorizationMode={authorizationMode}
               onAuthorizationModeChange={setAuthorizationMode}
               reasoningEffort={globalSettings.reasoningEffort}
@@ -829,6 +903,7 @@ export default function App() {
               liveModels={liveModels}
               modelsError={modelsError}
               activeSessionId={activeId}
+              selectedModelId={active?.model_id ?? null}
               onRefreshModels={() => void refreshModels(activeId ?? undefined)}
               onSelectModel={(modelId) => {
                 if (activeId !== null) void setSessionModel(activeId, modelId);
@@ -877,16 +952,17 @@ export default function App() {
                   projectError={projectError}
                   activeSessionId={activeId}
                   globalSettings={globalSettings}
-                  onCreate={(name, instructions, projectWorkspace) =>
-                    createProject(name, instructions, projectWorkspace)
+                  onCreate={(name, instructions, projectWorkspaces) =>
+                    createProject(name, instructions, projectWorkspaces)
                   }
                   onDelete={deleteProject}
                   onUpdate={updateProject}
                   onAttach={attachThread}
-                  onStartConversation={async (project) => {
-                    if (!project.workspace) return;
+                  onStartConversation={async (project, selectedWorkspace) => {
+                    const workspacePath = selectedWorkspace ?? project.workspace;
+                    if (!workspacePath) return;
                     await startSessionInWorkspace(
-                      project.workspace,
+                      workspacePath,
                       settingsFor(project.id),
                       project.id,
                     );
@@ -913,6 +989,8 @@ export default function App() {
                 <SchedulesPanel
                   schedules={schedules}
                   runs={scheduleRuns}
+                  schedulerStatus={schedulerStatus}
+                  schedulerWakeupStatus={schedulerWakeupStatus}
                   notifications={notifications}
                   notificationPermission={notificationPermission}
                   notificationsMuted={notificationsMuted}
@@ -937,16 +1015,31 @@ export default function App() {
                   onEnableNotifications={enableNotifications}
                   onSetNotificationsMuted={setNotificationsMuted}
                   onMarkNotificationRead={markNotificationRead}
+                  onMarkAllNotificationsRead={markAllNotificationsRead}
                   onOpenNotification={(notification) => {
-                    if (notification.sessionId) {
+                    const route = resolveNotificationRoute(
+                      { sessionId: notification.sessionId, runId: notification.runId },
+                      sessionsRef.current.map((session) => session.session_id),
+                      scheduleRunsRef.current.map((run) => run.id),
+                    );
+                    if (route?.kind === "task") {
                       openPage("task");
-                      setActive(notification.sessionId);
+                      setActive(route.sessionId);
+                    } else if (route?.kind === "automations") {
+                      openPage("automations");
                     }
                   }}
                   onOpenRun={(run) => {
-                    if (run.sessionId) {
+                    const route = resolveNotificationRoute(
+                      { sessionId: run.sessionId, runId: run.id },
+                      sessionsRef.current.map((session) => session.session_id),
+                      scheduleRunsRef.current.map((candidate) => candidate.id),
+                    );
+                    if (route?.kind === "task") {
                       openPage("task");
-                      setActive(run.sessionId);
+                      setActive(route.sessionId);
+                    } else if (route?.kind === "automations") {
+                      openPage("automations");
                     }
                   }}
                 />
@@ -978,6 +1071,13 @@ export default function App() {
                   onForgetRemoteCredential={forgetRemoteMcpCredential}
                   authorizationMode={authorizationMode}
                   remoteNotice={remoteNotice}
+                  activeSessionId={activeId}
+                  canReconnectActive={
+                    active !== null &&
+                    !backendMissing &&
+                    active.session_durability?.toLowerCase() !== "ephemeral"
+                  }
+                  onReconnectActive={(sessionId) => reconnectSession(sessionId)}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}
                   onToggle={(id, enabled) =>
@@ -1074,8 +1174,24 @@ export default function App() {
               </div>
             )}
             {sidecarKind !== null
-              ? active !== null && sidecarPanel
-              : error && <div className="error-banner">{userFacingError(error)}</div>}
+              ? sidecarPanel
+              : error && (
+                <div className="error-banner" role="alert">
+                  <span>{userFacingError(error)}</span>
+                  {error.toLowerCase().includes("restart the workspace host") && !backendMissing && (
+                    <button
+                      type="button"
+                      className="error-banner-action"
+                      onClick={() => {
+                        if (!window.confirm("Restart the workspace host? Active conversations will disconnect and can reconnect when the host supports durable sessions.")) return;
+                        void restartHost(workspace);
+                      }}
+                    >
+                      Restart workspace host
+                    </button>
+                  )}
+                </div>
+              )}
             {active === null ? (
               <EmptySessionScreen
                 workspace={workspace}
@@ -1085,8 +1201,8 @@ export default function App() {
                   const project = environment?.projectId
                     ? projects.find((candidate) => candidate.id === environment.projectId) ?? null
                     : null;
-                  const id = project?.workspace
-                    ? await startSessionInWorkspace(project.workspace, settingsFor(project.id), project.id)
+                  const id = project !== null && environment?.workspace
+                    ? await startSessionInWorkspace(environment.workspace, settingsFor(project.id), project.id)
                     : await startSession();
                   if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
                   // M0-03: honest result — when the first send fails the
@@ -1135,7 +1251,7 @@ export default function App() {
                     {activeProject !== null && (
                       <div
                         className="task-project-context"
-                        title="Project settings: the model is sent to the host; sandbox and network remain local preferences until the host contract is available."
+                        title="Project settings: the model and project isolation overrides are sent to a new workspace host; the global permission gate still applies and an existing host keeps its posture until restart."
                       >
                         <span>Project: {activeProject.name}</span>
                         <span>
@@ -1143,10 +1259,10 @@ export default function App() {
                             ? "Host default"
                             : activeProjectSettings.model}
                         </span>
-                        <span title="Saved locally; this host has no verified sandbox mutation contract">
+                        <span title="Projected to host startup with the global permission gate; an existing host keeps its posture until restart">
                           Sandbox preference: {activeProjectSettings.sandbox}
                         </span>
-                        <span title="Saved locally; this host has no verified network mutation contract">
+                        <span title="Project network preference remains the approval policy; host network posture is selected at workspace startup">
                           Network preference: {activeProjectSettings.networkDefault}
                         </span>
                         <span>
@@ -1199,6 +1315,7 @@ export default function App() {
                     stopping={stoppingBySession[active.session_id] === true}
                     lastEventAt={activeStreamActivity?.lastEventAt ?? null}
                     lastEventKind={activeStreamActivity?.lastEventKind ?? null}
+                    recoveryNotice={activeRecoveryNotice}
                     resumePendingAt={activeResumePending?.requestedAt ?? null}
                     retryScheduled={activeRetryScheduled}
                     pendingApprovals={activeApprovals.length}
@@ -1208,8 +1325,10 @@ export default function App() {
                     reconciling={reconcilingId === active.session_id}
                     onReconcile={() => void reconcileSession(active.session_id)}
                     onCancel={() => void cancelSession(active.session_id)}
+                    onForceStop={() => void killSession(active.session_id)}
                     onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
                     onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
+                    onOpenWorkspacePath={(path) => openWorkspacePath(active.session_id, path)}
                     controls={{
                       onInterrupt: (agentId) =>
                         void subagentInterrupt(active.session_id, agentId),
@@ -1302,8 +1421,9 @@ export default function App() {
                           onClick={() => setSettingsOpen(true)}
                           aria-label="Model settings"
                         >
-                          {liveModels?.find((model) => model.isActive)
-                            ?.displayLabel || "Model"}
+                          {liveModels?.find((model) => model.isActive)?.displayLabel ||
+                            active.model_id ||
+                            "Model"}
                         </button>
                         <span>Local</span>
                       </>
@@ -1348,6 +1468,7 @@ export default function App() {
                           ["terminal", "Terminal"],
                           ["files", "Files"],
                           ["browser", "Browser"],
+                          ["desktop", "Desktop"],
                           ["memory", "Memory"],
                           ["tools", "Activity"],
                         ] as const
@@ -1378,6 +1499,7 @@ export default function App() {
                             artifacts={artifacts[active.session_id] ?? []}
                             onRestore={restoreArtifact}
                             onComment={commentArtifact}
+                            onEdit={editArtifact}
                             onExport={exportArtifact}
                           />
                         </>
@@ -1386,6 +1508,7 @@ export default function App() {
                         <ReviewPanel
                           sessionId={active.session_id}
                           review={gitReview(active.session_id)}
+                          lastTurnSnapshot={gitTurnSnapshot(active.session_id)}
                           onRefreshStatus={refreshGitStatus}
                           onLoadDiff={loadGitDiff}
                           onStageFiles={stageGitFiles}
@@ -1435,8 +1558,16 @@ export default function App() {
                         <>
                           {" "}
                           <BrowserPanel
+                            key={active.session_id}
+                            sessionId={active.session_id}
                             annotations={browserAnnotations}
                             permissions={browserPermissions}
+                            hostSkills={hostSkillsBySession[active.session_id] ?? []}
+                            skillProgress={skillInvocationsBySession[active.session_id]}
+                            onInvokeBrowserSkill={(selector, args) =>
+                              invokeSkill(active.session_id, selector, args)
+                            }
+                            onCancelBrowserSkill={() => cancelSession(active.session_id)}
                             onAddAnnotation={addBrowserAnnotation}
                             onInsertContext={(context) => {
                               void prepareBrowserContext(active.session_id, context);
@@ -1448,6 +1579,24 @@ export default function App() {
                             onSetPermission={setBrowserAppPermission}
                           />
                         </>
+                      )}
+                      {workPanel === "desktop" && (
+                        <DesktopControlPanel
+                          permissions={browserPermissions}
+                          onSetPermission={setBrowserAppPermission}
+                          onInsertCapture={(capture) =>
+                            prepareDesktopCapture(active.session_id, capture)
+                          }
+                          onInsertContext={(context) =>
+                            prepareBrowserContext(active.session_id, context)
+                          }
+                          hostSkills={hostSkillsBySession[active.session_id] ?? []}
+                          skillProgress={skillInvocationsBySession[active.session_id]}
+                          onInvokeDesktopSkill={(selector, args) =>
+                            invokeSkill(active.session_id, selector, args)
+                          }
+                          onCancelDesktopSkill={() => cancelSession(active.session_id)}
+                        />
                       )}
                       {workPanel === "memory" && (
                         <>
@@ -1476,6 +1625,9 @@ export default function App() {
                               void newFromSummary(active.session_id)
                             }
                             usage={usageBySession[active.session_id] ?? null}
+                            serverCompaction={
+                              serverCompactionBySession[active.session_id] ?? { status: "idle" }
+                            }
                             onServerCompact={() =>
                               void serverCompact(active.session_id)
                             }
@@ -1486,14 +1638,93 @@ export default function App() {
                             workspace={active.workspace}
                             onCreateWorktree={createWorktree}
                             onCreateConversationWorktree={(plan) =>
-                              createWorktreeSession(active.session_id, plan, activeProjectSettings)
+                              createWorktreeSession(
+                                active.session_id,
+                                plan,
+                                activeProject !== null ? activeProjectSettings : undefined,
+                              )
                             }
+                            onCreateSetupConversationWorktree={async (plan, command, envAllowlist, onCreated) => {
+                              const projectSettings = activeProject !== null ? activeProjectSettings : undefined;
+                              const created = await createWorktree(active.session_id, plan);
+                              if (created === null) return null;
+                              onCreated?.(created);
+                              const setup = await runWorktreeSetup(
+                                active.session_id,
+                                created,
+                                command,
+                                envAllowlist,
+                              );
+                              if (setup === null || setup.status !== "ready") {
+                                const status = setup?.status ?? "failed";
+                                const removed = await removeWorktree(active.session_id, created);
+                                setError(
+                                  `Worktree setup ${status}; the new checkout was ${removed ? "removed" : "kept for cleanup retry"}.`,
+                                );
+                                return null;
+                              }
+                              const opened = await startSessionInWorkspace(
+                                created.path,
+                                projectSettings,
+                              );
+                              if (opened === null) {
+                                const removed = await removeWorktree(active.session_id, created);
+                                setError(
+                                  `Conversation admission failed; the new checkout was ${removed ? "removed" : "kept for cleanup retry"}.`,
+                                );
+                                return null;
+                              }
+                              return created;
+                            }}
                             worktrees={worktrees}
                             cleanupIntents={cleanupIntents}
                             onRemoveWorktree={removeWorktree}
                             onOpenWorktree={async (record) =>
-                              startSessionInWorkspace(record.path, activeProjectSettings)
+                              startSessionInWorkspace(
+                                record.path,
+                                activeProject !== null ? activeProjectSettings : undefined,
+                              )
                             }
+                            onOpenHandoffWorktree={async (record, plan) => {
+                              const opened = await startSessionInWorkspace(
+                                record.path,
+                                activeProject !== null ? activeProjectSettings : undefined,
+                              );
+                              if (opened !== null) {
+                                prefillComposer(formatHandoffContext(plan, logs[active.session_id] ?? []));
+                              }
+                              return opened;
+                            }}
+                            writerPrompts={orchestrationWriterPrompts}
+                            writerLogs={logs}
+                            writerSessionRunning={writerSessionRunning}
+                            writerCompletions={turnCompletionBySession}
+                            onDispatchWriter={async (record, prompt) => {
+                              const sourceId = activeId;
+                              try {
+                                const existing = sessions.find(
+                                  (session) =>
+                                    session.workspace.toLowerCase() === record.path.toLowerCase() &&
+                                    session.archived !== true &&
+                                    connectedIds.includes(session.session_id),
+                                );
+                                const writerId =
+                                  existing?.session_id ??
+                                  (await startSessionInWorkspace(
+                                    record.path,
+                                    activeProject !== null ? activeProjectSettings : undefined,
+                                  ));
+                                if (writerId === null) return null;
+                                const result = await sendInput(writerId, prompt);
+                                return result.ok ? { sessionId: writerId } : null;
+                              } finally {
+                                if (sourceId !== null) setActive(sourceId);
+                              }
+                            }}
+                            onStopWriter={async (writerId) => {
+                              await cancelSession(writerId);
+                            }}
+                            onOpenWriterConversation={(writerId) => setActive(writerId)}
                             onInspectWorktree={inspectWorktree}
                             onCheckReadiness={checkWorktreeReadiness}
                             onRunSetup={runWorktreeSetup}
@@ -1504,6 +1735,7 @@ export default function App() {
                             sessionId={active.session_id}
                             mode={shareMode}
                             bundles={sessionBundles(active.session_id)}
+                            exportError={shareExportError}
                             onModeChange={setShareMode}
                             onShare={(format) =>
                               void shareSession(active.session_id, format)
@@ -1516,22 +1748,38 @@ export default function App() {
                                 // clipboard unavailable: the id stays visible for manual copy
                               }
                             }}
-                            onDownload={(b: ShareBundle) => {
+                            onDownload={async (b: ShareBundle) => {
                               const ext = b.format === "json" ? "json" : "md";
-                              const blob = new Blob([b.body], {
-                                type:
-                                  b.format === "json"
-                                    ? "application/json"
-                                    : "text/markdown",
-                              });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = `${b.bundleId}.${ext}`;
-                              document.body.appendChild(a);
-                              a.click();
-                              a.remove();
-                              URL.revokeObjectURL(url);
+                              const filename = `${b.bundleId}.${ext}`;
+                              try {
+                                setShareExportError(null);
+                                if (isTauriRuntime()) {
+                                  const target = await save({
+                                    title: "Save conversation export",
+                                    defaultPath: filename,
+                                    filters: [{
+                                      name: b.format === "json" ? "JSON" : "Markdown",
+                                      extensions: [ext],
+                                    }],
+                                  });
+                                  if (typeof target !== "string" || target.trim() === "") return;
+                                  await invoke("artifact_export", { path: target, content: b.body });
+                                  return;
+                                }
+                                const blob = new Blob([b.body], {
+                                  type: b.format === "json" ? "application/json" : "text/markdown",
+                                });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = filename;
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                URL.revokeObjectURL(url);
+                              } catch (error) {
+                                setShareExportError(`Export failed: ${userFacingError(error instanceof Error ? error.message : String(error))}`);
+                              }
                             }}
                           />{" "}
                           {channelsExperimental && (

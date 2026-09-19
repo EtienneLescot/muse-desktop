@@ -50,17 +50,21 @@ export function TerminalPanel({
 
   useEffect(() => {
     if (!terminal) return;
+    const terminalId = terminal.info.terminalId;
     let disposed = false;
+    let timer: number | null = null;
     const read = () => {
-      if (!disposed) void onRead(terminal.info.terminalId);
+      if (disposed) return;
+      void onRead(terminalId).catch(() => undefined).finally(() => {
+        if (!disposed) timer = window.setTimeout(read, 180);
+      });
     };
     read();
-    const timer = window.setInterval(read, 180);
     return () => {
       disposed = true;
-      window.clearInterval(timer);
+      if (timer !== null) window.clearTimeout(timer);
     };
-  }, [onRead, terminal]);
+  }, [onRead, terminal?.info.terminalId]);
 
   useEffect(() => {
     outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight });

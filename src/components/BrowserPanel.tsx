@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   browserCaptureAttachment,
+  browserCaptureMatchesPage,
+  browserCapturePreviewSize,
   browserDownloadFilename,
   describeBrowserElement,
   IMAGE_GENERATION_NOTE,
@@ -8,6 +10,7 @@ import {
   formatBrowserCaptureContext,
   formatBrowserObservation,
   normalizeBrowserObservation,
+  normalizeSameOriginTarget,
   normalizeBrowserUrl,
   createBrowserTab,
   loadBrowserTabs,
@@ -23,8 +26,19 @@ import {
 } from "../lib/browserAnnotate";
 import { isTauriRuntime } from "../lib/env";
 import { userFacingError } from "../lib/errorCopy";
+import {
+  buildBrowserSkillArguments,
+  findBrowserSkill,
+  isAdvertisedBrowserSkill,
+  type BrowserSkillAction,
+} from "../lib/browserSkills";
+import type { HostSkill } from "../lib/hostSkills";
+import type { SkillInvocationProgress } from "../lib/skills";
+import { CapabilityBadge } from "./CapabilityBadge";
 
 interface Props {
+  /** Conversation identity; browser navigation must not leak across sessions. */
+  sessionId: string;
   annotations: BrowserAnnotation[];
   permissions: BrowserAppPermission[];
   onAddAnnotation: (url: string, selection: string, comment: string, element?: BrowserElementAnchor | null) => void;
@@ -34,10 +48,18 @@ interface Props {
   onInsertContext: (context: string) => void;
   /** Insert an explicitly captured visual page as context + image attachment. */
   onInsertCapture: (capture: BrowserCapture) => boolean;
+  /** Host-owned browser skills, if the connected engine advertises them. */
+  hostSkills?: readonly HostSkill[];
+  /** Current renderer progress for the active host skill invocation. */
+  skillProgress?: SkillInvocationProgress;
+  /** Invoke one advertised host skill through the session SSOT. */
+  onInvokeBrowserSkill?: (selector: string, args: string) => void;
+  /** Stop the active browser skill through the session SSOT. */
+  onCancelBrowserSkill?: () => Promise<void> | void;
 }
 
 /** Apps offered a computer-use toggle (explicit opt-in, default denied). */
-const KNOWN_APPS = ["finder", "terminal", "editor"];
+const KNOWN_APPS = ["browser", "finder", "terminal", "editor"];
 
 /**
  * US-19 in-app browser (scoped): a sandboxed iframe renders the URL, and
@@ -46,6 +68,7 @@ const KNOWN_APPS = ["finder", "terminal", "editor"];
  * opt-in per app. Image generation is out of scope (honest note, no UI).
  */
 export function BrowserPanel({
+  sessionId,
   annotations,
   permissions,
   onAddAnnotation,
@@ -53,10 +76,14 @@ export function BrowserPanel({
   onSetPermission,
   onInsertContext,
   onInsertCapture,
+  hostSkills = [],
+  skillProgress,
+  onInvokeBrowserSkill,
+  onCancelBrowserSkill,
 }: Props) {
   const initialTabsRef = useRef<BrowserTab[] | null>(null);
   if (initialTabsRef.current === null) {
-    const stored = loadBrowserTabs();
+    const stored = loadBrowserTabs(sessionId);
     initialTabsRef.current = stored.length > 0 ? stored : [createBrowserTab()];
   }
   const initialTabs = initialTabsRef.current;
@@ -76,24 +103,40 @@ export function BrowserPanel({
   const [appName, setAppName] = useState("");
   const [capture, setCapture] = useState<BrowserCapture | null>(null);
   const [captureRegion, setCaptureRegion] = useState<BrowserCaptureRegion | null>(null);
+  const [captureZoom, setCaptureZoom] = useState(1);
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
   const [pageObservation, setPageObservation] = useState<ReturnType<typeof normalizeBrowserObservation>>(null);
   const [controlStatus, setControlStatus] = useState<string | null>(null);
   const [typeText, setTypeText] = useState("");
+  const [stoppingHostSkill, setStoppingHostSkill] = useState(false);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const captureImageRef = useRef<HTMLImageElement>(null);
   const captureDragRef = useRef<{ x: number; y: number } | null>(null);
+  const currentUrlRef = useRef(currentUrl);
+  const captureGenerationRef = useRef(0);
   const selectionCleanupRef = useRef<(() => void) | null>(null);
+  const browserControlsAllowedRef = useRef(false);
+  currentUrlRef.current = currentUrl;
 
   useEffect(() => {
-    saveBrowserTabs(tabs);
-  }, [tabs]);
+    saveBrowserTabs(tabs, sessionId);
+  }, [sessionId, tabs]);
 
   useEffect(() => () => {
     selectionCleanupRef.current?.();
     selectionCleanupRef.current = null;
   }, []);
+
+  // A native browser surface belongs to the conversation that opened it.
+  // Closing it on unmount/session switch avoids leaving a stale page visible
+  // after the user moves to another conversation.
+  useEffect(() => () => {
+    if (!isTauriRuntime()) return;
+    void import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke<boolean>("close_native_browser", { sessionId }))
+      .catch(() => {});
+  }, [sessionId]);
 
   const normalized = normalizeBrowserUrl(currentUrl);
   const addressNormalized = normalizeBrowserUrl(url);
@@ -141,13 +184,30 @@ export function BrowserPanel({
           // Cross-origin access is unavailable by design.
         }
       };
+      const syncPageDownload = (event: MouseEvent) => {
+        const target = event.target;
+        const targetElement = target && typeof (target as Element).closest === "function"
+          ? target as Element
+          : null;
+        const anchor = targetElement?.closest("a[href]") as HTMLAnchorElement | null;
+        if (anchor === null || !anchor.hasAttribute("download")) return;
+        event.preventDefault();
+        if (!browserControlsAllowedRef.current) {
+          setDownloadStatus("Allow computer-use for browser before saving a page download.");
+          return;
+        }
+        setElementAnchor(describeBrowserElement(anchor));
+        void downloadLink(anchor.href, anchor.getAttribute("download") ?? undefined);
+      };
       document.addEventListener("selectionchange", syncSelection);
       document.addEventListener("mouseup", syncSelection);
       document.addEventListener("click", syncElement, true);
+      document.addEventListener("click", syncPageDownload, true);
       selectionCleanupRef.current = () => {
         document.removeEventListener("selectionchange", syncSelection);
         document.removeEventListener("mouseup", syncSelection);
         document.removeEventListener("click", syncElement, true);
+        document.removeEventListener("click", syncPageDownload, true);
       };
     } catch {
       // The iframe is cross-origin; the explicit selection field remains the
@@ -200,6 +260,10 @@ export function BrowserPanel({
   };
 
   const clickSelectedElement = () => {
+    if (!browserControlsAllowed) {
+      setControlStatus("Allow computer-use for browser before clicking a page element.");
+      return;
+    }
     const element = selectedElement();
     if (element === null) {
       setControlStatus("Select an element in a same-origin page before clicking it.");
@@ -214,6 +278,10 @@ export function BrowserPanel({
   };
 
   const typeIntoSelectedElement = () => {
+    if (!browserControlsAllowed) {
+      setControlStatus("Allow computer-use for browser before typing into a page field.");
+      return;
+    }
     const value = typeText.trim();
     if (value.length === 0) {
       setControlStatus("Enter text before using Type into field.");
@@ -245,19 +313,70 @@ export function BrowserPanel({
     }
   };
 
-  const downloadSelectedLink = async (): Promise<void> => {
-    const link = elementAnchor?.href;
+  const navigateSelectedLink = () => {
+    if (!browserControlsAllowed) {
+      setControlStatus("Allow computer-use for browser before navigating a page link.");
+      return;
+    }
+    if (!elementAnchor?.href || normalized === null) {
+      setControlStatus("Select a link in the same-origin page before navigating it.");
+      return;
+    }
+    const target = normalizeSameOriginTarget(normalized, elementAnchor.href);
+    if (target === null) {
+      setControlStatus("For safety, navigation is limited to the current page origin.");
+      return;
+    }
+    navigate(target);
+    setControlStatus("Navigated to the selected link.");
+  };
+
+  const openSelectedLinkInNewTab = () => {
+    if (!browserControlsAllowed) {
+      setControlStatus("Allow computer-use for browser before opening a new tab.");
+      return;
+    }
+    if (!elementAnchor?.href || normalized === null) {
+      setControlStatus("Select a link in the same-origin page before opening it.");
+      return;
+    }
+    if (tabs.length >= MAX_BROWSER_TABS) {
+      setControlStatus(`The browser supports up to ${MAX_BROWSER_TABS} tabs.`);
+      return;
+    }
+    const target = normalizeSameOriginTarget(normalized, elementAnchor.href);
+    if (target === null) {
+      setControlStatus("For safety, navigation is limited to the current page origin.");
+      return;
+    }
+    const tab = {
+      ...createBrowserTab(),
+      url: target,
+      history: [target],
+      historyIndex: 0,
+    };
+    setTabs((current) => [...current, tab]);
+    activateTab(tab);
+    setControlStatus("Opened the selected link in a new tab.");
+  };
+
+  const downloadLink = async (link: string | undefined, suggested?: string): Promise<void> => {
+    if (!browserControlsAllowedRef.current) {
+      setDownloadStatus("Allow computer-use for browser before saving a page link.");
+      return;
+    }
     if (!link || normalized === null) {
       setDownloadStatus("Select a link in the same-origin page before downloading it.");
       return;
     }
     try {
       const page = new URL(normalized);
-      const target = new URL(link);
-      if (target.origin !== page.origin) {
+      const targetUrl = normalizeSameOriginTarget(page.toString(), link);
+      if (targetUrl === null) {
         setDownloadStatus("For safety, downloads are limited to the current page origin.");
         return;
       }
+      const target = new URL(targetUrl);
       setDownloadStatus("Fetching the selected link…");
       let encoded: string;
       let contentType = "application/octet-stream";
@@ -296,7 +415,7 @@ export function BrowserPanel({
         }
         encoded = btoa(text);
       }
-      const filename = browserDownloadFilename(target.toString(), elementAnchor?.downloadName);
+      const filename = browserDownloadFilename(target.toString(), suggested ?? elementAnchor?.downloadName);
       if (isTauriRuntime()) {
         const [{ save }, { invoke }] = await Promise.all([
           import("@tauri-apps/plugin-dialog"),
@@ -327,8 +446,14 @@ export function BrowserPanel({
     }
   };
 
+  const downloadSelectedLink = async (): Promise<void> => {
+    await downloadLink(elementAnchor?.href, elementAnchor?.downloadName);
+  };
+
   const captureVisiblePage = async (): Promise<void> => {
     if (!renderable || normalized === null) return;
+    const requestUrl = normalized;
+    const requestGeneration = captureGenerationRef.current;
     const getDisplayMedia = navigator.mediaDevices?.getDisplayMedia;
     if (typeof getDisplayMedia !== "function") {
       setCaptureStatus("Visual capture is unavailable in this browser build.");
@@ -374,11 +499,21 @@ export function BrowserPanel({
         height,
         devicePixelRatio: window.devicePixelRatio || 1,
       };
+      // The display picker is asynchronous. Do not attach pixels captured for
+      // an older page after navigation or a reload has reset the panel state.
+      if (
+        requestGeneration !== captureGenerationRef.current ||
+        !browserCaptureMatchesPage(requestUrl, currentUrlRef.current)
+      ) {
+        setCaptureStatus("Capture discarded because the browser page changed. Capture it again on the current page.");
+        return;
+      }
       if (browserCaptureAttachment(next) === null) {
         throw new Error("the captured image exceeds the 5 MB attachment limit");
       }
       setCapture(next);
       setCaptureRegion(null);
+      setCaptureZoom(1);
       setCaptureStatus("Capture ready. Review it, then add it to the composer.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -445,6 +580,7 @@ export function BrowserPanel({
       }
       setCapture(next);
       setCaptureRegion(null);
+      setCaptureZoom(1);
       setCaptureStatus("Region cropped. Review it, then add it to the composer.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -459,6 +595,7 @@ export function BrowserPanel({
   };
 
   const resetPageState = () => {
+    captureGenerationRef.current += 1;
     setFrameError(null);
     setNativeBrowserStatus(null);
     setSelection("");
@@ -467,6 +604,7 @@ export function BrowserPanel({
     setControlStatus(null);
     setCapture(null);
     setCaptureRegion(null);
+    setCaptureZoom(1);
     setCaptureStatus(null);
     setTypeText("");
     setFrameKey((key) => key + 1);
@@ -552,7 +690,7 @@ export function BrowserPanel({
     setNativeBrowserStatus("Opening native browser…");
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("open_native_browser", { url: normalized });
+      await invoke("open_native_browser", { url: normalized, sessionId });
       setNativeBrowserStatus("Opened in the Muse Browser window.");
     } catch (error) {
       setNativeBrowserStatus(
@@ -572,7 +710,7 @@ export function BrowserPanel({
     }
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const closed = await invoke<boolean>("close_native_browser");
+      const closed = await invoke<boolean>("close_native_browser", { sessionId });
       setNativeBrowserStatus(closed ? "Closed the Muse Browser window." : "The Muse Browser window is already closed.");
     } catch (error) {
       setNativeBrowserStatus(
@@ -595,11 +733,67 @@ export function BrowserPanel({
 
   const isAllowed = (app: string) =>
     permissions.find((p) => p.app === app)?.allowed === true;
+  const browserControlsAllowed = isAllowed("browser");
+
+  const invokeBrowserSkill = (action: BrowserSkillAction): void => {
+    const skill = findBrowserSkill(hostSkills, action);
+    if (skill === null || onInvokeBrowserSkill === undefined) {
+      setControlStatus("This browser action is not available from the connected Muse host.");
+      return;
+    }
+    if (action !== "observe" && !browserControlsAllowed) {
+      setControlStatus("Allow computer-use for browser before asking Muse to act on the page.");
+      return;
+    }
+    onInvokeBrowserSkill(
+      skill.selector,
+      buildBrowserSkillArguments(action, normalized ?? currentUrl, elementAnchor, typeText),
+    );
+    setControlStatus(`Asked Muse to ${action === "openTab" ? "open a new tab" : action} in the browser.`);
+  };
+
+  const advertisedBrowserSkills = (Object.keys({
+    observe: true,
+    click: true,
+    type: true,
+    navigate: true,
+    openTab: true,
+    download: true,
+  }) as BrowserSkillAction[]).filter((action) => findBrowserSkill(hostSkills, action) !== null);
+  const browserSkillInFlight =
+    skillProgress !== undefined &&
+    ["preparing", "loading-resources", "sending", "queued", "running", "unknown"].includes(skillProgress.stage) &&
+    isAdvertisedBrowserSkill(hostSkills, skillProgress.name);
+
+  const stopBrowserSkill = () => {
+    if (!browserSkillInFlight || onCancelBrowserSkill === undefined || stoppingHostSkill) return;
+    setStoppingHostSkill(true);
+    setControlStatus("Asking Muse to stop the browser action…");
+    void Promise.resolve(onCancelBrowserSkill())
+      .then(() => setControlStatus("Stop requested. Waiting for Muse to confirm."))
+      .catch((error) => setControlStatus(`The browser action could not be stopped: ${error instanceof Error ? error.message : String(error)}`))
+      .finally(() => setStoppingHostSkill(false));
+  };
+  browserControlsAllowedRef.current = browserControlsAllowed;
+  const capturePreview = capture === null
+    ? null
+    : browserCapturePreviewSize(capture.width, capture.height, captureZoom);
 
   return (
     <section className="browser-panel" aria-label="In-app browser">
       <details open>
-        <summary className="browser-title">Browser</summary>
+        <summary className="browser-title">
+          <span>Browser</span>
+          <span className="capability-line">
+            <CapabilityBadge
+              status="local"
+              reason={isTauriRuntime()
+                ? "The embedded preview runs locally; native windows and Muse actions remain explicit and depend on the desktop host."
+                : "The embedded preview runs locally in this browser; native windows and host actions require the desktop app."}
+            />
+            <span className="muted">Embedded preview</span>
+          </span>
+        </summary>
         <div className="browser-tabs" role="tablist" aria-label="Browser tabs">
           {tabs.map((tab) => {
             const host = tab.url ? new URL(tab.url).hostname.replace(/^www\./, "") : "New tab";
@@ -707,14 +901,35 @@ export function BrowserPanel({
             <button type="button" disabled={!renderable} onClick={observePage}>
               Observe page
             </button>
-            <button type="button" disabled={elementAnchor === null} onClick={clickSelectedElement}>
+            <button
+              type="button"
+              disabled={elementAnchor === null || !browserControlsAllowed}
+              onClick={clickSelectedElement}
+              title={browserControlsAllowed ? "Click the selected same-origin element" : "Allow computer-use for browser first"}
+            >
               Click selected element
             </button>
             <button
               type="button"
-              disabled={elementAnchor?.href === undefined}
+              disabled={elementAnchor?.href === undefined || !browserControlsAllowed}
+              onClick={navigateSelectedLink}
+              title={browserControlsAllowed ? "Navigate to the selected same-origin link" : "Allow computer-use for browser first"}
+            >
+              Navigate selected link
+            </button>
+            <button
+              type="button"
+              disabled={elementAnchor?.href === undefined || !browserControlsAllowed || tabs.length >= MAX_BROWSER_TABS}
+              onClick={openSelectedLinkInNewTab}
+              title={browserControlsAllowed ? "Open the selected same-origin link in a new tab" : "Allow computer-use for browser first"}
+            >
+              Open in new tab
+            </button>
+            <button
+              type="button"
+              disabled={elementAnchor?.href === undefined || !browserControlsAllowed}
               onClick={() => void downloadSelectedLink()}
-              title="Fetch and save the selected same-origin link"
+              title={browserControlsAllowed ? "Fetch and save the selected same-origin link" : "Allow computer-use for browser first"}
             >
               Save selected link
             </button>
@@ -724,12 +939,50 @@ export function BrowserPanel({
               placeholder="Text for selected field"
               value={typeText}
               onChange={(event) => setTypeText(event.target.value)}
-              disabled={elementAnchor === null}
+              disabled={elementAnchor === null || !browserControlsAllowed}
             />
-            <button type="button" disabled={elementAnchor === null || typeText.trim().length === 0} onClick={typeIntoSelectedElement}>
+            <button
+              type="button"
+              disabled={elementAnchor === null || !browserControlsAllowed || typeText.trim().length === 0}
+              onClick={typeIntoSelectedElement}
+              title={browserControlsAllowed ? "Type into the selected same-origin field" : "Allow computer-use for browser first"}
+            >
               Type into field
             </button>
           </div>
+          {advertisedBrowserSkills.length > 0 && (
+            <div className="browser-host-actions" aria-label="Muse browser actions">
+              <span className="muted">Muse actions from the connected host</span>
+              {advertisedBrowserSkills.map((action) => (
+                <button
+                  type="button"
+                  key={action}
+                  onClick={() => invokeBrowserSkill(action)}
+                  disabled={
+                    (action !== "observe" && (!browserControlsAllowed || elementAnchor === null)) ||
+                    (["navigate", "openTab", "download"].includes(action) && elementAnchor?.href === undefined) ||
+                    (action === "type" && typeText.trim().length === 0)
+                  }
+                  title="Run the advertised browser skill through the current conversation"
+                >
+                  {action === "openTab"
+                    ? "Ask Muse to open a tab"
+                    : `Ask Muse to ${action}`}
+                </button>
+              ))}
+              {browserSkillInFlight && onCancelBrowserSkill !== undefined && (
+                <button
+                  type="button"
+                  className="browser-host-stop"
+                  onClick={stopBrowserSkill}
+                  disabled={stoppingHostSkill}
+                  title="Ask Muse to stop the active browser action"
+                >
+                  {stoppingHostSkill ? "Stopping…" : "Stop Muse action"}
+                </button>
+              )}
+            </div>
+          )}
           {controlStatus && <div className="muted browser-control-status" role="status" aria-live="polite">{controlStatus}</div>}
           {downloadStatus && <div className="muted browser-control-status" role="status" aria-live="polite">{downloadStatus}</div>}
           {pageObservation && normalized && (
@@ -795,50 +1048,80 @@ export function BrowserPanel({
             </button>
             {capture !== null && (
               <>
-                <div className="browser-capture-canvas">
-                  <img
-                    ref={captureImageRef}
-                    className="browser-capture-preview"
-                    src={capture.dataUrl}
-                    alt="Captured browser page preview; drag to select a region"
-                    onPointerDown={(event) => {
-                      const point = capturePoint(event);
-                      if (point === null) return;
-                      event.currentTarget.setPointerCapture(event.pointerId);
-                      captureDragRef.current = point;
-                      setCaptureRegion({ ...point, width: 0, height: 0 });
-                    }}
-                    onPointerMove={(event) => {
-                      const start = captureDragRef.current;
-                      const point = capturePoint(event);
-                      if (start === null || point === null) return;
-                      setCaptureRegion({
-                        x: Math.min(start.x, point.x),
-                        y: Math.min(start.y, point.y),
-                        width: Math.abs(point.x - start.x),
-                        height: Math.abs(point.y - start.y),
-                      });
-                    }}
-                    onPointerUp={(event) => {
-                      captureDragRef.current = null;
-                      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                        event.currentTarget.releasePointerCapture(event.pointerId);
-                      }
-                    }}
-                  />
-                  {captureRegion !== null && captureRegion.width > 1 && captureRegion.height > 1 && (
-                    <span
-                      className="browser-capture-region"
-                      aria-hidden="true"
-                      style={{
-                        left: `${(captureRegion.x / capture.width) * 100}%`,
-                        top: `${(captureRegion.y / capture.height) * 100}%`,
-                        width: `${(captureRegion.width / capture.width) * 100}%`,
-                        height: `${(captureRegion.height / capture.height) * 100}%`,
-                      }}
-                    />
-                  )}
-                </div>
+                {capturePreview !== null && (
+                  <>
+                    <div className="browser-capture-zoom">
+                      <label htmlFor="browser-capture-zoom">Preview zoom</label>
+                      <input
+                        id="browser-capture-zoom"
+                        type="range"
+                        min="1"
+                        max="2.5"
+                        step="0.1"
+                        value={captureZoom}
+                        onChange={(event) => setCaptureZoom(Number(event.currentTarget.value))}
+                        aria-label="Capture preview zoom"
+                      />
+                      <output>{Math.round(capturePreview.zoom * 100)}%</output>
+                      {captureZoom !== 1 && (
+                        <button type="button" className="quiet" onClick={() => setCaptureZoom(1)}>
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <div className="browser-capture-viewport">
+                      <div
+                        className="browser-capture-canvas"
+                        style={{ width: `${capturePreview.width}px`, height: `${capturePreview.height}px` }}
+                      >
+                        <img
+                          ref={captureImageRef}
+                          className="browser-capture-preview"
+                          src={capture.dataUrl}
+                          width={capturePreview.width}
+                          height={capturePreview.height}
+                          alt="Captured browser page preview; drag to select a region"
+                          onPointerDown={(event) => {
+                            const point = capturePoint(event);
+                            if (point === null) return;
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                            captureDragRef.current = point;
+                            setCaptureRegion({ ...point, width: 0, height: 0 });
+                          }}
+                          onPointerMove={(event) => {
+                            const start = captureDragRef.current;
+                            const point = capturePoint(event);
+                            if (start === null || point === null) return;
+                            setCaptureRegion({
+                              x: Math.min(start.x, point.x),
+                              y: Math.min(start.y, point.y),
+                              width: Math.abs(point.x - start.x),
+                              height: Math.abs(point.y - start.y),
+                            });
+                          }}
+                          onPointerUp={(event) => {
+                            captureDragRef.current = null;
+                            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                              event.currentTarget.releasePointerCapture(event.pointerId);
+                            }
+                          }}
+                        />
+                        {captureRegion !== null && captureRegion.width > 1 && captureRegion.height > 1 && (
+                          <span
+                            className="browser-capture-region"
+                            aria-hidden="true"
+                            style={{
+                              left: `${(captureRegion.x / capture.width) * 100}%`,
+                              top: `${(captureRegion.y / capture.height) * 100}%`,
+                              width: `${(captureRegion.width / capture.width) * 100}%`,
+                              height: `${(captureRegion.height / capture.height) * 100}%`,
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
                 <span className="muted browser-capture-help">Drag on the preview to crop a region.</span>
                 {captureRegion !== null && captureRegion.width > 1 && captureRegion.height > 1 && (
                   <button type="button" onClick={() => void cropCapture()}>
@@ -848,7 +1131,7 @@ export function BrowserPanel({
                 <button type="button" onClick={addCaptureToPrompt}>
                   Add screenshot to prompt
                 </button>
-                <button type="button" className="quiet" onClick={() => { setCapture(null); setCaptureRegion(null); }}>
+                <button type="button" className="quiet" onClick={() => { setCapture(null); setCaptureRegion(null); setCaptureZoom(1); }}>
                   Remove capture
                 </button>
               </>

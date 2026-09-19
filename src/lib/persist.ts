@@ -11,7 +11,7 @@
  * All writes are confined to these keys; nothing is written outside them.
  */
 
-import { MAX_OUTBOX_ENTRIES, type OutboxEntry } from "./outbox.ts";
+import { normalizeOutboxEntries, MAX_OUTBOX_ENTRIES, type OutboxEntry } from "./outbox.ts";
 import type {
   Project,
   ProjectSettings,
@@ -19,6 +19,7 @@ import type {
 } from "./projects.ts";
 import { normalizeReasoningEffort } from "./reasoning.ts";
 import type { WorktreeRecord } from "./worktrees.ts";
+import type { GitTurnSnapshot } from "./git.ts";
 import {
   readStorageJson,
   removeStorageKey,
@@ -32,6 +33,8 @@ export interface StoredSession {
   workspace: string;
   title: string;
   createdAt: number;
+  /** Last model requested for this conversation when the host omits it. */
+  model_id?: string;
   /** Latest branch observation supplied by the session host, when known. */
   branch?: string;
   /** Host-reported persistence posture; absent in older local rows. */
@@ -52,6 +55,16 @@ export interface StoredSession {
 /** Reasoning is persisted separately so it can be disclosed in the stream. */
 export type LogRole = "user" | "assistant" | "thinking" | "subagent" | "system" | "tool";
 
+/** Bounded metadata for host-provided rich output (bytes stay behind outputRef). */
+export interface RichContent {
+  type: string;
+  mediaType: string;
+  path: string;
+  sourceToolName: string;
+  width?: number;
+  height?: number;
+}
+
 export interface LogEntry {
   id: string;
   ts: number;
@@ -67,6 +80,8 @@ export interface LogEntry {
   itemRevision?: number;
   /** Opaque host reference for lazily loading a large item output. */
   outputRef?: string;
+  /** Host-provided rich output metadata; payload bytes are never persisted here. */
+  richContent?: RichContent[];
   /** True while further stream chunks may still be appended. */
   open?: boolean;
   /** Drill-down into the child's own transcript (`session/read`). */
@@ -92,6 +107,7 @@ const WORKSPACE_KEY = "muse-desktop.workspace.v1";
 const ACTIVE_KEY = "muse-desktop.active.v1";
 const TOMBSTONES_KEY = "muse-desktop.tombstones.v1";
 const logKey = (sessionId: string) => `muse-desktop.log.v1.${sessionId}`;
+const gitTurnSnapshotKey = (sessionId: string) => `muse-desktop.git-turn.v1.${sessionId}`;
 
 /** Cap per-session log length (mitigation for huge/corrupt histories). */
 export const MAX_LOG_ENTRIES = 2000;
@@ -106,6 +122,58 @@ function write(key: string, value: unknown): void {
   writeStorageJson(key, value);
 }
 
+function isValidGitTurnSnapshot(value: unknown): value is GitTurnSnapshot {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  if (
+    typeof row.clientMessageId !== "string" ||
+    row.clientMessageId.length === 0 ||
+    (row.turnId !== null && row.turnId !== undefined && typeof row.turnId !== "string") ||
+    typeof row.capturedAt !== "number" ||
+    !Number.isFinite(row.capturedAt) ||
+    !["captured", "running", "queued", "completed", "failed"].includes(String(row.phase))
+  ) return false;
+  const status = row.status;
+  if (typeof status !== "object" || status === null || Array.isArray(status)) return false;
+  const state = status as Record<string, unknown>;
+  if (
+    typeof state.repoRoot !== "string" ||
+    typeof state.fingerprint !== "string" ||
+    !Array.isArray(state.files) ||
+    state.files.length > 500
+  ) return false;
+  return state.files.every((file) => {
+    if (typeof file !== "object" || file === null || Array.isArray(file)) return false;
+    const row = file as Record<string, unknown>;
+    return typeof row.path === "string" &&
+      (row.originalPath === null || row.originalPath === undefined || typeof row.originalPath === "string") &&
+      typeof row.indexStatus === "string" &&
+      typeof row.worktreeStatus === "string" &&
+      typeof row.changeType === "string" &&
+      typeof row.staged === "boolean" &&
+      typeof row.unstaged === "boolean" &&
+      typeof row.untracked === "boolean" &&
+      typeof row.conflicted === "boolean" &&
+      typeof row.binary === "boolean";
+  });
+}
+
+/** Load the latest explicit repository baseline for one conversation. */
+export function loadGitTurnSnapshot(sessionId: string): GitTurnSnapshot | null {
+  const value = read<unknown>(gitTurnSnapshotKey(sessionId), null);
+  return isValidGitTurnSnapshot(value) ? value : null;
+}
+
+/** Persist one bounded repository baseline without making it part of the log. */
+export function saveGitTurnSnapshot(sessionId: string, snapshot: GitTurnSnapshot): void {
+  write(gitTurnSnapshotKey(sessionId), snapshot);
+}
+
+/** Remove the baseline together with a deleted conversation. */
+export function dropGitTurnSnapshot(sessionId: string): void {
+  removeStorageKey(gitTurnSnapshotKey(sessionId));
+}
+
 function isValidSession(s: unknown): s is StoredSession {
   if (typeof s !== "object" || s === null) return false;
   const r = s as Record<string, unknown>;
@@ -115,6 +183,7 @@ function isValidSession(s: unknown): s is StoredSession {
     typeof r.workspace === "string" &&
     typeof r.title === "string" &&
     typeof r.createdAt === "number" &&
+    (r.model_id === undefined || (typeof r.model_id === "string" && r.model_id.trim().length > 0)) &&
     (r.branch === undefined || (typeof r.branch === "string" && r.branch.trim().length > 0)) &&
     (r.session_durability === undefined ||
       (typeof r.session_durability === "string" && r.session_durability.trim().length > 0)) &&
@@ -146,6 +215,20 @@ function isValidEntry(e: unknown): e is LogEntry {
           Number.isFinite((error as Record<string, unknown>).durationMs))));
   const validSubagentStatus =
     r.subagentStatus === undefined || isSubagentStatus(r.subagentStatus);
+  const validRichContent =
+    r.richContent === undefined ||
+    (Array.isArray(r.richContent) &&
+      r.richContent.length <= 16 &&
+      r.richContent.every((item) => {
+        if (typeof item !== "object" || item === null || Array.isArray(item)) return false;
+        const value = item as Record<string, unknown>;
+        const bounded = (key: string) =>
+          typeof value[key] === "string" && (value[key] as string).length > 0 && (value[key] as string).length <= 240;
+        const dimension = (key: string) =>
+          value[key] === undefined ||
+          (typeof value[key] === "number" && Number.isFinite(value[key]) && (value[key] as number) > 0 && (value[key] as number) <= 10000);
+        return bounded("type") && bounded("mediaType") && bounded("path") && bounded("sourceToolName") && dimension("width") && dimension("height");
+      }));
   return (
     typeof r.id === "string" &&
     typeof r.ts === "number" &&
@@ -157,6 +240,7 @@ function isValidEntry(e: unknown): e is LogEntry {
       r.role === "tool") &&
     typeof r.text === "string" &&
     (r.outputRef === undefined || (typeof r.outputRef === "string" && r.outputRef.length > 0 && r.outputRef.length <= 4096)) &&
+    validRichContent &&
     validSubagentStatus &&
     validEngineError
   );
@@ -403,31 +487,9 @@ export function saveGlobalSettings(settings: ProjectSettings): void {
  */
 const outboxKey = (sessionId: string) => `muse-desktop.outbox.v1.${sessionId}`;
 
-function isValidOutboxEntry(e: unknown): e is OutboxEntry {
-  if (typeof e !== "object" || e === null) return false;
-  const r = e as Record<string, unknown>;
-  return (
-    typeof r.clientMessageId === "string" &&
-    r.clientMessageId.length > 0 &&
-    (r.serverCommandId === undefined ||
-      (typeof r.serverCommandId === "string" && r.serverCommandId.length > 0)) &&
-    typeof r.sessionId === "string" &&
-    r.sessionId.length > 0 &&
-    typeof r.text === "string" &&
-    typeof r.outgoingText === "string" &&
-    (r.state === "sending" || r.state === "accepted" || r.state === "failed") &&
-    (r.error === null || typeof r.error === "string") &&
-    typeof r.ambiguous === "boolean" &&
-    typeof r.createdAt === "number" &&
-    typeof r.updatedAt === "number" &&
-    typeof r.attempts === "number"
-  );
-}
-
 export function loadOutbox(sessionId: string): OutboxEntry[] {
   const raw = read<unknown>(outboxKey(sessionId), []);
-  if (!Array.isArray(raw)) return [];
-  return raw.filter(isValidOutboxEntry).slice(-MAX_OUTBOX_ENTRIES);
+  return normalizeOutboxEntries(raw);
 }
 
 export function saveOutbox(sessionId: string, entries: OutboxEntry[]): void {

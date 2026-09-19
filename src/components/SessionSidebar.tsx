@@ -14,6 +14,9 @@ interface Props {
   sessions: MuseSession[];
   activeId: string | null;
   pendingCounts: Record<string, number>;
+  /** M0-03: retryable sends across all conversations. */
+  pendingSendCount?: number;
+  onOpenPendingSends?: () => void;
   /** US-4: ids of threads holding a stored summary (compacted). */
   compactedIds?: string[];
   onSelect: (id: string) => void;
@@ -52,6 +55,8 @@ export function SessionSidebar({
   showArchived = false,
   activeId,
   pendingCounts,
+  pendingSendCount = 0,
+  onOpenPendingSends,
   onSelect,
   onNew,
   onCancel,
@@ -199,6 +204,18 @@ export function SessionSidebar({
           +
         </button>
       </div>
+      {pendingSendCount > 0 && (
+        <div className="sidebar-outbox" role="status" aria-live="polite">
+          <span>
+            {pendingSendCount} unsent message{pendingSendCount === 1 ? "" : "s"} need review.
+          </span>
+          {onOpenPendingSends && (
+            <button type="button" onClick={onOpenPendingSends}>
+              Review
+            </button>
+          )}
+        </div>
+      )}
       {active.length === 0 && (
         <p className="muted">Your conversations will appear here.</p>
       )}

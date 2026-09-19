@@ -97,8 +97,16 @@ pub struct GitWorktreeInspection {
     pub clean: bool,
     pub conflicted: bool,
     pub file_count: usize,
+    /// Ignored files are reported separately from tracked/untracked changes:
+    /// they are not removable by Review, but can hide generated artifacts
+    /// during a handoff or setup review.
+    pub ignored_file_count: usize,
     pub active_signals: Vec<String>,
     pub branch_referenced_elsewhere: bool,
+    /// Number of native Muse sessions still attached to this checkout.
+    /// This is kept separate from Git's own lock signals so cleanup can
+    /// refuse a checkout that is still addressable from the app.
+    pub attached_session_count: usize,
     pub observed_at: u64,
 }
 
@@ -951,6 +959,23 @@ fn worktree_activity(
     (signals, branch_referenced_elsewhere)
 }
 
+/// Count ignored files without returning their paths. Ignored content is
+/// intentionally kept out of the renderer transcript; the count is enough to
+/// prompt an explicit review while preserving the existing status bounds.
+fn ignored_file_count(root: &Path) -> usize {
+    let Ok(bytes) = git_command(
+        root,
+        &["ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
+    ) else {
+        return 0;
+    };
+    bytes
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+        .take(MAX_FILES)
+        .count()
+}
+
 /// Inspect one managed worktree before a retention or handoff action.
 pub fn inspect_worktree(root: &Path, path: &str) -> Result<GitWorktreeInspection, String> {
     let (canonical, candidate) = resolve_managed_worktree(root, path)?;
@@ -965,8 +990,10 @@ pub fn inspect_worktree(root: &Path, path: &str) -> Result<GitWorktreeInspection
         clean: snapshot.files.is_empty(),
         conflicted: snapshot.files.iter().any(|file| file.conflicted),
         file_count: snapshot.files.len(),
+        ignored_file_count: ignored_file_count(&candidate),
         active_signals,
         branch_referenced_elsewhere,
+        attached_session_count: 0,
         observed_at: now_ms(),
     })
 }
@@ -1429,12 +1456,33 @@ mod tests {
     #[test]
     fn inspect_reports_dirty_worktree_and_cleanup_preserves_it() {
         let root = fixture_repo();
+        fs::write(root.join(".gitignore"), "target/\n").unwrap();
+        let add_ignore = Command::new("git")
+            .args(["-C", root.to_string_lossy().as_ref(), "add", "--", ".gitignore"])
+            .output()
+            .unwrap();
+        assert!(add_ignore.status.success());
+        let commit_ignore = Command::new("git")
+            .args([
+                "-C",
+                root.to_string_lossy().as_ref(),
+                "commit",
+                "--quiet",
+                "-m",
+                "ignore generated files",
+            ])
+            .output()
+            .unwrap();
+        assert!(commit_ignore.status.success());
         let created = create_worktree(&root, "task/inspect", ".muse/worktrees/inspect", "HEAD")
             .unwrap();
+        fs::create_dir_all(Path::new(&created.path).join("target")).unwrap();
+        fs::write(Path::new(&created.path).join("target/generated.bin"), b"generated").unwrap();
         fs::write(Path::new(&created.path).join("main.txt"), "changed\n").unwrap();
         let inspected = inspect_worktree(&root, &created.path).unwrap();
         assert!(!inspected.clean);
         assert_eq!(inspected.file_count, 1);
+        assert_eq!(inspected.ignored_file_count, 1);
         assert!(remove_worktree(&root, &created.path).is_err());
         let restored = Command::new("git")
             .args(["-C", &created.path, "restore", "--", "main.txt"])

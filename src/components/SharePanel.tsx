@@ -9,7 +9,8 @@ interface Props {
   onShare: (format: "markdown" | "json") => void;
   onUnshare: (bundleId: string) => void;
   onCopy: (bundle: ShareBundle) => void;
-  onDownload: (bundle: ShareBundle) => void;
+  onDownload: (bundle: ShareBundle) => void | Promise<void>;
+  exportError?: string | null;
 }
 
 /**
@@ -26,6 +27,7 @@ export function SharePanel({
   onUnshare,
   onCopy,
   onDownload,
+  exportError = null,
 }: Props) {
   return (
     <section className="collab-panel" aria-label="Conversation exports">
@@ -51,6 +53,7 @@ export function SharePanel({
         />
         Local export only
       </p>
+      {exportError && <p className="error" role="alert">{exportError}</p>}
       {mode === "disabled" ? (
         <p className="muted">
           Exports are disabled in this mode.
@@ -83,6 +86,15 @@ export function SharePanel({
             <li key={b.bundleId} className="collab-row">
               <code title={b.bundleId}>{b.bundleId}</code>
               <span className="muted">{b.format}</span>
+              {(b.redacted || b.truncated) && (
+                <span
+                  className="muted share-safeguard"
+                  title="The export was bounded or had credential-shaped values removed."
+                >
+                  {b.redacted ? "sanitized" : "bounded"}
+                  {b.omittedEntries ? ` · ${b.omittedEntries} omitted` : ""}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => onCopy(b)}
@@ -92,10 +104,10 @@ export function SharePanel({
               </button>
               <button
                 type="button"
-                onClick={() => onDownload(b)}
-                title="Download export"
+                onClick={() => void onDownload(b)}
+                title="Save this export"
               >
-                Download
+                Save export
               </button>
               <button
                 type="button"

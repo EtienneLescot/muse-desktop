@@ -26,6 +26,7 @@ export const MSP_METHODS_SENT: MspMethod[] = [
   "initialize",
   "session/start",
   "session/read",
+  "view/page",
   "approval/listPending",
   "session/resume",
   "session/list",
@@ -70,6 +71,8 @@ export const MSP_NOTIFICATIONS_HANDLED: MspNotification[] = [
   "turn/started",
   "turn/completed",
   "turn/retracted",
+  // Additive host alias used by some engines for an acknowledged stop.
+  "turn/stopped" as unknown as MspNotification,
   "turn/retryScheduled",
   "turn/unqueued",
   "userInput/requested",
