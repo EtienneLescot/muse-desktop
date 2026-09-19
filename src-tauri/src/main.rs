@@ -6208,6 +6208,147 @@ mod tests {
         assert!(stderr_tail.lock().unwrap().is_empty());
     }
 
+    async fn recv_notification(
+        rx: &mut mpsc::UnboundedReceiver<(String, Value)>,
+        method: &str,
+    ) -> Value {
+        let timeout = std::time::Duration::from_secs(10);
+        loop {
+            let (name, params) = tokio::time::timeout(timeout, rx.recv())
+                .await
+                .expect("fixture notification timeout")
+                .expect("fixture notification channel closed");
+            if name == method {
+                return params;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn muse_fixture_child_traverses_stdout_pump_through_approval_resume() {
+        use std::io::Read;
+        use std::process::{Command, Stdio};
+
+        // M0-14: traverse a real Muse-protocol fixture child through the
+        // production stdout pump (initialize -> session/start -> turn/start
+        // -> approval/requested -> session/resume -> approval/decide ->
+        // approval/resolved -> turn/completed). Needs node on PATH; skip
+        // honestly where the fixture cannot spawn.
+        let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("scripts")
+            .join("muse-fixture.mjs");
+        let mut process = match Command::new("node")
+            .arg(&fixture)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(process) => process,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!("skipping muse fixture pump test: node not on PATH");
+                return;
+            }
+            Err(error) => panic!("fixture child should spawn: {error}"),
+        };
+        let stdin = process.stdin.take().expect("fixture stdin");
+        let mut stdout = process.stdout.take().expect("fixture stdout");
+        let shared: msp::SharedChild =
+            Arc::new(tokio::sync::Mutex::new(Some(Box::new(FixtureProcessChild {
+                child: Some(process),
+                stdin,
+            }))));
+        let (notify_tx, mut notify_rx) = mpsc::unbounded_channel();
+        let client = Arc::new(MspClient::new(shared.clone(), notify_tx));
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let (events_tx, events_rx) = tauri::async_runtime::channel(16);
+        let pump = tokio::spawn(consume_command_events(events_rx, client.clone(), stderr_tail.clone()));
+
+        let feeder = std::thread::spawn(move || {
+            let mut chunk = [0u8; 7];
+            loop {
+                match stdout.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(size) => {
+                        if events_tx
+                            .blocking_send(CommandEvent::Stdout(chunk[..size].to_vec()))
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = events_tx.blocking_send(CommandEvent::Error(error.to_string()));
+                        break;
+                    }
+                }
+            }
+            let _ = events_tx.blocking_send(CommandEvent::Terminated(TerminatedPayload {
+                code: Some(0),
+                signal: None,
+            }));
+        });
+
+        let init = client
+            .request(
+                "initialize",
+                json!({"protocolVersion": "1", "capabilities": {}, "clientInfo": {"name": "pump-test", "version": "1"}}),
+            )
+            .await
+            .expect("fixture initialize");
+        assert_eq!(init["sessionDurability"], json!("durable"));
+
+        let started = client
+            .request("session/start", json!({"workspaceRoot": "C:\\pump-fixture"}))
+            .await
+            .expect("fixture session start");
+        let session_id = started["session"]["sessionId"].as_str().expect("session id").to_string();
+        assert_eq!(started["session"]["status"], json!("idle"));
+
+        let turn = client
+            .request(
+                "turn/start",
+                json!({"commandId": "pump-cmd-1", "sessionId": session_id, "input": [{"type": "text", "text": "Pump traverse"}]}),
+            )
+            .await
+            .expect("fixture turn start");
+        let turn_id = turn["turnId"].as_str().expect("turn id").to_string();
+
+        let requested = recv_notification(&mut notify_rx, "approval/requested").await;
+        assert_eq!(requested["sessionId"], json!(session_id));
+        assert_eq!(requested["turnId"], json!(turn_id));
+        let approval_id = requested["approvalId"].as_str().expect("approval id").to_string();
+        let requirement_id = requested["currentRequirementId"].as_str().expect("requirement id").to_string();
+
+        let resumed = client
+            .request("session/resume", json!({"sessionId": session_id}))
+            .await
+            .expect("fixture session resume");
+        assert_eq!(resumed["session"]["status"], json!("running"));
+
+        let decided = client
+            .request(
+                "approval/decide",
+                json!({"commandId": "pump-cmd-2", "sessionId": session_id, "approvalId": approval_id, "requirementId": requirement_id, "choiceId": "allow-once"}),
+            )
+            .await
+            .expect("fixture approval decide");
+        assert_eq!(decided["terminal"], json!(true));
+
+        let resolved = recv_notification(&mut notify_rx, "approval/resolved").await;
+        assert_eq!(resolved["approvalId"], json!(approval_id));
+        let completed = recv_notification(&mut notify_rx, "turn/completed").await;
+        assert_eq!(completed["turnId"], json!(turn_id));
+
+        if let Some(child) = shared.lock().await.take() {
+            child.kill().expect("fixture kill");
+        }
+        assert!(matches!(pump.await.expect("pump join"), PumpExit::Terminated(_)));
+        feeder.join().expect("fixture feeder join");
+        assert!(stderr_tail.lock().unwrap().is_empty());
+    }
+
     #[tokio::test]
     async fn command_event_pump_handles_shell_errors_and_closed_channel() {
         let (tx, rx) = tauri::async_runtime::channel(16);
