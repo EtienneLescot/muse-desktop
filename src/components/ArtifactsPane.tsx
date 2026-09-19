@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   buildThreadRecap,
+  MAX_VERSIONS_PER_ARTIFACT,
   type Artifact,
   type ArtifactLogEntry,
   type ArtifactVersion,
@@ -288,6 +289,10 @@ export function ArtifactsPane({
                           disabled={editDraft === ver.text}
                           onClick={() => {
                             onEdit(sessionId, a.id, ver.v, editDraft);
+                            setSelected((cur) => ({
+                              ...cur,
+                              [a.id]: Math.min(MAX_VERSIONS_PER_ARTIFACT, a.versions.length + 1),
+                            }));
                             setEditing((cur) => ({ ...cur, [draftKey]: false }));
                             setExportMessage(`Saved ${a.title} as a new version.`);
                           }}
