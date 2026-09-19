@@ -339,6 +339,33 @@ describe("defensive storage facade", () => {
     assert.match(result.errors.join(" "), /corrupt/);
   });
 
+  it("completes an interrupted legacy migration without loss, duplication or overwrite", () => {
+    const { values } = fakeStorage({
+      "muse.sessions.v1": JSON.stringify([{ session_id: "legacy" }]),
+      "muse.workspace.v1": JSON.stringify("C:/legacy"),
+      "muse.settings.v1": JSON.stringify({ theme: "dark" }),
+      "muse.log.bad": "{broken",
+      "muse-desktop.workspace.v1": JSON.stringify("C:/current"),
+    });
+    // Simulate a crash halfway through a first pass: one key already copied.
+    values.set("muse-desktop.sessions.v1", JSON.stringify([{ session_id: "legacy" }]));
+
+    const first = migrateLegacyStorage();
+    assert.equal(first.migrated, 1);
+    assert.equal(first.skipped, 3);
+    assert.match(first.errors.join(" "), /corrupt/);
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.sessions.v1") ?? "{}"), [{ session_id: "legacy" }]);
+    assert.equal(values.get("muse-desktop.workspace.v1"), JSON.stringify("C:/current"));
+    assert.equal(values.get("muse-desktop.settings.v1"), JSON.stringify({ theme: "dark" }));
+    assert.equal(values.get("muse.sessions.v1"), JSON.stringify([{ session_id: "legacy" }]));
+
+    const second = migrateLegacyStorage();
+    assert.equal(second.migrated, 0);
+    assert.equal(second.skipped, 4);
+    assert.deepEqual(JSON.parse(values.get("muse-desktop.sessions.v1") ?? "{}"), [{ session_id: "legacy" }]);
+    assert.equal(values.get("muse-desktop.workspace.v1"), JSON.stringify("C:/current"));
+  });
+
   it("reports scalar read and write failures", () => {
     delete (globalThis as Record<string, unknown>).localStorage;
     assert.equal(readStorageString("muse-desktop.theme.v1", "light"), "light");
