@@ -273,6 +273,11 @@ small {
 .session-item {
   border-radius: 10px;
   padding: 8px 10px;
+  /* Keep large conversation lists cheap without removing rows from the
+   * accessibility tree or changing keyboard order. */
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: 0 42px;
 }
 
 .session-item.active {

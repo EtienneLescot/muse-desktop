@@ -345,7 +345,7 @@ Le contrat de démarrage est également couvert sans webview : une erreur `appro
 
 **Code :** sidebar, recherche App, `threads.ts`, stockage. Dépend M0-09/12.
 
-**Travail :** index de recherche locale sur historique, pagination et extraits ; épinglage et ordre explicites ; non-lus distincts de running. Migration du tri existant sans perdre dates/titres. La restauration native parcourt aussi `session/list` par curseur opaque (200 éléments par page, 20 pages bornées) avant le filtrage d'appartenance. La première tranche fournit recherche, épinglage, ordre et non-lus ; la virtualisation concerne le transcript M1-13, tandis que la sidebar reste conditionnée à une mesure.
+**Travail :** index de recherche locale sur historique, pagination et extraits ; épinglage et ordre explicites ; non-lus distincts de running. Migration du tri existant sans perdre dates/titres. La restauration native parcourt aussi `session/list` par curseur opaque (200 éléments par page, 20 pages bornées) avant le filtrage d'appartenance. La première tranche fournit recherche, épinglage, ordre et non-lus ; la sidebar applique maintenant `content-visibility: auto` et une taille intrinsèque par ligne pour réduire le coût de peinture tout en gardant le DOM et l'ordre clavier ; une virtualisation complète reste conditionnée à une mesure.
 
 **Acceptation :** recherche accentuée/multilingue, archive, suppression, gros historique, clavier et restart ; aucune session supprimée réindexée.
 
