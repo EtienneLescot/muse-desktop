@@ -36,6 +36,7 @@ import {
   shouldAutoShare,
   MAX_SHARE_ENTRIES,
   MAX_SHARE_ENTRY_CHARS,
+  MAX_SHARE_BUNDLES,
   type ShareState,
 } from "../src/lib/sharing.ts";
 import {
@@ -160,6 +161,20 @@ describe("share bundles (US-27)", () => {
     };
     assert.equal(parsed.safeguards.truncated, true);
     assert.match(parsed.entries.at(-1)?.text ?? "", /entry truncated/);
+  });
+
+  it("retains only the newest local bundles, including revocation history", () => {
+    let state = emptyShareState();
+    for (let i = 0; i < MAX_SHARE_BUNDLES + 5; i += 1) {
+      const created = shareThread(state, "s1", `T${i}`, LOG, "markdown", {
+        now: i,
+        rand: () => i / (MAX_SHARE_BUNDLES + 6),
+      });
+      assert.ok(created !== null);
+      state = created.state;
+    }
+    assert.equal(Object.keys(state.bundles).length, MAX_SHARE_BUNDLES);
+    assert.equal(Math.min(...Object.values(state.bundles).map((bundle) => bundle.createdAt)), 5);
   });
 });
 

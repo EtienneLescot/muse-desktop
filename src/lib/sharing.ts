@@ -115,6 +115,8 @@ function writeKey(key: string, value: unknown): void {
 }
 
 export const SHARING_KEY = "muse-desktop.sharing.v1";
+/** Maximum local snapshots retained, including revoked history. */
+export const MAX_SHARE_BUNDLES = 100;
 
 export function loadShareState(): ShareState {
   const raw = readKey(SHARING_KEY);
@@ -127,7 +129,12 @@ export function loadShareState(): ShareState {
       if (isValidBundle(v)) bundles[k] = v;
     }
   }
-  return { mode, bundles };
+  const bounded = Object.fromEntries(
+    Object.entries(bundles)
+      .sort(([, a], [, b]) => b.createdAt - a.createdAt)
+      .slice(0, MAX_SHARE_BUNDLES),
+  );
+  return { mode, bundles: bounded };
 }
 
 export function saveShareState(state: ShareState): void {
@@ -320,8 +327,13 @@ export function shareThread(
   if (prepared.redacted || safeTitle.redacted) bundle.redacted = true;
   if (prepared.truncated) bundle.truncated = true;
   if (prepared.omittedEntries > 0) bundle.omittedEntries = prepared.omittedEntries;
+  const bundles = Object.fromEntries(
+    Object.entries({ ...state.bundles, [bundle.bundleId]: bundle })
+      .sort(([, a], [, b]) => b.createdAt - a.createdAt)
+      .slice(0, MAX_SHARE_BUNDLES),
+  );
   return {
-    state: { ...state, bundles: { ...state.bundles, [bundle.bundleId]: bundle } },
+    state: { ...state, bundles },
     bundle,
   };
 }
