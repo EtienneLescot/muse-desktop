@@ -49,10 +49,17 @@ describe("scheduled run result summaries", () => {
         role: "assistant",
         text: "This sentence mentions an error but is not an issue label.",
       },
+      {
+        id: "failure",
+        role: "system",
+        text: "Muse could not complete this turn.",
+        engineError: { kind: "provider", message: "rate limit reached" },
+      },
     ]);
     assert.deepEqual(summary.issues, [
       "the migration is blocked by a missing table.",
       "retry after the service starts.",
+      "provider: rate limit reached",
     ]);
     assert.deepEqual(summary.nextSteps, ["apply the migration."]);
   });

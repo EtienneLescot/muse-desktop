@@ -58,6 +58,18 @@ function extractNextSteps(log: ArtifactLogEntry[]): string[] {
 function extractIssues(log: ArtifactLogEntry[]): string[] {
   const issues: string[] = [];
   for (const entry of log) {
+    const engineError = entry.engineError;
+    if (engineError !== undefined && typeof engineError === "object") {
+      const message = typeof engineError.message === "string" ? engineError.message.trim() : "";
+      if (message.length > 0) {
+        const kind = typeof engineError.kind === "string" && engineError.kind.trim().length > 0
+          ? `${engineError.kind.trim()}: `
+          : "";
+        const issue = clipIssue(`${kind}${message}`);
+        if (!issues.includes(issue)) issues.push(issue);
+        if (issues.length >= MAX_ISSUES) return issues;
+      }
+    }
     if (entry.role !== "assistant" && entry.role !== "subagent") continue;
     for (const line of entry.text.split(/\r?\n/)) {
       const trimmed = line.trim();

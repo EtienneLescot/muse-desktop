@@ -26,6 +26,8 @@ export interface ArtifactLogEntry {
   id: string;
   role: string;
   text: string;
+  /** Optional structured terminal failure already redacted by the host parser. */
+  engineError?: { kind?: string; message?: string };
 }
 
 export type ArtifactKind = "code" | "doc";
