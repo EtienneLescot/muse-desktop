@@ -1694,6 +1694,149 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    fn temp_dir(prefix: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "{}-{}-{}",
+            prefix,
+            std::process::id(),
+            NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn run_git(dir: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?}: {}",
+            args,
+            decode(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn commit_refuses_an_empty_index() {
+        let root = fixture_repo();
+        let snapshot = status(&root).unwrap();
+        assert!(snapshot.files.is_empty());
+        let error = commit(&root, "Nothing staged", snapshot.head, None, None).unwrap_err();
+        assert_eq!(error, "nothing staged to commit");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn commit_surfaces_a_failing_pre_commit_hook() {
+        let root = fixture_repo();
+        fs::write(root.join("main.txt"), "one\ntwo\n").unwrap();
+        let before = status(&root).unwrap();
+        let unstaged = diff(&root, "unstaged", None).unwrap();
+        let path = vec!["main.txt".to_string()];
+        let staged = stage(
+            &root,
+            &path,
+            before.head,
+            Some(before.fingerprint),
+            Some(unstaged.patch),
+        )
+        .unwrap();
+        let staged_diff = diff(&root, "staged", None).unwrap();
+        let hook = root.join(".git").join("hooks").join("pre-commit");
+        fs::write(&hook, "#!/bin/sh\necho forge hook says no >&2\nexit 1\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = fs::metadata(&hook).unwrap().permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&hook, permissions).unwrap();
+        }
+        let error = commit(
+            &root,
+            "Hooked change",
+            staged.head.clone(),
+            Some(staged.fingerprint),
+            Some(staged_diff.patch),
+        )
+        .unwrap_err();
+        assert!(
+            error.contains("forge hook says no"),
+            "unexpected hook error: {error}"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn push_to_a_branch_without_upstream_succeeds_with_an_explicit_refspec() {
+        let root = fixture_repo();
+        let bare = temp_dir("muse-git-bare");
+        run_git(&bare, &["init", "--bare", "--quiet"]);
+        let bare_arg = bare.to_string_lossy().into_owned();
+        run_git(&root, &["remote", "add", "origin", &bare_arg]);
+        let head = status(&root).unwrap().head;
+        let result = push(&root, "origin", "forge-smoke", head).unwrap();
+        assert_eq!(result.branch, "forge-smoke");
+        // No upstream was ever configured; the explicit refspec is enough and
+        // the branch still lands on the remote.
+        let upstream = Command::new("git")
+            .args(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(!upstream.status.success());
+        let advertised = Command::new("git")
+            .args(["ls-remote", "origin", "refs/heads/forge-smoke"])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(advertised.status.success());
+        assert!(!decode(&advertised.stdout).trim().is_empty());
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(bare);
+    }
+
+    #[test]
+    fn push_reports_a_rejected_non_fast_forward() {
+        let repo_a = fixture_repo();
+        let bare = temp_dir("muse-git-bare");
+        run_git(&bare, &["init", "--bare", "--quiet"]);
+        let bare_arg = bare.to_string_lossy().into_owned();
+        run_git(&repo_a, &["remote", "add", "origin", &bare_arg]);
+        let head_a = status(&repo_a).unwrap().head;
+        push(&repo_a, "origin", "forge-smoke", head_a).unwrap();
+        run_git(&bare, &["symbolic-ref", "HEAD", "refs/heads/forge-smoke"]);
+        // A second clone moves the remote branch forward, so repo_a is now
+        // behind and its next push must be rejected, not silently applied.
+        let parent = temp_dir("muse-git-clone-parent");
+        run_git(&parent, &["clone", "--quiet", &bare_arg, "clone"]);
+        let repo_c = parent.join("clone");
+        run_git(&repo_c, &["config", "user.email", "test@example.com"]);
+        run_git(&repo_c, &["config", "user.name", "Muse test"]);
+        fs::write(repo_c.join("other.txt"), "two\n").unwrap();
+        run_git(&repo_c, &["add", "--", "other.txt"]);
+        run_git(&repo_c, &["commit", "--quiet", "-m", "second"]);
+        run_git(
+            &repo_c,
+            &["push", "--quiet", "origin", "HEAD:refs/heads/forge-smoke"],
+        );
+        fs::write(repo_a.join("diverged.txt"), "three\n").unwrap();
+        run_git(&repo_a, &["add", "--", "diverged.txt"]);
+        run_git(&repo_a, &["commit", "--quiet", "-m", "diverged"]);
+        let diverged_head = status(&repo_a).unwrap().head;
+        let error = push(&repo_a, "origin", "forge-smoke", diverged_head).unwrap_err();
+        assert!(
+            error.contains("failed to push some refs"),
+            "unexpected rejection: {error}"
+        );
+        let _ = fs::remove_dir_all(repo_a);
+        let _ = fs::remove_dir_all(parent);
+        let _ = fs::remove_dir_all(bare);
+    }
+
     #[test]
     fn fetch_requires_an_existing_explicit_remote() {
         let root = fixture_repo();
