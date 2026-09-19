@@ -5673,6 +5673,53 @@ body.dark .composer textarea::placeholder {
   border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
 }
 
+.artifact-edit {
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+}
+
+.artifact-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.artifact-edit-input {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  box-sizing: border-box;
+  border: 1px solid var(--blue);
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  color: var(--text);
+  padding: var(--space-2);
+  font-family: var(--font-code);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.artifact-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.artifact-save-edit {
+  border-color: var(--blue);
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.artifact-save-edit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.artifact-cancel-edit {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
 .artifact-document-preview {
   max-height: 320px;
   overflow: auto;

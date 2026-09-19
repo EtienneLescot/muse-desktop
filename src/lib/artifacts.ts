@@ -77,6 +77,9 @@ export interface ThreadRecap {
 /** Max versions kept per artifact (oldest pruned, survivors renumbered). */
 export const MAX_VERSIONS_PER_ARTIFACT = 20;
 
+/** Keep local edits bounded just like model-produced artifact versions. */
+export const MAX_ARTIFACT_VERSION_CHARS = 120_000;
+
 /** Max artifacts kept per thread (oldest pruned past the cap). */
 export const MAX_ARTIFACTS_PER_THREAD = 50;
 
@@ -270,6 +273,41 @@ export function setVersionComment(
         ver.v === v ? { ...ver, comment } : ver,
       ),
     };
+  });
+}
+
+/**
+ * Save an edited artifact as a new version while preserving the version that
+ * was originally produced by Muse. Local edits are deliberately marked with a
+ * synthetic source id so the assistant block merger never treats them as host
+ * output or silently overwrites them on the next stream update.
+ */
+export function editArtifactVersion(
+  artifacts: Artifact[],
+  artifactId: string,
+  v: number,
+  text: string,
+  now: number = Date.now(),
+): Artifact[] {
+  const bounded = text.slice(0, MAX_ARTIFACT_VERSION_CHARS);
+  return artifacts.map((artifact) => {
+    if (artifact.id !== artifactId) return artifact;
+    const source = artifact.versions.find((version) => version.v === v);
+    if (source === undefined || source.text === bounded) return artifact;
+    const nextNumber = artifact.versions.length + 1;
+    const nextVersion: ArtifactVersion = {
+      v: nextNumber,
+      text: bounded,
+      lang: source.lang,
+      createdAt: now,
+      sourceEntryId: `local-edit:${now.toString(36)}:${artifact.id.slice(0, 12)}:${nextNumber}`,
+      comment: "",
+    };
+    const versions = [...artifact.versions, nextVersion].slice(-MAX_VERSIONS_PER_ARTIFACT);
+    versions.forEach((version, index) => {
+      version.v = index + 1;
+    });
+    return { ...artifact, versions, updatedAt: now };
   });
 }
 

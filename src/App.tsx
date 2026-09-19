@@ -254,6 +254,7 @@ export default function App() {
     artifacts,
     restoreArtifact,
     commentArtifact,
+    editArtifact,
     index,
     gitReview,
     gitTurnSnapshot,
@@ -1498,6 +1499,7 @@ export default function App() {
                             artifacts={artifacts[active.session_id] ?? []}
                             onRestore={restoreArtifact}
                             onComment={commentArtifact}
+                            onEdit={editArtifact}
                             onExport={exportArtifact}
                           />
                         </>

@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import {
   buildThreadRecap,
   dropArtifacts,
+  editArtifactVersion,
   extractBlocks,
   findVersionText,
   loadArtifacts,
@@ -163,6 +164,28 @@ describe("version lookup + anchored comments", () => {
     );
     // unknown ids are a no-op
     assert.deepEqual(setVersionComment(arts, "nope", 1, "x"), arts);
+  });
+
+  it("saves an edit as a new version and keeps the original source", () => {
+    const arts = twoVersions();
+    const id = arts[0]?.id ?? "";
+    const edited = editArtifactVersion(arts, id, 2, "const x = 3;", 100);
+    assert.deepEqual(edited[0]?.versions.map((version) => version.v), [1, 2, 3]);
+    assert.equal(edited[0]?.versions[1]?.text, "const x = 2;");
+    assert.equal(edited[0]?.versions[2]?.text, "const x = 3;");
+    assert.equal(edited[0]?.versions[2]?.createdAt, 100);
+    assert.match(edited[0]?.versions[2]?.sourceEntryId ?? "", /^local-edit:/);
+    assert.equal(arts[0]?.versions[1]?.text, "const x = 2;");
+  });
+
+  it("bounds local edits and ignores unknown or identical versions", () => {
+    const arts = twoVersions();
+    const id = arts[0]?.id ?? "";
+    const same = editArtifactVersion(arts, id, 2, "const x = 2;", 100);
+    assert.deepEqual(same, arts);
+    assert.deepEqual(editArtifactVersion(arts, "nope", 1, "x", 100), arts);
+    const huge = editArtifactVersion(arts, id, 2, "x".repeat(130_000), 100);
+    assert.equal(huge[0]?.versions[2]?.text.length, 120_000);
   });
 });
 

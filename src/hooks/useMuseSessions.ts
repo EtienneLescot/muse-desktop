@@ -344,6 +344,7 @@ import { createLatestWriteQueue } from "../lib/writeQueue";
 // unit-tested); restore reuses the US-4 composer prefill below.
 import {
   dropArtifacts,
+  editArtifactVersion,
   findVersionText,
   loadArtifacts,
   mergeAssistantBlocks,
@@ -1001,6 +1002,8 @@ interface UseMuseSessions {
   restoreArtifact: (sessionId: string, artifactId: string, v: number) => void;
   /** US-21: anchored per-version comment (persisted). */
   commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string) => void;
+  /** Save a local artifact edit as the next version, preserving history. */
+  editArtifact: (sessionId: string, artifactId: string, v: number, text: string) => void;
   /** US-23 opt-in local index (panel state + folder-pick indexing). */
   index: IndexApi;
   /** M1-01/M1-03: Git status/diff snapshots and guarded Review mutations. */
@@ -5678,6 +5681,20 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
+  /** US-21: local artifact edits become a new persisted version. */
+  const editArtifact = useCallback(
+    (sessionId: string, artifactId: string, v: number, text: string) => {
+      setArtifacts((cur) => {
+        const list = cur[sessionId] ?? [];
+        const next = editArtifactVersion(list, artifactId, v, text);
+        if (next === list || JSON.stringify(next) === JSON.stringify(list)) return cur;
+        saveArtifacts(sessionId, next);
+        return { ...cur, [sessionId]: next };
+      });
+    },
+    [],
+  );
+
   // US-23 local index: opt-in (default off, persisted), paused flag, and
   // the stored line index. Picked File handles stay in memory only — the
   // on-demand Rescan re-reads them (mtime-based, no watcher).
@@ -8080,6 +8097,7 @@ export function useMuseSessions(): UseMuseSessions {
     artifacts,
     restoreArtifact,
     commentArtifact,
+    editArtifact,
     index,
     gitReview,
     gitTurnSnapshot,
