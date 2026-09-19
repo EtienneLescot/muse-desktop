@@ -1,10 +1,12 @@
 /**
- * Bounded previews for common Office Open XML and OpenDocument containers.
+ * Bounded previews for common Office Open XML and OpenDocument containers,
+ * plus plain-text extraction for RTF documents.
  *
  * This is a read-only inspection helper. It never evaluates macros, formulas,
  * relationships or embedded media. XML is treated as text and only a small
  * allowlist of document parts is extracted from an archive capped by the
- * caller's file-read boundary.
+ * caller's file-read boundary. RTF control words are stripped without
+ * interpreting embedded objects.
  */
 import { strFromU8, unzipSync } from "fflate";
 
@@ -18,7 +20,7 @@ export const MAX_OFFICE_ENTRY_BYTES = MAX_OFFICE_XML_CHARS * 4;
 export const MAX_OFFICE_ARCHIVE_BYTES = MAX_OFFICE_ENTRY_BYTES * 2;
 export const MAX_OFFICE_ARCHIVE_ENTRIES = 500;
 
-export type OfficeFormat = "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp";
+export type OfficeFormat = "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp" | "rtf";
 
 export interface OfficePreview {
   kind: "table";
@@ -31,7 +33,7 @@ export interface OfficePreview {
 function extension(path: string): OfficeFormat | null {
   const name = path.split(/[\\/]/).pop() ?? path;
   const value = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
-  return value === "docx" || value === "xlsx" || value === "pptx" || value === "odt" || value === "ods" || value === "odp"
+  return value === "docx" || value === "xlsx" || value === "pptx" || value === "odt" || value === "ods" || value === "odp" || value === "rtf"
     ? value
     : null;
 }
@@ -260,6 +262,98 @@ function parseOdp(archive: Record<string, Uint8Array>): OfficePreview | null {
   return boundedRows(rows, "odp", ["Slide", "Text"], rows.length >= MAX_OFFICE_PREVIEW_ROWS);
 }
 
+/** Destination groups that never carry preview text (fonts, colors, metadata). */
+const RTF_SKIP_DESTINATIONS = new Set([
+  "fonttbl",
+  "colortbl",
+  "stylesheet",
+  "info",
+  "listtable",
+  "listoverridetable",
+]);
+
+/** Bounded plain-text extraction for RTF. Returns null without the magic header. */
+function parseRtf(bytes: Uint8Array): OfficePreview | null {
+  const limit = Math.min(bytes.length, MAX_OFFICE_XML_CHARS);
+  let source = "";
+  for (let index = 0; index < limit; index += 1) source += String.fromCharCode(bytes[index] ?? 0);
+  if (!source.startsWith("{\\rtf")) return null;
+  let text = "";
+  let depth = 0;
+  let skipDepth = -1;
+  let index = 0;
+  const push = (value: string): void => {
+    if (skipDepth === -1 && text.length < MAX_OFFICE_XML_CHARS) text += value;
+  };
+  while (index < source.length) {
+    const char = source[index] ?? "";
+    if (char === "{") {
+      depth += 1;
+      const destination = /^\\(\*|[a-z]+)/i.exec(source.slice(index + 1, index + 14))?.[1]?.toLowerCase();
+      if (skipDepth === -1 && destination !== undefined && (destination === "*" || RTF_SKIP_DESTINATIONS.has(destination))) {
+        skipDepth = depth;
+      }
+      index += 1;
+      continue;
+    }
+    if (char === "}") {
+      if (skipDepth !== -1 && depth === skipDepth) skipDepth = -1;
+      depth = Math.max(0, depth - 1);
+      index += 1;
+      continue;
+    }
+    if (char === "\\") {
+      const next = source[index + 1] ?? "";
+      if (next === "\\" || next === "{" || next === "}") {
+        push(next);
+        index += 2;
+        continue;
+      }
+      if (skipDepth !== -1) {
+        index += 1;
+        continue;
+      }
+      const unicode = /^\\u(-?\d+)/i.exec(source.slice(index, index + 10));
+      if (unicode) {
+        const point = Number.parseInt(unicode[1] ?? "", 10);
+        push(String.fromCodePoint(((point % 65536) + 65536) % 65536));
+        index += unicode[0].length;
+        const fallback = source[index] ?? "";
+        if (fallback !== "" && !"\\{}\r\n".includes(fallback)) index += 1;
+        continue;
+      }
+      const word = /^\\([a-z]+)(-?\d+)? ?/i.exec(source.slice(index, index + 32));
+      if (word) {
+        const name = (word[1] ?? "").toLowerCase();
+        if (name === "par" || name === "line") push("\n");
+        else if (name === "tab") push(" ");
+        index += word[0].length;
+        continue;
+      }
+      const symbol = /^\\([^a-zA-Z0-9])/i.exec(source.slice(index, index + 3));
+      if (symbol) {
+        const mark = symbol[1] ?? "";
+        if (mark === "~") push(" ");
+        else if (mark === "'") {
+          const hex = source.slice(index + 2, index + 4);
+          const point = Number.parseInt(hex, 16);
+          push(Number.isFinite(point) ? String.fromCharCode(point) : "");
+          index += 4;
+          continue;
+        } else if (mark === "\n" || mark === "\r") push(" ");
+        index += symbol[0].length;
+        continue;
+      }
+      index += 1;
+      continue;
+    }
+    if (skipDepth === -1) push(char === "\r" || char === "\n" ? " " : char);
+    index += 1;
+  }
+  const paragraphs = text.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
+  return boundedRows(paragraphs.map((line) => [line]), "rtf", ["Paragraph"]);
+}
+
 function isPreviewPart(format: OfficeFormat, name: string): boolean {
   if (format === "docx") return name === "word/document.xml";
   if (format === "xlsx") {
@@ -275,6 +369,7 @@ export function officePreviewForFile(path: string, base64Data: string): OfficePr
   if (!format) return null;
   const bytes = decodeBase64(base64Data);
   if (!bytes || bytes.length === 0 || bytes.length > MAX_OFFICE_PREVIEW_BYTES) return null;
+  if (format === "rtf") return parseRtf(bytes);
   let archive: Record<string, Uint8Array>;
   let entryCount = 0;
   let extractedBytes = 0;

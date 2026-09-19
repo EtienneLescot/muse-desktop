@@ -52,6 +52,7 @@ function mediaLabel(mediaType: string): string {
   if (mediaType.includes("opendocument.text")) return "ODT preview";
   if (mediaType.includes("opendocument.spreadsheet")) return "ODS preview";
   if (mediaType.includes("opendocument.presentation")) return "ODP preview";
+  if (mediaType.includes("rtf")) return "RTF preview";
   return "Image preview";
 }
 
@@ -131,6 +132,7 @@ export function FilesPanel({ sessionId, state, onList, onRead, onWatch, onUnwatc
   const isOfficeContainer = preview?.mediaType
     ? preview.mediaType.startsWith("application/vnd.openxmlformats")
       || preview.mediaType.startsWith("application/vnd.oasis.opendocument")
+      || preview.mediaType.includes("rtf")
     : false;
 
   return (
