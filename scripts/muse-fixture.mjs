@@ -34,8 +34,12 @@ function stringValue(value, fallback = "") {
   return typeof value === "string" && value.trim() ? value : fallback;
 }
 
+const instancePrefix = process.env.MUSE_FIXTURE_PREFIX
+  ? `${process.env.MUSE_FIXTURE_PREFIX}-`
+  : "";
+
 function id(prefix, counter) {
-  return `${prefix}-${counter}`;
+  return `${instancePrefix}${prefix}-${counter}`;
 }
 
 function timestamp() {

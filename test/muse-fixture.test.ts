@@ -22,10 +22,11 @@ class FixtureClient {
   private queue: Frame[] = [];
   private waiters: Array<(frame: Frame) => void> = [];
 
-  constructor() {
+  constructor(prefix?: string) {
     this.child = spawn(process.execPath, [fixture], {
       cwd: root,
       stdio: ["pipe", "pipe", "pipe"],
+      env: prefix ? { ...process.env, MUSE_FIXTURE_PREFIX: prefix } : process.env,
     });
     this.child.stdout.setEncoding("utf8");
     this.child.stdout.on("data", (chunk: string) => {
@@ -69,7 +70,7 @@ class FixtureClient {
   }
 }
 
-async function bootstrap(client: FixtureClient): Promise<string> {
+async function bootstrap(client: FixtureClient, workspaceRoot = "C:\\fixture-workspace"): Promise<string> {
   const init = await client.request(1, "initialize", {
     protocolVersion: "1",
     capabilities: {},
@@ -78,7 +79,7 @@ async function bootstrap(client: FixtureClient): Promise<string> {
   assert.equal((init.result as Frame).serverInfo && ((init.result as Frame).serverInfo as Frame).name, "muse");
   assert.equal((init.result as Frame).sessionDurability, "durable");
   client.write({ jsonrpc: "2.0", method: "initialized" });
-  const started = await client.request(2, "session/start", { workspaceRoot: "C:\\fixture-workspace" });
+  const started = await client.request(2, "session/start", { workspaceRoot });
   const session = (started.result as Frame).session as Frame;
   assert.equal(session.status, "idle");
   return String(session.sessionId);
@@ -189,5 +190,75 @@ test("Muse fixture keeps a durable transcript across read and resume", async () 
     assert.equal(((listed.result as Frame).sessions as Frame[]).length, 1);
   } finally {
     await client.close();
+  }
+});
+
+test("Muse fixture isolates concurrent A/B sessions: B terminates abruptly while A completes approval and turn", async () => {
+  const clientA = new FixtureClient("host-a");
+  const clientB = new FixtureClient("host-b");
+  try {
+    const sessionA = await bootstrap(clientA, "C:\\fixture-workspace-a");
+    const sessionB = await bootstrap(clientB, "C:\\fixture-workspace-b");
+    assert.notEqual(sessionA, sessionB);
+
+    const turnA = await clientA.request(3, "turn/start", {
+      commandId: "cmd-a-1",
+      sessionId: sessionA,
+      input: [{ type: "text", text: "Task in workspace A" }],
+    });
+    const turnB = await clientB.request(3, "turn/start", {
+      commandId: "cmd-b-1",
+      sessionId: sessionB,
+      input: [{ type: "text", text: "Task in workspace B" }],
+    });
+
+    const turnIdA = String((turnA.result as Frame).turnId);
+    const turnIdB = String((turnB.result as Frame).turnId);
+    assert.notEqual(turnIdA, turnIdB);
+
+    const reqA = await nextNotification(clientA, "approval/requested");
+    const reqB = await nextNotification(clientB, "approval/requested");
+    const paramsA = reqA.params as Frame;
+    const paramsB = reqB.params as Frame;
+    assert.equal(paramsA.sessionId, sessionA);
+    assert.equal(paramsB.sessionId, sessionB);
+    assert.notEqual(paramsA.approvalId, paramsB.approvalId);
+
+    // Host B dies abruptly while waiting for approval
+    await clientB.close();
+
+    // Host A continues: resolves approval and completes turn
+    const decidedA = await clientA.request(4, "approval/decide", {
+      commandId: "cmd-a-decide",
+      sessionId: sessionA,
+      approvalId: paramsA.approvalId,
+      requirementId: paramsA.currentRequirementId,
+      choiceId: "allow-once",
+    });
+    assert.deepEqual(decidedA.result, { terminal: true });
+
+    const resolvedA = await nextNotification(clientA, "approval/resolved");
+    assert.equal((resolvedA.params as Frame).approvalId, paramsA.approvalId);
+
+    let completedA: Frame | undefined;
+    for (;;) {
+      const frame = await clientA.read();
+      if (frame.method === "turn/completed") {
+        completedA = frame;
+        break;
+      }
+    }
+    assert.ok(completedA);
+    assert.equal((completedA.params as Frame).turnId, turnIdA);
+
+    const readA = await clientA.request(5, "session/read", { sessionId: sessionA, excludeItems: false });
+    const snapshotA = (readA.result as Frame).session as Frame;
+    assert.equal(snapshotA.workspaceRoot, "C:\\fixture-workspace-a");
+    assert.equal(snapshotA.sessionId, sessionA);
+    const historyA = ((readA.result as Frame).history as Frame).items as Frame[];
+    assert.ok(historyA.length >= 3);
+  } finally {
+    await clientA.close().catch(() => {});
+    await clientB.close().catch(() => {});
   }
 });
