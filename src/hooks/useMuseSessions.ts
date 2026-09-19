@@ -1001,7 +1001,7 @@ interface UseMuseSessions {
   /** US-21: 1-click restore — copy the version text via US-4 prefill. */
   restoreArtifact: (sessionId: string, artifactId: string, v: number) => void;
   /** US-21: anchored per-version comment (persisted). */
-  commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string) => void;
+  commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string, anchorQuote?: string) => void;
   /** Save a local artifact edit as the next version, preserving history. */
   editArtifact: (sessionId: string, artifactId: string, v: number, text: string) => void;
   /** US-23 opt-in local index (panel state + folder-pick indexing). */
@@ -5669,10 +5669,10 @@ export function useMuseSessions(): UseMuseSessions {
 
   /** US-21: anchored per-version comment (state + disk). */
   const commentArtifact = useCallback(
-    (sessionId: string, artifactId: string, v: number, comment: string) => {
+    (sessionId: string, artifactId: string, v: number, comment: string, anchorQuote?: string) => {
       setArtifacts((cur) => {
         const list = cur[sessionId] ?? [];
-        const next = setVersionComment(list, artifactId, v, comment);
+        const next = setVersionComment(list, artifactId, v, comment, anchorQuote);
         if (JSON.stringify(next) === JSON.stringify(list)) return cur;
         saveArtifacts(sessionId, next);
         return { ...cur, [sessionId]: next };

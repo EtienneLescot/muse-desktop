@@ -20,6 +20,7 @@ interface Props {
     artifactId: string,
     v: number,
     comment: string,
+    anchorQuote?: string,
   ) => void;
   /** Save an edited version as the next entry in the artifact history. */
   onEdit: (
@@ -55,6 +56,7 @@ export function ArtifactsPane({
   const [tab, setTab] = useState<Tab>("summary");
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [selectedQuotes, setSelectedQuotes] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [editDrafts, setEditDrafts] = useState<Record<string, string>>({});
   const [exporting, setExporting] = useState<string | null>(null);
@@ -165,6 +167,7 @@ export function ArtifactsPane({
               if (ver === undefined) return null;
               const draftKey = `${a.id}:${ver.v}`;
               const draft = drafts[draftKey] ?? ver.comment;
+              const selectedQuote = selectedQuotes[draftKey] ?? ver.commentAnchor?.quote ?? "";
               const isEditing = editing[draftKey] === true;
               const editDraft = editDrafts[draftKey] ?? ver.text;
               return (
@@ -309,14 +312,36 @@ export function ArtifactsPane({
                       </div>
                     </div>
                   ) : a.kind === "doc" && previewing[draftKey] === true ? (
-                    <div className="artifact-document-preview" aria-label={`Preview of ${a.title}`}>
+                    <div
+                      className="artifact-document-preview"
+                      aria-label={`Preview of ${a.title}`}
+                      onMouseUp={(event) => {
+                        const text = window.getSelection()?.toString().trim() ?? "";
+                        if (text.length > 0 && event.currentTarget.contains(window.getSelection()?.anchorNode ?? null)) {
+                          setSelectedQuotes((cur) => ({ ...cur, [draftKey]: text.slice(0, 240) }));
+                        }
+                      }}
+                    >
                       <MessageContent text={ver.text} />
                     </div>
                   ) : (
-                    <pre className="artifact-code">{ver.text}</pre>
+                    <pre
+                      className="artifact-code"
+                      onMouseUp={(event) => {
+                        const text = window.getSelection()?.toString().trim() ?? "";
+                        if (text.length > 0 && event.currentTarget.contains(window.getSelection()?.anchorNode ?? null)) {
+                          setSelectedQuotes((cur) => ({ ...cur, [draftKey]: text.slice(0, 240) }));
+                        }
+                      }}
+                    >{ver.text}</pre>
                   )}
                   <label className="artifact-comment-label">
                     Note v{ver.v}
+                    {selectedQuote.length > 0 && (
+                      <span className="artifact-comment-anchor" title={selectedQuote}>
+                        Anchored to “{selectedQuote}”
+                      </span>
+                    )}
                     <input
                       type="text"
                       className="artifact-comment"
@@ -329,8 +354,8 @@ export function ArtifactsPane({
                         }))
                       }
                       onBlur={() => {
-                        if (draft !== ver.comment)
-                          onComment(sessionId, a.id, ver.v, draft);
+                        if (draft !== ver.comment || selectedQuote !== (ver.commentAnchor?.quote ?? ""))
+                          onComment(sessionId, a.id, ver.v, draft, selectedQuote);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {

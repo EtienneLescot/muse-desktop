@@ -5450,6 +5450,16 @@ body.dark .composer textarea::placeholder {
   font-size: 0.82rem;
 }
 
+.artifact-comment-anchor {
+  display: block;
+  color: var(--blue);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 1100px) {
   .artifacts-pane {
     width: 240px;

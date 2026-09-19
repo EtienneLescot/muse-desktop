@@ -148,7 +148,7 @@ describe("version lookup + anchored comments", () => {
   it("anchors one comment per version without touching the rest", () => {
     const arts = twoVersions();
     const id = arts[0]?.id ?? "";
-    const noted = setVersionComment(arts, id, 2, "revoir le typage");
+    const noted = setVersionComment(arts, id, 2, "revoir le typage", "const x = 2;");
     assert.equal(
       noted[0]?.versions.find((v) => v.v === 2)?.comment,
       "revoir le typage",
@@ -157,6 +157,10 @@ describe("version lookup + anchored comments", () => {
       noted[0]?.versions.find((v) => v.v === 1)?.comment,
       "",
     );
+    assert.deepEqual(
+      noted[0]?.versions.find((v) => v.v === 2)?.commentAnchor,
+      { quote: "const x = 2;" },
+    );
     // input untouched (pure)
     assert.equal(
       arts[0]?.versions.find((v) => v.v === 2)?.comment,
@@ -164,6 +168,16 @@ describe("version lookup + anchored comments", () => {
     );
     // unknown ids are a no-op
     assert.deepEqual(setVersionComment(arts, "nope", 1, "x"), arts);
+  });
+
+  it("bounds and clears a selected quote without breaking old comments", () => {
+    const arts = twoVersions();
+    const id = arts[0]?.id ?? "";
+    const long = "x".repeat(400);
+    const anchored = setVersionComment(arts, id, 1, "note", long);
+    assert.equal(anchored[0]?.versions[0]?.commentAnchor?.quote.length, 240);
+    const cleared = setVersionComment(anchored, id, 1, "note");
+    assert.equal(cleared[0]?.versions[0]?.commentAnchor, undefined);
   });
 
   it("saves an edit as a new version and keeps the original source", () => {
