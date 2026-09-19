@@ -178,6 +178,9 @@ import {
   type TurnCompletionDetails,
 } from "../lib/engineError";
 import { statusLogText } from "../lib/statusLog";
+// Boot auto-resume candidate selection (pure, unit-tested): which stored
+// sessions need a silent `resume_session` after `restore_sessions` settles.
+import { selectBootResumeCandidates } from "../lib/bootResume";
 import {
   parseRetryScheduled,
   resumeRecoveryDelay,
@@ -926,7 +929,7 @@ interface UseMuseSessions {
   /** M1-09: create a server-side branch from completed conversation turns. */
   /** Fork at the latest completed turn, or at an explicit MSP turn anchor. */
   forkSession: (sessionId: string, lastTurnId?: string) => Promise<string | null>;
-  reconnectSession: (id: string) => Promise<void>;
+  reconnectSession: (id: string, options?: { silent?: boolean }) => Promise<void>;
   reconnectingId: string | null;
   /** M0-02: reconcile durable history and pending actions without a restart. */
   reconcileSession: (id: string, options?: { silent?: boolean }) => Promise<void>;
@@ -1942,6 +1945,13 @@ export function useMuseSessions(): UseMuseSessions {
   if (tombstoned.current === null) {
     tombstoned.current = new Set(loadTombstones());
   }
+  // Boot restore handshake: `restore_sessions` only admits sessions for
+  // already-connected hosts. Set once the backend restore settles (success
+  // or failure); the boot auto-resume effect below waits for it.
+  const restoreSettledRef = useRef(false);
+  // Boot auto-resume runs once: silent `resume_session` for the stored
+  // sessions the backend did not admit (hosts do not survive a restart).
+  const bootResumeDoneRef = useRef(false);
   // M0-03 outbox: durable retryable sends per session, restored once. An
   // entry still `sending` at boot means the app died or reloaded mid-flight:
   // the outcome is unknown, so it recovers as failed/ambiguous (a retry
@@ -2258,6 +2268,7 @@ export function useMuseSessions(): UseMuseSessions {
       } catch (e) {
         if (!cancelled) setError(`restore_sessions failed: ${String(e)}`);
       }
+      restoreSettledRef.current = true;
       // Start polling from the current head: no replay of ancient history,
       // live events only. Each response advances the cursor past what we fed.
       try {
@@ -4421,17 +4432,22 @@ export function useMuseSessions(): UseMuseSessions {
     resumeReconcileTimersRef.current = {};
   }, [settleServerCompaction]);
 
-  const reconnectSession = useCallback(async (id: string) => {
+  const reconnectSession = useCallback(async (id: string, options?: { silent?: boolean }) => {
     const session = sessions.find((s) => s.session_id === id);
     if (!session || !isTauriRuntime()) return;
+    const silent = options?.silent === true;
     if (isEphemeralSession(session)) {
+      if (silent) {
+        console.warn("boot resume skipped: ephemeral sessions cannot resume after a host restart", id);
+        return;
+      }
       setConnectionState(id, "error");
       setError("This Muse host uses ephemeral sessions. Your saved messages remain available, but this conversation cannot be resumed after the host restarts.");
       return;
     }
-    setReconnectingId(id);
+    if (!silent) setReconnectingId(id);
     setConnectionState(id, "connecting");
-    setError(null);
+    if (!silent) setError(null);
     try {
       const projectSettings = threadProjects[id] !== undefined
         ? settingsForThread(globalSettings, projects, threadProjects, id)
@@ -4522,15 +4538,51 @@ export function useMuseSessions(): UseMuseSessions {
       await refreshModels(id);
       await refreshHostSkills(id);
       if (postureError !== null) {
-        setError("Conversation reconnected, but the host kept its existing authorization posture.");
+        if (silent) {
+          console.warn("boot resume kept the host authorization posture", id);
+        } else {
+          setError("Conversation reconnected, but the host kept its existing authorization posture.");
+        }
       }
     } catch (e) {
-      setConnectionState(id, "error");
-      setError(reconnectErrorMessage(e));
+      if (silent) {
+        console.warn("boot resume failed, staying disconnected", id, e);
+        setConnectionState(id, "disconnected");
+      } else {
+        setConnectionState(id, "error");
+        setError(reconnectErrorMessage(e));
+      }
     } finally {
       setReconnectingId(null);
     }
   }, [authorizationMode, globalSettings, projects, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, sandbox]);
+
+  // Boot auto-resume: `restore_sessions` only admits sessions for
+  // already-connected hosts, and hosts do not survive an app restart. Once
+  // the backend restore settles, silently resume the stored sessions it did
+  // not admit (active first) so Terminal/Files find their native route
+  // without a manual Reconnect. Failures stay silent: rows keep
+  // 'disconnected' and the user can still reconnect by hand.
+  useEffect(() => {
+    if (!historyReady || !isTauriRuntime()) return;
+    if (bootResumeDoneRef.current || !restoreSettledRef.current) return;
+    bootResumeDoneRef.current = true;
+    const candidates = selectBootResumeCandidates({
+      stored: sessions,
+      restoredIds: connectedIds,
+      tombstonedIds: tombstoned.current,
+      activeId,
+    });
+    if (candidates.length === 0) return;
+    void (async () => {
+      for (const id of candidates) {
+        if (!aliveRef.current) return;
+        await reconnectSession(id, { silent: true });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyReady, reconnectSession]);
+
 
   const startSession = useCallback(async () => {
     return await startSessionRow(undefined, globalSettings, undefined);
