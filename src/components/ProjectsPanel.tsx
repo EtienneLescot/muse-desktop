@@ -131,14 +131,17 @@ export function ProjectsPanel({
     }
   }
 
-  async function checkProjectWorkspace(project: Project): Promise<void> {
-    const path = project.workspace?.trim();
-    if (!path || checkingWorkspaceId !== null) return;
+  async function checkProjectWorkspaces(project: Project): Promise<void> {
+    const roots = projectWorkspaces(project);
+    if (roots.length === 0 || checkingWorkspaceId !== null) return;
     setCheckingWorkspaceId(project.id);
     try {
-      const observation = await onCheckWorkspace(path);
-      if (observation !== null) {
-        setWorkspaceChecks((current) => ({ ...current, [project.id]: observation }));
+      for (const path of roots) {
+        const observation = await onCheckWorkspace(path);
+        if (observation !== null) {
+          const key = `${project.id}:${path}`;
+          setWorkspaceChecks((current) => ({ ...current, [key]: observation }));
+        }
       }
     } finally {
       setCheckingWorkspaceId(null);
@@ -256,9 +259,11 @@ export function ProjectsPanel({
               if (activeSessionId !== null) onAttach(activeSessionId, null);
             }}
             onSetOverride={(key, value) => onSetOverride(p.id, key, value)}
-            workspaceObservation={workspaceChecks[p.id]}
             checkingWorkspace={checkingWorkspaceId === p.id}
-            onCheckWorkspace={() => void checkProjectWorkspace(p)}
+            onCheckWorkspace={() => void checkProjectWorkspaces(p)}
+            workspaceObservations={Object.fromEntries(
+              projectWorkspaces(p).map((root) => [root, workspaceChecks[`${p.id}:${root}`]]),
+            )}
           />
         ))}
       </ul>
@@ -340,7 +345,7 @@ interface ProjectRowProps {
     key: keyof ProjectSettings,
     value: ProjectSettings[keyof ProjectSettings] | undefined,
   ) => void;
-  workspaceObservation?: WorkspaceRootObservation;
+  workspaceObservations: Readonly<Record<string, WorkspaceRootObservation | undefined>>;
   checkingWorkspace: boolean;
   onCheckWorkspace: () => void;
 }
@@ -358,7 +363,7 @@ function ProjectRow({
   onAttachActive,
   onDetachActive,
   onSetOverride,
-  workspaceObservation,
+  workspaceObservations,
   checkingWorkspace,
   onCheckWorkspace,
 }: ProjectRowProps) {
@@ -419,14 +424,30 @@ function ProjectRow({
             <span>Folders</span>
             <ul className="workspace-root-list" aria-label={`Folders for project ${project.name}`}>
               {draftWorkspaces.length === 0 && <li className="workspace-path">No project folder (uses default)</li>}
-              {draftWorkspaces.map((root, index) => (
+            {draftWorkspaces.map((root, index) => {
+              const observation = workspaceObservations[root];
+              return (
                 <li className="workspace-root-row" key={`${root}-${index}`}>
                   <span className="workspace-path" title={root}>{root}</span>
+                  {observation && (
+                    <span
+                      className={`workspace-health workspace-health-${observation.exists && observation.isDirectory ? "ready" : "missing"}`}
+                      role="status"
+                      title={observation.reason}
+                    >
+                      {observation.exists
+                        ? observation.isDirectory
+                          ? "Available"
+                          : "Not a folder"
+                        : "Missing"}
+                    </span>
+                  )}
                   <button type="button" onClick={() => setDraftWorkspaces((current) => current.filter((_, i) => i !== index))}>
                     Remove
                   </button>
                 </li>
-              ))}
+              );
+            })}
             </ul>
             <button
               type="button"
@@ -452,21 +473,8 @@ function ProjectRow({
             )}
             {hasWorkspace && (
               <button type="button" onClick={onCheckWorkspace} disabled={checkingWorkspace}>
-                {checkingWorkspace ? "Checking…" : "Check folder"}
+                {checkingWorkspace ? "Checking folders…" : "Check folders"}
               </button>
-            )}
-            {workspaceObservation && (
-              <span
-                className={`workspace-health workspace-health-${workspaceObservation.exists && workspaceObservation.isDirectory ? "ready" : "missing"}`}
-                role="status"
-                title={workspaceObservation.reason}
-              >
-                {workspaceObservation.exists
-                  ? workspaceObservation.isDirectory
-                    ? "Available"
-                    : "Not a folder"
-                  : "Missing"}
-              </span>
             )}
           </div>
           <div className="project-actions">
