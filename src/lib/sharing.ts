@@ -129,16 +129,14 @@ export function loadShareState(): ShareState {
       if (isValidBundle(v)) bundles[k] = v;
     }
   }
-  const bounded = Object.fromEntries(
-    Object.entries(bundles)
-      .sort(([, a], [, b]) => b.createdAt - a.createdAt)
-      .slice(0, MAX_SHARE_BUNDLES),
-  );
-  return { mode, bundles: bounded };
+  return { mode, bundles: boundShareBundles(bundles) };
 }
 
 export function saveShareState(state: ShareState): void {
-  writeKey(SHARING_KEY, state);
+  writeKey(SHARING_KEY, {
+    mode: isShareMode(state.mode) ? state.mode : DEFAULT_SHARE_MODE,
+    bundles: boundShareBundles(state.bundles),
+  });
 }
 
 /** Local bundle id: `share-<8 base36>`; `rand` is injectable for tests. */
@@ -162,6 +160,15 @@ const SECRET_PATTERNS: readonly RegExp[] = [
   /\b(?:bearer|token|api[_ -]?key|secret|password|passwd|authorization)\s*[:=]\s*(["']?)[^\s,;"']+\1/gi,
   /\b(?:sk|rk|ghp|gho|ghs|github_pat|xox[baprs])-[A-Za-z0-9_\-.]{12,}/g,
 ];
+
+function boundShareBundles(bundles: Record<string, ShareBundle>): Record<string, ShareBundle> {
+  return Object.fromEntries(
+    Object.entries(bundles)
+      .filter(([, bundle]) => isValidBundle(bundle))
+      .sort(([, a], [, b]) => b.createdAt - a.createdAt)
+      .slice(0, MAX_SHARE_BUNDLES),
+  );
+}
 
 interface PreparedShareEntries {
   entries: ShareableEntry[];
@@ -327,11 +334,7 @@ export function shareThread(
   if (prepared.redacted || safeTitle.redacted) bundle.redacted = true;
   if (prepared.truncated) bundle.truncated = true;
   if (prepared.omittedEntries > 0) bundle.omittedEntries = prepared.omittedEntries;
-  const bundles = Object.fromEntries(
-    Object.entries({ ...state.bundles, [bundle.bundleId]: bundle })
-      .sort(([, a], [, b]) => b.createdAt - a.createdAt)
-      .slice(0, MAX_SHARE_BUNDLES),
-  );
+  const bundles = boundShareBundles({ ...state.bundles, [bundle.bundleId]: bundle });
   return {
     state: { ...state, bundles },
     bundle,

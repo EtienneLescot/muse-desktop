@@ -176,6 +176,26 @@ describe("share bundles (US-27)", () => {
     assert.equal(Object.keys(state.bundles).length, MAX_SHARE_BUNDLES);
     assert.equal(Math.min(...Object.values(state.bundles).map((bundle) => bundle.createdAt)), 5);
   });
+
+  it("bounds and validates state at the persistence boundary", () => {
+    fakeStorage();
+    const shared = shareThread(emptyShareState(), "s1", "T", LOG, "markdown", {
+      now: 9,
+      rand: () => 0.7,
+    });
+    assert.ok(shared !== null);
+    saveShareState({
+      mode: "invalid" as ShareState["mode"],
+      bundles: {
+        ...shared.state.bundles,
+        bad: { bundleId: "bad" } as never,
+      },
+    });
+    const loaded = loadShareState();
+    assert.equal(loaded.mode, "manual");
+    assert.equal(loaded.bundles.bad, undefined);
+    assert.equal(Object.keys(loaded.bundles).length, 1);
+  });
 });
 
 describe("channel stub (US-28)", () => {
