@@ -34,6 +34,7 @@ import type { ShareBundle } from "./lib/sharing";
 import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
 import { userFacingError } from "./lib/errorCopy";
+import { displayPath } from "./lib/paths";
 import { isTauriRuntime } from "./lib/env";
 import { formatHandoffContext } from "./lib/handoff";
 import type { Artifact, ArtifactVersion } from "./lib/artifacts";
@@ -1230,7 +1231,7 @@ export default function App() {
                       <span className="dot" data-running={active.running} />
                       {active.running ? "Working" : "Ready"}
                       <span>·</span>
-                      <span title={active.workspace}>{active.workspace}</span>
+                      <span title={displayPath(active.workspace)}>{displayPath(active.workspace)}</span>
                       {active.branch !== undefined && (
                         <>
                           <span>·</span>
