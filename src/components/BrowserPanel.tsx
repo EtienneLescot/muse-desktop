@@ -680,7 +680,7 @@ export function BrowserPanel({
     setNativeBrowserStatus("Opening native browser…");
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("open_native_browser", { url: normalized });
+      await invoke("open_native_browser", { url: normalized, sessionId });
       setNativeBrowserStatus("Opened in the Muse Browser window.");
     } catch (error) {
       setNativeBrowserStatus(
@@ -700,7 +700,7 @@ export function BrowserPanel({
     }
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const closed = await invoke<boolean>("close_native_browser");
+      const closed = await invoke<boolean>("close_native_browser", { sessionId });
       setNativeBrowserStatus(closed ? "Closed the Muse Browser window." : "The Muse Browser window is already closed.");
     } catch (error) {
       setNativeBrowserStatus(

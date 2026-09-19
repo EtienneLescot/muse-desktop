@@ -542,8 +542,36 @@ fn redact_diagnostic(input: &str) -> String {
     truncate(&out, DIAGNOSTIC_LINE_LIMIT)
 }
 
-const NATIVE_BROWSER_LABEL: &str = "muse-browser";
+const NATIVE_BROWSER_LABEL_PREFIX: &str = "muse-browser-";
 const MAX_BROWSER_URL_CHARS: usize = 4096;
+const MAX_BROWSER_SESSION_CHARS: usize = 128;
+
+fn validate_native_browser_session(raw: &str) -> Result<String, String> {
+    let session = raw.trim();
+    if session.is_empty() {
+        return Err("browser session id must not be empty".to_string());
+    }
+    if session.chars().count() > MAX_BROWSER_SESSION_CHARS {
+        return Err(format!(
+            "browser session id is limited to {MAX_BROWSER_SESSION_CHARS} characters"
+        ));
+    }
+    if session.chars().any(char::is_control) {
+        return Err("browser session id contains an invalid control character".to_string());
+    }
+    Ok(session.to_string())
+}
+
+/// Derive a stable, label-safe native window id without putting a conversation
+/// id in the platform window registry or title.
+fn native_browser_label(session_id: &str) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in session_id.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{NATIVE_BROWSER_LABEL_PREFIX}{hash:016x}")
+}
 
 /// Normalize and validate a URL before it is handed to a native webview.
 /// The renderer performs the same normalization for its preview, but this
@@ -581,9 +609,19 @@ fn validate_native_browser_url(raw: &str) -> Result<Url, String> {
 /// Open a verified URL in one dedicated native webview window. Reusing the
 /// label keeps the browser surface single-instance and predictable.
 #[tauri::command]
-async fn open_native_browser(app: AppHandle, url: String) -> Result<String, String> {
+async fn open_native_browser(app: AppHandle, url: String, session_id: String) -> Result<String, String> {
     let parsed = validate_native_browser_url(&url)?;
-    if let Some(window) = app.get_webview_window(NATIVE_BROWSER_LABEL) {
+    let session = validate_native_browser_session(&session_id)?;
+    let label = native_browser_label(&session);
+    // Keep one native surface and one private profile per active conversation.
+    // Closing stale surfaces also prevents a browser window from visually
+    // following the wrong conversation after a sidebar switch.
+    for (existing_label, window) in app.webview_windows() {
+        if existing_label.starts_with(NATIVE_BROWSER_LABEL_PREFIX) && existing_label != label {
+            let _ = window.close();
+        }
+    }
+    if let Some(window) = app.get_webview_window(&label) {
         window
             .navigate(parsed)
             .map_err(|e| format!("could not navigate native browser: {e}"))?;
@@ -597,10 +635,11 @@ async fn open_native_browser(app: AppHandle, url: String) -> Result<String, Stri
     }
     WebviewWindowBuilder::new(
         &app,
-        NATIVE_BROWSER_LABEL,
+        &label,
         WebviewUrl::External(parsed),
     )
-    .title("Muse Browser")
+    .title(format!("Muse Browser · {}", session.chars().take(8).collect::<String>()))
+    .incognito(true)
     .inner_size(1180.0, 800.0)
     .min_inner_size(720.0, 480.0)
     .build()
@@ -612,8 +651,10 @@ async fn open_native_browser(app: AppHandle, url: String) -> Result<String, Stri
 /// idempotent so a user closing the window manually and then pressing the
 /// panel action does not surface a protocol error.
 #[tauri::command]
-fn close_native_browser(app: AppHandle) -> Result<bool, String> {
-    let Some(window) = app.get_webview_window(NATIVE_BROWSER_LABEL) else {
+fn close_native_browser(app: AppHandle, session_id: String) -> Result<bool, String> {
+    let session = validate_native_browser_session(&session_id)?;
+    let label = native_browser_label(&session);
+    let Some(window) = app.get_webview_window(&label) else {
         return Ok(false);
     };
     window
@@ -7837,6 +7878,23 @@ mod tests {
         let value = format!("https://example.com/{}", "a".repeat(MAX_BROWSER_URL_CHARS));
         let error = validate_native_browser_url(&value).unwrap_err();
         assert!(error.contains("limited"));
+    }
+
+    #[test]
+    fn native_browser_session_labels_are_private_and_stable() {
+        assert_eq!(validate_native_browser_session(" session-a ").unwrap(), "session-a");
+        assert_eq!(native_browser_label("session-a"), native_browser_label("session-a"));
+        assert_ne!(native_browser_label("session-a"), native_browser_label("session-b"));
+        assert!(native_browser_label("session-a").starts_with(NATIVE_BROWSER_LABEL_PREFIX));
+    }
+
+    #[test]
+    fn native_browser_session_rejects_empty_control_and_oversized_ids() {
+        for value in ["", "   ", "session\nwith-control"] {
+            assert!(validate_native_browser_session(value).is_err(), "accepted {value:?}");
+        }
+        let oversized = "s".repeat(MAX_BROWSER_SESSION_CHARS + 1);
+        assert!(validate_native_browser_session(&oversized).is_err());
     }
 
     #[test]
