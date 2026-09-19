@@ -67,6 +67,8 @@ function mediaTypeExtension(mediaType?: string): string | undefined {
     "application/vnd.oasis.opendocument.text": "odt",
     "application/vnd.oasis.opendocument.spreadsheet": "ods",
     "application/vnd.oasis.opendocument.presentation": "odp",
+    "application/rtf": "rtf",
+    "text/rtf": "rtf",
   };
   return known[normalized];
 }
@@ -925,7 +927,9 @@ export function StreamView({
         const richMediaType = loadedOutput?.mediaType ?? e.richContent?.[0]?.mediaType ?? "";
         const richOfficePreview = loadedOutput?.eof && loadedOutput.base64Data &&
           (richMediaType.startsWith("application/vnd.openxmlformats")
-            || richMediaType.startsWith("application/vnd.oasis.opendocument"))
+            || richMediaType.startsWith("application/vnd.oasis.opendocument")
+            || richMediaType === "application/rtf"
+            || richMediaType === "text/rtf")
           ? officePreviewForFile(richPath, loadedOutput.base64Data)
           : null;
         // US-10 reflexive phase: an open entry with no text yet (send just

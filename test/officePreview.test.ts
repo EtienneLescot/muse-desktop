@@ -92,6 +92,30 @@ test("ODP preview extracts slide text in document order", () => {
   assert.deepEqual(preview?.rows, [["1", "First slide"], ["2", "Second"]]);
 });
 
+test("RTF preview extracts text and decodes escapes", () => {
+  const data = encode(strToU8("{\\rtf1\\ansi{\\fonttbl{\\f0 Arial;}}\\f0\\fs24 Caf\\'e9 \\u233? au lait\\par Deuxi\\'e8me\\tab ligne}"));
+  const preview = officePreviewForFile("notes.rtf", data);
+  assert.deepEqual(preview, {
+    kind: "table",
+    format: "rtf",
+    columns: ["Paragraph"],
+    rows: [["Café é au lait"], ["Deuxième ligne"]],
+    truncated: false,
+  });
+});
+
+test("RTF preview rejects files without the magic header", () => {
+  assert.equal(officePreviewForFile("notes.rtf", encode(strToU8("plain text"))), null);
+  assert.equal(officePreviewForFile("notes.txt", encode(strToU8("{\\rtf1\\ansi hello}"))), null);
+});
+
+test("RTF preview bounds long documents", () => {
+  const body = Array.from({ length: MAX_OFFICE_PREVIEW_ROWS + 10 }, (_, index) => `row ${index}\\par`).join(" ");
+  const preview = officePreviewForFile("rows.rtf", encode(strToU8(`{\\rtf1 ${body}}`)));
+  assert.equal(preview?.rows.length, MAX_OFFICE_PREVIEW_ROWS);
+  assert.equal(preview?.truncated, true);
+});
+
 test("office preview rejects malformed archives and unsupported files", () => {
   assert.equal(officePreviewForFile("notes.docx", "not-base64"), null);
   assert.equal(officePreviewForFile("notes.txt", "aGVsbG8="), null);
