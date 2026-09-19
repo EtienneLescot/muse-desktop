@@ -2826,6 +2826,37 @@ body.dark .composer textarea::placeholder {
   }
 }
 
+/* M0-12: preserve the Muse palette while making the focus ring, active
+ * conversation and secondary copy easier to distinguish when the OS asks
+ * for increased contrast. */
+@media (prefers-contrast: more) {
+  .muted {
+    color: var(--text);
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  summary:focus-visible {
+    outline-width: 3px;
+    outline-offset: 3px;
+  }
+
+  .session-item.active {
+    box-shadow: none;
+    outline: 1px solid var(--blue);
+    outline-offset: -1px;
+  }
+
+  .stream-window-notice,
+  .stream-health,
+  .stream-recovery-note {
+    border-color: var(--text);
+  }
+}
+
 @media (max-width: 1100px) {
   .app {
     grid-template-columns: 215px 1fr;
