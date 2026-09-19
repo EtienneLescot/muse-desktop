@@ -21,6 +21,7 @@ class FixtureClient {
   private buffer = "";
   private queue: Frame[] = [];
   private waiters: Array<(frame: Frame) => void> = [];
+  private closed = false;
 
   constructor(prefix?: string) {
     this.child = spawn(process.execPath, [fixture], {
@@ -65,6 +66,8 @@ class FixtureClient {
   }
 
   async close(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
     if (!this.child.killed) this.child.kill();
     await once(this.child, "close");
   }
@@ -260,5 +263,54 @@ test("Muse fixture isolates concurrent A/B sessions: B terminates abruptly while
   } finally {
     await clientA.close().catch(() => {});
     await clientB.close().catch(() => {});
+  }
+});
+
+test("Muse fixture keeps a pending approval visible once across resume and resumes the same turn", async () => {
+  const client = new FixtureClient();
+  try {
+    const sessionId = await bootstrap(client);
+    const turn = await client.request(3, "turn/start", {
+      commandId: "command-resume-1",
+      sessionId,
+      input: [{ type: "text", text: "Resume me after reconnect" }],
+    });
+    const turnId = String((turn.result as Frame).turnId);
+    const requested = await nextNotification(client, "approval/requested");
+    const requestParams = requested.params as Frame;
+
+    const before = await client.request(4, "approval/listPending", { sessionId });
+    assert.equal(((before.result as Frame).approvals as Frame[]).length, 1);
+
+    const resumed = await client.request(5, "session/resume", { sessionId });
+    assert.equal(((resumed.result as Frame).session as Frame).status, "running");
+
+    const pending = await client.request(6, "approval/listPending", { sessionId });
+    const approvals = ((pending.result as Frame).approvals as Frame[]);
+    assert.equal(approvals.length, 1);
+    assert.equal(approvals[0].approvalId, requestParams.approvalId);
+    assert.equal(approvals[0].currentRequirementId, requestParams.currentRequirementId);
+
+    const read = await client.request(7, "session/read", { sessionId, excludeItems: false });
+    const itemIds = (((read.result as Frame).history as Frame).items as Frame[]).map((entry) => entry.itemId);
+    assert.equal(new Set(itemIds).size, itemIds.length);
+
+    const decided = await client.request(8, "approval/decide", {
+      commandId: "command-resume-2",
+      sessionId,
+      approvalId: requestParams.approvalId,
+      requirementId: requestParams.currentRequirementId,
+      choiceId: "allow-once",
+    });
+    assert.deepEqual(decided.result, { terminal: true });
+
+    await nextNotification(client, "approval/resolved");
+    const completed = await nextNotification(client, "turn/completed");
+    assert.equal((completed.params as Frame).turnId, turnId);
+
+    const after = await client.request(9, "approval/listPending", { sessionId });
+    assert.deepEqual((after.result as Frame).approvals, []);
+  } finally {
+    await client.close();
   }
 });
