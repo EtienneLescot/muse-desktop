@@ -128,6 +128,16 @@ export function BrowserPanel({
     selectionCleanupRef.current = null;
   }, []);
 
+  // A native browser surface belongs to the conversation that opened it.
+  // Closing it on unmount/session switch avoids leaving a stale page visible
+  // after the user moves to another conversation.
+  useEffect(() => () => {
+    if (!isTauriRuntime()) return;
+    void import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke<boolean>("close_native_browser", { sessionId }))
+      .catch(() => {});
+  }, [sessionId]);
+
   const normalized = normalizeBrowserUrl(currentUrl);
   const addressNormalized = normalizeBrowserUrl(url);
   const renderable = normalized !== null;
