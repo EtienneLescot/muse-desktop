@@ -590,7 +590,11 @@ Les études produisent un ADR avec API réellement disponible, prototype minimal
 
 ### M4-07 — Remote/cloud
 
-**Code :** abstraction HostConnection et service distant à concevoir ; dépend M0-01/02/06 et M2. Séparer exécution sur ordinateur distant connecté et environnement cloud provisionné. Auth, découverte, événements reconnectables, transfert d'artefacts et contrôle de versions. **Acceptation :** déconnexion/reprise sans doublons, host indisponible, commande ciblée et destruction explicite d'environnement.
+**Code :** `src/lib/hostConnection.ts`, `test/hostConnection.test.ts` et `SettingsPanel.tsx`. Modèle pur `HostConnection`, typage strict (`local`, `remote-ssh`, `cloud-runner`), machine d'états (`disconnected`, `connecting`, `connected`, `reconnecting`, `error`), calcul de backoff exponentiel, évaluation de heartbeat avec timeout configurable, routage isolé des sessions sans orphelins et destruction propre d'environnement. Intégré dans `SettingsPanel` sous la clé `muse-desktop.host-connections.v1`.
+
+**État au 19/09/2026 :** abstraction HostConnection livrée avec support des 3 types d'environnements, masquage des secrets d'authentification, validation d'endpoints SSH/HTTPS et 11 tests unitaires validés (775 tests Node au total).
+
+**Travail restant :** runtime natif de transport SSH interactif et conteneur cloud distant.
 
 ### M4-08 — Voix
 

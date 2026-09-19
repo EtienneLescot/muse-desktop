@@ -56,6 +56,14 @@ import {
   type StorageIssue,
   type StorageSnapshotPreview,
 } from "../lib/storage";
+import {
+  HOST_CONNECTIONS_KEY,
+  createHostConnection,
+  parseHostConnections,
+  serializeHostConnections,
+  type HostConnectionConfig,
+  type HostEnvironmentType,
+} from "../lib/hostConnection";
 
 interface Props {
   /** Absolute workspace root; null while none is picked. */
@@ -156,6 +164,76 @@ export function SettingsPanel({
     snapshot: StorageSnapshotPreview;
   } | null>(null);
   const [selectedRecoveryKeys, setSelectedRecoveryKeys] = useState<string[]>([]);
+
+  const [hostConnections, setHostConnections] = useState<HostConnectionConfig[]>(() => {
+    try {
+      const raw = localStorage.getItem(HOST_CONNECTIONS_KEY);
+      if (!raw) {
+        return [
+          {
+            id: "local-default",
+            label: "Local sidecar (Default)",
+            type: "local",
+            endpoint: "local://sidecar",
+            authType: "none",
+            workspaceRoot: workspace || "",
+            hasCredential: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ];
+      }
+      return parseHostConnections(JSON.parse(raw)).connections;
+    } catch {
+      return [];
+    }
+  });
+  const [newHostLabel, setNewHostLabel] = useState("");
+  const [newHostType, setNewHostType] = useState<HostEnvironmentType>("remote-ssh");
+  const [newHostEndpoint, setNewHostEndpoint] = useState("");
+  const [hostAddError, setHostAddError] = useState<string | null>(null);
+
+  function handleAddHost() {
+    setHostAddError(null);
+    const res = createHostConnection({
+      label: newHostLabel,
+      type: newHostType,
+      endpoint: newHostEndpoint,
+    });
+    if (!res.config) {
+      setHostAddError(res.error || "Failed to add host");
+      return;
+    }
+    const updated = [...hostConnections, res.config];
+    setHostConnections(updated);
+    try {
+      localStorage.setItem(
+        HOST_CONNECTIONS_KEY,
+        serializeHostConnections({
+          schema: "muse-desktop.host-connections.v1",
+          activeConnectionId: updated[0]?.id ?? null,
+          connections: updated,
+        }),
+      );
+    } catch {}
+    setNewHostLabel("");
+    setNewHostEndpoint("");
+  }
+
+  function handleRemoveHost(id: string) {
+    const updated = hostConnections.filter((h) => h.id !== id);
+    setHostConnections(updated);
+    try {
+      localStorage.setItem(
+        HOST_CONNECTIONS_KEY,
+        serializeHostConnections({
+          schema: "muse-desktop.host-connections.v1",
+          activeConnectionId: updated[0]?.id ?? null,
+          connections: updated,
+        }),
+      );
+    } catch {}
+  }
 
   const effective = effectiveSandboxMode(sandbox);
 
@@ -728,6 +806,87 @@ export function SettingsPanel({
             )}
           </>
         )}
+      </div>
+      <div className="settings-group">
+        <h3>Execution environments (Local / Remote / Cloud)</h3>
+        <p className="settings-note">
+          Manage local sidecar, remote SSH devboxes, and cloud runner environments.
+        </p>
+        <ul className="settings-host-list" style={{ listStyle: "none", padding: 0, margin: "8px 0" }}>
+          {hostConnections.map((h) => (
+            <li
+              key={h.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "8px 0",
+                borderBottom: "1px solid var(--border-subtle)",
+              }}
+            >
+              <div>
+                <strong>{h.label}</strong>{" "}
+                <span className="settings-note">
+                  ({h.type} — <code>{h.endpoint}</code>)
+                </span>
+              </div>
+              {h.type !== "local" && (
+                <button
+                  type="button"
+                  className="settings-link"
+                  onClick={() => handleRemoveHost(h.id)}
+                  aria-label={`Remove ${h.label}`}
+                >
+                  Remove
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+        <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+          <label className="settings-label" htmlFor="new-host-label">
+            Add environment
+          </label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input
+              id="new-host-label"
+              type="text"
+              placeholder="Label (e.g. Remote GPU)"
+              value={newHostLabel}
+              onChange={(e) => setNewHostLabel(e.target.value)}
+              style={{ flex: 1, minWidth: 140 }}
+            />
+            <select
+              value={newHostType}
+              onChange={(e) => setNewHostType(e.target.value as HostEnvironmentType)}
+              aria-label="Environment type"
+            >
+              <option value="remote-ssh">Remote SSH</option>
+              <option value="cloud-runner">Cloud Runner</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Endpoint (e.g. ssh://user@host:22)"
+              value={newHostEndpoint}
+              onChange={(e) => setNewHostEndpoint(e.target.value)}
+              style={{ flex: 2, minWidth: 200 }}
+              aria-label="Host endpoint"
+            />
+            <button
+              type="button"
+              className="button-primary"
+              onClick={handleAddHost}
+              disabled={!newHostLabel.trim() || !newHostEndpoint.trim()}
+            >
+              Add environment
+            </button>
+          </div>
+          {hostAddError && (
+            <p className="settings-note" style={{ color: "var(--danger)" }}>
+              {hostAddError}
+            </p>
+          )}
+        </div>
       </div>
     </section>
   );
