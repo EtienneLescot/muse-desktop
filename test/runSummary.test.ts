@@ -36,4 +36,24 @@ describe("scheduled run result summaries", () => {
       "ask the team to verify the deploy.",
     ]);
   });
+
+  it("keeps explicit issues separate from decisions and next steps", () => {
+    const summary = buildScheduleRunSummary("session-4", [
+      {
+        id: "a",
+        role: "assistant",
+        text: "Issue: the migration is blocked by a missing table.\nWarning: retry after the service starts.\nNext steps: apply the migration.",
+      },
+      {
+        id: "a2",
+        role: "assistant",
+        text: "This sentence mentions an error but is not an issue label.",
+      },
+    ]);
+    assert.deepEqual(summary.issues, [
+      "the migration is blocked by a missing table.",
+      "retry after the service starts.",
+    ]);
+    assert.deepEqual(summary.nextSteps, ["apply the migration."]);
+  });
 });

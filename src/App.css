@@ -5111,6 +5111,23 @@ body.dark .composer textarea::placeholder {
   margin: 2px 0;
 }
 
+.run-summary-issues {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--warning, #d9972b) 28%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning, #d9972b) 7%, transparent);
+}
+
+.run-summary-issues ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+.run-summary-issues li {
+  margin: 2px 0;
+}
+
 .notification-enable {
   margin-top: 8px;
   color: var(--blue);

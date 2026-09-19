@@ -434,6 +434,7 @@ export function SchedulesPanel({
                       {run.resultSummary.toolEvents > 0 ? ` · ${run.resultSummary.toolEvents} tool event${run.resultSummary.toolEvents === 1 ? "" : "s"}` : ""}
                       {run.resultSummary.filesMentioned.length > 0 ? ` · ${run.resultSummary.filesMentioned.length} file${run.resultSummary.filesMentioned.length === 1 ? "" : "s"}` : ""}
                       {run.resultSummary.nextSteps && run.resultSummary.nextSteps.length > 0 ? ` · ${run.resultSummary.nextSteps.length} next step${run.resultSummary.nextSteps.length === 1 ? "" : "s"}` : ""}
+                      {run.resultSummary.issues && run.resultSummary.issues.length > 0 ? ` · ${run.resultSummary.issues.length} issue${run.resultSummary.issues.length === 1 ? "" : "s"}` : ""}
                     </span>
                   </div>
                 )}
@@ -486,6 +487,12 @@ export function SchedulesPanel({
                         <div className="run-summary-next">
                           <span className="run-detail-label">Next steps observed</span>
                           <ul>{run.resultSummary.nextSteps.map((step) => <li key={step}>{step}</li>)}</ul>
+                        </div>
+                      )}
+                      {run.resultSummary.issues && run.resultSummary.issues.length > 0 && (
+                        <div className="run-summary-issues">
+                          <span className="run-detail-label">Issues observed</span>
+                          <ul>{run.resultSummary.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
                         </div>
                       )}
                     </div>
