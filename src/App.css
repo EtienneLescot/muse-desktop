@@ -5205,6 +5205,35 @@ body.dark .composer textarea::placeholder {
   white-space: nowrap;
 }
 
+.notification-facts {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.notification-facts summary {
+  cursor: pointer;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.notification-fact-group {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+}
+
+.notification-fact-group ul {
+  margin: 4px 0 0 16px;
+  padding: 0;
+}
+
+.notification-fact-group li + li {
+  margin-top: 3px;
+}
+
 .notification-meta {
   font-size: 0.72rem;
 }

@@ -619,6 +619,23 @@ export function SchedulesPanel({
                   {notification.unread && <span className="run-unread">New</span>}
                 </div>
                 <span className="notification-body">{notification.body}</span>
+                {(notification.issues?.length || notification.nextSteps?.length) ? (
+                  <details className="notification-facts">
+                    <summary>Result details</summary>
+                    {notification.issues && notification.issues.length > 0 && (
+                      <div className="notification-fact-group">
+                        <span className="run-detail-label">Issues</span>
+                        <ul>{notification.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
+                      </div>
+                    )}
+                    {notification.nextSteps && notification.nextSteps.length > 0 && (
+                      <div className="notification-fact-group">
+                        <span className="run-detail-label">Next steps</span>
+                        <ul>{notification.nextSteps.map((step) => <li key={step}>{step}</li>)}</ul>
+                      </div>
+                    )}
+                  </details>
+                ) : null}
                 <span className="muted notification-meta">{describeNotificationTime(notification.createdAt)}</span>
                 <div className="sched-actions">
                   {(notification.sessionId || notification.runId) && (

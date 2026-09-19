@@ -54,6 +54,25 @@ describe("M3-09 notification records", () => {
     assert.equal(buildRunNotification({ ...completed, status: "running" }), null);
   });
 
+  it("carries explicit run issues and next steps as bounded notification facts", () => {
+    const completed = {
+      ...run("completed"),
+      resultSummary: {
+        headline: "Review finished",
+        totalItems: 4,
+        assistantMessages: 1,
+        toolEvents: 1,
+        filesMentioned: [],
+        decisions: [],
+        issues: ["Issues: dependency is stale", "Issues: dependency is stale", " ", "x".repeat(400)],
+        nextSteps: ["Next steps: update the lockfile", "Next steps: update the lockfile"],
+      },
+    };
+    const notification = buildRunNotification(completed, 3000);
+    assert.deepEqual(notification?.issues, ["dependency is stale", "x".repeat(220) + "…"]);
+    assert.deepEqual(notification?.nextSteps, ["update the lockfile"]);
+  });
+
   it("deduplicates records and keeps unread count independent from runs", () => {
     const notification = buildRunNotification(run(), 3000) as MuseNotification;
     const same = { ...notification, id: "another-id" };
@@ -140,6 +159,19 @@ describe("M3-09 notification records", () => {
       { nope: true },
     ]));
     assert.deepEqual(loadNotifications(), [notification]);
+  });
+
+  it("bounds facts when restoring older or untrusted inbox records", () => {
+    fakeStorage();
+    const notification = buildRunNotification(run(), 3000) as MuseNotification;
+    localStorage.setItem("muse-desktop.notifications.v1", JSON.stringify([{
+      ...notification,
+      issues: Array.from({ length: 20 }, (_, index) => `issue-${index}`),
+      nextSteps: Array.from({ length: 20 }, (_, index) => `step-${index}`),
+    }]));
+    const restored = loadNotifications()[0];
+    assert.equal(restored?.issues?.length, 6);
+    assert.equal(restored?.nextSteps?.length, 4);
   });
 
   it("merges native and web inbox copies by dedupe key", () => {

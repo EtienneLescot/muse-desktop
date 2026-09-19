@@ -13,6 +13,9 @@ export interface MuseNotification {
   createdAt: number;
   runId?: string;
   sessionId?: string;
+  /** Explicit facts from the run result; never inferred by the notification layer. */
+  issues?: string[];
+  nextSteps?: string[];
   unread?: boolean;
 }
 
@@ -21,6 +24,9 @@ export const NOTIFICATION_PREFERENCES_KEY = "muse-desktop.notifications.preferen
 export const MAX_NOTIFICATIONS = 200;
 export const NOTIFICATION_ACTION_EVENT = "muse-desktop:notification-action";
 const NOTIFICATION_ACTION_TYPE = "muse-open-conversation";
+const MAX_NOTIFICATION_ISSUES = 6;
+const MAX_NOTIFICATION_NEXT_STEPS = 4;
+const MAX_NOTIFICATION_FACT_CHARS = 220;
 
 export interface NotificationActionPayload extends Record<string, unknown> {
   notificationId?: string;
@@ -118,6 +124,8 @@ export function buildRunNotification(run: ScheduleRun, now = run.finishedAt ?? D
   const body = run.status === "completed"
     ? (run.resultPreview ?? "The scheduled conversation finished.")
     : (run.error ?? "The scheduled conversation could not be dispatched.");
+  const issues = normalizeNotificationFacts(run.resultSummary?.issues, MAX_NOTIFICATION_ISSUES, /^(?:issues?|warnings?|blockers?|risks?|failures?|errors?|limitations?)\s*[:\-]\s*/i);
+  const nextSteps = normalizeNotificationFacts(run.resultSummary?.nextSteps, MAX_NOTIFICATION_NEXT_STEPS, /^(?:next steps?|todo|to-do|follow[- ]?up|remaining|recommended)\s*[:\-]\s*/i);
   return {
     id: makeId(),
     kind,
@@ -127,8 +135,26 @@ export function buildRunNotification(run: ScheduleRun, now = run.finishedAt ?? D
     createdAt: now,
     ...(run.id ? { runId: run.id } : {}),
     ...(run.sessionId ? { sessionId: run.sessionId } : {}),
+    ...(issues.length > 0 ? { issues } : {}),
+    ...(nextSteps.length > 0 ? { nextSteps } : {}),
     unread: true,
   };
+}
+
+function normalizeNotificationFacts(value: readonly string[] | undefined, limit: number, prefix?: RegExp): string[] {
+  if (!Array.isArray(value)) return [];
+  const facts: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const text = item.replace(/\s+/g, " ").trim().replace(prefix ?? /^/, "").trim();
+    if (text.length === 0) continue;
+    const bounded = text.length > MAX_NOTIFICATION_FACT_CHARS
+      ? `${text.slice(0, MAX_NOTIFICATION_FACT_CHARS)}…`
+      : text;
+    if (!facts.includes(bounded)) facts.push(bounded);
+    if (facts.length >= limit) break;
+  }
+  return facts;
 }
 
 export interface ApprovalNotificationInput {
@@ -230,12 +256,19 @@ function validNotification(value: unknown): value is MuseNotification {
     typeof row.createdAt === "number" && Number.isFinite(row.createdAt) &&
     (row.runId === undefined || typeof row.runId === "string") &&
     (row.sessionId === undefined || typeof row.sessionId === "string") &&
+    (row.issues === undefined || (Array.isArray(row.issues) && row.issues.every((item) => typeof item === "string"))) &&
+    (row.nextSteps === undefined || (Array.isArray(row.nextSteps) && row.nextSteps.every((item) => typeof item === "string"))) &&
     (row.unread === undefined || typeof row.unread === "boolean");
 }
 
 /** Parse a persisted inbox without trusting webview or native JSON. */
 export function normalizeNotifications(raw: unknown): MuseNotification[] {
-  return Array.isArray(raw) ? raw.filter(validNotification).slice(-MAX_NOTIFICATIONS) : [];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(validNotification).map((item) => ({
+    ...item,
+    ...(item.issues ? { issues: normalizeNotificationFacts(item.issues, MAX_NOTIFICATION_ISSUES, /^(?:issues?|warnings?|blockers?|risks?|failures?|errors?|limitations?)\s*[:\-]\s*/i) } : {}),
+    ...(item.nextSteps ? { nextSteps: normalizeNotificationFacts(item.nextSteps, MAX_NOTIFICATION_NEXT_STEPS, /^(?:next steps?|todo|to-do|follow[- ]?up|remaining|recommended)\s*[:\-]\s*/i) } : {}),
+  })).slice(-MAX_NOTIFICATIONS);
 }
 
 export function loadNotifications(): MuseNotification[] {
