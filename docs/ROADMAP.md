@@ -140,7 +140,7 @@ Validation de cette livraison : build frontend et 370 tests Node ; suite Rust (4
 - **M0-12b — transcript focalisable** : la zone de conversation peut recevoir le focus et expose `Home`, `End`, `PageUp` et `PageDown` via `aria-keyshortcuts`. Le déplacement reste borné à la zone de scroll ; `End` réutilise le même retour au dernier message que le bouton **Latest messages**, et le chargement des anciennes pages continue de passer par le gestionnaire de scroll existant.
 - **M0-12c — contraste forcé** : les contrôles conservent un contour de focus `Highlight`, des bordures `ButtonText` et des liens `LinkText` lorsque Windows active `forced-colors`, sans modifier la palette normale de Muse.
 - **M0-12d — limite restante** : lecteur d'écran réel, contraste et parcours complet sans souris restent à vérifier sur Windows WebView2 et les autres plateformes annoncées. Zoom (19/09/2026, natif Windows) : aucun contrôle in-app ; `Ctrl+=`/`Ctrl+-` sans effet visible sur WebView2 (captures avant/après identiques) ; la Loupe OS reste la seule voie 200 %, sans réglage de taille de texte in-app.
-- **Validation** : `npm test` (821 tests, dont les calculs de navigation du transcript et la classification des snapshots de récupération) et build frontend verts ; preuve assistive native encore à produire.
+- **Validation** : `npm test` (827 tests, dont les calculs de navigation du transcript et la classification des snapshots de récupération) et build frontend verts ; preuve assistive native encore à produire.
 
 ### Livraison M0-13 — états de capacité honnêtes (première passe)
 
