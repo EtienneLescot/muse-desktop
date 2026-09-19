@@ -22,6 +22,10 @@
  * The explicit `--exercise-user-shell` path negotiates the `userShell`
  * capability, admits a harmless command in each workspace and observes the
  * corresponding shell item without sending a model turn.
+ * The explicit `--exercise-user-shell-slow` path admits a ~9s command that
+ * prints a unique marker, then records whether the host serves the output
+ * back through its item stream or readable history. Absence of output is
+ * reported as an explicit boundary, never as a successful restitution.
  * The explicit `--exercise-reconnect` path reads each live session and its
  * pending approval/input snapshot. This is the native reconciliation half of
  * M0-02/M0-05; it deliberately does not claim a cold resume because the
@@ -54,6 +58,7 @@
  *   node scripts/native-smoke.mjs --exercise-isolation
  *   node scripts/native-smoke.mjs --exercise-cut-during-turn
  *   node scripts/native-smoke.mjs --exercise-user-shell
+ *   node scripts/native-smoke.mjs --exercise-user-shell --exercise-user-shell-slow
  *   node scripts/native-smoke.mjs --exercise-reconnect
  *   node scripts/native-smoke.mjs --exercise-history
  *   node scripts/native-smoke.mjs --exercise-reasoning
@@ -63,7 +68,7 @@
  *   node scripts/native-smoke.mjs --exercise-control --exercise-terminal
  *   node scripts/native-smoke.mjs --report artifacts/native-smoke.json
  */
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -123,6 +128,10 @@ function exercisesCutDuringTurnPath() {
 
 function exercisesUserShellPath() {
   return process.argv.includes("--exercise-user-shell");
+}
+
+function exercisesUserShellSlowPath() {
+  return process.argv.includes("--exercise-user-shell-slow");
 }
 
 function exercisesReconnectPath() {
@@ -341,7 +350,11 @@ function createHost(binary, workspace, label) {
     }
   }
 
-  return { request, notify, waitForNotification, close };
+  function snapshotNotifications() {
+    return notifications.map((notification) => ({ ...notification }));
+  }
+
+  return { request, notify, waitForNotification, snapshotNotifications, close };
 }
 
 async function removeTemporaryDirectory(path) {
@@ -388,6 +401,8 @@ async function main() {
   const exerciseIsolation = exercisesIsolationPath();
   const exerciseCutDuringTurn = exercisesCutDuringTurnPath();
   const exerciseUserShell = exercisesUserShellPath();
+  const exerciseUserShellSlow = exercisesUserShellSlowPath();
+  const negotiateUserShell = exerciseUserShell || exerciseUserShellSlow;
   const exerciseReconnect = exercisesReconnectPath();
   const exerciseHistory = exercisesHistoryPath();
   const exerciseReasoning = exercisesReasoningPath();
@@ -413,6 +428,7 @@ async function main() {
     const errors = [];
     const approvalModes = [];
     const userShellChecks = [];
+    const userShellSlowChecks = [];
     const reconnectChecks = [];
     const historyChecks = [];
     const reasoningChecks = [];
@@ -424,16 +440,16 @@ async function main() {
     for (const [index, host] of hosts.entries()) {
       const initialized = await host.request("initialize", {
         clientInfo: { name: "muse_desktop_native_smoke", version: "0.1.0" },
-        ...(exerciseUserShell ? { capabilities: { requestedCapabilities: ["userShell"] } } : {}),
+        ...(negotiateUserShell ? { capabilities: { requestedCapabilities: ["userShell"] } } : {}),
       });
       if (initialized?.serverInfo?.name !== "muse") fail(`host-${index === 0 ? "A" : "B"} returned an unexpected server name`);
       if (initialized?.schema?.version !== 1 || typeof initialized?.schema?.fingerprint !== "string") {
         fail(`host-${index === 0 ? "A" : "B"} returned an incompatible schema`);
       }
-      if (exerciseUserShell && !Array.isArray(initialized?.grantedCapabilities)) {
+      if (negotiateUserShell && !Array.isArray(initialized?.grantedCapabilities)) {
         fail(`host-${index === 0 ? "A" : "B"} returned no capability grant list`);
       }
-      if (exerciseUserShell && !initialized.grantedCapabilities.includes("userShell")) {
+      if (negotiateUserShell && !initialized.grantedCapabilities.includes("userShell")) {
         fail(`host-${index === 0 ? "A" : "B"} did not grant userShell`);
       }
       const sessionDurability = typeof initialized?.sessionDurability === "string" && initialized.sessionDurability.trim().length > 0
@@ -750,6 +766,91 @@ async function main() {
       }
     }
     if (new Set(sessions).size !== sessions.length) fail("the two native hosts returned the same session id");
+    if (exerciseUserShellSlow) {
+      // Admit one slow command per host and record whether the host serves
+      // its output back. Only session/userShell, item notifications and
+      // session/read are used; a missing output stays an explicit boundary.
+      for (const [index, host] of hosts.entries()) {
+        const hostLabel = String.fromCharCode(65 + index);
+        const marker = `SLOW-SHELL-${randomBytes(6).toString("hex").toUpperCase()}`;
+        const markerFile = `${marker}.txt`;
+        const markerPath = join(tmpdir(), markerFile).replace(/\\/g, "/");
+        const slowCommandId = uuidv7();
+        const admitted = await host.request("session/userShell", {
+          commandId: slowCommandId,
+          commandText: `node -e "setTimeout(()=>{console.log('${marker}');require('fs').writeFileSync('${markerPath}','done')},9000)"`,
+          sessionId: sessions[index],
+        });
+        if (admitted?.status !== "accepted" || admitted?.commandId !== slowCommandId) {
+          fail(`host-${hostLabel} did not accept the slow userShell probe`);
+        }
+        const admittedAt = Date.now();
+        let itemStarted = false;
+        try {
+          await host.waitForNotification(
+            "item/started",
+            (params) => JSON.stringify(params ?? "").includes(slowCommandId),
+            8_000,
+          );
+          itemStarted = true;
+        } catch {
+          // Some hosts serve shell output without an item stream.
+        }
+        let sessionRead = "checked";
+        let historyFound = false;
+        let outputMatched = false;
+        let outputExcerpt = null;
+        const deadline = Date.now() + 30_000;
+        try {
+          for (;;) {
+            const read = await host.request("session/read", { excludeItems: false, sessionId: sessions[index] });
+            const flat = JSON.stringify(read?.history?.items ?? []).slice(0, 200_000);
+            if (flat.includes(slowCommandId)) {
+              historyFound = true;
+              const at = flat.indexOf(marker);
+              if (at >= 0) {
+                outputMatched = true;
+                outputExcerpt = flat.slice(Math.max(0, at - 80), at + marker.length + 80);
+              }
+              break;
+            }
+            if (Date.now() > deadline) break;
+            await new Promise((resolve) => setTimeout(resolve, 2_000));
+          }
+        } catch (error) {
+          if (error?.code !== -32601 || error?.kind !== "methodNotFound") throw error;
+          sessionRead = "unsupported";
+        }
+        const waitForFile = admittedAt + 14_000 - Date.now();
+        if (waitForFile > 0) {
+          await new Promise((resolve) => setTimeout(resolve, waitForFile));
+        }
+        let executed = false;
+        try {
+          await access(join(tmpdir(), markerFile));
+          executed = true;
+        } catch {
+          // No side-effect file appeared: the command may never have run.
+        }
+        const observedMethods = [...new Set(
+          host.snapshotNotifications()
+            .filter((notification) => JSON.stringify(notification.params ?? "").includes(slowCommandId))
+            .map((notification) => notification.method),
+        )].sort();
+        userShellSlowChecks.push({
+          host: hostLabel,
+          commandId: slowCommandId,
+          status: "accepted",
+          executed,
+          itemStarted,
+          sessionRead,
+          historyFound,
+          outputMatched,
+          ...(outputExcerpt === null ? {} : { outputExcerpt }),
+          observedMethods,
+        });
+      }
+    }
     if (exerciseQueue) {
       for (const [index, host] of hosts.entries()) {
         const hostLabel = String.fromCharCode(65 + index);
@@ -935,6 +1036,7 @@ async function main() {
       ...(exerciseApproval ? { approvalModes } : {}),
       ...(exerciseIsolation ? { isolation } : {}),
       ...(exerciseUserShell ? { userShell: userShellChecks } : {}),
+      ...(exerciseUserShellSlow ? { userShellSlow: userShellSlowChecks } : {}),
       ...(exerciseReconnect ? { reconnect: reconnectChecks } : {}),
       ...(exerciseHistory ? { history: historyChecks } : {}),
       ...(exerciseReasoning ? { reasoningEffort: reasoningChecks } : {}),
