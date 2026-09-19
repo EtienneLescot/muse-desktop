@@ -14,6 +14,11 @@ export interface ScheduleRunSummary {
   nextSteps?: string[];
 }
 
+export interface StructuredRunFacts {
+  issues?: readonly string[];
+  nextSteps?: readonly string[];
+}
+
 const MAX_HEADLINE = 280;
 const MAX_NEXT_STEPS = 4;
 const MAX_NEXT_STEP_CHARS = 200;
@@ -80,6 +85,35 @@ function extractIssues(log: ArtifactLogEntry[]): string[] {
     }
   }
   return issues;
+}
+
+/**
+ * Merge explicit facts supplied by the host with the local extractive recap.
+ * Host facts are bounded and deduplicated exactly like transcript facts; no
+ * text is synthesized when the host omits a field.
+ */
+export function mergeScheduleRunSummary(
+  summary: ScheduleRunSummary,
+  hostFacts?: StructuredRunFacts,
+): ScheduleRunSummary {
+  if (hostFacts === undefined) return summary;
+  const issues = [...(summary.issues ?? [])];
+  for (const item of hostFacts.issues ?? []) {
+    const bounded = clipIssue(item);
+    if (bounded.length > 0 && !issues.includes(bounded)) issues.push(bounded);
+    if (issues.length >= MAX_ISSUES) break;
+  }
+  const nextSteps = [...(summary.nextSteps ?? [])];
+  for (const item of hostFacts.nextSteps ?? []) {
+    const bounded = clipNextStep(item);
+    if (bounded.length > 0 && !nextSteps.includes(bounded)) nextSteps.push(bounded);
+    if (nextSteps.length >= MAX_NEXT_STEPS) break;
+  }
+  return {
+    ...summary,
+    ...(issues.length > 0 ? { issues } : {}),
+    ...(nextSteps.length > 0 ? { nextSteps } : {}),
+  };
 }
 
 /**

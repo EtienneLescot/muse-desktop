@@ -6,7 +6,7 @@
  */
 import { isValidTimeZone, type ScheduleAuthorizationMode, type ThreadReuse } from "./schedules.ts";
 import { readStorageJson, writeStorageJson } from "./storage.ts";
-import type { ScheduleRunSummary } from "./runSummary.ts";
+import type { ScheduleRunSummary, StructuredRunFacts } from "./runSummary.ts";
 
 export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 /**
@@ -137,6 +137,8 @@ export interface ScheduledTurnOutcome {
   retryable?: boolean;
   resultPreview?: string;
   resultSummary?: ScheduleRunSummary;
+  /** Explicit structured facts from the terminal host result. */
+  resultFacts?: StructuredRunFacts;
 }
 
 /**

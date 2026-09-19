@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildScheduleRunSummary } from "../src/lib/runSummary.ts";
+import { buildScheduleRunSummary, mergeScheduleRunSummary } from "../src/lib/runSummary.ts";
 
 describe("scheduled run result summaries", () => {
   it("extracts a bounded headline, counts, files and outcomes", () => {
@@ -62,5 +62,18 @@ describe("scheduled run result summaries", () => {
       "provider: rate limit reached",
     ]);
     assert.deepEqual(summary.nextSteps, ["apply the migration."]);
+  });
+
+  it("merges host facts without replacing the local recap", () => {
+    const summary = buildScheduleRunSummary("session-5", [
+      { id: "a", role: "assistant", text: "Decision: keep the current plan." },
+    ]);
+    const merged = mergeScheduleRunSummary(summary, {
+      issues: ["host reported a partial result"],
+      nextSteps: ["Confirm the deployment"],
+    });
+    assert.match(merged.headline, /Decision: keep/);
+    assert.deepEqual(merged.issues, ["host reported a partial result"]);
+    assert.deepEqual(merged.nextSteps, ["Confirm the deployment"]);
   });
 });

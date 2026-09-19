@@ -92,6 +92,23 @@ describe("M0-07 structured engine failures", () => {
     assert.equal(tooDeep?.resultPreview, undefined);
   });
 
+  it("keeps explicit structured issues and next steps bounded", () => {
+    const result = parseTurnCompletion("turn/completed", JSON.stringify({
+      result: {
+        summary: "Completed with follow-up.",
+        issues: [{ message: "Bearer secret should never be shown" }, "workspace is dirty"],
+        warnings: ["review the generated patch"],
+        nextSteps: ["Run tests", { text: "Publish the release" }],
+      },
+    }));
+    assert.deepEqual(result?.resultIssues, [
+      "Bearer [redacted] should never be shown",
+      "workspace is dirty",
+      "review the generated patch",
+    ]);
+    assert.deepEqual(result?.resultNextSteps, ["Run tests", "Publish the release"]);
+  });
+
   it("finds only the prompt before the failed turn", () => {
     const entries = [
       { id: "u1", role: "user", text: "first" },

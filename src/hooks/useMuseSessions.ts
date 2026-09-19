@@ -299,7 +299,7 @@ import {
   syncNativeSchedulerWakeup,
   type SchedulerWakeupStatus,
 } from "../lib/schedulerWakeup";
-import { buildScheduleRunSummary } from "../lib/runSummary";
+import { buildScheduleRunSummary, mergeScheduleRunSummary } from "../lib/runSummary";
 export type { ScheduleRunSummary } from "../lib/runSummary";
 import {
   INITIAL_SCHEDULER_RUNTIME_STATUS,
@@ -3072,7 +3072,7 @@ export function useMuseSessions(): UseMuseSessions {
     );
     const preview = lastAssistant?.text.trim().replace(/\s+/g, " ").slice(0, 320);
     const resultSummary = outcome.status === "completed"
-      ? buildScheduleRunSummary(sessionId, log)
+      ? mergeScheduleRunSummary(buildScheduleRunSummary(sessionId, log), outcome.resultFacts)
       : undefined;
     setScheduleRuns((cur) => {
       return settleRunsForSession(cur, sessionId, {
@@ -3847,6 +3847,14 @@ export function useMuseSessions(): UseMuseSessions {
           : {
               status: "completed",
               ...(completion?.resultPreview ? { resultPreview: completion.resultPreview } : {}),
+              ...(completion?.resultIssues || completion?.resultNextSteps
+                ? {
+                    resultFacts: {
+                      ...(completion.resultIssues ? { issues: completion.resultIssues } : {}),
+                      ...(completion.resultNextSteps ? { nextSteps: completion.resultNextSteps } : {}),
+                    },
+                  }
+                : {}),
             });
     }
     const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated" || kind === "approval_mode_changed";
