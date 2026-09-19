@@ -6825,6 +6825,14 @@ body.dark .composer textarea::placeholder {
   padding: 0 var(--space-1);
 }
 
+.share-safeguard {
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line));
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
 .collab-flag {
   font-size: 0.75rem;
   font-weight: 700;

@@ -86,6 +86,15 @@ export function SharePanel({
             <li key={b.bundleId} className="collab-row">
               <code title={b.bundleId}>{b.bundleId}</code>
               <span className="muted">{b.format}</span>
+              {(b.redacted || b.truncated) && (
+                <span
+                  className="muted share-safeguard"
+                  title="The export was bounded or had credential-shaped values removed."
+                >
+                  {b.redacted ? "sanitized" : "bounded"}
+                  {b.omittedEntries ? ` · ${b.omittedEntries} omitted` : ""}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => onCopy(b)}

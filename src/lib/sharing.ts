@@ -41,6 +41,12 @@ export interface ShareBundle {
   createdAt: number;
   revoked: boolean;
   body: string;
+  /** True when known credential-shaped values were replaced before export. */
+  redacted?: boolean;
+  /** True when entry/body limits required a bounded export. */
+  truncated?: boolean;
+  /** Number of log entries omitted by the export bound. */
+  omittedEntries?: number;
 }
 
 export interface ShareState {
@@ -93,7 +99,10 @@ function isValidBundle(b: unknown): b is ShareBundle {
     (r.format === "markdown" || r.format === "json") &&
     typeof r.createdAt === "number" &&
     typeof r.revoked === "boolean" &&
-    typeof r.body === "string"
+    typeof r.body === "string" &&
+    (r.redacted === undefined || typeof r.redacted === "boolean") &&
+    (r.truncated === undefined || typeof r.truncated === "boolean") &&
+    (r.omittedEntries === undefined || (typeof r.omittedEntries === "number" && Number.isInteger(r.omittedEntries) && r.omittedEntries >= 0))
   );
 }
 
@@ -135,19 +144,101 @@ function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** Keep local exports useful while bounding accidental data disclosure. */
+export const MAX_SHARE_ENTRIES = 400;
+export const MAX_SHARE_ENTRY_CHARS = 12_000;
+export const MAX_SHARE_BODY_CHARS = 240_000;
+
+const SECRET_PATTERNS: readonly RegExp[] = [
+  /-----BEGIN [^-]+ PRIVATE KEY-----[\s\S]*?-----END [^-]+ PRIVATE KEY-----/gi,
+  /\bbearer\s+[A-Za-z0-9._~-]+/gi,
+  /\b(?:bearer|token|api[_ -]?key|secret|password|passwd|authorization)\s*[:=]\s*(["']?)[^\s,;"']+\1/gi,
+  /\b(?:sk|rk|ghp|gho|ghs|github_pat|xox[baprs])-[A-Za-z0-9_\-.]{12,}/g,
+];
+
+interface PreparedShareEntries {
+  entries: ShareableEntry[];
+  redacted: boolean;
+  truncated: boolean;
+  omittedEntries: number;
+}
+
+function prepareShareTitle(title: string, sessionId: string): { title: string; redacted: boolean } {
+  const fallback = oneLine(sessionId).slice(0, 80) || "conversation";
+  const scrubbed = redactShareText(oneLine(title).slice(0, 200));
+  return { title: scrubbed.text || fallback, redacted: scrubbed.redacted };
+}
+
+function redactShareText(text: string): { text: string; redacted: boolean } {
+  let next = text;
+  let redacted = false;
+  for (const pattern of SECRET_PATTERNS) {
+    const replaced = next.replace(pattern, (match: string) => {
+      redacted = true;
+      // Keep a key/value prefix when one is present so the export remains
+      // understandable without carrying the credential itself.
+      const separator = match.search(/[:=]/);
+      if (separator >= 0) {
+        const prefix = match.slice(0, separator + 1).trimEnd();
+        return `${prefix} [redacted]`;
+      }
+      return "[redacted]";
+    });
+    next = replaced;
+  }
+  return { text: next, redacted };
+}
+
+function prepareShareEntries(log: ShareableEntry[]): PreparedShareEntries {
+  const selected = log.slice(-MAX_SHARE_ENTRIES);
+  let redacted = false;
+  let truncated = selected.length !== log.length;
+  const entries = selected.map((entry) => {
+    const source = String(entry.text ?? "");
+    const scrubbed = redactShareText(source);
+    redacted ||= scrubbed.redacted;
+    let text = scrubbed.text;
+    if (text.length > MAX_SHARE_ENTRY_CHARS) {
+      text = `${text.slice(0, MAX_SHARE_ENTRY_CHARS)}\n[… entry truncated …]`;
+      truncated = true;
+    }
+    return { role: oneLine(String(entry.role ?? "message")) || "message", text, ts: Number.isFinite(entry.ts) ? entry.ts : 0 };
+  });
+  let total = 0;
+  let bounded = entries;
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const size = entries[i].text.length + entries[i].role.length + 32;
+    if (total + size > MAX_SHARE_BODY_CHARS) {
+      bounded = entries.slice(i + 1);
+      truncated = true;
+      break;
+    }
+    total += size;
+  }
+  return { entries: bounded, redacted, truncated, omittedEntries: log.length - bounded.length };
+}
+
 /** Render a thread snapshot as markdown (download / copy body). */
 export function buildBundleMarkdown(
   sessionId: string,
   title: string,
   log: ShareableEntry[],
 ): string {
+  const prepared = prepareShareEntries(log);
+  const safeTitle = prepareShareTitle(title, sessionId);
   const lines: string[] = [
-    `# ${title || sessionId.slice(0, 8)}`,
+    `# ${safeTitle.title}`,
     "",
     `_Session ${sessionId}, exported ${new Date().toISOString()}_`,
     "",
   ];
-  for (const e of log) {
+  if (prepared.redacted || prepared.truncated || safeTitle.redacted) {
+    lines.push(
+      `_Export safeguards applied${prepared.redacted || safeTitle.redacted ? ": credential-shaped values redacted" : ""}${prepared.truncated ? "; content bounded" : ""}._`,
+      "",
+    );
+  }
+  for (const e of prepared.entries) {
     const text = e.text.trim();
     if (text.length === 0) continue;
     lines.push(`## ${e.role}`, "", text, "");
@@ -161,13 +252,20 @@ export function buildBundleJson(
   title: string,
   log: ShareableEntry[],
 ): string {
+  const prepared = prepareShareEntries(log);
+  const safeTitle = prepareShareTitle(title, sessionId);
   return (
     JSON.stringify(
       {
         sessionId,
-        title,
+        title: safeTitle.title,
         exportedAt: new Date().toISOString(),
-        entries: log.map((e) => ({ role: e.role, text: e.text, ts: e.ts })),
+        safeguards: {
+          redacted: prepared.redacted || safeTitle.redacted,
+          truncated: prepared.truncated,
+          omittedEntries: prepared.omittedEntries,
+        },
+        entries: prepared.entries.map((e) => ({ role: e.role, text: e.text, ts: e.ts })),
       },
       null,
       2,
@@ -208,15 +306,20 @@ export function shareThread(
 ): { state: ShareState; bundle: ShareBundle } | null {
   if (state.mode === "disabled") return null;
   if (log.length === 0) return null;
+  const safeTitle = prepareShareTitle(title, sessionId);
   const bundle: ShareBundle = {
     bundleId: makeBundleId(opts?.rand),
     sessionId,
-    title: oneLine(title) || `Session ${sessionId.slice(0, 8)}`,
+    title: safeTitle.title,
     format,
     createdAt: opts?.now ?? Date.now(),
     revoked: false,
     body: buildBundleBody(format, sessionId, title, log),
   };
+  const prepared = prepareShareEntries(log);
+  if (prepared.redacted || safeTitle.redacted) bundle.redacted = true;
+  if (prepared.truncated) bundle.truncated = true;
+  if (prepared.omittedEntries > 0) bundle.omittedEntries = prepared.omittedEntries;
   return {
     state: { ...state, bundles: { ...state.bundles, [bundle.bundleId]: bundle } },
     bundle,
