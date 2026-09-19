@@ -845,6 +845,22 @@ export function OrchestrationPanel({
                         ? `Failed · ${hostCompletion.error.message}`
                         : hostCompletion.resultPreview ?? "The host confirmed completion without a summary."}
                     </p>
+                    {hostCompletion.resultIssues && hostCompletion.resultIssues.length > 0 && (
+                      <div className="writer-result-facts writer-result-issues">
+                        <strong>Issues observed</strong>
+                        <ul>
+                          {hostCompletion.resultIssues.map((issue) => <li key={issue}>{issue}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {hostCompletion.resultNextSteps && hostCompletion.resultNextSteps.length > 0 && (
+                      <div className="writer-result-facts writer-result-next">
+                        <strong>Next steps</strong>
+                        <ul>
+                          {hostCompletion.resultNextSteps.map((step) => <li key={step}>{step}</li>)}
+                        </ul>
+                      </div>
+                    )}
                     {hostCompletion.turnId !== undefined && (
                       <small>Turn {hostCompletion.turnId.slice(0, 12)} · structured completion from the host</small>
                     )}

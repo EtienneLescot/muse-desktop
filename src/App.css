@@ -3376,6 +3376,32 @@ body.dark .composer textarea::placeholder {
   color: var(--muted);
   font-size: 0.64rem;
 }
+.writer-result-facts {
+  margin: 6px 0;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 82%, var(--line) 18%);
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+.writer-result-facts strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.65rem;
+}
+.writer-result-facts ul {
+  margin: 3px 0 0;
+  padding-left: 16px;
+}
+.writer-result-facts li + li {
+  margin-top: 2px;
+}
+.writer-result-issues {
+  border-left: 2px solid var(--danger, #d66);
+}
+.writer-result-next {
+  border-left: 2px solid var(--blue);
+}
 
 /* ---- US-12 + US-21 artifacts pane: right-side column next to the thread. */
 /* Later equal-specificity rule: session-view becomes a row (center + pane). */
