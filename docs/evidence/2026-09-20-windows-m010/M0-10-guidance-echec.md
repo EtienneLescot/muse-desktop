@@ -37,11 +37,13 @@ Tout a été remis en place et **vérifié** :
 
 | Élément | État après restauration |
 |---|---|
-| `binaries/muse-x86_64-pc-windows-msvc.exe` | présent, 396,1 Mo |
-| `target/debug/muse.exe` | présent |
+| `src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe` | présent, 396,1 Mo |
+| `src-tauri/target/debug/muse.exe` | présent |
 | `%USERPROFILE%\.config\muse\auth.json` | présent, 135 octets |
 | Fichiers `.disabled` résiduels | **aucun** |
 | Application relancée | **1 host démarré**, 63 conversations, aucun panneau d'erreur |
+
+Les chemins sont donnés **relatifs à la racine du dépôt**, comme dans le tableau de l'état cassé plus haut : ce document vit sous `docs/evidence/`, donc un chemin sans préfixe serait ambigu.
 
 ## Ce qui reste non couvert pour M0-10
 
