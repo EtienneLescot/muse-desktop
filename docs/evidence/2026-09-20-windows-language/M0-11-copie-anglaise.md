@@ -5,8 +5,8 @@ M0-11 demande de « finir l'anglais ». Le dépôt disposait d'un test (`test/ui
 ## 1. Source entière — recherche d'accents
 
 ```powershell
-Get-ChildItem src -Recurse -Include *.tsx,*.ts
-Select-String -Pattern "[éèêëàâäôöûüç]"
+Get-ChildItem src -Recurse -Include *.tsx,*.ts |
+  Select-String -Pattern "[éèêëàâäôöûüç]"
 ```
 
 | Mesure | Résultat |
@@ -33,25 +33,39 @@ Le script parcourt les nœuds texte visibles et signale toute chaîne contenant 
 
 ### Résultat : aucune copie française
 
-| Surface | Candidats |
-|---|---|
-| home | 2 |
-| new-conversation | 2 |
-| automations | 2 |
-| extensions | 3 |
-| library | 2 |
-| search | 2 |
-| conversation | 2 |
+Première passe, avec une détection **sensible à la casse** (voir la correction plus bas) :
 
-**Les 7 chaînes signalées sont toutes des faux positifs de l'heuristique**, et je les examine une par une :
-
-| Chaîne | Déclencheur | Verdict |
+| Surface | Candidats (passe 1) | Candidats (passe 2, insensible à la casse) |
 |---|---|---|
-| `Extensions` | mon marqueur tronqué `Exten` | **anglais** — le mot est identique dans les deux langues |
-| `Conversations (…)` | marqueur `Conversations` | **anglais** — identique dans les deux langues |
-| `Curated catalog plus an explicit local MCP probe.` | mot grammatical `plus` | **anglais** — la phrase est entièrement anglaise |
+| home | 2 | **5** |
+| new-conversation | 2 | **5** |
+| automations | 2 | **4** |
+| extensions | 3 | **5** |
+| library | 2 | **5** |
+| search | 2 | **5** |
+| conversation | 2 | **5** |
+| **Total** | **7** | **34** |
 
-Aucune chaîne réellement française n'est apparue sur aucune des sept surfaces.
+**Aucune des 34 chaînes n'est française.** Ce sont toutes des faux positifs, regroupés en trois familles :
+
+| Chaîne signalée | Déclencheur | Verdict |
+|---|---|---|
+| `Extensions` | marqueur tronqué `Exten` | **anglais** — le mot est identique dans les deux langues |
+| `Conversations (…)` | marqueur `Conversations` | **anglais** — identique dans les deux langues |
+| `Archived conversations` | marqueur `Conversations` | **anglais** |
+| `Search conversations` | marqueur `Conversations` | **anglais** |
+| `No imported conversations yet.` | marqueur `Conversations` | **anglais** |
+| `Fast responses with no extended reasoning` | marqueur `Exten` | **anglais** — `Exten` matche « Ex**ten**sions » et « ex**ten**ded » |
+| `Curated catalog plus an explicit local MCP probe.` | mot grammatical `plus` | **anglais** — phrase entièrement anglaise |
+
+### Une correction apportée après revue
+
+Une revue automatisée a relevé deux défauts réels dans ma première passe :
+
+1. **La détection des marqueurs était sensible à la casse** (`raw.includes(m)`). Une copie française en minuscules — « ajouter », « fermer » — serait passée inaperçue si le marqueur était capitalisé. Corrigé en comparant en minuscules, puis **audit relancé** : 7 → 34 candidats, ce qui double la sensibilité de la passe.
+2. **Un défaut de journalisation** : si la conversation cible ne s'ouvrait pas, la surface était quand même enregistrée sous le nom `conversation`, laissant croire à une mesure valide. Corrigé : l'échec est désormais nommé `conversation-NOT-OPENED`.
+
+**La conclusion n'a pas changé après correction**, mais elle repose maintenant sur une détection plus stricte et sur une mesure dont l'échec serait visible.
 
 ## Conclusion
 
@@ -62,7 +76,7 @@ Aucune chaîne réellement française n'est apparue sur aucune des sept surfaces
 - **Sept surfaces seulement.** Les panneaux ouverts à la demande — réglages, projets, revue Git, terminal, navigateur, desktop, mémoire, extensions installées, automatisations configurées — **n'ont pas été visités**. Chacun pourrait contenir de la copie française non détectée.
 - **Les chaînes construites dynamiquement** (concaténation, gabarits avec variables) peuvent échapper à un balayage de nœuds texte si le fragment français est court et sans marqueur.
 - **Les messages d'erreur, infobulles, `aria-label` et titres d'onglet** ne sont pas tous dans des nœuds texte visibles ; `aria-label` notamment n'apparaît pas dans `innerText`.
-- Mon heuristique a produit **trois faux positifs sur sept détections** — un taux élevé. Les marqueurs tronqués (`Exten`) et les mots communs aux deux langues (`Conversations`, `plus`) la rendent bruyante ; elle est **sensible mais peu spécifique**, et une détection manquée reste possible.
+- Mon heuristique a produit **34 faux positifs sur 34 détections** — soit aucune spécificité. Les marqueurs tronqués (`Exten`) et les mots communs aux deux langues (`Conversations`, `plus`) la rendent très bruyante. Autrement dit : la passe est **sensible** mais son résultat ne vaut que parce que j'ai **examiné chaque chaîne une par une**. Un audit futur doit remplacer ces marqueurs par des mots réellement exclusifs au français, sans quoi il ne prouvera rien.
 - **M0-11 comporte un second volet** — « détails de navigation » : infobulles `Ctrl`/`Cmd`, copie d'erreur centralisée, chemin natif lisible. Ce volet n'est pas traité ici.
 
 **M0-11 n'est donc pas clos.** Son volet linguistique est mesuré sur sept surfaces, avec les limites ci-dessus ; le volet navigation reste à couvrir.
