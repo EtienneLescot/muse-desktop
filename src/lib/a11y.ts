@@ -120,3 +120,9 @@ export const COMPOSER_SHORTCUT_TITLES = {
   send: "Send (Enter)",
   stop: "Stop the running sidecar",
 } as const;
+
+/** Window zoom shortcuts (rendered as a title attribute on the main landmark). */
+export function zoomShortcutTitle(platform?: string): string {
+  const mod = primaryModifier(platform);
+  return `Zoom window: ${mod}+Plus enlarge, ${mod}+Minus shrink, ${mod}+0 reset zoom`;
+}
