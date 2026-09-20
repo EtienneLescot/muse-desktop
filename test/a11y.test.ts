@@ -17,6 +17,7 @@ import {
   statusAnnouncement,
   streamStatusMessage,
   trapTabIndex,
+  zoomShortcutTitle,
 } from "../src/lib/a11y.ts";
 
 describe("platform shortcut labels", () => {
@@ -112,5 +113,13 @@ describe("COMPOSER_SHORTCUT_TITLES", () => {
     assert.match(COMPOSER_SHORTCUT_TITLES.textarea, /Enter to send/);
     assert.match(COMPOSER_SHORTCUT_TITLES.textarea, /Shift\+Enter/);
     assert.match(COMPOSER_SHORTCUT_TITLES.textarea, /Escape/);
+  });
+});
+
+describe("zoomShortcutTitle", () => {
+  it("uses Ctrl off Apple platforms and Cmd on Mac", () => {
+    assert.match(zoomShortcutTitle("Win32"), /Ctrl\+Plus enlarge/);
+    assert.match(zoomShortcutTitle("Win32"), /Ctrl\+0 reset zoom/);
+    assert.match(zoomShortcutTitle("MacIntel"), /Cmd\+Plus enlarge/);
   });
 });

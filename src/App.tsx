@@ -48,6 +48,7 @@ import {
   inputAnnouncement,
   primaryModifier,
   streamStatusMessage,
+  zoomShortcutTitle,
 } from "./lib/a11y";
 import { IndexPanel } from "./components/IndexPanel";
 import { BrowserPanel } from "./components/BrowserPanel";
@@ -1802,7 +1803,7 @@ export default function App() {
         <span className="status-workspace">
           {workspaceName || "No folder selected"}
         </span>
-        <span className="status-brand">Muse-Desktop</span>
+        <span className="status-brand" title={zoomShortcutTitle()}>Muse-Desktop</span>
       </footer>
       <dialog
         ref={searchDialog}
