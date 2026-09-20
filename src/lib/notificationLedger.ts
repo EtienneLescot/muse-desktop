@@ -1,7 +1,7 @@
 /** Native mirror for the in-app notification inbox (M3-09). */
-import { isTauriRuntime } from "./env";
-import { normalizeNotifications, type MuseNotification } from "./notifications";
-import { createLatestWriteQueue } from "./writeQueue";
+import { isTauriRuntime } from "./env.ts";
+import { normalizeNotifications, type MuseNotification } from "./notifications.ts";
+import { createLatestWriteQueue } from "./writeQueue.ts";
 
 export const NATIVE_NOTIFICATIONS_SCHEMA = "muse-desktop.native-notifications.v1";
 
