@@ -40,18 +40,18 @@ Le client déclare ces méthodes dans `src/lib/msp.ts` (lignes 28–31) et les u
 
 ## 2. Notification terminale de tour — **émise à la fin normale, absente après une interruption**
 
-**Correction (20/09/2026, fin de campagne).** Ce paragraphe affirmait que les notifications terminales ne sont **jamais** émises. **C'est faux.**
+**Seconde correction (20/09/2026, round 55).** Ce paragraphe affirmait ensuite qu'**aucun** terminal n'est émis après une interruption. **C'est faux aussi**, et le tableau est désormais :
 
 | Situation | Notification terminale | Mesure |
 |---|---|---|
-| **Tour mené à son terme normalement** | **`turn/completed` est émis** | `msp-resume-free-session.mjs` : notifications observées `turn/started`, `item/started`, `item/delta`, `item/completed`, `session/tokenUsage`, `session/contextUsage`, **`turn/completed`** |
-| **Tour interrompu par `turn/interrupt`** | **aucune** | `native-smoke.mjs --exercise-control --exercise-terminal` échoue : `host-A did not emit a terminal notification` |
+| **Tour mené à son terme normalement** | **`turn/completed` émis** | `msp-resume-free-session.mjs` |
+| **Tour interrompu par `turn/interrupt`** | **`turn/completed` émis à +39 ms** | `msp-interrupt-notifications.mjs` — avec `{sessionId, turnId, commandId}` |
 
-`turn/interrupt` est **accusé** (`accepted`) mais le tour n'est **pas clos** par un terminal. C'est **uniquement** dans ce cas que le client doit déduire l'état final.
+Après interruption, le host émet `item/completed` (+19 ms), `session/statusChanged` (+39 ms) puis **`turn/completed` (+39 ms)**, portant **le `turnId` attendu**, et **zéro** `item/delta` ensuite : le tour s'est bien arrêté, et le terminal le confirme.
 
-**Impact, corrigé :** le client reçoit bien la fin d'un tour **normal**. Ce qui manque est la confirmation d'un **arrêt demandé** — l'utilisateur appuie sur Stop, le host accuse, puis rien ne vient confirmer que le tour s'est effectivement arrêté. Vérifié depuis l'interface : après un `Stop`, la conversation affiche `Stopping…` puis bascule en **« No recent host update »** sans terminal. La déduction côté client ne concerne donc que **le chemin d'arrêt**, pas le chemin nominal.
+**Pourquoi je croyais le contraire :** `native-smoke.mjs` appelle `turn/interrupt` **sans `turnId`** (`{commandId, sessionId, retract}`), alors que le host l'exige. L'interruption était refusée en `invalidParams`, le tour n'était jamais interrompu, aucun terminal ne pouvait arriver — et le harness traduisait cette absence en `terminalNotification: unsupported`. **Le harness a besoin d'un correctif** : passer le `turnId` du tour qu'il interrompt.
 
-**Cause probable de mon erreur initiale :** `native-smoke.mjs` ne teste la notification terminale **qu'après `turn/interrupt`** (fonction `waitForTerminalNotification`, appelée depuis le chemin `--exercise-control`). Je n'avais jamais mesuré le cas nominal, et j'ai généralisé à partir du seul cas d'arrêt.
+**Impact, corrigé une seconde fois :** il n'y a **aucun écart de terminal côté host**, ni sur le chemin nominal, ni sur le chemin d'arrêt. L'observation d'interface — `Stopping…` qui ne se résout pas, bandeau « waiting for the desktop host to confirm it » — reste **inexpliquée**, mais elle ne peut plus être attribuée à une absence de terminal : le host le fournit. Trois pistes restent ouvertes, aucune tranchée : le renderer ne transmet peut-être pas de `turnId` non vide à `interrupt_session` ; le terminal arrive peut-être sans être associé au bon tour ; l'observation datait peut-être d'un état différent. Détail dans [`terminal-apres-interruption.md`](evidence/2026-09-20-windows-sessions/terminal-apres-interruption.md).
 
 ## 3. `session/userShell` — accepté, jamais restitué
 
