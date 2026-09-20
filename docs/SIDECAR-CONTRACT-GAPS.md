@@ -73,13 +73,37 @@ Le smoke harness **attend déjà** cette notification (`native-smoke.mjs`, atten
 
 Pour `session/compact`, `missing-run` sur une session vierge est un refus cohérent ; ce qui manque est un scénario sur un historique réel, donc côté client ce n'est pas un écart mais une preuve à produire.
 
-## 5. Durabilité de session — `ephemeral`
+## 5. Durabilité de session — **variable**, et non `ephemeral`
 
-`initialize` annonce **`sessionDurability: "ephemeral"`** sur les deux hosts. Conséquence directe, observée depuis l'interface : après reconnexion, la reprise échoue avec
+**Correction (20/09/2026, fin de campagne).** Ce paragraphe affirmait que `initialize` annonce `sessionDurability: "ephemeral"`. **C'est incomplet et trompeur.**
+
+Mesuré en début de campagne : **`ephemeral`**. Mesuré en fin de campagne, **quatre fois de suite sur des hosts neufs** : **`durable`**. La configuration n'a pas changé entre les deux (`settings.json` et `auth.json` datent du 19/09, avant la première mesure), et le résultat ne dépend ni de `clientInfo.name` ni des capacités demandées.
+
+**Je n'identifie pas la cause.** Ce qui est établi, c'est que **`sessionDurability` ne peut pas être documenté comme une constante du host 1.3.0** : sa valeur a changé sur la même machine, le même jour, sans modification de configuration.
+
+Conséquence directe de l'échec de reprise, observée depuis l'interface après reconnexion :
 
 > `MSP error -32020: session … was not found [sessionNotFound] [retryable=false]`
 
-Le client affiche « Your saved messages are still available » et ne fabrique aucun faux succès — c'est le comportement correct face à un host éphémère.
+Le client affiche « Your saved messages are still available » et ne fabrique aucun faux succès — comportement correct, mais **l'explication n'est plus la bonne**.
+
+### Ce que `session/list` démontre à la place
+
+Le host **connaît 9 sessions**, chacune avec son **chemin de stockage** sur disque
+
+```
+%USERPROFILE%\.local\share\muse\sessions\<année>\<mois>\<jour>\<sessionId>\session.jsonl
+```
+
+et des métadonnées complètes : `title`, `turnCount`, `status`, `workspaceRoot`, `branch`, `updatedAt`, `providerId`, `modelId`, `firstUserPrompt`.
+
+**L'historique est donc déjà persistant et énumérable.** `session/read` et `session/resume` ne manquent pas pour *créer* de la persistance, mais pour **lire depuis un client** ce que le host stocke déjà.
+
+### Hypothèse à tester, qui pourrait fermer M0-02
+
+Si le host est `durable` et que `session/list` énumère ces sessions, alors **le host connaît la session après redémarrage** — et l'échec de reprise viendrait du **client**, qui lance un nouveau host sans réconcilier avec les sessions déjà présentes. Ce serait alors un **défaut côté client, corrigible**, et non un blocage du sidecar.
+
+**C'est une hypothèse, pas un résultat.** Elle est testable : relancer l'application et vérifier si le client propose à la reprise une session que `session/list` énumère.
 
 **Impact :** aucune reprise après redémarrage n'est possible. Une valeur `durable` avec un `session/read` fonctionnel serait le chemin le plus court pour fermer plusieurs tickets à la fois.
 
