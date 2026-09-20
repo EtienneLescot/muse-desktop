@@ -38,17 +38,20 @@ Le client déclare ces méthodes dans `src/lib/msp.ts` (lignes 28–31) et les u
 
 **Point d'attention :** `approval/listPending` **fonctionne** dès qu'on lui passe un `sessionId` ; un appel **sans** `sessionId` retourne `methodNotFound`. Le harness `native-smoke.mjs` l'appelait sans identifiant et le classait donc `unsupported` — la documentation du dépôt a porté cette erreur un moment. **C'est le même travers que pour `session/read`** : une erreur de contexte interprétée comme une absence de méthode. La sonde doit distinguer explicitement `methodNotFound` de `sessionNotFound`, et tester les surfaces de lecture sur une session **persistée**.
 
-## 2. Notification terminale de tour — **absente**
+## 2. Notification terminale de tour — **émise à la fin normale, absente après une interruption**
 
-| Mesure | Résultat |
-|---|---|
-| `turn/interrupt` | **accepted** |
-| Notification `turn/completed`, `turn/retracted`, `turn/stopped` | **`terminalNotification: unsupported`**, sur les deux hosts |
-| Notifications observées après un tour | `session/started`, puis rien de terminal |
+**Correction (20/09/2026, fin de campagne).** Ce paragraphe affirmait que les notifications terminales ne sont **jamais** émises. **C'est faux.**
 
-Vérifié aussi **depuis l'interface** : après un `Stop` utilisateur, la conversation affiche `Stopping…`, puis bascule en **« No recent host update »** sans jamais recevoir de terminal. Sur un tour modèle live, la réponse arrive puis l'interface passe en stale — le tour n'est jamais clos par le host.
+| Situation | Notification terminale | Mesure |
+|---|---|---|
+| **Tour mené à son terme normalement** | **`turn/completed` est émis** | `msp-resume-free-session.mjs` : notifications observées `turn/started`, `item/started`, `item/delta`, `item/completed`, `session/tokenUsage`, `session/contextUsage`, **`turn/completed`** |
+| **Tour interrompu par `turn/interrupt`** | **aucune** | `native-smoke.mjs --exercise-control --exercise-terminal` échoue : `host-A did not emit a terminal notification` |
 
-**Impact :** le client ne peut pas distinguer « le tour est fini » de « le host est silencieux ». Toute la logique d'état final — vérifier qu'un arrêt a bien abouti, savoir qu'un tour est terminé, clore proprement une lane — dépend d'une **déduction côté client** au lieu d'un signal.
+`turn/interrupt` est **accusé** (`accepted`) mais le tour n'est **pas clos** par un terminal. C'est **uniquement** dans ce cas que le client doit déduire l'état final.
+
+**Impact, corrigé :** le client reçoit bien la fin d'un tour **normal**. Ce qui manque est la confirmation d'un **arrêt demandé** — l'utilisateur appuie sur Stop, le host accuse, puis rien ne vient confirmer que le tour s'est effectivement arrêté. Vérifié depuis l'interface : après un `Stop`, la conversation affiche `Stopping…` puis bascule en **« No recent host update »** sans terminal. La déduction côté client ne concerne donc que **le chemin d'arrêt**, pas le chemin nominal.
+
+**Cause probable de mon erreur initiale :** `native-smoke.mjs` ne teste la notification terminale **qu'après `turn/interrupt`** (fonction `waitForTerminalNotification`, appelée depuis le chemin `--exercise-control`). Je n'avais jamais mesuré le cas nominal, et j'ai généralisé à partir du seul cas d'arrêt.
 
 ## 3. `session/userShell` — accepté, jamais restitué
 
