@@ -90,7 +90,7 @@ const AUDIT = `(() => {
     if (cs.visibility === "hidden" || cs.display === "none") continue;
     const rect = el.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
-    const markerHit = markers.find((m) => raw.includes(m));
+    const markerHit = markers.find((m) => raw.toLowerCase().includes(m.toLowerCase()));
     const wordHit = functionWords.test(raw);
     if (!markerHit && !wordHit) continue;
     if (!seen.has(raw)) seen.set(raw, { text: raw, marker: markerHit || null, functionWord: wordHit, tag: el.tagName });
@@ -136,7 +136,7 @@ async function main() {
       return { opened: true };
     })()`);
     await sleep(3_000);
-    await record("conversation");
+    await record(report.back.opened ? "conversation" : "conversation-NOT-OPENED");
   } catch (error) {
     report.failure = String((error && error.message) || error).slice(0, 300);
   } finally {
