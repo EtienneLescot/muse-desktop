@@ -2831,36 +2831,8 @@ body.dark .composer textarea::placeholder {
   }
 }
 
-/* M0-12: preserve the Muse palette while making the focus ring, active
- * conversation and secondary copy easier to distinguish when the OS asks
- * for increased contrast. */
-@media (prefers-contrast: more) {
-  .muted {
-    color: var(--text);
-  }
-
-  button:focus-visible,
-  a:focus-visible,
-  input:focus-visible,
-  textarea:focus-visible,
-  select:focus-visible,
-  summary:focus-visible {
-    outline-width: 3px;
-    outline-offset: 3px;
-  }
-
-  .session-item.active {
-    box-shadow: none;
-    outline: 1px solid var(--blue);
-    outline-offset: -1px;
-  }
-
-  .stream-window-notice,
-  .stream-health,
-  .stream-recovery-note {
-    border-color: var(--text);
-  }
-}
+/* The `prefers-contrast: more` block lives at the END of this stylesheet. See
+ * the note there before moving it. */
 
 @media (max-width: 1100px) {
   .app {
@@ -6955,4 +6927,43 @@ body.dark .composer textarea::placeholder {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--bg);
+}
+
+/* M0-12: preserve the Muse palette while making the focus ring, active
+ * conversation and secondary copy easier to distinguish when the OS asks for
+ * increased contrast.
+ *
+ * Deliberately at the END of this stylesheet. This block used to sit around
+ * line 2837, before the component styles, where `.muted` lost to
+ * `.project-group-header` -- declared later at the same specificity -- so the
+ * rule never applied on the sidebar group headers. Measured with the block in
+ * its old position: `rgb(146, 162, 173)` with and without the media active.
+ * Measured with the same block moved here: `rgb(233, 239, 243)`. Position, not
+ * specificity, is what makes it win. Keep it last. */
+@media (prefers-contrast: more) {
+  .muted {
+    color: var(--text);
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  summary:focus-visible {
+    outline-width: 3px;
+    outline-offset: 3px;
+  }
+
+  .session-item.active {
+    box-shadow: none;
+    outline: 1px solid var(--blue);
+    outline-offset: -1px;
+  }
+
+  .stream-window-notice,
+  .stream-health,
+  .stream-recovery-note {
+    border-color: var(--text);
+  }
 }
