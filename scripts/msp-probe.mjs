@@ -69,6 +69,11 @@ function createHost(binary, workspace) {
   const pending = new Map();
   const notifications = [];
 
+  // Drain stderr: the pipe is declared but nothing consumes it otherwise, and
+  // a host that writes more than the pipe capacity (~64 KiB) would block on
+  // stderr and stop answering, which the probe would misreport as a timeout.
+  child.stderr.resume();
+
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk) => {
     buffer += chunk;
@@ -145,11 +150,15 @@ function createHost(binary, workspace) {
 }
 
 const uuidv7 = () => {
+  // RFC 9562: 48-bit big-endian Unix millisecond timestamp, then version 7 in
+  // the high nibble of byte 6 and the RFC 4122 variant in byte 8. The previous
+  // form shifted the timestamp right by 16 bits and wrote 32 bits over six
+  // bytes, so every identifier started with 0000 and was neither time-sortable
+  // nor conformant.
   const now = BigInt(Date.now());
   const bytes = Buffer.alloc(16);
-  bytes.writeUIntBE(Number(now >> 16n), 0, 6);
-  bytes.writeUInt16BE(Number(now & 0xffffn), 6);
-  for (let index = 8; index < 16; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  bytes.writeUIntBE(Number(now & 0xffffffffffffn), 0, 6);
+  for (let index = 6; index < 16; index += 1) bytes[index] = Math.floor(Math.random() * 256);
   bytes[6] = (bytes[6] & 0x0f) | 0x70;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = bytes.toString("hex");

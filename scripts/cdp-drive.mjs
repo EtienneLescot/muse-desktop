@@ -15,8 +15,8 @@
  * Usage:
  *   node scripts/cdp-drive.mjs eval "<expression>"
  *   node scripts/cdp-drive.mjs snapshot
- *   node scripts/cdp-drive.mjs click "<css selector>"
- *   node scripts/cdp-drive.mjs fill "<css selector>" "<text>"
+ *   node scripts/cdp-drive.mjs click "<visible label>"      # matched by text, not CSS
+ *   node scripts/cdp-drive.mjs fill "<text>"                # writes into the composer
  */
 import { argv, exit } from "node:process";
 

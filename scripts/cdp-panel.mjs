@@ -100,9 +100,19 @@ async function main() {
     })()`);
     await sleep(2_000);
 
-    // 2. Expand the side panel via the icon-only toggle in the top bar.
+    // 2. Expand the side panel. The toggle is labelled in the DOM ("Hide work
+    // panel" when open, "Show work panel" when closed), so target that label
+    // first; the icon heuristic is only a fallback and deliberately excludes
+    // buttons that already carry an accessible name, so it cannot fire an
+    // unrelated action.
     report.steps.panelToggle = await evaluate(client, `(() => {
       ${HELPERS}
+      const byLabel = nodes('button, a, [role="button"]').find((n) => /work panel|side panel|panel/i.test(text(n)));
+      if (byLabel) {
+        const wasOpen = /hide/i.test(text(byLabel));
+        byLabel.click();
+        return { toggled: true, via: 'label', label: text(byLabel), wasOpen };
+      }
       const top = nodes('header, [class*=topbar], [class*=titlebar], [class*=app-bar], [class*=top-bar]')[0] || document.body;
       const candidates = [...top.querySelectorAll('button')].filter(vis).filter((n) => !text(n));
       const withSvg = candidates.filter((n) => n.querySelector('svg'));
@@ -117,17 +127,15 @@ async function main() {
     report.steps.tabsAfterToggle = await evaluate(client, `(() => { ${HELPERS} return workTabs(); })()`);
 
     if (!report.steps.tabsAfterToggle.length) {
-      // Toggle may have closed an already-open panel; try every icon candidate once.
+      // The toggle may have inverted an already-open panel. Try the labelled
+      // control once more rather than clicking every nameless button in the
+      // header, which could fire an unrelated action and skew the measurement.
       report.steps.retryToggle = await evaluate(client, `(() => {
         ${HELPERS}
-        const top = nodes('header, [class*=topbar], [class*=titlebar], [class*=app-bar]')[0] || document.body;
-        const buttons = [...top.querySelectorAll('button')].filter(vis).filter((n) => !text(n));
-        for (const b of buttons) {
-          b.click();
-          const tabs = workTabs();
-          if (tabs.length) return { hit: true, tabs, index: buttons.indexOf(b) };
-        }
-        return { hit: false, tried: buttons.length };
+        const byLabel = nodes('button, a, [role="button"]').find((n) => /work panel|side panel/i.test(text(n)));
+        if (!byLabel) return { hit: false, reason: 'no labelled panel toggle' };
+        byLabel.click();
+        return { hit: true, label: text(byLabel) };
       })()`);
       await sleep(2_000);
       report.steps.tabsAfterRetry = await evaluate(client, `(() => { ${HELPERS} return workTabs(); })()`);

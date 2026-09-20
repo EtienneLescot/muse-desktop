@@ -73,13 +73,15 @@ Après `Stop-Process` sur le **dernier** host (`47096`) : **0 host**, applicatio
 
 ### 4. Récupération explicite, et son échec honnête (`15`)
 
-Clic sur **Reconnect** → un nouveau host est lancé (`PID 43432`, `muse.exe serve --sandbox-network restricted`). La reprise de session échoue et l'application affiche :
+Clic sur **Reconnect** → un nouveau host est lancé (`PID 43432`, `muse.exe serve --sandbox-network restricted`). La reprise de session échoue et l'application affiche un bandeau d'erreur construit ainsi :
 
-> **This conversation could not be reconnecté. — MSP error -32020: session 01a0bd8e-e19f-76a3-856a-83f7c62a310 was not found [sessionNotFound] [retryable=false]. Your saved messages are still available.**
+> **This conversation could not be <mot illisible>. — MSP error -32020: session 01a0bd8e-… was not found [sessionNotFound] [retryable=false]. Your saved messages are still available.**
+
+Le mot exact après `be` **n'a pas pu être transcrit de façon fiable** : une première recopie en français (« reconnecté ») contredisait le verdict anglais ci-dessous, et l'identifiant de session avait été recopié avec un dernier groupe de 11 caractères au lieu de 12. L'application ayant été redémarrée depuis, la chaîne verbatim n'est plus reproductible. Ce qui **est** établi est la structure du message, énumérée ci-dessous, et non son texte mot pour mot.
 
 La pastille passe à **`Connection error`** (orange), le transcript reste affiché, l'envoi reste bloqué, et **`Reconnect` reste proposé**.
 
-**Verdict :** c'est le comportement attendu pour un host `ephemeral` — la session n'existe pas dans un store durable, donc la reprise est impossible. L'application ne fabrique aucun faux succès. La copie d'erreur est en anglais, bornée, avec code, identifiant, catégorie et `retryable`, plus une phrase rassurante sur les messages conservés : c'est exactement la copie `userFacingError` attendue par M0-11.
+**Verdict :** c'est le comportement attendu pour un host `ephemeral` — la session n'existe pas dans un store durable, donc la reprise est impossible. L'application ne fabrique aucun faux succès. La copie d'erreur est **en anglais**, bornée, et porte le code (`-32020`), l'identifiant de session, la catégorie (`sessionNotFound`), l'état `retryable=false` et une phrase rassurante sur les messages conservés : c'est la forme de la copie `userFacingError` attendue par M0-11.
 
 ### 5. Conservation du texte et absence d'envoi sans host (`19`, `20`)
 
@@ -203,16 +205,17 @@ Dernière étape du scénario A/B : après la mort de B, un nouveau tour a été
 
 **Réserve honnête :** ce tour s'exécute alors qu'il ne reste **qu'un** host — il n'y a donc plus de B concurrent pour démontrer l'absence de contamination croisée *pendant* l'exécution. Le critère « approbations simultanées » de M0-01 n'est pas couvert, et l'attente d'un terminal a été bornée à 90 s sans confirmer la fin du tour (le host n'émet pas de notification terminale, cf. plus haut).
 
-## Tentative M4-01/M4-02 — non atteint (round 6)
+## Tentative M4-01/M4-02 — round 6 (périmée)
 
-Le panneau navigateur n'a **pas** pu être exercé. Ce qui a été observé :
+Cette section décrit un échec **intermédiaire**, conservé pour mémoire. Elle est **périmée** : les deux tickets ont été qualifiés au round suivant, voir [`docs/evidence/2026-09-20-windows-browser/M4-01-M4-02.md`](../2026-09-20-windows-browser/M4-01-M4-02.md).
 
-- l'état persistant contient bien `muse-desktop.browser.tabs.v1.session.84bb6c78`, réduit à un onglet **vide** : `[{"id":"tab-f3c1a7aa…","url":"","history":[],"historyIndex":-1}]`. Le panneau a donc déjà été ouvert, mais **n'a jamais navigué** — la qualification « navigateur natif » de M4-01 n'a aucune preuve dans ce profil.
-- `muse-desktop.browser.permissions.v1` et `muse-desktop.browser.annotations.v1` valent tous deux `[]` : aucune permission ni annotation enregistrée.
-- après ouverture d'une conversation (`cdp dry run`, confirmé), **aucun libellé de barre de travail** correspondant à `Browser`, `Files`, `Review`, `Terminal`, `Desktop` ou `Content` n'est détecté dans le DOM, et le clic ciblé échoue (`clicked: false`).
-- aucun `iframe` n'est monté et aucun champ d'URL n'existe dans cet état.
+Ce que le round 6 avait observé, sur une conversation **ouverte mais panneau latéral replié** :
 
-**Conclusion :** atteindre la barre de travail demande une étape d'interaction non identifiée (les onglets y sont probablement rendus en icônes sans texte ni `aria-label` exploitable). M4-01 et M4-02 restent **non qualifiés** — ni prouvés ni infirmés. Script conservé pour une reprise : `scripts/cdp-workbar.mjs`.
+- l'état persistant contenait `muse-desktop.browser.tabs.v1.session.84bb6c78`, réduit à un onglet **vide** : `[{"id":"tab-f3c1a7aa…","url":"","history":[],"historyIndex":-1}]` — le panneau avait déjà été ouvert, mais **n'avait jamais navigué** ;
+- `muse-desktop.browser.permissions.v1` et `muse-desktop.browser.annotations.v1` valaient tous deux `[]` ;
+- **aucun libellé de barre de travail** n'était détecté, et le clic ciblé échouait (`clicked: false`) ; aucun `iframe`, aucun champ d'URL.
+
+**Ce qui expliquait l'échec :** les onglets de la barre de travail n'existent dans le DOM **qu'une fois le panneau latéral déplié**. L'inspection portait sur un panneau replié, d'où l'absence totale de libellés. La conclusion d'alors — « étape d'interaction non identifiée » — était donc fausse, et le script `cdp-workbar.mjs` qui en découlait a été remplacé par **`scripts/cdp-panel.mjs`**, qui cible le contrôle libellé **« Hide work panel »**.
 
 ## Ce qui reste ouvert dans le groupe 1
 
@@ -222,6 +225,8 @@ Aucun ticket du groupe 1 ne réunit encore **tous** ses critères de sortie. Ét
 |---|---|---|
 | **M0-01** | Deux hosts simultanés ; mort d'un host sans effet sur l'autre ni sur l'application | Scénario A/B **depuis l'UI** avec approbations simultanées et un tour qui se termine sur A après la mort de B |
 | **M0-14** | Idem ci-dessus ; chaîne native complète exercée | Même scénario A/B depuis la webview (c'est le critère qui ferme le parent) |
+| **M4-01** | Navigation native (iframe montée), persistance par onglet, isolation par `sessionId`, contrôles présents — voir le [document dédié](../2026-09-20-windows-browser/M4-01-M4-02.md) | Qualification macOS/Linux ; téléchargements initiés par navigation |
+| **M4-02** | Surfaces d'annotation **et** annotation réellement créée (ancre URL normalisée, citation, commentaire) | Garde de contexte après navigation ; recadrage de région ; capture visuelle |
 | **M0-03** | Texte préservé et aucun envoi sans host ; transcript conservé après panne | Rejet d'un envoi **avec** host vivant, double-clic, IME, fermeture/rechargement |
 | **M0-04** | État stale `No recent host update` avec actions ; terminaison propre observée | Interruption (`Stopping Muse`) et terminal confirmé — **bloqué par `turn/completed` absent du host 1.3.0** |
 | **M0-10** | Application démarrée et fonctionnelle ; panneau de récupération et Settings à exercer | Détection sur machine propre, matrices WSL/auth |
@@ -229,15 +234,18 @@ Aucun ticket du groupe 1 ne réunit encore **tous** ses critères de sortie. Ét
 | **M0-12** | Navigation clavier et clic confirmés ; zoom déjà validé le 20/09 | Parcours complet sans souris, lecteur d'écran, contraste |
 | **M1-10** | — | Course UI file/`unqueue` avec host vivant |
 | **M1-13** | — | Mesure 2 000 entrées dans la webview |
-| **M4-01/M4-02** | — | Navigateur natif, onglets par `sessionId`, download same-origin, annotation, capture |
+| **M4-01** | Navigation native (iframe montée), persistance par onglet, isolation par `sessionId`, contrôles présents | Qualification macOS/Linux ; téléchargements initiés par navigation |
+| **M4-02** | Surfaces d'annotation **et** annotation créée (ancre URL normalisée, citation, commentaire) | Garde de contexte après navigation ; recadrage de région ; capture visuelle |
 | **M4-09** | — | Installation NSIS/MSI, update, désinstallation |
+
+Détail de M4-01/M4-02 : [`2026-09-20-windows-browser/M4-01-M4-02.md`](../2026-09-20-windows-browser/M4-01-M4-02.md).
 
 ## Limites de la méthode
 
 1. **Pas d'accès déterministe à l'état.** Le contenu WebView2 n'étant pas dans l'arbre UIA, toute vérification passe par la lecture d'une capture. Il n'existe aucun moyen, depuis cet environnement, de lire le journal, le transcript ou la file de manière structurée pendant que l'application tourne (le profil est un `EBWebView` en mode dev).
 2. **Saisie clavier non fiable dans une conversation existante.** Le texte a été inséré avec succès dans le composer de l'écran d'accueil, mais **pas** dans celui d'une conversation ouverte (placeholders inchangés, captures identiques au bit près). Cause non déterminée à ce stade ; contournement possible via le presse-papiers et `Ctrl+V`, non concluant ici car le composer d'une conversation en erreur de connexion est désactivé par conception.
 3. **Machine non propre.** Le profil contenait 54 conversations préexistantes. L'état de « premier lancement » n'a donc pas pu être testé sur un profil vierge.
-4. **Aucune écriture dans la base de code.** Les preuves sont des captures ; la seule modification du dépôt à ce commit est `docs/ROADMAP.md`.
+4. **Provenance des preuves.** La campagne a été exécutée sur le commit historique `064e210`. Les preuves sont des captures, et **aucune écriture dans la base de code** n'a été faite pendant la campagne. Le commit `064e210` lui-même est un commit de fusion antérieur qui ne fait pas partie de ce travail : il contient `docs/ROADMAP.md` dans sa version par axes. Les scripts de pilotage et les documents de preuves ajoutés par cette campagne (`scripts/cdp-*.mjs`, `scripts/msp-probe.mjs`, `docs/evidence/**`) ne sont **pas** inclus dans `064e210` — ils appartiennent au commit de documentation et d'outillage qui a suivi.
 
 ## Artefacts
 

@@ -121,8 +121,11 @@ async function main() {
     report.steps.submitAttempts = await evaluate(client, `(() => {
       ${HELPERS}
       const tried = [];
+      // Stop at the first success: clickText matches substrings, so 'Save'
+      // would otherwise also hit "Save selected link" and mutate the very
+      // state the next step measures.
       for (const label of ['Add note', 'Add annotation', 'Save note', 'Save annotation', 'Add comment', 'Save']) {
-        if (clickText(label)) tried.push(label);
+        if (clickText(label)) { tried.push(label); break; }
       }
       return { tried };
     })()`);
