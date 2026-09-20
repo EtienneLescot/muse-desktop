@@ -2,17 +2,19 @@
 
 > ## ⚠️ Lire ceci avant le reste
 >
-> **Ce rapport a affirmé cinq écarts. Quatre ont été démentis par des mesures ultérieures, et le cinquième n'a jamais été mesuré valablement.**
+> **Ce rapport a affirmé cinq écarts. Les cinq ont été démentis.**
 >
 > | Écart | Ce que ce rapport affirmait | Mesure ultérieure |
 > |---|---|---|
 > | 1 | `session/read` et `session/resume` absents | **fonctionnels** sur une session persistée (§1) |
-> | 2 | aucune notification terminale après interruption | **`turn/completed` émis** (§2) |
+> | 2 | aucune notification terminale après interruption | **`turn/completed` émis**, +39 ms (§2) |
 > | 3 | `userShell` accepté sans item ni sortie | **item `userShell` publié, sortie incluse** (§3) |
-> | 4 | projections non rapportées | **jamais mesuré valablement** — mes appels sont refusés (§4) |
+> | 4 | projections non rapportées | **modèle visible sur la session, effort signalé par notification** (§4) |
 > | 5 | durabilité constamment `ephemeral` | **variable** (§5) |
 >
-> **La cause était mon outillage, pas le sidecar.** Cinq constats d'absence, cinq artefacts de méthode : une erreur de contexte — session non persistée, capacité mal demandée, interruption sans le `turnId` exigé, attente trop courte — lue chaque fois comme une absence de capacité du host.
+> **La cause était mon outillage, pas le sidecar.** Cinq constats d'absence, cinq artefacts de méthode : une erreur de contexte — session non persistée, capacité mal demandée, interruption sans le `turnId` exigé, paramètres sous la mauvaise forme, attente trop courte — lue chaque fois comme une absence de capacité du host.
+>
+> **Aucun écart de contrat du sidecar n'est établi.** Ce qui reste ouvert est ailleurs : le plafond `approval_mode` (non remesuré) et un faux négatif non expliqué dans `native-smoke.mjs`.
 >
 > **Ne reprenez aucune conclusion de ce document sans la revérifier** sur une ressource **persistée** et avec les **paramètres exigés**. Les sections corrigées portent leur date et leur mesure ; les sections non corrigées n'ont pas cette garantie.
 
@@ -97,9 +99,36 @@ Avec la bonne forme :
 
 **Impact, corrigé :** le parcours « je lance une commande et je vois la sortie » **est tenable**. Rien de ce côté n'est bloqué par le sidecar. Ce qui manquerait, s'il manquait quelque chose, serait **côté client** — demander la capacité sous la bonne forme et lire l'item. Détail dans [`user-shell-fonctionne.md`](evidence/2026-09-20-windows-sessions/user-shell-fonctionne.md).
 
-## 4. Projections effectives — **jamais mesuré valablement**
+## 4. Projections effectives — **fonctionnent**
 
-**Avertissement (20/09/2026, round 59).** Le tableau ci-dessous provient de `native-smoke.mjs`, l'outil dont cette campagne a **démontré** qu'il produit des faux négatifs. Il n'est **pas** une mesure fiable.
+**Correction (20/09/2026, round 61).** Ce paragraphe affirmait que les deux réglages sont acceptés sans projection exploitable. **C'est faux.**
+
+La cause, comme pour les autres écarts : **mes paramètres étaient faux**.
+
+| Méthode | Ce que j'envoyais | Ce que le host attend |
+|---|---|---|
+| `session/setModel` | `{ sessionId, modelId }` | `{ commandId, sessionId, model: { modelId } }` |
+| `session/setReasoningEffort` | `{ sessionId, effort }` | `{ commandId, sessionId, reasoningEffort }` |
+
+Mes appels étaient refusés en `invalidParams` — ce qui ne dit **rien** de la capacité du host.
+
+Avec les bonnes formes :
+
+| Mesure | Résultat |
+|---|---|
+| `setModel({ model: { modelId } })` | `accepted` |
+| **`session.modelId` après l'appel** | **`muse-spark-1.3-contributor` → `muse-spark-1.3`** |
+| `setReasoningEffort("none" / "high" / "ultra")` | `accepted` (les trois) |
+| **Notifications reçues** | **`session/modelChanged`** et **3 × `session/reasoningEffortChanged`** |
+
+**Le modèle est visible dans la session relue, et l'effort est signalé par une notification dédiée.** La seule nuance : l'objet session ne porte pas de champ `reasoningEffort` — la projection passe par la notification, ce qui reste exploitable pour un client.
+
+Détail dans [`projections-fonctionnent.md`](evidence/2026-09-20-windows-sessions/projections-fonctionnent.md).
+
+<details>
+<summary>Ancien constat, conservé pour mémoire — <strong>démenti</strong></summary>
+
+*Constat d'origine, produit par `native-smoke.mjs`, outil dont cette campagne a démontré qu'il produit des faux négatifs.*
 
 Recontrôlé hors de cet outil, avec `session/start`, `model/list`, puis les deux appels :
 
@@ -108,12 +137,9 @@ Recontrôlé hors de cet outil, avec `session/start`, `model/list`, puis les deu
 | `session/setReasoningEffort` (`none`, `high`, `ultra`) | **`invalidParams`** |
 | `session/setModel` (`muse-spark-1.3`) | **`invalidParams: missing f…`** |
 
-Un `invalidParams` sur **ma** requête ne dit **rien** de la capacité du host : c'est le même piège que l'`approval/listPending` sans `sessionId` qui avait déjà produit un faux constat dans ce dépôt. **Je n'ai donc aucune mesure valide de cet écart, ni pour le confirmer, ni pour l'infirmer.**
+Un `invalidParams` sur **ma** requête ne dit **rien** de la capacité du host : c'est le même piège que l'`approval/listPending` sans `sessionId` qui avait déjà produit un faux constat dans ce dépôt.
 
 Ce que `model/list` retourne en revanche, et qui est mesuré : `{providerId: "meta", profileId: "tbh", source: "providerCatalog", models: [{modelId: "muse-spark-1.3", …}]}` — le catalogue existe et est interrogeable.
-
-<details>
-<summary>Ancien constat, conservé pour mémoire — <strong>non fiable</strong></summary>
 
 | Réglage | Accusé | Projection | Effectif |
 |---|---|---|---|
@@ -199,17 +225,17 @@ Champs exposés : `sessionId`, `path`, `status`, `activeTurnId`, `createdAt`, `u
 
 ## Ce que nous demandons, par ordre de rentabilité
 
-**Section réécrite (round 59).** Les quatre premières demandes portaient sur des écarts **démentis** ou **non mesurés**. Il serait malhonnête de les maintenir.
+**Section réécrite (rounds 59 et 61).** Les quatre premières demandes portaient sur des écarts **démentis par la mesure**. Les maintenir serait malhonnête.
 
 | Demande | Statut |
 |---|---|
 | `session/read` et `session/resume` | **retirée** — les deux méthodes fonctionnent |
 | Notification terminale de tour | **retirée** — `turn/completed` est émis, nominal et après interruption |
 | Item `userShell` avec sa sortie | **retirée** — l'item est publié, la sortie y est |
-| Projection effective pour `setModel` / `setReasoningEffort` | **suspendue** — à remesurer avant d'être demandée |
-| **`approval_mode` au-delà de `promptUnmatched`** | **seule demande encore fondée** — elle limite la portée réelle de M0-01 et M0-06 |
+| Projection effective pour `setModel` / `setReasoningEffort` | **retirée** — le modèle est visible sur la session, l'effort signalé par notification |
+| **`approval_mode` au-delà de `promptUnmatched`** | **seule demande encore fondée** — elle limite la portée réelle de M0-01 et M0-06, et **n'a pas été remesurée** |
 
-**Ce qu'il faut faire avant de rouvrir ce rapport :** mesurer l'écart n° 4 avec les bons paramètres, puis décider s'il y a quelque chose à demander. Tant que ce n'est pas fait, **ce document ne porte aucune demande fondée**, à une exception près.
+**Ce document ne porte plus aucune demande d'évolution du sidecar, à une exception près** — et cette exception doit être remesurée avant d'être adressée au mainteneur. Les cinq écarts d'origine décrivaient **mon outillage**, pas le host.
 
 ## Ce que ce rapport n'affirme pas
 
