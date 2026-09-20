@@ -26,15 +26,17 @@ Le client déclare ces méthodes dans `src/lib/msp.ts` (lignes 28–31) et les u
 
 | Méthode | Résultat mesuré | Conséquence pour le client |
 |---|---|---|
-| `session/list` | **available** | restauration paginée fonctionnelle |
+| `session/list` | **available** — énumère les sessions persistées avec leur chemin et leurs métadonnées | restauration paginée fonctionnelle |
 | `approval/listPending` | **available** — retourne `{approvals, userInputs}` | récupération des demandes en attente possible |
-| `session/read` | **unsupported** | pas de relecture d'historique après reconnexion |
-| `session/resume` | **unsupported** | **reprise durable impossible** |
-| `view/page` | **unsupported** | pas de repli par curseur sur les événements durables |
+| `session/read` | **available sur une session persistée** — retourne `{session, viewCursor, history, pendingRequests}` | **la relecture d'historique existe** ; voir la correction ci-dessous |
+| `session/resume` | **`sessionInUse`** sur une session persistée déjà ouverte ; `sessionNotFound` sur une session non persistée | refus **conditionnel**, pas méthode absente |
+| `view/page` | **unsupported** en tant que tel | `session/read` retourne un `viewCursor` : la pagination passe peut-être par lui |
 
-**Impact :** `session/read` et `session/resume` sont les deux appels sur lesquels repose toute la reprise. Sans eux, le client ne peut pas rejouer un tour interrompu, ni récupérer les items produits hors ligne — il conserve le transcript local et l'annonce honnêtement, mais ne peut pas faire mieux.
+**Correction majeure (20/09/2026, fin de campagne).** Ce tableau classait `session/read` et `session/resume` comme `unsupported`. **C'est faux, et l'erreur vient de ma sonde.** `msp-probe.mjs` appelait ces surfaces sur une session **fraîchement créée**, jamais persistée : le host répondait `sessionNotFound`, et la sonde ne distinguait pas cette erreur de `methodNotFound`. Sur une session **réellement sur disque**, `session/read` répond **`ok`** et `session/resume` répond **`sessionInUse`** — quatre sessions testées, quatre fois.
 
-**Point d'attention :** `approval/listPending` **fonctionne** dès qu'on lui passe un `sessionId` ; un appel **sans** `sessionId` retourne `methodNotFound`. Le harness `native-smoke.mjs` l'appelait sans identifiant et le classait donc `unsupported` — la documentation du dépôt a porté cette erreur un moment. Si un `methodNotFound` sur cette méthode doit signifier « absente », il faudrait que la réponse ne dépende pas de la présence d'un paramètre.
+**Impact :** la reprise ne repose donc **pas** sur des méthodes absentes. Deux questions plus étroites restent ouvertes : `session/resume` sur une session **libre** n'a jamais été observé (l'application tenait les sessions pendant le test), et `view/page` doit être réévalué au regard du `viewCursor` retourné par `session/read`. Détail complet dans [`session-read-fonctionne.md`](evidence/2026-09-20-windows-sessions/session-read-fonctionne.md).
+
+**Point d'attention :** `approval/listPending` **fonctionne** dès qu'on lui passe un `sessionId` ; un appel **sans** `sessionId` retourne `methodNotFound`. Le harness `native-smoke.mjs` l'appelait sans identifiant et le classait donc `unsupported` — la documentation du dépôt a porté cette erreur un moment. **C'est le même travers que pour `session/read`** : une erreur de contexte interprétée comme une absence de méthode. La sonde doit distinguer explicitement `methodNotFound` de `sessionNotFound`, et tester les surfaces de lecture sur une session **persistée**.
 
 ## 2. Notification terminale de tour — **absente**
 
@@ -55,7 +57,7 @@ Vérifié aussi **depuis l'interface** : après un `Stop` utilisateur, la conver
 | `session/userShell` avec `commandText` | **accepted** |
 | Item `userShell` publié (`item/started` / `completed` / `updated`) | **aucun** — `itemStarted: false` |
 | `outputRef` sur l'item | **aucun** |
-| Historique relisible (`session/read`) | non — méthode absente de toute façon |
+| Historique relisible (`session/read`) | **oui sur une session persistée** — voir la correction du §1 ; la sonde l'avait testé sur une session non persistée |
 
 Le smoke harness **attend déjà** cette notification (`native-smoke.mjs`, attente d'un `item/started` de `kind: "userShell"`) et ne l'obtient pas. Une commande de ~9 s avec fichier témoin absolu a été admise, sans qu'aucun item ni fichier témoin n'apparaisse 14 s plus tard.
 
@@ -151,7 +153,8 @@ Quatre tickets de priorité immédiate (M0) sont donc **bloqués par le host, pa
 
 ## Ce que ce rapport n'affirme pas
 
-- Il ne dit pas **pourquoi** ces capacités sont absentes : choix de conception, retard d'implémentation ou limite du mode `serve` — nous ne le savons pas. À noter que `muse exec` (entrée headless) **produit** un tour complet, donc le moteur en est capable ; c'est la projection par `serve` qui manque.
+- **Il a déjà affirmé deux choses fausses**, corrigées depuis : que `session/read` et `session/resume` étaient `unsupported` (§1 — faux, la sonde testait une session non persistée), et que `sessionDurability` valait constamment `ephemeral` (§5 — faux, sa valeur a changé en cours de campagne). Les deux erreurs venaient de la **même cause** : une erreur de contexte interprétée comme une absence de capacité. Toute conclusion de ce rapport doit donc être lue avec cette réserve, et revérifiée sur une session **persistée** avant d'être reprise.
+- Il ne dit pas **pourquoi** les capacités qui manquent vraiment sont absentes : choix de conception, retard d'implémentation ou limite du mode `serve` — nous ne le savons pas. À noter que `muse exec` (entrée headless) **produit** un tour complet, donc le moteur en est capable ; c'est la projection par `serve` qui manque.
 - Il ne prétend pas que ces changements sont simples : nous n'avons pas examiné le code du sidecar.
 - Il ne couvre **pas** le mode interactif `muse` ni `muse exec`, uniquement `muse serve`, qui est le seul chemin utilisé par l'application.
 - Toutes les mesures viennent d'un profil unique sur **Windows** ; aucun test macOS ou Linux n'a été fait.
