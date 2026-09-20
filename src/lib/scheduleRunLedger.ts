@@ -4,8 +4,8 @@
  * fallback. In a Tauri build this mirror is stored under app data so a
  * webview reload cannot erase a queued, running, or recovery row.
  */
-import { isTauriRuntime } from "./env";
-import { normalizeScheduleRuns, type ScheduleRun } from "./scheduleRuns";
+import { isTauriRuntime } from "./env.ts";
+import { normalizeScheduleRuns, type ScheduleRun } from "./scheduleRuns.ts";
 
 export const NATIVE_SCHEDULE_RUNS_SCHEMA = "muse-desktop.native-schedule-runs.v1";
 
