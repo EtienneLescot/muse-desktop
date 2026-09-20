@@ -2,17 +2,20 @@
 
 > ## ⚠️ Lire ceci avant le reste
 >
-> **Ce rapport a affirmé cinq écarts. Les cinq ont été démentis.**
+> **Ce rapport a affirmé cinq écarts, plus un plafond d'approbation. Les six ont été démentis.**
 >
-> | Écart | Ce que ce rapport affirmait | Mesure ultérieure |
+> | Constat | Ce que ce rapport affirmait | Mesure ultérieure |
 > |---|---|---|
 > | 1 | `session/read` et `session/resume` absents | **fonctionnels** sur une session persistée (§1) |
 > | 2 | aucune notification terminale après interruption | **`turn/completed` émis**, +39 ms (§2) |
 > | 3 | `userShell` accepté sans item ni sortie | **item `userShell` publié, sortie incluse** (§3) |
 > | 4 | projections non rapportées | **modèle visible sur la session, effort signalé par notification** (§4) |
 > | 5 | durabilité constamment `ephemeral` | **variable** (§5) |
+> | 6 | plafond `approval_mode` à `promptUnmatched` | **aucun plafond** — `onRequest`, `allowAll` et `promptUnmatched` acceptés |
 >
-> **La cause était mon outillage, pas le sidecar.** Cinq constats d'absence, cinq artefacts de méthode : une erreur de contexte — session non persistée, capacité mal demandée, interruption sans le `turnId` exigé, paramètres sous la mauvaise forme, attente trop courte — lue chaque fois comme une absence de capacité du host.
+> **La cause était mon outillage, pas le sidecar.** Six constats d'absence, six artefacts de méthode : une erreur de contexte — session non persistée, capacité mal demandée, interruption sans le `turnId` exigé, paramètres sous la mauvaise forme, attente trop courte, mode inexistant — lue chaque fois comme une absence de capacité du host.
+>
+> **Aucun écart de contrat du sidecar n'est établi.** Le host 1.3.0 fait ce que je lui reprochais de ne pas faire. Ce qui reste à construire est **côté client**, dans ce dépôt.
 >
 > **Aucun écart de contrat du sidecar n'est établi.** Ce qui reste ouvert est ailleurs : le plafond `approval_mode` (non remesuré) et un faux négatif non expliqué dans `native-smoke.mjs`.
 >
@@ -206,36 +209,36 @@ Deux remarques pour la documentation du protocole :
 
 Champs exposés : `sessionId`, `path`, `status`, `activeTurnId`, `createdAt`, `updatedAt`, `workspaceRoot`, `providerId`, `modelId`, `turnCount`, `forkedFrom`, `title`, `firstUserPrompt`, `branch`.
 
-**Conséquence directe sur le §1** : les conversations **existent sur disque** et le host les relit au démarrage. Ce n'est donc pas la persistance qui manque, c'est **l'API pour les relire depuis un client** — `session/read` et `session/resume` sont absents alors que les données sont là, dans un format que le host sait lire. Cela réduit sérieusement l'effort attendu pour combler l'écart n° 1 de ce rapport, et cela vaut la peine d'être dit avant toute estimation.
+**Conséquence directe sur le §1** : les conversations **existent sur disque** et le host les relit au démarrage. La persistance n'est donc pas ce qui manque — et `session/read` comme `session/resume` **existent et fonctionnent** (§1 corrigé). Les données sont là, et l'API pour les lire depuis un client aussi.
 
 ## Impact consolidé sur les tickets du groupe 1
 
-**Tableau corrigé (round 59).** L'ancienne version déclarait quatre tickets M0 « bloqués par le host ». C'était faux pour trois d'entre eux.
+**Tableau corrigé (rounds 59 à 62).** L'ancienne version déclarait **quatre tickets M0 bloqués par le host**, puis laissait un plafond d'approbation comme seule limite. **Les deux lectures étaient fausses.**
 
-| Ticket | Dépend de | Bloqué par le host ? |
+| Ticket | Ce que ce rapport supposait | Mesuré |
 |---|---|---|
-| **M0-02** — reprendre après fermeture ou panne | §1 : `session/read` et `session/resume` **fonctionnent** | **non** — le défaut observé était une session absente côté host, pas une capacité manquante |
-| **M0-04** — arrêter avec un état fiable | §2 : le terminal **est émis** après interruption | **non** — la cause observée est dans l'outillage de mesure, pas dans le host |
-| **M1-06** — lire la sortie terminal | §3 : item `userShell` **publié avec sa sortie** | **non** — dépend du client, qui doit demander la capacité correctement |
-| **M1-11** — modèle et effort effectifs | §4 : **jamais mesuré valablement** | **inconnu** |
-| **M0-01 / M0-14** — isolation A/B | approbations : plafond `promptUnmatched` | **partiellement** — seule réserve encore debout |
-| **M0-06** — posture de permissions | `session/read` expose `approvalMode` ; plafond `promptUnmatched` | **à réinstruire** |
+| **M0-01** — approbations simultanées | bloqué par un plafond du host | **aucun plafond** — `onRequest`, `allowAll` et `promptUnmatched` sont acceptés, et `session/approvalModeChanged` est émis |
+| **M0-02** — reprendre après fermeture ou panne | `session/read` et `resume` absents | **fonctionnels** sur une session persistée |
+| **M0-04** — arrêter avec un état fiable | aucun terminal après interruption | **`turn/completed` émis à +39 ms** |
+| **M0-06** — posture de permissions | limité par le plafond | **aucun plafond** |
+| **M1-06** — lire la sortie terminal | item `userShell` jamais publié | **item publié, sortie incluse** |
+| **M1-11** — modèle et effort effectifs | projections non rapportées | **modèle visible sur la session, effort signalé par notification** |
 
-**Aucun ticket M0 n'est établi comme bloqué par le host.** Le seul constat encore debout est le plafond `promptUnmatched`, qui limite la portée de M0-01 et M0-06 — et il n'a pas été remesuré depuis.
+**Aucun de ces tickets n'est bloqué par le sidecar.** Ce qui reste à construire est **côté client**, dans ce dépôt — et c'est une bien meilleure nouvelle que ce rapport ne le laissait croire.
 
-## Ce que nous demandons, par ordre de rentabilité
+## Ce que nous demandons
 
-**Section réécrite (rounds 59 et 61).** Les quatre premières demandes portaient sur des écarts **démentis par la mesure**. Les maintenir serait malhonnête.
+**Rien.** Cette section demandait cinq évolutions du sidecar. **Aucune n'était fondée** : les cinq constats d'origine et le plafond d'approbation décrivaient **mon outillage**, pas le host.
 
 | Demande | Statut |
 |---|---|
-| `session/read` et `session/resume` | **retirée** — les deux méthodes fonctionnent |
-| Notification terminale de tour | **retirée** — `turn/completed` est émis, nominal et après interruption |
-| Item `userShell` avec sa sortie | **retirée** — l'item est publié, la sortie y est |
-| Projection effective pour `setModel` / `setReasoningEffort` | **retirée** — le modèle est visible sur la session, l'effort signalé par notification |
-| **`approval_mode` au-delà de `promptUnmatched`** | **seule demande encore fondée** — elle limite la portée réelle de M0-01 et M0-06, et **n'a pas été remesurée** |
+| `session/read` et `session/resume` | **retirée** — fonctionnent |
+| Notification terminale de tour | **retirée** — `turn/completed` est émis |
+| Item `userShell` avec sa sortie | **retirée** — publié, sortie incluse |
+| Projection `setModel` / `setReasoningEffort` | **retirée** — visibles |
+| `approval_mode` au-delà de `promptUnmatched` | **retirée** — aucun plafond, `allowAll` est accepté |
 
-**Ce document ne porte plus aucune demande d'évolution du sidecar, à une exception près** — et cette exception doit être remesurée avant d'être adressée au mainteneur. Les cinq écarts d'origine décrivaient **mon outillage**, pas le host.
+Le host 1.3.0 **fait tout** ce que ce rapport lui reprochait de ne pas faire. Ce qui reste à construire est **côté client**, et ce document n'a plus de destinataire côté sidecar.
 
 ## Ce que ce rapport n'affirme pas
 
