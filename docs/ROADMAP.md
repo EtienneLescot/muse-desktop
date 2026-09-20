@@ -58,6 +58,29 @@ Ce document est la source de vérité de l'avancement produit. Il est découpé 
 
 **Aucun ticket du groupe 1 n'est clos pour autant** — les critères restants sont listés dans le document de preuves.
 
+**Campagne du 20 septembre 2026 — état consolidé (27 PR mergées, #154 à #180) :** les preuves natives sont regroupées sous [`docs/evidence/`](evidence/), un dossier par sujet, et le contrat du sidecar est analysé dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md).
+
+| Ticket | Ce qui est désormais mesuré | Livrable |
+|---|---|---|
+| **M0-03** | **les 4 critères du ticket** : envoi rejeté (skill inconnue) conserve le texte · double Entrée n'admet qu'un tour (1 identifiant client) · brouillon et envoi en cours survivent au rechargement · Entrée pendant une composition IME **ne soumet pas** | [#177](https://github.com/EtienneLescot/muse-desktop/pull/177) [#178](https://github.com/EtienneLescot/muse-desktop/pull/178) [#179](https://github.com/EtienneLescot/muse-desktop/pull/179) [#180](https://github.com/EtienneLescot/muse-desktop/pull/180) |
+| **M0-10** | guidance d'échec exercée sur un cas réel : sidecar neutralisé → panneau `sidecar`/`binary`/`triple`/`folder` avec **Try again** et **Choose workspace folder**, aucune installation implicite | [#172](https://github.com/EtienneLescot/muse-desktop/pull/172) |
+| **M0-12** | `forced-colors` honoré (couleurs système sur les 5 contrôles) · 24 arrêts de tabulation sans piège · `Ctrl+F` lié au finder · contraste AA sur 60 textes · **un défaut corrigé** : la règle `prefers-contrast` était inerte, avec test de non-régression | [#162](https://github.com/EtienneLescot/muse-desktop/pull/162) [#163](https://github.com/EtienneLescot/muse-desktop/pull/163) [#165](https://github.com/EtienneLescot/muse-desktop/pull/165) |
+| **M1-13** | fenêtre DOM bornée à **160 articles sur 2 001** · chargement incrémental de **120 entrées** avec DOM constant · finder atteignant un résultat **hors fenêtre** · coût de rendu mesuré (layout 12 ms, script 2,02 s, +160 KiB de tas) | [#166](https://github.com/EtienneLescot/muse-desktop/pull/166) [#167](https://github.com/EtienneLescot/muse-desktop/pull/167) [#169](https://github.com/EtienneLescot/muse-desktop/pull/169) [#170](https://github.com/EtienneLescot/muse-desktop/pull/170) |
+| **M4-01 / M4-02** | navigation native, isolation par `sessionId`, annotation créée, **garde de contexte après navigation** prouvée | [#154](https://github.com/EtienneLescot/muse-desktop/pull/154) [#155](https://github.com/EtienneLescot/muse-desktop/pull/155) |
+| **M4-09** | installation, désinstallation et **mise à jour de version montante** exécutées sans perte : 64 conversations et 2 projets identiques après chaque transaction | [#174](https://github.com/EtienneLescot/muse-desktop/pull/174) [#176](https://github.com/EtienneLescot/muse-desktop/pull/176) |
+| **M0-01 / M0-14** | deux hosts simultanés · mort d'un host sans effet sur l'autre · tour mené à terme **pendant** la mort de l'autre host, sans stale | [#158](https://github.com/EtienneLescot/muse-desktop/pull/158) [#159](https://github.com/EtienneLescot/muse-desktop/pull/159) |
+
+**Ce qui bloque encore, par nature :**
+
+- **M0-04, M1-06, M1-11** : aucune correction client ne les fermera. Le sidecar 1.3.0 n'émet pas de notification terminale, ne publie pas d'item `userShell` ni d'`outputRef`, et ne rapporte pas les projections de modèle ou d'effort. Détail et demandes dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md).
+- **M0-01** : le critère « approbations simultanées » reste ouvert — le plafond du host est `promptUnmatched` et aucune demande d'approbation n'a pu être provoquée, même en mode `ask`.
+- **M0-10, M4-09** : la « machine propre » n'est pas couverte — la machine de test a déjà WSL, Muse et 64 conversations. La signature des installeurs est également absente (`NotSigned`).
+- **M0-12, M1-13** : la qualification par un **lecteur d'écran réel** n'a pas été faite ; les rôles et libellés observés sont une condition nécessaire, pas une preuve d'annonce correcte.
+- **M4-01, M4-02** : la qualification **macOS et Linux** n'existe pas.
+- **M0-11, M1-10** : partiels.
+
+**Trois erreurs de la campagne, corrigées et conservées** : un faux positif sur l'indicateur de focus (mesuré sur le champ au lieu du conteneur), un diagnostic erroné sur `prefers-contrast` (spécificité au lieu de l'ordre de déclaration, avec correctif retiré puis validé autrement), et une confusion sur l'ordre des entrées du transcript qui avait produit un « succès » sans valeur. Les documents concernés gardent les deux versions.
+
 **Preuve navigateur intégré (20/09/2026) :** [`docs/evidence/2026-09-20-windows-browser/`](evidence/2026-09-20-windows-browser/M4-01-M4-02.md). Les onglets de la barre de travail n'existent dans le DOM qu'une fois le panneau latéral déplié — un point qui avait fait conclure à tort à leur inaccessibilité. Sur une conversation ouverte, les sept onglets **Content · Review · Terminal · Files · Browser · Desktop · Memory** sont présents. En **M4-01**, la navigation native est prouvée dans la webview : `<input type="url">`, `iframe` montée sur `https://example.com/`, persistance par onglet et **isolation par `sessionId`** (deux clés `browser.tabs.v1.session.*` distinctes). En **M4-02**, les trois champs d'annotation sont présents, une **annotation a réellement été créée** (ancre URL normalisée, citation de sélection, commentaire, identifiant et horodatage persistés), et la **garde de contexte après navigation est prouvée** : après passage de l'onglet à un autre domaine, les notes ancrées sur la première page cessent d'être affichées (2 → 0) tout en restant persistées avec leur ancre d'origine. Restent ouverts pour M4-02 le recadrage de région et la capture visuelle.
 
 **Dernière preuve native (Windows, 19–20 septembre 2026) :** deux sidecars Muse Code 1.3.0 réels, deux sessions et workspaces distincts ; smoke `--exercise-control --exercise-errors --exercise-approval --exercise-isolation --exercise-user-shell --exercise-reconnect --exercise-history --exercise-reasoning --exercise-model --exercise-queue --exercise-compaction` réussi ; dogfood natif du 20/09 sur le pont MCP direct (parcours Tab, frappe, Ctrl+F, zoom natif Ctrl+0 puis Ctrl+Plus×2).
@@ -67,8 +90,15 @@ Ce document est la source de vérité de l'avancement produit. Il est découpé 
 - Le host Muse 1.3.0 observé reste **`ephemeral`** : `session/read` et `view/page` répondent `methodNotFound`, donc la reprise durable et la réconciliation native restent non démontrées, quel que soit l'OS. **Correction (20/09/2026) :** `approval/listPending` **est** disponible dès qu'on lui passe un `sessionId` et retourne `{approvals, userInputs}` — c'est un appel sans `sessionId` qui produit `methodNotFound`. Les mentions antérieures qui le classaient comme absent doivent être relues ; voir [`msp-probe.mjs`](../scripts/msp-probe.mjs) et le [rapport de campagne](evidence/2026-09-20-windows-group1/).
 - **Aucune preuve native macOS ni Linux** n'existe dans ce dépôt à ce jour, pour aucun ticket.
 - Le contrôle desktop (`desktop_control.rs`) et le navigateur natif (`muse-browser`) sont **Windows uniquement** ; macOS et Linux renvoient explicitement `supported: false`.
+- **`turn/completed`, `turn/retracted` et `turn/stopped` ne sont jamais émis**, même après `turn/interrupt` ou un `Stop` utilisateur : l'état final d'un tour est **déduit** côté client, jamais reçu. Constaté sur deux hosts réels et depuis l'interface.
 
-**Prochaine reprise :** fermer les preuves natives M0 sur Windows (deux workspaces, reprise après autorisation, arrêt/reconnexion, premier lancement), puis qualifier le cycle de vie package/source des extensions, le catalogue d'outils côté host, le scheduler/notifications et le navigateur vers le moteur. La distribution Windows dispose du chemin local et de l'orchestration de canal signée ; restent l'hébergement opérationnel, la rotation des clés et la qualification macOS/Linux.
+**Prochaine reprise :** les preuves natives M0 sur Windows sont largement avancées (voir le tableau consolidé ci-dessus). Ce qui reste dépend de trois natures de travail :
+
+1. **Côté sidecar** — les cinq écarts de contrat listés dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md) débloqueraient M0-04, M1-06, M1-11 et une partie de M0-02. Le plus rentable est `session/read` + `session/resume`, ou une durabilité `durable` ; le suivant est une notification terminale de tour.
+2. **Côté infrastructure** — machine propre pour M0-10 et M4-09, signature Authenticode des installeurs, hébergement du canal de mise à jour, VM macOS et Linux pour M4-01/M4-02.
+3. **Côté méthode** — qualification par un lecteur d'écran réel pour M0-12 et M1-13 ; compléter les variantes de scénarios déjà couverts (IME chinois et coréen, rechargement avant acquittement, double clic à la souris pour M0-03 ; services nommés et verrous pour M1-05 et M2-08).
+
+Les critères restants et leurs limites précises sont énumérés dans chaque document de [`docs/evidence/`](evidence/) : aucun des documents de cette campagne ne déclare un ticket clos sur un seul scénario.
 
 ## Récapitulatif
 
