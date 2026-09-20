@@ -2,7 +2,7 @@
 
 Point d'entrée unique vers les preuves produites par la campagne. Chaque ticket renvoie à ses documents, à **ce qui est prouvé**, à **ce qui reste**, et à **la commande qui reproduit la mesure**.
 
-Mise à jour le 20 septembre 2026, après la fusion de la PR #187.
+Mise à jour après la fusion de la PR #195.
 
 ## Comment lire ce dossier
 
@@ -10,46 +10,50 @@ Un dossier par sujet. **Chaque document déclare ses propres limites** : aucun n
 
 | Dossier | Sujet | Documents |
 |---|---|---|
-| [`2026-09-20-windows-group1/`](2026-09-20-windows-group1/) | parcours M0-03, M1-10, isolation générale | 8 documents + 29 captures |
-| [`2026-09-20-windows-ab-projects/`](2026-09-20-windows-ab-projects/) | isolation entre deux projets (M0-01, M0-14) | 1 |
-| [`2026-09-20-windows-browser/`](2026-09-20-windows-browser/) | navigateur intégré (M4-01, M4-02) | 1 |
-| [`2026-09-20-windows-transcript/`](2026-09-20-windows-transcript/) | fenêtre du transcript (M1-13) | 4 |
-| [`2026-09-20-windows-a11y/`](2026-09-20-windows-a11y/) | accessibilité (M0-12) | 1 |
-| [`2026-09-20-windows-language/`](2026-09-20-windows-language/) | copie anglaise et navigation (M0-11) | 2 |
-| [`2026-09-20-windows-m010/`](2026-09-20-windows-m010/) | premier lancement (M0-10) | 1 |
-| [`2026-09-20-windows-release/`](2026-09-20-windows-release/) | distribution (M4-09) | 3 |
+| [`2026-09-20-windows-group1/`](2026-09-20-windows-group1/) | M0-03 (envoi), M1-10 (file d'attente), campagne générale | 8 documents + 29 captures |
+| [`2026-09-20-windows-ab-projects/`](2026-09-20-windows-ab-projects/) | isolation entre deux projets — M0-01, M0-14 | 1 |
+| [`2026-09-20-windows-browser/`](2026-09-20-windows-browser/) | navigateur intégré — M4-01, M4-02 | 1 |
+| [`2026-09-20-windows-transcript/`](2026-09-20-windows-transcript/) | fenêtre du transcript, persistance, performance — M1-13 | 7 |
+| [`2026-09-20-windows-a11y/`](2026-09-20-windows-a11y/) | accessibilité — M0-12 | 1 |
+| [`2026-09-20-windows-language/`](2026-09-20-windows-language/) | copie anglaise, navigation, chemins — M0-11 | 4 |
+| [`2026-09-20-windows-m010/`](2026-09-20-windows-m010/) | premier lancement et guidance d'échec — M0-10 | 1 |
+| [`2026-09-20-windows-release/`](2026-09-20-windows-release/) | distribution — M4-09 | 3 |
+| [`2026-09-20-windows-ledgers/`](2026-09-20-windows-ledgers/) | miroirs natifs et testabilité — M3-07, M3-09 | 2 |
+| [`2026-09-20-windows-cleanup/`](2026-09-20-windows-cleanup/) | nettoyage des conversations de test | 1 |
 
 Le rapport destiné au mainteneur du sidecar est hors de ce dossier : [`../SIDECAR-CONTRACT-GAPS.md`](../SIDECAR-CONTRACT-GAPS.md).
 
 ## Matrice de couverture
 
-| Ticket | Ce qui est prouvé | Ce qui reste | Blocage | Reproduction |
+| Ticket | Prouvé | Reste | Nature du blocage | Documents |
 |---|---|---|---|---|
-| **M0-01** | deux hosts simultanés · mort d'un host sans effet sur l'autre ni sur l'application · tour mené à terme **pendant** la mort de l'autre, sans stale | **approbations simultanées** | plafond `promptUnmatched` du host — le mode `ask` n'a présenté aucune demande | `cdp-ab-projects.mjs`, `cdp-concurrent-turns.mjs` |
-| **M0-02** | reprise annoncée `ephemeral` · détection de la mort du host · `Disconnected` + envoi bloqué + transcript conservé · échec de reprise **honnête** (`sessionNotFound [retryable=false]`) | reprise durable d'un tour | **contrat sidecar** : `session/read` et `session/resume` absents | `README.md` (groupe 1) |
-| **M0-03** | **les 4 critères** : envoi rejeté conserve le texte · double Entrée = 1 tour (1 identifiant client) · brouillon et envoi en cours survivent au rechargement · Entrée en composition IME **ne soumet pas** | variantes : IME chinois/coréen, rechargement **avant** acquittement, double clic **à la souris** | méthode | `cdp-unknown-skill-reject.mjs`, `cdp-double-send.mjs`, `cdp-reload-mid-send.mjs`, `cdp-ime-compose.mjs` |
-| **M0-04** | interruption affichée (`Stopping…`) · état stale correctement signalé · aucun faux succès | **terminal confirmé** | **contrat sidecar** : `turn/completed`/`retracted`/`stopped` jamais émis | `native-smoke.mjs --exercise-control` |
-| **M0-10** | guidance d'échec exercée sur sidecar neutralisé : `sidecar`/`binary`/`triple`/`folder`, **Try again**, **Choose workspace folder**, aucune installation implicite | **machine propre** | infrastructure (la machine de test a déjà WSL, Muse, 64 conversations) | `M0-10-guidance-echec.md` |
-| **M0-11** | copie anglaise sur 7 surfaces + 129 fichiers sources · câblage des helpers de navigation **verrouillé par test** | rendu natif des infobulles · branche `Cmd` sur un vrai macOS | infrastructure | `cdp-language-audit.mjs`, `test/navigationDetails.test.ts` |
-| **M0-12** | `forced-colors` honoré (couleurs système) · 24 arrêts de tabulation sans piège · `Ctrl+F` lié · contraste AA sur 60 textes · **un défaut corrigé** (`prefers-contrast` inerte) avec test de non-régression | **lecteur d'écran réel** | je ne peux pas le piloter | `cdp-a11y-probe.mjs`, `cdp-contrast-probe.mjs`, `cdp-focus-pixels.mjs` |
-| **M0-14** | idem M0-01 | idem M0-01 | idem M0-01 | idem |
-| **M1-06** | `userShell` **négocié et accepté** | item publié, `outputRef`, sortie relisible | **contrat sidecar** | `msp-probe.mjs --user-shell` |
-| **M1-10** | admission en file persistée · panneau **Queued messages** ordonné · `Stopping…` · file vidée après Stop · **retrait séquentiel** · **course : les tours retirés ne démarrent pas** | compte exact des clics (évaluation async vide) · accusé `turn/unqueue` du host · une anomalie de journal non expliquée | méthode + contrat sidecar | `cdp-queue-removal.mjs`, `cdp-queue-race.mjs` |
-| **M1-11** | `setModel` et `setReasoningEffort` **acceptés** | projection effective | **contrat sidecar** : `projection: not-reported`, `isActive: false` | `native-smoke.mjs --exercise-reasoning --exercise-model` |
-| **M1-13** | fenêtre bornée à **160 articles sur 2 001** · chargement incrémental de 120 à DOM constant · finder atteignant un **résultat hors fenêtre** · coût de rendu (layout 12 ms, script 2,02 s, +160 KiB) | **qualification assistive** · mesures sur build de développement seul | je ne peux pas piloter un lecteur d'écran | `cdp-long-transcript.mjs`, `cdp-scroll-window.mjs`, `cdp-finder-jump.mjs`, `cdp-perf.mjs` |
-| **M4-01** | navigation native (iframe montée) · persistance par onglet · **isolation par `sessionId`** | qualification macOS/Linux · téléchargements initiés par navigation | infrastructure | `cdp-panel.mjs` |
-| **M4-02** | annotation **réellement créée** (ancre URL, citation, commentaire) · **garde de contexte** après changement de domaine | recadrage de région · capture visuelle | infrastructure | `cdp-panel.mjs`, `cdp-annotate.mjs` |
-| **M4-09** | build NSIS (SHA-256 vérifié) · **installation et désinstallation sans perte** (64 conversations, 2 projets) · **mise à jour 0.0.9 → 0.1.0 sans perte** · chaîne delta (~1250× plus petite, reconstruction à l'octet près) | **machine propre** · **signature** (`NotSigned`) · MSI · rollback réel | infrastructure | `build-windows.ps1`, `release-delta.mjs` |
+| **M0-01** | deux hosts simultanés · mort d'un host sans effet sur l'autre · tour mené à terme **pendant** la mort de l'autre, sans stale | **approbations simultanées** | plafond `promptUnmatched` du host — le mode `ask` n'a présenté aucune demande | [M0-01-M0-14](2026-09-20-windows-ab-projects/M0-01-M0-14.md), [groupe 1](2026-09-20-windows-group1/README.md) |
+| **M0-02** | `ephemeral` annoncé · détection de la mort du host · `Disconnected` + envoi bloqué + transcript conservé · échec de reprise **honnête** (`sessionNotFound [retryable=false]`) | reprise durable d'un tour | **contrat sidecar** : `session/read` et `session/resume` absents | [groupe 1](2026-09-20-windows-group1/README.md), [écarts](../SIDECAR-CONTRACT-GAPS.md) |
+| **M0-03** | **les 4 critères** : envoi rejeté conserve le texte · double Entrée = 1 tour · brouillon et envoi survivent au rechargement · Entrée en composition IME ne soumet pas | variantes : IME chinois/coréen, rechargement **avant** acquittement, double clic **à la souris** | méthode | [rejet](2026-09-20-windows-group1/M0-03-envoi-rejete.md), [double envoi](2026-09-20-windows-group1/M0-03-double-envoi.md), [rechargement](2026-09-20-windows-group1/M0-03-rechargement.md), [IME](2026-09-20-windows-group1/M0-03-ime.md) |
+| **M0-04** | interruption affichée (`Stopping…`) · état stale correctement signalé · aucun faux succès | **terminal confirmé** | **contrat sidecar** : `turn/completed`/`retracted`/`stopped` jamais émis | [groupe 1](2026-09-20-windows-group1/README.md), [écarts](../SIDECAR-CONTRACT-GAPS.md) |
+| **M0-10** | guidance d'échec exercée sur sidecar neutralisé : `sidecar`/`binary`/`triple`/`folder`, **Try again**, **Choose workspace folder**, aucune installation implicite | **machine propre** | infrastructure (WSL, Muse et des conversations déjà présents) | [M0-10](2026-09-20-windows-m010/M0-10-guidance-echec.md) |
+| **M0-11** | copie anglaise sur 7 surfaces et 129 fichiers sources · câblage des helpers de navigation **verrouillé par test** · `displayPath()` couvert, cas UNC limites inclus | rendu natif des infobulles · branche `Cmd` sur un vrai macOS | infrastructure | [copie](2026-09-20-windows-language/M0-11-copie-anglaise.md), [navigation](2026-09-20-windows-language/M0-11-navigation.md), [chemins](2026-09-20-windows-language/M0-11-display-path.md) |
+| **M0-12** | `forced-colors` honoré · 24 arrêts de tabulation sans piège · `Ctrl+F` lié · contraste AA sur 60 textes · **un défaut corrigé** (`prefers-contrast` inerte) avec test de non-régression | **lecteur d'écran réel** | hors de portée | [M0-12](2026-09-20-windows-a11y/M0-12.md) |
+| **M0-14** | idem M0-01 | idem M0-01 | idem M0-01 | [M0-01-M0-14](2026-09-20-windows-ab-projects/M0-01-M0-14.md) |
+| **M1-06** | `userShell` **négocié et accepté** | item publié, `outputRef`, sortie relisible | **contrat sidecar** | [écarts](../SIDECAR-CONTRACT-GAPS.md) |
+| **M1-10** | admission en file persistée · panneau **Queued messages** ordonné · `Stopping…` · file vidée après Stop · **retrait séquentiel** · **course : les tours retirés ne démarrent pas** | compte exact des clics · accusé `turn/unqueue` du host · une anomalie de journal non expliquée | méthode + contrat sidecar | [retrait](2026-09-20-windows-group1/M1-10-retrait-file.md), [course](2026-09-20-windows-group1/M1-10-course-file.md) |
+| **M1-11** | `setModel` et `setReasoningEffort` **acceptés** | projection effective | **contrat sidecar** : `projection: not-reported`, `isActive: false` | [écarts](../SIDECAR-CONTRACT-GAPS.md) |
+| **M1-13** | fenêtre bornée à **160 articles sur 2 001** · chargement incrémental de 120 à DOM constant · finder atteignant un **résultat hors fenêtre** · coût de rendu mesuré · **plafonds de persistance verrouillés par test** · **coût d'écriture chiffré et sa fréquence observée** | **qualification assistive** · mesures sur build de développement seul | hors de portée · infrastructure | [fenêtre](2026-09-20-windows-transcript/M1-13.md), [finder](2026-09-20-windows-transcript/finder-hors-fenetre.md), [rendu](2026-09-20-windows-transcript/perf-rendu.md), [plafonds](2026-09-20-windows-transcript/plafonds-persistance.md), [coût](2026-09-20-windows-transcript/cout-ecriture-journal.md), [fréquence](2026-09-20-windows-transcript/granularite-ecritures.md) |
+| **M3-07** | miroir natif du registre des exécutions rendu **importable par un test** et couvert (contrat d'échec, ordre du garde) | appel IPC réel · écriture durable dans l'app empaquetée | hors de portée d'un processus node | [schedule ledger](2026-09-20-windows-ledgers/schedule-ledger-et-garde.md) |
+| **M3-09** | miroir natif des notifications couvert · **fusion des écritures** vérifiée | appel IPC réel | idem | [modules inatteignables](2026-09-20-windows-ledgers/modules-inaccessibles-aux-tests.md) |
+| **M4-01** | navigation native (iframe montée) · persistance par onglet · **isolation par `sessionId`** | qualification macOS/Linux · téléchargements initiés par navigation | infrastructure | [M4-01-M4-02](2026-09-20-windows-browser/M4-01-M4-02.md) |
+| **M4-02** | annotation **réellement créée** (ancre URL, citation, commentaire) · **garde de contexte** après changement de domaine | recadrage de région · capture visuelle | infrastructure | [M4-01-M4-02](2026-09-20-windows-browser/M4-01-M4-02.md) |
+| **M4-09** | build NSIS (SHA-256 vérifié) · **installation et désinstallation sans perte** · **mise à jour 0.0.9 → 0.1.0 sans perte** · chaîne delta (~1250× plus petite, reconstruction à l'octet près) | **machine propre** · **signature** (`NotSigned`) · MSI · rollback réel | infrastructure | [build](2026-09-20-windows-release/M4-09.md), [cycle](2026-09-20-windows-release/M4-09-cycle-installation.md), [mise à jour](2026-09-20-windows-release/M4-09-mise-a-jour.md) |
 
-Tickets **non entamés** faute d'accès : M2 et M3 demandent un host qui expose les contrats correspondants ; voir leurs lignes dans [`../ROADMAP.md`](../ROADMAP.md).
+Tickets **non entamés** faute d'accès : M2 et M3 (hors M3-07 et M3-09) demandent un host qui expose les contrats correspondants ; voir leurs lignes dans [`../ROADMAP.md`](../ROADMAP.md).
 
 ## Outils de mesure livrés
 
-Tous sous `scripts/`, tous exécutables sans l'application sauf mention.
+Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>` ; ils activent une fonctionnalité de WebView2 et **ne modifient pas** le code de l'application.
 
-| Script | Rôle | Coût |
+| Script | Rôle | Coût modèle |
 |---|---|---|
-| `msp-probe.mjs` | décrit le contrat du host (surfaces, `userShell`, `approval/listPending`) | **aucun tour modèle** |
+| `msp-probe.mjs` | décrit le contrat du host (surfaces, `userShell`, `approval/listPending`) | **aucun** |
 | `native-smoke.mjs` | contrôle, erreurs, approbation, isolation, file, compaction sur deux hosts | quelques tours |
 | `cdp-drive.mjs` | inspection et pilotage du DOM (`snapshot`, `eval`, `click`, `fill`) | aucun |
 | `cdp-panel.mjs` | ouvre la barre de travail et exerce le navigateur intégré | aucun |
@@ -71,30 +75,38 @@ Tous sous `scripts/`, tous exécutables sans l'application sauf mention.
 | `cdp-language-audit.mjs` | copie française dans le DOM rendu | aucun |
 | `cdp-queue-removal.mjs` | retrait d'une entrée de file | un tour |
 | `cdp-queue-race.mjs` | course file/retrait | un tour |
+| `cdp-stream-granularity.mjs` | nombre et volume des écritures de journal d'un tour | un tour |
+| `cdp-delete-conversations.mjs` | supprime des conversations de test par la boîte de dialogue de l'application | aucun |
+| `bench-log-append.mts` | coût d'un ajout au journal selon sa taille | aucun |
 
-**Instrumentation de développement** : les scripts `cdp-*` supposent l'application lancée avec `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`. Ils activent une fonctionnalité de WebView2 et **ne modifient pas** le code de l'application.
+## Documents qui tracent un échec ou une erreur
 
-## Documents qui tracent un échec
-
-Quatre documents conservent un résultat négatif ou une erreur de méthode. Ils sont volontairement conservés :
+Six documents conservent un résultat négatif ou une erreur de méthode. Ils sont volontairement conservés :
 
 | Document | Ce qu'il trace |
 |---|---|
-| [`M0-03-envoi-rejete-inabouti.md`](2026-09-20-windows-group1/M0-03-envoi-rejete-inabouti.md) | première tentative d'envoi rejeté, remplacée depuis par `M0-03-envoi-rejete.md` |
-| [`M1-10-retrait-file-inabouti.md`](2026-09-20-windows-group1/M1-10-retrait-file-inabouti.md) | file jamais alimentée — préconditions non vérifiées |
-| [`finder-hors-fenetre-inabouti.md`](2026-09-20-windows-transcript/finder-hors-fenetre-inabouti.md) | mauvais sélecteur : le conteneur du finder au lieu de son ouvreur |
-| [`M0-12.md`](2026-09-20-windows-a11y/M0-12.md) | contient le faux positif « aucun indicateur de focus » **et** sa correction |
+| [M0-03-envoi-rejete-inabouti](2026-09-20-windows-group1/M0-03-envoi-rejete-inabouti.md) | première tentative d'envoi rejeté, remplacée depuis |
+| [M1-10-retrait-file-inabouti](2026-09-20-windows-group1/M1-10-retrait-file-inabouti.md) | file jamais alimentée — préconditions non vérifiées |
+| [finder-hors-fenetre-inabouti](2026-09-20-windows-transcript/finder-hors-fenetre-inabouti.md) | mauvais sélecteur : le conteneur du finder au lieu de son ouvreur |
+| [M0-12](2026-09-20-windows-a11y/M0-12.md) | contient le faux positif « aucun indicateur de focus » **et** sa correction |
+| [modules-inaccessibles-aux-tests](2026-09-20-windows-ledgers/modules-inaccessibles-aux-tests.md) | faux diagnostic initial : 15 modules annoncés au lieu de 2 |
+| [nettoyage-conversations](2026-09-20-windows-cleanup/nettoyage-conversations.md) | **trois** méthodes de suppression en échec avant la bonne |
 
-## Trois erreurs de méthode, documentées plutôt que corrigées en silence
+## Erreurs de méthode de la campagne, documentées plutôt que corrigées en silence
 
-1. **Indicateur de focus** : conclu absent en cadrant le seul `TEXTAREA`. L'anneau est sur le conteneur — deux captures identiques au bit près ne prouvaient rien.
-2. **`prefers-contrast`** : d'abord attribué à la spécificité, correctif tenté, **échec**, correctif retiré, diagnostic corrigé, puis hypothèse réelle testée **hors du dépôt** avant application.
-3. **Ordre des entrées du transcript** : `streamWindowStart` est un offset depuis la fin, donc un marqueur « hors fenêtre » était en fait **dedans**. Un « succès » sans valeur, détecté en lisant le code.
+1. **Indicateur de focus** : conclu absent en cadrant le seul `TEXTAREA`. L'anneau est sur le conteneur.
+2. **`prefers-contrast`** : d'abord attribué à la spécificité, correctif tenté, **échec**, correctif retiré, diagnostic corrigé, hypothèse réelle testée **hors du dépôt** avant application.
+3. **Ordre des entrées du transcript** : `streamWindowStart` est un offset depuis la fin, donc un marqueur « hors fenêtre » était en fait **dedans**.
+4. **Assertion tautologique sur Windows** : `pathToFileURL(url.pathname).pathname` diffère de `url.pathname` (double barre oblique), ce qui a fait échouer 92 tests pour rien.
+5. **Test faux, pas code faux** : `createLatestWriteQueue` fusionne délibérément les écritures ; mon assertion attendait l'inverse.
+6. **`returnByValue` oublié** sur `Runtime.evaluate` : renvoie une référence distante, donc `undefined`, indiscernable d'un échec.
+7. **Cycles de test sans vérification d'état initial** : quatre tests ont échoué faute d'avoir confirmé l'état de départ ou l'identité de la conversation.
 
 ## Ce que cette campagne n'a pas fait
 
 - **Aucune preuve macOS ni Linux**, pour aucun ticket.
 - **Aucune qualification par un lecteur d'écran réel.**
-- **Aucun test sur machine propre** : la machine de test a déjà WSL, Muse et 64 conversations.
+- **Aucun test sur machine propre** : la machine de test a déjà WSL, Muse et des conversations.
 - **Aucune installation signée** : les deux installeurs sont `NotSigned`.
-- **Aucun test des contrats M2 et M3** (worktrees, MCP, scheduler, notifications) : ils demandent un host qui expose les méthodes correspondantes.
+- **Aucun test des contrats M2 et M3** (worktrees, MCP, scheduler, notifications) hors les deux ledgers.
+- **Aucune correction du produit** hors le défaut `prefers-contrast` : cette campagne mesure et documente, elle ne refactorise pas.
