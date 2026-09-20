@@ -12,11 +12,13 @@ La seule conversation restant dans l'application — `01a0bd8e`, « Explain the 
 | Fichiers sur disque (`~/.local/share/muse/sessions`, 19 répertoires) | **aucun dossier `01a0bd8e*`** |
 | Stockage local de l'application | **présente**, `session_durability: durable`, 15 entrées |
 
-**Cette session n'existe que côté client.** Le host ne l'a jamais connue, et rien n'a jamais été écrit pour elle sur disque.
+**Au moment de l'enquête, cette session n'existe que côté client.** Le host ne la liste pas et aucun fichier ne porte son identifiant sur disque.
+
+**Ce que ces trois sources ne prouvent pas, et que je n'affirme donc pas :** elles établissent une absence **à l'instant de la mesure**, pas que le host ne l'a **jamais** connue, ni qu'aucune donnée n'a jamais été écrite pour elle. Aucune preuve historique n'étaye ces deux affirmations plus fortes, et je les retire.
 
 ## Conséquence : `sessionNotFound` était la bonne réponse
 
-Quand l'application tente de reprendre cette conversation, le host répond qu'il ne la trouve pas — **parce qu'il ne l'a jamais eue**. Le client affiche alors :
+Quand l'application tente de reprendre cette conversation, le host répond qu'il ne la trouve pas — **parce que, au moment de la reprise, elle ne figure pas parmi les sessions qu'il connaît**. Le client affiche alors :
 
 > `This conversation could not be resumed. — MSP error -32020: session … was not found [sessionNotFound] [retryable=false]`
 
@@ -32,15 +34,17 @@ C'est la conclusion que je n'avais pas su tirer pendant vingt rounds, parce que 
 | `session/read` existe et retourne `{session, viewCursor, history, pendingRequests}` | **prouvé** — mon rapport le déclarait `unsupported` à tort |
 | Une session **sans tour abouti** ne se persiste pas | **prouvé** — 10 sessions chez le host A, 9 chez le host B |
 | Les notifications terminales **sont** émises à la fin normale d'un tour | **prouvé** — `turn/completed` reçu |
-| Le client n'appelle **jamais** `session/list` | **prouvé** — zéro appel dans `src/`, une seule mention en commentaire |
+| `session/list` est **déclaré** côté client mais **aucun appel n'a été trouvé** dans `src/` | **prouvé** — la méthode figure dans le tableau exécutable `MSP_METHODS_SENT` (`msp.ts:32`), mais aucune invocation |
 | Le gate `ephemeral` du client a bloqué une reprise | **écarté** — les 41 sessions sauvegardées portaient toutes `durable` |
-| L'échec de reprise était un défaut | **réfuté** — la session n'a jamais existé côté host |
+| L'échec de reprise était un défaut | **réfuté** — la session est absente des sessions que le host liste |
 
 ## Le vrai écart, qui n'est pas celui que je cherchais
 
 Le client **peut** afficher dans sa barre latérale une conversation que le host ne connaît pas. C'est ce qui s'est produit, et c'est ce qui rend l'échec déroutant pour l'utilisateur : la conversation est **visible**, son historique est **lisible**, et pourtant elle n'est **pas reprenable** — sans que rien n'indique pourquoi.
 
-**Le client n'appelle jamais `session/list`**, donc il ne peut pas savoir quelles conversations sont réellement reprenables. Il ne peut ni marquer les conversations orphelines, ni avertir l'utilisateur, ni éviter de proposer une reprise qui échouera.
+**Aucun appel à `session/list` n'a été trouvé dans l'application**, donc rien ne lui permet de savoir quelles conversations sont réellement reprenables. Il ne peut ni marquer les conversations orphelines, ni avertir l'utilisateur, ni éviter de proposer une reprise qui échouera.
+
+**Précision sur cette absence** : `session/list` est bien déclaré dans `MSP_METHODS_SENT` (`src/lib/msp.ts:32`), le tableau que le pont Rust utilise — ce n'est donc pas une simple mention documentaire, et une revue automatisée a eu raison de me le signaler. Ce qui est établi, c'est qu'**aucune invocation n'existe côté application** ; l'absence d'appel dans `src/` n'exclut pas qu'un chemin Rust l'emprunte.
 
 **C'est une capacité manquante, pas un bug** — et c'est la seule amélioration que cette enquête justifie. Encore faudrait-il la valider par un scénario qui échoue de façon reproductible, ce qui n'est pas le cas aujourd'hui.
 
