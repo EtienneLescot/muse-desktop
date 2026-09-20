@@ -40,15 +40,27 @@ session/setReasoningEffort { sessionId, commandId, reasoningEffort } // pas `eff
 session/setApprovalMode    { sessionId, commandId, mode }   // seuls onRequest, allowAll, promptUnmatched
 ```
 
-## Chantier 1 — Réconcilier les conversations locales avec le host
+## Chantier 1 — **CORRIGÉ : il n'existe pas**
 
-**Constat :** `session/list` est déclaré dans `MSP_METHODS_SENT` (`src/lib/msp.ts:32`) mais **aucun appel n'existe côté application**. Le client peut afficher dans sa barre latérale une conversation que le host ne connaît pas — visible, son historique lisible, et **non reprenable**, sans que rien n'indique pourquoi. C'est exactement ce qui s'est produit avec la session `01a0bd8e`.
+**Ce que ce document affirmait (round 63) :** « `session/list` est déclaré dans `src/lib/msp.ts:32` mais aucun appel n'existe côté application. »
 
-**Ce qu'il faudrait :** interroger `session/list` à l'ouverture, confronter les identifiants aux conversations stockées, et marquer les orphelines. Une conversation sans contrepartie côté host ne devrait pas proposer une reprise qui échouera.
+**C'est faux, et l'erreur est la même que les six autres** : j'avais cherché dans `src/` seulement, en ignorant le pont Rust.
 
-**Où :** `src/hooks/useMuseSessions.ts`, au moment où les sessions stockées sont restaurées ; le pont Rust existe déjà pour les autres méthodes MSP.
+**La réalité, vérifiée dans `src-tauri/src/main.rs` :**
 
-**Vérification :** `msp-list-sessions.mjs` donne la liste attendue ; l'interface doit marquer la même chose.
+| Élément | Constat |
+|---|---|
+| `session/list` est appelé | **oui**, `main.rs:4507`, avec pagination bornée (`MAX_SESSION_LIST_PAGES`) |
+| Par quelle commande | **`restore_sessions`** — qui ne prend aucun paramètre de workspace |
+| Portée | elle **parcourt tous les hosts** (`for (root, client) in clients`) |
+| Filtrage | `hosts.owns(sid, &client) \|\| hosts.bind(sid, &root, &client).is_ok()` (`main.rs:4529`) |
+| Métadonnées | `session_meta_from_list_row(&root, s, …)` — le `root` **du host courant**, correct |
+
+**Le client demande donc bien au host quelles sessions existent, et ne restaure que celles qu'un host vivant possède.** C'est un comportement **correct et délibéré** : une session sans host ne peut pas être reprise, donc la restaurer ne servirait à rien.
+
+**Ce que cela explique :** la session `01a0bd8e`, visible dans la barre latérale et absente de `session/list`, était une **coquille locale** — le host ne la possédait pas, et `sessionNotFound` à la reprise était la bonne réponse. Ce n'était ni un défaut du client, ni du host.
+
+**Aucun chantier ici.** Je le retire, en laissant la trace de l'erreur parce qu'elle est représentative : **septième constat d'absence, septième artefact de méthode.**
 
 ## Chantier 2 — Le gate `ephemeral` ne se réévalue jamais
 
