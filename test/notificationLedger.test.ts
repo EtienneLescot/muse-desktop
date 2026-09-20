@@ -33,6 +33,23 @@ function clearRuntime(): void {
   delete (globalThis as Record<string, unknown>).window;
 }
 
+/**
+ * Wait for a condition instead of sleeping a fixed delay.
+ *
+ * A fixed `setTimeout` does not guarantee the writer callback has run: a slow or
+ * busy machine can fail the assertion for no real reason. Polling with a
+ * generous ceiling keeps the test honest on a slow worker while still failing if
+ * the condition never holds.
+ */
+async function waitFor(predicate: () => boolean, message: string, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.fail(message);
+}
+
 beforeEach(() => clearRuntime());
 
 describe("native notification mirror", () => {
@@ -97,12 +114,12 @@ describe("notification write queue", () => {
     queue([{ id: "a" } as never]);                       // starts the first write
     queue([{ id: "a" } as never, { id: "b" } as never]); // coalesced
     queue([{ id: "c" } as never]);                       // replaces the pending one
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await waitFor(() => seen.length >= 1, "the first write never started");
     assert.equal(seen.length, 1, "only the in-flight write should have started");
 
     release?.();
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.equal(seen.length, 2, "the coalesced batch should follow");
+    await waitFor(() => seen.length >= 2, "the coalesced batch never followed");
+    assert.equal(seen.length, 2, "exactly one follow-up write");
     assert.equal(seen[1], 1, "the last enqueued state wins");
   });
 
@@ -115,7 +132,7 @@ describe("notification write queue", () => {
     });
     queue([]);
     queue([]);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await waitFor(() => attempts >= 2, "the second write was never attempted");
     assert.equal(attempts, 2, "the second write should still be attempted");
   });
 });
