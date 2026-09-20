@@ -78,6 +78,16 @@ import { promisify } from "node:util";
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const PROCESS_EXIT_TIMEOUT_MS = 2_000;
+/**
+ * How long to wait for a turn terminal (`turn/completed` and aliases).
+ *
+ * Measured terminal latencies after `turn/interrupt`: 39 ms, 2 019 ms, 2 064 ms
+ * and 3 974 ms, the last one on a host running two sidecars in parallel. The
+ * previous 2_500 ms budget sat below the slowest observation, and each of the
+ * three aliases spent it in sequence, so a slow host made this probe report a
+ * missing terminal that the host had in fact emitted.
+ */
+const TERMINAL_WAIT_MS = 15_000;
 const SESSION_LIST_LIMIT = 200;
 const SESSION_LIST_MAX_PAGES = 20;
 const SESSION_LIST_MAX_CURSOR_CHARS = 4_096;
@@ -163,21 +173,31 @@ function exercisesTerminalPath() {
 }
 
 async function waitForTerminalNotification(host, turnId, label, required) {
+  const attempts = [];
   for (const method of ["turn/completed", "turn/retracted", "turn/stopped"]) {
     try {
       const params = await host.waitForNotification(
         method,
         (candidate) => candidate?.turnId === turnId,
-        2_500,
+        TERMINAL_WAIT_MS,
       );
       return { method, params };
-    } catch {
+    } catch (error) {
       // Compatible hosts use different terminal aliases. Keep probing the
       // allowlisted forms, but never treat an interrupt acknowledgement as a
       // terminal state by itself.
+      //
+      // The reason is kept rather than discarded: `waitForNotification` reports
+      // which notifications it did see, and that list is the only evidence that
+      // distinguishes "the host was silent" from "it answered something this
+      // probe does not expect". Swallowing it once made this harness report
+      // `terminalNotification: unsupported` for a host that does emit one.
+      attempts.push(`${method}: ${String(error?.message ?? error)}`);
     }
   }
-  if (required) fail(`${label} did not emit a terminal notification for ${turnId}`);
+  if (required) {
+    fail(`${label} did not emit a terminal notification for ${turnId}\n  ${attempts.join("\n  ")}`);
+  }
   return { method: null, params: null };
 }
 
