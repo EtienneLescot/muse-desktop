@@ -19,11 +19,12 @@
  *   node scripts/cdp-drive.mjs fill "<text>"                # writes into the composer
  */
 import { argv, exit } from "node:process";
+import { pathToFileURL } from "node:url";
 
 const PORT = Number(process.env.MUSE_CDP_PORT ?? 9222);
 const ENDPOINT = `http://127.0.0.1:${PORT}`;
 
-async function pageTarget() {
+export async function pageTarget() {
   const response = await fetch(`${ENDPOINT}/json/list`);
   if (!response.ok) throw new Error(`CDP list failed: HTTP ${response.status}`);
   const targets = await response.json();
@@ -35,7 +36,7 @@ async function pageTarget() {
 }
 
 /** Open one WebSocket and expose request/response correlation. */
-function connect(url) {
+export function connect(url) {
   const socket = new WebSocket(url);
   let nextId = 1;
   const pending = new Map();
@@ -78,7 +79,7 @@ function connect(url) {
 }
 
 /** Evaluate an expression and return its JSON value. */
-async function evaluate(client, expression) {
+export async function evaluate(client, expression) {
   const wrapped = `(() => { try { return JSON.stringify(${expression}); }
     catch (error) { return JSON.stringify({ __error: String(error && error.message || error) }); } })()`;
   const result = await client.send("Runtime.evaluate", {
@@ -173,7 +174,9 @@ async function main() {
   }
 }
 
-await main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main().catch((error) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    exit(1);
+  });
+}
