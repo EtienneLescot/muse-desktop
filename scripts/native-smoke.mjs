@@ -960,6 +960,12 @@ async function main() {
         host.request("turn/interrupt", {
           commandId: uuidv7(),
           sessionId: sessions[index],
+          // The host requires `turnId` (and `commandId`); without it the request
+          // is refused as invalidParams, the turn is never interrupted, and no
+          // terminal can arrive. Omitting it made this probe report
+          // `terminalNotification: unsupported` for a host that does emit one —
+          // see docs/evidence/2026-09-20-windows-sessions/terminal-apres-interruption.md.
+          turnId: turnIds[index],
           retract: false,
         }),
       ));
