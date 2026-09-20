@@ -1,11 +1,29 @@
 # Écarts de contrat du sidecar Muse — rapport au mainteneur
 
+> ## ⚠️ Lire ceci avant le reste
+>
+> **Ce rapport a affirmé cinq écarts. Quatre ont été démentis par des mesures ultérieures, et le cinquième n'a jamais été mesuré valablement.**
+>
+> | Écart | Ce que ce rapport affirmait | Mesure ultérieure |
+> |---|---|---|
+> | 1 | `session/read` et `session/resume` absents | **fonctionnels** sur une session persistée (§1) |
+> | 2 | aucune notification terminale après interruption | **`turn/completed` émis** (§2) |
+> | 3 | `userShell` accepté sans item ni sortie | **item `userShell` publié, sortie incluse** (§3) |
+> | 4 | projections non rapportées | **jamais mesuré valablement** — mes appels sont refusés (§4) |
+> | 5 | durabilité constamment `ephemeral` | **variable** (§5) |
+>
+> **La cause était mon outillage, pas le sidecar.** Cinq constats d'absence, cinq artefacts de méthode : une erreur de contexte — session non persistée, capacité mal demandée, interruption sans le `turnId` exigé, attente trop courte — lue chaque fois comme une absence de capacité du host.
+>
+> **Ne reprenez aucune conclusion de ce document sans la revérifier** sur une ressource **persistée** et avec les **paramètres exigés**. Les sections corrigées portent leur date et leur mesure ; les sections non corrigées n'ont pas cette garantie.
+
 **Destinataire :** mainteneur du sidecar Muse (nous).
 **Objet :** capacités que le client Muse-Desktop attend et que `muse serve` n'expose pas, avec mesures reproductibles et impact ticket par ticket.
 **Version mesurée :** Muse Code **1.3.0 (1.3.0-R3401.1)**, binaire Windows natif.
 **Date :** 20 septembre 2026.
 
 Ce document ne décrit **pas** des bugs du client. Chaque écart a été confirmé en interrogeant le host directement, sans passer par l'interface. Les commandes sont fournies pour que chaque constat soit revérifiable.
+
+**Limite acquise à la fin de cette campagne :** une mesure d'absence ne vaut que si le scénario **sollicitait réellement** la ressource. Quatre des cinq constats de ce rapport ne le faisaient pas.
 
 ## Comment reproduire toutes les mesures
 
@@ -53,30 +71,61 @@ Après interruption, le host émet `item/completed` (+19 ms), `session/statusCha
 
 **Impact, corrigé une seconde fois :** il n'y a **aucun écart de terminal côté host**, ni sur le chemin nominal, ni sur le chemin d'arrêt. L'observation d'interface — `Stopping…` qui ne se résout pas, bandeau « waiting for the desktop host to confirm it » — reste **inexpliquée**, mais elle ne peut plus être attribuée à une absence de terminal : le host le fournit. Trois pistes restent ouvertes, aucune tranchée : le renderer ne transmet peut-être pas de `turnId` non vide à `interrupt_session` ; le terminal arrive peut-être sans être associé au bon tour ; l'observation datait peut-être d'un état différent. Détail dans [`terminal-apres-interruption.md`](evidence/2026-09-20-windows-sessions/terminal-apres-interruption.md).
 
-## 3. `session/userShell` — accepté, jamais restitué
+## 3. `session/userShell` — **fonctionne**, et la sortie est reportée
+
+**Correction (20/09/2026, round 59).** Ce paragraphe affirmait que le host accepte `session/userShell` **sans jamais publier d'item**. **C'est faux sur les deux points.**
+
+La cause était dans la façon dont je demandais la capacité. Elle doit être **imbriquée dans `capabilities`** :
+
+```js
+initialize({ clientInfo, capabilities: { requestedCapabilities: ["userShell"] } })
+```
+
+Mes autres formes — `capabilities: { userShell: true }`, `capabilities: ["userShell"]`, ou `requestedCapabilities` au niveau racine — échouent toutes avec `grantedCapabilities: []`, et l'appel répond alors `session/userShell requires the userShell capability`. **Je lisais ce refus comme une absence de fonctionnalité.**
+
+Avec la bonne forme :
 
 | Mesure | Résultat |
 |---|---|
-| `session/userShell` avec `commandText` | **accepted** |
-| Item `userShell` publié (`item/started` / `completed` / `updated`) | **aucun** — `itemStarted: false` |
-| `outputRef` sur l'item | **aucun** |
-| Historique relisible (`session/read`) | **oui sur une session persistée** — voir la correction du §1 ; la sonde l'avait testé sur une session non persistée |
+| `grantedCapabilities` | **`["userShell"]`** |
+| `session/userShell` avec `commandText` | **`ok`**, `status: accepted` |
+| Items publiés | **`item/started` et `item/completed`**, de `kind: "userShell"` |
+| **Sortie de la commande** | **présente dans la charge utile de l'item** |
+| `outputRef` | absent — mais la sortie est reportée autrement |
 
-Le smoke harness **attend déjà** cette notification (`native-smoke.mjs`, attente d'un `item/started` de `kind: "userShell"`) et ne l'obtient pas. Une commande de ~9 s avec fichier témoin absolu a été admise, sans qu'aucun item ni fichier témoin n'apparaisse 14 s plus tard.
+**Preuve par contenu, pas par présence d'un champ :** la commande exécutée écrit un marqueur unique (`muse-ushell-<horodatage>`) et ce marqueur est **retrouvé dans les notifications** reçues après l'appel.
 
-**Impact :** le bouton **Run in Muse** peut exécuter une commande sans jamais pouvoir en montrer le résultat. Le client a un repli honnête — il insère la sortie manuellement dans le prompt — mais le parcours annoncé « je lance et je vois la sortie » n'est pas tenable.
+**Impact, corrigé :** le parcours « je lance une commande et je vois la sortie » **est tenable**. Rien de ce côté n'est bloqué par le sidecar. Ce qui manquerait, s'il manquait quelque chose, serait **côté client** — demander la capacité sous la bonne forme et lire l'item. Détail dans [`user-shell-fonctionne.md`](evidence/2026-09-20-windows-sessions/user-shell-fonctionne.md).
 
-## 4. Projections effectives — non rapportées
+## 4. Projections effectives — **jamais mesuré valablement**
+
+**Avertissement (20/09/2026, round 59).** Le tableau ci-dessous provient de `native-smoke.mjs`, l'outil dont cette campagne a **démontré** qu'il produit des faux négatifs. Il n'est **pas** une mesure fiable.
+
+Recontrôlé hors de cet outil, avec `session/start`, `model/list`, puis les deux appels :
+
+| Appel | Résultat de mon contrôle |
+|---|---|
+| `session/setReasoningEffort` (`none`, `high`, `ultra`) | **`invalidParams`** |
+| `session/setModel` (`muse-spark-1.3`) | **`invalidParams: missing f…`** |
+
+Un `invalidParams` sur **ma** requête ne dit **rien** de la capacité du host : c'est le même piège que l'`approval/listPending` sans `sessionId` qui avait déjà produit un faux constat dans ce dépôt. **Je n'ai donc aucune mesure valide de cet écart, ni pour le confirmer, ni pour l'infirmer.**
+
+Ce que `model/list` retourne en revanche, et qui est mesuré : `{providerId: "meta", profileId: "tbh", source: "providerCatalog", models: [{modelId: "muse-spark-1.3", …}]}` — le catalogue existe et est interrogeable.
+
+<details>
+<summary>Ancien constat, conservé pour mémoire — <strong>non fiable</strong></summary>
 
 | Réglage | Accusé | Projection | Effectif |
 |---|---|---|---|
-| `session/setReasoningEffort` — `none`, `high`, `ultra` | **accepted** (les trois) | **`not-reported`** | **vide** |
-| `session/setModel` — `muse-spark-1.3` | **accepted** | rapportée | **`isActive: false`** |
+| `session/setReasoningEffort` — `none`, `high`, `ultra` | *accepted* (les trois) | **`not-reported`** | *vide* |
+| `session/setModel` — `muse-spark-1.3` | *accepted* | rapportée | **`isActive: false`** |
 | `session/compact` sur session vierge | — | — | **`missing-run`** |
 
-**Impact :** le client ne peut pas prouver qu'un réglage a pris effet. Il affiche le dernier modèle **demandé**, en le marquant explicitement comme non live — ce qui est honnête mais empêche toute confirmation utilisateur. Un `isActive: false` après un `setModel` accepté est particulièrement ambigu : accepter sans activer n'est pas un contrat exploitable.
+</details>
 
-Pour `session/compact`, `missing-run` sur une session vierge est un refus cohérent ; ce qui manque est un scénario sur un historique réel, donc côté client ce n'est pas un écart mais une preuve à produire.
+**Impact : inconnu.** Ni « le client ne peut pas prouver qu'un réglage a pris effet », ni l'inverse, ne sont établis. `session/read` expose `modelId` et `providerId` sur la session — la projection est peut-être simplement lisible là, comme l'est `approvalMode`.
+
+**Ce qu'il faudrait :** retrouver la forme correcte des deux appels, puis relire la session pour voir si le réglage y apparaît. Borné, non fait.
 
 ## 5. Durabilité de session — **variable**, et non `ephemeral`
 
@@ -135,24 +184,32 @@ Champs exposés : `sessionId`, `path`, `status`, `activeTurnId`, `createdAt`, `u
 
 ## Impact consolidé sur les tickets du groupe 1
 
-| Ticket | Dépend de | Fermable sans changement du host ? |
-|---|---|---|
-| **M0-04** — arrêter et reprendre avec des états fiables | §2 notification terminale | **non** |
-| **M1-06** — faire lire la sortie terminal au moteur | §3 items `userShell` et `outputRef` | **non** |
-| **M1-11** — modèle et effort effectifs | §4 projections | **non** |
-| **M0-02** — reprendre après fermeture ou panne | §1 `session/read`, `session/resume` ; §5 durabilité | **non** |
-| **M0-01 / M0-14** — isolation A/B | aucune ; approbations bloquées par `promptUnmatched` | partiellement |
-| **M0-06** — posture de permissions effective | plafond `promptUnmatched` | partiellement |
+**Tableau corrigé (round 59).** L'ancienne version déclarait quatre tickets M0 « bloqués par le host ». C'était faux pour trois d'entre eux.
 
-Quatre tickets de priorité immédiate (M0) sont donc **bloqués par le host, pas par le client**.
+| Ticket | Dépend de | Bloqué par le host ? |
+|---|---|---|
+| **M0-02** — reprendre après fermeture ou panne | §1 : `session/read` et `session/resume` **fonctionnent** | **non** — le défaut observé était une session absente côté host, pas une capacité manquante |
+| **M0-04** — arrêter avec un état fiable | §2 : le terminal **est émis** après interruption | **non** — la cause observée est dans l'outillage de mesure, pas dans le host |
+| **M1-06** — lire la sortie terminal | §3 : item `userShell` **publié avec sa sortie** | **non** — dépend du client, qui doit demander la capacité correctement |
+| **M1-11** — modèle et effort effectifs | §4 : **jamais mesuré valablement** | **inconnu** |
+| **M0-01 / M0-14** — isolation A/B | approbations : plafond `promptUnmatched` | **partiellement** — seule réserve encore debout |
+| **M0-06** — posture de permissions | `session/read` expose `approvalMode` ; plafond `promptUnmatched` | **à réinstruire** |
+
+**Aucun ticket M0 n'est établi comme bloqué par le host.** Le seul constat encore debout est le plafond `promptUnmatched`, qui limite la portée de M0-01 et M0-06 — et il n'a pas été remesuré depuis.
 
 ## Ce que nous demandons, par ordre de rentabilité
 
-1. **`session/read` et `session/resume`**, ou une durabilité `durable` — débloque la reprise et, par ricochet, une partie de M0-02 et M0-05.
-2. **Une notification terminale de tour** (`turn/completed` suffirait, avec `turnId`) — débloque M0-04 et rend l'état final vérifiable au lieu d'être déduit.
-3. **La publication d'un item `userShell`** avec sa sortie et un `outputRef` — débloque M1-06.
-4. **Une projection effective** pour `setModel` et `setReasoningEffort` — débloque M1-11 ; un simple `effective` ou un `isActive` conforme à l'accusé suffirait.
-5. **`approval_mode` sélectionnable au-delà de `promptUnmatched`**, ou une explication du plafond — débloque le critère « approbations simultanées » de M0-01 et la portée réelle de M0-06.
+**Section réécrite (round 59).** Les quatre premières demandes portaient sur des écarts **démentis** ou **non mesurés**. Il serait malhonnête de les maintenir.
+
+| Demande | Statut |
+|---|---|
+| `session/read` et `session/resume` | **retirée** — les deux méthodes fonctionnent |
+| Notification terminale de tour | **retirée** — `turn/completed` est émis, nominal et après interruption |
+| Item `userShell` avec sa sortie | **retirée** — l'item est publié, la sortie y est |
+| Projection effective pour `setModel` / `setReasoningEffort` | **suspendue** — à remesurer avant d'être demandée |
+| **`approval_mode` au-delà de `promptUnmatched`** | **seule demande encore fondée** — elle limite la portée réelle de M0-01 et M0-06 |
+
+**Ce qu'il faut faire avant de rouvrir ce rapport :** mesurer l'écart n° 4 avec les bons paramètres, puis décider s'il y a quelque chose à demander. Tant que ce n'est pas fait, **ce document ne porte aucune demande fondée**, à une exception près.
 
 ## Ce que ce rapport n'affirme pas
 
