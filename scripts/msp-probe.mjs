@@ -28,7 +28,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..");
@@ -37,8 +37,8 @@ const REQUEST_TIMEOUT_MS = 20_000;
 const NOTIFICATION_WINDOW_MS = 25_000;
 
 const argv = process.argv.slice(2);
-const has = (name) => argv.includes(name);
-const value = (name) => {
+export const has = (name) => argv.includes(name);
+export const value = (name) => {
   const index = argv.indexOf(name);
   return index >= 0 && argv[index + 1] && !argv[index + 1].startsWith("--") ? argv[index + 1] : undefined;
 };
@@ -46,7 +46,7 @@ const value = (name) => {
 const MODE_ALL = has("--all");
 const mode = (name) => MODE_ALL || has(`--${name}`);
 
-function bounded(value, max = 160) {
+export function bounded(value, max = 160) {
   if (typeof value !== "string") return undefined;
   const clean = value.replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max)}…` : clean;
@@ -149,7 +149,7 @@ function createHost(binary, workspace) {
   };
 }
 
-const uuidv7 = () => {
+export const uuidv7 = () => {
   // RFC 9562: 48-bit big-endian Unix millisecond timestamp, then version 7 in
   // the high nibble of byte 6 and the RFC 4122 variant in byte 8. The previous
   // form shifted the timestamp right by 16 bits and wrote 32 bits over six
@@ -415,4 +415,4 @@ async function main() {
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

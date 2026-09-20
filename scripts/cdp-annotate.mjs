@@ -7,11 +7,12 @@
  * Usage: node scripts/cdp-annotate.mjs
  */
 import { exit } from "node:process";
+import { pathToFileURL } from "node:url";
 
 const PORT = Number(process.env.MUSE_CDP_PORT ?? 9222);
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
-async function pageTarget() {
+export async function pageTarget() {
   const res = await fetch(`http://127.0.0.1:${PORT}/json/list`);
   const targets = await res.json();
   const page = targets.find((t) => t.type === "page" && typeof t.webSocketDebuggerUrl === "string");
@@ -19,7 +20,7 @@ async function pageTarget() {
   return page;
 }
 
-function connect(url) {
+export function connect(url) {
   const socket = new WebSocket(url);
   let nextId = 1;
   const pending = new Map();
@@ -52,7 +53,7 @@ function connect(url) {
   };
 }
 
-async function evaluate(client, expression) {
+export async function evaluate(client, expression) {
   const wrapped = `(() => { try { return JSON.stringify(${expression}); }
     catch (error) { return JSON.stringify({ __error: String((error && error.message) || error) }); } })()`;
   const result = await client.send("Runtime.evaluate", { expression: wrapped, returnByValue: true, awaitPromise: true });
@@ -146,4 +147,6 @@ async function main() {
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 
-await main().catch((error) => { process.stderr.write(`${(error && error.message) || error}\n`); exit(1); });
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main().catch((error) => { process.stderr.write(`${(error && error.message) || error}\n`); exit(1); });
+}

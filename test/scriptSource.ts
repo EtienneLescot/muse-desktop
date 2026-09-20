@@ -65,7 +65,13 @@ function extractDeclaration(source: string, name: string): string {
   );
   const match = marker.exec(source);
   if (!match) throw new Error(`declaration ${name} is not defined in this script`);
-  const declaration = source.slice(match.index, declarationEnd(source, match.index)).trim();
+  const declaration = source
+    .slice(match.index, declarationEnd(source, match.index))
+    // The slice starts at the keyword, but a declaration written with `export`
+    // would carry that keyword into the wrapper body, where it is a syntax
+    // error. Strip it so exported and unexported forms both load.
+    .replace(/^export\s+/, "")
+    .trim();
   if (!declaration) throw new Error(`declaration ${name} is empty`);
   return declaration;
 }

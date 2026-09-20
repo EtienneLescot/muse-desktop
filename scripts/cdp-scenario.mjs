@@ -11,12 +11,13 @@
  * Without `--live` it only inspects state and spends no model tokens.
  */
 import { argv, exit } from "node:process";
+import { pathToFileURL } from "node:url";
 
 const PORT = Number(process.env.MUSE_CDP_PORT ?? 9222);
 const LIVE = argv.includes("--live");
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
-async function pageTarget() {
+export async function pageTarget() {
   const response = await fetch(`http://127.0.0.1:${PORT}/json/list`);
   const targets = await response.json();
   const page = targets.find((t) => t.type === "page" && typeof t.webSocketDebuggerUrl === "string");
@@ -24,7 +25,7 @@ async function pageTarget() {
   return page;
 }
 
-function connect(url) {
+export function connect(url) {
   const socket = new WebSocket(url);
   let nextId = 1;
   const pending = new Map();
@@ -57,7 +58,7 @@ function connect(url) {
   };
 }
 
-async function evaluate(client, expression) {
+export async function evaluate(client, expression) {
   const wrapped = `(() => { try { return JSON.stringify(${expression}); }
     catch (error) { return JSON.stringify({ __error: String((error && error.message) || error) }); } })()`;
   const result = await client.send("Runtime.evaluate", {
@@ -96,7 +97,7 @@ const appState = (client) => evaluate(client, `(() => {
     stale: /No recent host update/.test(body),
     stopping: /Stopping Muse/.test(body),
     resuming: /Muse is resuming/.test(body),
-    thinking: /thinking…|\\(thinking\\)/.test(body),
+    thinking: /thinkingâ€¦|\\(thinking\\)/.test(body),
     completed: /Completed/.test(body),
     bodyTail: body.slice(-320)
   };
@@ -198,7 +199,9 @@ async function main() {
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 
-await main().catch((error) => {
-  process.stderr.write(`${(error && error.message) || error}\n`);
-  exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main().catch((error) => {
+    process.stderr.write(`${(error && error.message) || error}\n`);
+    exit(1);
+  });
+}
