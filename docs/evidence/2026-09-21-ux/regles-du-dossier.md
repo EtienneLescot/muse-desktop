@@ -104,11 +104,11 @@ Autrement dit `ultra` n'est **pas** un neuvième niveau plus profond : c'est `ma
 - `src/lib/projects.ts` : `instructions` devient optionnel et déprécié, `buildProjectInput` supprimé.
 - `src/lib/reasoning.ts`, `validate_reasoning_effort`, liste du panneau Projets : huit niveaux, une seule source.
 - `src/components/ProjectsPanel.tsx` : bloc « Rules » en lecture seule, avis ponctuel sur les anciennes instructions.
-- `scripts/ux-rules-scan.mjs` et `scripts/ux-project-rules.mjs` (nouveaux), `scripts/msp-reasoning-tiers.mjs` (mis à jour).
+- `scripts/ux-rules-scan.mjs`, `scripts/ux-project-rules.mjs` et `scripts/ux-legacy-instructions.mjs` (nouveaux), `scripts/msp-reasoning-tiers.mjs` (mis à jour).
 
 Tests : **220 Rust, 1102 Node, 0 échec.** Build vert.
 
-Migration : les deux projets présents sur cette machine avaient `instructions: ""` — vérifié dans le `localStorage` de l'application lancée. Rien n'est perdu ici ; une valeur non vide resterait affichée avec **Copy** et **Dismiss**, et n'est plus jamais envoyée.
+Migration : les deux projets présents sur cette machine avaient `instructions: ""` — vérifié dans le `localStorage` de l'application lancée. Rien n'est perdu ici ; une valeur non vide reste affichée avec **Copy** et **Dismiss**, et n'est plus jamais envoyée. Ce chemin est exercé pour de vrai par `node scripts/ux-legacy-instructions.mjs` : il injecte une valeur, recharge, vérifie que l'encart apparaît, qu'il dit « no longer sent », qu'il n'y a **aucun champ éditable**, que **Dismiss** vide le stockage, puis restaure la chaîne d'origine (le script rend l'application telle qu'il l'a trouvée).
 
 ## Ce qui reste ouvert
 

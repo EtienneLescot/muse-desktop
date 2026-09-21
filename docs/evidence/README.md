@@ -101,6 +101,7 @@ Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `
 | `msp-user-shell-after-resume.mjs` | `userShell` avant/après `session/resume`, sur une session neuve | un appel shell |
 | `ux-rules-scan.mjs` | `rules_scan` sur le pont vivant : chaque ligne confrontée au disque, fichiers **inchangés** après lecture | aucun |
 | `ux-project-rules.mjs` | le panneau Projets : champ `Instructions` disparu, 4 rôles listés, débordement de 1440 à 760 px | aucun |
+| `ux-legacy-instructions.mjs` | l'encart des instructions retirées : apparition, Copy/Dismiss, stockage vidé — **et restauré** | aucun |
 | `check-scripts-parse.mjs` | garde-fou : tout script de `scripts/` doit compiler | aucun |
 
 **`ux-panel-overflow.mjs` refuse d'imprimer le moindre chiffre si son auto-test échoue** : une sonde de 300 px dans une boîte de 100 px doit être signalée à +200 px, et la même sonde avec `overflow-x: hidden` doit être ignorée. Ce garde-fou existe parce que trois versions successives de ce détecteur ont produit des rapports plausibles et faux — détails dans [`2026-09-21-ux/debordement-desktop.md`](2026-09-21-ux/debordement-desktop.md).
