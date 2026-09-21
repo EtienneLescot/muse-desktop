@@ -1218,6 +1218,31 @@ export default function App() {
                       >
                         Restore
                       </button>
+                      {/*
+                        Permanent delete, the action this page was missing: an
+                        archived conversation could only be restored, which left
+                        no way to get rid of one. `killSession` is the same path
+                        the conversation-actions menu uses — it stops the session
+                        and records a persisted tombstone, so the entry does not
+                        come back on the next `session/list`.
+                      */}
+                      <button
+                        className="danger"
+                        data-danger="true"
+                        onClick={() => {
+                          const title = session.title || session.session_id.slice(0, 8);
+                          if (
+                            !window.confirm(
+                              `Delete "${title}" permanently?\n\nIt will disappear from Muse and will not come back. The conversation file itself stays on disk, under the Muse data folder, until it is removed there.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          void killSession(session.session_id);
+                        }}
+                      >
+                        Delete…
+                      </button>
                     </div>
                   ))}
                 {!sessions.some((session) => session.archived) && (

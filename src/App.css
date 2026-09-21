@@ -332,6 +332,16 @@ small {
   opacity: 1;
 }
 
+/* The archived section is not a list of rows to skim past: its actions are the
+   only way out of the section, and one of them is destructive. Hiding them until
+   hover made the row look like it offered nothing at all — reported as "on ne
+   peut rien faire à part le désarchiver" while both actions were present and
+   clickable. They stay visible here; active rows keep the hover behaviour so the
+   list stays calm. */
+.session-item.archived .session-meta {
+  opacity: 1;
+}
+
 .session-meta .muted {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -347,6 +357,15 @@ small {
 .session-actions button {
   padding: 4px 8px;
   font-size: 0.8rem;
+}
+
+/* Text-only labels ("Del", "Restore") were too terse to read as actions, and one
+   of them destroys a conversation. Destructive actions are marked in the same
+   red the confirmation dialog already uses, so the affordance matches the menu
+   entry that has a confirmation step. */
+.session-actions button[data-danger="true"] {
+  color: var(--danger, #c0392b);
+  border-color: color-mix(in srgb, var(--danger, #c0392b) 40%, var(--line));
 }
 
 /* ---- US-5 threads sidebar ---- */
