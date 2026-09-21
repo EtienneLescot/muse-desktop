@@ -72,7 +72,8 @@ Ce document est la source de vérité de l'avancement produit. Il est découpé 
 
 **Ce qui bloque encore, par nature :**
 
-- **M0-04, M1-06, M1-11** : aucune correction client ne les fermera. Le sidecar 1.3.0 n'émet pas de notification terminale, ne publie pas d'item `userShell` ni d'`outputRef`, et ne rapporte pas les projections de modèle ou d'effort. Détail et demandes dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md).
+- **M1-06 : RÉFUTÉ le 21/09/2026.** Le « blocage côté host » venait d'une sonde qui demandait la capacité sous une forme que le host lit comme « aucune capacité demandée ». Avec la forme correcte, le sidecar 1.3.0 **publie bien** les items `userShell` **et** leur sortie. Détail et mesures dans la ligne M1-06 plus bas ; **ne citez plus `SIDECAR-CONTRACT-GAPS.md` pour ce ticket.**
+- **M0-04, M1-11** : aucune correction client ne les fermera. Le sidecar 1.3.0 n'émet pas de notification terminale, ne publie pas d'`outputRef`, et ne rapporte pas les projections de modèle ou d'effort. Détail et demandes dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md). **Ces deux-là restent à revérifier** : la mesure qui les étayait partageait le harnais de M1-06, dont la forme de capacité était fausse.
 - **M0-01** : le critère « approbations simultanées » reste ouvert — le plafond du host est `promptUnmatched` et aucune demande d'approbation n'a pu être provoquée, même en mode `ask`.
 - **M0-10, M4-09** : la « machine propre » n'est pas couverte — la machine de test a déjà WSL, Muse et 64 conversations. La signature des installeurs est également absente (`NotSigned`).
 - **M0-12, M1-13** : la qualification par un **lecteur d'écran réel** n'a pas été faite ; les rôles et libellés observés sont une condition nécessaire, pas une preuve d'annonce correcte.
@@ -94,7 +95,7 @@ Ce document est la source de vérité de l'avancement produit. Il est découpé 
 
 **Prochaine reprise :** les preuves natives M0 sur Windows sont largement avancées (voir le tableau consolidé ci-dessus). Ce qui reste dépend de trois natures de travail :
 
-1. **Côté sidecar** — les cinq écarts de contrat listés dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md) débloqueraient M0-04, M1-06, M1-11 et une partie de M0-02. Le plus rentable est `session/read` + `session/resume`, ou une durabilité `durable` ; le suivant est une notification terminale de tour.
+1. **Côté sidecar** — **la liste des cinq écarts n'est plus fiable** : tous ont été réexaminés le 20-21/09/2026 et **six claims se sont révélés être des artefacts de mesure** (`SIDECAR-CONTRACT-GAPS.md` porte un bandeau en ce sens). M1-06 en particulier est réfuté. Ce qui reste réellement côté host doit être **remesuré avec la forme de capacité correcte** avant d'être présenté comme un blocage. Les seules demandes encore plausibles concernent `outputRef` et une notification terminale de tour, à confirmer.
 2. **Côté infrastructure** — machine propre pour M0-10 et M4-09, signature Authenticode des installeurs, hébergement du canal de mise à jour, VM macOS et Linux pour M4-01/M4-02.
 3. **Côté méthode** — qualification par un lecteur d'écran réel pour M0-12 et M1-13 ; compléter les variantes de scénarios déjà couverts (IME chinois et coréen, rechargement avant acquittement, double clic à la souris pour M0-03 ; services nommés et verrous pour M1-05 et M2-08).
 
@@ -270,7 +271,9 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 
 - ◐ **M1-06 — Faire lire au moteur la sortie du terminal**
   - Windows ◐ — **Add output to prompt** (fallback borné à 12 000 caractères), **Run in Muse** négociant `userShell`, repli des `item/completed` sans delta, lecture différée `item/readOutput` par blocs de 64 KiB.
-  - **Constat bloquant (Windows, 19/09/2026) :** `--exercise-user-shell --exercise-user-shell-slow` a obtenu `accepted` des deux côtés, mais **aucun** `item/started`, aucune notification portant le `commandId`, et aucun fichier témoin 14 s après l'admission. L'admission seule ne prouve ni exécution ni restitution — le blocage est côté host, sans RPC inventé.
+  - **Constat bloquant du 19/09/2026 : RÉFUTÉ le 21/09/2026 — c'était un artefact de mesure.** Le harnais envoyait la capacité **à plat** (`capabilities: {}` **plus** `requestedCapabilities: ["userShell"]`), forme que le host lit comme « aucune capacité demandée ». Il obtenait donc `grantedCapabilities: []`, l'appel répondait `capabilityRequired`, et la sonde concluait « aucun item `userShell` ». Avec la forme que l'application utilise depuis toujours — **imbriquée**, `capabilities.requestedCapabilities` (`src-tauri/src/main.rs`) — la même sonde mesure : `grantedCapabilities: ["userShell"]`, `session/userShell` → **`accepted`** avec `commandId`, puis **`item/started` et `item/completed` de type `userShell`** (à 1 867 et 1 922 ms), et le marqueur de la commande **restitué**. Verdict de la sonde corrigée : « the host DOES publish 2 userShell item(s) — the gap report is wrong here ».
+  - **Conséquence :** le blocage n'est **pas** côté host. `SIDECAR-CONTRACT-GAPS.md` ne doit plus être invoqué pour M1-06, et le chemin `Run in Muse` côté client fonctionne : capacité projetée par Rust, fusionnée par le renderer, bouton activé dès qu'une commande est saisie.
+  - **Reste :** `Run in Muse` échoue en `sessionNotLoaded` sur une conversation jamais lancée (le host admet la session au repos mais ne la charge qu'à son premier tour) — le client devrait soit la charger, soit refuser l'action avec ce motif. Et la qualification native interactive sur les trois OS reste due.
   - macOS ☐ / Linux ☐ — non commencé ; qualification native sur les trois OS requise par le ticket.
 
 - ◐ **M1-07 → M1-08 — fichiers et pièces jointes** *(code partagé)*

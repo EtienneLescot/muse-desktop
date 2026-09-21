@@ -78,8 +78,16 @@ async function main() {
     const init = await request("initialize", {
       clientInfo: { name: "muse_user_shell_probe", version: "1.0.0" },
       schema: 1,
-      capabilities: {},
-      requestedCapabilities: ["userShell"],
+      // The capability key must be NESTED. This probe formerly sent
+      // `capabilities: {}` plus a top-level `requestedCapabilities`, which the
+      // host read as "no capabilities requested": it granted nothing, answered
+      // the userShell call with `capabilityRequired`, and the run concluded
+      // "no userShell item and no output anywhere". That verdict was published
+      // as a blocking finding for M1-06 and sent people looking for a sidecar
+      // gap. The application has always used the nested shape
+      // (src-tauri/src/main.rs: `capabilities.requestedCapabilities`), which is
+      // why the desktop grants userShell and this probe did not.
+      capabilities: { requestedCapabilities: ["userShell"] },
     });
     report.durability = init.result?.sessionDurability ?? null;
     report.grantedCapabilities = init.result?.grantedCapabilities ?? null;
