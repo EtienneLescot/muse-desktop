@@ -22,6 +22,7 @@ export function AuthorizationModeControl({ mode, onChange, compact = false }: Pr
   return (
     <details
       className={`authorization-mode-control${compact ? " authorization-mode-control-compact" : ""}`}
+      data-popover
     >
       <summary
         className="authorization-mode-trigger"

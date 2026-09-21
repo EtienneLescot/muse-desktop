@@ -14,7 +14,10 @@ interface Props {
 /** Shared reasoning selector for the welcome and active conversation composers. */
 export function ReasoningEffortControl({ value, onChange, compact = false }: Props) {
   return (
-    <details className={`reasoning-effort-control${compact ? " reasoning-effort-control-compact" : ""}`}>
+    <details
+      className={`reasoning-effort-control${compact ? " reasoning-effort-control-compact" : ""}`}
+      data-popover
+    >
       <summary
         className="reasoning-effort-trigger"
         aria-label={`Reasoning effort: ${reasoningEffortLabel(value)}`}

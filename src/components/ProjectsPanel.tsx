@@ -12,6 +12,18 @@ import {
   type WorkspaceRootObservation,
 } from "../lib/projects";
 import { userFacingError } from "../lib/errorCopy";
+import {
+  describeRules,
+  formatRuleBytes,
+  governingRule,
+  ruleStatusLabel,
+  type HarnessRules,
+} from "../lib/harnessRules";
+import {
+  REASONING_EFFORTS,
+  isReasoningEffort,
+  reasoningEffortLabel,
+} from "../lib/reasoning";
 
 interface ProjectsPanelProps {
   projects: Project[];
@@ -19,7 +31,7 @@ interface ProjectsPanelProps {
   projectError: string | null;
   activeSessionId: string | null;
   globalSettings: ProjectSettings;
-  onCreate: (name: string, instructions: string, workspaces?: string[]) => void;
+  onCreate: (name: string, workspaces?: string[]) => void;
   onDelete: (id: string) => void;
   onUpdate: (
     id: string,
@@ -35,6 +47,12 @@ interface ProjectsPanelProps {
   ) => void;
   settingsFor: (projectId: string | null) => ProjectSettings;
   onCheckWorkspace: (path: string) => Promise<WorkspaceRootObservation | null>;
+  /**
+   * Read-only: which rule files the CLI loads for a folder. Projects do not
+   * own instructions — the folder does, and the host injects them — so the
+   * panel shows what the backend reads instead of offering a second store.
+   */
+  onReadRules: (path: string) => Promise<HarnessRules | null>;
   /**
    * Hide the global-defaults editor: global settings live in the Settings
    * panel (sidebar footer). Per-project overrides stay — they are
@@ -56,13 +74,19 @@ function formatSetting(
   value: string | boolean,
 ): string {
   if (key === "autoCompact") return value === true ? "on" : "off";
+  // The inherited value is shown next to the override: naming the tier beats
+  // echoing the wire spelling ("Very high" rather than "xhigh").
+  if (key === "reasoningEffort" && isReasoningEffort(value)) {
+    return reasoningEffortLabel(value);
+  }
   return String(value);
 }
 
 /**
- * US-3 + US-30 projects panel: create (max 5, client-side), per-project
- * instructions, thread attach/detach for the active thread, and the small
- * settings panel (global defaults + per-project overrides with diff).
+ * US-3 + US-30 projects panel: create (max 5, client-side), the folder's real
+ * rules (read-only, as the CLI loads them), thread attach/detach for the active
+ * thread, and the small settings panel (global defaults + per-project overrides
+ * with diff).
  */
 export function ProjectsPanel({
   projects,
@@ -79,10 +103,10 @@ export function ProjectsPanel({
   onSetOverride,
   settingsFor,
   onCheckWorkspace,
+  onReadRules,
   hideGlobalSettings = false,
 }: ProjectsPanelProps) {
   const [name, setName] = useState("");
-  const [instructions, setInstructions] = useState("");
   const [workspacePaths, setWorkspacePaths] = useState<string[]>([]);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [migrationBusy, setMigrationBusy] = useState(false);
@@ -152,9 +176,8 @@ export function ProjectsPanel({
 
   function submit(): void {
     if (name.trim().length === 0) return;
-    onCreate(name, instructions, workspacePaths.length > 0 ? workspacePaths : undefined);
+    onCreate(name, workspacePaths.length > 0 ? workspacePaths : undefined);
     setName("");
-    setInstructions("");
     setWorkspacePaths([]);
   }
 
@@ -195,13 +218,6 @@ export function ProjectsPanel({
           aria-label="Project name"
           maxLength={80}
         />
-        <textarea
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          placeholder="Instructions included with requests (optional)"
-          aria-label="Project instructions"
-          rows={2}
-        />
         <div className="project-workspace-picker">
           <button type="button" onClick={() => void pickWorkspace()}>
             {workspacePaths.length > 0 ? "Add project folders" : "Choose project folders"}
@@ -235,7 +251,8 @@ export function ProjectsPanel({
       )}
       {projects.length === 0 && (
         <p className="muted">
-          No projects yet. Group your conversations and their instructions.
+          No projects yet. Group your conversations and give them a folder and
+          preferences.
         </p>
       )}
       <ul className="project-items">
@@ -263,6 +280,7 @@ export function ProjectsPanel({
             onSetOverride={(key, value) => onSetOverride(p.id, key, value)}
             checkingWorkspace={checkingWorkspaceId === p.id}
             onCheckWorkspace={(paths) => void checkProjectWorkspaces(p, paths)}
+            onReadRules={onReadRules}
             workspaceObservations={Object.fromEntries(
               projectWorkspaces(p).map((root) => [root, workspaceChecks[`${p.id}:${root}`]]),
             )}
@@ -350,6 +368,7 @@ interface ProjectRowProps {
   workspaceObservations: Readonly<Record<string, WorkspaceRootObservation | undefined>>;
   checkingWorkspace: boolean;
   onCheckWorkspace: (paths: string[]) => void;
+  onReadRules: (path: string) => Promise<HarnessRules | null>;
 }
 
 function ProjectRow({
@@ -368,13 +387,15 @@ function ProjectRow({
   workspaceObservations,
   checkingWorkspace,
   onCheckWorkspace,
+  onReadRules,
 }: ProjectRowProps) {
   const [draftName, setDraftName] = useState(project.name);
-  const [draftInstructions, setDraftInstructions] = useState(
-    project.instructions,
-  );
   const [draftWorkspaces, setDraftWorkspaces] = useState(() => projectWorkspaces(project));
   const [selectedWorkspace, setSelectedWorkspace] = useState(() => projectWorkspaces(project)[0] ?? "");
+  const [rules, setRules] = useState<HarnessRules | null>(null);
+  const [rulesError, setRulesError] = useState<string | null>(null);
+  const [readingRules, setReadingRules] = useState(false);
+  const [copiedLegacy, setCopiedLegacy] = useState(false);
   useEffect(() => {
     const roots = projectWorkspaces(project);
     setDraftWorkspaces(roots);
@@ -383,13 +404,39 @@ function ProjectRow({
   const diff = diffProjectSettings(globalSettings, project.settings);
   const dirty =
     draftName.trim() !== project.name ||
-    draftInstructions.trim() !== project.instructions ||
     JSON.stringify(draftWorkspaces) !== JSON.stringify(projectWorkspaces(project));
   const hasWorkspace = draftWorkspaces.length > 0;
+  const rulesRoot = draftWorkspaces[0] ?? "";
+  const governing = governingRule(rules);
+  const legacyInstructions = (project.instructions ?? "").trim();
+
+  async function readRules(): Promise<void> {
+    if (rulesRoot.length === 0 || readingRules) return;
+    setReadingRules(true);
+    setRulesError(null);
+    try {
+      const read = await onReadRules(rulesRoot);
+      if (read === null) {
+        setRulesError("The rules could not be read from this folder.");
+        return;
+      }
+      setRules(read);
+    } catch (error) {
+      setRulesError(userFacingError(error));
+    } finally {
+      setReadingRules(false);
+    }
+  }
 
   return (
     <li className={`project-item${hasWorkspace ? "" : " project-item-unrooted"}`}>
-      <details>
+      <details
+        onToggle={(event) => {
+          // Reading on first open keeps the panel free of one native call per
+          // project on mount, and the answer is only useful once it is visible.
+          if (event.currentTarget.open && rules === null && !readingRules) void readRules();
+        }}
+      >
         <summary>
           <span className="project-name">{project.name}</span>
           <span className="muted">
@@ -413,15 +460,90 @@ function ProjectRow({
               maxLength={80}
             />
           </label>
-          <label className="project-setting">
-            <span>Instructions</span>
-            <textarea
-              value={draftInstructions}
-              onChange={(e) => setDraftInstructions(e.target.value)}
-              aria-label={`Instructions for project ${project.name}`}
-              rows={2}
-            />
-          </label>
+          {legacyInstructions.length > 0 && (
+            <div className="project-legacy-instructions" role="status">
+              <strong>This project still has client-side instructions</strong>
+              <p>
+                They used to be prepended to every request. The agent's
+                instructions are the rules of the folder it runs in, read by the
+                CLI itself, so these are no longer sent anywhere. Copy them into
+                the folder's <code>AGENTS.md</code> if you still want them.
+              </p>
+              <pre>{legacyInstructions}</pre>
+              <div className="project-legacy-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(legacyInstructions).then(
+                      () => setCopiedLegacy(true),
+                      () => setCopiedLegacy(false),
+                    );
+                  }}
+                >
+                  {copiedLegacy ? "Copied" : "Copy"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ instructions: "" })}
+                  title="Forget these instructions for good"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="project-setting project-rules-setting">
+            <span>Rules</span>
+            <div className="project-rules-body">
+            {rulesRoot.length === 0 ? (
+              <p className="muted">
+                Rules live in the folder the CLI runs in. Choose a folder to see
+                which files would be loaded.
+              </p>
+            ) : readingRules ? (
+              <p className="muted" role="status">Reading rules…</p>
+            ) : rulesError !== null ? (
+              <p className="project-error" role="alert">{rulesError}</p>
+            ) : rules === null ? (
+              <button type="button" onClick={() => void readRules()}>Check rules</button>
+            ) : (
+              <>
+                <p className="project-rules-summary" role="status">{describeRules(rules)}</p>
+                <ul className="project-rule-list" aria-label={`Rules for ${project.name}`}>
+                  {rules.files.map((file) => (
+                    <li key={file.id} className={`project-rule-row project-rule-${file.status}`}>
+                      <span className="project-rule-name">{file.name}</span>
+                      <span className="project-rule-scope">
+                        {file.scope === "project" ? "folder" : "personal"}
+                      </span>
+                      <span className="project-rule-status">{ruleStatusLabel(file.status)}</span>
+                      {file.present && (
+                        <span className="muted">{formatRuleBytes(file.bytes)}</span>
+                      )}
+                      <small className="project-rule-detail">
+                        {/* The path, not just the file name: two rows named
+                            AGENTS.md with different scopes are otherwise
+                            indistinguishable. */}
+                        <code className="project-rule-path" title={file.path}>{file.path}</code>{" "}
+                        {file.detail}
+                      </small>
+                    </li>
+                  ))}
+                </ul>
+                {governing !== null && governing.preview.trim().length > 0 && (
+                  <details className="project-rule-preview">
+                    <summary>Show what the agent reads</summary>
+                    <pre>{governing.preview}{governing.truncated ? "\n…" : ""}</pre>
+                    <small>{governing.path}</small>
+                  </details>
+                )}
+                <button type="button" onClick={() => void readRules()} disabled={readingRules}>
+                  Refresh rules
+                </button>
+              </>
+            )}
+            </div>
+          </div>
           <div className="project-setting project-workspace-setting">
             <span>Folders</span>
             <ul className="workspace-root-list" aria-label={`Folders for project ${project.name}`}>
@@ -484,7 +606,6 @@ function ProjectRow({
               onClick={() =>
                 onUpdate({
                   name: draftName,
-                  instructions: draftInstructions,
                   workspaces: draftWorkspaces,
                 })
               }
@@ -647,13 +768,13 @@ function OverrideRow({
         onChange={onText}
         aria-label={`Project reasoning effort (global ${globalValue})`}
       >
-        <option value="none">None</option>
-        <option value="minimal">Minimal</option>
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-        <option value="xhigh">Very high</option>
-        <option value="ultra">Ultra</option>
+        {/* Driven by the shared list: a hand-written copy of it here is how
+            the picker lost `max` in the first place. */}
+        {REASONING_EFFORTS.map((effort) => (
+          <option key={effort} value={effort}>
+            {reasoningEffortLabel(effort)}
+          </option>
+        ))}
       </select>
     ) : (
       <input

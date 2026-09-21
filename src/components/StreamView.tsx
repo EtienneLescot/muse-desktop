@@ -437,6 +437,23 @@ export function StreamView({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        // Escape closes the finder from anywhere inside the transcript.
+        //
+        // The input takes focus when the bar opens and then loses it to some
+        // other control, so an Escape handler bound to the input alone never
+        // fires in practice: measured, focus lands on the input at +80ms and is
+        // gone by +200ms. Closing the shortcut's own UI has to work whatever
+        // holds focus, or Ctrl/Cmd+F opens a bar the user cannot dismiss from
+        // the keyboard.
+        setFindOpen((open) => {
+          if (!open) return false;
+          setFindQuery("");
+          setFindSelection(null);
+          return false;
+        });
+        return;
+      }
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f") return;
       const target = event.target as HTMLElement | null;
       if (target !== null && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
@@ -809,13 +826,19 @@ export function StreamView({
           {windowAnnouncement}
         </span>
       )}
-      <div className="stream-find" aria-label="Find in conversation">
-        {!findOpen ? (
-          <button type="button" onClick={() => setFindOpen(true)}>
-            Find in conversation <kbd>Ctrl/Cmd F</kbd>
-          </button>
-        ) : (
-          <>
+      {/*
+        Find-in-conversation, on demand. The persistent trigger was removed: it
+        occupied a 42px band plus a full-width backdrop at all times — 10% of the
+        transcript's visible height — and, being a 760px card in a ~1034px stream,
+        read as a widget floating over the conversation. Ctrl/Cmd+F opens it; the
+        dock is not rendered at all otherwise, so nothing takes space when the
+        user has not asked for it.
+
+        Measured before the change: docs/evidence/2026-09-21-ux/find-bar-flottante.md
+      */}
+      {findOpen && (
+        <div className="stream-find-dock">
+          <div className="stream-find" aria-label="Find in conversation">
             <input
               ref={findInputRef}
               type="search"
@@ -866,15 +889,14 @@ export function StreamView({
             >
               Close
             </button>
-          </>
-        )}
-        {findOpen && findHits.length > 0 && (
-          <div
-            id="conversation-search-results"
-            className="stream-find-hits"
-            role="listbox"
-            aria-label="Conversation matches"
-          >
+          </div>
+          {findHits.length > 0 && (
+            <div
+              id="conversation-search-results"
+              className="stream-find-hits"
+              role="listbox"
+              aria-label="Conversation matches"
+            >
             {findHits.map((hit, index) => (
               <button
                 type="button"
@@ -893,9 +915,10 @@ export function StreamView({
                 <strong>{hit.excerpt}</strong>
               </button>
             ))}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      )}
       {streamWindowed && windowPadding.top > 0 && (
         <div
           className="stream-window-spacer"

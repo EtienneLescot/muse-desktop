@@ -75,10 +75,19 @@ export function SessionSidebar({
   const [selected, setSelected] = useState<MuseSession | null>(null);
   const [rename, setRename] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  /**
+   * Session awaiting a delete confirmation launched from an archived row.
+   *
+   * The actions menu confirms through `confirmDelete`, but an archived row has
+   * no menu: its Delete button has to be able to reach the same dialog. Keeping
+   * the id here means one dialog serves both entry points.
+   */
+  const [pendingKill, setPendingKill] = useState<string | null>(null);
   function closeActions() {
     dialog.current?.close();
     setSelected(null);
     setConfirmDelete(false);
+    setPendingKill(null);
     actionTrigger.current?.focus();
     actionTrigger.current = null;
   }
@@ -289,11 +298,20 @@ export function SessionSidebar({
                     >
                       Restore
                     </button>
+                    {/* Same confirmation as the actions menu. This used to delete
+                        a conversation outright on a single click, with no undo
+                        and no warning, which is the worse half of the same
+                        defect: the action was invisible until hover, and then it
+                        was irreversible without asking. */}
                     <button
-                      onClick={() => onKill(s.session_id)}
-                      title="Kill session and delete its local history"
+                      data-danger="true"
+                      onClick={() => {
+                        setPendingKill(s.session_id);
+                        dialog.current?.showModal();
+                      }}
+                      title="Delete this conversation permanently"
                     >
-                      Del
+                      Delete…
                     </button>
                   </span>
                 </div>
@@ -310,25 +328,38 @@ export function SessionSidebar({
       >
         <header>
           <h2>
-            {confirmDelete ? "Delete this conversation?" : selected?.title}
+            {confirmDelete || pendingKill !== null ? "Delete this conversation?" : selected?.title}
           </h2>
           <button className="icon" aria-label="Close" onClick={closeActions}>
             <Icon name="close" />
           </button>
         </header>
-        {confirmDelete ? (
+        {confirmDelete || pendingKill !== null ? (
           <>
             <p>
-              Its local history will be deleted. This cannot be undone.
+              It will disappear from Muse and will not come back. The
+              conversation file itself stays on disk, under the Muse data folder,
+              until it is removed there.
             </p>
             <div className="dialog-buttons">
-              <button autoFocus onClick={() => setConfirmDelete(false)}>
+              <button
+                autoFocus
+                onClick={() => {
+                  setConfirmDelete(false);
+                  setPendingKill(null);
+                  // The archived row opens this dialog with no selected session,
+                  // so there is no action list to fall back to. Without this the
+                  // dialog stays open with a rename field bound to nothing.
+                  if (selected === null) closeActions();
+                }}
+              >
                 Cancel
               </button>
               <button
                 className="danger"
                 onClick={() => {
-                  if (selected) onKill(selected.session_id);
+                  const target = pendingKill ?? selected?.session_id ?? null;
+                  if (target !== null) onKill(target);
                   closeActions();
                 }}
               >

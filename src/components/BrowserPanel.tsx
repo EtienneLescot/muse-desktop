@@ -791,7 +791,7 @@ export function BrowserPanel({
                 ? "The embedded preview runs locally; native windows and Muse actions remain explicit and depend on the desktop host."
                 : "The embedded preview runs locally in this browser; native windows and host actions require the desktop app."}
             />
-            <span className="muted">Embedded preview</span>
+            <span className="muted">Same-origin preview</span>
           </span>
         </summary>
         <div className="browser-tabs" role="tablist" aria-label="Browser tabs">
@@ -891,6 +891,19 @@ export function BrowserPanel({
             onLoad={handleFrameLoad}
             onError={() => setFrameError("This page could not be loaded in the embedded preview.")}
           />
+        )}
+        {/*
+          The preview surface only exists once a URL is renderable, so a fresh
+          tab used to show nothing at all between the navigation row and "Page
+          controls" — the one panel of the seven with no empty state. Reported by
+          an independent visual review and confirmed by structure measurement.
+        */}
+        {!renderable && frameError === null && (
+          <div className="browser-frame-empty" role="status">
+            <span className="muted">
+              No page loaded yet. Enter an http or https address above and press Go.
+            </span>
+          </div>
         )}
         <div className="browser-controls" aria-label="Browser page controls">
           <div className="browser-controls-head">

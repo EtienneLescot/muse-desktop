@@ -202,11 +202,10 @@ import {
   withPinnedFlag,
   withUnreadFlag,
 } from "../lib/threads";
-// US-3 + US-30 Projects: create/attach/instruction-prepend/settings
-// override live in ../lib/projects (dependency-free, unit-tested).
+// US-3 + US-30 Projects: create/attach/settings-override live in
+// ../lib/projects (dependency-free, unit-tested).
 import {
   attachThread as attachThreadRow,
-  buildProjectInput,
   createProject as createProjectRow,
   DEFAULT_PROJECT_SETTINGS,
   deleteProject as deleteProjectRow,
@@ -937,6 +936,8 @@ interface UseMuseSessions {
   connectedIds: string[];
   /** M1-06: capability negotiated with each workspace host. */
   userShellAvailableForSession: (sessionId: string) => boolean;
+  /** M1-06: whether the host has this conversation loaded; `undefined` = unreported. */
+  sessionLoadedForSession: (sessionId: string) => boolean | undefined;
   /**
    * M0-03: send one turn and get an explicit result. `retryKey` re-sends
    * an existing outbox entry (same clientMessageId, byte-identical
@@ -1100,7 +1101,7 @@ interface UseMuseSessions {
   threadProjects: ThreadProjectMap;
   /** Last project refusal (quota / blank name); null when clean. */
   projectError: string | null;
-  createProject: (name: string, instructions?: string, workspaces?: string[]) => void;
+  createProject: (name: string, workspaces?: string[]) => void;
   /** Delete a project; its threads become ungrouped (no orphans). */
   deleteProject: (id: string) => void;
   updateProject: (id: string, patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] }) => void;
@@ -1320,9 +1321,18 @@ interface BackendSessionMeta {
   workspace: string;
   running: boolean;
   session_durability?: string;
+  /** Model the host reports for this session, when it exposes one. */
+  model_id?: string;
   /** Host projection, when this sidecar exposes one. */
   approval_mode?: string;
   granted_capabilities?: string[];
+  /**
+   * Whether the host holds this session in memory. `session/list` reports
+   * `notLoaded` for every persisted session after a host restart, so the
+   * renderer needs the distinction to avoid offering an action the host will
+   * refuse with `sessionNotLoaded`.
+   */
+  loaded?: boolean;
 }
 
 interface BackendWorktreeSessionResult {
@@ -1856,7 +1866,7 @@ export function useMuseSessions(): UseMuseSessions {
   );
   const [projectError, setProjectError] = useState<string | null>(null);
   // Fresh copies for the render-detached send path (same pattern as
-  // logsRef): sendInput reads these so instructions never go stale.
+  // logsRef): sendInput reads these so project settings never go stale.
   const projectsRef = useRef<Project[]>([]);
   projectsRef.current = projects;
   const threadProjectsRef = useRef<ThreadProjectMap>({});
@@ -1868,6 +1878,12 @@ export function useMuseSessions(): UseMuseSessions {
   // authorization posture and from persisted session metadata.
   const [grantedCapabilitiesBySession, setGrantedCapabilitiesBySession] = useState<
     Record<string, string[] | undefined>
+  >({});
+  // M1-06: whether the host has each conversation loaded. `session/list` calls
+  // every persisted session `notLoaded` after a restart, and `session/userShell`
+  // is refused in that state, so this is a precondition rather than a detail.
+  const [sessionLoadedBySession, setSessionLoadedBySession] = useState<
+    Record<string, boolean | undefined>
   >({});
   const [connectionBySession, setConnectionBySession] = useState<
     Record<string, SessionConnectionState>
@@ -2209,6 +2225,13 @@ export function useMuseSessions(): UseMuseSessions {
           }
           return next;
         });
+        setSessionLoadedBySession((cur) => {
+          const next = { ...cur };
+          for (const meta of restored) {
+            if (meta.loaded !== undefined) next[meta.session_id] = meta.loaded;
+          }
+          return next;
+        });
         setSessions((cur) => {
           const next = [...cur];
           for (const meta of restored) {
@@ -2222,6 +2245,10 @@ export function useMuseSessions(): UseMuseSessions {
                 workspace: meta.workspace,
                 running: meta.running,
                 ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+                // The host owns the model, so its value wins when present; a
+                // host that omits modelId keeps the last model we requested
+                // instead of silently reverting to a generic "Model" label.
+                ...(meta.model_id ? { model_id: meta.model_id } : {}),
               };
             } else {
               next.push({
@@ -2231,6 +2258,7 @@ export function useMuseSessions(): UseMuseSessions {
                 createdAt: Date.now(),
                 running: meta.running,
                 ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+                ...(meta.model_id ? { model_id: meta.model_id } : {}),
               });
             }
           }
@@ -4466,6 +4494,20 @@ export function useMuseSessions(): UseMuseSessions {
         ...cur,
         [id]: meta.granted_capabilities,
       }));
+      // `resume_session` is what loads a persisted conversation on the host, and
+      // the terminal refuses "Run in Muse" while `loaded` is false. The restored
+      // value is only a snapshot from boot, so the resumed one has to be written
+      // back or the action stays disabled for the rest of the session.
+      if (meta.loaded !== undefined) {
+        setSessionLoadedBySession((cur) => ({ ...cur, [id]: meta.loaded }));
+      }
+      if (meta.model_id) {
+        setSessions((cur) =>
+          cur.map((session) =>
+            session.session_id === id ? { ...session, model_id: meta.model_id } : session,
+          ),
+        );
+      }
       // Resume restores the host's persisted posture. Reconcile it with the
       // current global selector before enabling the composer again. A host
       // ceiling must not make the saved conversation unusable: preserve the
@@ -4602,8 +4644,8 @@ export function useMuseSessions(): UseMuseSessions {
       );
       if (sessionId === null || projectId === undefined) return sessionId;
       // Attach before the caller can send the first turn. The ref is updated
-      // synchronously so the send path uses the same project instructions and
-      // settings that admitted this session, even before React re-renders.
+      // synchronously so the send path uses the same project settings that
+      // admitted this session, even before React re-renders.
       const next = attachThreadRow(
         threadProjectsRef.current,
         projectsRef.current,
@@ -5143,7 +5185,6 @@ export function useMuseSessions(): UseMuseSessions {
       let outgoing = prior !== null ? prior.outgoingText : trimmed;
       let fanout: ReturnType<typeof parseFanoutCommand> = null;
       let nativeSkill: { selector: string; arguments?: string } | null = null;
-      let nativeProjectContext = "";
       let skillInvocation: { name: string; source: "host" | "local" } | null = null;
       if (prior === null) {
         // w-integrations US-25: `/skill-name args` expands to the skill
@@ -5255,22 +5296,14 @@ export function useMuseSessions(): UseMuseSessions {
             pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: note }]);
           }
         }
-        // US-3: the thread's project instructions ride along with the sent
-        // input (the stored log keeps the expanded turn text).
-        const attachedId = threadProjectsRef.current[sessionId] ?? null;
-        const project =
-          attachedId !== null
-            ? (projectsRef.current.find((p) => p.id === attachedId) ?? null)
-            : null;
-        if (nativeSkill !== null && project?.instructions.trim()) {
-          nativeProjectContext = buildProjectInput("", project);
-        }
-        outgoing = buildProjectInput(outgoing, project);
+        // A project contributes its settings and its folder, never text: the
+        // rules that govern a session are the folder's, and the host injects
+        // them itself (see src/lib/harnessRules.ts).
       }
       const originalText = prior !== null ? prior.text : trimmed;
       // Attachments are part of the durable send payload. On a retry, always
       // reuse the exact serialized parts from the outbox; on a first send,
-      // replace the leading text part after skill/project expansion.
+      // replace the leading text part after skill expansion.
       const outgoingParts = prior?.inputParts ?? (
         nativeSkill === null
           ? inputPartsWithText(outgoing, inputParts)
@@ -5280,7 +5313,6 @@ export function useMuseSessions(): UseMuseSessions {
                 selector: nativeSkill.selector,
                 ...(nativeSkill.arguments ? { arguments: nativeSkill.arguments } : {}),
               },
-              ...(nativeProjectContext ? [{ type: "text" as const, text: nativeProjectContext }] : []),
               ...(inputParts ?? []).filter((part, index) =>
                 part.type === "image" || (part.type === "text" && index > 0),
               ),
@@ -6320,8 +6352,8 @@ export function useMuseSessions(): UseMuseSessions {
   // US-3 + US-30 project actions. Creation past MAX_PROJECTS is refused
   // client-side with the explicit quota message in projectError.
   const createProject = useCallback(
-    (name: string, instructions?: string, workspacePaths?: string[]) => {
-      const res = createProjectRow(projects, { name, instructions, workspaces: workspacePaths });
+    (name: string, workspacePaths?: string[]) => {
+      const res = createProjectRow(projects, { name, workspaces: workspacePaths });
       setProjectError(res.error);
       if (res.project !== null) setProjects(res.projects);
     },
@@ -7736,6 +7768,17 @@ export function useMuseSessions(): UseMuseSessions {
     [grantedCapabilitiesBySession],
   );
 
+  /**
+   * Whether the host currently has this conversation loaded.
+   *
+   * `undefined` means the host did not report a status, which must not block an
+   * action; only an explicit `false` does.
+   */
+  const sessionLoadedForSession = useCallback(
+    (sessionId: string): boolean | undefined => sessionLoadedBySession[sessionId],
+    [sessionLoadedBySession],
+  );
+
   /** M1-06: explicit `!`-style host shell action from the terminal panel. */
   const runUserShell = useCallback(
     async (sessionId: string, command: string): Promise<boolean> => {
@@ -8035,6 +8078,7 @@ export function useMuseSessions(): UseMuseSessions {
     reconcilingId,
     connectedIds,
     userShellAvailableForSession,
+    sessionLoadedForSession,
     sendInput,
     steerInput,
     unqueueTurn,

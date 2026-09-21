@@ -207,8 +207,8 @@ export function EmptySessionScreen({
         </select>
         <small>
           {selectedEnvironment
-            ? `Uses ${selectedEnvironment.projectName} instructions and preferences.`
-            : "Choose a project root to inherit its instructions and preferences."}
+            ? `Runs in ${workspaceLabel(selectedEnvironment.workspace)} with ${selectedEnvironment.projectName}'s preferences. The agent reads the rules of that folder.`
+            : "Choose a project folder to inherit its preferences and its rules."}
         </small>
       </div>
       <div className="welcome-suggestions">

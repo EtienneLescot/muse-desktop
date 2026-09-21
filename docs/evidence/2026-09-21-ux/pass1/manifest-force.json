@@ -1,0 +1,161 @@
+{
+  "schema": "muse-desktop.ux-force-conversation.v1",
+  "shots": [
+    {
+      "file": "201-conversation-forcee.png",
+      "note": "tentative d'ouverture — showPanel=true",
+      "state": {
+        "titre": "Reply with exactly the word: BETA-178997",
+        "onglets": [],
+        "composer": true,
+        "messages": 8
+      }
+    },
+    {
+      "file": "202-panneau-deplie.png",
+      "note": "panneau de travail deplie",
+      "state": {
+        "titre": "Reply with exactly the word: BETA-178997",
+        "onglets": [
+          "Content",
+          "Review",
+          "Terminal",
+          "Files",
+          "Browser",
+          "Desktop",
+          "Memory",
+          "Content"
+        ],
+        "composer": true,
+        "messages": 8
+      }
+    },
+    {
+      "file": "203-onglet-content.png",
+      "note": "onglet Content — clic OK",
+      "state": {
+        "titre": "Reply with exactly the word: BETA-178997",
+        "onglets": [
+          "Content",
+          "Review",
+          "Terminal",
+          "Files",
+          "Browser",
+          "Desktop",
+          "Memory",
+          "Content"
+        ],
+        "composer": true,
+        "messages": 8
+      }
+    },
+    {
+      "file": "204-onglet-review.png",
+      "note": "onglet Review — clic OK",
+      "state": {
+        "titre": "Reply with exactly the word: BETA-178997",
+        "onglets": [
+          "Content",
+          "Review",
+          "Terminal",
+          "Files",
+          "Browser",
+          "Desktop",
+          "Memory"
+        ],
+        "composer": true,
+        "messages": 8
+      }
+    },
+    {
+      "file": "205-onglet-terminal.png",
+      "note": "onglet Terminal — clic OK",
+      "state": {
+        "titre": "Reply with exactly the word: BETA-178997",
+        "onglets": [
+          "Content",
+          "Review",
+          "Terminal",
+          "Files",
+          "Browser",
+          "Desktop",
+          "Memory"
+        ],
+        "composer": true,
+        "messages": 8
+      }
+    },
+    {
+      "file": "206-onglet-files.png",
+      "note": "onglet Files — clic OK",
+      "state": {
+        "titre": "Reply with exactly the word: BETA-178997",
+        "onglets": [
+          "Content",
+          "Review",
+          "Terminal",
+          "Files",
+          "Browser",
+          "Desktop",
+          "Memory"
+        ],
+        "composer": true,
+        "messages": 8
+      }
+    },
+    {
+      "file": "207-onglet-browser.png",
+      "note": "onglet Browser — clic OK",
+      "state": {
+        "titre": "Reply with exactly the word: BETA-178997",
+        "onglets": [
+          "Content",
+          "Review",
+          "Terminal",
+          "Files",
+          "Browser",
+          "Desktop",
+          "Memory"
+        ],
+        "composer": true,
+        "messages": 8
+      }
+    },
+    {
+      "file": "208-onglet-desktop.png",
+      "note": "onglet Desktop — clic OK",
+      "state": {
+        "titre": "Reply with exactly the word: BETA-178997",
+        "onglets": [
+          "Content",
+          "Review",
+          "Terminal",
+          "Files",
+          "Browser",
+          "Desktop",
+          "Memory"
+        ],
+        "composer": true,
+        "messages": 8
+      }
+    },
+    {
+      "file": "209-onglet-memory.png",
+      "note": "onglet Memory — clic OK",
+      "state": {
+        "titre": "Reply with exactly the word: BETA-178997",
+        "onglets": [
+          "Content",
+          "Review",
+          "Terminal",
+          "Files",
+          "Browser",
+          "Desktop",
+          "Memory"
+        ],
+        "composer": true,
+        "messages": 8
+      }
+    }
+  ]
+}

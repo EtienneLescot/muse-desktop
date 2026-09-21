@@ -22,3 +22,8 @@ Thumbs.db
 
 # Local WSL adapter build
 scripts/wsl-bridge/target/
+
+# Working directories produced by image analysis during a review: crops and zooms
+# are derived from the captures next to them and are not evidence themselves.
+**/_crops/
+**/_zoom/

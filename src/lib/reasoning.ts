@@ -1,6 +1,20 @@
 /**
  * Reasoning effort exposed by the Muse host.  Keep this list as the single
  * source of truth for persisted settings and both composer controls.
+ *
+ * The values and their order are the MSP contract's, not ours: `muse schema
+ * generate-json-schema` exports `$defs.ReasoningEffort` as exactly these eight
+ * strings, and `muse --help` documents the same eight for `--reasoning-effort`.
+ * `max` was missing here for a while, so the picker could not reach a level the
+ * engine accepts and announces like any other (verified against a live host:
+ * all eight reply `accepted` and emit `session/reasoningEffortChanged`).
+ *
+ * The descriptions are not a guess either — the CLI's own guidance states that
+ * `high` is the default Meta baseline, that `xhigh` is the opt-in premium
+ * precision tier, and that `ultra` is "the saved client selection" which "uses
+ * `max` reasoning on the Meta wire" plus proactive workflow/delegation guidance.
+ * `ultra` is therefore not a deeper ninth level: it is `max` plus an autonomy
+ * change, and its copy has to say so.
  */
 export const REASONING_EFFORTS = [
   "none",
@@ -9,6 +23,7 @@ export const REASONING_EFFORTS = [
   "medium",
   "high",
   "xhigh",
+  "max",
   "ultra",
 ] as const;
 
@@ -23,6 +38,7 @@ const LABELS: Record<ReasoningEffort, string> = {
   medium: "Medium",
   high: "High",
   xhigh: "Very high",
+  max: "Max",
   ultra: "Ultra",
 };
 
@@ -31,9 +47,10 @@ const DESCRIPTIONS: Record<ReasoningEffort, string> = {
   minimal: "Fast responses with a light reasoning pass",
   low: "Short reasoning for straightforward tasks",
   medium: "Balanced speed and depth",
-  high: "Deeper reasoning for complex work",
-  xhigh: "Very deep reasoning for demanding tasks",
-  ultra: "Maximum reasoning depth; responses may take longer",
+  high: "The default Muse baseline",
+  xhigh: "Opt-in premium precision tier",
+  max: "Deepest reasoning depth on the wire",
+  ultra: "Max reasoning plus proactive workflow and delegation guidance; can raise token usage quickly",
 };
 
 export function isReasoningEffort(value: unknown): value is ReasoningEffort {

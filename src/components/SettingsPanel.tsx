@@ -15,7 +15,10 @@
  *   project either way.
  */
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { WorkspacePicker } from "./WorkspacePicker";
+import { describeAuth, canOfferSignIn, type AuthStatusPayload } from "../lib/museAuth";
+import { isTauriRuntime } from "../lib/env";
 import {
   startupCheckStatusLabel,
   startupProbeRows,
@@ -105,6 +108,16 @@ interface Props {
    * Surfaces the backend verdict (and the error-banner prompt) for the path.
    */
   checkPathScope: (path: string) => Promise<ScopeVerdict>;
+  /**
+   * Run the CLI's sign-in inside the built-in terminal.
+   *
+   * The desktop never sees the credential: `muse login` prints a device code,
+   * the user approves it in a browser, and the CLI stores the result itself.
+   * That is why this drives a terminal instead of implementing OAuth — MSP is a
+   * stdio protocol with no authentication concept, so there is no endpoint the
+   * desktop could authenticate against on its own.
+   */
+  onSignIn: () => void | Promise<unknown>;
   onClose?: () => void;
 }
 
@@ -130,18 +143,35 @@ export function SettingsPanel({
   startupProbe = null,
   onProbeStartup,
   checkPathScope,
+  onSignIn,
   onClose,
 }: Props) {
   const [probe, setProbe] = useState("");
   const [probeResult, setProbeResult] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
   const [restartingHost, setRestartingHost] = useState(false);
-  const [restartStatus, setRestartStatus] = useState<string | null>(null);
-  const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [restartStatus, setRestartStatus] = useState<string | null>(null);  const [exportStatus, setExportStatus] = useState<string | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [storageIssues, setStorageIssues] = useState<StorageIssue[]>(() =>
     consumeStorageIssues(),
   );
+  /**
+   * Which Muse credential is in effect. `null` means "not read yet or not
+   * readable" and is rendered as such rather than as "no credential", which
+   * would be a wrong and alarming claim.
+   */
+  const [authStatus, setAuthStatus] = useState<AuthStatusPayload | null>(null);
+
+  const refreshAuthStatus = () => {
+    if (!isTauriRuntime()) return;
+    void invoke<AuthStatusPayload>("muse_auth_status")
+      .then((next) => setAuthStatus(next))
+      .catch(() => setAuthStatus(null));
+  };
+
+  useEffect(() => {
+    refreshAuthStatus();
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeStorageIssues(() => {
@@ -386,6 +416,10 @@ export function SettingsPanel({
     if (result.migrated > 0) window.setTimeout(() => window.location.reload(), 500);
   }
 
+  // Pure derivation: every warning/neutral case is decided and tested in
+  // `src/lib/museAuth.ts`, so this component only renders the verdict.
+  const authNotice = describeAuth(authStatus);
+
   return (
     <section className="settings-panel" aria-label="Settings">
       <header className="settings-head">
@@ -623,6 +657,38 @@ export function SettingsPanel({
               <span className="settings-note" role="status">{restartStatus}</span>
             )}
           </div>
+        )}
+      </div>
+
+      <div className="settings-group">
+        <h3>Muse authentication</h3>
+        <p className="settings-note">
+          The desktop does not hold your credentials. The Muse CLI owns the
+          sign-in and stores the result itself, so nothing here can read or leak
+          it.
+        </p>
+        <p className={authNotice.tone === "warning" ? "settings-note settings-note-warning" : "settings-note"}>
+          <strong>{authNotice.headline}</strong>
+        </p>
+        {authNotice.detail !== null && (
+          <p className="settings-note">{authNotice.detail}</p>
+        )}
+        <div className="settings-row">
+          <button type="button" onClick={refreshAuthStatus}>
+            Check again
+          </button>
+          {canOfferSignIn(authStatus) && (
+            <button type="button" onClick={() => void onSignIn()}>
+              Sign in with Meta
+            </button>
+          )}
+        </div>
+        {authStatus !== null && authStatus.cliAvailable !== true && (
+          <p className="settings-note">
+            The Muse CLI was not found on PATH, so the desktop cannot run the
+            sign-in for you. Install Muse Code, or run <code>muse login</code>{" "}
+            yourself.
+          </p>
         )}
       </div>
 

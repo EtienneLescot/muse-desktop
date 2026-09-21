@@ -53,7 +53,7 @@ Et la persistance, après **arrêt complet de l'application et des hosts**, puis
 | **Qualification par lecteur d'écran** | je ne peux pas piloter un lecteur d'écran. Le balisage est vérifié (`M0-12`), l'annonce réelle ne l'est pas. |
 | **Le site du navigateur intégré** (recadrage de région, capture visuelle) | la navigation et les annotations fonctionnent ; les deux fonctions manquantes ne bloquent pas le parcours principal. |
 | **Les quatre chantiers client** du plan du 20/09 | aucun défaut n'a été **reproduit**. Les écrire maintenant serait deviner — l'erreur que cette campagne a corrigée sept fois. Ils restent planifiés, pas dans la beta. |
-| **Sortie des commandes `userShell` dans l'interface** | le repli existe (insérer la sortie dans le prompt). Le host fournit l'item, le client ne l'affiche pas — gênant, pas bloquant. |
+| **Affichage de la sortie `userShell` dans le transcript** | le host **publie bien** l'item et sa sortie (mesuré le 21/09 : `item/started` + `item/completed` de type `userShell`, marqueur restitué) ; c'est **le client** qui ne la rend pas dans le fil. Le repli existe (insérer la sortie dans le prompt). Gênant, pas bloquant. |
 | **Confirmation visuelle du modèle et de l'effort** | le client affiche le modèle demandé, marqué comme non live. Honnête, imparfait, non bloquant. |
 | **`M0-01`, `M0-14`, `M1-10` — critères non couverts** | ce sont des critères de robustesse sur des cas limites. Une beta n'a pas à les couvrir tous, et les documents de preuves disent lesquels. |
 

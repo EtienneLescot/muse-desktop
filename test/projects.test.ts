@@ -1,6 +1,6 @@
 /**
- * US-3 + US-30 Projects: pure logic (create/quota/attach/prepend/settings
- * override + diff) plus the `muse-desktop.*` persistence round-trip.
+ * US-3 + US-30 Projects: pure logic (create/quota/attach/settings override +
+ * diff) plus the `muse-desktop.*` persistence round-trip.
  *
  * Runs on the built-in node:test runner, no extra framework:
  *   npm test
@@ -9,7 +9,6 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   attachThread,
-  buildProjectInput,
   createProject,
   DEFAULT_PROJECT_SETTINGS,
   deleteProject,
@@ -62,12 +61,13 @@ function fill(n: number): Project[] {
 }
 
 describe("US-3 project creation", () => {
-  it("creates a project with id, name and instructions", () => {
-    const res = createProject([], { name: "  Web  ", instructions: "  be terse " });
+  it("creates a project with an id, a name and a reviewed folder", () => {
+    const res = createProject([], { name: "  Web  ", workspace: "C:\\work\\web" });
     assert.equal(res.error, null);
     assert.ok(res.project !== null);
     assert.equal(res.project.name, "Web");
-    assert.equal(res.project.instructions, "be terse");
+    assert.equal(res.project.instructions, undefined);
+    assert.equal(res.project.workspace, "C:\\work\\web");
     assert.equal(res.project.workspaceReviewed, true);
     assert.ok(res.project.id.length > 0);
     assert.equal(res.projects.length, 1);
@@ -175,21 +175,31 @@ describe("US-3 thread attach / detach", () => {
   });
 });
 
-describe("US-3 instruction prepending", () => {
-  it("prepends project instructions before the raw sent input", () => {
-    const projects = fill(1);
-    const withInstr = updateProject(projects, "p0", { instructions: "be terse" });
-    const out = buildProjectInput("  hello  ", withInstr[0]);
-    assert.ok(out.includes("be terse"));
-    assert.ok(out.endsWith("hello"));
-    assert.ok(out.indexOf("be terse") < out.indexOf("hello"));
+describe("retired client-side instructions", () => {
+  it("never puts an instructions field on a newly created project", () => {
+    const res = createProject([], { name: "Web" });
+    assert.ok(res.project !== null);
+    assert.equal("instructions" in res.project, false);
   });
 
-  it("sends input untouched without a project or with blank instructions", () => {
-    const projects = fill(1);
-    assert.equal(buildProjectInput("  hi ", null), "hi");
-    assert.equal(buildProjectInput("  hi ", undefined), "hi");
-    assert.equal(buildProjectInput("  hi ", projects[0]), "hi");
+  it("keeps a legacy value readable so it can be shown and dismissed", () => {
+    // Rows written before the store was retired still carry the text. Dropping
+    // it silently would lose something the user typed, so it is preserved
+    // until they clear it — and nothing sends it.
+    const projects: Project[] = [{ ...fill(1)[0], instructions: "be terse" }];
+    const kept = updateProject(projects, "p0", { name: "Renamed" });
+    assert.equal(kept[0].instructions, "be terse");
+    const cleared = updateProject(kept, "p0", { instructions: "" });
+    assert.equal(cleared[0].instructions, undefined);
+  });
+
+  it("still loads rows written before the field became optional", () => {
+    const projects = sanitizeProjects([
+      { id: "old", name: "Old", instructions: "", createdAt: 1 },
+      { id: "older", name: "Older", createdAt: 1 },
+      { id: "broken", name: "Broken", instructions: 7, createdAt: 1 },
+    ]);
+    assert.deepEqual(projects.map((project) => project.id), ["old", "older"]);
   });
 });
 

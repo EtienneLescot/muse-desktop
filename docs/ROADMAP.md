@@ -72,7 +72,8 @@ Ce document est la source de vérité de l'avancement produit. Il est découpé 
 
 **Ce qui bloque encore, par nature :**
 
-- **M0-04, M1-06, M1-11** : aucune correction client ne les fermera. Le sidecar 1.3.0 n'émet pas de notification terminale, ne publie pas d'item `userShell` ni d'`outputRef`, et ne rapporte pas les projections de modèle ou d'effort. Détail et demandes dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md).
+- **M1-06 : RÉFUTÉ le 21/09/2026.** Le « blocage côté host » venait d'une sonde qui demandait la capacité sous une forme que le host lit comme « aucune capacité demandée ». Avec la forme correcte, le sidecar 1.3.0 **publie bien** les items `userShell` **et** leur sortie. Détail et mesures dans la ligne M1-06 plus bas ; **ne citez plus `SIDECAR-CONTRACT-GAPS.md` pour ce ticket.**
+- **M0-04, M1-11** : aucune correction client ne les fermera. Le sidecar 1.3.0 n'émet pas de notification terminale, ne publie pas d'`outputRef`, et ne rapporte pas les projections de modèle ou d'effort. Détail et demandes dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md). **Ces deux-là restent à revérifier** : la mesure qui les étayait partageait le harnais de M1-06, dont la forme de capacité était fausse.
 - **M0-01** : le critère « approbations simultanées » reste ouvert — le plafond du host est `promptUnmatched` et aucune demande d'approbation n'a pu être provoquée, même en mode `ask`.
 - **M0-10, M4-09** : la « machine propre » n'est pas couverte — la machine de test a déjà WSL, Muse et 64 conversations. La signature des installeurs est également absente (`NotSigned`).
 - **M0-12, M1-13** : la qualification par un **lecteur d'écran réel** n'a pas été faite ; les rôles et libellés observés sont une condition nécessaire, pas une preuve d'annonce correcte.
@@ -94,7 +95,7 @@ Ce document est la source de vérité de l'avancement produit. Il est découpé 
 
 **Prochaine reprise :** les preuves natives M0 sur Windows sont largement avancées (voir le tableau consolidé ci-dessus). Ce qui reste dépend de trois natures de travail :
 
-1. **Côté sidecar** — les cinq écarts de contrat listés dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md) débloqueraient M0-04, M1-06, M1-11 et une partie de M0-02. Le plus rentable est `session/read` + `session/resume`, ou une durabilité `durable` ; le suivant est une notification terminale de tour.
+1. **Côté sidecar** — **la liste des cinq écarts n'est plus fiable** : tous ont été réexaminés le 20-21/09/2026 et **six claims se sont révélés être des artefacts de mesure** (`SIDECAR-CONTRACT-GAPS.md` porte un bandeau en ce sens). M1-06 en particulier est réfuté. Ce qui reste réellement côté host doit être **remesuré avec la forme de capacité correcte** avant d'être présenté comme un blocage. Les seules demandes encore plausibles concernent `outputRef` et une notification terminale de tour, à confirmer.
 2. **Côté infrastructure** — machine propre pour M0-10 et M4-09, signature Authenticode des installeurs, hébergement du canal de mise à jour, VM macOS et Linux pour M4-01/M4-02.
 3. **Côté méthode** — qualification par un lecteur d'écran réel pour M0-12 et M1-13 ; compléter les variantes de scénarios déjà couverts (IME chinois et coréen, rechargement avant acquittement, double clic à la souris pour M0-03 ; services nommés et verrous pour M1-05 et M2-08).
 
@@ -270,7 +271,11 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 
 - ◐ **M1-06 — Faire lire au moteur la sortie du terminal**
   - Windows ◐ — **Add output to prompt** (fallback borné à 12 000 caractères), **Run in Muse** négociant `userShell`, repli des `item/completed` sans delta, lecture différée `item/readOutput` par blocs de 64 KiB.
-  - **Constat bloquant (Windows, 19/09/2026) :** `--exercise-user-shell --exercise-user-shell-slow` a obtenu `accepted` des deux côtés, mais **aucun** `item/started`, aucune notification portant le `commandId`, et aucun fichier témoin 14 s après l'admission. L'admission seule ne prouve ni exécution ni restitution — le blocage est côté host, sans RPC inventé.
+  - **Constat bloquant du 19/09/2026 : RÉFUTÉ le 21/09/2026 — c'était un artefact de mesure.** Le harnais envoyait la capacité **à plat** (`capabilities: {}` **plus** `requestedCapabilities: ["userShell"]`), forme que le host lit comme « aucune capacité demandée ». Il obtenait donc `grantedCapabilities: []`, l'appel répondait `capabilityRequired`, et la sonde concluait « aucun item `userShell` ». Avec la forme que l'application utilise depuis toujours — **imbriquée**, `capabilities.requestedCapabilities` (`src-tauri/src/main.rs`) — la même sonde mesure : `grantedCapabilities: ["userShell"]`, `session/userShell` → **`accepted`** avec `commandId`, puis **`item/started` et `item/completed` de type `userShell`** (à 1 867 et 1 922 ms), et le marqueur de la commande **restitué**. Verdict de la sonde corrigée : « the host DOES publish 2 userShell item(s) — the gap report is wrong here ».
+  - **Conséquence :** le blocage n'est **pas** côté host. `SIDECAR-CONTRACT-GAPS.md` ne doit plus être invoqué pour M1-06, et le chemin `Run in Muse` côté client fonctionne : capacité projetée par Rust, fusionnée par le renderer, bouton activé dès qu'une commande est saisie.
+  - **Deuxième défaut trouvé, de synchronisation (21/09/2026) :** la carte `grantedCapabilitiesBySession` du renderer n'est peuplée **qu'au montage**, par un `restore_sessions` qui s'exécute avant que les hôtes par workspace soient lancés. Sur un lancement frais elle ne contient donc qu'une partie des sessions, et **rien ne la repeuple** — le bouton annonce « did not grant the userShell capability » alors que le host l'a accordée. Mesuré : pont `["userShell"]` pour les 13 sessions, carte du renderer réduite à `01a0c2d7`. Détail dans [`evidence/2026-09-21-ux/m1-06-capacites-au-montage.md`](evidence/2026-09-21-ux/m1-06-capacites-au-montage.md).
+  - **`sessionNotLoaded` n'est plus un échec opaque :** le host rapporte `status: "notLoaded"` pour **toutes** les sessions persistées après une relance — y compris à 27 tours — donc « listée » et « chargée » sont deux états. `SessionMeta` porte désormais `loaded` et le bouton est indisponible avec un motif exact tant que la conversation n'est pas chargée, au lieu d'échouer après le clic.
+  - **Reste :** (1) repeupler la carte des capacités après le lancement des hôtes ; (2) charger la session à la demande via `session/resume`, qui fournit exactement l'état manquant — mesuré : `accepted`, **2 items `userShell`**, marqueur restitué ; (3) qualification native interactive sur les trois OS.
   - macOS ☐ / Linux ☐ — non commencé ; qualification native sur les trois OS requise par le ticket.
 
 - ◐ **M1-07 → M1-08 — fichiers et pièces jointes** *(code partagé)*
@@ -288,8 +293,8 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
   - macOS ☐ / Linux ☐ — non commencé.
 
 - ◐ **M1-11 — Choisir un modèle disponible et suivre le contexte** *(Global : —)*
-  - Windows ◐ — `model/list` comme source de vérité, `session/setModel`, compaction en geste séparé avec cycle `pending → accepted/noop/error`, `session/contextUsage` et `session/tokenUsage` affichés tels que fournis, effort de raisonnement `none`→`ultra` persisté global/projet et appliqué via `session/setReasoningEffort`, dernier modèle conservé dans `StoredSession.model_id`.
-  - **Preuves natives partielles :** `--exercise-reasoning` accepte `none`/`high`/`ultra` mais le sidecar renvoie `projection: not-reported` ; `--exercise-model` accepte l'accusé mais relit `isActive: false` ; `--exercise-compaction` sur session vierge renvoie `missing-run`. **Donc : l'effectif n'est pas prouvé.**
+  - Windows ◐ — `model/list` comme source de vérité, `session/setModel`, compaction en geste séparé avec cycle `pending → accepted/noop/error`, `session/contextUsage` et `session/tokenUsage` affichés tels que fournis, effort de raisonnement **les huit valeurs du contrat** (`none`→`ultra`, `max` compris) persisté global/projet et appliqué via `session/setReasoningEffort`, dernier modèle conservé dans `StoredSession.model_id`.
+  - **Preuves natives :** les **huit** niveaux sont acceptés par un host 1.3.0 vivant et chacun émet `session/reasoningEffortChanged` avec la valeur envoyée (`node scripts/msp-reasoning-tiers.mjs`) — le « sept sur huit » venait de notre liste, pas du moteur, et `session/read` ne projette pas le champ, ce qui avait produit un faux « non conservé ». `--exercise-model` accepte l'accusé mais relit `isActive: false` ; `--exercise-compaction` sur session vierge renvoie `missing-run`. **Donc : la profondeur est prouvée, l'effectif du modèle non.**
   - macOS ☐ / Linux ☐ — non commencé.
 
 - ☑ **M1-12 — Retrouver et organiser les conversations** *(sans dimension OS — seul ticket clos)*
@@ -322,6 +327,8 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 
 - ◐ **M2-01 — Un projet représente des dossiers persistants** *(Global : —)*
   - Windows ◐ — racines multiples persistantes avec `workspace` conservé comme racine primaire, migration guidée **N projects need a folder**, sonde native `inspect_workspace_root` (`Available`/`Not a folder`/`Missing`), sélecteur d'environnement `projectId:rootIndex` à la création de conversation.
+  - Windows ◐ — **règles du dossier** : sonde native `rules_scan` en lecture seule (`AGENTS.md` prioritaire, `CLAUDE.md` seulement en repli, règles personnelles en repli conditionnel), affichées dans le projet avec leur statut. Le champ d'instructions client a été **retiré** — un projet ne possède pas d'instructions, le CLI lit celles du dossier. Détails et limites : [regles-du-dossier](evidence/2026-09-21-ux/regles-du-dossier.md).
+  - **Reste :** `workspaces[]` n'a aucun équivalent backend (un projet = un dossier côté CLI) ; « Start in » reste ambigu face au sélecteur de dossier.
   - Linux ◐ — le chemin pur (modèle, migration, projection) est couvert par les tests Node et la CI tourne sur Linux ; la sonde native n'y est pas exercée.
   - macOS ☐ — non commencé.
 

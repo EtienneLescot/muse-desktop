@@ -6,6 +6,7 @@ import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
 import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { useMuseSessions } from "./hooks/useMuseSessions";
+import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
 import {
   EmptySessionScreen,
@@ -35,6 +36,8 @@ import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
 import { userFacingError } from "./lib/errorCopy";
 import { displayPath } from "./lib/paths";
+import { signInCommand, type AuthStatusPayload } from "./lib/museAuth";
+import { ModelControl } from "./components/ModelControl";
 import { isTauriRuntime } from "./lib/env";
 import { formatHandoffContext } from "./lib/handoff";
 import type { Artifact, ArtifactVersion } from "./lib/artifacts";
@@ -42,6 +45,7 @@ import {
   parseWorkspaceRootObservation,
   projectWorkspaceOptions,
 } from "./lib/projects";
+import { parseHarnessRules } from "./lib/harnessRules";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -135,6 +139,7 @@ export default function App() {
     reconcilingId,
     connectedIds,
     userShellAvailableForSession,
+    sessionLoadedForSession,
     evtCount,
     sendInput,
     steerInput,
@@ -331,6 +336,13 @@ export default function App() {
   const searchWasOpen = useRef(false);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const settingsWasOpen = useRef(false);
+  // Mounted once for the whole app. Every `<details data-popover>` then gets
+  // dismissal on an outside click and on Escape, and an honest `aria-expanded`
+  // on its trigger, so a new picker cannot ship without the behaviour by
+  // forgetting a per-control effect. Content disclosures carry no marker and are
+  // never closed: see src/lib/popovers.ts for why that split matters.
+  useDismissablePopovers();
+  usePopoverExpandedState();
   const searchResults = searchConversations(sessions, logs, search);
   useEffect(() => setSearchIndex(0), [search, searchOpen]);
   const searchDialog = useRef<HTMLDialogElement>(null);
@@ -361,7 +373,13 @@ export default function App() {
     }
   }, [settingsOpen]);
   const openPage = useCallback((next: typeof page) => {
+    // Navigating from the sidebar must dismiss whatever overlay is up, or the
+    // destination renders behind it. Settings was already closed here; search was
+    // not, so opening Search and then clicking Automations/Extensions/Library left
+    // the dialog on top of the new view — measured with `dialog.task-search`
+    // covering the view's own `h1`, the navigation having already happened.
     setSettingsOpen(false);
+    setSearchOpen(false);
     setPage(next);
   }, []);
 
@@ -611,8 +629,49 @@ export default function App() {
     />
   );
 
-  async function exportDiagnostics(): Promise<void> {
-    let native: NativeDiagnosticsSnapshot | null = null;
+  /**
+   * Drive the Muse CLI's device-code sign-in inside the built-in terminal.
+   *
+   * Why a terminal and not an OAuth client: MSP is a stdio protocol with no
+   * authentication concept, so there is no Meta/Muse endpoint the desktop could
+   * authenticate against on its own. `muse login` already implements the flow —
+   * it prints a URL and a code, the user approves in a browser, and the CLI
+   * stores the credential itself. The desktop therefore never handles the
+   * secret, which is strictly safer than storing one.
+   *
+   * The command text comes from `signInCommand`, which returns null unless the
+   * payload carries the exact reviewed command, so a compromised or future
+   * native payload cannot inject a shell line here.
+   */
+  async function signInWithMuseCli(): Promise<void> {
+    if (!isTauriRuntime()) return;
+    const status = await invoke<AuthStatusPayload>("muse_auth_status").catch(() => null);
+    const command = signInCommand(status);
+    if (command === null) return;
+
+    const sessionId = activeId;
+    if (sessionId === null) return;
+    // The terminal panel only exists while it is the selected work panel, so
+    // showing it is part of preparing the action rather than a side effect.
+    setWorkPanel("terminal");
+    setSettingsOpen(false);
+
+    // `terminalForSession` reports the panel's view state; `openTerminal`
+    // answers the native `TerminalInfo`, which is what carries the id to write
+    // to. Mixing the two was a type error, so both are handled separately.
+    let terminalId = terminalForSession(sessionId)?.info.terminalId ?? null;
+    for (let attempt = 0; attempt < 20 && terminalId === null; attempt += 1) {
+      // Opening a PTY is not instant; the command must not be written into a
+      // shell that does not exist yet.
+      const opened = await openTerminal(sessionId);
+      terminalId = opened?.terminalId ?? null;
+      if (terminalId === null) await new Promise((resolve) => window.setTimeout(resolve, 250));
+    }
+    if (terminalId === null) return;
+    await writeTerminal(terminalId, command);
+  }
+
+  async function exportDiagnostics(): Promise<void> {    let native: NativeDiagnosticsSnapshot | null = null;
     try {
       native = await invoke<NativeDiagnosticsSnapshot>("collect_diagnostics");
     } catch {
@@ -914,6 +973,7 @@ export default function App() {
               startupProbe={startupProbe}
               onProbeStartup={() => probeStartup(workspace)}
               checkPathScope={checkPathScope}
+              onSignIn={signInWithMuseCli}
               onClose={() => setSettingsOpen(false)}
             />
           </section>
@@ -934,7 +994,8 @@ export default function App() {
             <p className="page-description">
               {
                 {
-                  projects: "Organize your projects and instructions.",
+                  projects:
+                    "Group conversations, give them a folder and preferences.",
                   automations:
                     "Schedule requests to review before they run.",
                   extensions: "Your tools and skills, all in one place.",
@@ -954,8 +1015,8 @@ export default function App() {
                   projectError={projectError}
                   activeSessionId={activeId}
                   globalSettings={globalSettings}
-                  onCreate={(name, instructions, projectWorkspaces) =>
-                    createProject(name, instructions, projectWorkspaces)
+                  onCreate={(projectName, projectWorkspaces) =>
+                    createProject(projectName, projectWorkspaces)
                   }
                   onDelete={deleteProject}
                   onUpdate={updateProject}
@@ -977,6 +1038,15 @@ export default function App() {
                     try {
                       const raw = await invoke<unknown>("inspect_workspace_root", { path });
                       return parseWorkspaceRootObservation(raw);
+                    } catch {
+                      return null;
+                    }
+                  }}
+                  onReadRules={async (path) => {
+                    if (!isTauriRuntime()) return null;
+                    try {
+                      const raw = await invoke<unknown>("rules_scan", { workspace: path });
+                      return parseHarnessRules(raw);
                     } catch {
                       return null;
                     }
@@ -1158,6 +1228,31 @@ export default function App() {
                         onClick={() => restoreSession(session.session_id)}
                       >
                         Restore
+                      </button>
+                      {/*
+                        Permanent delete, the action this page was missing: an
+                        archived conversation could only be restored, which left
+                        no way to get rid of one. `killSession` is the same path
+                        the conversation-actions menu uses — it stops the session
+                        and records a persisted tombstone, so the entry does not
+                        come back on the next `session/list`.
+                      */}
+                      <button
+                        className="danger"
+                        data-danger="true"
+                        onClick={() => {
+                          const title = session.title || session.session_id.slice(0, 8);
+                          if (
+                            !window.confirm(
+                              `Delete "${title}" permanently?\n\nIt will disappear from Muse and will not come back. The conversation file itself stays on disk, under the Muse data folder, until it is removed there.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          void killSession(session.session_id);
+                        }}
+                      >
+                        Delete…
                       </button>
                     </div>
                   ))}
@@ -1418,17 +1513,16 @@ export default function App() {
                     sessionId={active.session_id}
                     disabled={backendMissing || active.archived === true || !connectedIds.includes(active.session_id)}
                     modelControl={
-                      <>
-                        <button
-                          onClick={() => setSettingsOpen(true)}
-                          aria-label="Model settings"
-                        >
-                          {liveModels?.find((model) => model.isActive)?.displayLabel ||
-                            active.model_id ||
-                            "Model"}
-                        </button>
-                        <span>Local</span>
-                      </>
+                      <ModelControl
+                        models={liveModels}
+                        value={active.model_id ?? null}
+                        onSelect={(modelId) => void setSessionModel(active.session_id, modelId)}
+                        /* The composer sits at the bottom of the window, so the
+                           popover must open upward. Without this the list rendered
+                           downwards, off the viewport, and was clipped by the
+                           conversation's own overflow: hidden. */
+                        compact
+                      />
                     }
                     running={active.running}
                     stopping={stoppingBySession[active.session_id] === true}
@@ -1540,6 +1634,7 @@ export default function App() {
                           onResize={resizeTerminal}
                           onClose={closeTerminal}
                           canRunThroughMuse={userShellAvailableForSession(active.session_id)}
+                          sessionLoaded={sessionLoadedForSession(active.session_id)}
                           onRunThroughMuse={runUserShell}
                           onInsertContext={prepareTerminalContext}
                         />

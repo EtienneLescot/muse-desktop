@@ -79,9 +79,39 @@ Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `
 | `cdp-delete-conversations.mjs` | supprime des conversations de test par la boîte de dialogue de l'application | aucun |
 | `bench-log-append.mts` | coût d'un ajout au journal selon sa taille | aucun |
 
+### Passe UX 1 (21 septembre 2026)
+
+| Script | Rôle | Coût modèle |
+|---|---|---|
+| `ux-capture.mjs` | 13 surfaces de l'interface, préconditions assertées | aucun |
+| `ux-force-conversation.mjs` | force la vue conversation et les 8 onglets du panneau | aucun |
+| `ux-contrast-audit.mjs` | ratios WCAG réels, alpha composé, thème clair ou sombre | aucun |
+| `ux-panel-overflow.mjs` | débordements par onglet, **auto-test bloquant** | aucun |
+| `ux-breakpoint-sweep.mjs` | 13 largeurs de fenêtre, fuites superficielles **et imbriquées** | aucun |
+| `ux-review-captures.mjs` | captures + assertions structurelles | aucun |
+| `ux-terminal-contrast.mjs` | contraste WCAG des contrôles, état actif **et** désactivé | aucun |
+| `ux-target-size-audit.mjs` | cibles < 24×24 px, débordement, éléments rognés par un ancêtre | aucun |
+| `ux-session-meta-probe.mjs` | projection brute du pont Rust (autorité sur le rendu) | aucun |
+| `ux-react-state-probe.mjs` | prop React lue sur la fibre, quand DOM et pont se contredisent | aucun |
+| `ux-verify-pass2.mjs` | vérifie les décisions de la passe 2 au DOM et par capture | aucun |
+| `ux-terminal-state.mjs` | état des actions du terminal **et la raison** de leur indisponibilité | aucun |
+| `ux-read-logs.mjs` | transcript lu depuis l'état du hook, pas depuis le DOM | aucun |
+| `ux-run-in-muse.mjs` | exerce `Run in Muse` : saisie, activation, clic, attente de l'item | un appel shell |
+| `msp-user-shell-items.mjs` | le host publie-t-il les items `userShell` ? (**forme de capacité corrigée**) | un appel shell |
+| `msp-user-shell-after-resume.mjs` | `userShell` avant/après `session/resume`, sur une session neuve | un appel shell |
+| `ux-rules-scan.mjs` | `rules_scan` sur le pont vivant : chaque ligne confrontée au disque, fichiers **inchangés** après lecture | aucun |
+| `ux-project-rules.mjs` | le panneau Projets : champ `Instructions` disparu, 4 rôles listés, débordement de 1440 à 760 px | aucun |
+| `ux-terminal-precondition.mjs` | parcourt les conversations et vérifie qu'aucune n'est refusée pour cause de « session non chargée » | aucun |
+| `ux-legacy-instructions.mjs` | l'encart des instructions retirées : apparition, Copy/Dismiss, stockage vidé — **et restauré** | aucun |
+| `check-scripts-parse.mjs` | garde-fou : tout script de `scripts/` doit compiler **et** ne pas refermer un gabarit page-side avec un backtick (scanner auto-testé) | aucun |
+
+**`ux-panel-overflow.mjs` refuse d'imprimer le moindre chiffre si son auto-test échoue** : une sonde de 300 px dans une boîte de 100 px doit être signalée à +200 px, et la même sonde avec `overflow-x: hidden` doit être ignorée. Ce garde-fou existe parce que trois versions successives de ce détecteur ont produit des rapports plausibles et faux — détails dans [`2026-09-21-ux/debordement-desktop.md`](2026-09-21-ux/debordement-desktop.md).
+
+`ux-review-captures.mjs` porte un avertissement : il force la largeur du panneau **sans** changer celle de la fenêtre, ce qui produit un état qu'aucune fenêtre réelle ne peut atteindre. Pour les questions de mise en page responsive, l'instrument est `ux-breakpoint-sweep.mjs`.
+
 ## Documents qui tracent un échec ou une erreur
 
-Six documents conservent un résultat négatif ou une erreur de méthode. Ils sont volontairement conservés :
+Ces documents conservent un résultat négatif ou une erreur de méthode. Ils sont volontairement conservés :
 
 | Document | Ce qu'il trace |
 |---|---|
@@ -91,6 +121,14 @@ Six documents conservent un résultat négatif ou une erreur de méthode. Ils so
 | [M0-12](2026-09-20-windows-a11y/M0-12.md) | contient le faux positif « aucun indicateur de focus » **et** sa correction |
 | [modules-inaccessibles-aux-tests](2026-09-20-windows-ledgers/modules-inaccessibles-aux-tests.md) | faux diagnostic initial : 15 modules annoncés au lieu de 2 |
 | [nettoyage-conversations](2026-09-20-windows-cleanup/nettoyage-conversations.md) | **trois** méthodes de suppression en échec avant la bonne |
+| [debordement-desktop](2026-09-21-ux/debordement-desktop.md) | **trois** bugs d'instrument successifs, dont un `NaN` silencieux qui vidait le rapport ; remplace une version dont tous les chiffres étaient faux |
+| [revue-passe2](2026-09-21-ux/revue-passe2.md) | **quatre faux positifs** (dont deux que j'avais relayés) et une hypothèse de doublon **réfutée par les données persistées** |
+| [m1-06-blocage-refute](2026-09-21-ux/m1-06-blocage-refute.md) | un « constat bloquant » publié contre le host, réfuté : la sonde demandait la capacité **à plat** et n'exécutait donc jamais la commande |
+| [m1-06-capacites-au-montage](2026-09-21-ux/m1-06-capacites-au-montage.md) | trois sources qui se contredisent sur la même capacité, et le défaut de synchronisation qui les explique |
+| [authentification-muse](2026-09-21-ux/authentification-muse.md) | pourquoi l'éditeur ne peut pas faire d'OAuth seul, et comment piloter le CLI à la place — avec le piège de priorité `META_API_KEY` |
+| [find-bar-flottante](2026-09-21-ux/find-bar-flottante.md) | **deux hypothèses fausses** (transparence, z-index) écartées par la mesure avant de trouver la cause réelle : une carte de 760 px dans un flux de 1034 px |
+| [regles-du-dossier](2026-09-21-ux/regles-du-dossier.md) | le client gardait ses propres instructions alors que le CLI lit des règles dans le dossier ; `max` manquait sur huit niveaux de réflexion, et `ultra` était décrit comme plus profond que `max` |
+| [alignement-cli-projet-dossier](2026-09-21-ux/alignement-cli-projet-dossier.md) | un `--trust-workspace` manquant rendait les règles du dossier muettes **sans erreur** ; la décision d'écrire nos instructions dans `AGENTS.md` a été prise puis **retirée** (le fichier appartient à l'utilisateur) |
 
 ## Erreurs de méthode de la campagne, documentées plutôt que corrigées en silence
 
@@ -101,6 +139,7 @@ Six documents conservent un résultat négatif ou une erreur de méthode. Ils so
 5. **Test faux, pas code faux** : `createLatestWriteQueue` fusionne délibérément les écritures ; mon assertion attendait l'inverse.
 6. **`returnByValue` oublié** sur `Runtime.evaluate` : renvoie une référence distante, donc `undefined`, indiscernable d'un échec.
 7. **Cycles de test sans vérification d'état initial** : quatre tests ont échoué faute d'avoir confirmé l'état de départ ou l'identité de la conversation.
+8. **Capture « conversation propre » non vérifiée** : le prédicat comptait `.message`/`.log-entry`/`[data-role]`, qui n'existent nulle part dans le DOM réel — la classe des lignes de transcript est `.msg`. Le compte valait donc **toujours 0**, et trois captures de la page **Library** ont été enregistrées comme « conversation propre » avec un `conversationOpen` nul. Le sélecteur est corrigé, et le script **refuse** désormais d'écrire la capture quand le transcript est vide. Le garde-fou `check-scripts-parse.mjs` détecte en plus la forme *équilibrée* du piège du backtick, celle que `node --check` laisse passer : c'est ce qui a produit ce bug, un commentaire contenant `.msg` entre backticks à l'intérieur du gabarit page-side.
 
 ## Ce que cette campagne n'a pas fait
 

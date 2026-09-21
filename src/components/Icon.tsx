@@ -18,7 +18,22 @@ const paths = {
   sun: "M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
   shield: "M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z",
   "arrow-right": "M5 12h14M13 6l6 6-6 6",
-  branch: "M6 3v5a4 4 0 0 0 4 4h4a4 4 0 0 1 4 4v5M18 3v5a4 4 0 0 1-4 4h-1",
+  // Fork. Hand-written, like every glyph here: the project ships no icon
+  // library, and `Icon` renders one stroked path with fill:none, so circles are
+  // drawn as arcs rather than <circle> elements.
+  //
+  // Five shapes were rendered at real size before this one and all five failed:
+  // a trunk with a crossbar read as the digit "4", straight diagonals read as an
+  // arrow, and a node circle on a bare stem read as a keyhole. The canonical
+  // git-branch layout avoids every one of those traps, which is why the
+  // reference the user supplied is the shape that works.
+  // Evidence: docs/evidence/2026-09-21-ux/pass2/fork-icon-*.png
+  branch:
+    "M3.5 5.5a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0Z" +
+    "M3.5 18.5a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0Z" +
+    "M15.5 5.5a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0Z" +
+    "M6 8v8" +
+    "M18 8v3a3 3 0 0 1-3 3H6",
   pin: "M8 3h8l-1 6 3 3v2h-5v7l-1 1-1-1v-7H6v-2l3-3-1-6Z",
 };
 export function Icon({ name }: { name: keyof typeof paths }) {

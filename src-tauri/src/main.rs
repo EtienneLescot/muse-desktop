@@ -31,6 +31,8 @@ mod setup;
 mod mcp;
 mod mcp_package;
 mod secret_store;
+mod muse_auth;
+mod rules;
 mod skills;
 mod startup;
 mod scheduler;
@@ -81,6 +83,22 @@ pub struct SessionMeta {
     /// native user-shell action disabled until a fresh handshake proves it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub granted_capabilities: Option<Vec<String>>,
+    /// Model the host reports for this session (`session/list` publishes
+    /// `modelId` as a plain string). Without it the renderer lost the model on
+    /// every reload and fell back to a bare "Model" label, even though the same
+    /// field is already tracked while a session is live.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    /// Whether the host currently holds this session in memory.
+    ///
+    /// `session/list` reports `status: "notLoaded"` for every persisted session
+    /// after a host restart — including sessions with dozens of turns — so
+    /// "the host lists it" and "the host has it loaded" are genuinely different
+    /// states. The distinction is not cosmetic: `session/userShell` answers
+    /// `sessionNotLoaded` on an admitted-but-unloaded session, which is how
+    /// `Run in Muse` used to fail after the user had already clicked it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loaded: Option<bool>,
 }
 
 /// Sandbox posture selected when a workspace-owned Muse host is spawned.
@@ -151,6 +169,18 @@ impl HostSandboxPolicy {
         if self.disable_shell {
             args.push("--disable-shell");
         }
+        // Load the workspace's own rules and skills.
+        //
+        // Without this flag the host starts untrusted and never reads the
+        // folder's `AGENTS.md`, which is where Muse Code keeps a project's rules:
+        // `muse init` scaffolds that file and the CLI describes it as "project
+        // rules when it runs in this directory". A user editing instructions in
+        // the desktop therefore had no effect on the engine, and the rules
+        // committed next to the code were silently ignored.
+        //
+        // This mirrors launching `muse` by hand in the folder, which is the
+        // behaviour the desktop is meant to reproduce.
+        args.push("--trust-workspace");
         args
     }
 
@@ -1068,6 +1098,8 @@ fn session_meta_from_list_row(
         session_durability,
         approval_mode: session_approval_mode(session),
         granted_capabilities,
+        model_id: session_model_id(session),
+        loaded: session_loaded(session),
     })
 }
 
@@ -1198,8 +1230,59 @@ fn session_approval_mode(session: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Read the model the host reports for a session.
+///
+/// `session/list` publishes `modelId` as a plain string; `session/setModel`
+/// answers with a nested `model.modelId`. Both shapes are accepted so the same
+/// helper serves a list row and a command result. Older hosts omit the field,
+/// so absence stays `None` and the renderer keeps its compatibility path
+/// instead of inventing a model name.
+fn session_model_id(session: &Value) -> Option<String> {
+    session
+        .get("modelId")
+        .or_else(|| session.get("model_id"))
+        .or_else(|| session.get("model").and_then(|model| model.get("modelId")))
+        .or_else(|| session.get("model").and_then(|model| model.get("model_id")))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .map(str::to_string)
+}
+
+/// Whether the host reports this session as loaded in memory.
+///
+/// The host uses `notLoaded` for a session it can read from disk but has not
+/// opened in this process. Any other status means it is loaded, so the check is
+/// "known and not `notLoaded`" rather than an allow-list of live states, which
+/// would misreport a future status name as unloaded. Absence stays `None` so an
+/// older host keeps the compatibility path instead of being called unloaded.
+fn session_loaded(session: &Value) -> Option<bool> {
+    session
+        .get("status")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|status| !status.is_empty())
+        .map(|status| !status.eq_ignore_ascii_case("notLoaded"))
+}
+
 fn is_approval_mode_ceiling(error: &str) -> bool {
     error.contains("approval_mode_ceiling") || error.contains("approval mode ceiling")
+}
+
+/// Fold a resumed session payload into the metadata the terminal reads.
+///
+/// `session/resume` is the call that loads a persisted conversation, so the
+/// resumed payload is the only place its post-load state exists. Deriving the
+/// metadata from the pre-resume `session/read` alone left `loaded: false`
+/// forever, and the terminal kept telling the user to send a message first -
+/// including after the message that was supposed to fix it.
+///
+/// Pure, so this has a test rather than a comment.
+fn apply_resumed_session(meta: &mut SessionMeta, session: &Value) {
+    meta.running = session.get("status").and_then(Value::as_str) == Some("running");
+    meta.approval_mode = session_approval_mode(session).or_else(|| meta.approval_mode.clone());
+    meta.model_id = session_model_id(session).or_else(|| meta.model_id.clone());
+    meta.loaded = session_loaded(session).or(meta.loaded);
 }
 
 fn push_event(state: &AppState, session_id: &str, kind: &str, payload: String) {
@@ -3116,6 +3199,23 @@ fn secure_store_remove(key: String) -> Result<(), String> {
     secret_store::remove(&key)
 }
 
+/// Report which Muse credential is in effect, so the UI can tell the user.
+///
+/// The desktop cannot authenticate on its own — MSP is a stdio protocol inside
+/// the user's session and carries no authentication concept — so the CLI owns
+/// the login and the desktop only reports what it finds. The value that matters
+/// is `apiKeyOverridesLogin`: the CLI documents that `META_API_KEY` always wins
+/// over an account login, so a user who signs in expecting to spend a
+/// subscription can keep spending API credits without any visible signal.
+///
+/// No secret crosses this boundary: `muse_auth` derives only *whether* a
+/// credential exists, never its value, and its payload is asserted in tests to
+/// carry no credential-shaped field.
+#[tauri::command]
+fn muse_auth_status() -> Value {
+    muse_auth::status_json()
+}
+
 /// Call one tool on an explicitly configured local MCP server.
 #[tauri::command]
 async fn mcp_local_call(
@@ -3150,6 +3250,24 @@ async fn skills_scan(
     tokio::task::spawn_blocking(move || skills::scan(&root))
         .await
         .map_err(|e| format!("skills scan task failed: {e}"))?
+}
+
+/// Report the rule files the Muse host loads for a folder.
+///
+/// Read-only by construction: the renderer needs to *show* the rules that
+/// really govern a session, and the user's `AGENTS.md` belongs to the user and
+/// to the CLI. Nothing in this path creates, edits or deletes a file, so there
+/// is no command id, no confirmation and no undo to design — there is simply no
+/// write.
+#[tauri::command]
+async fn rules_scan(workspace: String) -> Result<rules::RulesScan, String> {
+    let trimmed = workspace.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("select a folder before reading its rules".to_string());
+    }
+    tokio::task::spawn_blocking(move || rules::scan(Path::new(&trimmed)))
+        .await
+        .map_err(|e| format!("rules scan task failed: {e}"))?
 }
 
 /// Start (or replace) a persistent MCP stdio server for one configured
@@ -4013,6 +4131,8 @@ async fn start_session_at_workspace(
         session_durability,
         approval_mode: session_approval_mode(session),
         granted_capabilities,
+        model_id: session_model_id(session),
+        loaded: session_loaded(session),
     };
     state
         .sessions
@@ -4149,6 +4269,8 @@ async fn fork_session(
             .cloned(),
         approval_mode: session_approval_mode(session),
         granted_capabilities: session_granted_capabilities(&state, &root)?,
+        model_id: session_model_id(session),
+        loaded: session_loaded(session),
     };
     state
         .sessions
@@ -4223,6 +4345,18 @@ async fn resume_session_with_client(
             .get("session")
             .and_then(session_approval_mode),
         granted_capabilities: session_granted_capabilities(&state, &root)?,
+        // These come from the pre-resume `session/read`, which reports
+        // `notLoaded` for every persisted conversation after a restart. The
+        // success branch below overwrites them from the resumed session, which
+        // is the whole point of calling `session/resume`.
+        model_id: read
+            .get("session")
+            .and_then(session_model_id)
+            .or_else(|| session_model_id(&read)),
+        loaded: read
+            .get("session")
+            .and_then(session_loaded)
+            .or_else(|| session_loaded(&read)),
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     if let Err(error) = state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client) {
@@ -4236,8 +4370,7 @@ async fn resume_session_with_client(
             let checked = session.and_then(|s| { resume::validate(s, &session_id, &root)?; Ok(s) });
             match checked {
                 Ok(session) => {
-                    meta.running = session.get("status").and_then(Value::as_str) == Some("running");
-                    meta.approval_mode = session_approval_mode(session).or(meta.approval_mode);
+                    apply_resumed_session(&mut meta, session);
                     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
                     Ok(meta)
                 }
@@ -4704,10 +4837,20 @@ async fn set_model(
 /// US-31: apply the host-backed reasoning depth to a conversation. Keeping
 /// validation here makes the renderer preference fail closed and keeps the
 /// wire value aligned with the Muse Code schema.
+///
+/// The list is `$defs.ReasoningEffort` of the exported MSP schema, in contract
+/// order, and it is the same eight values `muse --help` documents for
+/// `--reasoning-effort`. `max` was missing here, which made the renderer's
+/// rejection the only visible symptom of a value the engine accepts.
+const REASONING_EFFORTS: [&str; 8] = [
+    "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
+];
+
 fn validate_reasoning_effort(value: String) -> Result<String, String> {
-    match value.as_str() {
-        "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "ultra" => Ok(value),
-        _ => Err(format!("unknown reasoning effort: {value}")),
+    if REASONING_EFFORTS.contains(&value.as_str()) {
+        Ok(value)
+    } else {
+        Err(format!("unknown reasoning effort: {value}"))
     }
 }
 
@@ -5499,6 +5642,7 @@ mod tests {
                 "restricted",
                 "--disable-write",
                 "--disable-shell",
+                "--trust-workspace",
             ]
         );
     }
@@ -5506,7 +5650,24 @@ mod tests {
     #[test]
     fn sandbox_policy_keeps_legacy_flags_when_project_options_are_absent() {
         let policy = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
-        assert_eq!(policy.cli_args(), vec!["serve", "--sandbox-network", "enabled"]);
+        assert_eq!(
+            policy.cli_args(),
+            vec!["serve", "--sandbox-network", "enabled", "--trust-workspace"]
+        );
+    }
+
+    /// The workspace rules are only loaded when the host is trusted, so every
+    /// posture must pass the flag. A regression here would silently stop the
+    /// engine reading the folder's `AGENTS.md` again, with no error anywhere.
+    #[test]
+    fn every_sandbox_posture_trusts_the_workspace() {
+        for mode in ["workspace", "network", "elevated"] {
+            let policy = HostSandboxPolicy::parse(Some(mode), None, None).unwrap();
+            assert!(
+                policy.cli_args().contains(&"--trust-workspace"),
+                "posture {mode} would run without loading the workspace rules"
+            );
+        }
     }
 
     #[test]
@@ -5593,6 +5754,9 @@ mod tests {
                 running: false,
                 session_durability: None,
                 approval_mode: None,
+                model_id: None,
+
+                loaded: None,
                 granted_capabilities: None,
             },
         );
@@ -5862,6 +6026,9 @@ mod tests {
                 running: true,
                 session_durability: None,
                 approval_mode: None,
+                model_id: None,
+
+                loaded: None,
                 granted_capabilities: None,
             },
         );
@@ -5921,6 +6088,9 @@ mod tests {
                 running: true,
                 session_durability: None,
                 approval_mode: None,
+                model_id: None,
+
+                loaded: None,
                 granted_capabilities: None,
             },
         );
@@ -5979,6 +6149,9 @@ mod tests {
                 running: true,
                 session_durability: None,
                 approval_mode: None,
+                model_id: None,
+
+                loaded: None,
                 granted_capabilities: None,
             },
         );
@@ -8282,9 +8455,47 @@ mod tests {
         assert_eq!(e.context_limit, None);
     }
 
+    /// The terminal disables "Run in Muse" while `loaded` is false, so a resume
+    /// that cannot flip it is the difference between a stated precondition and
+    /// a dead end.
+    #[test]
+    fn resuming_a_conversation_reports_it_as_loaded() {
+        let mut meta = SessionMeta {
+            session_id: "s-1".to_string(),
+            workspace: "C:\\work".to_string(),
+            running: false,
+            session_durability: None,
+            approval_mode: Some("on-request".to_string()),
+            granted_capabilities: Some(vec!["userShell".to_string()]),
+            model_id: None,
+            loaded: Some(false),
+        };
+        apply_resumed_session(
+            &mut meta,
+            &json!({"status": "idle", "modelId": "muse-spark-1.3-contributor"}),
+        );
+        assert_eq!(meta.loaded, Some(true), "a resumed conversation is loaded");
+        assert_eq!(meta.model_id.as_deref(), Some("muse-spark-1.3-contributor"));
+        assert!(!meta.running, "idle is not running");
+
+        // A payload that says nothing must not erase what was already known.
+        apply_resumed_session(&mut meta, &json!({}));
+        assert_eq!(meta.loaded, Some(true));
+        assert_eq!(meta.model_id.as_deref(), Some("muse-spark-1.3-contributor"));
+        assert_eq!(meta.approval_mode.as_deref(), Some("on-request"));
+
+        // And an honest regression is still reported honestly.
+        apply_resumed_session(&mut meta, &json!({"status": "notLoaded"}));
+        assert_eq!(meta.loaded, Some(false));
+    }
+
     #[test]
     fn reasoning_effort_validation_matches_the_host_enum() {
-        for value in ["none", "minimal", "low", "medium", "high", "xhigh", "ultra"] {
+        // Spelled out again on purpose: iterating over the production constant
+        // would pass no matter what that constant says.
+        let contract = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+        assert_eq!(REASONING_EFFORTS, contract, "the wire vocabulary changed");
+        for value in contract {
             assert_eq!(validate_reasoning_effort(value.to_string()).unwrap(), value);
         }
         let error = validate_reasoning_effort("maximum".to_string()).unwrap_err();
@@ -8353,6 +8564,9 @@ mod tests {
                 running: false,
                 session_durability: None,
                 approval_mode: None,
+                model_id: None,
+
+                loaded: None,
                 granted_capabilities: None,
             },
         );
@@ -8448,6 +8662,7 @@ fn main() {
             mcp_package_remove,
             secure_store_set,
             secure_store_get,
+            muse_auth_status,
             secure_store_remove,
             mcp_local_start,
             mcp_local_refresh,
@@ -8456,6 +8671,7 @@ fn main() {
             mcp_local_stop,
             mcp_local_running,
             skills_scan,
+            rules_scan,
             skills_read_resources,
             terminal_open,
             terminal_write,

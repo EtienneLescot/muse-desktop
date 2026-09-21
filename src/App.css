@@ -8,7 +8,13 @@
   --side: #f5f6f8;
   --surface: #f8f9fb;
   --text: #182329;
-  --muted: #78828a;
+  /*
+   * Was #78828a, which measured 3.62:1 on the sidebar (#f5f6f8) and 3.92:1 on
+   * white — below the 4.5:1 that WCAG AA requires for body text. This darker
+   * value is the smallest change that clears it on both backgrounds: 4.52:1 and
+   * 4.89:1. It still reads as muted against --text (#182329, ~14:1).
+   */
+  --muted: #6a7279;
   --line: #e6e9ed;
   --blue: #0866ff;
   --blue-hover: #0055d9;
@@ -182,6 +188,13 @@ small {
 
 .icon {
   padding: 7px;
+  /* Some icon buttons render to their glyph width only: the work-panel close
+     button has `padding: 15px 1px` because its rule shares the tab strip, which
+     left a 16px-wide click target - under the 24px minimum. Every other icon
+     button already measures 28x30 or 32x32, so this floor raises none of them
+     and only widens the one that was too small. */
+  min-width: 24px;
+  min-height: 24px;
 }
 
 /* Logo asset carries padding: crop it like the prototype does. */
@@ -319,6 +332,16 @@ small {
   opacity: 1;
 }
 
+/* The archived section is not a list of rows to skim past: its actions are the
+   only way out of the section, and one of them is destructive. Hiding them until
+   hover made the row look like it offered nothing at all — reported as "on ne
+   peut rien faire à part le désarchiver" while both actions were present and
+   clickable. They stay visible here; active rows keep the hover behaviour so the
+   list stays calm. */
+.session-item.archived .session-meta {
+  opacity: 1;
+}
+
 .session-meta .muted {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -334,6 +357,15 @@ small {
 .session-actions button {
   padding: 4px 8px;
   font-size: 0.8rem;
+}
+
+/* Text-only labels ("Del", "Restore") were too terse to read as actions, and one
+   of them destroys a conversation. Destructive actions are marked in the same
+   red the confirmation dialog already uses, so the affordance matches the menu
+   entry that has a confirmation step. */
+.session-actions button[data-danger="true"] {
+  color: var(--danger, #c0392b);
+  border-color: color-mix(in srgb, var(--danger, #c0392b) 40%, var(--line));
 }
 
 /* ---- US-5 threads sidebar ---- */
@@ -552,17 +584,39 @@ body.dark .avatar {
   outline-offset: -2px;
 }
 
-.stream-find {
-  position: sticky;
-  top: 0;
+/* Find-in-conversation, on demand only.
+ *
+ * The card is 760px wide inside a transcript that measures ~1034px, so while it
+ * was pinned it left 137px of scrolling text on each side and read as a widget
+ * floating over the conversation. It also occupied 10% of the transcript's
+ * visible height at all times, which is what prompted the report.
+ *
+ * It is now opened by Ctrl/Cmd+F and takes no space otherwise: `:empty` collapses
+ * both the band and its padding, so a user who never presses the shortcut sees
+ * the transcript alone. The dock still spans the full stream width when shown,
+ * so nothing scrolls alongside the card.
+ */
+.stream-find-dock {
+  position: relative;
   z-index: 2;
+  /* Cancel the stream's own padding so the band reaches both edges. */
+  margin: -16px -8px 0;
+  background: var(--bg);
+}
+
+.stream-find-dock:not(:empty) {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.stream-find {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   width: min(100%, 760px);
   box-sizing: border-box;
-  margin: -20px auto 4px;
+  margin: 0 auto;
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -1382,6 +1436,7 @@ body.dark .avatar {
 /* Host-backed reasoning picker. It follows the authorization control's
    disclosure pattern so the chat input stays compact while every option
    remains keyboard reachable and explained. */
+.model-control,
 .reasoning-effort-control {
   position: relative;
   display: inline-flex;
@@ -1391,6 +1446,7 @@ body.dark .avatar {
   white-space: nowrap;
 }
 
+.model-trigger,
 .reasoning-effort-trigger {
   display: inline-flex;
   align-items: center;
@@ -1407,6 +1463,8 @@ body.dark .avatar {
   font-size: 0.76rem;
 }
 
+.model-trigger::-webkit-details-marker,
+.model-trigger::marker,
 .reasoning-effort-trigger::-webkit-details-marker,
 .reasoning-effort-trigger::marker {
   display: none;
@@ -1464,6 +1522,15 @@ body.dark .avatar {
   background: var(--surface);
 }
 
+/* The composer's two pickers share one design: same trigger, same popover, same
+   option rows. Written as shared selector lists rather than copied blocks so the
+   model picker cannot drift away from the reasoning picker it sits next to. */
+.model-control-compact,
+.reasoning-effort-control-compact {
+  position: relative;
+}
+
+.model-popover,
 .reasoning-effort-popover {
   position: absolute;
   z-index: 30;
@@ -1477,13 +1544,19 @@ body.dark .avatar {
   box-shadow: var(--shadow);
 }
 
+/* Inside the composer the control sits at the bottom of the window, so the
+   popover opens upward and is bounded by the viewport. */
+.model-control-compact .model-popover,
 .reasoning-effort-control-compact .reasoning-effort-popover {
   top: auto;
   right: auto;
   left: 0;
   bottom: calc(100% + 8px);
+  max-height: min(340px, 60vh);
+  overflow-y: auto;
 }
 
+.model-option,
 .reasoning-effort-option {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
@@ -1499,16 +1572,20 @@ body.dark .avatar {
   cursor: pointer;
 }
 
+.model-option:hover,
+.model-option[data-selected="true"],
 .reasoning-effort-option:hover,
 .reasoning-effort-option[data-selected="true"] {
   background: var(--pale);
 }
 
+.model-option:focus-visible,
 .reasoning-effort-option:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: -2px;
 }
 
+.model-option-check,
 .reasoning-effort-option-check {
   min-height: 18px;
   color: var(--blue);
@@ -1516,11 +1593,14 @@ body.dark .avatar {
   line-height: 1.2;
 }
 
+.model-option strong,
+.model-option small,
 .reasoning-effort-option strong,
 .reasoning-effort-option small {
   display: block;
 }
 
+.model-option strong,
 .reasoning-effort-option strong {
   font-size: 0.8rem;
 }
@@ -1945,6 +2025,24 @@ body.dark .composer textarea::placeholder {
   gap: 6px;
   margin-left: auto;
   min-width: 0;
+}
+
+/*
+ * A long model label ("muse-spark-1.3-contributor") used to break onto two lines
+ * inside the model button, in a control that has room for it on one. The button
+ * is a flex item with `min-width: 0` on its container, so nothing stopped the
+ * text from wrapping. Keep it on one line and let it ellipsise at the end when
+ * the label is genuinely too long for the space.
+ */
+.composer-model > button {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22ch;
+}
+
+.composer-model > span {
+  white-space: nowrap;
 }
 
 .composer-actions button:not(.send) {
@@ -3127,6 +3225,158 @@ body.dark .composer textarea::placeholder {
 
 .project-setting small {
   font-size: 0.75rem;
+}
+
+/* Rules the CLI loads for the folder. Read-only by design, so nothing here
+   looks like the editable fields beside it. */
+.project-rules-setting {
+  align-items: flex-start;
+}
+
+.project-rules-setting > span {
+  padding-top: 2px;
+}
+
+.project-rules-body {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-rules-summary {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.project-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 0.78rem;
+}
+
+/* Fixed minima instead of a grid: each row is its own box, so the columns only
+   line up if their widths do not depend on the row's content. */
+.project-rule-name {
+  min-width: 78px;
+  font-weight: 600;
+}
+
+.project-rule-scope,
+.project-rule-status {
+  color: var(--muted);
+}
+
+.project-rule-scope {
+  min-width: 62px;
+}
+
+.project-rule-status {
+  min-width: 58px;
+}
+
+.project-rule-detail {
+  flex: 1 1 100%;
+  color: var(--muted);
+}
+
+.project-rule-path {
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.project-rule-governs {
+  border-color: color-mix(in srgb, var(--success, #2aa876) 45%, var(--line));
+}
+
+.project-rule-governs .project-rule-status {
+  color: var(--success, #2a8f65);
+}
+
+.project-rule-superseded .project-rule-status {
+  color: var(--warning, #c48721);
+}
+
+.project-rule-preview summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.project-rule-preview pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 4px 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.project-rule-preview small {
+  color: var(--muted);
+  word-break: break-all;
+}
+
+/* Retired client-side instructions, shown once so nothing typed is lost. */
+.project-legacy-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--warning, #d89024) 45%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 92%, var(--warning, #d89024) 8%);
+  font-size: 0.8rem;
+}
+
+.project-legacy-instructions p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.project-legacy-instructions pre {
+  max-height: 140px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.project-legacy-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.project-legacy-actions button {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 5px 9px;
 }
 
 .project-global {
@@ -5574,6 +5824,14 @@ body.dark .composer textarea::placeholder {
   word-break: break-word;
 }
 
+/* A settings note that reports something the user must act on — currently only
+   the META_API_KEY precedence warning. Amber rather than red: nothing is broken,
+   the billing is simply not the one the user expects. Colour is not the only
+   signal, since the same paragraph also carries the word "priority". */
+.settings-note-warning {
+  color: var(--warning, #d89024);
+}
+
 .notification-show-more {
   margin-top: 7px;
   color: var(--blue);
@@ -6283,6 +6541,22 @@ body.dark .composer textarea::placeholder {
   background: var(--bg);
 }
 
+/* Placeholder shown while no page is loaded. Matches the frame's footprint so
+   the panel does not reflow when the preview appears, and reuses the dashed
+   empty-state treatment used by the other panels. */
+.browser-frame-empty {
+  display: grid;
+  place-items: center;
+  height: 320px;
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
 .browser-frame-error {
   margin-top: var(--space-2);
   padding: var(--space-2);
@@ -6494,7 +6768,17 @@ body.dark .composer textarea::placeholder {
 
 .desktop-control-layout {
   display: grid;
-  grid-template-columns: minmax(180px, .8fr) minmax(240px, 1.2fr);
+  /* The window list and the actions column have an intrinsic floor (223px and
+     250px) coming from unbreakable application names and fixed-width inputs.
+     A 180px/240px minimum therefore asked for 434px inside a 405px panel,
+     overflowing by 65px. The floors below sit under that, and the narrow-width
+     fallback further down folds to a single column. */
+  /* Floors of 140px/190px. Lowering them to 120px/180px to squeeze past the
+     3px measured at a 1280px window did remove that leak, but it introduced an
+     8px one inside the desktop observation block: its heading is a flex row
+     whose min-content width exceeds the narrower column. Raising the fallback
+     threshold instead keeps both clean, which the width sweep confirms. */
+  grid-template-columns: minmax(140px, .8fr) minmax(190px, 1.2fr);
   gap: 14px;
   min-height: 260px;
 }
@@ -6504,6 +6788,12 @@ body.dark .composer textarea::placeholder {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 10px;
+  /* Grid items default to min-width:auto, so their min-content width becomes a
+     floor the grid cannot go below. Window titles such as
+     "Cua.AgentCursorOverlay.default" have a 223px min-content width, which
+     forced this grid to 417px inside a 405px panel: the layout overflowed by
+     65px and the columns refused to shrink. */
+  min-width: 0;
 }
 
 .desktop-window-list {
@@ -6523,6 +6813,17 @@ body.dark .composer textarea::placeholder {
   padding: 9px 10px;
   color: inherit;
   background: transparent;
+}
+
+/* Application names are single unbreakable tokens ("Cua.AgentCursorOverlay.
+   default"), so they cannot wrap: without ellipsis they were clipped
+   mid-character at 152px with no visual cue that anything was missing. */
+.desktop-window-list button > strong,
+.desktop-window-list button > span {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .desktop-window-list button:hover,
@@ -6629,6 +6930,10 @@ body.dark .composer textarea::placeholder {
 .desktop-control-click {
   display: grid;
   gap: 6px;
+  /* This row is `auto 68px 68px auto`: a grid item defaults to min-width:auto,
+     so the label text ("Click inside window") became the row's floor and pushed
+     the whole layout past the panel edge. */
+  min-width: 0;
 }
 
 .desktop-control-actions textarea,
@@ -6639,9 +6944,17 @@ body.dark .composer textarea::placeholder {
 }
 
 .desktop-control-click {
-  grid-template-columns: auto 68px 68px auto;
+  /* The label takes its own full-width row. As `auto 68px 68px auto` the four
+     tracks needed 265px inside a 218px column, so the row visibly spilled past
+     the panel; with the label on its own line the fixed-width inputs and the
+     button have room to spare. */
+  grid-template-columns: 68px 68px auto;
   align-items: center;
   gap: 8px;
+}
+
+.desktop-control-click > span {
+  grid-column: 1 / -1;
 }
 
 .desktop-control-footnote {
@@ -6649,16 +6962,46 @@ body.dark .composer textarea::placeholder {
   font-size: 12px;
 }
 
-@media (max-width: 720px) {
-  .desktop-control-layout {
-    grid-template-columns: 1fr;
-  }
+/* Two columns need 140 + 190 + 14 = 344px of usable width inside the panel.
+   The panel does NOT track the window proportionally: measured on this build it
+   is ~478px at a 1440px window, ~340px at 1080px, and then RISES again to
+   ~369px at 900px, because the conversation column reaches its own minimum and
+   the panel takes back the difference. A "40% of the window" rule is therefore
+   wrong at both ends, and this threshold comes from sweeping real widths rather
+   than from arithmetic: 301px of panel overflowed by 43px, 341px by 3px, and
+   375px was clean.
+
+   The breakpoint is kept as LOW as the measurements allow on purpose. Stacking
+   the window list above the controls is a real layout change, so it is reserved
+   for widths where two columns genuinely do not fit. At 1300px and above the
+   original side-by-side layout is intact; between 1200px and 1290px a
+   two-column grid fits its tracks but leaves the observation block's heading
+   8px short, so it stacks there too rather than introducing a third fix.
+
+   The click row needs its own, WIDER breakpoint: `68px 68px auto` has a
+   min-content floor of 202px (two inputs, the button, and the gaps), which the
+   controls column only reaches once the panel passes ~390px. Between 1200px and
+   1400px the button was therefore squeezed to 40px and spilled 40px outside the
+   panel while the outer grid still measured fine.
+
+   Kept in App.css deliberately: the base rule for `.desktop-control-layout`
+   is also in this file, so the override cannot be beaten by import order. */
+@media (max-width: 1400px) {
   .desktop-control-click {
-    grid-template-columns: 1fr 68px 68px;
+    grid-template-columns: 68px 68px;
   }
   .desktop-control-click button {
     grid-column: 1 / -1;
   }
+}
+
+@media (max-width: 1290px) {
+  .desktop-control-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
   .desktop-capture-heading,
   .desktop-capture-preview {
     grid-template-columns: 1fr;
