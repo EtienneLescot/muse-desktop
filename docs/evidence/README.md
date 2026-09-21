@@ -121,6 +121,7 @@ Six documents conservent un résultat négatif ou une erreur de méthode. Ils so
 | [revue-passe2](2026-09-21-ux/revue-passe2.md) | **quatre faux positifs** (dont deux que j'avais relayés) et une hypothèse de doublon **réfutée par les données persistées** |
 | [m1-06-blocage-refute](2026-09-21-ux/m1-06-blocage-refute.md) | un « constat bloquant » publié contre le host, réfuté : la sonde demandait la capacité **à plat** et n'exécutait donc jamais la commande |
 | [m1-06-capacites-au-montage](2026-09-21-ux/m1-06-capacites-au-montage.md) | trois sources qui se contredisent sur la même capacité, et le défaut de synchronisation qui les explique |
+| [authentification-muse](2026-09-21-ux/authentification-muse.md) | pourquoi l'éditeur ne peut pas faire d'OAuth seul, et comment piloter le CLI à la place — avec le piège de priorité `META_API_KEY` |
 
 ## Erreurs de méthode de la campagne, documentées plutôt que corrigées en silence
 
