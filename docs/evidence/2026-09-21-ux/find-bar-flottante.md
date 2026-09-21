@@ -26,38 +26,61 @@ La barre était **elle-même** l'élément `sticky` : une carte centrée de 760 
 
 C'est précisément ce que « floating over conversation » décrit : non pas du texte *derrière* la carte, mais du contenu qui continue de défiler **à côté** d'un élément qui, lui, ne bouge plus. L'ombre portée (`box-shadow: 0 6px 18px`) renforçait l'effet en la détachant du fond.
 
-## Le correctif
+## Le correctif, en deux temps
 
-Un conteneur **pleine largeur** (`.stream-find-dock`) porte désormais le `sticky`, un fond opaque et un liseré de séparation. La carte garde exactement son dessin et reste centrée dedans.
+### Premier temps : ancrer la barre (insuffisant, remplacé)
 
-```css
-.stream-find-dock {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  margin: -16px -8px 4px;   /* annule le padding du flux, bord à bord */
-  padding: 8px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-}
-```
+J'ai d'abord donné à la barre un conteneur **pleine largeur** qui portait le `sticky` et un fond opaque, pour que rien ne défile à côté d'elle. La bande faisait alors **980 px** et couvrait les 137 px de chaque côté.
 
-Les marges négatives annulent le `padding: 16px` et le `padding: 8px` latéral du flux, pour que la bande aille **bord à bord** au lieu de flotter en encart.
+**C'était un mieux, pas une solution.** Le signalement suivant a été : « la barre prend toujours trop de place ». Mesure : la bande occupait **61 px en permanence**, soit 69 px d'espace de tête au-dessus du premier message. Ancrer une barre ne règle pas le fait qu'elle ne devrait pas être là.
 
-**Conséquence mesurée :** la bande fait **980 px** et couvre donc les 137 px de chaque côté. Plus rien ne défile à côté de la carte. Le défilement total passe de 648 à 669 px — le coût assumé de la bande.
+### Second temps : à la demande (retenu)
+
+**La distinction qui manquait** — et elle a été posée par l'utilisateur :
+
+| Contrôle | Rôle | Traitement |
+|---|---|---|
+| `Ctrl/Cmd+F` | trouver du texte dans **la conversation qu'on lit** | UI **à la demande**, aucun espace au repos |
+| `Ctrl/Cmd+K` | chercher dans **toutes les conversations** | point d'entrée propre, icône d'en-tête |
+
+La barre n'est donc **plus rendue du tout** tant que `Ctrl+F` n'a pas été pressé. Le conteneur a `dockHeight: 0` au repos.
+
+**Espace rendu, mesuré : 69 px** de hauteur de tête (`headroom` : 85 px → 16 px, les 16 px étant le `padding-top` normal du flux).
+
+### Et l'entrée de la recherche globale
+
+Le dialogue « Search conversations » existait déjà et s'ouvrait depuis la barre latérale — mais **il disparaît quand la barre latérale est repliée**. Une icône de recherche a été ajoutée dans l'en-tête, à côté des autres contrôles, avec `Ctrl+K` en infobulle. C'est le même dialogue, pas une seconde implémentation.
+
+## Vérification des quatre états
+
+| État | Barre de recherche | Dialogue global |
+|---|---|---|
+| Au repos | absente | fermé |
+| Après `Ctrl+F` | **présente** | fermé |
+| Après `Échap` | absente | fermé |
+| Clic sur l'icône d'en-tête | absente | **« Search conversations » ouvert** |
+
+`Ctrl+F` est envoyé par de vrais événements clavier (`Input.dispatchKeyEvent`), pas en appelant le setter — sinon le test prouverait seulement que React sait rendre un état.
 
 ## Ce qui a été vérifié après le changement
 
 | Contrôle | Résultat |
 |---|---|
-| Ouverture par le bouton, saisie, fermeture | OK |
-| Recherche d'un terme **présent** (« BETA ») | **3 correspondances**, panneau de résultats visible |
-| Empilement sous la bande pendant qu'elle est épinglée | `stream-find-dock` gagne, le contenu est couvert |
 | Débordement des 7 onglets du panneau | **0** — aucune régression |
 | Tests / build | **1085, 0 échec** / vert |
 
 ## Une note de méthode
 
-J'ai testé la recherche avec « audio » et obtenu **« 0 matches »**, ce que j'ai d'abord pris pour un défaut. C'était mon propre test qui cherchait dans la mauvaise conversation. Le contrôle qui tranche est de chercher un terme **dont on a d'abord vérifié qu'il figure dans le transcript** : `ux-find-bar-finds.mjs` lit le texte du flux, confirme la présence du terme, puis cherche. Un résultat nul devient alors une preuve au lieu d'une ambiguïté.
+J'ai testé la recherche avec « audio » et obtenu **« 0 matches »**, ce que j'ai d'abord pris pour un défaut. C'était mon propre test qui cherchait dans la mauvaise conversation. Le contrôle qui tranche est de chercher un terme **dont on a d'abord vérifié qu'il figure dans le transcript** : `ux-find-bar-finds.mjs` lisait le texte du flux, confirmait la présence du terme, puis cherchait. Un résultat nul devient alors une preuve au lieu d'une ambiguïté.
 
 C'est la même leçon que le reste de cette campagne : **un test qui passe ne vaut rien s'il ne peut pas échouer**, et une absence observée n'est une absence de capacité que si l'on a vérifié qu'on regardait au bon endroit.
+
+## Le vrai enseignement de ce défaut
+
+J'ai traité **trois fois** le même symptôme avant de trouver le bon niveau :
+
+1. `sticky` avec fond opaque — la barre était correcte, le problème était la largeur ;
+2. dock pleine largeur épinglé — le défilement latéral est réglé, l'encombrement reste ;
+3. **à la demande** — le symptôme disparaît.
+
+Les deux premières réponses étaient des corrections **techniquement justes d'un défaut mal cadré**. Le signalement disait « flotte » et « trop de place » ; j'ai traité « flotte » avant d'entendre « trop de place », alors que **le second mot contenait la vraie demande** : cet élément ne devait pas être là en permanence.
