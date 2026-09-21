@@ -81,6 +81,12 @@ pub struct SessionMeta {
     /// native user-shell action disabled until a fresh handshake proves it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub granted_capabilities: Option<Vec<String>>,
+    /// Model the host reports for this session (`session/list` publishes
+    /// `modelId` as a plain string). Without it the renderer lost the model on
+    /// every reload and fell back to a bare "Model" label, even though the same
+    /// field is already tracked while a session is live.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
 }
 
 /// Sandbox posture selected when a workspace-owned Muse host is spawned.
@@ -1068,6 +1074,7 @@ fn session_meta_from_list_row(
         session_durability,
         approval_mode: session_approval_mode(session),
         granted_capabilities,
+        model_id: session_model_id(session),
     })
 }
 
@@ -1195,6 +1202,25 @@ fn session_approval_mode(session: &Value) -> Option<String> {
         .and_then(|mode| mode.get("mode").or(Some(mode)))
         .and_then(Value::as_str)
         .filter(|mode| !mode.trim().is_empty())
+        .map(str::to_string)
+}
+
+/// Read the model the host reports for a session.
+///
+/// `session/list` publishes `modelId` as a plain string; `session/setModel`
+/// answers with a nested `model.modelId`. Both shapes are accepted so the same
+/// helper serves a list row and a command result. Older hosts omit the field,
+/// so absence stays `None` and the renderer keeps its compatibility path
+/// instead of inventing a model name.
+fn session_model_id(session: &Value) -> Option<String> {
+    session
+        .get("modelId")
+        .or_else(|| session.get("model_id"))
+        .or_else(|| session.get("model").and_then(|model| model.get("modelId")))
+        .or_else(|| session.get("model").and_then(|model| model.get("model_id")))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
         .map(str::to_string)
 }
 
@@ -4013,6 +4039,7 @@ async fn start_session_at_workspace(
         session_durability,
         approval_mode: session_approval_mode(session),
         granted_capabilities,
+        model_id: session_model_id(session),
     };
     state
         .sessions
@@ -4149,6 +4176,7 @@ async fn fork_session(
             .cloned(),
         approval_mode: session_approval_mode(session),
         granted_capabilities: session_granted_capabilities(&state, &root)?,
+        model_id: session_model_id(session),
     };
     state
         .sessions
@@ -4223,6 +4251,12 @@ async fn resume_session_with_client(
             .get("session")
             .and_then(session_approval_mode),
         granted_capabilities: session_granted_capabilities(&state, &root)?,
+        // `session/read` may answer with the session at the top level or nested
+        // under `session`, so both shapes are tried before giving up.
+        model_id: read
+            .get("session")
+            .and_then(session_model_id)
+            .or_else(|| session_model_id(&read)),
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     if let Err(error) = state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client) {
@@ -5593,6 +5627,7 @@ mod tests {
                 running: false,
                 session_durability: None,
                 approval_mode: None,
+                model_id: None,
                 granted_capabilities: None,
             },
         );
@@ -5862,6 +5897,7 @@ mod tests {
                 running: true,
                 session_durability: None,
                 approval_mode: None,
+                model_id: None,
                 granted_capabilities: None,
             },
         );
@@ -5921,6 +5957,7 @@ mod tests {
                 running: true,
                 session_durability: None,
                 approval_mode: None,
+                model_id: None,
                 granted_capabilities: None,
             },
         );
@@ -5979,6 +6016,7 @@ mod tests {
                 running: true,
                 session_durability: None,
                 approval_mode: None,
+                model_id: None,
                 granted_capabilities: None,
             },
         );
@@ -8353,6 +8391,7 @@ mod tests {
                 running: false,
                 session_durability: None,
                 approval_mode: None,
+                model_id: None,
                 granted_capabilities: None,
             },
         );

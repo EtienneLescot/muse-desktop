@@ -1320,6 +1320,8 @@ interface BackendSessionMeta {
   workspace: string;
   running: boolean;
   session_durability?: string;
+  /** Model the host reports for this session, when it exposes one. */
+  model_id?: string;
   /** Host projection, when this sidecar exposes one. */
   approval_mode?: string;
   granted_capabilities?: string[];
@@ -2222,6 +2224,10 @@ export function useMuseSessions(): UseMuseSessions {
                 workspace: meta.workspace,
                 running: meta.running,
                 ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+                // The host owns the model, so its value wins when present; a
+                // host that omits modelId keeps the last model we requested
+                // instead of silently reverting to a generic "Model" label.
+                ...(meta.model_id ? { model_id: meta.model_id } : {}),
               };
             } else {
               next.push({
@@ -2231,6 +2237,7 @@ export function useMuseSessions(): UseMuseSessions {
                 createdAt: Date.now(),
                 running: meta.running,
                 ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+                ...(meta.model_id ? { model_id: meta.model_id } : {}),
               });
             }
           }
