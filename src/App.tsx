@@ -6,6 +6,7 @@ import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
 import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { useMuseSessions } from "./hooks/useMuseSessions";
+import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
 import {
   EmptySessionScreen,
@@ -334,6 +335,13 @@ export default function App() {
   const searchWasOpen = useRef(false);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const settingsWasOpen = useRef(false);
+  // Mounted once for the whole app. Every `<details data-popover>` then gets
+  // dismissal on an outside click and on Escape, and an honest `aria-expanded`
+  // on its trigger, so a new picker cannot ship without the behaviour by
+  // forgetting a per-control effect. Content disclosures carry no marker and are
+  // never closed: see src/lib/popovers.ts for why that split matters.
+  useDismissablePopovers();
+  usePopoverExpandedState();
   const searchResults = searchConversations(sessions, logs, search);
   useEffect(() => setSearchIndex(0), [search, searchOpen]);
   const searchDialog = useRef<HTMLDialogElement>(null);

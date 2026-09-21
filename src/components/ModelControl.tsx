@@ -48,7 +48,7 @@ export function ModelControl({ models, value, onSelect, fallbackLabel = "Model",
   const hasChoices = models !== null && models.length > 0;
 
   return (
-    <details className={`model-control${compact ? " model-control-compact" : ""}`}>
+    <details className={`model-control${compact ? " model-control-compact" : ""}`} data-popover>
       <summary
         className="model-trigger"
         aria-label={`Model: ${activeLabel}`}
