@@ -45,7 +45,7 @@ if (payload.error) {
   process.exit(1);
 }
 
-const expected = ["mode", "source", "apiKeyOverridesLogin", "loginCommand"];
+const expected = ["mode", "source", "apiKeyOverridesLogin", "loginCommand", "cliAvailable"];
 const keys = Object.keys(payload).sort();
 console.log(`\n  champs : ${keys.join(", ")}`);
 const shapeOk = JSON.stringify(keys) === JSON.stringify([...expected].sort());

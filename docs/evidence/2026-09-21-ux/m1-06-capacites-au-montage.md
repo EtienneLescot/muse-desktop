@@ -37,13 +37,30 @@ Sur une instance plus ancienne, la même carte contenait **11 sessions** avec `[
 
 **Et le chemin fonctionne une fois la session chargée :** `session/resume` puis `session/userShell` donnent `accepted`, **2 items `userShell`**, et le marqueur de la commande **restitué** — mesuré deux fois, avant et après la reprise, dans `scripts/msp-user-shell-after-resume.mjs`.
 
-## 5. Reste ouvert
+## 5. Ce qui a été corrigé depuis : le drapeau `loaded` ne revenait jamais
 
-1. **Repeupler la carte des capacités** après le lancement des hôtes, plutôt qu'au seul montage. C'est le correctif du défaut de synchronisation décrit en 2, et il n'est **pas** fait.
+Le point 2 ci-dessus (« charger la session à la demande ») supposait que le refus persistant venait de l'absence de reprise. **Mesure du 21 septembre : la reprise avait déjà lieu, et le drapeau ne suivait pas.**
 
-2. **Charger la session à la demande** au lieu de refuser l'action : `session/resume` fournit exactement l'état manquant, comme mesuré. Le refus explicite est un progrès honnête, pas la fonction complète.
+Il existe en effet une reprise automatique au démarrage : `selectBootResumeCandidates` reprend les sessions que `restore_sessions` n'a pas admises, active d'abord, en silence. Chaque conversation atteignable est donc **chargée** par le host quelques secondes après le lancement.
 
-3. **Qualification native interactive sur les trois OS**, exigée par le ticket.
+Mais les deux moitiés de l'information manquaient :
+
+- **côté Rust**, `resume_session` construisait `SessionMeta` à partir du `session/read` **d'avant** la reprise, puis ne mettait à jour que `running` et `approval_mode` dans la branche de succès. `loaded` restait donc `false` pour une conversation que l'appel venait précisément de charger ;
+- **côté renderer**, `reconnectSession` recopiait `granted_capabilities` mais ignorait `meta.loaded`. La carte `sessionLoadedBySession` n'était peuplée **qu'au montage**, par un `restore_sessions` qui répond `loaded: false` pour toutes les sessions persistées.
+
+Résultat : le host chargeait la conversation, et l'interface continuait d'afficher « Send a message in this conversation first: the host only runs shell commands for a conversation it has loaded ». **Le remède proposé ne pouvait pas fonctionner** : envoyer un message ne changeait pas la valeur figée au montage.
+
+**Correctif.** `apply_resumed_session` (fonction pure, testée) replie la charge utile de la reprise dans les métadonnées — `loaded`, `model_id`, `approval_mode`, `running` — et le renderer recopie `meta.loaded` et `meta.model_id` après une reprise réussie.
+
+**Vérifié dans l'application** (`scripts/ux-terminal-precondition.mjs`) : six conversations parcourues, commande saisie dans chacune, **aucune** n'est refusée pour cause de chargement ; celle qui a un transcript affiche `disabled=false` et l'infobulle « Run this command through the Muse host (userShell) ». Les cinq conversations sans message sont comptées **ignorées** — elles ne rendent aucun panneau de travail, il n'y a rien à décider — et non comme des succès.
+
+**Un correctif écarté, et pourquoi.** J'avais ajouté un bouton « Load conversation » dans le terminal, affiché quand `loaded` est faux, qui appelait `session/resume`. La sonde l'a écarté : sur un host sain, **cet état n'est pas atteignable** — la reprise au démarrage charge toutes les conversations candidates, et les six mesurées répondaient `loaded`. Le bouton n'aurait été visible que si une reprise avait échoué, c'est-à-dire dans le seul cas où le clic échoue aussi, et l'interface offre déjà **Reconnect** pour ce cas. Livrer une action qu'aucune fenêtre réelle ne peut atteindre n'est pas une fonctionnalité : elle a été retirée, le correctif de métadonnées conservé.
+
+## 6. Reste ouvert
+
+1. **Repeupler la carte des capacités** après le lancement des hôtes, plutôt qu'au seul montage. La reprise automatique la renseigne pour les sessions qu'elle reprend (`resume_session` écrit une entrée), ce qui explique qu'elle ne se voie plus guère — mais rien ne garantit qu'une session non reprise en reçoive une.
+
+2. **Qualification native interactive sur les trois OS**, exigée par le ticket.
 
 ## La leçon, une fois de plus
 

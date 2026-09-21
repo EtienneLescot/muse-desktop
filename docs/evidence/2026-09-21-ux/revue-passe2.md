@@ -158,7 +158,7 @@ Ajouté : un cadre en pointillés « No page loaded yet. Enter an http or https 
 | `ux-terminal-contrast.mjs` | contraste WCAG réel des contrôles, état actif et désactivé, préconditions assertées |
 | `ux-session-meta-probe.mjs` | lit la projection brute du pont Rust (autorité sur le rendu) |
 | `ux-react-state-probe.mjs` | lit une prop React sur la fibre, quand le DOM et le pont se contredisent |
-| `ux-control-contrast.mjs` | mesure ciblée par sélecteur, fond propre composité |
+| `ux-contrast-audit.mjs` | mesure ciblée par sélecteur, fond propre composité |
 | `ux-verify-pass2.mjs` | vérifie les décisions de la passe 2 au DOM et par capture |
 
 **Prédicat de visibilité, corrigé partout.** `ux-capture.mjs`, `ux-capture-conversation.mjs`, `ux-force-conversation.mjs` et `ux-target-size-audit.mjs` utilisaient `offsetParent !== null`, qui vaut `null` pour `<body>` et pour tout élément `position: fixed` : tout un mode de positionnement échappait à l'audit. Le prédicat est désormais `getClientRects()` + `display`/`visibility`, avec assertion des préconditions. Signalé par CodeRabbit sur `ux-target-size-audit.mjs` ; l'audit voit maintenant 43 contrôles au lieu de 46 selon l'état, et signale correctement 0 élément hors viewport.

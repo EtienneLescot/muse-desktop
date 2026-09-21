@@ -4494,6 +4494,20 @@ export function useMuseSessions(): UseMuseSessions {
         ...cur,
         [id]: meta.granted_capabilities,
       }));
+      // `resume_session` is what loads a persisted conversation on the host, and
+      // the terminal refuses "Run in Muse" while `loaded` is false. The restored
+      // value is only a snapshot from boot, so the resumed one has to be written
+      // back or the action stays disabled for the rest of the session.
+      if (meta.loaded !== undefined) {
+        setSessionLoadedBySession((cur) => ({ ...cur, [id]: meta.loaded }));
+      }
+      if (meta.model_id) {
+        setSessions((cur) =>
+          cur.map((session) =>
+            session.session_id === id ? { ...session, model_id: meta.model_id } : session,
+          ),
+        );
+      }
       // Resume restores the host's persisted posture. Reconcile it with the
       // current global selector before enabling the composer again. A host
       // ceiling must not make the saved conversation unusable: preserve the

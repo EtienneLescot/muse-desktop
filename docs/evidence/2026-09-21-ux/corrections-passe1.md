@@ -55,15 +55,15 @@ C'est le **sixième faux diagnostic** de cette campagne sur le même schéma : u
 
 ## Reste ouvert, mesuré
 
-État au **21 septembre, après la passe 2** ([`revue-passe2.md`](revue-passe2.md)). Les lignes 6 à 8 et 11 sont **corrigées**, la 12 était un **faux positif**, et les autres sont requalifiées par la mesure.
+État au **21 septembre, après la passe 2** ([`revue-passe2.md`](revue-passe2.md)). Les lignes **6, 8, 9 et 10** sont **corrigées**, les lignes **7, 11 et 12** étaient des **faux positifs**, et les autres sont requalifiées par la mesure.
 
 | # | Défaut | État | Mesure / preuve |
 |---|---|---|---|
 | 6 | **Panneau Desktop** : six conteneurs débordaient en cascade | **CORRIGÉ** | 3 causes distinctes (planchers `minmax`, `min-width: auto`, ligne de clic) ; **0 débordement** sur 13 largeurs |
 | 7 | **Review** : `.work-panel-body` débordait | **FAUX POSITIF** | mesuré sur un instrument qui comptait la troncature volontaire ; 0 débordement réel |
 | 8 | **Files** : `.files-panel` débordait | **CORRIGÉ** | planchers 180/250 → 140/190 + `min-width: 0`, repli sous `1230px` |
-| 9 | **Panneau Browser** : « Embedded preview » promis, **aucune surface d'aperçu** ni état vide | **OUVERT** | confirmé par mesure de structure : plus grand blanc vertical ~36 px, aucun viewport |
-| 10 | **Message utilisateur dupliqué** : deux bulles identiques, même horodatage | **OUVERT, cause localisée** | doublon **pixel pour pixel** (diff 0,05/765) ; **absent des données** (`session.jsonl` ne contient qu'un message) → double projection cliente ; `mergeHistoryLog` ne déduplique pas les entrées distantes entre elles |
+| 9 | **Panneau Browser** : « Embedded preview » promis, **aucune surface d'aperçu** ni état vide | **CORRIGÉ** | `BrowserPanel` explique désormais l'état vide (« No page loaded yet. Enter an http or https address above and press Go. ») ; capture `pass2/pass2-browser-etat-vide.png` |
+| 10 | **Message utilisateur dupliqué** : deux bulles identiques, même horodatage | **CORRIGÉ, cause confirmée** | cause réelle : `mergeHistoryLog` cherchait la bulle par identifiant **sans vérifier le rôle**, donc un message utilisateur distant écrasait le rôle du placeholder assistant. Corrigé (comparaison de rôle) **et verrouillé par test**, écrit avant le correctif. L'hypothèse « dédoublonnage distant » avait été **réfutée** par les données persistées |
 | 11 | Le libellé du modèle se couperait panneau déplié | **FAUX POSITIF** | mesuré sous le bon état ; le libellé générique « Model » venait de `model_id` **non transmis par Rust** — corrigé et vérifié sur 11 sessions |
 | 12 | « Run in Muse » quasi blanc sur blanc | **FAUX POSITIF** | bouton **`disabled` + `opacity: .45`**, que WCAG exempte ; « Send » actif mesure **4,82:1** |
 | 13 | Deux encadrés du panneau Desktop avec bordure épaisse ~2 px | **REQUALIFIÉ** | contours natifs non stylés `#545D62`/`#687075`/`#767676` contre `#E6E9ED` ailleurs : **hors charte**, pas « quasi noirs » |

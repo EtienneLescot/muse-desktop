@@ -101,6 +101,7 @@ Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `
 | `msp-user-shell-after-resume.mjs` | `userShell` avant/après `session/resume`, sur une session neuve | un appel shell |
 | `ux-rules-scan.mjs` | `rules_scan` sur le pont vivant : chaque ligne confrontée au disque, fichiers **inchangés** après lecture | aucun |
 | `ux-project-rules.mjs` | le panneau Projets : champ `Instructions` disparu, 4 rôles listés, débordement de 1440 à 760 px | aucun |
+| `ux-terminal-precondition.mjs` | parcourt les conversations et vérifie qu'aucune n'est refusée pour cause de « session non chargée » | aucun |
 | `ux-legacy-instructions.mjs` | l'encart des instructions retirées : apparition, Copy/Dismiss, stockage vidé — **et restauré** | aucun |
 | `check-scripts-parse.mjs` | garde-fou : tout script de `scripts/` doit compiler **et** ne pas refermer un gabarit page-side avec un backtick (scanner auto-testé) | aucun |
 
@@ -110,7 +111,7 @@ Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `
 
 ## Documents qui tracent un échec ou une erreur
 
-Six documents conservent un résultat négatif ou une erreur de méthode. Ils sont volontairement conservés :
+Ces documents conservent un résultat négatif ou une erreur de méthode. Ils sont volontairement conservés :
 
 | Document | Ce qu'il trace |
 |---|---|

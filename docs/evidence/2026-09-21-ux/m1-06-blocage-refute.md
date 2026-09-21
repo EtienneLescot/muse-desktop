@@ -68,5 +68,5 @@ Le script portait déjà, dans son propre commentaire, l'avertissement que la r�
 | `msp-user-shell-items.mjs` | **corrigé** — forme de capacité imbriquée, avec le pourquoi en commentaire |
 | `ux-run-in-muse.mjs` | exerce le chemin UI : saisie, activation, clic, attente de l'item |
 | `ux-read-logs.mjs` | lit le transcript depuis l'état du hook, pas depuis le DOM |
-| `ux-shell-error.mjs` | lit la bannière d'erreur de l'application : distingue « échec » de « jamais tenté » |
+| `ux-terminal-state.mjs` | lit l'état des deux actions d'envoi **et la raison** de leur indisponibilité : distingue « échec » de « jamais tenté » |
 | `check-scripts-parse.mjs` | garde-fou : tout script de `scripts/` doit au moins compiler |

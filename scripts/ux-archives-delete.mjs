@@ -6,8 +6,9 @@
  * reached from the sidebar, so this navigates there the way a user does, reads
  * what each archived row offers, and confirms the delete path asks before acting.
  *
- * The confirmation is accepted on purpose against a throwaway session, so the
- * delete path is exercised rather than merely observed. Nothing else is touched.
+ * The confirmation is **refused** on purpose: the probe replaces `window.confirm`
+ * with a function returning false and then asserts that nothing was removed. It
+ * observes the prompt and the refusal path; it never deletes anything.
  *
  * Usage: node scripts/ux-archives-delete.mjs --port 9227
  */

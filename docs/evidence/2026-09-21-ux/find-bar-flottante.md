@@ -49,7 +49,9 @@ La barre n'est donc **plus rendue du tout** tant que `Ctrl+F` n'a pas été pres
 
 ### Et l'entrée de la recherche globale
 
-Le dialogue « Search conversations » existait déjà et s'ouvrait depuis la barre latérale — mais **il disparaît quand la barre latérale est repliée**. Une icône de recherche a été ajoutée dans l'en-tête, à côté des autres contrôles, avec `Ctrl+K` en infobulle. C'est le même dialogue, pas une seconde implémentation.
+Le dialogue « Search conversations » existait déjà et s'ouvre depuis la barre latérale — mais **il disparaît quand la barre latérale est repliée**. Une icône de recherche a donc été ajoutée dans l'en-tête, à côté des autres contrôles, avec `Ctrl+K` en infobulle : même dialogue, pas une seconde implémentation.
+
+**Puis retirée.** Cette icône faisait doublon avec celles de la barre latérale, qui est dépliée par défaut : deux boutons pour un même dialogue, dont un visible en permanence. `scripts/ux-search-entrypoints.mjs` enregistre l'ajout **et** le retrait. Il ne reste donc **qu'une seule entrée** pour la recherche globale, dans la barre latérale. `Ctrl+F` continue d'ouvrir la recherche **de la conversation courante**, qui est un autre contrôle.
 
 ## Vérification des quatre états
 
@@ -58,7 +60,7 @@ Le dialogue « Search conversations » existait déjà et s'ouvrait depuis la ba
 | Au repos | absente | fermé |
 | Après `Ctrl+F` | **présente** | fermé |
 | Après `Échap` | absente | fermé |
-| Clic sur l'icône d'en-tête | absente | **« Search conversations » ouvert** |
+| Clic sur l'entrée de la barre latérale | absente | **« Search conversations » ouvert** |
 
 `Ctrl+F` est envoyé par de vrais événements clavier (`Input.dispatchKeyEvent`), pas en appelant le setter — sinon le test prouverait seulement que React sait rendre un état.
 

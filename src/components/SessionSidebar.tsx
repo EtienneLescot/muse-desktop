@@ -342,7 +342,17 @@ export function SessionSidebar({
               until it is removed there.
             </p>
             <div className="dialog-buttons">
-              <button autoFocus onClick={() => { setConfirmDelete(false); setPendingKill(null); }}>
+              <button
+                autoFocus
+                onClick={() => {
+                  setConfirmDelete(false);
+                  setPendingKill(null);
+                  // The archived row opens this dialog with no selected session,
+                  // so there is no action list to fall back to. Without this the
+                  // dialog stays open with a rename field bound to nothing.
+                  if (selected === null) closeActions();
+                }}
+              >
                 Cancel
               </button>
               <button

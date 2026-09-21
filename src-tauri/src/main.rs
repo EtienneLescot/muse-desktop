@@ -1269,6 +1269,22 @@ fn is_approval_mode_ceiling(error: &str) -> bool {
     error.contains("approval_mode_ceiling") || error.contains("approval mode ceiling")
 }
 
+/// Fold a resumed session payload into the metadata the terminal reads.
+///
+/// `session/resume` is the call that loads a persisted conversation, so the
+/// resumed payload is the only place its post-load state exists. Deriving the
+/// metadata from the pre-resume `session/read` alone left `loaded: false`
+/// forever, and the terminal kept telling the user to send a message first -
+/// including after the message that was supposed to fix it.
+///
+/// Pure, so this has a test rather than a comment.
+fn apply_resumed_session(meta: &mut SessionMeta, session: &Value) {
+    meta.running = session.get("status").and_then(Value::as_str) == Some("running");
+    meta.approval_mode = session_approval_mode(session).or_else(|| meta.approval_mode.clone());
+    meta.model_id = session_model_id(session).or_else(|| meta.model_id.clone());
+    meta.loaded = session_loaded(session).or(meta.loaded);
+}
+
 fn push_event(state: &AppState, session_id: &str, kind: &str, payload: String) {
     let (Ok(mut seq), Ok(mut buf)) = (state.event_seq.lock(), state.event_buffer.lock()) else {
         return;
@@ -4329,14 +4345,14 @@ async fn resume_session_with_client(
             .get("session")
             .and_then(session_approval_mode),
         granted_capabilities: session_granted_capabilities(&state, &root)?,
-        // `session/read` may answer with the session at the top level or nested
-        // under `session`, so both shapes are tried before giving up.
+        // These come from the pre-resume `session/read`, which reports
+        // `notLoaded` for every persisted conversation after a restart. The
+        // success branch below overwrites them from the resumed session, which
+        // is the whole point of calling `session/resume`.
         model_id: read
             .get("session")
             .and_then(session_model_id)
             .or_else(|| session_model_id(&read)),
-        // `session/resume` is what loads the session, so this site reports the
-        // state after the call rather than the pre-resume `notLoaded`.
         loaded: read
             .get("session")
             .and_then(session_loaded)
@@ -4354,8 +4370,7 @@ async fn resume_session_with_client(
             let checked = session.and_then(|s| { resume::validate(s, &session_id, &root)?; Ok(s) });
             match checked {
                 Ok(session) => {
-                    meta.running = session.get("status").and_then(Value::as_str) == Some("running");
-                    meta.approval_mode = session_approval_mode(session).or(meta.approval_mode);
+                    apply_resumed_session(&mut meta, session);
                     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
                     Ok(meta)
                 }
@@ -8438,6 +8453,40 @@ mod tests {
         assert_eq!(e.profile_id, None);
         assert!(!e.is_active && !e.is_default);
         assert_eq!(e.context_limit, None);
+    }
+
+    /// The terminal disables "Run in Muse" while `loaded` is false, so a resume
+    /// that cannot flip it is the difference between a stated precondition and
+    /// a dead end.
+    #[test]
+    fn resuming_a_conversation_reports_it_as_loaded() {
+        let mut meta = SessionMeta {
+            session_id: "s-1".to_string(),
+            workspace: "C:\\work".to_string(),
+            running: false,
+            session_durability: None,
+            approval_mode: Some("on-request".to_string()),
+            granted_capabilities: Some(vec!["userShell".to_string()]),
+            model_id: None,
+            loaded: Some(false),
+        };
+        apply_resumed_session(
+            &mut meta,
+            &json!({"status": "idle", "modelId": "muse-spark-1.3-contributor"}),
+        );
+        assert_eq!(meta.loaded, Some(true), "a resumed conversation is loaded");
+        assert_eq!(meta.model_id.as_deref(), Some("muse-spark-1.3-contributor"));
+        assert!(!meta.running, "idle is not running");
+
+        // A payload that says nothing must not erase what was already known.
+        apply_resumed_session(&mut meta, &json!({}));
+        assert_eq!(meta.loaded, Some(true));
+        assert_eq!(meta.model_id.as_deref(), Some("muse-spark-1.3-contributor"));
+        assert_eq!(meta.approval_mode.as_deref(), Some("on-request"));
+
+        // And an honest regression is still reported honestly.
+        apply_resumed_session(&mut meta, &json!({"status": "notLoaded"}));
+        assert_eq!(meta.loaded, Some(false));
     }
 
     #[test]

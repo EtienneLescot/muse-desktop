@@ -99,7 +99,14 @@ console.log("\npayload");
 console.log(`  workspace : ${payload.workspace}`);
 console.log(`  governing : ${payload.governing}`);
 check("the payload is an object with files[]", Array.isArray(payload.files), `${payload.files?.length} rows`);
-check("four rule roles are always reported", payload.files?.length === 4);
+if (!Array.isArray(payload.files)) {
+  // Iterating an absent array would throw before the read-only comparison runs,
+  // and the summary would never print - a probe that fails without saying why.
+  ws.close();
+  console.log("\n1 check(s) failed");
+  process.exit(1);
+}
+check("four rule roles are always reported", payload.files.length === 4);
 
 console.log("\nrows");
 for (const file of payload.files) {

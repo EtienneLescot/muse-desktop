@@ -179,7 +179,7 @@ export function TerminalPanel({
             !canRunThroughMuse
               ? "This Muse host did not grant the userShell capability"
               : !sessionReady
-                ? "Send a message in this conversation first: the host only runs shell commands for a conversation it has loaded"
+                ? "The host has not loaded this conversation yet: reconnect it, or send a message"
                 : "Run this command through the Muse host (userShell)"
           }
         >
