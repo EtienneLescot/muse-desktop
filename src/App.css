@@ -5605,6 +5605,14 @@ body.dark .composer textarea::placeholder {
   word-break: break-word;
 }
 
+/* A settings note that reports something the user must act on — currently only
+   the META_API_KEY precedence warning. Amber rather than red: nothing is broken,
+   the billing is simply not the one the user expects. Colour is not the only
+   signal, since the same paragraph also carries the word "priority". */
+.settings-note-warning {
+  color: var(--warning, #d89024);
+}
+
 .notification-show-more {
   margin-top: 7px;
   color: var(--blue);

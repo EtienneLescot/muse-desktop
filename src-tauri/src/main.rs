@@ -31,6 +31,7 @@ mod setup;
 mod mcp;
 mod mcp_package;
 mod secret_store;
+mod muse_auth;
 mod skills;
 mod startup;
 mod scheduler;
@@ -3167,6 +3168,23 @@ fn secure_store_get(key: String) -> Result<Option<String>, String> {
 #[tauri::command]
 fn secure_store_remove(key: String) -> Result<(), String> {
     secret_store::remove(&key)
+}
+
+/// Report which Muse credential is in effect, so the UI can tell the user.
+///
+/// The desktop cannot authenticate on its own — MSP is a stdio protocol inside
+/// the user's session and carries no authentication concept — so the CLI owns
+/// the login and the desktop only reports what it finds. The value that matters
+/// is `apiKeyOverridesLogin`: the CLI documents that `META_API_KEY` always wins
+/// over an account login, so a user who signs in expecting to spend a
+/// subscription can keep spending API credits without any visible signal.
+///
+/// No secret crosses this boundary: `muse_auth` derives only *whether* a
+/// credential exists, never its value, and its payload is asserted in tests to
+/// carry no credential-shaped field.
+#[tauri::command]
+fn muse_auth_status() -> Value {
+    muse_auth::status_json()
 }
 
 /// Call one tool on an explicitly configured local MCP server.
@@ -8532,6 +8550,7 @@ fn main() {
             mcp_package_remove,
             secure_store_set,
             secure_store_get,
+            muse_auth_status,
             secure_store_remove,
             mcp_local_start,
             mcp_local_refresh,
