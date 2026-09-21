@@ -94,6 +94,12 @@ Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `
 | `ux-session-meta-probe.mjs` | projection brute du pont Rust (autorité sur le rendu) | aucun |
 | `ux-react-state-probe.mjs` | prop React lue sur la fibre, quand DOM et pont se contredisent | aucun |
 | `ux-verify-pass2.mjs` | vérifie les décisions de la passe 2 au DOM et par capture | aucun |
+| `ux-terminal-state.mjs` | état des actions du terminal **et la raison** de leur indisponibilité | aucun |
+| `ux-read-logs.mjs` | transcript lu depuis l'état du hook, pas depuis le DOM | aucun |
+| `ux-run-in-muse.mjs` | exerce `Run in Muse` : saisie, activation, clic, attente de l'item | un appel shell |
+| `msp-user-shell-items.mjs` | le host publie-t-il les items `userShell` ? (**forme de capacité corrigée**) | un appel shell |
+| `msp-user-shell-after-resume.mjs` | `userShell` avant/après `session/resume`, sur une session neuve | un appel shell |
+| `check-scripts-parse.mjs` | garde-fou : tout script de `scripts/` doit compiler | aucun |
 
 **`ux-panel-overflow.mjs` refuse d'imprimer le moindre chiffre si son auto-test échoue** : une sonde de 300 px dans une boîte de 100 px doit être signalée à +200 px, et la même sonde avec `overflow-x: hidden` doit être ignorée. Ce garde-fou existe parce que trois versions successives de ce détecteur ont produit des rapports plausibles et faux — détails dans [`2026-09-21-ux/debordement-desktop.md`](2026-09-21-ux/debordement-desktop.md).
 
@@ -113,6 +119,8 @@ Six documents conservent un résultat négatif ou une erreur de méthode. Ils so
 | [nettoyage-conversations](2026-09-20-windows-cleanup/nettoyage-conversations.md) | **trois** méthodes de suppression en échec avant la bonne |
 | [debordement-desktop](2026-09-21-ux/debordement-desktop.md) | **trois** bugs d'instrument successifs, dont un `NaN` silencieux qui vidait le rapport ; remplace une version dont tous les chiffres étaient faux |
 | [revue-passe2](2026-09-21-ux/revue-passe2.md) | **quatre faux positifs** (dont deux que j'avais relayés) et une hypothèse de doublon **réfutée par les données persistées** |
+| [m1-06-blocage-refute](2026-09-21-ux/m1-06-blocage-refute.md) | un « constat bloquant » publié contre le host, réfuté : la sonde demandait la capacité **à plat** et n'exécutait donc jamais la commande |
+| [m1-06-capacites-au-montage](2026-09-21-ux/m1-06-capacites-au-montage.md) | trois sources qui se contredisent sur la même capacité, et le défaut de synchronisation qui les explique |
 
 ## Erreurs de méthode de la campagne, documentées plutôt que corrigées en silence
 
