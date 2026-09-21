@@ -79,6 +79,22 @@ Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `
 | `cdp-delete-conversations.mjs` | supprime des conversations de test par la boîte de dialogue de l'application | aucun |
 | `bench-log-append.mts` | coût d'un ajout au journal selon sa taille | aucun |
 
+### Passe UX 1 (21 septembre 2026)
+
+| Script | Rôle | Coût modèle |
+|---|---|---|
+| `ux-capture.mjs` | 13 surfaces de l'interface, préconditions assertées | aucun |
+| `ux-force-conversation.mjs` | force la vue conversation et les 8 onglets du panneau | aucun |
+| `ux-contrast-audit.mjs` | ratios WCAG réels, alpha composé, thème clair ou sombre | aucun |
+| `ux-target-size-audit.mjs` | cibles < 24×24 px et débordement de viewport | aucun |
+| `ux-panel-overflow.mjs` | débordements par onglet, **auto-test bloquant** | aucun |
+| `ux-breakpoint-sweep.mjs` | 13 largeurs de fenêtre, fuites superficielles **et imbriquées** | aucun |
+| `ux-review-captures.mjs` | captures + assertions structurelles | aucun |
+
+**`ux-panel-overflow.mjs` refuse d'imprimer le moindre chiffre si son auto-test échoue** : une sonde de 300 px dans une boîte de 100 px doit être signalée à +200 px, et la même sonde avec `overflow-x: hidden` doit être ignorée. Ce garde-fou existe parce que trois versions successives de ce détecteur ont produit des rapports plausibles et faux — détails dans [`2026-09-21-ux/debordement-desktop.md`](2026-09-21-ux/debordement-desktop.md).
+
+`ux-review-captures.mjs` porte un avertissement : il force la largeur du panneau **sans** changer celle de la fenêtre, ce qui produit un état qu'aucune fenêtre réelle ne peut atteindre. Pour les questions de mise en page responsive, l'instrument est `ux-breakpoint-sweep.mjs`.
+
 ## Documents qui tracent un échec ou une erreur
 
 Six documents conservent un résultat négatif ou une erreur de méthode. Ils sont volontairement conservés :
@@ -91,6 +107,7 @@ Six documents conservent un résultat négatif ou une erreur de méthode. Ils so
 | [M0-12](2026-09-20-windows-a11y/M0-12.md) | contient le faux positif « aucun indicateur de focus » **et** sa correction |
 | [modules-inaccessibles-aux-tests](2026-09-20-windows-ledgers/modules-inaccessibles-aux-tests.md) | faux diagnostic initial : 15 modules annoncés au lieu de 2 |
 | [nettoyage-conversations](2026-09-20-windows-cleanup/nettoyage-conversations.md) | **trois** méthodes de suppression en échec avant la bonne |
+| [debordement-desktop](2026-09-21-ux/debordement-desktop.md) | **trois** bugs d'instrument successifs, dont un `NaN` silencieux qui vidait le rapport ; remplace une version dont tous les chiffres étaient faux |
 
 ## Erreurs de méthode de la campagne, documentées plutôt que corrigées en silence
 
