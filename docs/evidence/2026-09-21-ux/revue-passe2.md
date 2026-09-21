@@ -101,11 +101,55 @@ La revue a elle-même classé **SUPPOSÉ** ; la mesure ne montre pas de glyphe c
 
 ## Correction appliquée et vérifiée
 
-**`model_id` n'était pas transmis au renderer.** `session_meta_from_list_row` lisait `session_durability`, `approval_mode` et `granted_capabilities` mais **ignorait `modelId`**, pourtant publié par `session/list`. Le composeur affichait donc « Model ».
+### `model_id` n'était pas transmis au renderer
+
+`session_meta_from_list_row` lisait `session_durability`, `approval_mode` et `granted_capabilities` mais **ignorait `modelId`**, pourtant publié par `session/list`. Le composeur affichait donc « Model ».
 
 Corrigé côté Rust (`SessionMeta::model_id`, helper `session_model_id` acceptant la forme plate de `session/list` et la forme imbriquée de `setModel`) **et** côté renderer (`restore_sessions` ne reportait pas `model_id` dans la fusion).
 
-**Vérifié sur l'application en fonctionnement :** `restore_sessions` renvoie `"model_id": "muse-spark-1.3-contributor"` pour les **11 sessions**.
+**Vérifié à trois niveaux :** `restore_sessions` renvoie `"model_id": "muse-spark-1.3-contributor"` pour les **11 sessions** ; et la capture de la passe 2 montre le modèle réel dans le composeur au lieu de « Model ».
+
+### Message utilisateur dupliqué — cause trouvée et corrigée
+
+Le sous-agent a lu les **logs persistés dans `localStorage`** de l'application et y a trouvé deux entrées `role: "user"` pour un seul envoi :
+
+| # | `itemId` | `clientMessageId` | `ts` |
+|---|---|---|---|
+| 1 | **`null`** | identifiant client | 1789975305622 |
+| 2 | **`e948ccf8…`** (id d'item du host) | identifiant de commande du host | 1789975305697 |
+
+75 ms d'écart, donc **la même seconde affichée** — ce qui explique l'horodatage identique. Reproduit dans une seconde session (160 ms d'écart).
+
+**Le mécanisme, en trois étapes :**
+
+1. À l'envoi, le client crée une bulle utilisateur optimiste **et** un placeholder assistant vide.
+2. Le réducteur temps réel lie l'`itemId` de l'item **utilisateur** du host à ce placeholder, car la voie incrémentale des items n'a pas de rôle « user ».
+3. `mergeHistoryLog` recherche par `itemId` **sans contrôle de rôle** (`src/lib/history.ts:323-325`), donc l'item utilisateur distant **écrase le rôle** du placeholder (`:332`, ordre du spread) au lieu d'être reconnu comme un message déjà représenté. La bulle optimiste reste comme reliquat non consommé.
+
+**Mon hypothèse initiale était fausse** : j'accusais une absence de déduplication entre entrées distantes. Le sous-agent l'a **réfutée par les données** — une entrée distante non appariée conserve un identifiant préfixé `history:`, et aucun identifiant de ce type n'existe dans les logs persistés.
+
+**Corrigé** : la correspondance par `itemId` exige désormais le **même rôle**. Deux tests ajoutés, écrits **avant** le correctif :
+
+- `does not turn an assistant placeholder into a second user bubble` — **échouait** avant, passe après ;
+- `still binds a remote item to a local entry of the same role` — garde le comportement légitime.
+
+`npm test` : **1074 tests, 0 échec** (contre 1072).
+
+### Redondance de « Local » — chip du composeur retirée
+
+Décision produit : la chip du composeur est supprimée, la pastille d'en-tête et « Local execution » en barre de statut restent. **Vérifié au DOM** : une seule occurrence de « Local » seul subsiste (la pastille d'en-tête).
+
+### Onglet Browser — état vide ajouté
+
+**Correction de mon propre diagnostic :** il *existe* une surface d'aperçu — une `iframe` même-origine (`BrowserPanel.tsx:884`) — mais elle n'est rendue qu'une fois une URL affichable, et **rien ne s'affichait en attendant**. C'était le seul des 7 onglets sans état vide.
+
+Ajouté : un cadre en pointillés « No page loaded yet. Enter an http or https address above and press Go. », de la hauteur de l'iframe pour éviter tout décalage quand l'aperçu apparaît. Le sous-titre « Embedded preview » devient « **Same-origin preview** », qui décrit ce qui existe réellement.
+
+**Vérifié** au DOM et par capture : état vide présent et visible, sous-titre exact.
+
+### Cible tactile « Close panel »
+
+**16 px de large**, sous le minimum de 24 px : `padding: 15px 1px` réduisait le bouton à la largeur du glyphe. `min-width: 24px` sur `.icon` → **24×50 px**, sans toucher aux autres boutons (28×30, 32×32). L'audit ne signale plus que 2 écarts, tous deux légitimes et documentés.
 
 ## Instruments ajoutés
 
@@ -115,9 +159,16 @@ Corrigé côté Rust (`SessionMeta::model_id`, helper `session_model_id` accepta
 | `ux-session-meta-probe.mjs` | lit la projection brute du pont Rust (autorité sur le rendu) |
 | `ux-react-state-probe.mjs` | lit une prop React sur la fibre, quand le DOM et le pont se contredisent |
 | `ux-control-contrast.mjs` | mesure ciblée par sélecteur, fond propre composité |
+| `ux-verify-pass2.mjs` | vérifie les décisions de la passe 2 au DOM et par capture |
+
+**Prédicat de visibilité, corrigé partout.** `ux-capture.mjs`, `ux-capture-conversation.mjs`, `ux-force-conversation.mjs` et `ux-target-size-audit.mjs` utilisaient `offsetParent !== null`, qui vaut `null` pour `<body>` et pour tout élément `position: fixed` : tout un mode de positionnement échappait à l'audit. Le prédicat est désormais `getClientRects()` + `display`/`visibility`, avec assertion des préconditions. Signalé par CodeRabbit sur `ux-target-size-audit.mjs` ; l'audit voit maintenant 43 contrôles au lieu de 46 selon l'état, et signale correctement 0 élément hors viewport.
+
+Le même prédicat subsiste dans l'outillage `cdp-*` **antérieur** et dans `beta-smoke.mjs` : hors du périmètre de ce signalement, non modifié pour ne pas risquer de régression sur des scripts qui étayent des preuves déjà publiées.
 
 ## La leçon
 
 **Deux revues indépendantes, sur les mêmes captures, ont produit deux faux positifs majeurs et corrigé deux de mes affirmations.** La cause est la même des deux côtés : **mesurer un état sans vérifier lequel**. Les boutons mesurés étaient désactivés ; le jeton mesuré n'était plus dans la feuille de style.
 
-C'est exactement l'erreur que cette campagne a déjà payée sept fois. La parade est constante : **asserter l'état avant de mesurer**, et quand deux sources se contredisent, instrumenter une troisième (ici la fibre React) au lieu de choisir celle qui arrange.
+Et **mon hypothèse sur le doublon était fausse elle aussi**, pour une raison différente : j'avais lu le code et conclu à une absence de déduplication entre entrées distantes, sans aller regarder les **données réellement persistées**. Un seul `localStorage.getItem` a tranché — aucun identifiant préfixé `history:` n'existe, donc la voie que j'accusais n'a jamais servi. La cause était ailleurs, dans une correspondance par `itemId` sans contrôle de rôle.
+
+C'est la même erreur que cette campagne a déjà payée huit fois, sous une forme nouvelle : **raisonner sur le code au lieu de mesurer l'état**. La parade ne change pas — instrumenter, asserter, et préférer la donnée à la déduction. Quand deux sources se contredisent, en instrumenter une troisième (ici : le log persisté, puis la fibre React) plutôt que de choisir celle qui arrange.
