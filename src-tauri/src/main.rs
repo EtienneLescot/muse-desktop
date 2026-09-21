@@ -87,6 +87,16 @@ pub struct SessionMeta {
     /// field is already tracked while a session is live.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
+    /// Whether the host currently holds this session in memory.
+    ///
+    /// `session/list` reports `status: "notLoaded"` for every persisted session
+    /// after a host restart — including sessions with dozens of turns — so
+    /// "the host lists it" and "the host has it loaded" are genuinely different
+    /// states. The distinction is not cosmetic: `session/userShell` answers
+    /// `sessionNotLoaded` on an admitted-but-unloaded session, which is how
+    /// `Run in Muse` used to fail after the user had already clicked it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loaded: Option<bool>,
 }
 
 /// Sandbox posture selected when a workspace-owned Muse host is spawned.
@@ -1075,6 +1085,7 @@ fn session_meta_from_list_row(
         approval_mode: session_approval_mode(session),
         granted_capabilities,
         model_id: session_model_id(session),
+        loaded: session_loaded(session),
     })
 }
 
@@ -1222,6 +1233,22 @@ fn session_model_id(session: &Value) -> Option<String> {
         .map(str::trim)
         .filter(|model| !model.is_empty())
         .map(str::to_string)
+}
+
+/// Whether the host reports this session as loaded in memory.
+///
+/// The host uses `notLoaded` for a session it can read from disk but has not
+/// opened in this process. Any other status means it is loaded, so the check is
+/// "known and not `notLoaded`" rather than an allow-list of live states, which
+/// would misreport a future status name as unloaded. Absence stays `None` so an
+/// older host keeps the compatibility path instead of being called unloaded.
+fn session_loaded(session: &Value) -> Option<bool> {
+    session
+        .get("status")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|status| !status.is_empty())
+        .map(|status| !status.eq_ignore_ascii_case("notLoaded"))
 }
 
 fn is_approval_mode_ceiling(error: &str) -> bool {
@@ -4040,6 +4067,7 @@ async fn start_session_at_workspace(
         approval_mode: session_approval_mode(session),
         granted_capabilities,
         model_id: session_model_id(session),
+        loaded: session_loaded(session),
     };
     state
         .sessions
@@ -4177,6 +4205,7 @@ async fn fork_session(
         approval_mode: session_approval_mode(session),
         granted_capabilities: session_granted_capabilities(&state, &root)?,
         model_id: session_model_id(session),
+        loaded: session_loaded(session),
     };
     state
         .sessions
@@ -4257,6 +4286,12 @@ async fn resume_session_with_client(
             .get("session")
             .and_then(session_model_id)
             .or_else(|| session_model_id(&read)),
+        // `session/resume` is what loads the session, so this site reports the
+        // state after the call rather than the pre-resume `notLoaded`.
+        loaded: read
+            .get("session")
+            .and_then(session_loaded)
+            .or_else(|| session_loaded(&read)),
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     if let Err(error) = state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client) {
@@ -5628,6 +5663,8 @@ mod tests {
                 session_durability: None,
                 approval_mode: None,
                 model_id: None,
+
+                loaded: None,
                 granted_capabilities: None,
             },
         );
@@ -5898,6 +5935,8 @@ mod tests {
                 session_durability: None,
                 approval_mode: None,
                 model_id: None,
+
+                loaded: None,
                 granted_capabilities: None,
             },
         );
@@ -5958,6 +5997,8 @@ mod tests {
                 session_durability: None,
                 approval_mode: None,
                 model_id: None,
+
+                loaded: None,
                 granted_capabilities: None,
             },
         );
@@ -6017,6 +6058,8 @@ mod tests {
                 session_durability: None,
                 approval_mode: None,
                 model_id: None,
+
+                loaded: None,
                 granted_capabilities: None,
             },
         );
@@ -8392,6 +8435,8 @@ mod tests {
                 session_durability: None,
                 approval_mode: None,
                 model_id: None,
+
+                loaded: None,
                 granted_capabilities: None,
             },
         );

@@ -12,6 +12,15 @@ interface Props {
   onResize: (terminalId: string, cols: number, rows: number) => Promise<void>;
   onClose: (sessionId: string) => Promise<void>;
   canRunThroughMuse: boolean;
+  /**
+   * Whether the host currently holds this conversation in memory.
+   *
+   * `session/userShell` answers `sessionNotLoaded` on a conversation the host
+   * has only read from disk, so the action is disabled until a turn has loaded
+   * it rather than failing after the click. `undefined` means the host did not
+   * report a status, and the action stays available.
+   */
+  sessionLoaded?: boolean;
   onRunThroughMuse: (sessionId: string, command: string) => Promise<boolean>;
   onInsertContext: (sessionId: string) => boolean;
 }
@@ -31,6 +40,7 @@ export function TerminalPanel({
   onResize,
   onClose,
   canRunThroughMuse,
+  sessionLoaded,
   onRunThroughMuse,
   onInsertContext,
 }: Props) {
@@ -82,8 +92,16 @@ export function TerminalPanel({
     setCommand("");
   };
 
+  /**
+   * The host only accepts `session/userShell` for a conversation it has loaded,
+   * which happens on that conversation's first turn. Disabling here turns a
+   * failure that used to arrive *after* the click into a stated precondition.
+   * An absent `sessionLoaded` (older host) never blocks the action.
+   */
+  const sessionReady = sessionLoaded !== false;
+
   const runThroughMuse = () => {
-    if (!canRunThroughMuse || command.trim().length === 0 || runningThroughMuse) return;
+    if (!canRunThroughMuse || !sessionReady || command.trim().length === 0 || runningThroughMuse) return;
     setRunningThroughMuse(true);
     void onRunThroughMuse(sessionId, command)
       .then((accepted) => {
@@ -156,10 +174,14 @@ export function TerminalPanel({
           type="button"
           className="terminal-muse"
           onClick={runThroughMuse}
-          disabled={!canRunThroughMuse || !command.trim() || runningThroughMuse}
-          title={canRunThroughMuse
-            ? "Run this command through the Muse host (userShell)"
-            : "This Muse host did not grant the userShell capability"}
+          disabled={!canRunThroughMuse || !sessionReady || !command.trim() || runningThroughMuse}
+          title={
+            !canRunThroughMuse
+              ? "This Muse host did not grant the userShell capability"
+              : !sessionReady
+                ? "Send a message in this conversation first: the host only runs shell commands for a conversation it has loaded"
+                : "Run this command through the Muse host (userShell)"
+          }
         >
           Run in Muse
         </button>

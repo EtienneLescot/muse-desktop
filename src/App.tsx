@@ -135,6 +135,7 @@ export default function App() {
     reconcilingId,
     connectedIds,
     userShellAvailableForSession,
+    sessionLoadedForSession,
     evtCount,
     sendInput,
     steerInput,
@@ -1543,6 +1544,7 @@ export default function App() {
                           onResize={resizeTerminal}
                           onClose={closeTerminal}
                           canRunThroughMuse={userShellAvailableForSession(active.session_id)}
+                          sessionLoaded={sessionLoadedForSession(active.session_id)}
                           onRunThroughMuse={runUserShell}
                           onInsertContext={prepareTerminalContext}
                         />

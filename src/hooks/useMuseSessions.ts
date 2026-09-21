@@ -937,6 +937,8 @@ interface UseMuseSessions {
   connectedIds: string[];
   /** M1-06: capability negotiated with each workspace host. */
   userShellAvailableForSession: (sessionId: string) => boolean;
+  /** M1-06: whether the host has this conversation loaded; `undefined` = unreported. */
+  sessionLoadedForSession: (sessionId: string) => boolean | undefined;
   /**
    * M0-03: send one turn and get an explicit result. `retryKey` re-sends
    * an existing outbox entry (same clientMessageId, byte-identical
@@ -1325,6 +1327,13 @@ interface BackendSessionMeta {
   /** Host projection, when this sidecar exposes one. */
   approval_mode?: string;
   granted_capabilities?: string[];
+  /**
+   * Whether the host holds this session in memory. `session/list` reports
+   * `notLoaded` for every persisted session after a host restart, so the
+   * renderer needs the distinction to avoid offering an action the host will
+   * refuse with `sessionNotLoaded`.
+   */
+  loaded?: boolean;
 }
 
 interface BackendWorktreeSessionResult {
@@ -1871,6 +1880,12 @@ export function useMuseSessions(): UseMuseSessions {
   const [grantedCapabilitiesBySession, setGrantedCapabilitiesBySession] = useState<
     Record<string, string[] | undefined>
   >({});
+  // M1-06: whether the host has each conversation loaded. `session/list` calls
+  // every persisted session `notLoaded` after a restart, and `session/userShell`
+  // is refused in that state, so this is a precondition rather than a detail.
+  const [sessionLoadedBySession, setSessionLoadedBySession] = useState<
+    Record<string, boolean | undefined>
+  >({});
   const [connectionBySession, setConnectionBySession] = useState<
     Record<string, SessionConnectionState>
   >({});
@@ -2208,6 +2223,13 @@ export function useMuseSessions(): UseMuseSessions {
           const next = { ...cur };
           for (const meta of restored) {
             next[meta.session_id] = meta.granted_capabilities;
+          }
+          return next;
+        });
+        setSessionLoadedBySession((cur) => {
+          const next = { ...cur };
+          for (const meta of restored) {
+            if (meta.loaded !== undefined) next[meta.session_id] = meta.loaded;
           }
           return next;
         });
@@ -7743,6 +7765,17 @@ export function useMuseSessions(): UseMuseSessions {
     [grantedCapabilitiesBySession],
   );
 
+  /**
+   * Whether the host currently has this conversation loaded.
+   *
+   * `undefined` means the host did not report a status, which must not block an
+   * action; only an explicit `false` does.
+   */
+  const sessionLoadedForSession = useCallback(
+    (sessionId: string): boolean | undefined => sessionLoadedBySession[sessionId],
+    [sessionLoadedBySession],
+  );
+
   /** M1-06: explicit `!`-style host shell action from the terminal panel. */
   const runUserShell = useCallback(
     async (sessionId: string, command: string): Promise<boolean> => {
@@ -8042,6 +8075,7 @@ export function useMuseSessions(): UseMuseSessions {
     reconcilingId,
     connectedIds,
     userShellAvailableForSession,
+    sessionLoadedForSession,
     sendInput,
     steerInput,
     unqueueTurn,
