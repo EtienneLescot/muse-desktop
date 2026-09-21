@@ -112,8 +112,13 @@ const STATE = `(() => {
     .map((b) => (b.innerText || "").trim())
     .filter((t) => /^(Content|Review|Terminal|Files|Browser|Desktop|Memory)$/.test(t));
   // A transcript proves a conversation is really displayed; a page title alone
-  // does not, because content pages carry an h1 too.
-  const messages = [...document.querySelectorAll(".message, .log-entry, [data-role], .stream-entry")].filter(visible).length;
+  // does not, because content pages carry an h1 too. ".msg" is the transcript
+  // row class (StreamView.tsx). The previous list (".message", ".log-entry",
+  // "[data-role]", ".stream-entry") matched nothing in the real DOM, so this
+  // count was always 0: the guard could never pass, and before it existed the
+  // captures were recorded anyway - including three shots of the Library page
+  // filed as "conversation propre".
+  const messages = [...document.querySelectorAll(".msg")].filter(visible).length;
   const composer = [...document.querySelectorAll("textarea")].filter(visible);
   return {
     dialogs,
@@ -187,22 +192,32 @@ async function main() {
 
   // 2. Make sure a conversation with messages is displayed.
   const opened = await evaluate(client, `(() => {
-    const visible = (n) => {
-    if (!n || !n.isConnected) return false;
-    const c = getComputedStyle(n);
-    if (c.display === "none" || c.visibility === "hidden") return false;
-    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
-    return true;
-  };
-    if (visible(document.querySelector("textarea")) && document.querySelector("h1")) return { already: true };
+    ${VIS}
+    // "A textarea and an h1 exist" is also true of the Library, Projects and
+    // Settings pages. A transcript with at least one message is what proves a
+    // conversation, which is the same predicate STATE uses.
+    const messages = [...document.querySelectorAll(".msg")].filter(visible).length;
+    if (messages > 0) return { already: true, messages };
     const rows = [...document.querySelectorAll("button[aria-label^='Actions for']")].filter(visible);
     const target = rows.find((b) => /BETA/.test(b.getAttribute("aria-label") || "")) || rows[0];
-    if (!target) return { opened: false };
+    if (!target) return { opened: false, messages };
     const sib = target.parentElement && target.parentElement.querySelector(".session-select");
     (sib || target).click();
-    return { opened: true };
+    return { opened: true, messages };
   })()`);
   await sleep(3_000);
+  // Refuse the shot rather than record a page that only looks like a
+  // conversation: an unusable capture that claims a transcript is worse than no
+  // capture at all, and it was produced this way twice before.
+  const conversation = await evaluate(client, STATE);
+  if (conversation.messageCount === 0 || !conversation.composerPresent) {
+    process.stderr.write(
+      `aucune conversation avec messages — capture refusee (${JSON.stringify({ opened, messages: conversation.messageCount, composer: conversation.composerPresent, title: conversation.title })})\n`,
+    );
+    writeFileSync(join(OUT, "manifest-conversation.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    client.close();
+    return;
+  }
   await shot("conversation-propre", `conversation affichee — ${JSON.stringify(opened)}`);
 
   // 3. Expand the work panel: its tabs do not exist in the DOM until then.

@@ -102,7 +102,7 @@ Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `
 | `ux-rules-scan.mjs` | `rules_scan` sur le pont vivant : chaque ligne confrontée au disque, fichiers **inchangés** après lecture | aucun |
 | `ux-project-rules.mjs` | le panneau Projets : champ `Instructions` disparu, 4 rôles listés, débordement de 1440 à 760 px | aucun |
 | `ux-legacy-instructions.mjs` | l'encart des instructions retirées : apparition, Copy/Dismiss, stockage vidé — **et restauré** | aucun |
-| `check-scripts-parse.mjs` | garde-fou : tout script de `scripts/` doit compiler | aucun |
+| `check-scripts-parse.mjs` | garde-fou : tout script de `scripts/` doit compiler **et** ne pas refermer un gabarit page-side avec un backtick (scanner auto-testé) | aucun |
 
 **`ux-panel-overflow.mjs` refuse d'imprimer le moindre chiffre si son auto-test échoue** : une sonde de 300 px dans une boîte de 100 px doit être signalée à +200 px, et la même sonde avec `overflow-x: hidden` doit être ignorée. Ce garde-fou existe parce que trois versions successives de ce détecteur ont produit des rapports plausibles et faux — détails dans [`2026-09-21-ux/debordement-desktop.md`](2026-09-21-ux/debordement-desktop.md).
 
@@ -138,6 +138,7 @@ Six documents conservent un résultat négatif ou une erreur de méthode. Ils so
 5. **Test faux, pas code faux** : `createLatestWriteQueue` fusionne délibérément les écritures ; mon assertion attendait l'inverse.
 6. **`returnByValue` oublié** sur `Runtime.evaluate` : renvoie une référence distante, donc `undefined`, indiscernable d'un échec.
 7. **Cycles de test sans vérification d'état initial** : quatre tests ont échoué faute d'avoir confirmé l'état de départ ou l'identité de la conversation.
+8. **Capture « conversation propre » non vérifiée** : le prédicat comptait `.message`/`.log-entry`/`[data-role]`, qui n'existent nulle part dans le DOM réel — la classe des lignes de transcript est `.msg`. Le compte valait donc **toujours 0**, et trois captures de la page **Library** ont été enregistrées comme « conversation propre » avec un `conversationOpen` nul. Le sélecteur est corrigé, et le script **refuse** désormais d'écrire la capture quand le transcript est vide. Le garde-fou `check-scripts-parse.mjs` détecte en plus la forme *équilibrée* du piège du backtick, celle que `node --check` laisse passer : c'est ce qui a produit ce bug, un commentaire contenant `.msg` entre backticks à l'intérieur du gabarit page-side.
 
 ## Ce que cette campagne n'a pas fait
 

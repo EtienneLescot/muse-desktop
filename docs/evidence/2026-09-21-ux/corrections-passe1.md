@@ -32,7 +32,7 @@ Complète [`constats-passe1.md`](constats-passe1.md). Ce document liste ce qui a
 
 **Correctif retiré** (`git checkout -- src/App.css`). Améliorer trois mesures en en dégradant deux n'est pas une correction, et je ne livre pas un changement dont je ne peux pas démontrer qu'il est meilleur.
 
-> **Mise à jour du 21 septembre (passe 2).** Cette première tentative reste retirée, mais **le défaut a été corrigé depuis, par une autre voie**, et les chiffres de ce document provenaient d'un instrument défectueux. L'état livré est :
+> **Mise à jour du 21 septembre (passe 2).** Cette première tentative reste retirée, mais **le défaut a été corrigé depuis, par une autre voie**, et les chiffres de ce document provenaient d'un instrument défectueux. Deux jeux de valeurs différents, à ne pas confondre : la tentative **retirée** était `minmax(120px, .8fr) minmax(160px, 1.2fr)` ; l'état **livré** est `minmax(140px, .8fr) minmax(190px, 1.2fr)`. L'état livré est donc :
 >
 > - `.desktop-control-layout` : `minmax(140px, .8fr) minmax(190px, 1.2fr)`, avec repli à une colonne sous `1400px` (ligne de clic) et `1290px` (grille) ;
 > - `.files-layout` : `minmax(140px, .85fr) minmax(190px, 1.4fr)`, repli sous `1230px`, dans `Desktop.css` **à côté** de la règle de base à cause de l'ordre d'import ;
