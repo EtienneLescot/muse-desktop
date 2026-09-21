@@ -122,6 +122,7 @@ Six documents conservent un résultat négatif ou une erreur de méthode. Ils so
 | [m1-06-blocage-refute](2026-09-21-ux/m1-06-blocage-refute.md) | un « constat bloquant » publié contre le host, réfuté : la sonde demandait la capacité **à plat** et n'exécutait donc jamais la commande |
 | [m1-06-capacites-au-montage](2026-09-21-ux/m1-06-capacites-au-montage.md) | trois sources qui se contredisent sur la même capacité, et le défaut de synchronisation qui les explique |
 | [authentification-muse](2026-09-21-ux/authentification-muse.md) | pourquoi l'éditeur ne peut pas faire d'OAuth seul, et comment piloter le CLI à la place — avec le piège de priorité `META_API_KEY` |
+| [find-bar-flottante](2026-09-21-ux/find-bar-flottante.md) | **deux hypothèses fausses** (transparence, z-index) écartées par la mesure avant de trouver la cause réelle : une carte de 760 px dans un flux de 1034 px |
 
 ## Erreurs de méthode de la campagne, documentées plutôt que corrigées en silence
 

@@ -565,17 +565,39 @@ body.dark .avatar {
   outline-offset: -2px;
 }
 
-.stream-find {
+/* Full-width strip behind the find card.
+ *
+ * The card alone is 760px wide inside a transcript that measures ~1034px, which
+ * left 137px of scrolling content on each side of a sticky element: the card
+ * looked like it floated in the middle of the conversation while text kept
+ * moving past it. This dock makes the pinned region span the whole stream, so
+ * nothing scrolls alongside the card.
+ *
+ * The negative margins pull the strip to the scroll container's own padding
+ * edges, so the band reads as the top of the transcript rather than as an inset
+ * box. Its purpose is to be opaque: the card's shadow alone did not separate it
+ * from the text passing underneath.
+ */
+.stream-find-dock {
   position: sticky;
   top: 0;
   z-index: 2;
+  /* Cancel the stream's 16px top padding so the band reaches the edge, and its
+     8px side padding so the band is the full width of the scroll viewport. */
+  margin: -16px -8px 4px;
+  padding: 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.stream-find {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   width: min(100%, 760px);
   box-sizing: border-box;
-  margin: -20px auto 4px;
+  margin: 0 auto;
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);

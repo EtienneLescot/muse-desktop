@@ -809,6 +809,16 @@ export function StreamView({
           {windowAnnouncement}
         </span>
       )}
+      {/*
+        A full-width dock carries the sticky positioning and an opaque backdrop.
+        The find bar itself is a 760px centred card inside a ~1034px transcript,
+        so on its own it left 137px of scrolling text on each side: content kept
+        flowing past a card that appeared to float in the middle of the
+        conversation. Measured, not guessed — see
+        docs/evidence/2026-09-21-ux/pass2/find-bar-geometry.txt.
+        The card keeps its shape; only the strip behind it changed.
+      */}
+      <div className="stream-find-dock">
       <div className="stream-find" aria-label="Find in conversation">
         {!findOpen ? (
           <button type="button" onClick={() => setFindOpen(true)}>
@@ -895,6 +905,7 @@ export function StreamView({
             ))}
           </div>
         )}
+      </div>
       </div>
       {streamWindowed && windowPadding.top > 0 && (
         <div
