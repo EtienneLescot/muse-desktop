@@ -41,16 +41,21 @@ const SNAPSHOT = `(() => { ${VIS}
   const dock = document.querySelector(".stream-find-dock");
   const findInput = document.querySelector(".stream-find input");
   const dialog = [...document.querySelectorAll("dialog")].find((d) => d.open);
-  const searchBtn = [...document.querySelectorAll("header button, .icon")].filter(vis)
+  // The global search entry point is the sidebar button, not a header icon:
+  // a header duplicate was added and then removed once it was clear the sidebar
+  // is expanded by default.
+  const sidebarSearch = [...document.querySelectorAll("button")].filter(vis)
+    .find((b) => (b.getAttribute("aria-label") || "") === "Search");
+  const headerSearch = [...document.querySelectorAll("button")].filter(vis)
     .find((b) => /search all conversations/i.test(b.getAttribute("aria-label") || ""));
   return {
     transcriptHeight: stream ? Math.round(stream.getBoundingClientRect().height) : null,
-    transcriptScrollHeight: stream ? stream.scrollHeight : null,
     dockPresent: Boolean(dock),
     findInputPresent: Boolean(findInput),
     globalDialogOpen: Boolean(dialog),
     globalDialogTitle: dialog ? (dialog.querySelector("h2")?.innerText || "").trim() : null,
-    headerSearchIcon: Boolean(searchBtn),
+    sidebarSearchPresent: Boolean(sidebarSearch),
+    headerSearchPresent: Boolean(headerSearch),
   }; })()`;
 
 // A conversation with history must be open: `.stream` and the Ctrl+F listener
@@ -89,14 +94,14 @@ await sleep(700);
 console.log("\n  3. apres Echap");
 console.log("     " + JSON.stringify(await ev(SNAPSHOT)));
 
-// The header icon opens the global dialog.
+// The sidebar button opens the same global dialog, and is the only entry point.
 const clicked = await ev(`(() => { ${VIS}
   const b = [...document.querySelectorAll("button")].filter(vis)
-    .find((n) => /search all conversations/i.test(n.getAttribute("aria-label") || ""));
+    .find((n) => (n.getAttribute("aria-label") || "") === "Search");
   if (b) b.click();
   return Boolean(b); })()`);
 await sleep(900);
-console.log(`\n  4. clic sur l'icone d'en-tete : ${clicked}`);
+console.log(`\n  4. clic sur le bouton Search de la barre laterale : ${clicked}`);
 console.log("     " + JSON.stringify(await ev(SNAPSHOT)));
 
 // Leave the app as found.

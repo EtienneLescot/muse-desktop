@@ -437,6 +437,23 @@ export function StreamView({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        // Escape closes the finder from anywhere inside the transcript.
+        //
+        // The input takes focus when the bar opens and then loses it to some
+        // other control, so an Escape handler bound to the input alone never
+        // fires in practice: measured, focus lands on the input at +80ms and is
+        // gone by +200ms. Closing the shortcut's own UI has to work whatever
+        // holds focus, or Ctrl/Cmd+F opens a bar the user cannot dismiss from
+        // the keyboard.
+        setFindOpen((open) => {
+          if (!open) return false;
+          setFindQuery("");
+          setFindSelection(null);
+          return false;
+        });
+        return;
+      }
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f") return;
       const target = event.target as HTMLElement | null;
       if (target !== null && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;

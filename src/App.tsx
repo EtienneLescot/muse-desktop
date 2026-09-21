@@ -899,22 +899,6 @@ export default function App() {
               <span className="dot" />
               {backendMissing ? "Web preview" : "Local"}
             </span>
-            {/*
-              Global search belongs in the header, not in the transcript.
-              The two searches are different jobs: Ctrl/Cmd+F finds text in the
-              conversation being read, and this searches across every
-              conversation. The sidebar already opened the same dialog, but it
-              disappears when the sidebar is collapsed, so the header is where
-              the entry point has to live.
-            */}
-            <button
-              className="icon"
-              onClick={() => setSearchOpen(true)}
-              aria-label="Search all conversations"
-              title={`Search all conversations · ${modifier}+K`}
-            >
-              <Icon name="search" />
-            </button>
             <button
               className="icon"
               onClick={() => setTheme(nextTheme(theme))}
