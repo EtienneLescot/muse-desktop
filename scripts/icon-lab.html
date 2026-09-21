@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fork icon — round 5, finalists</title>
+    <style>
+      body { margin: 0; padding: 16px; background: #ffffff; font: 12px system-ui, sans-serif; color: #182329; }
+      h1 { font-size: 13px; margin: 0 0 4px; font-weight: 600; }
+      p.note { font-size: 10px; color: #6a7279; margin: 0 0 14px; }
+      .row { display: flex; align-items: center; gap: 16px; margin: 0 0 16px; }
+      .name { width: 230px; font-family: ui-monospace, monospace; font-size: 10px; color: #6a7279; }
+      svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.65; fill: none;
+            stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+      .frame { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #e6e9ed; border-radius: 8px; }
+      .big svg { width: 84px; height: 84px; stroke-width: 1.2; }
+      .big .frame { width: 108px; height: 108px; }
+    </style>
+  </head>
+  <body>
+    <h1>Fork icon — round 5. A trunk plus merged arms is a 4; a lone Y reads as a fork.</h1>
+    <p class="note">Left: 18 px in a 32 px frame (real size). Right: enlarged. The winner gets applied to the app.</p>
+    <div id="rows"></div>
+    <script>
+      const candidates = {
+        "U  Y, round 2 tightened": "M12 4v7M6 20v-2c0-3 3-5 6-5s6 2 6 5v2",
+        "V  Y, gentler shoulders": "M12 3v8M6.5 20v-1.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5V20",
+        "W  Y, narrower feet":    "M12 4v8M8 20v-2c0-3 2-4.5 4-4.5s4 1.5 4 4.5v2",
+        "X  Y, taller shoulders":  "M12 3v9M7 20v-1c0-3.5 2.5-5.5 5-5.5s5 2 5 5.5v1",
+      };
+      const host = document.getElementById("rows");
+      for (const [name, d] of Object.entries(candidates)) {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML = `<span class="name">${name}</span>
+          <span class="frame"><svg viewBox="0 0 24 24"><path d="${d}"/></svg></span>
+          <span class="frame big"><svg viewBox="0 0 24 24"><path d="${d}"/></svg></span>`;
+        host.appendChild(row);
+      }
+    </script>
+  </body>
+</html>
