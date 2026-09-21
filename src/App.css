@@ -8,7 +8,13 @@
   --side: #f5f6f8;
   --surface: #f8f9fb;
   --text: #182329;
-  --muted: #78828a;
+  /*
+   * Was #78828a, which measured 3.62:1 on the sidebar (#f5f6f8) and 3.92:1 on
+   * white — below the 4.5:1 that WCAG AA requires for body text. This darker
+   * value is the smallest change that clears it on both backgrounds: 4.52:1 and
+   * 4.89:1. It still reads as muted against --text (#182329, ~14:1).
+   */
+  --muted: #6a7279;
   --line: #e6e9ed;
   --blue: #0866ff;
   --blue-hover: #0055d9;
