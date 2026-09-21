@@ -86,11 +86,27 @@ async function evaluate(client, expression) {
   return parsed;
 }
 
+/**
+ * "Would paint something."
+ *
+ * NOT offsetParent: it is null for <body> and for every position:fixed element,
+ * so a fixed control silently drops out of every selection below. That blind
+ * spot is how earlier captures ended up unusable.
+ */
+const VIS = `const vis = (n) => {
+  if (!n || !n.isConnected) return false;
+  const c = getComputedStyle(n);
+  if (c.display === "none" || c.visibility === "hidden") return false;
+  if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+  return true;
+};`;
+
 /** Click the first visible control whose text matches, and report whether it did. */
 const clickByText = (patterns) => `(() => {
+  ${VIS}
   const wanted = ${JSON.stringify(patterns)}.map((p) => new RegExp(p, "i"));
   const nodes = [...document.querySelectorAll("button, a, [role='button'], [role='tab']")]
-    .filter((n) => n.offsetParent !== null);
+    .filter(vis);
   const hit = nodes.find((n) => {
     const text = (n.innerText || n.getAttribute("aria-label") || "").trim();
     return wanted.some((re) => re.test(text));
@@ -101,11 +117,12 @@ const clickByText = (patterns) => `(() => {
 })()`;
 
 const DIGEST = `(() => {
+  ${VIS}
   const body = (document.body.innerText || "").replace(/\\s+/g, " ").trim();
-  const buttons = [...document.querySelectorAll("button")].filter((b) => b.offsetParent !== null)
+  const buttons = [...document.querySelectorAll("button")].filter(vis)
     .map((b) => (b.innerText || b.getAttribute("aria-label") || "").trim()).filter(Boolean);
   const panels = [...document.querySelectorAll("[class*=panel],[class*=sidebar],[class*=bar]")]
-    .filter((n) => n.offsetParent !== null).map((n) => n.className).slice(0, 12);
+    .filter(vis).map((n) => n.className).slice(0, 12);
   return { textLength: body.length, head: body.slice(0, 220), buttons: [...new Set(buttons)].slice(0, 24), panels };
 })()`;
 
@@ -153,7 +170,8 @@ async function main() {
 
     // Back to a conversation, then the work-bar panels, which need the side panel open.
     const conversation = await evaluate(client, `(() => {
-      const rows = [...document.querySelectorAll("button[aria-label^='Actions for']")].filter((b) => b.offsetParent !== null);
+      ${VIS}
+      const rows = [...document.querySelectorAll("button[aria-label^='Actions for']")].filter(vis);
       if (!rows.length) return { opened: false };
       rows[0].click();
       return { opened: true, label: rows[0].getAttribute("aria-label") };
@@ -163,7 +181,8 @@ async function main() {
 
     // The work-bar tabs only exist in the DOM once the side panel is expanded.
     const panel = await evaluate(client, `(() => {
-      const b = [...document.querySelectorAll("button")].find((n) => n.offsetParent !== null && (n.getAttribute("aria-label") || "") === "Show work panel");
+      ${VIS}
+      const b = [...document.querySelectorAll("button")].find((n) => vis(n) && (n.getAttribute("aria-label") || "") === "Show work panel");
       if (!b) return { opened: false };
       b.click();
       return { opened: true };
@@ -192,7 +211,8 @@ async function main() {
 
     // Light theme changes the whole palette: worth its own capture.
     const theme = await evaluate(client, `(() => {
-      const b = [...document.querySelectorAll("button")].find((n) => n.offsetParent !== null && /Switch to light theme/.test(n.getAttribute("aria-label") || ""));
+      ${VIS}
+      const b = [...document.querySelectorAll("button")].find((n) => vis(n) && /Switch to light theme/.test(n.getAttribute("aria-label") || ""));
       if (!b) return { switched: false };
       b.click();
       return { switched: true };

@@ -32,6 +32,14 @@ Complète [`constats-passe1.md`](constats-passe1.md). Ce document liste ce qui a
 
 **Correctif retiré** (`git checkout -- src/App.css`). Améliorer trois mesures en en dégradant deux n'est pas une correction, et je ne livre pas un changement dont je ne peux pas démontrer qu'il est meilleur.
 
+> **Mise à jour du 21 septembre (passe 2).** Cette première tentative reste retirée, mais **le défaut a été corrigé depuis, par une autre voie**, et les chiffres de ce document provenaient d'un instrument défectueux. L'état livré est :
+>
+> - `.desktop-control-layout` : `minmax(140px, .8fr) minmax(190px, 1.2fr)`, avec repli à une colonne sous `1400px` (ligne de clic) et `1290px` (grille) ;
+> - `.files-layout` : `minmax(140px, .85fr) minmax(190px, 1.4fr)`, repli sous `1230px`, dans `Desktop.css` **à côté** de la règle de base à cause de l'ordre d'import ;
+> - **0 débordement** sur les 7 onglets et sur 13 largeurs de fenêtre de 720 à 1440 px.
+>
+> Le récit complet et les mesures valides sont dans [`debordement-desktop.md`](debordement-desktop.md). **Ne reprenez aucun chiffre de la section ci-dessous sans le revérifier** : ils venaient d'un détecteur qui comptait la troncature volontaire (`overflow: hidden`, ellipse, `.sr-only`) comme un défaut.
+
 ### Ce que la mesure a écarté
 
 J'ai ensuite cherché la **feuille** la plus large du panneau, en supposant qu'un élément de contenu imposait sa largeur intrinsèque à toute la chaîne :
@@ -47,18 +55,22 @@ C'est le **sixième faux diagnostic** de cette campagne sur le même schéma : u
 
 ## Reste ouvert, mesuré
 
-| # | Défaut | Mesure | Gravité |
+État au **21 septembre, après la passe 2** ([`revue-passe2.md`](revue-passe2.md)). Les lignes 6 à 8 et 11 sont **corrigées**, la 12 était un **faux positif**, et les autres sont requalifiées par la mesure.
+
+| # | Défaut | État | Mesure / preuve |
 |---|---|---|---|
-| 6 | **Panneau Desktop** : six conteneurs débordent en cascade | jusqu'à **+65 px** (`.desktop-control-layout`) | MAJEUR |
-| 7 | **Review** : `.work-panel-body` déborde | **+32 px** | MINEUR |
-| 8 | **Files** : `.files-panel` déborde | **+15 px** | MINEUR |
-| 9 | **Panneau Browser** : l'en-tête promet « Embedded preview » avec champ d'URL et « New tab », mais **aucune surface d'aperçu** n'existe — zone vide sans message | revue visuelle | MAJEUR |
-| 10 | **Message utilisateur dupliqué** : deux bulles identiques, même texte, même horodatage | revue visuelle | MAJEUR |
-| 11 | Le libellé du modèle **se couperait encore panneau déplié** (composeur réduit à 646 px) — **contredit ma vérification** qui disait 1 ligne | revue visuelle | à trancher |
-| 12 | « Run in Muse » quasi blanc sur blanc, à côté d'un « Send » actif | revue visuelle | MINEUR |
-| 13 | Deux encadrés du panneau Desktop avec bordure épaisse ~2 px → effet « focus resté bloqué » | revue visuelle | MINEUR |
-| 14 | Bas du transcript **coupé en plein glyphe** au bord de défilement, sans fondu | revue visuelle | MINEUR |
-| 15 | Hiérarchie d'en-tête incohérente (Review/Desktop en majuscules + grand titre, les autres en titre simple) | revue visuelle | MINEUR |
+| 6 | **Panneau Desktop** : six conteneurs débordaient en cascade | **CORRIGÉ** | 3 causes distinctes (planchers `minmax`, `min-width: auto`, ligne de clic) ; **0 débordement** sur 13 largeurs |
+| 7 | **Review** : `.work-panel-body` débordait | **FAUX POSITIF** | mesuré sur un instrument qui comptait la troncature volontaire ; 0 débordement réel |
+| 8 | **Files** : `.files-panel` débordait | **CORRIGÉ** | planchers 180/250 → 140/190 + `min-width: 0`, repli sous `1230px` |
+| 9 | **Panneau Browser** : « Embedded preview » promis, **aucune surface d'aperçu** ni état vide | **OUVERT** | confirmé par mesure de structure : plus grand blanc vertical ~36 px, aucun viewport |
+| 10 | **Message utilisateur dupliqué** : deux bulles identiques, même horodatage | **OUVERT, cause localisée** | doublon **pixel pour pixel** (diff 0,05/765) ; **absent des données** (`session.jsonl` ne contient qu'un message) → double projection cliente ; `mergeHistoryLog` ne déduplique pas les entrées distantes entre elles |
+| 11 | Le libellé du modèle se couperait panneau déplié | **FAUX POSITIF** | mesuré sous le bon état ; le libellé générique « Model » venait de `model_id` **non transmis par Rust** — corrigé et vérifié sur 11 sessions |
+| 12 | « Run in Muse » quasi blanc sur blanc | **FAUX POSITIF** | bouton **`disabled` + `opacity: .45`**, que WCAG exempte ; « Send » actif mesure **4,82:1** |
+| 13 | Deux encadrés du panneau Desktop avec bordure épaisse ~2 px | **REQUALIFIÉ** | contours natifs non stylés `#545D62`/`#687075`/`#767676` contre `#E6E9ED` ailleurs : **hors charte**, pas « quasi noirs » |
+| 14 | Bas du transcript coupé en plein glyphe | **NON DÉMONTRÉ** | la mesure ne montre pas de glyphe coupé en pleine hauteur, seulement du contenu atteignant le bord |
+| 15 | Hiérarchie d'en-tête incohérente (kicker en majuscules sur Review/Desktop) | **OUVERT** | confirmé : hauteur d'en-tête 100 px (Review) contre 26 px (Memory) |
+| 16 | **« Close panel » à 16 px de large** | **CORRIGÉ** | `padding: 15px 1px` réduisait la cible à la largeur du glyphe ; `min-width: 24px` sur `.icon` — 24×50 px, et les autres boutons (28×30, 32×32) inchangés |
+| 17 | **« Run in Muse » reste désactivé** alors que le host accorde `userShell` | **OUVERT, non tranché** | pont : `["userShell"]` · prop React lue sur la fibre : `false` · infobulle : « did not grant ». Écart prouvé, chaîne non élucidée |
 
 ## Ce qui a été vérifié comme correct
 

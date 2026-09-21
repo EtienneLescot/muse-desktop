@@ -83,25 +83,55 @@ async function evaluate(client, expression) {
   return parsed;
 }
 
-/** Open dialogs, settings panel, theme, and whether a conversation is displayed. */
+/**
+ * "Would paint something."
+ *
+ * NOT offsetParent: null for <body> and for every position:fixed element, so a
+ * fixed control would silently drop out of every check below.
+ */
+const VIS = `const visible = (n) => {
+  if (!n || !n.isConnected) return false;
+  const c = getComputedStyle(n);
+  if (c.display === "none" || c.visibility === "hidden") return false;
+  if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+  return true;
+};`;
+
+/**
+ * Open dialogs, settings panel, theme, and whether a REAL conversation is shown.
+ *
+ * `conversationOpen` used to be "a textarea and an h1 exist", which is also true
+ * of the Library and Settings pages - that is exactly how two unusable captures
+ * were produced earlier. It now requires a transcript with at least one message.
+ */
 const STATE = `(() => {
-  const visible = (n) => Boolean(n) && n.offsetParent !== null;
+  ${VIS}
   const dialogs = [...document.querySelectorAll("dialog")].filter((d) => d.open).length;
   const label = (a) => [...document.querySelectorAll("button")].filter(visible).some((b) => (b.getAttribute("aria-label") || "") === a);
   const tabs = [...document.querySelectorAll("button, [role=tab]")].filter(visible)
     .map((b) => (b.innerText || "").trim())
     .filter((t) => /^(Content|Review|Terminal|Files|Browser|Desktop|Memory)$/.test(t));
+  // A transcript proves a conversation is really displayed; a page title alone
+  // does not, because content pages carry an h1 too.
+  const messages = [...document.querySelectorAll(".message, .log-entry, [data-role], .stream-entry")].filter(visible).length;
+  const composer = [...document.querySelectorAll("textarea")].filter(visible);
   return {
     dialogs,
     settingsOpen: label("Close settings"),
-    conversationOpen: !label("Show work panel") ? null : Boolean(document.querySelector("h1")),
+    conversationOpen: label("Show work panel") === false ? null : (messages > 0 && composer.length > 0),
+    messageCount: messages,
+    composerPresent: composer.length > 0,
     title: document.querySelector("h1") ? document.querySelector("h1").innerText.trim().slice(0, 44) : null,
     panelButton: label("Show work panel"),
     hidePanelButton: label("Hide work panel"),
     tabs,
     theme: document.documentElement.dataset.theme || (document.body.className.match(/light|dark/) || [null])[0],
-    composerPresent: [...document.querySelectorAll("textarea")].some(visible),
     bodyHead: (document.body.innerText || "").replace(/\\s+/g, " ").slice(0, 140),
+    themeOverlay: dialogs > 0,
+    scrim: (() => {
+      const c = getComputedStyle(document.body);
+      return c.backgroundColor;
+    })(),
   };
 })()`;
 
@@ -157,7 +187,13 @@ async function main() {
 
   // 2. Make sure a conversation with messages is displayed.
   const opened = await evaluate(client, `(() => {
-    const visible = (n) => Boolean(n) && n.offsetParent !== null;
+    const visible = (n) => {
+    if (!n || !n.isConnected) return false;
+    const c = getComputedStyle(n);
+    if (c.display === "none" || c.visibility === "hidden") return false;
+    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+    return true;
+  };
     if (visible(document.querySelector("textarea")) && document.querySelector("h1")) return { already: true };
     const rows = [...document.querySelectorAll("button[aria-label^='Actions for']")].filter(visible);
     const target = rows.find((b) => /BETA/.test(b.getAttribute("aria-label") || "")) || rows[0];
@@ -182,7 +218,13 @@ async function main() {
     await shot("barre-travail", `panneau deplie, ${afterPanel.tabs.length} onglets`);
     for (const tab of afterPanel.tabs) {
       const clicked = await evaluate(client, `(() => {
-        const visible = (n) => Boolean(n) && n.offsetParent !== null;
+        const visible = (n) => {
+    if (!n || !n.isConnected) return false;
+    const c = getComputedStyle(n);
+    if (c.display === "none" || c.visibility === "hidden") return false;
+    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+    return true;
+  };
         const b = [...document.querySelectorAll("button, [role=tab]")].filter(visible)
           .find((n) => (n.innerText || "").trim() === ${JSON.stringify(tab)});
         if (!b) return { clicked: false };

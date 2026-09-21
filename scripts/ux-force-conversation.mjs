@@ -47,7 +47,13 @@ const shot = async (name, note) => {
   }
   writeFileSync(join(OUT, file), Buffer.from(base64, "base64"));
   const state = await ev(`(() => {
-    const visible = (x) => Boolean(x) && x.offsetParent !== null;
+    const visible = (n) => {
+    if (!n || !n.isConnected) return false;
+    const c = getComputedStyle(n);
+    if (c.display === "none" || c.visibility === "hidden") return false;
+    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+    return true;
+  };
     const tabs = [...document.querySelectorAll("button, [role=tab]")].filter(visible)
       .map((b) => (b.innerText || "").trim())
       .filter((t) => /^(Content|Review|Terminal|Files|Browser|Desktop|Memory)$/.test(t));
@@ -63,7 +69,13 @@ const shot = async (name, note) => {
 };
 
 const CONTEXT = `(() => {
-  const visible = (x) => Boolean(x) && x.offsetParent !== null;
+  const visible = (n) => {
+    if (!n || !n.isConnected) return false;
+    const c = getComputedStyle(n);
+    if (c.display === "none" || c.visibility === "hidden") return false;
+    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+    return true;
+  };
   return {
     titre: document.querySelector("h1") ? document.querySelector("h1").innerText.trim().slice(0, 40) : null,
     pickers: [...document.querySelectorAll(".session-select")].filter(visible).length,
@@ -84,7 +96,13 @@ for (let attempt = 1; attempt <= 6; attempt += 1) {
   if (before.showPanel) break;
   // Leave any library/search/extensions/automations view first.
   await ev(`(() => {
-    const visible = (x) => Boolean(x) && x.offsetParent !== null;
+    const visible = (n) => {
+    if (!n || !n.isConnected) return false;
+    const c = getComputedStyle(n);
+    if (c.display === "none" || c.visibility === "hidden") return false;
+    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+    return true;
+  };
     const b = [...document.querySelectorAll("button")].filter(visible)
       .find((x) => (x.innerText || "").trim() === "New conversation");
     if (b) b.click();
@@ -93,7 +111,13 @@ for (let attempt = 1; attempt <= 6; attempt += 1) {
   await sleep(2_200);
   // Then open the most recent thread from the sidebar.
   const clicked = await ev(`(() => {
-    const visible = (x) => Boolean(x) && x.offsetParent !== null;
+    const visible = (n) => {
+    if (!n || !n.isConnected) return false;
+    const c = getComputedStyle(n);
+    if (c.display === "none" || c.visibility === "hidden") return false;
+    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+    return true;
+  };
     const picker = [...document.querySelectorAll(".session-select")].filter(visible)[0];
     if (!picker) return { clicked: false, reason: "aucun .session-select visible" };
     picker.click();
@@ -116,7 +140,13 @@ if (afterOpen.showPanel) {
     })()`);
     await sleep(2_500);
     const state = await ev(`(() => {
-      const visible = (x) => Boolean(x) && x.offsetParent !== null;
+      const visible = (n) => {
+    if (!n || !n.isConnected) return false;
+    const c = getComputedStyle(n);
+    if (c.display === "none" || c.visibility === "hidden") return false;
+    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+    return true;
+  };
       return {
         hidePanel: [...document.querySelectorAll("button")].filter(visible).some((b) => (b.getAttribute("aria-label") || "") === "Hide work panel"),
         tabs: [...document.querySelectorAll("button, [role=tab]")].filter(visible).map((b) => (b.innerText || "").trim())
@@ -128,7 +158,13 @@ if (afterOpen.showPanel) {
   }
   await shot("panneau-deplie", "panneau de travail deplie");
   const tabs = (await ev(`(() => {
-    const visible = (x) => Boolean(x) && x.offsetParent !== null;
+    const visible = (n) => {
+    if (!n || !n.isConnected) return false;
+    const c = getComputedStyle(n);
+    if (c.display === "none" || c.visibility === "hidden") return false;
+    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+    return true;
+  };
     return [...document.querySelectorAll("button, [role=tab]")].filter(visible).map((b) => (b.innerText || "").trim())
       .filter((t) => /^(Content|Review|Terminal|Files|Browser|Desktop|Memory)$/.test(t));
   })()`)) ?? [];
@@ -137,7 +173,13 @@ if (afterOpen.showPanel) {
     if (seen.has(tab)) continue;
     seen.add(tab);
     const ok = await ev(`(() => {
-      const visible = (x) => Boolean(x) && x.offsetParent !== null;
+      const visible = (n) => {
+    if (!n || !n.isConnected) return false;
+    const c = getComputedStyle(n);
+    if (c.display === "none" || c.visibility === "hidden") return false;
+    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+    return true;
+  };
       const b = [...document.querySelectorAll("button, [role=tab]")].filter(visible).find((x) => (x.innerText || "").trim() === ${JSON.stringify(tab)});
       if (!b) return { clicked: false };
       b.click();

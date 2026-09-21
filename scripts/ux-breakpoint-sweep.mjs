@@ -126,11 +126,14 @@ for (const w of WIDTHS) {
   const deepAll = [...(f.deep || []), ...(d.deep || [])];
   const deepTotal = deepAll.reduce((s, o) => s + o.plus, 0);
   const bad = (fm && fm.leak > 1) || (dm && dm.leak > 1) || (cm && cm.leak > 1) || deepTotal > 1;
+  // A tab that failed to open yields a null entry; format it as "-" rather than
+  // letting `fm.w` throw and abort the whole sweep at one bad width.
+  const cell = (row, key, width) => String(row == null ? "-" : row[key]).padEnd(width);
   console.log(
-    `${String(w).padEnd(8)} ${String(f.panelWidth).padEnd(8)} ` +
-    `${String(fm.w).padEnd(5)} ${String(fm.tracks).padEnd(5)} ${String(fm.leak).padEnd(7)}   ` +
-    `${String(dm.w).padEnd(6)} ${String(dm.tracks).padEnd(5)} ${String(dm.leak).padEnd(7)}   ` +
-    `${String(cm.leak).padEnd(5)}   ${String(deepTotal).padEnd(4)}` +
+    `${String(w).padEnd(8)} ${String(f.panelWidth ?? "-").padEnd(8)} ` +
+    `${cell(fm, "w", 5)} ${cell(fm, "tracks", 5)} ${cell(fm, "leak", 7)}   ` +
+    `${cell(dm, "w", 6)} ${cell(dm, "tracks", 5)} ${cell(dm, "leak", 7)}   ` +
+    `${cell(cm, "leak", 5)}   ${String(deepTotal).padEnd(4)}` +
     `${deepAll.length ? "  " + deepAll.map((o) => `.${o.cls} +${o.plus}`).join(" | ") : ""}` +
     `${bad ? "   <-- DEBORDEMENT" : ""}`
   );

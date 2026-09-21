@@ -31,13 +31,29 @@ ws.addEventListener("message", (e) => {
 const cmd = (m, p) => new Promise((res) => { const i = id++; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
 async function ev(expression) {
   const r = await cmd("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+  // Surface page-side exceptions instead of collapsing them into "undefined":
+  // an expression that throws is a bug in the probe, not an empty result.
+  if (r.result?.exceptionDetails) {
+    throw new Error(`exception dans la page : ${r.result.exceptionDetails.exception?.description || JSON.stringify(r.result.exceptionDetails)}`);
+  }
   const v = r.result?.result?.value;
   if (v === undefined) throw new Error(`undefined (${expression.slice(0, 40)})`);
   return v;
 }
 
 const report = await ev(`(() => {
-  const vis = (n) => Boolean(n) && n.offsetParent !== null && !n.closest("details:not([open])");
+  // NOT offsetParent: it is null for <body> and for every position:fixed
+  // element, so a fixed control would silently drop out of the audit. The app
+  // has none today, but an audit that cannot see a whole positioning mode is a
+  // coverage gap waiting to hide a defect.
+  const vis = (n) => {
+    if (!n || !n.isConnected) return false;
+    if (n.closest("details:not([open])")) return false;
+    const c = getComputedStyle(n);
+    if (c.display === "none" || c.visibility === "hidden") return false;
+    if (c.display !== "contents" && n.getClientRects().length === 0) return false;
+    return true;
+  };
   const controls = [...document.querySelectorAll("button, a[href], [role=button], [role=tab], input, select, textarea")].filter(vis);
   const small = [];
   for (const c of controls) {
@@ -55,15 +71,44 @@ const report = await ev(`(() => {
   }
   const docWidth = document.documentElement.scrollWidth;
   const viewWidth = window.innerWidth;
+  /**
+   * An element past the viewport edge only matters when nothing clips it: an
+   * ancestor with overflow hidden means the overflow is contained and creates
+   * no scrollbar. Reporting those as "offscreen" is noise - the earlier
+   * predicate could not see them at all, this one saw them and mislabelled them.
+   */
+  const clippedByAncestor = (n) => {
+    for (let p = n.parentElement; p; p = p.parentElement) {
+      if (getComputedStyle(p).overflowX !== "visible") return true;
+    }
+    return false;
+  };
   const overflow = [...document.querySelectorAll("*")]
     .filter(vis)
     .map((n) => ({ n, r: n.getBoundingClientRect() }))
     .filter(({ r }) => r.right > viewWidth + 1 || r.left < -1)
+    .map(({ n, r }) => ({
+      n, r,
+      tag: n.tagName,
+      cls: typeof n.className === "string" ? n.className.slice(0, 30) : "",
+      left: Math.round(r.left),
+      right: Math.round(r.right),
+      clipped: clippedByAncestor(n),
+    }))
+    // Only unclipped overflow can extend the document; clipped ones are states
+    // of the design, reported separately below.
+    .filter((row) => !row.clipped)
+    .slice(0, 8)
+    .map(({ tag, cls, left, right }) => ({ tag, cls, left, right }));
+  const clippedPast = [...document.querySelectorAll("*")]
+    .filter(vis)
+    .map((n) => ({ n, r: n.getBoundingClientRect(), clipped: clippedByAncestor(n) }))
+    .filter(({ r, clipped }) => clipped && r.right > viewWidth + 1)
     .slice(0, 8)
     .map(({ n, r }) => ({
       tag: n.tagName,
       cls: typeof n.className === "string" ? n.className.slice(0, 30) : "",
-      left: Math.round(r.left),
+      label: (n.getAttribute("aria-label") || n.textContent || "").trim().slice(0, 30),
       right: Math.round(r.right),
     }));
   return {
@@ -73,6 +118,7 @@ const report = await ev(`(() => {
     controlsChecked: controls.length,
     belowMinimum: small,
     overflowing: overflow,
+    clippedPast,
   };
 })()`);
 
@@ -86,5 +132,12 @@ for (const s of report.belowMinimum) {
 console.log(`\n${report.overflowing.length} element(s) hors viewport :`);
 for (const o of report.overflowing) {
   console.log(`  ${o.tag}.${o.cls}  left=${o.left} right=${o.right}`);
+}
+if (report.clippedPast.length) {
+  console.log(`\n${report.clippedPast.length} element(s) depassant le bord mais ROGNES par un ancetre`);
+  console.log("  (aucun defilement cree ; a verifier visuellement, pas comptes comme debordement)");
+  for (const o of report.clippedPast) {
+    console.log(`  ${o.tag}.${o.cls} right=${o.right}  "${o.label}"`);
+  }
 }
 ws.close();

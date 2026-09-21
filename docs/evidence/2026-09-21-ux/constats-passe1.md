@@ -67,7 +67,7 @@ Ces points viennent de l'examen des captures. Je ne les ai **pas** instrumentés
 | 3 | **Le composeur est très haut** : le placeholder « Ask Muse to continue… » occupe une large zone vide et la ligne de contrôles est centrée verticalement, pour ~160 px au total | `08-panneau-deplie` | MAJEUR |
 | 4 | **« Local » apparaît trois fois** : pastille d'en-tête (`App.tsx:851`), pastille du composeur (`:1430`), « Local execution » en barre de statut (`:1802`). Les deux pastilles nues sont redondantes entre elles | `07`, `08` | MAJEUR |
 | 5 | **Le modèle s'affiche « Model »** quand `model_id` est absent de la session, au lieu du nom réel | mesuré au DOM | MAJEUR |
-| 6 | **Ligne d'événement sous-agent tassée** : `▸ Agent b44a4ae3-6c20-… Reminder child se… | Completed | 09:21:48` — identifiant tronqué et texte se disputent la même ligne | `08` | MINEUR |
+| 6 | **Ligne d'événement sous-agent tassée** : `▸ Agent b44a4ae3-6c20-… Reminder child se… \| Completed \| 09:21:48` — identifiant tronqué et texte se disputent la même ligne | `08` | MINEUR |
 | 7 | **Bandeau « Find in conversation » monté en permanence** au-dessus des messages, alors qu'un raccourci `Ctrl/Cmd F` existe | `08` | MINEUR |
 | 8 | **Titre tronqué deux fois** : `Reply with exactly the word: BETA-17899752…` dans le fil d'Ariane **et** dans le `h1` | `08` | MINEUR |
 

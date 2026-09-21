@@ -188,6 +188,13 @@ small {
 
 .icon {
   padding: 7px;
+  /* Some icon buttons render to their glyph width only: the work-panel close
+     button has `padding: 15px 1px` because its rule shares the tab strip, which
+     left a 16px-wide click target - under the 24px minimum. Every other icon
+     button already measures 28x30 or 32x32, so this floor raises none of them
+     and only widens the one that was too small. */
+  min-width: 24px;
+  min-height: 24px;
 }
 
 /* Logo asset carries padding: crop it like the prototype does. */
