@@ -45,6 +45,7 @@ import {
   parseWorkspaceRootObservation,
   projectWorkspaceOptions,
 } from "./lib/projects";
+import { parseHarnessRules } from "./lib/harnessRules";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -993,7 +994,8 @@ export default function App() {
             <p className="page-description">
               {
                 {
-                  projects: "Organize your projects and instructions.",
+                  projects:
+                    "Group conversations, give them a folder and preferences.",
                   automations:
                     "Schedule requests to review before they run.",
                   extensions: "Your tools and skills, all in one place.",
@@ -1013,8 +1015,8 @@ export default function App() {
                   projectError={projectError}
                   activeSessionId={activeId}
                   globalSettings={globalSettings}
-                  onCreate={(name, instructions, projectWorkspaces) =>
-                    createProject(name, instructions, projectWorkspaces)
+                  onCreate={(projectName, projectWorkspaces) =>
+                    createProject(projectName, projectWorkspaces)
                   }
                   onDelete={deleteProject}
                   onUpdate={updateProject}
@@ -1036,6 +1038,15 @@ export default function App() {
                     try {
                       const raw = await invoke<unknown>("inspect_workspace_root", { path });
                       return parseWorkspaceRootObservation(raw);
+                    } catch {
+                      return null;
+                    }
+                  }}
+                  onReadRules={async (path) => {
+                    if (!isTauriRuntime()) return null;
+                    try {
+                      const raw = await invoke<unknown>("rules_scan", { workspace: path });
+                      return parseHarnessRules(raw);
                     } catch {
                       return null;
                     }

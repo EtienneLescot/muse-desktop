@@ -3227,6 +3227,158 @@ body.dark .composer textarea::placeholder {
   font-size: 0.75rem;
 }
 
+/* Rules the CLI loads for the folder. Read-only by design, so nothing here
+   looks like the editable fields beside it. */
+.project-rules-setting {
+  align-items: flex-start;
+}
+
+.project-rules-setting > span {
+  padding-top: 2px;
+}
+
+.project-rules-body {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-rules-summary {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.project-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 0.78rem;
+}
+
+/* Fixed minima instead of a grid: each row is its own box, so the columns only
+   line up if their widths do not depend on the row's content. */
+.project-rule-name {
+  min-width: 78px;
+  font-weight: 600;
+}
+
+.project-rule-scope,
+.project-rule-status {
+  color: var(--muted);
+}
+
+.project-rule-scope {
+  min-width: 62px;
+}
+
+.project-rule-status {
+  min-width: 58px;
+}
+
+.project-rule-detail {
+  flex: 1 1 100%;
+  color: var(--muted);
+}
+
+.project-rule-path {
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.project-rule-governs {
+  border-color: color-mix(in srgb, var(--success, #2aa876) 45%, var(--line));
+}
+
+.project-rule-governs .project-rule-status {
+  color: var(--success, #2a8f65);
+}
+
+.project-rule-superseded .project-rule-status {
+  color: var(--warning, #c48721);
+}
+
+.project-rule-preview summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.project-rule-preview pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 4px 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.project-rule-preview small {
+  color: var(--muted);
+  word-break: break-all;
+}
+
+/* Retired client-side instructions, shown once so nothing typed is lost. */
+.project-legacy-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--warning, #d89024) 45%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 92%, var(--warning, #d89024) 8%);
+  font-size: 0.8rem;
+}
+
+.project-legacy-instructions p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.project-legacy-instructions pre {
+  max-height: 140px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.project-legacy-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.project-legacy-actions button {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 5px 9px;
+}
+
 .project-global {
   border-top: 1px solid var(--line);
   padding-top: 6px;

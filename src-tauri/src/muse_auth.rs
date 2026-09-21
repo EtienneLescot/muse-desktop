@@ -112,13 +112,22 @@ pub fn decide(observation: &AuthObservation) -> AuthStatus {
     }
 }
 
+/// The user's home directory, as the CLI sees it.
+///
+/// `USERPROFILE` first (Windows), then `HOME`, matching what the CLI does on
+/// each platform; an empty value counts as unset so a broken environment does
+/// not resolve to the current directory.
+pub fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("USERPROFILE")
+        .filter(|value| !value.is_empty())
+        .or_else(|| std::env::var_os("HOME").filter(|value| !value.is_empty()))
+        .map(PathBuf::from)
+}
+
 /// The CLI's credential file: `~/.config/muse/auth.json` on every platform the
 /// CLI supports, including Windows (it does not use `%APPDATA%`).
 pub fn credentials_path() -> Option<PathBuf> {
-    let home = std::env::var_os("USERPROFILE")
-        .filter(|value| !value.is_empty())
-        .or_else(|| std::env::var_os("HOME").filter(|value| !value.is_empty()))?;
-    Some(PathBuf::from(home).join(".config").join("muse").join("auth.json"))
+    Some(home_dir()?.join(".config").join("muse").join("auth.json"))
 }
 
 /// Whether the credential file holds a provider key.

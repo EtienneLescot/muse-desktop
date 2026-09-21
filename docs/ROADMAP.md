@@ -293,8 +293,8 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
   - macOS ☐ / Linux ☐ — non commencé.
 
 - ◐ **M1-11 — Choisir un modèle disponible et suivre le contexte** *(Global : —)*
-  - Windows ◐ — `model/list` comme source de vérité, `session/setModel`, compaction en geste séparé avec cycle `pending → accepted/noop/error`, `session/contextUsage` et `session/tokenUsage` affichés tels que fournis, effort de raisonnement `none`→`ultra` persisté global/projet et appliqué via `session/setReasoningEffort`, dernier modèle conservé dans `StoredSession.model_id`.
-  - **Preuves natives partielles :** `--exercise-reasoning` accepte `none`/`high`/`ultra` mais le sidecar renvoie `projection: not-reported` ; `--exercise-model` accepte l'accusé mais relit `isActive: false` ; `--exercise-compaction` sur session vierge renvoie `missing-run`. **Donc : l'effectif n'est pas prouvé.**
+  - Windows ◐ — `model/list` comme source de vérité, `session/setModel`, compaction en geste séparé avec cycle `pending → accepted/noop/error`, `session/contextUsage` et `session/tokenUsage` affichés tels que fournis, effort de raisonnement **les huit valeurs du contrat** (`none`→`ultra`, `max` compris) persisté global/projet et appliqué via `session/setReasoningEffort`, dernier modèle conservé dans `StoredSession.model_id`.
+  - **Preuves natives :** les **huit** niveaux sont acceptés par un host 1.3.0 vivant et chacun émet `session/reasoningEffortChanged` avec la valeur envoyée (`node scripts/msp-reasoning-tiers.mjs`) — le « sept sur huit » venait de notre liste, pas du moteur, et `session/read` ne projette pas le champ, ce qui avait produit un faux « non conservé ». `--exercise-model` accepte l'accusé mais relit `isActive: false` ; `--exercise-compaction` sur session vierge renvoie `missing-run`. **Donc : la profondeur est prouvée, l'effectif du modèle non.**
   - macOS ☐ / Linux ☐ — non commencé.
 
 - ☑ **M1-12 — Retrouver et organiser les conversations** *(sans dimension OS — seul ticket clos)*
@@ -327,6 +327,8 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 
 - ◐ **M2-01 — Un projet représente des dossiers persistants** *(Global : —)*
   - Windows ◐ — racines multiples persistantes avec `workspace` conservé comme racine primaire, migration guidée **N projects need a folder**, sonde native `inspect_workspace_root` (`Available`/`Not a folder`/`Missing`), sélecteur d'environnement `projectId:rootIndex` à la création de conversation.
+  - Windows ◐ — **règles du dossier** : sonde native `rules_scan` en lecture seule (`AGENTS.md` prioritaire, `CLAUDE.md` seulement en repli, règles personnelles en repli conditionnel), affichées dans le projet avec leur statut. Le champ d'instructions client a été **retiré** — un projet ne possède pas d'instructions, le CLI lit celles du dossier. Détails et limites : [regles-du-dossier](evidence/2026-09-21-ux/regles-du-dossier.md).
+  - **Reste :** `workspaces[]` n'a aucun équivalent backend (un projet = un dossier côté CLI) ; « Start in » reste ambigu face au sélecteur de dossier.
   - Linux ◐ — le chemin pur (modèle, migration, projection) est couvert par les tests Node et la CI tourne sur Linux ; la sonde native n'y est pas exercée.
   - macOS ☐ — non commencé.
 

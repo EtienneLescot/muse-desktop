@@ -99,6 +99,8 @@ Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `
 | `ux-run-in-muse.mjs` | exerce `Run in Muse` : saisie, activation, clic, attente de l'item | un appel shell |
 | `msp-user-shell-items.mjs` | le host publie-t-il les items `userShell` ? (**forme de capacité corrigée**) | un appel shell |
 | `msp-user-shell-after-resume.mjs` | `userShell` avant/après `session/resume`, sur une session neuve | un appel shell |
+| `ux-rules-scan.mjs` | `rules_scan` sur le pont vivant : chaque ligne confrontée au disque, fichiers **inchangés** après lecture | aucun |
+| `ux-project-rules.mjs` | le panneau Projets : champ `Instructions` disparu, 4 rôles listés, débordement de 1440 à 760 px | aucun |
 | `check-scripts-parse.mjs` | garde-fou : tout script de `scripts/` doit compiler | aucun |
 
 **`ux-panel-overflow.mjs` refuse d'imprimer le moindre chiffre si son auto-test échoue** : une sonde de 300 px dans une boîte de 100 px doit être signalée à +200 px, et la même sonde avec `overflow-x: hidden` doit être ignorée. Ce garde-fou existe parce que trois versions successives de ce détecteur ont produit des rapports plausibles et faux — détails dans [`2026-09-21-ux/debordement-desktop.md`](2026-09-21-ux/debordement-desktop.md).
@@ -123,6 +125,8 @@ Six documents conservent un résultat négatif ou une erreur de méthode. Ils so
 | [m1-06-capacites-au-montage](2026-09-21-ux/m1-06-capacites-au-montage.md) | trois sources qui se contredisent sur la même capacité, et le défaut de synchronisation qui les explique |
 | [authentification-muse](2026-09-21-ux/authentification-muse.md) | pourquoi l'éditeur ne peut pas faire d'OAuth seul, et comment piloter le CLI à la place — avec le piège de priorité `META_API_KEY` |
 | [find-bar-flottante](2026-09-21-ux/find-bar-flottante.md) | **deux hypothèses fausses** (transparence, z-index) écartées par la mesure avant de trouver la cause réelle : une carte de 760 px dans un flux de 1034 px |
+| [regles-du-dossier](2026-09-21-ux/regles-du-dossier.md) | le client gardait ses propres instructions alors que le CLI lit des règles dans le dossier ; `max` manquait sur huit niveaux de réflexion, et `ultra` était décrit comme plus profond que `max` |
+| [alignement-cli-projet-dossier](2026-09-21-ux/alignement-cli-projet-dossier.md) | un `--trust-workspace` manquant rendait les règles du dossier muettes **sans erreur** ; la décision d'écrire nos instructions dans `AGENTS.md` a été prise puis **retirée** (le fichier appartient à l'utilisateur) |
 
 ## Erreurs de méthode de la campagne, documentées plutôt que corrigées en silence
 

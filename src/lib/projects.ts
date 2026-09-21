@@ -1,11 +1,16 @@
 /**
  * US-3 + US-30 Projects: pure project logic (create, thread attach/detach,
- * instruction prepending, per-project settings override with global diff).
+ * per-project settings override with global diff).
  *
- * Zero imports (no React, no Tauri, no sibling modules) so it stays
- * runnable under the built-in `node:test` runner. Persistence helpers
- * (localStorage keys) live additively in ./persist; the hook keeps the
- * live state in ../hooks/useMuseSessions.
+ * A project groups conversations. It does *not* own instructions: the Muse CLI
+ * has no such store, its rules live in the folder (`AGENTS.md`), and the host
+ * injects them itself. See `harnessRules.ts` for what replaced the old
+ * client-side text.
+ *
+ * Zero imports beyond the reasoning vocabulary (no React, no Tauri, no sibling
+ * modules) so it stays runnable under the built-in `node:test` runner.
+ * Persistence helpers (localStorage keys) live additively in ./persist; the
+ * hook keeps the live state in ../hooks/useMuseSessions.
  */
 
 import {
@@ -14,12 +19,27 @@ import {
   type ReasoningEffort,
 } from "./reasoning.ts";
 
-/** One project: a named thread group with shared instructions. */
+/** One project: a named thread group with a shared folder and settings. */
 export interface Project {
   id: string;
   name: string;
-  instructions: string;
   createdAt: number;
+  /**
+   * @deprecated Client-side project instructions, retired.
+   *
+   * They were prepended to every outgoing turn as a `[Project "X"
+   * instructions]` block. The backend has no equivalent: the Muse CLI keeps a
+   * folder's rules in the folder (`muse init` writes `AGENTS.md`, read as
+   * "project rules when it runs in this directory"), versioned with the code,
+   * and the host injects them itself with its own precedence rule. Two
+   * instruction stores that ignore each other are worse than one that is
+   * visible, so nothing sends this any more.
+   *
+   * The field survives only so existing rows can be shown once and dismissed
+   * instead of being silently dropped. `rules_scan` reports what really
+   * governs a folder.
+   */
+  instructions?: string;
   /** Optional canonical folder used when starting conversations in a project. */
   workspace?: string;
   /** Additional project roots. `workspace` remains the legacy primary root. */
@@ -110,9 +130,11 @@ function isValidProject(p: unknown): p is Project {
     typeof r.id === "string" &&
     r.id.length > 0 &&
     typeof r.name === "string" &&
-    typeof r.instructions === "string" &&
     typeof r.createdAt === "number" &&
-    (r.workspace === undefined || typeof r.workspace === "string")
+    // Legacy rows still carry `instructions`; a row is valid without it, and a
+    // non-string value is dropped rather than repaired into a sent string.
+    (r.instructions === undefined || typeof r.instructions === "string")
+    && (r.workspace === undefined || typeof r.workspace === "string")
     && (r.workspaces === undefined || (
       Array.isArray(r.workspaces) &&
       r.workspaces.every((root) => typeof root === "string")
@@ -192,10 +214,13 @@ export function projectWorkspaceOptions(
 /**
  * Create a project. Refuses with PROJECT_LIMIT_MESSAGE at MAX_PROJECTS,
  * and with a blank-name message when the trimmed name is empty.
+ *
+ * A project no longer carries instructions: the folder's rules are the
+ * harness's, and `rules_scan` reports them.
  */
 export function createProject(
   projects: Project[],
-  draft: { name: string; instructions?: string; workspace?: string; workspaces?: string[]; id?: string },
+  draft: { name: string; workspace?: string; workspaces?: string[]; id?: string },
 ): CreateResult {
   const name = draft.name.trim();
   if (name.length === 0) {
@@ -208,7 +233,6 @@ export function createProject(
   const project: Project = {
     id: draft.id ?? makeId(),
     name,
-    instructions: (draft.instructions ?? "").trim(),
     createdAt: Date.now(),
     workspaceReviewed: true,
     ...(roots[0] ? { workspace: roots[0] } : {}),
@@ -231,11 +255,21 @@ export function deleteProject(
   };
 }
 
-/** Rename / re-instruct a project (blank rename is ignored). */
+/**
+ * Rename / re-root a project (blank rename is ignored).
+ *
+ * `instructions` is accepted only so the legacy value can be cleared once the
+ * user has dismissed it; nothing sends it.
+ */
 export function updateProject(
   projects: Project[],
   id: string,
-  patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] },
+  patch: {
+    name?: string;
+    instructions?: string;
+    workspace?: string;
+    workspaces?: string[];
+  },
 ): Project[] {
   return projects.map((p) => {
     if (p.id !== id) return p;
@@ -248,11 +282,13 @@ export function updateProject(
       : patch.workspace !== undefined
         ? normalizeProjectWorkspaces(undefined, patch.workspace)
         : projectWorkspaces(p);
+    const legacy = patch.instructions !== undefined
+      ? patch.instructions.trim()
+      : (p.instructions ?? "").trim();
     return {
       ...p,
       name,
-      instructions:
-        patch.instructions !== undefined ? patch.instructions.trim() : p.instructions,
+      ...(legacy.length > 0 ? { instructions: legacy } : { instructions: undefined }),
       ...(patch.workspace !== undefined || patch.workspaces !== undefined
         ? {
             workspaceReviewed: true,
@@ -298,24 +334,6 @@ export function threadsInProject(
   return Object.entries(attached)
     .filter(([, pid]) => pid === projectId)
     .map(([sid]) => sid);
-}
-
-/**
- * Prepend project instructions to the outgoing input (US-3 AC): the model
- * receives the project context first, then the user's raw text verbatim.
- * Threads without a project (or with blank instructions) send input
- * untouched.
- */
-export function buildProjectInput(
-  text: string,
-  project: Project | null | undefined,
-): string {
-  const trimmed = text.trim();
-  if (!project || project.instructions.trim().length === 0) return trimmed;
-  return (
-    `[Project "${project.name}" instructions]\n` +
-    `${project.instructions.trim()}\n\n${trimmed}`
-  );
 }
 
 /** Effective settings for a project: global defaults + set override keys. */

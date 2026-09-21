@@ -202,11 +202,10 @@ import {
   withPinnedFlag,
   withUnreadFlag,
 } from "../lib/threads";
-// US-3 + US-30 Projects: create/attach/instruction-prepend/settings
-// override live in ../lib/projects (dependency-free, unit-tested).
+// US-3 + US-30 Projects: create/attach/settings-override live in
+// ../lib/projects (dependency-free, unit-tested).
 import {
   attachThread as attachThreadRow,
-  buildProjectInput,
   createProject as createProjectRow,
   DEFAULT_PROJECT_SETTINGS,
   deleteProject as deleteProjectRow,
@@ -1102,7 +1101,7 @@ interface UseMuseSessions {
   threadProjects: ThreadProjectMap;
   /** Last project refusal (quota / blank name); null when clean. */
   projectError: string | null;
-  createProject: (name: string, instructions?: string, workspaces?: string[]) => void;
+  createProject: (name: string, workspaces?: string[]) => void;
   /** Delete a project; its threads become ungrouped (no orphans). */
   deleteProject: (id: string) => void;
   updateProject: (id: string, patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] }) => void;
@@ -1867,7 +1866,7 @@ export function useMuseSessions(): UseMuseSessions {
   );
   const [projectError, setProjectError] = useState<string | null>(null);
   // Fresh copies for the render-detached send path (same pattern as
-  // logsRef): sendInput reads these so instructions never go stale.
+  // logsRef): sendInput reads these so project settings never go stale.
   const projectsRef = useRef<Project[]>([]);
   projectsRef.current = projects;
   const threadProjectsRef = useRef<ThreadProjectMap>({});
@@ -4631,8 +4630,8 @@ export function useMuseSessions(): UseMuseSessions {
       );
       if (sessionId === null || projectId === undefined) return sessionId;
       // Attach before the caller can send the first turn. The ref is updated
-      // synchronously so the send path uses the same project instructions and
-      // settings that admitted this session, even before React re-renders.
+      // synchronously so the send path uses the same project settings that
+      // admitted this session, even before React re-renders.
       const next = attachThreadRow(
         threadProjectsRef.current,
         projectsRef.current,
@@ -5172,7 +5171,6 @@ export function useMuseSessions(): UseMuseSessions {
       let outgoing = prior !== null ? prior.outgoingText : trimmed;
       let fanout: ReturnType<typeof parseFanoutCommand> = null;
       let nativeSkill: { selector: string; arguments?: string } | null = null;
-      let nativeProjectContext = "";
       let skillInvocation: { name: string; source: "host" | "local" } | null = null;
       if (prior === null) {
         // w-integrations US-25: `/skill-name args` expands to the skill
@@ -5284,22 +5282,14 @@ export function useMuseSessions(): UseMuseSessions {
             pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: note }]);
           }
         }
-        // US-3: the thread's project instructions ride along with the sent
-        // input (the stored log keeps the expanded turn text).
-        const attachedId = threadProjectsRef.current[sessionId] ?? null;
-        const project =
-          attachedId !== null
-            ? (projectsRef.current.find((p) => p.id === attachedId) ?? null)
-            : null;
-        if (nativeSkill !== null && project?.instructions.trim()) {
-          nativeProjectContext = buildProjectInput("", project);
-        }
-        outgoing = buildProjectInput(outgoing, project);
+        // A project contributes its settings and its folder, never text: the
+        // rules that govern a session are the folder's, and the host injects
+        // them itself (see src/lib/harnessRules.ts).
       }
       const originalText = prior !== null ? prior.text : trimmed;
       // Attachments are part of the durable send payload. On a retry, always
       // reuse the exact serialized parts from the outbox; on a first send,
-      // replace the leading text part after skill/project expansion.
+      // replace the leading text part after skill expansion.
       const outgoingParts = prior?.inputParts ?? (
         nativeSkill === null
           ? inputPartsWithText(outgoing, inputParts)
@@ -5309,7 +5299,6 @@ export function useMuseSessions(): UseMuseSessions {
                 selector: nativeSkill.selector,
                 ...(nativeSkill.arguments ? { arguments: nativeSkill.arguments } : {}),
               },
-              ...(nativeProjectContext ? [{ type: "text" as const, text: nativeProjectContext }] : []),
               ...(inputParts ?? []).filter((part, index) =>
                 part.type === "image" || (part.type === "text" && index > 0),
               ),
@@ -6349,8 +6338,8 @@ export function useMuseSessions(): UseMuseSessions {
   // US-3 + US-30 project actions. Creation past MAX_PROJECTS is refused
   // client-side with the explicit quota message in projectError.
   const createProject = useCallback(
-    (name: string, instructions?: string, workspacePaths?: string[]) => {
-      const res = createProjectRow(projects, { name, instructions, workspaces: workspacePaths });
+    (name: string, workspacePaths?: string[]) => {
+      const res = createProjectRow(projects, { name, workspaces: workspacePaths });
       setProjectError(res.error);
       if (res.project !== null) setProjects(res.projects);
     },

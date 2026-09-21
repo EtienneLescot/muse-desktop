@@ -32,6 +32,7 @@ mod mcp;
 mod mcp_package;
 mod secret_store;
 mod muse_auth;
+mod rules;
 mod skills;
 mod startup;
 mod scheduler;
@@ -3235,6 +3236,24 @@ async fn skills_scan(
         .map_err(|e| format!("skills scan task failed: {e}"))?
 }
 
+/// Report the rule files the Muse host loads for a folder.
+///
+/// Read-only by construction: the renderer needs to *show* the rules that
+/// really govern a session, and the user's `AGENTS.md` belongs to the user and
+/// to the CLI. Nothing in this path creates, edits or deletes a file, so there
+/// is no command id, no confirmation and no undo to design — there is simply no
+/// write.
+#[tauri::command]
+async fn rules_scan(workspace: String) -> Result<rules::RulesScan, String> {
+    let trimmed = workspace.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("select a folder before reading its rules".to_string());
+    }
+    tokio::task::spawn_blocking(move || rules::scan(Path::new(&trimmed)))
+        .await
+        .map_err(|e| format!("rules scan task failed: {e}"))?
+}
+
 /// Start (or replace) a persistent MCP stdio server for one configured
 /// connector. The command is still supplied by the persisted local registry;
 /// no server is started during app boot.
@@ -4803,10 +4822,20 @@ async fn set_model(
 /// US-31: apply the host-backed reasoning depth to a conversation. Keeping
 /// validation here makes the renderer preference fail closed and keeps the
 /// wire value aligned with the Muse Code schema.
+///
+/// The list is `$defs.ReasoningEffort` of the exported MSP schema, in contract
+/// order, and it is the same eight values `muse --help` documents for
+/// `--reasoning-effort`. `max` was missing here, which made the renderer's
+/// rejection the only visible symptom of a value the engine accepts.
+const REASONING_EFFORTS: [&str; 8] = [
+    "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
+];
+
 fn validate_reasoning_effort(value: String) -> Result<String, String> {
-    match value.as_str() {
-        "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "ultra" => Ok(value),
-        _ => Err(format!("unknown reasoning effort: {value}")),
+    if REASONING_EFFORTS.contains(&value.as_str()) {
+        Ok(value)
+    } else {
+        Err(format!("unknown reasoning effort: {value}"))
     }
 }
 
@@ -8413,7 +8442,11 @@ mod tests {
 
     #[test]
     fn reasoning_effort_validation_matches_the_host_enum() {
-        for value in ["none", "minimal", "low", "medium", "high", "xhigh", "ultra"] {
+        // Spelled out again on purpose: iterating over the production constant
+        // would pass no matter what that constant says.
+        let contract = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+        assert_eq!(REASONING_EFFORTS, contract, "the wire vocabulary changed");
+        for value in contract {
             assert_eq!(validate_reasoning_effort(value.to_string()).unwrap(), value);
         }
         let error = validate_reasoning_effort("maximum".to_string()).unwrap_err();
@@ -8589,6 +8622,7 @@ fn main() {
             mcp_local_stop,
             mcp_local_running,
             skills_scan,
+            rules_scan,
             skills_read_resources,
             terminal_open,
             terminal_write,

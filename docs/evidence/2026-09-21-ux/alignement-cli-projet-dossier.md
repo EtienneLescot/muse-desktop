@@ -29,9 +29,9 @@ Le nom du projet est **dérivé du nom du dossier**. Les règles vivent donc ave
 | | CLI | Notre client |
 |---|---|---|
 | Nature du projet | **le dossier lui-même** | entité `Project` avec un `id` |
-| Instructions | **`AGENTS.md` dans le dossier** | champ `instructions` en `localStorage` |
+| Instructions | **`AGENTS.md` dans le dossier** | champ `instructions` en `localStorage` → **retiré** |
 | Dossiers par projet | **un** | `workspace` **+** `workspaces[]` |
-| Visibilité | lue par le host | **invisible au client** |
+| Visibilité | lue par le host | **sonde en lecture seule** (`rules_scan`) |
 
 D'où la confusion signalée sur l'écran de démarrage : « Change folder · openscreen » et « Start in — Default workspace · openscreen » affichent **le même texte** alors que le premier choisit un dossier et le second un jeu de réglages. Le couplage est de surcroît bidirectionnel : choisir un projet écrase le dossier, changer de dossier remet le projet à `default`.
 
@@ -64,8 +64,8 @@ Tests : **209 Rust, 1091 Node, 0 échec**. Build vert.
 
 ## Reste à faire, dans l'ordre de valeur
 
-1. **Lire et afficher le `AGENTS.md` du dossier** à la sélection — en lecture seule, pour montrer les règles qui existent réellement. Le client ne les voit pas aujourd'hui.
-2. **Écrire nos instructions de projet dans `AGENTS.md`** au lieu de `localStorage` (décidé, pas encore fait). Supprime le doublon de deux jeux d'instructions qui s'ignorent.
+1. **Lire et afficher le `AGENTS.md` du dossier** à la sélection — en lecture seule, pour montrer les règles qui existent réellement. **Fait** (`rules_scan`, `src/lib/harnessRules.ts`), voir `regles-du-dossier.md`.
+2. ~~**Écrire nos instructions de projet dans `AGENTS.md`** au lieu de `localStorage`.~~ **Abandonné, et c'était la bonne décision** : le `AGENTS.md` de l'utilisateur lui appartient, et c'est au CLI de l'écrire (`muse init`, `/rules import`). Le doublon, lui, a bien été supprimé — mais dans l'autre sens : c'est notre champ client qui disparaît, pas le fichier qui devient notre stockage.
 3. **Supprimer `workspaces[]`** : un projet = un dossier, comme le CLI. Le multi-dossier n'a aucun équivalent backend.
 4. **Renommer « Start in »** en « Project settings », et n'afficher que ce qui distingue.
 5. **Une case worktree au démarrage** — la plomberie existe (`git_worktree_create_session` crée le worktree, démarre la session dedans et le nettoie en cas d'échec), mais elle exige une session parente. Il faut une variante sans session, puis la case dans l'interface.

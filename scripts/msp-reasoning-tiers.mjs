@@ -2,14 +2,20 @@
 /**
  * Ask the live Muse host which reasoning tiers it actually accepts.
  *
- * The MSP schema declares a closed vocabulary of seven tiers, but a declared
- * type is a spelling contract, not a promise that the engine honours every
- * value. The desktop's picker offers all seven with hand-written descriptions,
- * so "does Muse Spark really have these levels?" has to be answered by the
- * engine, not by the schema.
+ * The MSP schema declares a closed vocabulary (`$defs.ReasoningEffort`), but a
+ * declared type is a spelling contract, not a promise that the engine honours
+ * every value: the CLI binary carries a separate persisted vocabulary
+ * (`ReasoningEffortV1`, seven values without `max`) and a gate message
+ * ("reasoning effort ultra is not available (gate ultra_reasoning_effort is
+ * closed); using xhigh"). So the question "which levels really exist, and does
+ * the host keep the one we sent?" has to be answered by the engine.
  *
  * Method: start one host in a throwaway workspace, then set each tier in turn
- * and record the reply. Read-only with respect to the repository.
+ * and record the reply AND the value the host echoes back. A tier that is
+ * accepted but echoed as another value is a silent downgrade, which the UI
+ * must not present as a distinct level.
+ *
+ * Read-only with respect to the repository.
  *
  * Usage: node scripts/msp-reasoning-tiers.mjs
  */
@@ -20,7 +26,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 
 const SIDECAR = process.env.MUSE_SIDECAR ?? "src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe";
-const TIERS = ["none", "minimal", "low", "medium", "high", "xhigh", "ultra"];
+const TIERS = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 function uuidv7() {
@@ -92,14 +98,23 @@ try {
     const events = notifications.slice(before)
       .filter((n) => /reasoning/i.test(n.method))
       .map((n) => ({ method: n.method, value: n.params?.reasoningEffort ?? n.params?.effort ?? null }));
+    // `session/read` does not project the effort field, so the notification is
+    // the only honest source for "what did the host keep?". A tier accepted but
+    // announced as another value is a silent downgrade.
+    const observed = events.at(-1)?.value ?? null;
+    const after = await request("session/read", { sessionId, excludeItems: true }, 15_000);
     report.tiers[tier] = reply.error
       ? { accepted: false, kind: reply.error.data?.kind ?? null, message: String(reply.error.message).slice(0, 120) }
-      : { accepted: true, status: reply.result?.status ?? null, echoed: reply.result?.reasoningEffort ?? null, events };
+      : {
+          accepted: true,
+          status: reply.result?.status ?? null,
+          echoed: reply.result?.reasoningEffort ?? null,
+          observed,
+          kept: observed === tier,
+          readBack: after.result?.session?.reasoningEffort ?? null,
+          events,
+        };
   }
-
-  // The effective value should be readable back on the session.
-  const read = await request("session/read", { sessionId, excludeItems: true }, 15_000);
-  report.effectiveAfter = read.result?.session?.reasoningEffort ?? null;
 } catch (error) {
   report.fatal = String(error).slice(0, 250);
 } finally {

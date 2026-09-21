@@ -396,7 +396,9 @@ function isValidProjectRow(p: unknown): p is Project {
     typeof r.id === "string" &&
     r.id.length > 0 &&
     typeof r.name === "string" &&
-    typeof r.instructions === "string" &&
+    // `instructions` became optional when the client-side store was retired;
+    // older rows still carry it, and a row without it is a normal row now.
+    (r.instructions === undefined || typeof r.instructions === "string") &&
     typeof r.createdAt === "number" &&
     (r.workspace === undefined || typeof r.workspace === "string") &&
     (r.settings === undefined || (typeof r.settings === "object" && r.settings !== null))
