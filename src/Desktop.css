@@ -453,6 +453,19 @@
   padding-bottom: 10px;
   border-bottom: 1px solid var(--line);
 }
+/*
+ * The toolbar is a two-child flex row: a label block and `.terminal-actions`,
+ * which is `flex-shrink: 0` so its buttons stay legible. The label block
+ * therefore has to absorb the whole deficit, and a flex item's default
+ * `min-width: auto` refuses to shrink below its content — so the row overflowed
+ * and the panel's `overflow: auto` painted a horizontal scrollbar in Review,
+ * Terminal and Desktop. Measured: the toolbar was 411 px wide with 548 px of
+ * content (+137 px). Allowing the label block to shrink to zero lets its own
+ * `text-overflow: ellipsis` do its job instead.
+ */
+.terminal-toolbar > *:first-child {
+  min-width: 0;
+}
 .terminal-toolbar strong {
   display: block;
   font-size: 13px;
