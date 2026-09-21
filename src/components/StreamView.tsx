@@ -810,22 +810,18 @@ export function StreamView({
         </span>
       )}
       {/*
-        A full-width dock carries the sticky positioning and an opaque backdrop.
-        The find bar itself is a 760px centred card inside a ~1034px transcript,
-        so on its own it left 137px of scrolling text on each side: content kept
-        flowing past a card that appeared to float in the middle of the
-        conversation. Measured, not guessed — see
-        docs/evidence/2026-09-21-ux/pass2/find-bar-geometry.txt.
-        The card keeps its shape; only the strip behind it changed.
+        Find-in-conversation, on demand. The persistent trigger was removed: it
+        occupied a 42px band plus a full-width backdrop at all times — 10% of the
+        transcript's visible height — and, being a 760px card in a ~1034px stream,
+        read as a widget floating over the conversation. Ctrl/Cmd+F opens it; the
+        dock is not rendered at all otherwise, so nothing takes space when the
+        user has not asked for it.
+
+        Measured before the change: docs/evidence/2026-09-21-ux/find-bar-flottante.md
       */}
-      <div className="stream-find-dock">
-      <div className="stream-find" aria-label="Find in conversation">
-        {!findOpen ? (
-          <button type="button" onClick={() => setFindOpen(true)}>
-            Find in conversation <kbd>Ctrl/Cmd F</kbd>
-          </button>
-        ) : (
-          <>
+      {findOpen && (
+        <div className="stream-find-dock">
+          <div className="stream-find" aria-label="Find in conversation">
             <input
               ref={findInputRef}
               type="search"
@@ -876,15 +872,14 @@ export function StreamView({
             >
               Close
             </button>
-          </>
-        )}
-        {findOpen && findHits.length > 0 && (
-          <div
-            id="conversation-search-results"
-            className="stream-find-hits"
-            role="listbox"
-            aria-label="Conversation matches"
-          >
+          </div>
+          {findHits.length > 0 && (
+            <div
+              id="conversation-search-results"
+              className="stream-find-hits"
+              role="listbox"
+              aria-label="Conversation matches"
+            >
             {findHits.map((hit, index) => (
               <button
                 type="button"
@@ -903,10 +898,10 @@ export function StreamView({
                 <strong>{hit.excerpt}</strong>
               </button>
             ))}
-          </div>
-        )}
-      </div>
-      </div>
+            </div>
+          )}
+        </div>
+      )}
       {streamWindowed && windowPadding.top > 0 && (
         <div
           className="stream-window-spacer"
