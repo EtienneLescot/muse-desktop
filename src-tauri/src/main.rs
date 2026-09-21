@@ -168,6 +168,18 @@ impl HostSandboxPolicy {
         if self.disable_shell {
             args.push("--disable-shell");
         }
+        // Load the workspace's own rules and skills.
+        //
+        // Without this flag the host starts untrusted and never reads the
+        // folder's `AGENTS.md`, which is where Muse Code keeps a project's rules:
+        // `muse init` scaffolds that file and the CLI describes it as "project
+        // rules when it runs in this directory". A user editing instructions in
+        // the desktop therefore had no effect on the engine, and the rules
+        // committed next to the code were silently ignored.
+        //
+        // This mirrors launching `muse` by hand in the folder, which is the
+        // behaviour the desktop is meant to reproduce.
+        args.push("--trust-workspace");
         args
     }
 
@@ -5586,6 +5598,7 @@ mod tests {
                 "restricted",
                 "--disable-write",
                 "--disable-shell",
+                "--trust-workspace",
             ]
         );
     }
@@ -5593,7 +5606,24 @@ mod tests {
     #[test]
     fn sandbox_policy_keeps_legacy_flags_when_project_options_are_absent() {
         let policy = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
-        assert_eq!(policy.cli_args(), vec!["serve", "--sandbox-network", "enabled"]);
+        assert_eq!(
+            policy.cli_args(),
+            vec!["serve", "--sandbox-network", "enabled", "--trust-workspace"]
+        );
+    }
+
+    /// The workspace rules are only loaded when the host is trusted, so every
+    /// posture must pass the flag. A regression here would silently stop the
+    /// engine reading the folder's `AGENTS.md` again, with no error anywhere.
+    #[test]
+    fn every_sandbox_posture_trusts_the_workspace() {
+        for mode in ["workspace", "network", "elevated"] {
+            let policy = HostSandboxPolicy::parse(Some(mode), None, None).unwrap();
+            assert!(
+                policy.cli_args().contains(&"--trust-workspace"),
+                "posture {mode} would run without loading the workspace rules"
+            );
+        }
     }
 
     #[test]
