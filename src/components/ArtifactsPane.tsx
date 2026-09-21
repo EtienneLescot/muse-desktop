@@ -113,7 +113,7 @@ export function ArtifactsPane({
             <p className="muted">
               {recap.total} message(s) — {recap.counts.user} you,{" "}
               {recap.counts.assistant} assistant, {recap.counts.subagent}{" "}
-              subagent, {recap.counts.tool} outil, {recap.counts.system}{" "}
+              subagent, {recap.counts.tool} tool, {recap.counts.system}{" "}
               system.
             </p>
           </section>

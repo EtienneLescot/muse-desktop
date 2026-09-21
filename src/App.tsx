@@ -361,7 +361,13 @@ export default function App() {
     }
   }, [settingsOpen]);
   const openPage = useCallback((next: typeof page) => {
+    // Navigating from the sidebar must dismiss whatever overlay is up, or the
+    // destination renders behind it. Settings was already closed here; search was
+    // not, so opening Search and then clicking Automations/Extensions/Library left
+    // the dialog on top of the new view — measured with `dialog.task-search`
+    // covering the view's own `h1`, the navigation having already happened.
     setSettingsOpen(false);
+    setSearchOpen(false);
     setPage(next);
   }, []);
 
