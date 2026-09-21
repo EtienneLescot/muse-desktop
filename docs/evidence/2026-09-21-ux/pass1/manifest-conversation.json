@@ -1,0 +1,57 @@
+{
+  "schema": "muse-desktop.ux-capture-conversation.v1",
+  "port": 9227,
+  "shots": [
+    {
+      "file": "101-conversation-propre.png",
+      "name": "conversation-propre",
+      "note": "conversation affichee — {\"already\":true}",
+      "state": {
+        "dialogs": 0,
+        "settingsOpen": false,
+        "conversationOpen": null,
+        "title": "Library",
+        "panelButton": false,
+        "hidePanelButton": false,
+        "tabs": [],
+        "theme": null,
+        "composerPresent": true,
+        "bodyHead": "Skip to message input Muse-Desktop New conversation Search Automations Extensions Library CONVERSATIONS (2) + Ungrouped (2) Reply with exact"
+      }
+    },
+    {
+      "file": null,
+      "name": "barre-travail",
+      "note": "PANNEAU NON DEPLIE — {\"opened\":false}",
+      "state": {
+        "dialogs": 0,
+        "settingsOpen": false,
+        "conversationOpen": null,
+        "title": "Library",
+        "panelButton": false,
+        "hidePanelButton": false,
+        "tabs": [],
+        "theme": null,
+        "composerPresent": true,
+        "bodyHead": "Skip to message input Muse-Desktop New conversation Search Automations Extensions Library CONVERSATIONS (2) + Ungrouped (2) Reply with exact"
+      }
+    },
+    {
+      "file": "102-theme-clair-conversation.png",
+      "name": "theme-clair-conversation",
+      "note": "theme clair sur une conversation",
+      "state": {
+        "dialogs": 0,
+        "settingsOpen": false,
+        "conversationOpen": null,
+        "title": "Library",
+        "panelButton": false,
+        "hidePanelButton": false,
+        "tabs": [],
+        "theme": null,
+        "composerPresent": true,
+        "bodyHead": "Skip to message input Muse-Desktop New conversation Search Automations Extensions Library CONVERSATIONS (2) + Ungrouped (2) Reply with exact"
+      }
+    }
+  ]
+}
