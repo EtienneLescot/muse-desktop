@@ -24,12 +24,14 @@ export type AuthMode = "api_key" | "account" | "none";
 /** Where the effective credential came from. Mirrors the Rust `AuthSource`. */
 export type AuthSource = "environment" | "stored" | "absent";
 
-/** The native command's payload. Bounded by a Rust test to these four fields. */
+/** The native command's payload. Bounded by a Rust test to these five fields. */
 export interface AuthStatusPayload {
   mode: AuthMode;
   source: AuthSource;
   apiKeyOverridesLogin: boolean;
   loginCommand: string;
+  /** Whether the CLI resolves on the PATH the built-in terminal inherits. */
+  cliAvailable: boolean;
 }
 
 export type AuthNoticeTone = "neutral" | "warning";
@@ -115,11 +117,13 @@ export function describeAuth(status: AuthStatusPayload | null): AuthNotice {
  * Whether the built-in terminal can drive the CLI at all.
  *
  * `muse login` is only reachable when the CLI is on the PATH the terminal
- * inherits; the terminal spawns without clearing the environment, so this is the
- * same PATH the app sees.
+ * inherits — the terminal spawns without clearing the environment, so this is
+ * the same PATH the app sees. The native side reports it, so the action is
+ * hidden rather than offered and failing.
  */
-export function canOfferSignIn(cliAvailable: boolean, status: AuthStatusPayload | null): boolean {
-  if (!cliAvailable) return false;
+export function canOfferSignIn(status: AuthStatusPayload | null): boolean {
+  if (status === null) return false;
+  if (status.cliAvailable !== true) return false;
   return describeAuth(status).offerSignIn;
 }
 

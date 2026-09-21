@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WorkspacePicker } from "./WorkspacePicker";
-import { describeAuth, type AuthStatusPayload } from "../lib/museAuth";
+import { describeAuth, canOfferSignIn, type AuthStatusPayload } from "../lib/museAuth";
 import { isTauriRuntime } from "../lib/env";
 import {
   startupCheckStatusLabel,
@@ -108,6 +108,16 @@ interface Props {
    * Surfaces the backend verdict (and the error-banner prompt) for the path.
    */
   checkPathScope: (path: string) => Promise<ScopeVerdict>;
+  /**
+   * Run the CLI's sign-in inside the built-in terminal.
+   *
+   * The desktop never sees the credential: `muse login` prints a device code,
+   * the user approves it in a browser, and the CLI stores the result itself.
+   * That is why this drives a terminal instead of implementing OAuth — MSP is a
+   * stdio protocol with no authentication concept, so there is no endpoint the
+   * desktop could authenticate against on its own.
+   */
+  onSignIn: () => void | Promise<unknown>;
   onClose?: () => void;
 }
 
@@ -133,6 +143,7 @@ export function SettingsPanel({
   startupProbe = null,
   onProbeStartup,
   checkPathScope,
+  onSignIn,
   onClose,
 }: Props) {
   const [probe, setProbe] = useState("");
@@ -666,7 +677,19 @@ export function SettingsPanel({
           <button type="button" onClick={refreshAuthStatus}>
             Check again
           </button>
+          {canOfferSignIn(authStatus) && (
+            <button type="button" onClick={() => void onSignIn()}>
+              Sign in with Meta
+            </button>
+          )}
         </div>
+        {authStatus !== null && authStatus.cliAvailable !== true && (
+          <p className="settings-note">
+            The Muse CLI was not found on PATH, so the desktop cannot run the
+            sign-in for you. Install Muse Code, or run <code>muse login</code>{" "}
+            yourself.
+          </p>
+        )}
       </div>
 
       <div className="settings-group">

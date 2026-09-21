@@ -13,6 +13,7 @@ function status(over: Partial<AuthStatusPayload> = {}): AuthStatusPayload {
     source: "absent",
     apiKeyOverridesLogin: false,
     loginCommand: "muse login",
+    cliAvailable: true,
     ...over,
   };
 }
@@ -78,10 +79,12 @@ test("a newer host value does not crash and does not offer sign-in blindly", () 
 });
 
 test("sign-in is withheld when the CLI is not reachable", () => {
-  assert.equal(canOfferSignIn(false, status()), false);
-  assert.equal(canOfferSignIn(true, status()), true);
+  assert.equal(canOfferSignIn(status({ cliAvailable: false })), false);
+  assert.equal(canOfferSignIn(status()), true);
   // Even with the CLI present, a state that should not offer it still refuses.
-  assert.equal(canOfferSignIn(true, status({ mode: "account", source: "stored" })), false);
+  assert.equal(canOfferSignIn(status({ mode: "account", source: "stored" })), false);
+  // An unread status cannot vouch for the CLI, so it must not offer the action.
+  assert.equal(canOfferSignIn(null), false);
 });
 
 test("the terminal receives the exact reviewed command, or nothing", () => {

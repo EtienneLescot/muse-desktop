@@ -35,6 +35,7 @@ import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
 import { userFacingError } from "./lib/errorCopy";
 import { displayPath } from "./lib/paths";
+import { signInCommand, type AuthStatusPayload } from "./lib/museAuth";
 import { isTauriRuntime } from "./lib/env";
 import { formatHandoffContext } from "./lib/handoff";
 import type { Artifact, ArtifactVersion } from "./lib/artifacts";
@@ -618,8 +619,49 @@ export default function App() {
     />
   );
 
-  async function exportDiagnostics(): Promise<void> {
-    let native: NativeDiagnosticsSnapshot | null = null;
+  /**
+   * Drive the Muse CLI's device-code sign-in inside the built-in terminal.
+   *
+   * Why a terminal and not an OAuth client: MSP is a stdio protocol with no
+   * authentication concept, so there is no Meta/Muse endpoint the desktop could
+   * authenticate against on its own. `muse login` already implements the flow —
+   * it prints a URL and a code, the user approves in a browser, and the CLI
+   * stores the credential itself. The desktop therefore never handles the
+   * secret, which is strictly safer than storing one.
+   *
+   * The command text comes from `signInCommand`, which returns null unless the
+   * payload carries the exact reviewed command, so a compromised or future
+   * native payload cannot inject a shell line here.
+   */
+  async function signInWithMuseCli(): Promise<void> {
+    if (!isTauriRuntime()) return;
+    const status = await invoke<AuthStatusPayload>("muse_auth_status").catch(() => null);
+    const command = signInCommand(status);
+    if (command === null) return;
+
+    const sessionId = activeId;
+    if (sessionId === null) return;
+    // The terminal panel only exists while it is the selected work panel, so
+    // showing it is part of preparing the action rather than a side effect.
+    setWorkPanel("terminal");
+    setSettingsOpen(false);
+
+    // `terminalForSession` reports the panel's view state; `openTerminal`
+    // answers the native `TerminalInfo`, which is what carries the id to write
+    // to. Mixing the two was a type error, so both are handled separately.
+    let terminalId = terminalForSession(sessionId)?.info.terminalId ?? null;
+    for (let attempt = 0; attempt < 20 && terminalId === null; attempt += 1) {
+      // Opening a PTY is not instant; the command must not be written into a
+      // shell that does not exist yet.
+      const opened = await openTerminal(sessionId);
+      terminalId = opened?.terminalId ?? null;
+      if (terminalId === null) await new Promise((resolve) => window.setTimeout(resolve, 250));
+    }
+    if (terminalId === null) return;
+    await writeTerminal(terminalId, command);
+  }
+
+  async function exportDiagnostics(): Promise<void> {    let native: NativeDiagnosticsSnapshot | null = null;
     try {
       native = await invoke<NativeDiagnosticsSnapshot>("collect_diagnostics");
     } catch {
@@ -921,6 +963,7 @@ export default function App() {
               startupProbe={startupProbe}
               onProbeStartup={() => probeStartup(workspace)}
               checkPathScope={checkPathScope}
+              onSignIn={signInWithMuseCli}
               onClose={() => setSettingsOpen(false)}
             />
           </section>

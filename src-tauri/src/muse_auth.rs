@@ -158,6 +158,39 @@ pub fn status() -> AuthStatus {
     decide(&observation)
 }
 
+/// Whether the built-in terminal can drive the CLI at all.
+///
+/// `muse login` is only reachable when the CLI is on the PATH that the terminal
+/// inherits -- the PTY spawns without clearing the environment, so the terminal
+/// sees exactly this PATH. The UI hides the sign-in action when this is false
+/// rather than offering a button that would fail in the terminal.
+///
+/// Candidate names differ per platform because the CLI ships a `.cmd` shim on
+/// Windows. `split_paths` is used instead of splitting on `;` or `:`, so a
+/// Windows drive letter or a quoted component cannot mis-parse.
+fn cli_candidates() -> Vec<&'static str> {
+    if cfg!(windows) {
+        vec!["muse.cmd", "muse.exe", "muse"]
+    } else {
+        vec!["muse"]
+    }
+}
+
+/// Whether the CLI resolves on PATH. The resolved path is never returned to the
+/// renderer, so this answers only "can the terminal run it".
+pub fn cli_on_path() -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let candidates = cli_candidates();
+    std::env::split_paths(&path).any(|dir| {
+        if dir.as_os_str().is_empty() {
+            return false;
+        }
+        candidates.iter().any(|name| dir.join(name).is_file())
+    })
+}
+
 /// Render the status for the renderer. A flat object of strings and booleans,
 /// deliberately: nothing here can carry a credential.
 ///
@@ -175,6 +208,9 @@ pub fn status_json() -> serde_json::Value {
         "apiKeyOverridesLogin": status.api_key_overrides_login,
         // Whether the built-in terminal can drive the CLI at all.
         "loginCommand": "muse login",
+        // The sign-in action is hidden rather than shown-and-failing when the
+        // CLI is not on the PATH the terminal inherits.
+        "cliAvailable": cli_on_path(),
     })
 }
 
@@ -283,7 +319,7 @@ mod tests {
         keys.sort_unstable();
         assert_eq!(
             keys,
-            ["apiKeyOverridesLogin", "loginCommand", "mode", "source"],
+            ["apiKeyOverridesLogin", "cliAvailable", "loginCommand", "mode", "source"],
             "the auth status payload changed shape; review any new field for credential content before updating this list"
         );
 
@@ -298,6 +334,7 @@ mod tests {
             "source must be one of the three documented values, got {source}"
         );
         assert!(object["apiKeyOverridesLogin"].is_boolean(), "apiKeyOverridesLogin is a bool");
+        assert!(object["cliAvailable"].is_boolean(), "cliAvailable is a bool");
         assert_eq!(
             object["loginCommand"].as_str(),
             Some("muse login"),
