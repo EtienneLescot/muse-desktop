@@ -1424,17 +1424,14 @@ export default function App() {
                     sessionId={active.session_id}
                     disabled={backendMissing || active.archived === true || !connectedIds.includes(active.session_id)}
                     modelControl={
-                      <>
-                        <button
-                          onClick={() => setSettingsOpen(true)}
-                          aria-label="Model settings"
-                        >
-                          {liveModels?.find((model) => model.isActive)?.displayLabel ||
-                            active.model_id ||
-                            "Model"}
-                        </button>
-                        <span>Local</span>
-                      </>
+                      <button
+                        onClick={() => setSettingsOpen(true)}
+                        aria-label="Model settings"
+                      >
+                        {liveModels?.find((model) => model.isActive)?.displayLabel ||
+                          active.model_id ||
+                          "Model"}
+                      </button>
                     }
                     running={active.running}
                     stopping={stoppingBySession[active.session_id] === true}

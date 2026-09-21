@@ -320,16 +320,31 @@ export function mergeHistoryLog(local: LogEntry[], remote: LogEntry[]): LogEntry
   const used = new Set<string>();
   const merged: LogEntry[] = [];
   for (const incoming of remote) {
+    // An item id only identifies the same message when the LANE matches too.
+    // The live reducer binds the host's user-item id onto the empty assistant
+    // placeholder created at send time (the incremental item lane has no "user"
+    // role), so matching on the id alone let a remote user item overwrite that
+    // placeholder's role. The result was two "user" entries with identical text
+    // and the same displayed second - one optimistic, one flipped - and it is
+    // sticky, because every later merge re-matched the same placeholder.
     const byItem = incoming.itemId === undefined
       ? undefined
-      : local.find((entry) => !used.has(entry.id) && entry.itemId === incoming.itemId);
+      : local.find((entry) => !used.has(entry.id) && entry.itemId === incoming.itemId && entry.role === incoming.role);
+    // A user message is recognised by its text when the item id was already
+    // claimed by the placeholder above; without this the optimistic bubble would
+    // stay in the log as an unconsumed leftover.
     const byUserText = byItem === undefined && incoming.role === "user"
       ? local.find((entry) => !used.has(entry.id) && entry.role === "user" && entry.text === incoming.text)
       : undefined;
     const existing = byItem ?? byUserText;
     if (existing !== undefined) {
       used.add(existing.id);
-      merged.push({ ...existing, ...incoming, id: existing.id, clientMessageId: existing.clientMessageId ?? incoming.clientMessageId });
+      merged.push({
+        ...existing,
+        ...incoming,
+        id: existing.id,
+        clientMessageId: existing.clientMessageId ?? incoming.clientMessageId,
+      });
     } else {
       merged.push(incoming);
     }

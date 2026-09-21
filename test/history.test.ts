@@ -177,4 +177,53 @@ describe("session history hydration", () => {
     assert.equal(merged.find((entry) => entry.itemId === "a1")?.text, "complete");
     assert.equal(merged.find((entry) => entry.role === "system")?.text, "queued");
   });
+
+  /**
+   * Observed defect: one send rendered two identical user bubbles.
+   *
+   * The live reducer binds the host's user-item id onto the empty assistant
+   * placeholder created at send time, because the incremental item lane has no
+   * "user" role. The merge then matches that placeholder BY ITEM ID, and the
+   * itemId lookup has no role check, so the remote user item overwrites the
+   * placeholder's role instead of being recognised as an already-represented
+   * message. The optimistic user entry survives as an unconsumed leftover.
+   *
+   * Both persisted logs of the affected sessions carry exactly this shape: one
+   * user entry with no itemId, one with the host item id and host command id,
+   * 75 ms and 160 ms apart, therefore the same displayed second.
+   */
+  it("does not turn an assistant placeholder into a second user bubble", () => {
+    const local = [
+      { id: "optimistic", ts: 1000, role: "user" as const, text: "Hello", clientMessageId: "cm-1" },
+      { id: "placeholder", ts: 1001, role: "assistant" as const, text: "", itemId: "u1", turnId: "t1", open: true },
+    ];
+    const remote = [
+      {
+        id: "history:u1",
+        ts: 1002,
+        role: "user" as const,
+        text: "Hello",
+        itemId: "u1",
+        turnId: "t1",
+        clientMessageId: "cmd-1",
+        open: false,
+      },
+    ];
+    const merged = mergeHistoryLog(local, remote);
+    const users = merged.filter((entry) => entry.role === "user");
+    assert.equal(users.length, 1);
+    assert.equal(users[0]?.id, "optimistic");
+    assert.equal(users[0]?.itemId, "u1");
+    assert.equal(merged.some((entry) => entry.id === "placeholder" && entry.role === "user"), false);
+  });
+
+  it("still binds a remote item to a local entry of the same role", () => {
+    const local = [{ id: "local-assistant", ts: 1, role: "assistant" as const, text: "partial", itemId: "a1", open: true }];
+    const remote = [{ id: "history:a1", ts: 2, role: "assistant" as const, text: "complete", itemId: "a1", open: false }];
+    const merged = mergeHistoryLog(local, remote);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0]?.id, "local-assistant");
+    assert.equal(merged[0]?.text, "complete");
+    assert.equal(merged[0]?.open, false);
+  });
 });
