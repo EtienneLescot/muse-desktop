@@ -648,13 +648,27 @@
 }
 .files-layout {
   display: grid;
-  grid-template-columns: minmax(180px, .85fr) minmax(250px, 1.4fr);
+  grid-template-columns: minmax(140px, .85fr) minmax(190px, 1.4fr);
   gap: 12px;
   min-height: 0;
   flex: 1;
 }
+/* Narrow-panel fallback, deliberately in the same file as the rule above.
+   App.css is imported FIRST by main.tsx, so an override written there lost to
+   this base rule at equal specificity: the grid stayed two-column down to a
+   720px window and overflowed by up to 104px. Floors must also stay below the
+   narrowest panel - at 180px + 250px the columns sat at their min-content width
+   (172/248) and demanded 442px inside a 411px panel. 342px of tracks is the
+   requirement; sweeping real widths, a 315px panel overflowed by 27px and a
+   347px panel was clean, so the switch sits between them. */
+@media (max-width: 1230px) {
+  .files-layout {
+    grid-template-columns: 1fr;
+  }
+}
 .files-list,
 .file-preview {
+  min-width: 0;
   min-height: 0;
   overflow: auto;
   border: 1px solid var(--line);

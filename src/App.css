@@ -6518,7 +6518,17 @@ body.dark .composer textarea::placeholder {
 
 .desktop-control-layout {
   display: grid;
-  grid-template-columns: minmax(180px, .8fr) minmax(240px, 1.2fr);
+  /* The window list and the actions column have an intrinsic floor (223px and
+     250px) coming from unbreakable application names and fixed-width inputs.
+     A 180px/240px minimum therefore asked for 434px inside a 405px panel,
+     overflowing by 65px. The floors below sit under that, and the narrow-width
+     fallback further down folds to a single column. */
+  /* Floors of 140px/190px. Lowering them to 120px/180px to squeeze past the
+     3px measured at a 1280px window did remove that leak, but it introduced an
+     8px one inside the desktop observation block: its heading is a flex row
+     whose min-content width exceeds the narrower column. Raising the fallback
+     threshold instead keeps both clean, which the width sweep confirms. */
+  grid-template-columns: minmax(140px, .8fr) minmax(190px, 1.2fr);
   gap: 14px;
   min-height: 260px;
 }
@@ -6528,6 +6538,12 @@ body.dark .composer textarea::placeholder {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 10px;
+  /* Grid items default to min-width:auto, so their min-content width becomes a
+     floor the grid cannot go below. Window titles such as
+     "Cua.AgentCursorOverlay.default" have a 223px min-content width, which
+     forced this grid to 417px inside a 405px panel: the layout overflowed by
+     65px and the columns refused to shrink. */
+  min-width: 0;
 }
 
 .desktop-window-list {
@@ -6547,6 +6563,17 @@ body.dark .composer textarea::placeholder {
   padding: 9px 10px;
   color: inherit;
   background: transparent;
+}
+
+/* Application names are single unbreakable tokens ("Cua.AgentCursorOverlay.
+   default"), so they cannot wrap: without ellipsis they were clipped
+   mid-character at 152px with no visual cue that anything was missing. */
+.desktop-window-list button > strong,
+.desktop-window-list button > span {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .desktop-window-list button:hover,
@@ -6653,6 +6680,10 @@ body.dark .composer textarea::placeholder {
 .desktop-control-click {
   display: grid;
   gap: 6px;
+  /* This row is `auto 68px 68px auto`: a grid item defaults to min-width:auto,
+     so the label text ("Click inside window") became the row's floor and pushed
+     the whole layout past the panel edge. */
+  min-width: 0;
 }
 
 .desktop-control-actions textarea,
@@ -6663,9 +6694,17 @@ body.dark .composer textarea::placeholder {
 }
 
 .desktop-control-click {
-  grid-template-columns: auto 68px 68px auto;
+  /* The label takes its own full-width row. As `auto 68px 68px auto` the four
+     tracks needed 265px inside a 218px column, so the row visibly spilled past
+     the panel; with the label on its own line the fixed-width inputs and the
+     button have room to spare. */
+  grid-template-columns: 68px 68px auto;
   align-items: center;
   gap: 8px;
+}
+
+.desktop-control-click > span {
+  grid-column: 1 / -1;
 }
 
 .desktop-control-footnote {
@@ -6673,16 +6712,46 @@ body.dark .composer textarea::placeholder {
   font-size: 12px;
 }
 
-@media (max-width: 720px) {
-  .desktop-control-layout {
-    grid-template-columns: 1fr;
-  }
+/* Two columns need 140 + 190 + 14 = 344px of usable width inside the panel.
+   The panel does NOT track the window proportionally: measured on this build it
+   is ~478px at a 1440px window, ~340px at 1080px, and then RISES again to
+   ~369px at 900px, because the conversation column reaches its own minimum and
+   the panel takes back the difference. A "40% of the window" rule is therefore
+   wrong at both ends, and this threshold comes from sweeping real widths rather
+   than from arithmetic: 301px of panel overflowed by 43px, 341px by 3px, and
+   375px was clean.
+
+   The breakpoint is kept as LOW as the measurements allow on purpose. Stacking
+   the window list above the controls is a real layout change, so it is reserved
+   for widths where two columns genuinely do not fit. At 1300px and above the
+   original side-by-side layout is intact; between 1200px and 1290px a
+   two-column grid fits its tracks but leaves the observation block's heading
+   8px short, so it stacks there too rather than introducing a third fix.
+
+   The click row needs its own, WIDER breakpoint: `68px 68px auto` has a
+   min-content floor of 202px (two inputs, the button, and the gaps), which the
+   controls column only reaches once the panel passes ~390px. Between 1200px and
+   1400px the button was therefore squeezed to 40px and spilled 40px outside the
+   panel while the outer grid still measured fine.
+
+   Kept in App.css deliberately: the base rule for `.desktop-control-layout`
+   is also in this file, so the override cannot be beaten by import order. */
+@media (max-width: 1400px) {
   .desktop-control-click {
-    grid-template-columns: 1fr 68px 68px;
+    grid-template-columns: 68px 68px;
   }
   .desktop-control-click button {
     grid-column: 1 / -1;
   }
+}
+
+@media (max-width: 1290px) {
+  .desktop-control-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
   .desktop-capture-heading,
   .desktop-capture-preview {
     grid-template-columns: 1fr;

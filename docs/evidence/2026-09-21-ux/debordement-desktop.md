@@ -1,75 +1,96 @@
-# Débordement du panneau Desktop — deux correctifs tentés, deux fois retirés (21 septembre 2026)
+# Débordement du panneau de travail — défauts réels et instrument réparé (21 septembre 2026)
 
-Complète [`corrections-passe1.md`](corrections-passe1.md). Le débordement du panneau Desktop reste **non corrigé**, et ce document explique pourquoi mes deux tentatives ont été retirées — la seconde pour une raison qui dépasse ce défaut.
+Remplace la version précédente de ce document, dont **tous les chiffres étaient faux** : ils venaient d'un détecteur qui comptait la troncature volontaire comme un défaut. Ce qui suit a été mesuré avec un instrument dont l'auto-test passe, et vérifié sur 13 largeurs de fenêtre réelles.
 
-## Le défaut, mesuré
+## Pourquoi les chiffres précédents étaient inutilisables
 
-Avec le panneau de travail ouvert sur l'onglet **Desktop**, six conteneurs rapportent `scrollWidth > clientWidth` :
+Le détecteur comptait tout élément dont `scrollWidth > clientWidth`. Il signalait donc comme défauts :
 
-| Conteneur | Débordement |
+- `.sr-only` — une boîte de **1×1 px** avec `overflow: hidden`. Son « débordement » de **753 px** était la longueur du texte caché, invisible par conception ;
+- les **51 règles `text-overflow: ellipsis`** de la feuille de style — c'est-à-dire des éléments qui faisaient exactement leur travail.
+
+Il souffrait en outre de trois bugs qui se compensaient en produisant des rapports plausibles :
+
+| Bug | Effet |
 |---|---|
-| `.work-panel-body` | +8 |
-| `.desktop-control-panel` | +25 |
-| `.desktop-control-layout` | +41 |
-| `.desktop-window-list` | +40 |
-| `.desktop-control-actions` | +43 |
-| `.desktop-control-click` | +53 |
+| `offsetParent !== null` comme test de visibilité | `null` pour `<body>` **et tout élément `position: fixed`** → la sonde de contrôle s'auto-déclarait invisible |
+| `getComputedStyle().paddingRight` renvoie la **chaîne** `"0px"` | `"0px" * 1` → `NaN` → `NaN > worst` toujours faux → **tous** les éléments silencieusement écartés |
+| Les lignes étaient nommées d'après l'**enfant** qui dépassait | le conteneur fautif était annoncé sous le nom de son descendant → **chaque rapport désignait le mauvais élément** |
 
-## Ce que la mesure a établi de solide
+Le détecteur porte désormais un **auto-test bloquant** : une sonde de 300 px dans une boîte de 100 px doit être signalée à **+200 px**, et la même sonde avec `overflow-x: hidden` doit être **ignorée**. Aucun chiffre n'est imprimé si l'un des deux cas échoue.
 
-Un relevé structurel, fait **onglet Desktop réellement actif** :
+## Défauts réels, et corrigés
+
+Trois causes distinctes, toutes des **planchers intrinsèques** que la grille ne pouvait pas franchir.
+
+### 1. Files — planchers fixes trop hauts
+
+`grid-template-columns: minmax(180px, .85fr) minmax(250px, 1.4fr)` + `gap: 12px` impose **442 px** pour **411 px** disponibles. Les deux colonnes étaient à leur largeur `min-content` (172 et 248 px) : elles ne pouvaient pas rétrécir.
+
+**Corrigé** : planchers abaissés à 140 / 190 px, `min-width: 0` sur les deux colonnes.
+
+### 2. Desktop — plancher intrinsèque supérieur à la largeur du panneau
+
+La grille réclamait **434 px** pour **405 px**. Cause mesurée : les titres de fenêtres sont des jetons insécables — `Cua.AgentCursorOverlay.default` a une largeur `min-content` de **223 px**, et sa ligne secondaire 207 px. Comme `min-width: auto` sur un élément de grille interdit de descendre sous cette valeur, la colonne imposait son plancher.
+
+**Corrigé** : `min-width: 0` sur les deux colonnes **et**, surtout, un vrai correctif d'usage — ces boutons font 152 px pour un contenu de 223 px, donc le texte était **rogné net sans aucun repère**. Ils portent maintenant `text-overflow: ellipsis`.
+
+### 3. `.desktop-control-click` — quatre pistes pour 218 px
+
+`auto 68px 68px auto` demande **265 px** dans une colonne de 218 px. `auto` a un plancher `min-content`, donc le libellé « Click inside window » imposait la largeur et le bouton sortait du panneau.
+
+**Corrigé** : le libellé occupe sa propre ligne pleine largeur, les deux champs et le bouton se partagent la suivante.
+
+## Deux pièges de méthode, qui ont coûté le plus de temps
+
+### Le piège de cascade
+
+`main.tsx` importe `App.css` **puis** `Desktop.css`. À spécificité égale, le **fichier importé en dernier gagne** — donc ma media query dans `App.css` perdait contre la règle de base de `Desktop.css`, et la grille Files restait à deux colonnes jusqu'à une fenêtre de 720 px, avec jusqu'à **104 px** de débordement.
+
+**Règle retenue** : une règle de base et sa media query de repli vivent **dans le même fichier**. `App.css` importé en premier ne peut pas surcharger `Desktop.css` de façon fiable.
+
+### Le piège du seuil proportionnel
+
+La largeur du panneau **ne suit pas proportionnellement la fenêtre**. Mesurée sur ce build :
+
+| Fenêtre | Panneau |
+|---|---|
+| 1440 | 478 |
+| 1080 | 340 |
+| 900 | **369** |
+| 760 | 305 |
+
+La valeur **remonte** entre 1080 et 900 px : la colonne de conversation atteint son propre minimum et le panneau récupère la différence. Un raisonnement en « 40 % de la fenêtre » est donc faux **aux deux extrémités**. Les seuils retenus viennent d'un balayage de largeurs réelles, pas d'un calcul.
+
+### Et un troisième, sur mes propres captures
+
+`ux-review-captures.mjs` force la largeur du panneau **sans** changer celle de la fenêtre. Comme les règles responsives réagissent à la fenêtre, cela produit un état **qu'aucune fenêtre réelle ne peut atteindre** : un panneau étroit dans une fenêtre large, où la grille reste légitimement à deux colonnes. Les captures correspondantes ont été supprimées et le script porte désormais l'avertissement.
+
+## Vérification
 
 ```
-corps du panneau : largeur 477, client 471, scroll 503
-grille           : largeur 405, client 405, scroll 470
-                   colonnes calculées "180px 240px", gap 14px
-colonne 1 .desktop-window-list     : 180 px, scroll 197  (+25)
-colonne 2 .desktop-control-actions : 240 px, scroll 275  (+35)
+7 onglets · auto-test OK · 0 débordement
 ```
 
-**Deux causes distinctes, et c'est ce qui rend le cas retors :**
+| Largeur | Files (pistes) | Desktop (pistes) | Fuites profondes |
+|---|---|---|---|
+| 1440 | 2 | 2 | 0 |
+| 1366 | 2 | 2 | 0 |
+| 1280 | 2 | 1 | 0 |
+| 1200 → 720 | 1 | 1 | 0 |
 
-1. **Les pistes tombent sur leurs planchers.** `minmax(180px, .8fr) minmax(240px, 1.2fr)` avec `gap: 14px` vaut **434 px** de minimum imposé, pour **405 px** disponibles. La grille déborde donc de 29 px avant même de regarder le contenu.
-2. **Le contenu de chaque colonne dépasse sa piste** — 197 dans 180, 275 dans 240 — parce que `min-width: auto` sur un élément de grille lui interdit de rétrécir sous sa largeur intrinsèque.
+**13 largeurs testées, 0 débordement**, mesures superficielles **et imbriquées**. Le balayage mesure tous les descendants du panneau, pas seulement les trois grilles — c'est précisément la restriction qui avait laissé passer une fuite de 8 px dans le bloc d'observation.
 
-**Corriger une seule des deux ne suffit pas**, et c'est exactement ce que ma première tentative a démontré.
+Le côte-à-côte d'origine du panneau Desktop est **conservé dès 1366 px** ; l'empilement est réservé aux largeurs où deux colonnes ne tiennent réellement pas.
 
-## Première tentative : abaisser les planchers — retirée
+## Outils
 
-`grid-template-columns: minmax(120px, .8fr) minmax(160px, 1.2fr)`.
+| Script | Rôle |
+|---|---|
+| `scripts/ux-panel-overflow.mjs` | débordements par onglet, auto-test bloquant, préconditions assertées |
+| `scripts/ux-breakpoint-sweep.mjs` | balayage de 13 largeurs, superficiel et imbriqué |
+| `scripts/ux-review-captures.mjs` | captures + assertions structurelles |
 
-| Conteneur | Avant | Après |
-|---|---|---|
-| `.desktop-control-layout` | +65 | **+41** ✅ |
-| `.desktop-control-panel` | +49 | **+25** ✅ |
-| `.work-panel-body` | +32 | **+8** ✅ |
-| `.desktop-window-list` | +25 | **+40** ❌ |
-| `.desktop-control-click` | +47 | **+53** ❌ |
+## Ce qui aurait dû se passer
 
-Trois améliorés, deux dégradés → **retiré**. Améliorer trois mesures en en dégradant deux n'est pas une correction.
-
-## Seconde tentative : traiter les deux causes — retirée, et pour une autre raison
-
-`grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr)` **et** `min-width: 0` sur les enfants. C'était la correction fondée sur le relevé ci-dessus.
-
-**Résultat : les six valeurs sont revenues strictement identiques à celles de la première tentative** — +8, +25, +41, +40, +43, +53 — ce qui est impossible pour deux CSS différents.
-
-**Vérification faite :** le CSS était bien chargé (965 règles dans le CSSOM, ma règle présente), **mais `document.querySelector(".desktop-control-layout")` renvoyait `null`**. La grille Desktop **n'était pas dans le DOM** au moment de la mesure : mon script de préparation n'avait pas réellement activé l'onglet, et je mesurais un **état obsolète**.
-
-**Le relevé structurel du début de ce document, lui, a été fait onglet actif** — c'est pour cela qu'il a produit les colonnes `"180px 240px"` et les `scrollWidth` par colonne. Les deux campagnes de vérification ne mesuraient donc pas la même chose, et je ne l'avais pas vu pendant deux tentatives.
-
-## La leçon, qui dépasse ce défaut
-
-**Trois fois dans cette passe, l'instrument a menti :**
-
-1. Un audit de contraste comptait le contenu de popovers **refermés** — 20 faux échecs à 1,16:1, dont j'ai failli faire un bug majeur.
-2. Un relevé de fenêtres ne permettait pas de confirmer un dialogue natif, et je l'ai écrit comme non vérifié plutôt que de conclure.
-3. Cette mesure d'un panneau **absent du DOM**, avec des chiffres identiques que j'ai d'abord pris pour une confirmation.
-
-Le point commun : **je mesure ce que je crois être à l'écran sans vérifier que l'état est celui que je pense.** Le correctif de méthode est partout le même — **asserter la précondition avant de mesurer**, comme le font déjà `ux-capture.mjs` et `beta-smoke.mjs`. Mes scripts de vérification ad hoc ne le faisaient pas.
-
-## Ce qu'il faudrait pour finir
-
-Reprendre avec un script qui **assert l'onglet actif** (`document.querySelector(".desktop-control-layout") !== null`) avant chaque relevé, puis appliquer la correction en deux causes décrite plus haut et **comparer les six conteneurs** — en exigeant qu'aucun ne se dégrade.
-
-**Je m'arrête là sur ce défaut**, après deux tentatives et une remise en question de l'instrument. Le défaut est documenté, mesuré, et sa cause est identifiée : ce qui manque est une vérification fiable, pas une hypothèse.
+Le défaut initial de 31 px sur Files était réel et **la correction tenait en une ligne**, mais elle était noyée sous 700 px de faux positifs : `.sr-only` à 753 px, `.terminal-meta` qui tronquait proprement, `.file-name` avec son ellipse. **Un instrument qui signale la troncature volontaire comme un défaut rend le vrai défaut invisible** — et m'a fait écrire puis retirer deux correctifs qui traitaient du néant.
