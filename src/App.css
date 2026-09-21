@@ -1417,6 +1417,7 @@ body.dark .avatar {
 /* Host-backed reasoning picker. It follows the authorization control's
    disclosure pattern so the chat input stays compact while every option
    remains keyboard reachable and explained. */
+.model-control,
 .reasoning-effort-control {
   position: relative;
   display: inline-flex;
@@ -1426,6 +1427,7 @@ body.dark .avatar {
   white-space: nowrap;
 }
 
+.model-trigger,
 .reasoning-effort-trigger {
   display: inline-flex;
   align-items: center;
@@ -1442,6 +1444,8 @@ body.dark .avatar {
   font-size: 0.76rem;
 }
 
+.model-trigger::-webkit-details-marker,
+.model-trigger::marker,
 .reasoning-effort-trigger::-webkit-details-marker,
 .reasoning-effort-trigger::marker {
   display: none;
@@ -1499,6 +1503,15 @@ body.dark .avatar {
   background: var(--surface);
 }
 
+/* The composer's two pickers share one design: same trigger, same popover, same
+   option rows. Written as shared selector lists rather than copied blocks so the
+   model picker cannot drift away from the reasoning picker it sits next to. */
+.model-control-compact,
+.reasoning-effort-control-compact {
+  position: relative;
+}
+
+.model-popover,
 .reasoning-effort-popover {
   position: absolute;
   z-index: 30;
@@ -1512,13 +1525,19 @@ body.dark .avatar {
   box-shadow: var(--shadow);
 }
 
+/* Inside the composer the control sits at the bottom of the window, so the
+   popover opens upward and is bounded by the viewport. */
+.model-control-compact .model-popover,
 .reasoning-effort-control-compact .reasoning-effort-popover {
   top: auto;
   right: auto;
   left: 0;
   bottom: calc(100% + 8px);
+  max-height: min(340px, 60vh);
+  overflow-y: auto;
 }
 
+.model-option,
 .reasoning-effort-option {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
@@ -1534,16 +1553,20 @@ body.dark .avatar {
   cursor: pointer;
 }
 
+.model-option:hover,
+.model-option[data-selected="true"],
 .reasoning-effort-option:hover,
 .reasoning-effort-option[data-selected="true"] {
   background: var(--pale);
 }
 
+.model-option:focus-visible,
 .reasoning-effort-option:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: -2px;
 }
 
+.model-option-check,
 .reasoning-effort-option-check {
   min-height: 18px;
   color: var(--blue);
@@ -1551,11 +1574,14 @@ body.dark .avatar {
   line-height: 1.2;
 }
 
+.model-option strong,
+.model-option small,
 .reasoning-effort-option strong,
 .reasoning-effort-option small {
   display: block;
 }
 
+.model-option strong,
 .reasoning-effort-option strong {
   font-size: 0.8rem;
 }

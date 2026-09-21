@@ -36,6 +36,7 @@ import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnosti
 import { userFacingError } from "./lib/errorCopy";
 import { displayPath } from "./lib/paths";
 import { signInCommand, type AuthStatusPayload } from "./lib/museAuth";
+import { ModelControl } from "./components/ModelControl";
 import { isTauriRuntime } from "./lib/env";
 import { formatHandoffContext } from "./lib/handoff";
 import type { Artifact, ArtifactVersion } from "./lib/artifacts";
@@ -1468,14 +1469,16 @@ export default function App() {
                     sessionId={active.session_id}
                     disabled={backendMissing || active.archived === true || !connectedIds.includes(active.session_id)}
                     modelControl={
-                      <button
-                        onClick={() => setSettingsOpen(true)}
-                        aria-label="Model settings"
-                      >
-                        {liveModels?.find((model) => model.isActive)?.displayLabel ||
-                          active.model_id ||
-                          "Model"}
-                      </button>
+                      <ModelControl
+                        models={liveModels}
+                        value={active.model_id ?? null}
+                        onSelect={(modelId) => void setSessionModel(active.session_id, modelId)}
+                        /* The composer sits at the bottom of the window, so the
+                           popover must open upward. Without this the list rendered
+                           downwards, off the viewport, and was clipped by the
+                           conversation's own overflow: hidden. */
+                        compact
+                      />
                     }
                     running={active.running}
                     stopping={stoppingBySession[active.session_id] === true}
