@@ -40,7 +40,8 @@ function uuidv7() {
 }
 
 async function main() {
-  const child = spawn(SIDECAR, ["serve", "--sandbox-network", "restricted"], { stdio: ["pipe", "pipe", "pipe"] });
+  const extraArgs = (process.env.MUSE_SERVE_ARGS ?? "").split(" ").filter(Boolean);
+  const child = spawn(SIDECAR, ["serve", "--sandbox-network", "restricted", ...extraArgs], { stdio: ["pipe", "pipe", "pipe"] });
   const reader = createInterface({ input: child.stdout });
   let nextId = 1;
   const pending = new Map();
