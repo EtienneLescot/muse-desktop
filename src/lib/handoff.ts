@@ -266,3 +266,26 @@ export function formatHandoffContext(
     ? result
     : `${result.slice(0, MAX_HANDOFF_CONTEXT - 1)}…`;
 }
+
+/**
+ * The note a worktree continuation opens with.
+ *
+ * Deliberately not `formatHandoffContext`: that one describes a *plan* with
+ * checks, and a one-gesture move has no plan. What it must not do is borrow the
+ * plan's authority. So it states the three facts a person needs — this is a new
+ * conversation, the old one did not move, and where the copy is — and nothing
+ * else. Sending it is the user's decision; it lands in the composer.
+ */
+export function formatWorktreeContinuationNote(
+  sourceWorkspace: string,
+  targetPath: string,
+  targetBranch: string,
+): string {
+  return [
+    "## Continued in a worktree",
+    "This is a new conversation in a copy of the project. The previous conversation was not moved or emptied; it is still where it was.",
+    `Copy: ${contextValue(targetPath, "unknown path")} (${contextValue(targetBranch, "no branch")})`,
+    `Original: ${contextValue(sourceWorkspace, "unknown workspace")}`,
+    "Continue the work here, and check the copy before changing anything.",
+  ].join("\n");
+}
