@@ -60,6 +60,18 @@ log, session, active) puis **`taskkill /F /PID 23040` à +3 s**, relance :
 Avec le correctif, même si une valeur venait à être corrompue en vol, le repli ne serait plus
 persisté (test du marqueur ci-dessus) et le host reconstruirait les fils (rédemption ci-dessus).
 
+## Brouillon du composeur — DÉFAUT : non conservé (pièce manquante de M0-02)
+
+« Conserver le travail non envoyé (brouillon) » — **non implémenté** : saisi `draft-marker-M02-unsent`
+dans le composeur (clavier réel, sans envoi), attendu 7 s :
+
+- **aucune clé localStorage** ne contient le marqueur (aucune clé de type brouillon n'existe) ;
+- `taskkill /F` + relance : **brouillon perdu** (champ vide, stockage vide).
+
+La valeur vit uniquement dans l'état React du composeur — toute extinction (crash, kill, fermeture)
+la perd. Correctif attendu : persistance debouncée du brouillon par fil (une clé
+`muse-desktop.drafts.v1` par exemple) avec restauration au montage du fil.
+
 ## Reproductibilité
 
 ```powershell
