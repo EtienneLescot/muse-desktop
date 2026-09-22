@@ -57,6 +57,33 @@ La troncature du libellé, elle, est **rapportée et non comptée comme un éche
 
 Un piège de sonde au passage, du même genre que les précédents : le contenu d'un `<details>` fermé **conserve un rectangle**. Chrome le masque par `content-visibility`, donc `display`, `visibility` et `getClientRects()` disent tous « rendu ». Le popover du modèle, large de 300 px, était compté comme débordant de plus de 200 px **à toutes les largeurs** — un rapport plausible et entièrement faux. Le prédicat écarte maintenant `details:not([open])`.
 
+## La reprise : le garde-fou échouait à tort, et n'exerçait pas le cas
+
+Deuxième signalement du même symptôme, capture à l'appui : la pastille coupée par le bord droit de la carte. Le correctif ci-dessus était pourtant en place et `flex-wrap: wrap` actif. La mesure a établi autre chose — et d'abord **contre le garde-fou lui-même**.
+
+### Il échouait sur son propre seuil
+
+Au premier passage, le catalogue du host n'avait pas encore répondu : la pastille affichait le libellé de repli **« Model »** (`title="The host catalog is unavailable"`), soit **65 px**. Or le garde-fou refusait toute pastille sous **90 px** : `11 largeurs sur 11` en défaut, **sur un composeur sain**. Un seuil qui encode la longueur d'un libellé ne prouve rien sur une mise en page — il ne mesurait que le fait que `model/list` avait répondu.
+
+La règle est maintenant exacte et sans constante : **un libellé tronqué n'est légitime que si la pastille est seule sur sa rangée.** Flexbox ne rétrécit un élément qu'une fois sa rangée remplie ; sur une rangée partagée, la troncature signifie donc que la pastille a été écrasée alors qu'elle avait encore une ligne à elle. Le relevé indique désormais la rangée (`seule` / `partagee`), et la largeur **1280 px** — la largeur réelle de la fenêtre de test — manquait dans la liste balayée.
+
+### Il n'exerçait pas la configuration qui échouait
+
+Le composeur ne suit pas la largeur de la fenêtre : plafonné à **728 px** panneau de travail fermé, il tombe à **528–624 px** panneau ouvert, et c'est là que la ligne se rompt. Panneau fermé, les cinq pastilles tiennent (563 px dans 728) : le contrôle ne mesurait que le cas facile, et serait passé **correctif retiré**. Panneau ouvert, il mesure ce qui compte :
+
+| Largeur | Composeur | Ligne | Contexte | Rangée de la pastille | Libellé |
+|---|---|---|---|---|---|
+| 1440 px | 624 px | 0 | 0 | partagée | 171/171 |
+| 1280 px | **528 px** | 0 | 0 | seule | 171/171 |
+| 1024 px | 384 px | 0 | 0 | seule | 171/171 |
+| 640 px | 318 px | 0 | 0 | seule | 171/171 |
+
+Aucun débordement, libellé entier partout : c'est le **retour à la ligne** qui le protège, pas la troncature. Preuve visuelle (`composer-1280.png`, `composer-1024.png`, région du composeur, panneau ouvert) : la pastille est entière sur sa propre ligne.
+
+### Il peut encore échouer, et sans toucher à un fichier
+
+La vérification précédente retirait le correctif par `git stash`. Deux sessions travaillant dans le même dépôt, l'édition de fichier a été remplacée par une **injection dans la page** : la déclaration retirée est réappliquée (`.composer-context { flex-wrap: nowrap !important }`), et le script rapporte **11 largeurs sur 12** en défaut — dont `libelle tronque sur une ligne partagee` sur 11 d'entre elles, plus les débordements de ligne et de contexte aux largeurs serrées. Mutation retirée, `12 largeurs testees, aucun rognage`.
+
 ## Ce qui n'a pas été fait
 
 - Le catalogue n'offre **aucun libellé plus court** : `model/list` renvoie l'identifiant comme son propre `displayLabel` pour les quatre modèles. Raccourcir la pastille est donc une décision produit (quelle forme ?), pas un correctif d'affichage — la troncature et le retour à la ligne sont les deux seules options honnêtes en attendant.
