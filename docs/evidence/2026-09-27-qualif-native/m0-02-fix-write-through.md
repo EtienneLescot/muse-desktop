@@ -45,6 +45,21 @@ corrigé). Les fils survivent donc aussi côté host, indépendamment du localSt
 Restauration finale : `projects.v1` reintégrée depuis la clé de secours `m02.bak.p`, projet
 `openscreen` de nouveau affiché.
 
+## Rejeu du `taskkill /F` réel — RÉUSSI (kill « sale » en plein tour)
+
+Sur le build corrigé, tour lancé (« Reply with exactly the word: KILLTEST », écritures en vol :
+log, session, active) puis **`taskkill /F /PID 23040` à +3 s**, relance :
+
+| | Avant kill | Après kill + relance |
+|---|---|---|
+| Clés localStorage | 36 | **36** ✓ |
+| `projects.v1` | 172 o (1 projet) | **172 o (1 projet)** ✓ octet à octet |
+| `sessions.v1` | 13 557 o (59 fils) | **13 578 o (61 fils)** ✓ JSON valide, enrichi |
+
+**Aucune corruption, aucune perte** : projets et fils intacts après un kill brutal en plein tour.
+Avec le correctif, même si une valeur venait à être corrompue en vol, le repli ne serait plus
+persisté (test du marqueur ci-dessus) et le host reconstruirait les fils (rédemption ci-dessus).
+
 ## Reproductibilité
 
 ```powershell
