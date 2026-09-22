@@ -5416,12 +5416,16 @@ fn subagent_control_payload(
         json!({
             "commandId": new_command_id(),
             "sessionId": session_id,
-            "agentId": agent_id,
+            "subagentId": agent_id,
         }),
     ))
 }
 
 /// Params for `subagent/followupTask`: base ids plus the follow-up text.
+///
+/// The text field is `body` (`SubagentInputParams`), not `task`: the same
+/// schema that names the id also names the payload, and inventing a friendlier
+/// key would have failed here too.
 /// Pure (unit-tested).
 fn subagent_followup_payload(
     session_id: &str,
@@ -5430,11 +5434,11 @@ fn subagent_followup_payload(
 ) -> Result<(String, Value), String> {
     let (method, mut params) =
         subagent_control_payload(SUBAGENT_FOLLOWUP_METHOD, session_id, agent_id)?;
-    let task = require_non_empty(task, "task")?;
+    let body = require_non_empty(task, "task")?;
     params
         .as_object_mut()
         .ok_or("followup payload is not an object")?
-        .insert("task".to_string(), json!(task));
+        .insert("body".to_string(), json!(body));
     Ok((method, params))
 }
 
@@ -8481,9 +8485,19 @@ mod tests {
         for (method, expected) in cases {
             let (m, params) = subagent_control_payload(method, "sess-1", "item-9").unwrap();
             assert_eq!(m, expected);
-            assert_eq!(params["sessionId"], "sess-1");
-            assert_eq!(params["agentId"], "item-9");
-            assert!(params["commandId"].as_str().is_some_and(|s| !s.is_empty()));
+            // The field set is pinned, not sampled. Asserting one field is how a
+            // wrong name reached the host: the test agreed with the bug.
+            let object = params.as_object().expect("params are an object");
+            let mut keys: Vec<&str> = object.keys().map(String::as_str).collect();
+            keys.sort_unstable();
+            assert_eq!(
+                keys,
+                ["commandId", "sessionId", "subagentId"],
+                "the MSP schema spells the shared target as SubagentTargetParams"
+            );
+            assert_eq!(object["sessionId"], "sess-1");
+            assert_eq!(object["subagentId"], "item-9");
+            assert!(object["commandId"].as_str().is_some_and(|s| !s.is_empty()));
         }
     }
 
@@ -8491,9 +8505,14 @@ mod tests {
     fn subagent_followup_carries_the_task_text() {
         let (m, params) = subagent_followup_payload("sess-1", "item-9", "dig deeper").unwrap();
         assert_eq!(m, "subagent/followupTask");
-        assert_eq!(params["task"], "dig deeper");
-        assert_eq!(params["sessionId"], "sess-1");
-        assert_eq!(params["agentId"], "item-9");
+        // SubagentInputParams: ids plus `body` — not `task`.
+        let object = params.as_object().expect("params are an object");
+        let mut keys: Vec<&str> = object.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["body", "commandId", "sessionId", "subagentId"]);
+        assert_eq!(object["body"], "dig deeper");
+        assert_eq!(object["sessionId"], "sess-1");
+        assert_eq!(object["subagentId"], "item-9");
     }
 
     #[test]
