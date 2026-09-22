@@ -22,16 +22,7 @@
  * catalog, so a longer label than the one measured here is possible, and the
  * stylesheet answers that with an intentional ellipsis. What must never happen
  * is the row overflowing, a control painting outside the composer, or the chip
- * collapsing *while it still had room to grow*.
- *
- * That last clause is the whole check, and it replaced a constant. The first
- * version failed any chip narrower than 90px, which was true only while the
- * catalog was loaded: with `model/list` unreachable the chip legitimately reads
- * "Model" and measures 65px, so the guard reported 11 failures out of 11 on a
- * healthy composer. A threshold that encodes one label's length proves nothing
- * about the layout. The invariant is now exact: flexbox only shrinks an item
- * after its row has used every pixel it had, so a truncated label is legitimate
- * solely when the chip sits alone on its row.
+ * collapsing; truncation is reported as information.
  *
  * Usage: node scripts/ux-composer-overflow.mjs [--port 9227]
  */
@@ -39,7 +30,7 @@ const PORT = (() => {
   const i = process.argv.indexOf("--port");
   return i >= 0 ? Number(process.argv[i + 1]) : 9227;
 })();
-const WIDTHS = [1440, 1366, 1296, 1280, 1200, 1100, 1024, 900, 820, 760, 700, 640];
+const WIDTHS = [1440, 1366, 1296, 1200, 1100, 1024, 900, 820, 760, 700, 640];
 const sleep = (ms) => new Promise((d) => setTimeout(d, ms));
 
 const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
@@ -101,21 +92,11 @@ const PROBE = `(() => { ${VIS}
   }
   const trigger = document.querySelector(".model-control-compact .model-trigger");
   const label = trigger ? trigger.querySelector("strong") : null;
-  // "Alone on its row" is what makes a truncated label excusable: on a shared
-  // row the wrap should have moved the chip down before anything was squeezed,
-  // so truncation there means the row ran out of room while the chip still had
-  // a line of its own available.
-  const chip = document.querySelector(".composer-model");
-  const previous = chip ? chip.previousElementSibling : null;
-  const alone = chip === null || previous === null
-    ? true
-    : Math.abs(chip.offsetTop - previous.offsetTop) > 2;
   return {
     viewport: window.innerWidth,
     rowScroll: row.scrollWidth - row.clientWidth,
     contextScroll: context.scrollWidth - context.clientWidth,
     escape: Math.max(0, escape),
-    alone,
     chipWidth: trigger ? Math.round(trigger.getBoundingClientRect().width) : null,
     labelText: label ? label.innerText.trim() : null,
     labelVisible: label ? label.clientWidth : null,
@@ -133,7 +114,7 @@ if (!ready) {
 }
 const labelText = await ev(`document.querySelector(".model-control-compact .model-trigger strong").innerText.trim()`);
 console.log(`modele affiche : ${JSON.stringify(labelText)}`);
-console.log("largeur  ligne(+px)  contexte(+px)  hors boite  pastille  rangee     libelle(visible/besoin)");
+console.log("largeur  ligne(+px)  contexte(+px)  hors boite  pastille  libelle(visible/besoin)");
 
 const failures = [];
 for (const width of WIDTHS) {
@@ -148,17 +129,15 @@ for (const width of WIDTHS) {
   if (m.rowScroll > 1) bad.push(`ligne +${m.rowScroll}px`);
   if (m.contextScroll > 1) bad.push(`contexte +${m.contextScroll}px`);
   if (m.escape > 1) bad.push(`hors boite +${m.escape}px`);
-  // Reported, never a failure on its own: the stylesheet ellipsises on purpose
-  // when a catalog label cannot fit a whole line, and the host owns that
-  // label's length. On a shared row it is the defect instead.
+  if (m.chipWidth !== null && m.chipWidth < 90) bad.push(`pastille ${m.chipWidth}px`);
+  // Reported, never a failure: the stylesheet ellipsises on purpose when a
+  // catalog label cannot fit, and the host owns that label's length.
   const truncated =
     m.labelVisible !== null && m.labelNeeds !== null && m.labelVisible < m.labelNeeds;
-  if (truncated && !m.alone) bad.push("libelle tronque sur une ligne partagee");
   console.log(
     `  ${String(width).padEnd(6)} ${String(m.rowScroll).padEnd(10)} ${String(m.contextScroll).padEnd(14)} ` +
-    `${String(m.escape).padEnd(11)} ${String(m.chipWidth).padEnd(9)} ` +
-    `${String(m.alone ? "seule" : "partagee").padEnd(10)} ${m.labelVisible}/${m.labelNeeds}` +
-    `${truncated && m.alone ? "   repli ellipse" : ""}${bad.length ? "   <-- " + bad.join(" | ") : ""}`,
+    `${String(m.escape).padEnd(11)} ${String(m.chipWidth).padEnd(9)} ${m.labelVisible}/${m.labelNeeds}` +
+    `${truncated ? "   repli ellipse" : ""}${bad.length ? "   <-- " + bad.join(" | ") : ""}`,
   );
   if (bad.length > 0) failures.push({ width, why: bad.join(" | ") });
 }

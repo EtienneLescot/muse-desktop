@@ -5,11 +5,7 @@ import { Icon } from "./Icon";
 import type { AuthorizationMode } from "../lib/authorization";
 import { ReasoningEffortControl } from "./ReasoningEffortControl";
 import type { ReasoningEffort } from "../lib/reasoning";
-import {
-  folderName,
-  projectOptionLabels,
-  type ProjectWorkspaceOption,
-} from "../lib/projects";
+import type { ProjectWorkspaceOption } from "../lib/projects";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
 import { userFacingError } from "../lib/errorCopy";
 import {
@@ -98,8 +94,11 @@ export function EmptySessionScreen({
     (option) => option.optionId === environmentId,
   );
   const selectedWorkspace = selectedEnvironment?.workspace ?? workspace;
-  // Computed as a set: a folder is appended only where it distinguishes the row.
-  const projectLabels = projectOptionLabels(environmentOptions);
+  const workspaceLabel = (path: string | null): string => {
+    if (path === null) return "Choose a folder";
+    const parts = path.split(/[\\/]/).filter((part) => part.length > 0);
+    return parts[parts.length - 1] ?? path;
+  };
   useEffect(() => {
     if (environmentId !== "default" && selectedEnvironment === undefined) {
       setEnvironmentId("default");
@@ -190,26 +189,26 @@ export function EmptySessionScreen({
         }}
       />
       <div className="welcome-environment">
-        <label htmlFor="welcome-environment-select">Project</label>
+        <label htmlFor="welcome-environment-select">Start in</label>
         <select
           id="welcome-environment-select"
           value={environmentId}
           onChange={(event) => setEnvironmentId(event.target.value)}
-          aria-label="Project for this conversation"
+          aria-label="Conversation environment"
         >
-          <option value="default">No project</option>
-          {environmentOptions.map((option, index) => (
+          <option value="default">
+            Default workspace · {workspaceLabel(workspace)}
+          </option>
+          {environmentOptions.map((option) => (
             <option key={option.optionId} value={option.optionId}>
-              {projectLabels[index] ?? option.projectName}
+              {option.projectName} · {workspaceLabel(option.workspace)}
             </option>
           ))}
         </select>
         <small>
           {selectedEnvironment
-            ? `Runs in ${folderName(selectedEnvironment.workspace)} with ${selectedEnvironment.projectName}'s preferences. The agent reads the rules of that folder.`
-            : workspace === null
-              ? "Choose a project folder to inherit its preferences and its rules."
-              : `No project: runs in ${folderName(workspace)} with the global settings. The agent reads that folder's rules.`}
+            ? `Runs in ${workspaceLabel(selectedEnvironment.workspace)} with ${selectedEnvironment.projectName}'s preferences. The agent reads the rules of that folder.`
+            : "Choose a project folder to inherit its preferences and its rules."}
         </small>
       </div>
       <div className="welcome-suggestions">
