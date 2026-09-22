@@ -5,7 +5,7 @@ import type { LogEntry } from "../lib/persist";
 import { isTauriRuntime } from "../lib/env";
 import type { ItemOutputChunk } from "../hooks/useMuseSessions";
 import { REFLEXIVE_LABEL } from "../lib/phase";
-import { subagentSummary } from "../lib/subagent";
+import { childSessionLabel, subagentControlAvailability, subagentSummary } from "../lib/subagent";
 import {
   initialStreamWindowStart,
   maxStreamWindowStart,
@@ -32,10 +32,7 @@ import {
 } from "../lib/transcriptSearch";
 import { streamEntryA11y, streamWindowAnnouncement } from "../lib/streamA11y";
 import { streamNavigationTarget } from "../lib/streamNavigation";
-import {
-  isTerminalSubagentStatus,
-  subagentStatusLabel,
-} from "../lib/subagent";
+import { subagentStatusLabel } from "../lib/subagent";
 import { officePreviewForFile, type OfficePreview } from "../lib/officePreview";
 import { MessageContent } from "./MessageContent";
 import { loadStreamPosition, saveStreamPosition } from "../lib/streamPosition";
@@ -996,11 +993,13 @@ export function StreamView({
           );
         }
         const subagentStatus = e.subagentStatus ?? (e.open === true ? "running" : "completed");
-        const subagentTerminal = isTerminalSubagentStatus(subagentStatus);
-        const subagentResumable =
-          subagentStatus === "interrupted" ||
-          subagentStatus === "stopped" ||
-          subagentStatus === "paused";
+        // One table decides what each control may do, and says why when it may
+        // not. The previous ad-hoc booleans left every button enabled on a
+        // finished agent, where each click could only fail.
+        const subagentActions = subagentControlAvailability(subagentStatus, {
+          busy: busy === e.id,
+          hasChildSession: typeof e.childSessionId === "string" && e.childSessionId !== "",
+        });
         return e.role === "subagent" ? (
           <details
             key={e.id}
@@ -1033,61 +1032,61 @@ export function StreamView({
               {e.open && <span className="caret" aria-hidden="true" />}
             </pre>
             {e.childSessionId && (
-              <div className="muted subagent-child">
-                child: {e.childSessionId}
+              <div className="muted subagent-child" title={e.childSessionId}>
+                child: {childSessionLabel(e.childSessionId)}
               </div>
             )}
             {controls && (
               <div className="subagent-controls">
                 <button
                   type="button"
-                  disabled={busy === e.id || subagentTerminal}
+                  disabled={!subagentActions.interrupt.enabled}
                   onClick={() => controls.onInterrupt(agentOf(e))}
-                  title="subagent/interrupt"
+                  title={subagentActions.interrupt.reason ?? "subagent/interrupt"}
                 >
                   Interrupt
                 </button>
                 <button
                   type="button"
-                  disabled={busy === e.id || subagentTerminal}
+                  disabled={!subagentActions.stop.enabled}
                   onClick={() => controls.onStop(agentOf(e))}
-                  title="subagent/stop"
+                  title={subagentActions.stop.reason ?? "subagent/stop"}
                 >
                   Stop
                 </button>
                 <button
                   type="button"
-                  disabled={busy === e.id || !subagentResumable}
+                  disabled={!subagentActions.resume.enabled}
                   onClick={() => controls.onResume(agentOf(e))}
-                  title="subagent/resume"
+                  title={subagentActions.resume.reason ?? "subagent/resume"}
                 >
                   Resume
                 </button>
                 <button
                   type="button"
-                  disabled={busy === e.id}
+                  disabled={!subagentActions.followup.enabled}
                   onClick={() => {
                     setFollowupFor(followupFor === e.id ? null : e.id);
                     setFollowupText("");
                   }}
-                  title="subagent/followupTask"
+                  title={subagentActions.followup.reason ?? "subagent/followupTask"}
                 >
                   Follow up
                 </button>
                 <button
                   type="button"
-                  disabled={busy === e.id}
+                  disabled={!subagentActions.readResult.enabled}
                   onClick={() => void runResult(e, "result")}
-                  title="subagent/readResult"
+                  title={subagentActions.readResult.reason ?? "subagent/readResult"}
                 >
                   Read result
                 </button>
                 {e.childSessionId && (
                   <button
                     type="button"
-                    disabled={busy === e.id}
+                    disabled={!subagentActions.drilldown.enabled}
                     onClick={() => void runResult(e, "drilldown")}
-                    title="session/read"
+                    title={subagentActions.drilldown.reason ?? "session/read"}
                   >
                     Agent conversation
                   </button>
