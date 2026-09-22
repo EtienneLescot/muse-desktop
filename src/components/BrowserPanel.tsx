@@ -380,7 +380,7 @@ export function BrowserPanel({
         return;
       }
       const target = new URL(targetUrl);
-      setDownloadStatus("Fetching the selected linkâ€¦");
+      setDownloadStatus("Fetching the selected link…");
       let encoded: string;
       let contentType = "application/octet-stream";
       let bytes: ArrayBuffer | null = null;
@@ -462,7 +462,7 @@ export function BrowserPanel({
       setCaptureStatus("Visual capture is unavailable in this browser build.");
       return;
     }
-    setCaptureStatus("Choose the browser surface to captureâ€¦");
+    setCaptureStatus("Choose the browser surface to capture…");
     let stream: MediaStream | null = null;
     try {
       stream = await getDisplayMedia.call(navigator.mediaDevices, {
@@ -690,7 +690,7 @@ export function BrowserPanel({
       setNativeBrowserStatus("The native browser is available in the desktop build.");
       return;
     }
-    setNativeBrowserStatus("Opening native browserâ€¦");
+    setNativeBrowserStatus("Opening native browser…");
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("open_native_browser", { url: normalized, sessionId });
@@ -765,7 +765,7 @@ export function BrowserPanel({
   const stopBrowserSkill = () => {
     if (!browserSkillInFlight || onCancelBrowserSkill === undefined || stoppingHostSkill) return;
     setStoppingHostSkill(true);
-    setControlStatus("Asking Muse to stop the browser actionâ€¦");
+    setControlStatus("Asking Muse to stop the browser action…");
     void Promise.resolve(onCancelBrowserSkill())
       .then(() => setControlStatus("Stop requested. Waiting for Muse to confirm."))
       .catch((error) => setControlStatus(`The browser action could not be stopped: ${error instanceof Error ? error.message : String(error)}`))
@@ -813,7 +813,7 @@ export function BrowserPanel({
                   title={`Close ${host} tab`}
                   onClick={() => closeTab(tab.id)}
                 >
-                  Ã—
+                  ×
                 </button>
               </div>
             );
@@ -843,8 +843,8 @@ export function BrowserPanel({
           <button type="submit" disabled={addressNormalized === null}>Go</button>
         </form>
         <div className="browser-nav-row" aria-label="Browser navigation">
-          <button type="button" onClick={goBack} disabled={historyIndex <= 0} aria-label="Back">â†</button>
-          <button type="button" onClick={goForward} disabled={historyIndex < 0 || historyIndex >= history.length - 1} aria-label="Forward">â†’</button>
+          <button type="button" onClick={goBack} disabled={historyIndex <= 0} aria-label="Back">←</button>
+          <button type="button" onClick={goForward} disabled={historyIndex < 0 || historyIndex >= history.length - 1} aria-label="Forward">→</button>
           <button type="button" onClick={() => renderable && setFrameKey((key) => key + 1)} disabled={!renderable}>Reload</button>
           <button
             type="button"
@@ -892,7 +892,7 @@ export function BrowserPanel({
         {/*
           The preview surface only exists once a URL is renderable, so a fresh
           tab used to show nothing at all between the navigation row and "Page
-          controls" â€” the one panel of the seven with no empty state. Reported by
+          controls" — the one panel of the seven with no empty state. Reported by
           an independent visual review and confirmed by structure measurement.
         */}
         {!renderable && frameError === null && (
@@ -988,7 +988,7 @@ export function BrowserPanel({
                   disabled={stoppingHostSkill}
                   title="Ask Muse to stop the active browser action"
                 >
-                  {stoppingHostSkill ? "Stoppingâ€¦" : "Stop Muse action"}
+                  {stoppingHostSkill ? "Stopping…" : "Stop Muse action"}
                 </button>
               )}
             </div>
@@ -1154,7 +1154,7 @@ export function BrowserPanel({
           )}
           {capture !== null && (
             <div className="muted browser-capture-meta">
-              {formatBrowserCaptureContext(capture).split("\n").slice(1, 4).join(" Â· ")}
+              {formatBrowserCaptureContext(capture).split("\n").slice(1, 4).join(" · ")}
             </div>
           )}
         </div>
@@ -1163,7 +1163,7 @@ export function BrowserPanel({
             {pageNotes.map((a) => (
               <li key={a.id} className="browser-note">
                 {a.selection !== "" && (
-                  <blockquote title="Anchored selection">â€œ{a.selection}â€</blockquote>
+                  <blockquote title="Anchored selection">“{a.selection}”</blockquote>
                 )}
                 <span>{a.comment}</span>
                 <button
@@ -1197,7 +1197,7 @@ export function BrowserPanel({
           <ul className="browser-perms-rows">
             {/*
               One row, because one grant is enforced. This list used to offer
-              four "apps" â€” `browser`, `finder`, `terminal`, `editor` â€” plus a
+              four "apps" — `browser`, `finder`, `terminal`, `editor` — plus a
               free-text "other app": only `browser` is read anywhere, the rest
               toggled nothing. Computer use proper is the Desktop panel's single
               switch, which grants tools through the CUA driver.

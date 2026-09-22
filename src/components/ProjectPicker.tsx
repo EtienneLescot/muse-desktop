@@ -19,12 +19,12 @@ interface Props {
  * One entry for "where does this conversation run".
  *
  * The welcome screen used to show two controls side by side: a folder chip
- * ("Change folder Â· openscreen") and a project selector ("Project Â· openscreen").
+ * ("Change folder · openscreen") and a project selector ("Project · openscreen").
  * Both answered the same question, both displayed the same word, and nothing
  * said which one won. The folder chip is gone.
  *
- * A project *is* its folder â€” that is the CLI's model, where `muse init` writes
- * rules into the directory and no project entity exists at all â€” so the single
+ * A project *is* its folder — that is the CLI's model, where `muse init` writes
+ * rules into the directory and no project entity exists at all — so the single
  * entry is the project, and choosing a folder when no project matches is how a
  * project gets created. The name comes from the folder, as `muse init` does it.
  */
@@ -77,7 +77,7 @@ export function ProjectPicker({
             {selectedLabel ?? "Choose a project"}
           </span>
           {/* The folder is shown only once a project is chosen: on its own it
-              read as a second answer to the same question ("Choose a project Â·
+              read as a second answer to the same question ("Choose a project ·
               openscreen"), which is the duplication this control replaced. */}
           {selected !== null && (
             <span className="project-trigger-folder">{folderName(selected.workspace)}</span>
@@ -107,7 +107,7 @@ export function ProjectPicker({
                 }}
               >
                 <span className="project-option-check" aria-hidden="true">
-                  {isSelected ? "âœ“" : ""}
+                  {isSelected ? "✓" : ""}
                 </span>
                 <span>
                   <strong>{labels[index] ?? option.projectName}</strong>
@@ -122,7 +122,7 @@ export function ProjectPicker({
             onClick={() => void createFromFolder()}
             disabled={busy}
           >
-            {busy ? "Choosingâ€¦" : "New project from a folderâ€¦"}
+            {busy ? "Choosing…" : "New project from a folder…"}
           </button>
           {error !== null && (
             <p className="project-popover-error" role="alert">

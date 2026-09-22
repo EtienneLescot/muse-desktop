@@ -97,7 +97,7 @@ const appState = (client) => evaluate(client, `(() => {
     stale: /No recent host update/.test(body),
     stopping: /Stopping Muse/.test(body),
     resuming: /Muse is resuming/.test(body),
-    thinking: /thinkingâ€¦|\\(thinking\\)/.test(body),
+    thinking: /thinking…|\\(thinking\\)/.test(body),
     completed: /Completed/.test(body),
     bodyTail: body.slice(-320)
   };

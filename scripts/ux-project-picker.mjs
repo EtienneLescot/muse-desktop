@@ -2,11 +2,11 @@
 /**
  * Verify the welcome screen offers ONE entry for where a conversation runs.
  *
- * It used to offer two: a folder chip ("Change folder Â· openscreen") and a
- * project selector ("Project Â· openscreen"). Both answered the same question,
+ * It used to offer two: a folder chip ("Change folder · openscreen") and a
+ * project selector ("Project · openscreen"). Both answered the same question,
  * both printed the same word, and nothing said which one won. This asserts the
  * folder chip and the old `<select>` are gone, that a single project control
- * remains, and that its popover is where a missing project gets created â€” by
+ * remains, and that its popover is where a missing project gets created — by
  * choosing a folder, since a project *is* its folder.
  *
  * Usage: node scripts/ux-project-picker.mjs [--port 9227] [--out <png>]
@@ -74,7 +74,7 @@ if (openedWizard === "introuvable") {
 
 let failures = 0;
 const check = (label, ok, detail) => {
-  console.log(`  ${ok ? "ok  " : "FAIL"} ${label}${detail === undefined ? "" : ` â€” ${detail}`}`);
+  console.log(`  ${ok ? "ok  " : "FAIL"} ${label}${detail === undefined ? "" : ` — ${detail}`}`);
   if (!ok) failures += 1;
 };
 
@@ -97,7 +97,7 @@ console.log("\nverifications");
 check("l'ecran d'accueil est affiche", before.welcome);
 check("une seule entree de projet", before.pickers === 1, `${before.pickers} controle(s)`);
 check("la pastille de dossier a disparu", before.folderChip === 0);
-check("Â« Change folder Â» a disparu", before.changeFolder === 0);
+check("« Change folder » a disparu", before.changeFolder === 0);
 check("l'ancien selecteur a disparu", before.selects === 0);
 check("l'entree annonce un projet", before.trigger.length > 0, before.trigger);
 check(
