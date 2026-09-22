@@ -1,0 +1,8 @@
+﻿node :   PRECONDITION ECHOUEE : conversation affichee
+Au caractère Ligne:1 : 942
++ ... -Seconds 5; node scripts/ux-terminal-state.mjs --port 9222 --type 'ec ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (  PRECONDITION ...sation affichee:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Ouvre une conversation.
