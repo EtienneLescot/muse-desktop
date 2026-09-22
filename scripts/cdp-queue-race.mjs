@@ -132,18 +132,16 @@ const submit = (client) => evaluate(client, `(() => {
   const field = [...document.querySelectorAll("textarea")].filter((f) => f.offsetParent !== null)[0];
   if (!field) return { submitted: false, reason: "no composer" };
   if (field.disabled) return { submitted: false, reason: "composer disabled" };
+  if (field.value.length === 0) return { submitted: false, reason: "composer empty" };
+  // The real send button is the only reliable submission path: synthetic Enter
+  // can fire twice (key handlers on keydown and keyup duplicate the queued turn)
+  // or zero times (the handler misses it and the text stays in the composer).
   field.focus();
-  for (const type of ["keydown", "keypress", "keyup"]) {
-    field.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
-  }
-  // Synthetic Enter does not always reach the React composer handler; fall
-  // back to the real send button (measured reliable, including while a turn is
-  // running — where it queues instead of sending).
-  if (field.value.length > 0) {
-    const send = document.querySelector("button.send");
-    if (send && !send.disabled) { send.click(); return { submitted: true, via: "send-button", remaining: field.value.length }; }
-  }
-  return { submitted: true, via: "enter", remaining: field.value.length };
+  const send = document.querySelector("button.send");
+  if (!send) return { submitted: false, reason: "no send button" };
+  if (send.disabled) return { submitted: false, reason: "send button disabled" };
+  send.click();
+  return { submitted: true, via: "send-button", remaining: field.value.length };
 })()`);
 
 async function main() {
@@ -181,7 +179,11 @@ async function main() {
 
     // THE RACE: remove every queued entry, and keep removing for a moment, from
     // one evaluation so the clicks cannot be spread by CDP round-trips.
-    report.race = await evaluate(client, `(async () => {
+    // THE RACE: remove every queued entry, and keep removing for a moment, from
+    // one evaluation so the clicks cannot be spread by CDP round-trips. The
+    // result is parked on window because evaluate() wraps its expression in
+    // JSON.stringify, which flattens an async IIFE's resolution to {}.
+    await evaluate(client, `(async () => {
       const click = () => {
         const button = [...document.querySelectorAll("button")].find((b) => /remove from queue/i.test(b.innerText || ""));
         if (!button) return false;
@@ -193,8 +195,10 @@ async function main() {
         attempts.push(click());
         await new Promise((r) => setTimeout(r, 90));
       }
-      return { clicks: attempts.filter(Boolean).length, attempts: attempts.length };
+      window.__queueRace = { clicks: attempts.filter(Boolean).length, attempts: attempts.length };
+      return true;
     })()`);
+    report.race = await evaluate(client, `(() => window.__queueRace || null)()`);
 
     await sleep(2_000);
     report.steps.push({ label: "after-race", ...(await readState(client)) });

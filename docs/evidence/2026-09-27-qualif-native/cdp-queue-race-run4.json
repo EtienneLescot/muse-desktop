@@ -1,0 +1,118 @@
+﻿{
+  "schema": "muse-desktop.cdp-queue-race.v1",
+  "preconditions": [
+    {
+      "label": "composer vide et connecté",
+      "ok": false,
+      "state": {
+        "queuedRows": 0,
+        "queuedTexts": [],
+        "panelVisible": false,
+        "removeButtons": 0,
+        "working": false,
+        "composerLength": 27,
+        "logEntries": 53,
+        "raceAInLog": true,
+        "raceBInLog": false,
+        "removeAllInBody": false
+      }
+    },
+    {
+      "label": "premier tour en cours",
+      "ok": true,
+      "state": {
+        "queuedRows": 0,
+        "queuedTexts": [],
+        "panelVisible": false,
+        "removeButtons": 0,
+        "working": true,
+        "composerLength": 0,
+        "logEntries": 56,
+        "raceAInLog": true,
+        "raceBInLog": false,
+        "removeAllInBody": false
+      }
+    },
+    {
+      "label": "deux tours en file",
+      "ok": true,
+      "state": {
+        "queuedRows": 2,
+        "queuedTexts": [
+          "RACE-QUEUED-A-3311 say ALPHA",
+          "RACE-QUEUED-B-7722 say BETA"
+        ],
+        "panelVisible": true,
+        "removeButtons": 2,
+        "working": true,
+        "composerLength": 0,
+        "logEntries": 62,
+        "raceAInLog": true,
+        "raceBInLog": true,
+        "removeAllInBody": false
+      }
+    }
+  ],
+  "steps": [
+    {
+      "label": "two-queued",
+      "queuedRows": 2,
+      "queuedTexts": [
+        "RACE-QUEUED-A-3311 say ALPHA",
+        "RACE-QUEUED-B-7722 say BETA"
+      ],
+      "panelVisible": true,
+      "removeButtons": 2,
+      "working": true,
+      "composerLength": 0,
+      "logEntries": 62,
+      "raceAInLog": true,
+      "raceBInLog": true,
+      "removeAllInBody": false
+    },
+    {
+      "label": "after-race",
+      "queuedRows": 0,
+      "queuedTexts": [],
+      "panelVisible": false,
+      "removeButtons": 0,
+      "working": true,
+      "composerLength": 0,
+      "logEntries": 65,
+      "raceAInLog": true,
+      "raceBInLog": true,
+      "removeAllInBody": false
+    },
+    {
+      "label": "after-race-settled",
+      "queuedRows": 0,
+      "queuedTexts": [],
+      "panelVisible": false,
+      "removeButtons": 0,
+      "working": true,
+      "composerLength": 0,
+      "logEntries": 65,
+      "raceAInLog": true,
+      "raceBInLog": true,
+      "removeAllInBody": false
+    },
+    {
+      "label": "later",
+      "queuedRows": 0,
+      "queuedTexts": [],
+      "panelVisible": false,
+      "removeButtons": 0,
+      "working": true,
+      "composerLength": 0,
+      "logEntries": 65,
+      "raceAInLog": true,
+      "raceBInLog": true,
+      "removeAllInBody": false
+    }
+  ],
+  "open": {
+    "opened": true,
+    "label": "Count slowly from one to five hundred in w…"
+  },
+  "race": null
+}

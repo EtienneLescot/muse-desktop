@@ -299,8 +299,8 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 
 - ◐ **M1-10 — Réorienter une exécution ou mettre en attente** *(Global : —)*
   - Windows ◐ — queue MSP par défaut, dispositions `queued`/`steered` visibles, ordre persisté sous `muse-desktop.queued-turns.v1`, `turn/unqueue`, réconciliation sur `history.snapshot.queuedTurns`. Smoke `--exercise-queue` réussi sur deux sessions : `disposition: queued` puis `turn/unqueue` accepté.
-  - **Progrès (27/09/2026) :** course de suppression en webview jouée pour de vrai ([`m1-10-course-de-file.md`](evidence/2026-09-27-qualif-native/m1-10-course-de-file.md)) : suppressions en rafale depuis le contexte de page pendant un premier tour — **aucun tour retiré n'a jamais démarré** (ni accusé ni réponse), file vidée, premier tour mené à son terminal. Limites : second tour mal enfilé dans le run, à rejouer proprement.
-  - **Reste :** course avec deux tours correctement enfilés, restauration native après redémarrage ; webview empaquetée.
+  - **Progrès (27/09/2026) :** course de suppression en webview jouée pour de vrai ([`m1-10-course-de-file.md`](evidence/2026-09-27-qualif-native/m1-10-course-de-file.md)) : suppressions en rafale depuis le contexte de page pendant un premier tour — **aucun tour retiré n'a jamais démarré** (ni accusé ni réponse), file vidée, premier tour mené à son terminal. **Run de clôture de course le 27/09 au soir :** deux tours **correctement et distinctement enfilés** (A et B, sans doublon — la duplication venait du harnais : Enter synthétique double, corrigé), retirés pendant l'exécution, **jamais lancés** (file vide dès le retrait, premier tour toujours seul à +20 s), trace « non envoyé » au journal pour les deux.
+  - **Reste :** restauration native après redémarrage ; webview empaquetée.
   - macOS ☐ / Linux ☐ — non commencé.
 
 - ◐ **M1-11 — Choisir un modèle disponible et suivre le contexte** *(Global : —)*
