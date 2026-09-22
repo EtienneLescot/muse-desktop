@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { WorkspacePicker } from "./WorkspacePicker";
+import { ProjectPicker } from "./ProjectPicker";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import type { AuthorizationMode } from "../lib/authorization";
@@ -29,7 +29,8 @@ import {
 interface Props {
   /** Default folder for the new thread; null until the user picks one. */
   workspace: string | null;
-  onPickWorkspace: (path: string) => void;
+  /** Creates a project from a chosen folder, and returns its new option id. */
+  onCreateProjectFromFolder: (path: string) => Promise<string | null>;
   /** Project roots available as explicit environments on the welcome screen. */
   environmentOptions?: ProjectWorkspaceOption[];
   /** Creates the session and sends the first message right away. */
@@ -57,13 +58,13 @@ export interface NewConversationEnvironment {
 
 /**
  * Empty session screen shown when no session is active. Codex-like: the
- * folder/environment is chosen here, per thread, at creation time — there is
+ * folder/environment is chosen here, per thread, at creation time ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â there is
  * no global folder lock in the sidebar. Starting sends the typed message
  * immediately; nothing waits in the composer.
  */
 export function EmptySessionScreen({
   workspace,
-  onPickWorkspace,
+  onCreateProjectFromFolder,
   environmentOptions = [],
   onStart,
   backendMissing,
@@ -127,7 +128,7 @@ export function EmptySessionScreen({
       }
     }
     if (next.length > 0) setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
-    if (failures.length > 0) setAttachmentError(failures.join(" · "));
+    if (failures.length > 0) setAttachmentError(failures.join(" ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· "));
   }
 
   async function start() {
@@ -182,36 +183,20 @@ export function EmptySessionScreen({
         A little further.
       </h2>
       <p>Build, explore, and ship with Muse.</p>
-      <WorkspacePicker
-        workspace={workspace}
-        onPick={(path) => {
-          setEnvironmentId("default");
-          onPickWorkspace(path);
-        }}
+      <ProjectPicker
+        options={environmentOptions}
+        labels={projectLabels}
+        value={environmentId}
+        onChange={setEnvironmentId}
+        onCreateFromFolder={onCreateProjectFromFolder}
       />
-      <div className="welcome-environment">
-        <label htmlFor="welcome-environment-select">Project</label>
-        <select
-          id="welcome-environment-select"
-          value={environmentId}
-          onChange={(event) => setEnvironmentId(event.target.value)}
-          aria-label="Project for this conversation"
-        >
-          <option value="default">No project</option>
-          {environmentOptions.map((option, index) => (
-            <option key={option.optionId} value={option.optionId}>
-              {projectLabels[index] ?? option.projectName}
-            </option>
-          ))}
-        </select>
-        <small>
-          {selectedEnvironment
-            ? `Runs in ${folderName(selectedEnvironment.workspace)} with ${selectedEnvironment.projectName}'s preferences. The agent reads the rules of that folder.`
-            : workspace === null
-              ? "Choose a project folder to inherit its preferences and its rules."
-              : `No project: runs in ${folderName(workspace)} with the global settings. The agent reads that folder's rules.`}
-        </small>
-      </div>
+      <p className="welcome-project-note">
+        {selectedEnvironment
+          ? `Runs in ${folderName(selectedEnvironment.workspace)}. The agent reads the rules of that folder.`
+          : workspace === null
+            ? "Choose a project folder: a project is a folder, and its name comes from it."
+            : `Runs in ${folderName(workspace)} with the global settings. The agent reads that folder's rules.`}
+      </p>
       <div className="welcome-suggestions">
         {[
           [
@@ -230,7 +215,7 @@ export function EmptySessionScreen({
           <button key={title} onClick={() => setDraft(prompt)}>
             <Icon name="code" />
             {title}
-            <small>Start with Muse ↗</small>
+            <small>Start with Muse ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</small>
           </button>
         ))}
       </div>
@@ -246,7 +231,7 @@ export function EmptySessionScreen({
           <ul className="attachment-chips" aria-label="Attached files">
             {attachments.map((attachment) => (
               <li className="attachment-chip" key={attachment.id}>
-                <span className="attachment-kind" aria-hidden="true">{attachment.kind === "image" ? "▧" : "▤"}</span>
+                <span className="attachment-kind" aria-hidden="true">{attachment.kind === "image" ? "ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“Ãƒâ€šÃ‚Â§" : "ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“Ãƒâ€šÃ‚Â¤"}</span>
                 <span className="attachment-name" title={attachment.name}>{attachment.name}</span>
                 {attachment.missing === true && (
                   <>
@@ -269,7 +254,7 @@ export function EmptySessionScreen({
                   aria-label={`Remove attachment ${attachment.name}`}
                   onClick={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))}
                 >
-                  ×
+                  ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
                 </button>
               </li>
             ))}
@@ -284,7 +269,7 @@ export function EmptySessionScreen({
         <textarea
           autoFocus
           aria-label="Your first message"
-          placeholder="Describe what you want to build…"
+          placeholder="Describe what you want to buildÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onPaste={(event) => {
@@ -316,7 +301,7 @@ export function EmptySessionScreen({
                 event.currentTarget.value = "";
               }}
             />
-            <span aria-hidden="true">＋</span>
+            <span aria-hidden="true">ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¼ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹</span>
             <span>Attach</span>
           </label>
           <AuthorizationModeControl
@@ -343,7 +328,7 @@ export function EmptySessionScreen({
             onClick={() => void start()}
             disabled={!canStart}
           >
-            {starting ? "Starting…" : "Start conversation"}
+            {starting ? "StartingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦" : "Start conversation"}
             <Icon name="arrow-right" />
           </button>
         </div>
