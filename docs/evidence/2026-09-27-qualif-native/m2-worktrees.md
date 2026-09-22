@@ -75,6 +75,22 @@ Capture : [`shots/m2-worktree-session.png`](shots/m2-worktree-session.png).
   non limite de l'app. La concurrence multi-fils (chaque fil déployant son enfant) reste la
   reproduction propre à faire.
 
+## Reproduction multi-fils — CONCURRENCE PROUVÉE (run2, 27 septembre 2026)
+
+Deux fils simultanés, chacun déployant des sous-agents, échantillonnés par bascule de fil :
+
+| Échantillon | Fil | Lanes | En `running` |
+|---|---|---|---|
+| t | A (« Reply with exactly the word: PTY ») | 5 | **3 simultanées** (`running, completed, running, completed, running`) |
+| t+~4 s | B (« Start a subagent to summarize… ») | 2 | **2 simultanées** |
+| retour | B (revérifié) | 2 | **2 toujours en vol** |
+
+**L'app rend, suit et contrôle plusieurs sous-agents en parallèle** — multi-fils **et** dans un même
+fil (3 lanes `running` coexistantes dans A). La sérialisation observée au run1 était donc bien un
+choix de délégation de muse-spark, pas une limite de l'app. Les pièces M2-07 (enfant lié au fil
+parent via `childSessionId`, cycle `running → completed`, contrôles bornés par état) sont
+consolidées par cette concurrence réelle.
+
 ## Reproductibilité
 
 - Commit `4453efc`+ ; Windows 11 26200, WebView2, CDP 9222 ; `muse` 1.3.0.
