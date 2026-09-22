@@ -234,6 +234,7 @@ export interface SubagentControl {
 }
 
 export interface SubagentControls {
+  close: SubagentControl;
   interrupt: SubagentControl;
   stop: SubagentControl;
   resume: SubagentControl;
@@ -255,6 +256,14 @@ export function subagentControlAvailability(
   const finishedReason = "This agent has finished; there is nothing to interrupt.";
   const resumeReason = "Only an interrupted, stopped or paused agent can resume.";
   return {
+    // Closing an agent that is still working is not what this UI should offer
+    // first: `stop` is the verb for that, and it sits next to it. The gate is
+    // our policy, not a host rule, and the reason says which.
+    close: busy
+      ? { enabled: false, reason: busyReason }
+      : status === "running"
+        ? { enabled: false, reason: "This agent is still working; stop it first." }
+        : { enabled: true },
     interrupt: busy
       ? { enabled: false, reason: busyReason }
       : finished
