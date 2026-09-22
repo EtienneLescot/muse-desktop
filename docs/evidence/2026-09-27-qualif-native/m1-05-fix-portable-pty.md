@@ -125,6 +125,30 @@ documenté M1-06 (`managed shell sandbox is unavailable` : shell spawné par l'a
 l'extérieur). `terminal_open` (Rust, `portable-pty 0.8.1`) inchangé depuis les runs réussis — à
 requalifier après investigation du chemin de spawn.
 
+## CAUSE RACINE du cwd errant (run6 bis) : le préfixe `\\?\` passé tel quel à cmd.exe
+
+Interception du trafic `terminal_*` (hook `window.fetch`, réponse brute) pendant l'ouverture :
+
+- `terminal_open` **réussit** (200) : `{"shell":"C:\\WINDOWS\\system32\\cmd.exe","cwd":"\\\\?\\G:\\repos\\openscreen","cols":100,"rows":28}` ;
+- le **premier `terminal_read`** porte la réponse de `cmd.exe` :
+
+> `CMD.EXE a été démarré avec le chemin d'accès comme répertoire en cours. Les chemins d'accès UNC
+> ne sont pas prise en charge. … Windows par défaut.` puis bannière + prompt **`C:\Windows>`**.
+
+**Défaut :** le workspace est passé au PTY sous sa forme `\\?\G:\…` (préfixe NT-DOS, syntaxe UNC
+pour `cmd.exe`), qui la refuse et **dévie sur `C:\Windows`**. Conséquences :
+
+1. le shell n'est **jamais lié au cwd de la conversation** — pièce d'acceptation M1-05 non remplie
+   (le prompt `C:\Windows>` de tous les runs en est la trace visible) ;
+2. **même racine** que le défaut d'automations (`G:\…` vs `\\?\G:\…`, « recorded workspace no
+   longer matches ») : le préfixe `\\?\` est conservé là où il faut comparer/spawner en forme
+   simple ;
+3. le « Terminal unavailable » du run6 est un avatar de cette chaîne (ouverture initiale dégradée).
+
+**Correctif attendu :** normaliser le cwd avant spawn (retirer le préfixe `\\?\`, ex.
+`\\?\G:\repos\openscreen` → `G:\repos\openscreen`) dans `terminal_open` — et la même normalisation
+dans la comparaison de workspaces des automations.
+
 ## Reproductibilité
 
 - Commit : cette note + `src-tauri/Cargo.toml`/`Cargo.lock` (downgrade) + `scripts/cdp-type.mjs`.
