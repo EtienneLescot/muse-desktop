@@ -2358,8 +2358,17 @@ export function useMuseSessions(): UseMuseSessions {
   }, [pollOnce]);
 
   // Write-through persistence.
+  // M0-02: never persist the hydrated value itself. A corrupt/absent store
+  // hydrates to the read fallback, and mount-time write-through used to persist
+  // that fallback — a transient read failure (force-kill during a storage flush)
+  // became permanent data loss. Only real mutations (new identity) reach
+  // storage; the ref is initialized during render so it captures the hydrated
+  // value even when state changes before historyReady.
+  const sessionsHydratedRef = useRef<typeof sessions | null>(null);
+  if (sessionsHydratedRef.current === null) sessionsHydratedRef.current = sessions;
   useEffect(() => {
     if (!historyReady) return;
+    if (sessions === sessionsHydratedRef.current) return;
     saveSessions(sessions.map(({ running: _r, ...rest }) => rest));
   }, [sessions, historyReady]);
 
@@ -2378,7 +2387,13 @@ export function useMuseSessions(): UseMuseSessions {
   }, [allowlist]);
 
   // US-3 + US-30 write-through persistence (best-effort, cf. persist.ts).
+  // M0-02: same hydration guard as sessions above — the loaded value (which may
+  // be the read fallback after a corrupt store) is never persisted; only real
+  // mutations are.
+  const projectsHydratedRef = useRef<typeof projects | null>(null);
+  if (projectsHydratedRef.current === null) projectsHydratedRef.current = projects;
   useEffect(() => {
+    if (projects === projectsHydratedRef.current) return;
     saveProjects(projects);
   }, [projects]);
 
