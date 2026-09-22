@@ -131,8 +131,8 @@ export { buildAnswers, parseInputRequest } from "../lib/input";
 // share it so two drains never overlap with the same cursor (overlap would
 // deliver the same buffered events twice and duplicate streamed text).
 import { createPollChain, enqueuePoll } from "../lib/poll";
-// US-10 reflexive phase: kindÃ¢â€ â€™phase mapping + placeholder entries, so the
-// stream shows "thinkingÃ¢â‚¬Â¦" synchronously on send and on `item/started`
+// US-10 reflexive phase: kindÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢phase mapping + placeholder entries, so the
+// stream shows "thinkingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦" synchronously on send and on `item/started`
 // even before the first delta lands.
 import {
   applyItemSnapshotUpdate,
@@ -246,9 +246,9 @@ export {
   settingsForThread,
 } from "../lib/projects";
 // US-9 automations/scheduled + review queue: pure schedule logic (cron,
-// due Ã¢â€ â€™ review enqueue, approve/discard, target resolution). No workflow/*
+// due ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ review enqueue, approve/discard, target resolution). No workflow/*
 // MSP endpoint exists, so scheduling is a client-side timer (see the
-// automation effect below) + persisted state Ã¢â‚¬â€ due entries never auto-send.
+// automation effect below) + persisted state ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â due entries never auto-send.
 import {
   approveReview,
   buildSchedule,
@@ -696,7 +696,7 @@ function inputPartsWithText(text: string, parts?: TurnInputPart[]): OutboxInputP
 type FileWithRelPath = File & { webkitRelativePath?: string };
 
 /**
- * Directory-input path Ã¢â€ â€™ workspace-relative path. The input prefixes every
+ * Directory-input path ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ workspace-relative path. The input prefixes every
  * file with the picked top folder (`root/src/a.ts`); that root is dropped.
  */
 function indexRelPath(f: File): string {
@@ -946,7 +946,7 @@ interface UseMuseSessions {
   /**
    * M0-03: send one turn and get an explicit result. `retryKey` re-sends
    * an existing outbox entry (same clientMessageId, byte-identical
-   * expansion). ok=true means the supervisor acknowledged admission Ã¢â‚¬â€ the
+   * expansion). ok=true means the supervisor acknowledged admission ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the
    * draft may be cleared; ok=false leaves the text recoverable.
    */
   sendInput: (
@@ -1008,7 +1008,7 @@ interface UseMuseSessions {
   serverCompact: (sessionId: string) => Promise<void>;
   /** US-12 + US-21: versioned artifacts per thread (extracted blocks). */
   artifacts: Record<string, Artifact[]>;
-  /** US-21: 1-click restore Ã¢â‚¬â€ copy the version text via US-4 prefill. */
+  /** US-21: 1-click restore ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â copy the version text via US-4 prefill. */
   restoreArtifact: (sessionId: string, artifactId: string, v: number) => void;
   /** US-21: anchored per-version comment (persisted). */
   commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string, anchorQuote?: string) => void;
@@ -1106,7 +1106,8 @@ interface UseMuseSessions {
   threadProjects: ThreadProjectMap;
   /** Last project refusal (quota / blank name); null when clean. */
   projectError: string | null;
-  createProject: (name: string, workspaces?: string[]) => void;
+  /** Creates a project and returns it, so a caller can select it at once. */
+  createProject: (name: string, workspaces?: string[]) => Project | null;
   /** Delete a project; its threads become ungrouped (no orphans). */
   deleteProject: (id: string) => void;
   updateProject: (id: string, patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] }) => void;
@@ -1160,7 +1161,7 @@ interface UseMuseSessions {
   setNotificationsMuted: (muted: boolean) => void;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
-  /** US-9: approve a review entry Ã¢â€ â€™ sent as normal turn input. */
+  /** US-9: approve a review entry ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ sent as normal turn input. */
   approveReview: (id: string) => Promise<void>;
   /** US-9: discard a pending review entry. */
   discardReview: (id: string) => void;
@@ -1172,7 +1173,7 @@ interface UseMuseSessions {
   shareSession: (sessionId: string, format: BundleFormat) => ShareBundle | null;
   /** Un-share: revoke the bundle locally (its link then 404s). */
   unshareBundle: (bundleId: string) => void;
-  /** w-collab US-28: channel stub flag (off) Ã¢â‚¬â€ never connected. */
+  /** w-collab US-28: channel stub flag (off) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â never connected. */
   channelsExperimental: boolean;
   /** w-collab US-34: resumable sessions surfaced by config imports. */
   importedSessions: ResumableSession[];
@@ -1355,7 +1356,7 @@ interface BackendWorktreeSessionResult {
 
 function shortTitle(text: string): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
-  return oneLine.length > 42 ? `${oneLine.slice(0, 42)}Ã¢â‚¬Â¦` : oneLine;
+  return oneLine.length > 42 ? `${oneLine.slice(0, 42)}ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦` : oneLine;
 }
 
 /**
@@ -1422,7 +1423,7 @@ function bytesToBase64(bytes: Uint8Array): string {
  */
 const ACK_TIMEOUT_MS = 15000;
 const ACK_TIMEOUT_MSG =
-  `no acknowledgment after ${ACK_TIMEOUT_MS / 1000}s Ã¢â‚¬â€ the outcome is unknown; ` +
+  `no acknowledgment after ${ACK_TIMEOUT_MS / 1000}s ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the outcome is unknown; ` +
   "retry checks the server before resending";
 
 /** Rejects with ACK_TIMEOUT_MSG when the invoke never settles in time. */
@@ -2164,11 +2165,11 @@ export function useMuseSessions(): UseMuseSessions {
   // Boot: restore local persistence first (instant history), then merge
   // the supervisor's live table, then poll the backend event buffer.
   // (Polling, not `listen` push: push subscriptions resolved yet never fired
-  // in one environment, while `invoke` always worked Ã¢â‚¬â€ same broadcast
+  // in one environment, while `invoke` always worked ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â same broadcast
   // semantics, boring transport.)
   useEffect(() => {
     // No once-guard here: React StrictMode (dev) mounts, unmounts, and
-    // remounts Ã¢â‚¬â€ a "booted" ref would skip the second (real) setup forever
+    // remounts ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â a "booted" ref would skip the second (real) setup forever
     // after cleanup cancelled the first. Teardown below makes re-setup safe.
     let timer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
@@ -2318,7 +2319,7 @@ export function useMuseSessions(): UseMuseSessions {
         if (!cancelled) setError(`event poll failed: ${String(err)}`);
         return;
       }
-      // US-31: the backend answered, so the host is up Ã¢â‚¬â€ snapshot the live
+      // US-31: the backend answered, so the host is up ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â snapshot the live
       // model catalog once (no per-session active flags yet; setSessionModel
       // reloads with the session after each pick). refreshModels is stable.
       if (!cancelled) await refreshModels();
@@ -2804,7 +2805,7 @@ export function useMuseSessions(): UseMuseSessions {
       ts: Date.now(),
       role: "system",
       text:
-        `Thread compacted Ã¢â‚¬â€ local summary ready (${summary.entryCount} entries: ` +
+        `Thread compacted ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â local summary ready (${summary.entryCount} entries: ` +
         `${summary.decisions.length} decisions, ${summary.context.length} context, ` +
         `${summary.todos.length} to-dos). Open a new thread via "New From Summary".`,
     };
@@ -2830,7 +2831,7 @@ export function useMuseSessions(): UseMuseSessions {
   }, [logs, doCompact, globalSettings, projects, threadProjects]);
 
   // US-4 server half: host occupancy per session (latest triple wins; the
-  // host only emits on change). Never persisted Ã¢â‚¬â€ it is live host state.
+  // host only emits on change). Never persisted ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â it is live host state.
   const [usageBySession, setUsageBySession] = useState<
     Record<string, ContextUsage>
   >({});
@@ -2860,7 +2861,7 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   // US-4 server half: the real context gesture (`session/compact`).
-  // User-clicked only Ã¢â‚¬â€ async host work is never fired automatically.
+  // User-clicked only ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â async host work is never fired automatically.
   // The ack is admission-only; `noop` is a success. Rejections carry the
   // friendly sentence mapped in Rust (`missing_run`, `run_active`).
   const serverCompact = useCallback(async (sessionId: string) => {
@@ -2879,7 +2880,7 @@ export function useMuseSessions(): UseMuseSessions {
         id: newId(),
         ts: Date.now(),
         role: "system",
-        text: `Server compaction failed Ã¢â‚¬â€ ${message}`,
+        text: `Server compaction failed ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ${message}`,
       };
       setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
       appendLog(sessionId, [note]);
@@ -2899,8 +2900,8 @@ export function useMuseSessions(): UseMuseSessions {
         status === "noop"
           ? "Server compaction: nothing to compact (noop)."
           : status === "accepted"
-            ? "Server compaction accepted Ã¢â‚¬â€ the host is working in the background."
-            : "Server compaction failed Ã¢â‚¬â€ the host returned an unknown result.",
+            ? "Server compaction accepted ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the host is working in the background."
+            : "Server compaction failed ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the host returned an unknown result.",
     };
     setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
     appendLog(sessionId, [note]);
@@ -3679,7 +3680,7 @@ export function useMuseSessions(): UseMuseSessions {
       return;
     }
     // US-4 server half: host occupancy triple. Latest wins, no log noise,
-    // no persistence Ã¢â‚¬â€ the CompactBar reads it live. Malformed payloads
+    // no persistence ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the CompactBar reads it live. Malformed payloads
     // are dropped (the host only emits on change anyway).
     if (kind === "context_usage") {
       let parsed: unknown = null;
@@ -3958,7 +3959,7 @@ export function useMuseSessions(): UseMuseSessions {
     // settle blocks for turn-end statuses. Approval updates are protocol
     // bookkeeping and must leave the resumed assistant block open.
     if (!isRunningKind(kind) && !isApprovalStatus) closeOpenBlocks(sid);
-    // w-collab US-27: a stopped status also ends the turn Ã¢â‚¬â€ refresh the
+    // w-collab US-27: a stopped status also ends the turn ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â refresh the
     // auto snapshot (no-op unless the share mode is auto). Idempotent
     // with the item_done trigger above: one live auto bundle per session.
     if (isStoppedKind(kind)) refreshAutoShare(sid);
@@ -4064,7 +4065,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   // US-31: live host catalog. Null until the first successful load (the
   // panel falls back to the sample registry); failures record modelsError
-  // instead of clobbering the banner Ã¢â‚¬â€ a picker must degrade, not shout.
+  // instead of clobbering the banner ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â a picker must degrade, not shout.
   const [liveModels, setLiveModels] = useState<LiveModel[] | null>(null);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const refreshModels = useCallback(async (sessionId?: string) => {
@@ -4129,12 +4130,12 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   // w-settings: out-of-scope attempts (path outside cwd) route to the
-  // existing scope-guard prompt path Ã¢â‚¬â€ the backend `check_scope` verdict,
+  // existing scope-guard prompt path ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the backend `check_scope` verdict,
   // with an error-banner prompt when access is denied.
   const checkPathScope = useCallback(async (path: string): Promise<ScopeVerdict> => {
     const verdict = await checkScope(path);
     if (!verdict.in_scope) {
-      setError(`Scope guard: ${verdict.reason} Ã¢â‚¬â€ approval required before opening.`);
+      setError(`Scope guard: ${verdict.reason} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â approval required before opening.`);
     }
     return verdict;
   }, []);
@@ -5168,7 +5169,7 @@ export function useMuseSessions(): UseMuseSessions {
       ) ?? false;
       if (!trimmed && !hasInputParts) return sendFailed(null, "the message is empty");
       // US-4: `/compact` is intercepted at send time and never reaches the
-      // model Ã¢â‚¬â€ it builds the local extractive summary of this thread.
+      // model ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â it builds the local extractive summary of this thread.
       // Local action, no server round trip: no outbox entry, nothing to ack.
       if (isCompactCommand(trimmed)) {
         doCompact(sessionId);
@@ -5296,7 +5297,7 @@ export function useMuseSessions(): UseMuseSessions {
           outgoing = buildSkillInvocation(skill, skillCmd.args, resources);
           }
         }
-        // US-7: `/fanout <n> "<task>"` never reaches the model as typed Ã¢â‚¬â€
+        // US-7: `/fanout <n> "<task>"` never reaches the model as typed ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
         // it becomes one parent-turn prompt instructing N parallel
         // subagents. A FIFO note is logged when n exceeds the lanes.
         fanout = parseFanoutCommand(outgoing);
@@ -5459,7 +5460,7 @@ export function useMuseSessions(): UseMuseSessions {
                   id: newId(),
                   ts: Date.now(),
                   role: "system",
-                  text: "Turn queued Ã¢â‚¬â€ it will start after the current turn finishes.",
+                  text: "Turn queued ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â it will start after the current turn finishes.",
                 },
               ]);
             } else if (admission.disposition === "steered") {
@@ -5526,7 +5527,7 @@ export function useMuseSessions(): UseMuseSessions {
             cur.map((s) => (s.session_id === sessionId ? { ...s, running: false } : s)),
           );
         }
-        // Ambiguous: keep the live indicators Ã¢â‚¬â€ the turn may still be
+        // Ambiguous: keep the live indicators ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the turn may still be
         // running server-side; late events or Retry's server check settle it.
         return sendFailed(clientMessageId, failure);
       } finally {
@@ -5624,7 +5625,7 @@ export function useMuseSessions(): UseMuseSessions {
       }
       if (entry.ambiguous) {
         // Ambiguous outcome: verify the server conversation before any
-        // retransmission Ã¢â‚¬â€ if the turn is already there, never resend (one
+        // retransmission ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â if the turn is already there, never resend (one
         // logical send can never become two accepted turns).
         if (entry.serverCommandId === undefined) {
           setError(
@@ -5646,7 +5647,7 @@ export function useMuseSessions(): UseMuseSessions {
                 id: newId(),
                 ts: Date.now(),
                 role: "system",
-                text: "Retry check: the turn was already delivered Ã¢â‚¬â€ not resent.",
+                text: "Retry check: the turn was already delivered ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â not resent.",
               },
             ]);
             return;
@@ -5734,7 +5735,7 @@ export function useMuseSessions(): UseMuseSessions {
   /**
    * US-4: open a fresh thread pre-filled with the source thread's summary.
    * The summary must exist (manual `/compact`, Compacter button, or auto at
-   * the entry cap). The composer receives the formatted text as prefill Ã¢â‚¬â€
+   * the entry cap). The composer receives the formatted text as prefill ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
    * nothing is sent to the model until the user presses Send.
    */
   const newFromSummary = useCallback(
@@ -5766,7 +5767,7 @@ export function useMuseSessions(): UseMuseSessions {
   }, []);
 
   /**
-   * US-21: 1-click restore Ã¢â‚¬â€ the version text goes through the US-4
+   * US-21: 1-click restore ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the version text goes through the US-4
    * composer prefill, so nothing is sent until the user presses Send.
    */
   const restoreArtifact = useCallback(
@@ -5810,7 +5811,7 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   // US-23 local index: opt-in (default off, persisted), paused flag, and
-  // the stored line index. Picked File handles stay in memory only Ã¢â‚¬â€ the
+  // the stored line index. Picked File handles stay in memory only ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the
   // on-demand Rescan re-reads them (mtime-based, no watcher).
   const [indexEnabled, setIndexEnabledState] = useState<boolean>(() =>
     loadIndexEnabled(),
@@ -5857,7 +5858,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   const rescanIndexFiles = useCallback(async (): Promise<void> => {
     if (indexPaused) {
-      setIndexSummary("Paused Ã¢â‚¬â€ resume to rescan.");
+      setIndexSummary("Paused ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â resume to rescan.");
       return;
     }
     const list = indexFilesRef.current;
@@ -6428,10 +6429,11 @@ export function useMuseSessions(): UseMuseSessions {
   // US-3 + US-30 project actions. Creation past MAX_PROJECTS is refused
   // client-side with the explicit quota message in projectError.
   const createProject = useCallback(
-    (name: string, workspacePaths?: string[]) => {
+    (name: string, workspacePaths?: string[]): Project | null => {
       const res = createProjectRow(projects, { name, workspaces: workspacePaths });
       setProjectError(res.error);
       if (res.project !== null) setProjects(res.projects);
+      return res.project;
     },
     [projects],
   );
@@ -8054,7 +8056,7 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   // US-23 search over the stored index (empty unless opted in). Search
-  // keeps working while paused Ã¢â‚¬â€ pause only suspends indexing updates.
+  // keeps working while paused ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pause only suspends indexing updates.
   const indexResults = searchIndex(indexStore, indexEnabled ? indexQuery : "");
   const indexStatsNow = indexStats(indexStore);
   const index: IndexApi = {
