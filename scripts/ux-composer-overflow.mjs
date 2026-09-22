@@ -18,6 +18,12 @@
  * viewport, 610px at 900px — the work panel takes a share), so this asserts the
  * invariant at each width instead of trusting one breakpoint.
  *
+ * Ellipsis is deliberately NOT a failure. `displayLabel` comes from the host
+ * catalog, so a longer label than the one measured here is possible, and the
+ * stylesheet answers that with an intentional ellipsis. What must never happen
+ * is the row overflowing, a control painting outside the composer, or the chip
+ * collapsing; truncation is reported as information.
+ *
  * Usage: node scripts/ux-composer-overflow.mjs [--port 9227]
  */
 const PORT = (() => {
@@ -124,13 +130,14 @@ for (const width of WIDTHS) {
   if (m.contextScroll > 1) bad.push(`contexte +${m.contextScroll}px`);
   if (m.escape > 1) bad.push(`hors boite +${m.escape}px`);
   if (m.chipWidth !== null && m.chipWidth < 90) bad.push(`pastille ${m.chipWidth}px`);
-  if (m.labelVisible !== null && m.labelNeeds !== null && m.labelVisible < m.labelNeeds) {
-    bad.push(`libelle tronque ${m.labelVisible}/${m.labelNeeds}`);
-  }
+  // Reported, never a failure: the stylesheet ellipsises on purpose when a
+  // catalog label cannot fit, and the host owns that label's length.
+  const truncated =
+    m.labelVisible !== null && m.labelNeeds !== null && m.labelVisible < m.labelNeeds;
   console.log(
     `  ${String(width).padEnd(6)} ${String(m.rowScroll).padEnd(10)} ${String(m.contextScroll).padEnd(14)} ` +
     `${String(m.escape).padEnd(11)} ${String(m.chipWidth).padEnd(9)} ${m.labelVisible}/${m.labelNeeds}` +
-    `${bad.length ? "   <-- " + bad.join(" | ") : ""}`,
+    `${truncated ? "   repli ellipse" : ""}${bad.length ? "   <-- " + bad.join(" | ") : ""}`,
   );
   if (bad.length > 0) failures.push({ width, why: bad.join(" | ") });
 }

@@ -39,7 +39,7 @@ Le composeur n'est **pas monotone** en fonction de la fenêtre : 416 px de large
 2. **La pastille ne se colle plus à droite** — `margin-left: auto` retiré de `.composer-model`. Sur une ligne complète il n'avait aucun effet ; sur une ligne rompue il envoyait la pastille seule à droite, ce qui se lisait comme un élément tombé du groupe.
 3. **L'ellipse reste, en dernier recours** — le libellé garde `overflow: hidden` + `text-overflow: ellipsis` avec `min-width: 0`, pour un identifiant plus long qu'une ligne entière.
 
-Vérifié : `11 largeurs testees, aucun rognage`, et la pastille conserve **son libellé entier** (171/171) à toutes les largeurs — c'est le retour à la ligne qui la protège, pas la troncature.
+Vérifié : `11 largeurs testees, aucun rognage`. Le libellé testé — `muse-spark-1.3-contributor`, 25 caractères — reste **entier** (171/171) à toutes les largeurs : c'est le retour à la ligne qui le protège, pas la troncature. L'ellipse demeure le repli assumé pour un libellé plus long que la ligne, ce que le catalogue du host peut fournir (`displayLabel` vient du host) : le garde-fou la **signale** sans la compter comme un échec, puisqu'elle est voulue.
 
 | | Avant (`pass3/composer-avant.png`) | Après (`pass3/composer-apres.png`) |
 |---|---|---|
@@ -49,7 +49,9 @@ Vérifié : `11 largeurs testees, aucun rognage`, et la pastille conserve **son 
 
 ## Le garde-fou, et sa preuve
 
-`scripts/ux-composer-overflow.mjs` balaie 11 largeurs et vérifie quatre choses : la ligne ne défile pas, le contexte ne défile pas, aucun descendant ne peint hors de la boîte de padding du composeur, et le libellé du modèle n'est jamais tronqué. La précondition est assertée — sans conversation ouverte il n'y a pas de composeur, et mesurer zéro n'aurait rien prouvé.
+`scripts/ux-composer-overflow.mjs` balaie 11 largeurs et vérifie trois choses : la ligne ne défile pas, le contexte ne défile pas, aucun descendant ne peint hors de la boîte de padding du composeur, et la pastille du modèle ne s'écrase pas sous 90 px. La précondition est assertée — sans conversation ouverte il n'y a pas de composeur, et mesurer zéro n'aurait rien prouvé.
+
+La troncature du libellé, elle, est **rapportée et non comptée comme un échec** : l'ellipse est le repli voulu quand un `displayLabel` du host dépasse la ligne.
 
 **Le garde-fou peut échouer** : correctif retiré (`git stash push -- src/App.css`), il rapporte **10 largeurs sur 11** en défaut avec les valeurs ci-dessus. Remis, il rapporte 0.
 
