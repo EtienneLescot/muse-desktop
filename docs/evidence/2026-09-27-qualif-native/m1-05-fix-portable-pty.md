@@ -90,6 +90,27 @@ depuis le 0.8.1).
   le focus sur l'input du terminal — un premier essai sans focus avait laissé le ping aller à son
   terme, honnêteté méthodologique.)
 
+## Cause M0-02 trouvée dans le code : write-through au montage persiste le repli vide
+
+`src/hooks/useMuseSessions.ts` :
+
+```ts
+const [projects, setProjects] = useState<Project[]>(() => loadProjects());   // L1875
+useEffect(() => { saveProjects(projects); }, [projects]);                    // L2381-2383
+useEffect(() => { saveSessions(sessions.map(({ running: _r, ...rest }) => rest)); }, [sessions]); // L2361-2363
+```
+
+- `loadProjects()` = `read(PROJECTS_KEY, [])` : toute valeur corrompue/absente (kill pendant une
+  écriture LevelDB de WebView2) redonne **`[]` en mémoire**.
+- Les `useEffect` de write-through s'exécutent **au montage**, sans distinction entre « mutation
+  utilisateur » et « état initial » : ils **persist aussitôt `[]`** dans `projects.v1` et
+  `sessions.v1` — une corruption transitoire devient un **effacement permanent**.
+- Cela cadre exactement l'observation : les deux clés à write-through fréquent sont effacées **de
+  façon persistée** (présentes à `"[]"`), les clés à écriture rare (schedules, runs…) survivent.
+
+**Correctif suggéré :** ne pas écrire au montage (compteur de première mutation, ou double clé de
+secours `.bak` avec génération), et ne jamais persister un repli issu d'une lecture invalide.
+
 ## Reproductibilité
 
 - Commit : cette note + `src-tauri/Cargo.toml`/`Cargo.lock` (downgrade) + `scripts/cdp-type.mjs`.
