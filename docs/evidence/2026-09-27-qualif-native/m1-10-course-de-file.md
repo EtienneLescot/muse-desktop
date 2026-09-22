@@ -69,6 +69,22 @@ conclusion.
 **Reste pour fermer M1-10 :** restauration native de la file après redémarrage
 (`muse-desktop.queued-turns.v1`), et exécution en webview **empaquetée** (le run est en build dev).
 
+## Restauration de la file après redémarrage — prouvée (27 septembre 2026, kill + relance)
+
+Protocole : tour long lancé (« Count slowly … six hundred ») + **deux tours enfilés**
+(`QUEUE-RESTORE-A` → ALPHA, `QUEUE-RESTORE-B` → BETA) → **`taskkill /F` de l'app en plein tour** →
+relance du binaire `target\debug\muse-desktop.exe` avec `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`.
+
+- Avant kill : `muse-desktop.queued-turns.v1` contient les 2 tours (« Turn queued — it will start
+  automatically » au journal) ; le tour long tourne.
+- Après relance (PID 44844) : stockage **intact (2 tours)**.
+- **Puis la file se vide d'elle-même, dans l'ordre** : `QUEUE-RESTORE-A` exécuté à 17:14:01 →
+  réponse **ALPHA** 17:14:04 ; `QUEUE-RESTORE-B` exécuté ensuite → réponse **BETA** 17:14:49.
+
+La file n'est pas seulement restaurée : elle **reprend et s'exécute correctement après la mort
+totale du processus** (aucun doublon, aucun ordre inversé). Ne reste que l'exécution en webview
+**empaquetée** (build dev ici).
+
 ## Reproductibilité
 
 - Commit : scripts à inclure dans la série de qualification ; app `362c8bb`+ ; Windows 11 26200, WebView2.

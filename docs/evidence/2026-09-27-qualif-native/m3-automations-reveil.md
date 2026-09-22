@@ -130,6 +130,16 @@ error: "the recorded workspace no longer matches the target conversation"
   (« réutilise ensuite le même fil ») ne peut pas être jouée tant que la comparaison n'est pas
   normalisée. À corriger côté app (comparaison normalisée ou stockage d'une seule forme).
 
+## Redémarrage en plein run (M3-07) — « Review needed » absent, état « Running » périmé
+
+Run `run-mucta00t-3dqgz3` (« Qualif M3 restart », `threadReuse: new`) laissé en statut `running`
+puis **`taskkill /F`** de l'app. Après relance : le run **affiche toujours « Running »** (« 22/09/2026
+17:10:49 · conversation started ») alors que le tour et son host sont morts — **aucun marquage
+« Review needed »**, aucune réconciliation visible. L'acceptation « runs non terminaux marqués
+**Review needed** après redémarrage et bloqués jusqu'à réconciliation explicite » **n'est pas
+remplie** : l'état affiché devient incohérent (« Running » pour un travail mort). À corriger /
+rejouer quand le marquage existera.
+
 ## Reproductibilité
 
 - Commit `aff5467`+ ; Windows 11 26200, WebView2, CDP 9222 ; `muse` 1.3.0.
