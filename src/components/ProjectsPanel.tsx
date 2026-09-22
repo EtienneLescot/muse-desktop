@@ -20,7 +20,7 @@ import {
   type HarnessRules,
 } from "../lib/harnessRules";
 import {
-  REASONING_EFFORTS,
+  reasoningEffortChoices,
   isReasoningEffort,
   reasoningEffortLabel,
 } from "../lib/reasoning";
@@ -769,12 +769,15 @@ function OverrideRow({
         aria-label={`Project reasoning effort (global ${globalValue})`}
       >
         {/* Driven by the shared list: a hand-written copy of it here is how
-            the picker lost `max` in the first place. */}
-        {REASONING_EFFORTS.map((effort) => (
-          <option key={effort} value={effort}>
-            {reasoningEffortLabel(effort)}
-          </option>
-        ))}
+            the picker lost `max` in the first place. A persisted value that is
+            no longer offered (wire-only `none`) is kept listed. */}
+        {reasoningEffortChoices(isReasoningEffort(effectiveValue) ? effectiveValue : undefined).map(
+          (effort) => (
+            <option key={effort} value={effort}>
+              {reasoningEffortLabel(effort)}
+            </option>
+          ),
+        )}
       </select>
     ) : (
       <input

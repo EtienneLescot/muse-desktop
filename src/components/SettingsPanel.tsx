@@ -44,7 +44,7 @@ import {
 } from "../lib/authorization";
 import { userFacingError } from "../lib/errorCopy";
 import {
-  REASONING_EFFORTS,
+  reasoningEffortChoices,
   reasoningEffortDescription,
   reasoningEffortLabel,
   type ReasoningEffort,
@@ -576,7 +576,7 @@ export function SettingsPanel({
           onChange={(event) => onReasoningEffortChange(event.target.value as ReasoningEffort)}
           aria-label="Default reasoning effort"
         >
-          {REASONING_EFFORTS.map((effort) => (
+          {reasoningEffortChoices(reasoningEffort).map((effort) => (
             <option key={effort} value={effort}>
               {reasoningEffortLabel(effort)} — {reasoningEffortDescription(effort)}
             </option>

@@ -1,5 +1,5 @@
 import {
-  REASONING_EFFORTS,
+  reasoningEffortChoices,
   reasoningEffortDescription,
   reasoningEffortLabel,
   type ReasoningEffort,
@@ -29,7 +29,7 @@ export function ReasoningEffortControl({ value, onChange, compact = false }: Pro
         <span className="reasoning-effort-chevron" aria-hidden="true" />
       </summary>
       <div className="reasoning-effort-popover" role="listbox" aria-label="Reasoning effort">
-        {REASONING_EFFORTS.map((candidate) => {
+        {reasoningEffortChoices(value).map((candidate) => {
           const selected = candidate === value;
           return (
             <button
