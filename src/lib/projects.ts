@@ -212,6 +212,51 @@ export function projectWorkspaceOptions(
 }
 
 /**
+ * Last segment of a folder path, which is how this screen names a location.
+ * `null` means no folder has been chosen yet — a different statement from an
+ * empty name, so it keeps its own label.
+ */
+export function folderName(path: string | null): string {
+  if (path === null) return "Choose a folder";
+  const parts = path.split(/[\\/]/).filter((part) => part.length > 0);
+  return parts[parts.length - 1] ?? path;
+}
+
+/**
+ * Labels for the new-conversation project selector, one per option.
+ *
+ * A project is a client-side grouping, and it is usually created from the very
+ * folder it points at, so `name · folder` printed "openscreen · openscreen" —
+ * two strings for one fact, on a control the user already had to tell apart
+ * from the folder picker above it. The folder is appended only when it says
+ * something the name does not: a project named differently from its folder, or
+ * two roots of the same project that would otherwise read identically.
+ */
+export function projectOptionLabels(
+  options: readonly Pick<ProjectWorkspaceOption, "projectName" | "workspace">[],
+): string[] {
+  const names = options.map((option) => option.projectName);
+  const counts = new Map<string, number>();
+  for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
+  const labels = options.map((option, index) => {
+    const name = names[index] ?? option.projectName;
+    const folder = folderName(option.workspace);
+    if (folder === name && counts.get(name) === 1) return name;
+    return `${name} · ${folder}`;
+  });
+  // Two roots of one project can carry the same folder name, and then the label
+  // still collides. Those rows fall back to the whole path, which is the only
+  // form guaranteed to tell them apart.
+  const seen = new Map<string, number>();
+  for (const label of labels) seen.set(label, (seen.get(label) ?? 0) + 1);
+  return labels.map((label, index) =>
+    (seen.get(label) ?? 0) > 1
+      ? `${names[index] ?? ""} · ${options[index]?.workspace ?? ""}`
+      : label,
+  );
+}
+
+/**
  * Create a project. Refuses with PROJECT_LIMIT_MESSAGE at MAX_PROJECTS,
  * and with a blank-name message when the trimmed name is empty.
  *
