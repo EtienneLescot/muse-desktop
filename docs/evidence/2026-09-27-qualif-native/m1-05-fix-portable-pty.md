@@ -65,6 +65,21 @@ Attente → saisie → capture côté processus → écho : la **« saisie inter
 l'acceptation M1-05 est prouvée. Reste : commande interactive longue type éditeur/REPL, `Resize`
 visuel, ANSI/raccourcis.
 
+## Resize — DÉFAUT CONFIRMÉ (run4) : le volet suit, le PTY ignore
+
+Chaîne testée : redimensionnement natif de la fenêtre (`set_window_frame` 1600×1000 puis 900×700) →
+volet terminal → `terminal_resize` → ConPTY, mesurée par `mode con` à chaque étape :
+
+| Fenêtre | Volet `.terminal-panel` | `mode con` |
+|---|---|---|
+| 1600×1000 | 506 × 820 | **Lignes 28 · Colonnes 100** |
+| 900×700 | **332 × 520** (suit la fenêtre) | **Lignes 28 · Colonnes 100** (inchangé) |
+
+Le layout est réactif mais **la géométrie du PTY ne bouge jamais** : `terminal_resize` n'est pas
+appelé (ou ConPTY l'ignore) — le défaut historique « resize sans effet » est donc **reproduit et
+localisé** : côté appel de resize dans l'app, pas côté portable-pty (la sortie, elle, fonctionne
+depuis le 0.8.1).
+
 ## Reproductibilité
 
 - Commit : cette note + `src-tauri/Cargo.toml`/`Cargo.lock` (downgrade) + `scripts/cdp-type.mjs`.
