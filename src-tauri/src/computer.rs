@@ -234,10 +234,15 @@ pub fn mcp_args() -> Vec<String> {
 /// service holds a live grant, so a stale switch cannot send the host hunting a
 /// socket, nor hand it a service whose authorization has already lapsed.
 pub fn mcp_server_json(grant: &str) -> Option<Value> {
+    mcp_server_for(&binary()?, grant)
+}
+
+/// The construction itself, with the binary supplied: pure enough to test on a
+/// machine that has no driver installed, which is every CI runner.
+fn mcp_server_for(binary: &Path, grant: &str) -> Option<Value> {
     if grant != "active" {
         return None;
     }
-    let binary = binary()?;
     Some(json!({
         "transport": "stdio",
         "command": binary.display().to_string(),
@@ -727,9 +732,12 @@ mod tests {
 
     #[test]
     fn the_mcp_entry_uses_this_apps_own_endpoint() {
-        let entry = mcp_server_json("active").expect("an entry is built while the grant is live");
+        let driver = Path::new("C:\\cua-driver.exe");
+        let entry =
+            mcp_server_for(driver, "active").expect("an entry is built while the grant is live");
         assert_eq!(entry["transport"], json!("stdio"));
         assert_eq!(entry["mode"], json!("optional"));
+        assert_eq!(entry["command"], json!("C:\\cua-driver.exe"));
         let args = entry["args"].as_array().expect("args is an array");
         assert_eq!(args[0], json!("mcp"));
         assert_eq!(args[1], json!("--socket"));
@@ -740,8 +748,9 @@ mod tests {
     /// still up in that state, which is exactly what makes it easy to get wrong.
     #[test]
     fn only_a_live_grant_is_offered_to_the_host() {
-        assert!(mcp_server_json("stopped").is_none());
-        assert!(mcp_server_json("expired").is_none());
-        assert!(mcp_server_json("active").is_some());
+        let driver = Path::new("C:\\cua-driver.exe");
+        assert!(mcp_server_for(driver, "stopped").is_none());
+        assert!(mcp_server_for(driver, "expired").is_none());
+        assert!(mcp_server_for(driver, "active").is_some());
     }
 }
