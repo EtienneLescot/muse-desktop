@@ -1,0 +1,89 @@
+# M0-04 — Stop → terminal, avec trace du `turnId` transmis (27 septembre 2026)
+
+**Le chantier 5 du [plan client du 20 septembre](../../plans/2026-09-20-travail-client-restant.md) est tranché.** La
+question était : « reproduire l'arrêt depuis l'interface et vérifier le `turnId` effectivement
+transmis ». Réponse, mesurée sur le fil IPC réel : **le `turnId` est transmis, non vide, et l'état
+Stop se résout en ~1 s.** Le `Stopping…` figé de la campagne du 20/09 **ne se reproduit pas** au
+HEAD (`362c8bb`).
+
+## La mesure
+
+```powershell
+node scripts/cdp-stop-terminal.mjs
+```
+
+Scénario complet depuis la webview : nouvelle conversation → tour long admis → **bouton Stop de
+l'interface** → observation de la résolution → **relance** (« reprendre »).
+
+| Fait | Mesure |
+|---|---|
+| `turnId` observé sur le fil | **oui** (`send_input` → `turnId` du tour) |
+| Bouton Stop cliqué | **oui** (bouton « Stop » de la ligne composer en état working) |
+| Appels `cancel_session` | **2/2 avec `turnId` non vide** |
+| Résolution de l'état Stop | **1 006 ms** après le clic |
+| Relance après arrêt | **oui** — le tour suivant démarre (`stream-health-working`, « work item started ») |
+
+La trace IPC, qui tranche (identifiants de la session en cours) :
+
+```json
+{ "cmd": "cancel_session",
+  "payload": { "sessionId": "01a0c947-b83b-7032-9298-fe305b3eab42",
+               "turnId": "01a0c947-ba9b-7349-8cc5-98420f17f846" },
+  "result": "null" }
+```
+
+`turnId` = l'identifiant de tour annoncé par `send_input` — **le renderer transmet le bon
+identifiant, non vide**. L'accusé `null` est l'admission (« admission only »), puis le terminal
+serveur `turn/completed` — établi par [`msp-interrupt-notifications.mjs`](session-log-expique-tout.md)
+à **+36 ms** — fait sortir l'interface de l'état Stop.
+
+## Les trois possibilités du plan client, tranchées
+
+| Hypothèse (chantier 5) | Verdict |
+|---|---|
+| 1. le renderer n'appelle pas `interrupt_session` avec un `turnId` non vide | **réfutée** — `turnId` présent et correct à chaque appel |
+| 2. le terminal arrive mais n'est pas associé au bon tour côté client | **réfutée** — résolution UI en ~1 s |
+| 3. l'observation d'interface datait d'un état différent | **la plus probable** — voir ci-dessous |
+
+**Sur le 3 :** l'observation d'origine cliquait un bouton **désactivé** dont le `title` contenait
+« stop it first » (contrôle de lane sous-agent), et un autre essai rejetait le vrai bouton **à
+cause de son titre** — le bouton Stop du tour porte le titre trompeur
+**`"Stop the running sidecar"`**. Ce titre est un défaut de libellé restant (le bouton arrête le
+**tour**, pas le sidecar), à corriger côté interface.
+
+## Deux défauts de méthode qui ont failli produire un faux constat
+
+Consignés pour ne pas les refaire :
+
+1. **`__TAURI_INTERNALS__.invoke` n'est pas patchable** (Proxy qui rend l'ancien `invoke`) et
+   **`chrome.webview.postMessage` n'est pas la voie de transport** (0 trame). Le transport IPC
+   réel de ce build est **`window.fetch`** — chaque invoke est un fetch dont l'URL porte la
+   commande (`http://ipc.localhost/{cmd}`) et le corps les arguments. Mesuré : 153 appels/65 s
+   de trafic ordinaire dont les polls `poll_events` (`{"since":N}`).
+2. Le bouton Stop du tour **n'apparaît qu'avec l'état working**, avec 1 à 3 s de décalage sur
+   l'accusé de `send_input` ; un clic à +2,4 s ne trouve rien. Il faut **attendre** le bouton.
+
+## Comportement de liveness observé (honnête, à connaître)
+
+Pendant la réflexion du modèle (avant le premier delta de texte), le bandeau passe en
+`stream-health-stalled` : **« No recent host update — No host event for 47s. Muse may still be
+working. Last event: work item started. »**, puis revient à « response update » dès le premier
+delta. Ce n'est **pas** un bug de flux : le modèle était silencieux 47 s. Le libellé reste
+calme et honnête (« Muse may still be working »).
+
+## États terminaux quand la mort du processus est connue
+
+Voir [`m0-02-reprise-apres-mort-host.md`](m0-02-reprise-apres-mort-host.md) : le statut
+« Muse stopped because the host process ended. Reconnect to continue. » est honnête et actionnable.
+
+## Reproductibilité
+
+- Commit : `362c8bb` (main), `target\debug\muse-desktop.exe` via `npm run tauri -- dev`.
+- Plateforme : Windows 11 (10.0.26200), WebView2, sidecar `muse-bin-1.3.0-R3401.1`.
+- Script : `scripts/cdp-stop-terminal.mjs` (captures dans `shots/m0-04-*.png`).
+- Sortie brute : `cdp-stop-terminal-run6.json` (verdict ci-dessus), `cdp-stop-terminal-run4.json`
+  (trace des formes d'appel).
+
+**Verdict M0-04 Windows :** « Stop résolu par un terminal serveur » est **prouvé en cours de
+réponse** avec `turnId` transmis et reprise prouvée. Reste à prouver les phases spéciales
+(arrêt avant le premier token, pendant un outil, après la fin de la réponse, réponse tardive).

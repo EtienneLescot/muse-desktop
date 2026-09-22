@@ -1,7 +1,7 @@
 # Roadmap opérationnelle — Muse-Desktop
 
 État de référence : **20 septembre 2026**, dépôt à `064e210` (main, après fusion des PRs #18–#153).
-Objectif : finir les parcours existants, puis atteindre la parité des workflows desktop de Codex en conservant le branding Muse. Ordre M0 → M4 validé par Étienne.
+Mis à jour le **27 septembre 2026** par une campagne de **qualification native Windows** (dépôt à `362c8bb`, PRs jusqu'à #227) : preuves dans [`docs/evidence/2026-09-27-qualif-native/`](evidence/2026-09-27-qualif-native/). Objectif : finir les parcours existants, puis atteindre la parité des workflows desktop de Codex en conservant le branding Muse. Ordre M0 → M4 validé par Étienne.
 
 Ce document est la source de vérité de l'avancement produit. Il est découpé **par plateforme** parce que la majorité des tickets restants ne se ferment pas au même moment selon l'OS. La [SPEC](SPEC.md) conserve les intentions initiales ; le [bilan du 13 septembre](plans/2026-09-13-roadmap-progress.md) est historique. L'[audit de parité](plans/2026-09-15-codex-parity-audit.md) contient les constats techniques et références officielles. Les chiffres de stories fusionnées ne sont pas un taux de parité.
 
@@ -73,7 +73,8 @@ Ce document est la source de vérité de l'avancement produit. Il est découpé 
 **Ce qui bloque encore, par nature :**
 
 - **M1-06 : RÉFUTÉ le 21/09/2026.** Le « blocage côté host » venait d'une sonde qui demandait la capacité sous une forme que le host lit comme « aucune capacité demandée ». Avec la forme correcte, le sidecar 1.3.0 **publie bien** les items `userShell` **et** leur sortie. Détail et mesures dans la ligne M1-06 plus bas ; **ne citez plus `SIDECAR-CONTRACT-GAPS.md` pour ce ticket.**
-- **M0-04, M1-11** : aucune correction client ne les fermera. Le sidecar 1.3.0 n'émet pas de notification terminale, ne publie pas d'`outputRef`, et ne rapporte pas les projections de modèle ou d'effort. Détail et demandes dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md). **Ces deux-là restent à revérifier** : la mesure qui les étayait partageait le harnais de M1-06, dont la forme de capacité était fausse.
+- **M0-04, M1-11 : revérifiés le 27/09/2026 — les deux « blocages sidecar » étaient faux.** Le host **émet** bien une notification terminale (`turn/completed` à **+36 ms** après `turn/interrupt`) et **rapporte** bien les projections de modèle (`model_id` sur la session, `is_active` sur `model/list`) ; la mesure qui les étayait partageait le harnais `--no-session-log` de M1-06 (voir [`session-log-expique-tout.md`](evidence/2026-09-27-qualif-native/session-log-expique-tout.md)). **Seul `outputRef` reste plausible** dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md). M0-04 garde ses phases d'arrêt spéciales à qualifier — côté scénario, pas côté host.
+- **Révision du 27/09/2026 :** M0-02 et M0-03 **fermés sur Windows** (preuves : [`m0-02-reprise-apres-mort-host.md`](evidence/2026-09-27-qualif-native/m0-02-reprise-apres-mort-host.md), [`M0-03-texte-en-rejet-conserve.md`](evidence/2026-09-20-windows-group1/M0-03-texte-en-rejet-conserve.md)) ; M0-04 **avancé à la preuve du `turnId` transmis et de la résolution en ~1 s** ([`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md)).
 - **M0-01** : le critère « approbations simultanées » reste ouvert — le plafond du host est `promptUnmatched` et aucune demande d'approbation n'a pu être provoquée, même en mode `ask`.
 - **M0-10, M4-09** : la « machine propre » n'est pas couverte — la machine de test a déjà WSL, Muse et 64 conversations. La signature des installeurs est également absente (`NotSigned`).
 - **M0-12, M1-13** : la qualification par un **lecteur d'écran réel** n'a pas été faite ; les rôles et libellés observés sont une condition nécessaire, pas une preuve d'annonce correcte.
@@ -95,9 +96,9 @@ Ce document est la source de vérité de l'avancement produit. Il est découpé 
 
 **Prochaine reprise :** les preuves natives M0 sur Windows sont largement avancées (voir le tableau consolidé ci-dessus). Ce qui reste dépend de trois natures de travail :
 
-1. **Côté sidecar** — **la liste des cinq écarts n'est plus fiable** : tous ont été réexaminés le 20-21/09/2026 et **six claims se sont révélés être des artefacts de mesure** (`SIDECAR-CONTRACT-GAPS.md` porte un bandeau en ce sens). M1-06 en particulier est réfuté. Ce qui reste réellement côté host doit être **remesuré avec la forme de capacité correcte** avant d'être présenté comme un blocage. Les seules demandes encore plausibles concernent `outputRef` et une notification terminale de tour, à confirmer.
+1. **Côté sidecar** — **plus aucun blocage mesuré** (révision du 27/09/2026). La notification terminale de tour existe (`turn/completed` à +36 ms), les projections de modèle existent, la reprise `session/read`/`session/resume` fonctionne. Seul `outputRef` reste à confirmer dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md). La leçon de méthode reste valable : mesurez avec les formes du contrat (`capabilities` imbriqué, host avec log de session), sinon vous fabriquez des blocages fictifs.
 2. **Côté infrastructure** — machine propre pour M0-10 et M4-09, signature Authenticode des installeurs, hébergement du canal de mise à jour, VM macOS et Linux pour M4-01/M4-02.
-3. **Côté méthode** — qualification par un lecteur d'écran réel pour M0-12 et M1-13 ; compléter les variantes de scénarios déjà couverts (IME chinois et coréen, rechargement avant acquittement, double clic à la souris pour M0-03 ; services nommés et verrous pour M1-05 et M2-08).
+3. **Côté méthode** — qualification par un lecteur d'écran réel pour M0-12 et M1-13 ; compléter les variantes de scénarios déjà couverts (IME chinois et coréen, rechargement avant acquittement, double clic à la souris pour M0-03 ; les phases d'arrêt restantes de M0-04 : avant premier token, pendant outil, après fin, réponse tardive ; services nommés et verrous pour M1-05 et M2-08) ; M0 et M1 restants en qualification native Windows (scénarios outillés : `cdp-concurrent-turns`, `cdp-queue-race`, `cdp-ab-projects`, `cdp-stop-terminal`).
 
 Les critères restants et leurs limites précises sont énumérés dans chaque document de [`docs/evidence/`](evidence/) : aucun des documents de cette campagne ne déclare un ticket clos sur un seul scénario.
 
@@ -108,11 +109,11 @@ Les critères restants et leurs limites précises sont énumérés dans chaque d
 | État | Total | Répartition |
 |---|---|---|
 | ☐ Pas commencé | **1** | M4-06 |
-| ◐ Commencé | **51** | tout le reste |
-| ☑ Terminé | **1** | M1-12 |
+| ◐ Commencé | **49** | tout le reste |
+| ☑ Terminé | **3** | M1-12, **M0-02** et **M0-03** (prouvés sur Windows le 20-27/09) |
 | **Total** | **53** | |
 
-Ce récapitulatif est volontairement sévère : 51 tickets ont du code livré, mais aucun ne réunit encore l'ensemble de ses critères de sortie sur une plateforme. Le seul ticket clos, M1-12, n'a **aucune** dépendance OS ni native.
+Ce récapitulatif est volontairement sévère : 49 tickets ont du code livré, mais ne réunissent pas encore l'ensemble de leurs critères de sortie sur une plateforme. Les trois tickets clos : M1-12 sans **aucune** dépendance OS ni native ; M0-02 et M0-03 dont les critères sont entièrement prouvés dans la webview Windows ([preuves](evidence/2026-09-27-qualif-native/)) — les colonnes macOS/Linux de ces deux-là restent ◐, faute de preuve native sur ces plateformes.
 
 ### Par plateforme
 
@@ -120,10 +121,10 @@ Les 53 tickets se répartissent en trois groupes, dénombrés depuis les tableau
 
 | Groupe | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
-| **A** — sans dépendance OS (colonne `Global` renseignée) | 34 | 1 | 32 | 1 |
+| **A** — sans dépendance OS (colonne `Global` renseignée) | 34 | 1 | 31 | 2 |
 | **B** — dépendants d'un runtime natif (colonne `Global` = `—`) | 18 | 0 | 18 | 0 |
 | **C** — M1-12, clos et identique sur les trois OS | 1 | 0 | 0 | 1 |
-| **Total** | **53** | **1** | **51** | **1** |
+| **Total** | **53** | **1** | **49** | **3** |
 
 Le groupe B est le seul à porter du code **différent** selon la plateforme : c'est là que la distinction par OS change réellement la réponse.
 
@@ -152,8 +153,8 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 | ID | Résultat attendu | Global | Windows | macOS | Linux |
 |---|---|---|---|---|---|
 | M0-01 | A continue à travailler quand on ouvre le projet B | — | ◐ | ☐ | ☐ |
-| M0-02 | Reprendre une conversation après fermeture ou panne du moteur | ◐ | ◐ | ◐ | ◐ |
-| M0-03 | Ne perdre aucun texte lors d'un envoi rejeté | ◐ | ◐ | ◐ | ◐ |
+| M0-02 | Reprendre une conversation après fermeture ou panne du moteur | ☑ | ☑ | ◐ | ◐ |
+| M0-03 | Ne perdre aucun texte lors d'un envoi rejeté | ☑ | ☑ | ◐ | ◐ |
 | M0-04 | Arrêter et reprendre avec des états fiables | ◐ | ◐ | ☐ | ☐ |
 | M0-05 | Répondre aux permissions/questions même après incident | — | ◐ | ☐ | ☐ |
 | M0-06 | Afficher la politique de permissions réellement effective | — | ◐ | ☐ | ☐ |
@@ -174,17 +175,23 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
   - macOS ☐ / Linux ☐ — qualification multi-OS non commencée. La webview n'est pas WebView2 hors Windows.
   - *Critère de sortie :* isolation prouvée depuis l'interface Tauri empaquetée, sur chaque OS annoncé.
 
-- ◐ **M0-02 — Reprendre une conversation après fermeture ou panne** *(sans dimension OS)*
+- ☑ **M0-02 — Reprendre une conversation après fermeture ou panne** *(sans dimension OS)*
   - Reconnexion explicite via `session/read` + `session/resume`, état de connexion par conversation (`disconnected / connecting / connected / error`), réhydratation des items pliés par `itemId`, liveness visible avec état stale, réconciliation bornée après 15 s de silence, fallback `view/page` par curseur, `session/list` paginé, pont **Muse is resuming**, bouton **Sync now**, détection de perte du ring d'événements.
-  - **Reste (bloquant) :** le sidecar Muse 1.3.0 est `ephemeral` et ne sert pas `session/read`/`session/resume` — la reprise native d'un tour et les demandes en attente réémises restent **non démontrées**, faute de host qui expose ces méthodes.
-  - *Critère de sortie :* reprise d'un tour réellement rejouée contre un host durable, ou adaptateur de compatibilité vérifié.
+  - **Prouvé le 27/09/2026 sur Windows** ([`m0-02-reprise-apres-mort-host.md`](evidence/2026-09-27-qualif-native/m0-02-reprise-apres-mort-host.md)) : mort du host en fonctionnement → statut honnête « Muse stopped because the host process ended. Reconnect to continue. » → `resume_session` sur host relancé (`loaded: true`, grants, modèle) → **historique complet relu** (`read_session_history`) → **nouveau tour exécuté**. Les trois critères du ticket sont couverts.
+  - **Note du 27/09 :** l'ancien « Reste bloquant » (« le sidecar est `ephemeral` et ne sert pas `session/read`/`session/resume` ») était **faux** — mesuré avec un host `--no-session-log` (mémoire seule). Voir [`session-log-expique-tout.md`](evidence/2026-09-27-qualif-native/session-log-expique-tout.md).
+  - macOS ◐ / Linux ◐ — code partagé, aucune preuve native sur ces plateformes.
+  - *Critère de sortie :* reprise d'un tour réellement rejouée contre un host durable. **✓ fait sur Windows (27/09).**
 
-- ◐ **M0-03 — Ne perdre aucun texte lors d'un envoi rejeté** *(sans dimension OS)*
+- ☑ **M0-03 — Ne perdre aucun texte lors d'un envoi rejeté** *(sans dimension OS)*
   - Outbox durable par envoi (`clientMessageId`, `sending/accepted/failed`), brouillon vidé seulement à l'acquittement, vérification serveur avant retransmission, miroir natif sous `app_data/outbox/`, sidebar signalant les envois conservés.
-  - **Reste :** E2E natif — moteur coupé pendant l'envoi, fermeture/rechargement, double-clic, IME.
+  - **Prouvé le 20/09/2026 sur Windows** pour les 4 critères ([`M0-03-texte-en-rejet-conserve.md`](evidence/2026-09-20-windows-group1/M0-03-texte-en-rejet-conserve.md)) : envoi rejeté (skill inconnue) conserve le texte · double-Entrée n'admet qu'un tour · brouillon et envoi en cours survivent au rechargement · Entrée pendant une composition IME ne soumet pas.
+  - **Reste (non bloquant) :** variantes de méthode — moteur coupé pendant l'envoi, double-clic souris, IME chinois et coréen (§Méthode) ; preuve macOS/Linux.
+  - *Critère de sortie :* aucun texte perdu sur les quatre scénarios du ticket. **✓ fait sur Windows (20/09).**
 
 - ◐ **M0-04 — Arrêter et reprendre avec des états fiables**
-  - Windows ◐ — distinction demande acceptée (`Stopping Muse`) / terminal confirmé, `turnId` transmis, alias `turn/completed|retracted|stopped`, récupération bornée après accusé sans terminal, double-clic ignoré. **Reste :** qualification native avant premier token, pendant outil, après fin, avec réponse tardive. Le host 1.3.x n'émet aucun terminal après `turn/interrupt` immédiat — la preuve exige un tour modèle live.
+  - Windows ◐ — distinction demande acceptée (`Stopping Muse`) / terminal confirmé, `turnId` transmis, alias `turn/completed|retracted|stopped`, récupération bornée après accusé sans terminal, double-clic ignoré.
+  - **Progrès décisif (27/09/2026, preuve native) :** [`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md) — clic Stop depuis la webview → `cancel_session` avec **`turnId` non vide et correct** → état résolu en **1 s** (terminal serveur) → **relance immédiate**. La phrase « le host 1.3.x n'émet aucun terminal après `turn/interrupt » » est **fausse** (`turn/completed` à +36 ms, prouvé) et l'ancien « Stopping… » figé ne se reproduit pas au HEAD.
+  - **Reste (Windows) :** les phases spéciales — arrêt avant le premier token, pendant un outil, après la fin de la réponse, réponse tardive. **Défaut de libellé restant :** le bouton Stop du tour porte le titre `Stop the running sidecar`.
   - macOS ☐ / Linux ☐ — non commencé.
 
 - ◐ **M0-05 — Répondre aux permissions/questions même après incident**
@@ -275,7 +282,7 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
   - **Conséquence :** le blocage n'est **pas** côté host. `SIDECAR-CONTRACT-GAPS.md` ne doit plus être invoqué pour M1-06, et le chemin `Run in Muse` côté client fonctionne : capacité projetée par Rust, fusionnée par le renderer, bouton activé dès qu'une commande est saisie.
   - **Deuxième défaut trouvé, de synchronisation (21/09/2026) :** la carte `grantedCapabilitiesBySession` du renderer n'est peuplée **qu'au montage**, par un `restore_sessions` qui s'exécute avant que les hôtes par workspace soient lancés. Sur un lancement frais elle ne contient donc qu'une partie des sessions, et **rien ne la repeuple** — le bouton annonce « did not grant the userShell capability » alors que le host l'a accordée. Mesuré : pont `["userShell"]` pour les 13 sessions, carte du renderer réduite à `01a0c2d7`. Détail dans [`evidence/2026-09-21-ux/m1-06-capacites-au-montage.md`](evidence/2026-09-21-ux/m1-06-capacites-au-montage.md).
   - **`sessionNotLoaded` n'est plus un échec opaque :** le host rapporte `status: "notLoaded"` pour **toutes** les sessions persistées après une relance — y compris à 27 tours — donc « listée » et « chargée » sont deux états. `SessionMeta` porte désormais `loaded` et le bouton est indisponible avec un motif exact tant que la conversation n'est pas chargée, au lieu d'échouer après le clic.
-  - **Reste :** (1) repeupler la carte des capacités après le lancement des hôtes ; (2) charger la session à la demande via `session/resume`, qui fournit exactement l'état manquant — mesuré : `accepted`, **2 items `userShell`**, marqueur restitué ; (3) qualification native interactive sur les trois OS.
+  - **Reste :** (1) repeupler la carte des capacités après le lancement des hôtes — amorcé : les réponses `start_session`/`resume_session` portent `granted_capabilities` et le renderer les hydrate à la (re)connexion (**mesuré 27/09** : `["userShell"]` propagé) ; (2) **afficher la sortie `userShell` dans la carte Run in Muse** (les items et leur `output` sont bien publiés par le host — `msp-user-shell-items.mjs`) ; (3) qualification native interactive sur les trois OS.
   - macOS ☐ / Linux ☐ — non commencé ; qualification native sur les trois OS requise par le ticket.
 
 - ◐ **M1-07 → M1-08 — fichiers et pièces jointes** *(code partagé)*
@@ -294,7 +301,7 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 
 - ◐ **M1-11 — Choisir un modèle disponible et suivre le contexte** *(Global : —)*
   - Windows ◐ — `model/list` comme source de vérité, `session/setModel`, compaction en geste séparé avec cycle `pending → accepted/noop/error`, `session/contextUsage` et `session/tokenUsage` affichés tels que fournis, effort de raisonnement **les huit valeurs du contrat** (`none`→`ultra`, `max` compris) persisté global/projet et appliqué via `session/setReasoningEffort`, dernier modèle conservé dans `StoredSession.model_id`.
-  - **Preuves natives :** les **huit** niveaux sont acceptés par un host 1.3.0 vivant et chacun émet `session/reasoningEffortChanged` avec la valeur envoyée (`node scripts/msp-reasoning-tiers.mjs`) — le « sept sur huit » venait de notre liste, pas du moteur, et `session/read` ne projette pas le champ, ce qui avait produit un faux « non conservé ». `--exercise-model` accepte l'accusé mais relit `isActive: false` ; `--exercise-compaction` sur session vierge renvoie `missing-run`. **Donc : la profondeur est prouvée, l'effectif du modèle non.**
+  - **Preuves natives :** les **huit** niveaux sont acceptés par un host 1.3.0 vivant et chacun émet `session/reasoningEffortChanged` avec la valeur envoyée (`node scripts/msp-reasoning-tiers.mjs`) — le « sept sur huit » venait de notre liste, pas du moteur. **Mesures du 27/09/2026 :** l'« effectif du modèle » **est** visible côté host — `list_models` rend `is_active: true` sur le modèle courant, `start_session`/`resume_session` rapportent `model_id`, et `session/setModel` se projette sur la session (`msp-projection-check.mjs`) ; le vieux `isActive: false` de `--exercise-model` venait du host `--no-session-log` du harnais ([preuve](evidence/2026-09-27-qualif-native/session-log-expique-tout.md)). **Reste :** bascule de modèle entre deux conversations ouvertes visible côté UI, suivi du contexte (`contextUsage`) et qualification native.
   - macOS ☐ / Linux ☐ — non commencé.
 
 - ☑ **M1-12 — Retrouver et organiser les conversations** *(sans dimension OS — seul ticket clos)*

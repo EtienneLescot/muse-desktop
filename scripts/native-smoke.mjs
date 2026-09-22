@@ -219,7 +219,18 @@ function uuidv7() {
 }
 
 function createHost(binary, workspace, label) {
-  const child = spawn(binary, ["serve", "--no-session-log"], {
+  // Session logging is ON by default, deliberately. `--no-session-log` makes
+  // the host memory-only, which is not a neutral storage choice: measured by
+  // `scripts/msp-session-log-effect.mjs`, a memory-only host answers
+  // `sessionDurability: "ephemeral"` AND admits turns that never materialize
+  // (`turn/start` → `accepted`, then only `session/started` — no
+  // `turn/started`, no terminal). That degenerate path is what made this
+  // harness report `terminalNotification: unsupported` for a host that does
+  // emit one (see docs/evidence/2026-09-27-qualif-native/session-log-expique-tout.md).
+  // Pass `--memory-only-sessions` to opt back into the old behaviour.
+  const serveArgs = ["serve"];
+  if (process.argv.includes("--memory-only-sessions")) serveArgs.push("--no-session-log");
+  const child = spawn(binary, serveArgs, {
     cwd: workspace,
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
@@ -960,8 +971,9 @@ async function main() {
     if (exerciseControl) {
       // This path is deliberately opt-in: admit both real turns in parallel,
       // then interrupt each target independently. It proves the native
-      // control contract without waiting for a model response or persisting
-      // user content in the default memory-only host.
+      // control contract without waiting for a model response. Note that a
+      // memory-only host (`--memory-only-sessions`) never materializes these
+      // turns at all — run this exercise on a logging host.
       const started = await Promise.all(hosts.map((host, index) =>
         host.request("turn/start", {
           commandId: uuidv7(),
