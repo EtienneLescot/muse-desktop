@@ -40,7 +40,7 @@ import { signInCommand, type AuthStatusPayload } from "./lib/museAuth";
 import { ModelControl } from "./components/ModelControl";
 import { ComputerUsePanel } from "./components/ComputerUsePanel";
 import { isTauriRuntime } from "./lib/env";
-import { formatHandoffContext } from "./lib/handoff";
+import { formatHandoffContext, formatWorktreeContinuationNote } from "./lib/handoff";
 import type { Artifact, ArtifactVersion } from "./lib/artifacts";
 import {
   folderName,
@@ -325,6 +325,9 @@ export default function App() {
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // M2-05: the step a move to a worktree is on, or null. The button carries it
+  // because the conversation screen has no preparation banner of its own.
+  const [movingToWorktree, setMovingToWorktree] = useState<string | null>(null);
   // What the welcome screen is waiting for, in plain words. Null when idle.
   const [preparation, setPreparation] = useState<string | null>(null);
   const [page, setPage] = useState<
@@ -748,6 +751,52 @@ export default function App() {
     return true;
   }
 
+  /**
+   * Continue this conversation in a worktree.
+   *
+   * This is not a transfer, and it does not pretend to be one: MSP has no
+   * multi-workspace contract, so a session cannot move between hosts. What
+   * happens is a copy of the folder, a new conversation in it, and a bounded
+   * context note in the composer — while this conversation stays exactly where
+   * it is, transcript included.
+   */
+  async function moveToWorktree(sessionId: string): Promise<void> {
+    const session = sessions.find((candidate) => candidate.session_id === sessionId);
+    if (session === undefined || movingToWorktree !== null) return;
+    const source = session.workspace;
+    try {
+      setError(null);
+      setMovingToWorktree("Creating a worktree…");
+      const plan = planConversationWorktree(
+        folderName(source),
+        undefined,
+        Date.now().toString(36).slice(-5),
+      );
+      const record = await createWorktreeForWorkspace(source, plan);
+      if (record === null) return;
+      setMovingToWorktree("Starting Muse in the copy…");
+      const project = projectForSession(sessionId);
+      const opened = await startSessionInWorkspace(
+        record.path,
+        project !== null ? settingsFor(project.id) : undefined,
+        project?.id,
+      );
+      if (opened === null) {
+        setError(
+          "The worktree was created but no conversation could start in it; it is kept, and you can open it from the worktrees panel.",
+        );
+        return;
+      }
+      prefillComposer(
+        formatWorktreeContinuationNote(source, record.path, record.branch),
+      );
+    } catch (error) {
+      setError(userFacingError(error, "The worktree action could not be completed."));
+    } finally {
+      setMovingToWorktree(null);
+    }
+  }
+
   return (
     <div className={`app desktop-app ${collapsed ? "nav-collapsed" : ""}`}>
       <a className="skip-link" href="#composer">
@@ -915,6 +964,16 @@ export default function App() {
                 onClick={() => void reconnectSession(active.session_id)}
                 title="Reconnect this saved conversation to its workspace engine">
                 {reconnectingId === active.session_id ? "Reconnecting…" : "Reconnect"}
+              </button>
+            )}
+            {active !== null && page === "task" && (
+              <button
+                type="button"
+                disabled={movingToWorktree !== null || active.running || active.workspace.length === 0}
+                onClick={() => void moveToWorktree(active.session_id)}
+                title="Open a new conversation in a worktree of this folder; this conversation stays here"
+              >
+                {movingToWorktree ?? "Move to a worktree…"}
               </button>
             )}
             <span className="pill">

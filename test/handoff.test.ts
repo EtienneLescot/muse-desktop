@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildHandoffPlan, formatHandoffContext, isHandoffPlanStale } from "../src/lib/handoff.ts";
+import {
+  formatWorktreeContinuationNote, buildHandoffPlan, formatHandoffContext, isHandoffPlanStale } from "../src/lib/handoff.ts";
 
 const base = {
   direction: "local-to-worktree" as const,
@@ -127,5 +128,28 @@ describe("M2-05 handoff planner", () => {
   it("treats a newly observed target as a stale plan", () => {
     const plan = buildHandoffPlan(base);
     assert.equal(isHandoffPlanStale(plan, { ...base, targetDirty: false }), true);
+  });
+});
+
+describe("worktree continuation note", () => {
+  it("states what happened without borrowing a plan's authority", () => {
+    const note = formatWorktreeContinuationNote(
+      "C:\\repos\\openscreen",
+      "C:\\repos\\openscreen\\.muse\\worktrees\\openscreen-4f2a1",
+      "muse/openscreen-4f2a1",
+    );
+    // The one claim that must never appear: that the session moved.
+    assert.match(note, /was not moved or emptied/);
+    assert.match(note, /new conversation in a copy/);
+    assert.match(note, /muse\/openscreen-4f2a1/);
+    assert.doesNotMatch(note, /transferred automatically/);
+    assert.ok(note.length < 800, "a context note stays small enough to read");
+  });
+
+  it("survives empty values instead of printing blanks", () => {
+    const note = formatWorktreeContinuationNote("", "", "");
+    assert.match(note, /unknown path/);
+    assert.match(note, /unknown workspace/);
+    assert.match(note, /no branch/);
   });
 });
