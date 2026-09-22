@@ -97,6 +97,59 @@ windows_elevated setup_required: sandbox users are not ready ». La phase « arr
 n'a donc pas pu être jouée avec un outil modèle long ; elle reste à rejouer avec **Run in Muse**
 (`session/userShell`, lui fonctionnel — voir M1-06) comme outil long.
 
+## Phases spéciales jouées le 27/09/2026 (suite) — trois de quatre fermées
+
+Toutes via `scripts/cdp-stop-terminal.mjs` (`MUSE_STOP_AFTER_MS` pour cibler la phase,
+`--followup` pour prouver la relance) ; rapports bruts `cdp-stop-avant-token-run1.json`,
+`cdp-stop-reponse-tardive-run1.json` et `cdp-stop-reponse-tardive-run2.json`.
+
+### Avant le premier token — prouvé (`MUSE_STOP_AFTER_MS=1500`)
+
+Prompt à planification longue (« plan a 2500-word essay … then reply PLANNED ») ; arrêt à +1,5 s,
+**avant toute sortie** (`uiBeforeStop.healthText: null` — la rangée de stream n'a pas encore
+d'état ; l'état `reasoning update` du tour suivant est visible dans `uiAfterFollowup`).
+
+```
+verdict: {"turnIdObservedOnWire":true,"stopClicked":true,
+          "cancelCarriedTurnId":[true,true,true,true],
+          "stoppingResolved":true,"resolvedAtMs":1018}
+```
+
+- `cancel_session` porte le **`turnId`** du tour dès la phase pré-token.
+- Bannière **acceptée** capturée en direct (`uiObservations[0]`, +2 ms après le clic) :
+  « Stopping Muse — The stop request was accepted; waiting for the desktop host to confirm it. »
+- **Résolution terminale en 1,0 s** puis **relance immédiate fonctionnelle** (`uiAfterFollowup` :
+  `Muse is working … · reasoning update.`).
+
+### Réponse tardive — prouvé (`MUSE_STOP_AFTER_MS=45000`)
+
+Prompt très long (« 3000-word technical analysis … ») ; à **+45 s** le tour est **toujours vivant**
+(bouton Stop présent, cliqué) :
+
+```
+verdict: {"turnIdObservedOnWire":true,"stopClicked":true,
+          "cancelCarriedTurnId":[true,true,true,true,true,true],
+          "stoppingResolved":true,"resolvedAtMs":1016}
+```
+
+Acceptation du même libellé (capturée live), `turnId` transmis, **résolution en 1,0 s**, relance
+OK. Le comportement de liveness (« No recent host update… Muse may still be working ») reste le
+marqueur honnête de cette fenêtre.
+
+### Après la fin de la réponse — prouvé (`MUSE_STOP_AFTER_MS=60000`, réponse déjà terminée)
+
+`cdp-stop-reponse-tardive-run1.json` : à +60 s la réponse était finie depuis longtemps —
+**aucun bouton Stop n'existe plus** (`stopClicked: false`), l'UI est au repos
+(`uiBeforeStop.healthText: null`), et le tour suivant (`--followup`) démarre immédiatement.
+L'UI ne propose pas d'arrêter ce qui est déjà fini et rien ne casse.
+
+### Reste : pendant un outil
+
+Toujours bloqué par le défaut d'environnement (outil shell du modèle refusé — et depuis le
+27/09 au soir, `muse sandbox windows setup` est fait mais **un host lancé par l'app refuse
+toujours** (`managed shell sandbox is unavailable`) — voir [`m1-06-run-in-muse-sandbox.md`](m1-06-run-in-muse-sandbox.md)).
+À rejouer dès que le raccordement app↔host est corrigé, avec un outil long (shell ou recherche).
+
 ## Reproductibilité
 
 - Commit : `362c8bb` (main), `target\debug\muse-desktop.exe` via `npm run tauri -- dev`.
@@ -106,5 +159,6 @@ n'a donc pas pu être jouée avec un outil modèle long ; elle reste à rejouer 
   (trace des formes d'appel).
 
 **Verdict M0-04 Windows :** « Stop résolu par un terminal serveur » est **prouvé en cours de
-réponse** avec `turnId` transmis et reprise prouvée. Reste à prouver les phases spéciales
-(arrêt avant le premier token, pendant un outil, après la fin de la réponse, réponse tardive).
+réponse** avec `turnId` transmis et reprise prouvée. **Phases fermées le 27/09 : avant le premier
+token, réponse tardive, après la fin** (ci-dessus). Reste la phase **pendant un outil**, bloquée
+par le défaut d'environnement documenté dans [`m1-06-run-in-muse-sandbox.md`](m1-06-run-in-muse-sandbox.md).
