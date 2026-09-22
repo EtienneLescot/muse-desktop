@@ -94,6 +94,21 @@ de l'app au drop du lease reste à rejouer avec le relancement.
 
 Capture : [`shots/m3-automation-run.png`](shots/m3-automation-run.png).
 
+## Fuseau et DST (M3-07) — résolution mesurée, avertissement absent
+
+Deux automatisations `Once` créées via le formulaire pour des heures locales **dégénérées** :
+
+| Cas | Saisie | Affiché et persisté | Verdict |
+|---|---|---|---|
+| **Trou** (28/03/2027, 02:30 n'existe pas — passage à l'heure d'été 02:00→03:00) | `2027-03-28T02:30` | « At **28/03/2027 03:30:00** · Europe/Paris », `trigger.at = 1806197400000` (= 01:30Z = 03:30 CEST) | résolu par saut d'une heure ✓ |
+| **Doublon** (31/10/2027, 02:30 existe deux fois — retour à l'heure d'hiver) | `2027-10-31T02:30` | « At **31/10/2027 02:30:00** · Europe/Paris », `trigger.at = 1824942600000` (= 00:30Z = **premier** passage, CEST) | choix déterministe ✓ |
+
+`timeZone: "Europe/Paris"` persistée **par planification** (heure murale ancrée sur le fuseau IANA,
+insensible à un changement de fuseau système ultérieur). **Manque par contre l'affichage d'un
+avertissement :** ni le saut d'heure ni le choix sur le doublon ne sont signalés à l'utilisateur —
+l'acceptation « l'application **affiche** et persiste les avertissements de planification » n'est
+que moitié remplie (la persistance est prouvée, l'affichage non).
+
 ## Reproductibilité
 
 - Commit `aff5467`+ ; Windows 11 26200, WebView2, CDP 9222 ; `muse` 1.3.0.
