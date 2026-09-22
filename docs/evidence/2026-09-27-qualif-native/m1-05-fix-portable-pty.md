@@ -80,6 +80,16 @@ appelé (ou ConPTY l'ignore) — le défaut historique « resize sans effet » e
 localisé** : côté appel de resize dans l'app, pas côté portable-pty (la sortie, elle, fonctionne
 depuis le 0.8.1).
 
+## ANSI SGR + Ctrl+C — prouvés (run5)
+
+- **ANSI SGR :** `prompt $e[31mRED$e[32mGREEN$e[0m` (cmd, ESC réels) → rendu **en couleurs
+  distinctes** : span `RED` → `rgb(239,68,68)` (31m), span `GREEN` → `rgb(34,197,94)` (32m).
+  Palette 16 couleurs fonctionnelle.
+- **Ctrl+C :** `ping -n 20 127.0.0.1` interrompu à ~6 réponses (**pas de bilan final de 20
+  paquets**), marque **`^C`** affichée, retour au prompt. (Attention mesure : la fenêtre doit avoir
+  le focus sur l'input du terminal — un premier essai sans focus avait laissé le ping aller à son
+  terme, honnêteté méthodologique.)
+
 ## Reproductibilité
 
 - Commit : cette note + `src-tauri/Cargo.toml`/`Cargo.lock` (downgrade) + `scripts/cdp-type.mjs`.
