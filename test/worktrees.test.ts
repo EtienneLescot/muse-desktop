@@ -12,6 +12,7 @@ import {
   MAX_SETUP_ENV_NAMES,
   MAX_SETUP_COMMAND_CHARS,
   planWorktrees,
+  planConversationWorktree,
   summarizeWorktreeInspections,
   validateSetupCommand,
   WORKTREE_BASE,
@@ -194,5 +195,30 @@ describe("M2-06 retention policy", () => {
     assert.equal(eligible.eligible, true);
     assert.equal(normalizeRetentionDays("0"), null);
     assert.equal(normalizeRetentionDays("30"), 30);
+  });
+});
+
+describe("conversation worktree plan", () => {
+  it("names the branch after the folder, not after a task position", () => {
+    // `task1-branch` is right for parallel writers and wrong here: every
+    // conversation would ask for the same branch name.
+    const plan = planConversationWorktree("openscreen");
+    assert.deepEqual(plan, {
+      agent: "openscreen",
+      path: ".muse/worktrees/openscreen",
+      branch: "muse/openscreen",
+      base: "HEAD",
+    });
+  });
+
+  it("sanitizes hostile folder names and never returns an empty segment", () => {
+    assert.equal(planConversationWorktree("../../etc").path.startsWith(".muse/worktrees/"), true);
+    assert.equal(planConversationWorktree("../../etc").path.includes(".."), false);
+    assert.equal(planConversationWorktree("   ").agent, "conversation");
+    assert.equal(planConversationWorktree("C:\\\\Users\\\\etien").branch.startsWith("muse/"), true);
+  });
+
+  it("accepts an explicit base ref", () => {
+    assert.equal(planConversationWorktree("demo", "origin/main").base, "origin/main");
   });
 });

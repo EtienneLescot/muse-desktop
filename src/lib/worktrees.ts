@@ -211,6 +211,35 @@ export function planWorktrees(
 }
 
 /**
+ * Plan the worktree for a conversation that is about to start.
+ *
+ * `planWorktrees` names one worktree per *agent* (`task<N>-branch`), which is
+ * the parallel-writers case. Starting a conversation is a different question —
+ * "do I work in the project folder or in a copy?" — so it gets its own branch
+ * prefix: `task1-branch` for every conversation would collide on the second one.
+ *
+ * Pure and total: a blank seed still yields a usable plan.
+ */
+export function planConversationWorktree(
+  seed: string,
+  base: string = WORKTREE_BASE,
+): WorktreePlan {
+  const sanitized = safePathSegment(seed.trim().length > 0 ? seed.trim() : "conversation")
+    // A folder name is user-controlled, so it can start with dots and dashes
+    // ("../../etc" sanitizes to "..-..-etc"). One path segment cannot traverse
+    // anything, but a directory literally named "..-..-etc" is a trap for the
+    // next person reading `git worktree list`.
+    .replace(/^[.-]+/, "");
+  const segment = sanitized.length > 0 ? sanitized : "conversation";
+  return {
+    agent: segment,
+    path: `${WORKTREE_ROOT}/${segment}`,
+    branch: `muse/${segment}`,
+    base,
+  };
+}
+
+/**
  * Render the manual-setup shell snippet for a plan list: one
  * `git worktree add` per agent. Empty plan list yields an empty string.
  */
