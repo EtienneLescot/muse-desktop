@@ -238,12 +238,22 @@ export function projectOptionLabels(
   const names = options.map((option) => option.projectName);
   const counts = new Map<string, number>();
   for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
-  return options.map((option, index) => {
+  const labels = options.map((option, index) => {
     const name = names[index] ?? option.projectName;
     const folder = folderName(option.workspace);
     if (folder === name && counts.get(name) === 1) return name;
     return `${name} · ${folder}`;
   });
+  // Two roots of one project can carry the same folder name, and then the label
+  // still collides. Those rows fall back to the whole path, which is the only
+  // form guaranteed to tell them apart.
+  const seen = new Map<string, number>();
+  for (const label of labels) seen.set(label, (seen.get(label) ?? 0) + 1);
+  return labels.map((label, index) =>
+    (seen.get(label) ?? 0) > 1
+      ? `${names[index] ?? ""} · ${options[index]?.workspace ?? ""}`
+      : label,
+  );
 }
 
 /**

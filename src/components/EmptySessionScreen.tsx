@@ -190,26 +190,26 @@ export function EmptySessionScreen({
         }}
       />
       <div className="welcome-environment">
-        <label htmlFor="welcome-environment-select">Start in</label>
+        <label htmlFor="welcome-environment-select">Project</label>
         <select
           id="welcome-environment-select"
           value={environmentId}
           onChange={(event) => setEnvironmentId(event.target.value)}
-          aria-label="Conversation environment"
+          aria-label="Project for this conversation"
         >
-          <option value="default">
-            Default workspace · {workspaceLabel(workspace)}
-          </option>
-          {environmentOptions.map((option) => (
+          <option value="default">No project</option>
+          {environmentOptions.map((option, index) => (
             <option key={option.optionId} value={option.optionId}>
-              {option.projectName} · {workspaceLabel(option.workspace)}
+              {projectLabels[index] ?? option.projectName}
             </option>
           ))}
         </select>
         <small>
           {selectedEnvironment
-            ? `Runs in ${workspaceLabel(selectedEnvironment.workspace)} with ${selectedEnvironment.projectName}'s preferences. The agent reads the rules of that folder.`
-            : "Choose a project folder to inherit its preferences and its rules."}
+            ? `Runs in ${folderName(selectedEnvironment.workspace)} with ${selectedEnvironment.projectName}'s preferences. The agent reads the rules of that folder.`
+            : workspace === null
+              ? "Choose a project folder to inherit its preferences and its rules."
+              : `No project: runs in ${folderName(workspace)} with the global settings. The agent reads that folder's rules.`}
         </small>
       </div>
       <div className="welcome-suggestions">
