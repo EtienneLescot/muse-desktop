@@ -13,9 +13,11 @@ import {
   DEFAULT_PROJECT_SETTINGS,
   deleteProject,
   diffProjectSettings,
+  folderName,
   MAX_PROJECTS,
   PROJECT_LIMIT_MESSAGE,
   projectOfThread,
+  projectOptionLabels,
   projectWorkspaceOptions,
   projectWorkspaces,
   projectsNeedingWorkspace,
@@ -325,6 +327,56 @@ describe("M2-01 new conversation environments", () => {
       "C:\\work\\front",
       "D:\\work\\back",
     ]);
+  });
+
+  it("names a location by its last segment, on both separators", () => {
+    assert.equal(folderName("C:\\work\\openscreen"), "openscreen");
+    assert.equal(folderName("/home/dev/openscreen"), "openscreen");
+    assert.equal(folderName("C:\\work\\openscreen\\"), "openscreen");
+    assert.equal(folderName("openscreen"), "openscreen");
+    // No folder chosen is its own statement, not an empty name.
+    assert.equal(folderName(null), "Choose a folder");
+  });
+
+  it("prints the folder only where it tells the rows apart", () => {
+    // The reported defect: a project made from its own folder printed the same
+    // word twice, next to a folder picker already showing it.
+    assert.deepEqual(
+      projectOptionLabels([
+        { projectName: "openscreen", workspace: "G:\\repos\\openscreen" },
+        { projectName: "muse-desktop", workspace: "C:\\repos\\muse-desktop" },
+      ]),
+      ["openscreen", "muse-desktop"],
+    );
+    // A differently named project keeps the folder: it is the only thing that
+    // says where the conversation would run.
+    assert.deepEqual(
+      projectOptionLabels([{ projectName: "Website", workspace: "C:\\work\\site" }]),
+      ["Website · site"],
+    );
+  });
+
+  it("falls back to the whole path when two roots would still read alike", () => {
+    // Same project, same folder name, two locations: no combination of name and
+    // folder can tell them apart, so those rows carry the path.
+    assert.deepEqual(
+      projectOptionLabels([
+        { projectName: "openscreen", workspace: "G:\\repos\\openscreen" },
+        { projectName: "openscreen", workspace: "H:\\archive\\openscreen" },
+      ]),
+      [
+        "openscreen · G:\\repos\\openscreen",
+        "openscreen · H:\\archive\\openscreen",
+      ],
+    );
+    // Distinct folder names are enough, so the path stays out of the way.
+    assert.deepEqual(
+      projectOptionLabels([
+        { projectName: "Monorepo", workspace: "C:\\work\\front" },
+        { projectName: "Monorepo", workspace: "D:\\work\\back" },
+      ]),
+      ["Monorepo · front", "Monorepo · back"],
+    );
   });
 });
 

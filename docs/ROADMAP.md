@@ -328,7 +328,8 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 - ◐ **M2-01 — Un projet représente des dossiers persistants** *(Global : —)*
   - Windows ◐ — racines multiples persistantes avec `workspace` conservé comme racine primaire, migration guidée **N projects need a folder**, sonde native `inspect_workspace_root` (`Available`/`Not a folder`/`Missing`), sélecteur d'environnement `projectId:rootIndex` à la création de conversation.
   - Windows ◐ — **règles du dossier** : sonde native `rules_scan` en lecture seule (`AGENTS.md` prioritaire, `CLAUDE.md` seulement en repli, règles personnelles en repli conditionnel), affichées dans le projet avec leur statut. Le champ d'instructions client a été **retiré** — un projet ne possède pas d'instructions, le CLI lit celles du dossier. Détails et limites : [regles-du-dossier](evidence/2026-09-21-ux/regles-du-dossier.md).
-  - **Reste :** `workspaces[]` n'a aucun équivalent backend (un projet = un dossier côté CLI) ; « Start in » reste ambigu face au sélecteur de dossier.
+  - Windows ◐ — **sélecteur de projet** : « Start in » devient « Project », l'option par défaut « No project », et le dossier n'est affiché que lorsqu'il distingue — un projet né de son propre dossier n'affiche plus « openscreen · openscreen » sous un sélecteur de dossier qui dit déjà « openscreen ». Deux racines qui se liraient encore pareil retombent sur le chemin entier (`projectOptionLabels`).
+  - **Reste :** `workspaces[]` n'a aucun équivalent backend (un projet = un dossier côté CLI).
   - Linux ◐ — le chemin pur (modèle, migration, projection) est couvert par les tests Node et la CI tourne sur Linux ; la sonde native n'y est pas exercée.
   - macOS ☐ — non commencé.
 

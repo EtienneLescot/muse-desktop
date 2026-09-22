@@ -113,6 +113,6 @@ Migration : les deux projets présents sur cette machine avaient `instructions: 
 ## Ce qui reste ouvert
 
 - `workspaces[]` (multi-dossier) n'a toujours aucun équivalent backend — à retirer.
-- « Start in » reste ambigu face au sélecteur de dossier.
+- ~~« Start in » reste ambigu face au sélecteur de dossier.~~ **Corrigé** : le sélecteur s'appelle « Project », son option par défaut « No project », et le dossier n'apparaît que lorsqu'il distingue. Détails : [alignement-cli-projet-dossier](alignement-cli-projet-dossier.md).
 - La case worktree au démarrage exige une variante de `git_worktree_create_session` sans session parente.
 - `AuthMode::Account` n'est jamais produit par `decide()` — le mode est donc toujours soit `api_key`, soit `none`. À trancher : retirer la variante, ou distinguer un login de compte d'une clé API.

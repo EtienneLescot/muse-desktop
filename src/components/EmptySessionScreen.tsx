@@ -5,7 +5,11 @@ import { Icon } from "./Icon";
 import type { AuthorizationMode } from "../lib/authorization";
 import { ReasoningEffortControl } from "./ReasoningEffortControl";
 import type { ReasoningEffort } from "../lib/reasoning";
-import type { ProjectWorkspaceOption } from "../lib/projects";
+import {
+  folderName,
+  projectOptionLabels,
+  type ProjectWorkspaceOption,
+} from "../lib/projects";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
 import { userFacingError } from "../lib/errorCopy";
 import {
@@ -94,11 +98,8 @@ export function EmptySessionScreen({
     (option) => option.optionId === environmentId,
   );
   const selectedWorkspace = selectedEnvironment?.workspace ?? workspace;
-  const workspaceLabel = (path: string | null): string => {
-    if (path === null) return "Choose a folder";
-    const parts = path.split(/[\\/]/).filter((part) => part.length > 0);
-    return parts[parts.length - 1] ?? path;
-  };
+  // Computed as a set: a folder is appended only where it distinguishes the row.
+  const projectLabels = projectOptionLabels(environmentOptions);
   useEffect(() => {
     if (environmentId !== "default" && selectedEnvironment === undefined) {
       setEnvironmentId("default");
@@ -189,26 +190,26 @@ export function EmptySessionScreen({
         }}
       />
       <div className="welcome-environment">
-        <label htmlFor="welcome-environment-select">Start in</label>
+        <label htmlFor="welcome-environment-select">Project</label>
         <select
           id="welcome-environment-select"
           value={environmentId}
           onChange={(event) => setEnvironmentId(event.target.value)}
-          aria-label="Conversation environment"
+          aria-label="Project for this conversation"
         >
-          <option value="default">
-            Default workspace · {workspaceLabel(workspace)}
-          </option>
-          {environmentOptions.map((option) => (
+          <option value="default">No project</option>
+          {environmentOptions.map((option, index) => (
             <option key={option.optionId} value={option.optionId}>
-              {option.projectName} · {workspaceLabel(option.workspace)}
+              {projectLabels[index] ?? option.projectName}
             </option>
           ))}
         </select>
         <small>
           {selectedEnvironment
-            ? `Runs in ${workspaceLabel(selectedEnvironment.workspace)} with ${selectedEnvironment.projectName}'s preferences. The agent reads the rules of that folder.`
-            : "Choose a project folder to inherit its preferences and its rules."}
+            ? `Runs in ${folderName(selectedEnvironment.workspace)} with ${selectedEnvironment.projectName}'s preferences. The agent reads the rules of that folder.`
+            : workspace === null
+              ? "Choose a project folder to inherit its preferences and its rules."
+              : `No project: runs in ${folderName(workspace)} with the global settings. The agent reads that folder's rules.`}
         </small>
       </div>
       <div className="welcome-suggestions">
