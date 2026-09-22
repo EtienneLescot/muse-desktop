@@ -216,6 +216,8 @@ export default function App() {
     dismissImport,
     subagentInterrupt,
     subagentStop,
+    subagentClose,
+    subagentReopen,
     subagentResume,
     subagentFollowup,
     subagentReadResult,
@@ -1534,6 +1536,10 @@ export default function App() {
                     onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
                     onOpenWorkspacePath={(path) => openWorkspacePath(active.session_id, path)}
                     controls={{
+                      onClose: (agentId, reason) =>
+                        void subagentClose(active.session_id, agentId, reason),
+                      onReopen: (agentId) =>
+                        void subagentReopen(active.session_id, agentId),
                       onInterrupt: (agentId) =>
                         void subagentInterrupt(active.session_id, agentId),
                       onStop: (agentId) =>

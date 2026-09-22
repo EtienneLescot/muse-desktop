@@ -29,6 +29,9 @@ export type SubagentStatus =
   | "stopped"
   | "paused"
   | "failed"
+  /** `closing` then `closed`: the host's own control statuses (SS4.5.7). */
+  | "closing"
+  | "closed"
   | "unknown";
 
 const STATUS_ALIASES: Record<string, SubagentStatus> = {
@@ -58,6 +61,10 @@ const STATUS_ALIASES: Record<string, SubagentStatus> = {
 };
 
 const SUBAGENT_STATUSES = new Set<SubagentStatus>([
+  // `closed` and `closing` are the host's own control statuses: without them a
+  // closed agent read as "unknown", which is how a real state becomes a mystery.
+  "closing",
+  "closed",
   "queued",
   "running",
   "completed",
@@ -235,6 +242,7 @@ export interface SubagentControl {
 
 export interface SubagentControls {
   close: SubagentControl;
+  reopen: SubagentControl;
   interrupt: SubagentControl;
   stop: SubagentControl;
   resume: SubagentControl;
@@ -243,7 +251,13 @@ export interface SubagentControls {
   drilldown: SubagentControl;
 }
 
-const SUBAGENT_FINISHED: readonly string[] = ["completed", "failed", "cancelled", "stopped"];
+const SUBAGENT_FINISHED: readonly string[] = [
+  "completed",
+  "failed",
+  "cancelled",
+  "stopped",
+  "closed",
+];
 const SUBAGENT_RESUMABLE: readonly string[] = ["interrupted", "stopped", "paused"];
 
 export function subagentControlAvailability(
@@ -264,6 +278,14 @@ export function subagentControlAvailability(
       : status === "running"
         ? { enabled: false, reason: "This agent is still working; stop it first." }
         : { enabled: true },
+    // Reopening is meaningful exactly when the host reports the agent closed:
+    // `closed` is one of its own control statuses, so this is the host's
+    // vocabulary talking, not a state we invented.
+    reopen: busy
+      ? { enabled: false, reason: busyReason }
+      : status === "closed"
+        ? { enabled: true }
+        : { enabled: false, reason: "Only a closed agent can be reopened." },
     interrupt: busy
       ? { enabled: false, reason: busyReason }
       : finished

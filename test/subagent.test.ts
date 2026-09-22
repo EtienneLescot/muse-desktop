@@ -196,3 +196,19 @@ describe("subagent close policy", () => {
     assert.equal(subagentControlAvailability("completed").close.enabled, true);
   });
 });
+describe("close and reopen", () => {
+  it("offers reopen only for a closed agent", () => {
+    // `closed` is one of the host's own control statuses, so this is its
+    // vocabulary rather than a state the client invented.
+    assert.equal(subagentControlAvailability("closed").reopen.enabled, true);
+    assert.equal(subagentControlAvailability("completed").reopen.enabled, false);
+    assert.match(subagentControlAvailability("completed").reopen.reason ?? "", /closed agent/);
+  });
+
+  it("treats a closed agent as finished for the stop controls", () => {
+    const closed = subagentControlAvailability("closed");
+    assert.equal(closed.interrupt.enabled, false);
+    assert.equal(closed.stop.enabled, false);
+    assert.match(closed.interrupt.reason ?? "", /finished/);
+  });
+});
