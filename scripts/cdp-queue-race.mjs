@@ -136,7 +136,14 @@ const submit = (client) => evaluate(client, `(() => {
   for (const type of ["keydown", "keypress", "keyup"]) {
     field.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
   }
-  return { submitted: true, remaining: field.value.length };
+  // Synthetic Enter does not always reach the React composer handler; fall
+  // back to the real send button (measured reliable, including while a turn is
+  // running — where it queues instead of sending).
+  if (field.value.length > 0) {
+    const send = document.querySelector("button.send");
+    if (send && !send.disabled) { send.click(); return { submitted: true, via: "send-button", remaining: field.value.length }; }
+  }
+  return { submitted: true, via: "enter", remaining: field.value.length };
 })()`);
 
 async function main() {
@@ -146,11 +153,12 @@ async function main() {
   const report = { schema: "muse-desktop.cdp-queue-race.v1", preconditions: [], steps: [] };
   try {
     report.open = await evaluate(client, `(() => {
+      const needle = ${JSON.stringify(process.env.MUSE_RACE_SESSION ?? "Count slowly")};
       const nodes = [...document.querySelectorAll('button, a, [role="button"]')].filter((n) => n.offsetParent !== null);
-      const hit = nodes.find((n) => /Enumerate the three Musketeers/i.test(n.innerText || ""));
+      const hit = nodes.find((n) => new RegExp(needle, "i").test((n.title || "") + " " + (n.innerText || "")));
       if (!hit) return { opened: false };
       hit.click();
-      return { opened: true };
+      return { opened: true, label: (hit.title || hit.innerText || "").slice(0, 60) };
     })()`);
     await sleep(3_500);
 

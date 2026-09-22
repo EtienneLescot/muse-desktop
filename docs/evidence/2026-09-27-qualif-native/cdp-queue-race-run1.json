@@ -1,0 +1,111 @@
+﻿{
+  "schema": "muse-desktop.cdp-queue-race.v1",
+  "preconditions": [
+    {
+      "label": "composer vide et connecté",
+      "ok": true,
+      "state": {
+        "queuedRows": 0,
+        "queuedTexts": [],
+        "panelVisible": false,
+        "removeButtons": 0,
+        "working": false,
+        "composerLength": 0,
+        "logEntries": 7,
+        "raceAInLog": false,
+        "raceBInLog": false,
+        "removeAllInBody": false
+      }
+    },
+    {
+      "label": "premier tour en cours",
+      "ok": false,
+      "state": {
+        "queuedRows": 0,
+        "queuedTexts": [],
+        "panelVisible": false,
+        "removeButtons": 0,
+        "working": false,
+        "composerLength": 0,
+        "logEntries": 7,
+        "raceAInLog": false,
+        "raceBInLog": false,
+        "removeAllInBody": false
+      }
+    },
+    {
+      "label": "deux tours en file",
+      "ok": false,
+      "state": {
+        "queuedRows": 0,
+        "queuedTexts": [],
+        "panelVisible": false,
+        "removeButtons": 0,
+        "working": false,
+        "composerLength": 0,
+        "logEntries": 7,
+        "raceAInLog": false,
+        "raceBInLog": false,
+        "removeAllInBody": false
+      }
+    }
+  ],
+  "steps": [
+    {
+      "label": "two-queued",
+      "queuedRows": 0,
+      "queuedTexts": [],
+      "panelVisible": false,
+      "removeButtons": 0,
+      "working": false,
+      "composerLength": 0,
+      "logEntries": 7,
+      "raceAInLog": false,
+      "raceBInLog": false,
+      "removeAllInBody": false
+    },
+    {
+      "label": "after-race",
+      "queuedRows": 0,
+      "queuedTexts": [],
+      "panelVisible": false,
+      "removeButtons": 0,
+      "working": false,
+      "composerLength": 0,
+      "logEntries": 7,
+      "raceAInLog": false,
+      "raceBInLog": false,
+      "removeAllInBody": false
+    },
+    {
+      "label": "after-race-settled",
+      "queuedRows": 0,
+      "queuedTexts": [],
+      "panelVisible": false,
+      "removeButtons": 0,
+      "working": false,
+      "composerLength": 0,
+      "logEntries": 7,
+      "raceAInLog": false,
+      "raceBInLog": false,
+      "removeAllInBody": false
+    },
+    {
+      "label": "later",
+      "queuedRows": 0,
+      "queuedTexts": [],
+      "panelVisible": false,
+      "removeButtons": 0,
+      "working": false,
+      "composerLength": 0,
+      "logEntries": 7,
+      "raceAInLog": false,
+      "raceBInLog": false,
+      "removeAllInBody": false
+    }
+  ],
+  "open": {
+    "opened": false
+  },
+  "race": {}
+}

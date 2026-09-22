@@ -76,6 +76,27 @@ calme et honnête (« Muse may still be working »).
 Voir [`m0-02-reprise-apres-mort-host.md`](m0-02-reprise-apres-mort-host.md) : le statut
 « Muse stopped because the host process ended. Reconnect to continue. » est honnête et actionnable.
 
+## Complément : la distinction « demande acceptée » / « terminal confirmé » capturée en direct
+
+Run « outil » (`cdp-stop-terminal-outil-run1.json`, `MUSE_STOP_AFTER_MS=20000`) — état UI exact
+au moment du clic Stop :
+
+```json
+{ "stopping": true, "stoppingBanner": true,
+  "healthClass": "stream-health stream-health-stopping",
+  "healthText": "Stopping Muse The stop request was accepted; waiting for the desktop host to confirm it." }
+```
+
+→ puis résolution en **1 018 ms**, `cancel_session` avec `turnId` correct (3ᵉ appel consécutif
+conforme). Le critère « `Stopping Muse` reste une demande acceptée tant que le terminal n'est pas
+confirmé » est donc **prouvé avec son libellé exact**.
+
+**Constat d'environnement (M1-05/M0-10) :** le shell *utilisateur du modèle* (outil interne) est
+refusé dans cette configuration : le flux de sortie rapporte « enforcement unavailable:
+windows_elevated setup_required: sandbox users are not ready ». La phase « arrêt pendant un outil »
+n'a donc pas pu être jouée avec un outil modèle long ; elle reste à rejouer avec **Run in Muse**
+(`session/userShell`, lui fonctionnel — voir M1-06) comme outil long.
+
 ## Reproductibilité
 
 - Commit : `362c8bb` (main), `target\debug\muse-desktop.exe` via `npm run tauri -- dev`.

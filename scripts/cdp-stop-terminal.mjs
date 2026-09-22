@@ -253,6 +253,11 @@ async function main() {
   report.uiBeforeStop = await evaluate(client, `(() => { ${PAGE} return uiState(); })()`);
   report.shotBeforeStop = await shot(client, "m0-04-1-before-stop");
 
+  // Optional delay so the stop can be aimed at a specific phase — e.g. wait
+  // for a long-running tool to start before pressing Stop ("during a tool").
+  const STOP_AFTER_MS = Number(process.env.MUSE_STOP_AFTER_MS ?? 0);
+  if (STOP_AFTER_MS > 0) await sleep(STOP_AFTER_MS);
+
   // 3. Press Stop from the UI. The turn-level control is `button.quiet`
   // labelled "Stop"; other "Stop" candidates are subagent lanes
   // (`title="subagent/stop"`) and the sidecar panel — and one disabled button
@@ -282,6 +287,7 @@ async function main() {
     if (stopClick.clicked) break;
     await sleep(500);
   }
+  report.uiAtStop = await evaluate(client, `(() => { ${PAGE} return uiState(); })()`);
   const stoppedAt = Date.now();
   report.steps.push({ step: "stop clicked", ...stopClick });
 

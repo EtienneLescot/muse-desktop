@@ -171,7 +171,8 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 
 - ◐ **M0-01 — A continue à travailler quand on ouvre le projet B** *(Global : —)*
   - Windows ◐ — routage isolé par chemin canonique, appartenance explicite des sessions, isolation des approbations ; prouvé par deux processus enfants réels (Rust + Node) avec mort subite de B et complétion de A. **Reste :** E2E WebView2 empaquetée.
-  - **Progrès natif (20/09/2026, CUA puis CDP) :** deux hosts simultanés observés ; mort du host B **sans effet** sur l'application, la conversation servie par A, les 58 sessions ou la file (aucun respawn, application toujours `Responding`). Puis, sur le host survivant : **nouvelle session créée (58 → 59), tour réel admis, conversation restée connectée, sous-agents passés de 1 à 3 `Completed`**. **Ce qui manque encore :** un tour terminé sur A *pendant* que B est encore vivant, avec approbations simultanées — le tour mesuré s'exécutait alors qu'il ne restait qu'un host.
+  - **Progrès natif (20/09/2026, CUA puis CDP) :** deux hosts simultanés observés ; mort du host B **sans effet** sur l'application, la conversation servie par A, les 58 sessions ou la file (aucun respawn, application toujours `Responding`). Puis, sur le host survivant : **nouvelle session créée (58 → 59), tour réel admis, conversation restée connectée, sous-agents passés de 1 à 3 `Completed`**.
+  - **Critère manquant du 20/09 PROUVÉ le 27/09/2026** ([`m0-01-deux-projets.md`](evidence/2026-09-27-qualif-native/m0-01-deux-projets.md)) : tours longs concurrents dans les deux projets → host de B tué à 15:37:24 en plein tour → **tour A terminé à 15:38:10 sans erreur**, statut honnête de B à la seconde près. **Reste :** E2E WebView2 empaquetée (le scénario ci-dessus tourne en build dev) et répétition sur sessions fraîches.
   - macOS ☐ / Linux ☐ — qualification multi-OS non commencée. La webview n'est pas WebView2 hors Windows.
   - *Critère de sortie :* isolation prouvée depuis l'interface Tauri empaquetée, sur chaque OS annoncé.
 
@@ -191,7 +192,7 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 - ◐ **M0-04 — Arrêter et reprendre avec des états fiables**
   - Windows ◐ — distinction demande acceptée (`Stopping Muse`) / terminal confirmé, `turnId` transmis, alias `turn/completed|retracted|stopped`, récupération bornée après accusé sans terminal, double-clic ignoré.
   - **Progrès décisif (27/09/2026, preuve native) :** [`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md) — clic Stop depuis la webview → `cancel_session` avec **`turnId` non vide et correct** → état résolu en **1 s** (terminal serveur) → **relance immédiate**. La phrase « le host 1.3.x n'émet aucun terminal après `turn/interrupt » » est **fausse** (`turn/completed` à +36 ms, prouvé) et l'ancien « Stopping… » figé ne se reproduit pas au HEAD.
-  - **Reste (Windows) :** les phases spéciales — arrêt avant le premier token, pendant un outil, après la fin de la réponse, réponse tardive. **Défaut de libellé restant :** le bouton Stop du tour porte le titre `Stop the running sidecar`.
+  - **Reste (Windows) :** les phases spéciales — arrêt avant le premier token, pendant un outil, après la fin de la réponse, réponse tardive. La distinction « demande acceptée / terminal confirmé » est prouvée avec son libellé exact (`Stopping Muse…` capturé en direct, résolution en 1,0 s). **Défaut de libellé restant :** le bouton Stop du tour porte le titre `Stop the running sidecar`. **Environnement :** le shell interne du modèle est refusé ici (`windows_elevated setup_required`) — rejouer « pendant outil » avec **Run in Muse**.
   - macOS ☐ / Linux ☐ — non commencé.
 
 - ◐ **M0-05 — Répondre aux permissions/questions même après incident**
@@ -296,7 +297,8 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 
 - ◐ **M1-10 — Réorienter une exécution ou mettre en attente** *(Global : —)*
   - Windows ◐ — queue MSP par défaut, dispositions `queued`/`steered` visibles, ordre persisté sous `muse-desktop.queued-turns.v1`, `turn/unqueue`, réconciliation sur `history.snapshot.queuedTurns`. Smoke `--exercise-queue` réussi sur deux sessions : `disposition: queued` puis `turn/unqueue` accepté.
-  - **Reste :** course UI complète, restauration native ; smoke transport ≠ preuve webview.
+  - **Progrès (27/09/2026) :** course de suppression en webview jouée pour de vrai ([`m1-10-course-de-file.md`](evidence/2026-09-27-qualif-native/m1-10-course-de-file.md)) : suppressions en rafale depuis le contexte de page pendant un premier tour — **aucun tour retiré n'a jamais démarré** (ni accusé ni réponse), file vidée, premier tour mené à son terminal. Limites : second tour mal enfilé dans le run, à rejouer proprement.
+  - **Reste :** course avec deux tours correctement enfilés, restauration native après redémarrage ; webview empaquetée.
   - macOS ☐ / Linux ☐ — non commencé.
 
 - ◐ **M1-11 — Choisir un modèle disponible et suivre le contexte** *(Global : —)*
