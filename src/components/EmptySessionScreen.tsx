@@ -33,6 +33,15 @@ interface Props {
   onCreateProjectFromFolder: (path: string) => Promise<string | null>;
   /** Project roots available as explicit environments on the welcome screen. */
   environmentOptions?: ProjectWorkspaceOption[];
+  /**
+   * What the app is waiting for right now, in plain words; null when idle.
+   *
+   * Starting a conversation in a worktree copies the repository and starts a
+   * host for that folder. The screen used to say "Starting..." for the whole of
+   * it, which reads as a hang. The steps come from the caller, the only place
+   * that knows them.
+   */
+  preparation?: string | null;
   /** Creates the session and sends the first message right away. */
   onStart: (
     draft: string,
@@ -66,6 +75,7 @@ export interface NewConversationEnvironment {
  */
 export function EmptySessionScreen({
   workspace,
+  preparation = null,
   onCreateProjectFromFolder,
   environmentOptions = [],
   onStart,
@@ -222,6 +232,12 @@ export function EmptySessionScreen({
           </small>
         </span>
       </label>
+      {preparation !== null && (
+        <div className="welcome-preparation" role="status" aria-live="polite">
+          <span className="welcome-spinner" aria-hidden="true" />
+          <span>{preparation}</span>
+        </div>
+      )}
       <div className="welcome-suggestions">
         {[
           [

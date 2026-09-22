@@ -218,6 +218,16 @@ describe("conversation worktree plan", () => {
     assert.equal(planConversationWorktree("C:\\\\Users\\\\etien").branch.startsWith("muse/"), true);
   });
 
+  it("keeps two conversations in one project apart", () => {
+    // Measured failure: the second start asked for the same path and branch, and
+    // Git answered "worktree path already exists".
+    const first = planConversationWorktree("openscreen", "HEAD", "a1b2c");
+    const second = planConversationWorktree("openscreen", "HEAD", "d3e4f");
+    assert.notEqual(first.path, second.path);
+    assert.notEqual(first.branch, second.branch);
+    assert.equal(first.path, ".muse/worktrees/openscreen-a1b2c");
+  });
+
   it("accepts an explicit base ref", () => {
     assert.equal(planConversationWorktree("demo", "origin/main").base, "origin/main");
   });

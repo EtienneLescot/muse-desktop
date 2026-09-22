@@ -218,11 +218,19 @@ export function planWorktrees(
  * "do I work in the project folder or in a copy?" — so it gets its own branch
  * prefix: `task1-branch` for every conversation would collide on the second one.
  *
+ * The suffix keeps the name unique per conversation. Without it, a second start
+ * in the same project asked for the same folder and the same branch, and Git
+ * refused it: `worktree path already exists`. Measured on the reporter's own
+ * repository, which already carries seventy worktrees from other tools, each
+ * named uniquely (`claude/admiring-liskov-1d1098`). The caller supplies it so
+ * this stays pure.
+ *
  * Pure and total: a blank seed still yields a usable plan.
  */
 export function planConversationWorktree(
   seed: string,
   base: string = WORKTREE_BASE,
+  suffix: string = "",
 ): WorktreePlan {
   const sanitized = safePathSegment(seed.trim().length > 0 ? seed.trim() : "conversation")
     // A folder name is user-controlled, so it can start with dots and dashes
@@ -230,7 +238,12 @@ export function planConversationWorktree(
     // anything, but a directory literally named "..-..-etc" is a trap for the
     // next person reading `git worktree list`.
     .replace(/^[.-]+/, "");
-  const segment = sanitized.length > 0 ? sanitized : "conversation";
+  const stem = sanitized.length > 0 ? sanitized : "conversation";
+  // Test the raw suffix, not the sanitized one: `safePathSegment("")` falls back
+  // to "agent", which would append itself to every name.
+  const rawTail = suffix.trim();
+  const tail = rawTail.length > 0 ? safePathSegment(rawTail).replace(/^[.-]+/, "") : "";
+  const segment = tail.length > 0 ? `${stem}-${tail}` : stem;
   return {
     agent: segment,
     path: `${WORKTREE_ROOT}/${segment}`,
