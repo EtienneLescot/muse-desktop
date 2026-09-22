@@ -29,6 +29,28 @@ fils et file.
   ◐ sur ce point : la reprise a été prouvée sur la file et les runs, **pas** sur projets/fils dans
   toutes les configurations de kill.
 
+## Rejoue — SORTIE PTY RÉTABLIE (run2, même jour)
+
+`node scripts/ux-terminal-state.mjs --port 9222 --type "echo muse-pty-fix-2026"` puis envoi depuis
+le panneau Terminal, sur l'app relancée avec le binaire `portable-pty 0.8.1`. Écran du terminal
+(`.terminal-panel`, capture dans `m1-05-fix-portable-pty-run2.json`) :
+
+```
+Microsoft Windows [version 10.0.26200.9457] (c) Microsoft Corporation. Tous droits réservés.
+C:\Windows>echo muse-pty-fix-2026
+muse-pty-fix-2026
+C:\Windows>
+```
+
+- **Bannière cmd.exe rendue**, commande saisie en clavier réel (`scripts/cdp-type.mjs`), **sortie
+  `muse-pty-fix-2026` affichée**, prompt de retour — la boucle complète du PTY fonctionne.
+- **Cause racine confirmée : `portable-pty 0.9.0`** (régression aval, cf.
+  [turborepo#11816](https://github.com/vercel/turborepo/pull/11816)) ; `0.8.1` rétablit la lecture
+  de sortie sans aucun changement dans `terminal.rs`.
+- **Reste pour M1-05 :** rejouer une commande **interactif longue** (ex. `powershell` en attente
+  d'entrée) et vérifier `Resize` visuellement ; le cœur « cmd.exe s'ouvre et le texte s'affiche »
+  est prouvé.
+
 ## Reproductibilité
 
 - Commit : cette note + `src-tauri/Cargo.toml`/`Cargo.lock` (downgrade) + `scripts/cdp-type.mjs`.
