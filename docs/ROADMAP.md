@@ -15,6 +15,34 @@ Ce document est la source de vérité de l'avancement produit. Il est découpé 
 >
 > Rien n'a été perdu : les bilans de livraison, les mesures de tests et les empreintes de bundles de l'ancienne version restent dans cet historique. Les constats de limites qui conditionnent les critères de sortie ont été repris ici ticket par ticket.
 
+## Point d'étape — qualification native Windows (27 septembre 2026)
+
+Campagne de qualification native (app Tauri + webview, pilotage CDP ; preuves dans
+[`docs/evidence/2026-09-27-qualif-native/`](evidence/2026-09-27-qualif-native/)).
+
+**Prouvé nativement cette campagne :** M0-01 deux projets simultanés · M0-02/03 arrêt du host →
+message honest « Its process exited… » + recovery en 7,6 s (cause racine : drop stdin) · M0-04
+Stop → terminal avec `turnId` + phases **avant premier token / réponse tardive / après la fin** +
+variante « pendant outil » (lane sous-agent en vol) · M1-05 PTY : défaut isolé sur
+`portable-pty 0.9.0` · M1-06 chaîne Run in Muse prouvée + déclenchement corrigé + défaut
+environnement de spawn isolé · M1-10 queue : course propre à deux tours + **restauration et reprise
+après `taskkill /F`** · M1-11 modèle effectif par session + défaut de label UI · M2-03/07 worktrees
+et lanes sous-agents + défaut « Create & open » · M3-06/07 run sans clic, bail natif, claim
+anti-doublon, DST résolus · M3-08 cartes de run · M3-09 notification persistée.
+
+**Défauts ouverts à corriger (preuves jointes) :** sandbox shell indisponible pour un host lancé
+par l'app (`m1-06-run-in-muse-sandbox.md`) · PTY sans sortie (`m1-05-pty-sortie-vide.md`) · label
+de modèle partagé entre fils (`m1-11-bascule-modele.md`) · worktree créé mais inutilisé
+(`m2-worktrees.md`) · comparaison de chemins `G:\…` vs `\\?\G:\…` qui rend toute cible sur
+conversation existante impossible (`m3-automations-reveil.md`) · « Review needed » jamais marqué
+après redémarrage · avertissements DST absents · libellés de boutons (« Stop the running sidecar »,
+`terminal.read-output` en contenu au lieu de rôle).
+
+**Reste à qualifier :** M0-05/07/11-14 (stale races, support macOS/Linux, CI, installations), M1
+restants (PTY en commande interactive, outil pendant outil strict, clavier et attachments en UI
+réelle, empaqueté), M2 restants (fermeture avec agents actifs, Local↔Worktree, fan-out de
+sous-agents), M3-01 à 05 (MCP, extensions, skills), réveil `AutomationWake` réel.
+
 ## Comment lire cette roadmap
 
 ### Trois états, un seul critère
