@@ -325,6 +325,8 @@ export default function App() {
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // What the welcome screen is waiting for, in plain words. Null when idle.
+  const [preparation, setPreparation] = useState<string | null>(null);
   const [page, setPage] = useState<
     "task" | "projects" | "automations" | "extensions" | "library" | "archives"
   >("task");
@@ -1312,6 +1314,7 @@ export default function App() {
                   return `${created.id}:${index >= 0 ? index : 0}`;
                 }}
                 environmentOptions={environmentOptions}
+                preparation={preparation}
                 onStart={async (draft, inputParts, environment?: NewConversationEnvironment) => {
                   const project = environment?.projectId
                     ? projects.find((candidate) => candidate.id === environment.projectId) ?? null
@@ -1319,22 +1322,39 @@ export default function App() {
                   // A worktree is created before the conversation exists: the
                   // folder is the one the user chose, and the session then starts
                   // inside the copy. Nothing is moved afterwards.
+                  //
+                  // Each step is announced. Starting a conversation in a worktree
+                  // can take several seconds — a copy of the repository, then a
+                  // Muse host for that folder — and the screen used to say only
+                  // "Starting…", which is indistinguishable from a hang.
                   let startFolder = environment?.workspace ?? null;
-                  if (environment?.worktree === true && startFolder !== null) {
-                    const plan = planConversationWorktree(folderName(startFolder));
-                    const record = await createWorktreeForWorkspace(startFolder, plan);
-                    if (record === null) return false;
-                    startFolder = record.path;
+                  try {
+                    if (environment?.worktree === true && startFolder !== null) {
+                      setPreparation(`Creating a worktree of ${folderName(startFolder)}…`);
+                      // A short, unique tail: two conversations in the same project must not ask for the same folder and branch.
+                      const plan = planConversationWorktree(folderName(startFolder), undefined, Date.now().toString(36).slice(-5));
+                      const record = await createWorktreeForWorkspace(startFolder, plan);
+                      if (record === null) return false;
+                      startFolder = record.path;
+                    }
+                    setPreparation(
+                      startFolder === null
+                        ? "Starting a Muse host…"
+                        : `Starting Muse in ${folderName(startFolder)}…`,
+                    );
+                    const id = project !== null && startFolder !== null
+                      ? await startSessionInWorkspace(startFolder, settingsFor(project.id), project.id)
+                      : await startSession();
+                    if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
+                    setPreparation("Sending your first message…");
+                    // M0-03: honest result — when the first send fails the
+                    // welcome draft must not be reported as sent; the text
+                    // stays recoverable via the retryable pending-send notice.
+                    const res = await sendInput(id, draft, undefined, inputParts);
+                    return res.ok;
+                  } finally {
+                    setPreparation(null);
                   }
-                  const id = project !== null && startFolder !== null
-                    ? await startSessionInWorkspace(startFolder, settingsFor(project.id), project.id)
-                    : await startSession();
-                  if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
-                  // M0-03: honest result — when the first send fails the
-                  // welcome draft must not be reported as sent; the text
-                  // stays recoverable via the retryable pending-send notice.
-                  const res = await sendInput(id, draft, undefined, inputParts);
-                  return res.ok;
                 }}
                 backendMissing={backendMissing}
                 sidecarError={sidecarPanel}
