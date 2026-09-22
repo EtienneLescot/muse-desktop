@@ -162,6 +162,9 @@ function RichOfficeTable({ preview }: { preview: OfficePreview }) {
  *  fire-and-forget with errors surfaced in the hook error banner. */
 export interface SubagentControls {
   /** `subagent/close`: the host carries an optional owner reason. */
+  /** `subagent/close`: the host accepts an optional owner reason. */
+  onClose: (agentId: string, reason?: string) => void;
+  onReopen: (agentId: string) => void;
   onInterrupt: (agentId: string) => void;
   onStop: (agentId: string) => void;
   onResume: (agentId: string) => void;
@@ -1057,6 +1060,22 @@ export function StreamView({
             )}
             {controls && (
               <div className="subagent-controls">
+                <button
+                  type="button"
+                  disabled={!subagentActions.close.enabled}
+                  onClick={() => controls.onClose(agentOf(e))}
+                  title={subagentActions.close.reason ?? "subagent/close"}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  disabled={!subagentActions.reopen.enabled}
+                  onClick={() => controls.onReopen(agentOf(e))}
+                  title={subagentActions.reopen.reason ?? "subagent/reopen"}
+                >
+                  Reopen
+                </button>
                 <button
                   type="button"
                   disabled={!subagentActions.interrupt.enabled}

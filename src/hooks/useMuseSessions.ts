@@ -1216,6 +1216,8 @@ interface UseMuseSessions {
   /** US-20: stamp the SCAN review as done (dismisses the nudge). */
   ackScanNudge: () => void;
   /** US-6 controls: one hook method per `subagent/*` MSP method. */
+  subagentClose: (sessionId: string, agentId: string, reason?: string) => Promise<void>;
+  subagentReopen: (sessionId: string, agentId: string) => Promise<void>;
   subagentInterrupt: (sessionId: string, agentId: string) => Promise<void>;
   subagentStop: (sessionId: string, agentId: string) => Promise<void>;
   subagentResume: (sessionId: string, agentId: string) => Promise<void>;
@@ -7181,6 +7183,28 @@ export function useMuseSessions(): UseMuseSessions {
     [subagentFireAndForget],
   );
 
+  const subagentClose = useCallback(
+    async (sessionId: string, agentId: string, reason?: string) => {
+      if (!isTauriRuntime()) return;
+      try {
+        await invoke("subagent_close", {
+          sessionId,
+          agentId,
+          ...(reason !== undefined && reason.trim().length > 0 ? { reason: reason.trim() } : {}),
+        });
+      } catch (error) {
+        setError(userFacingError(error, "The agent could not be closed."));
+      }
+    },
+    [],
+  );
+
+  const subagentReopen = useCallback(
+    (sessionId: string, agentId: string) =>
+      subagentFireAndForget("subagent_reopen", sessionId, agentId),
+    [subagentFireAndForget],
+  );
+
   const subagentStop = useCallback(
     (sessionId: string, agentId: string) =>
       subagentFireAndForget("subagent_stop", sessionId, agentId),
@@ -8278,6 +8302,8 @@ export function useMuseSessions(): UseMuseSessions {
     addMemoryEntry,
     removeMemoryEntry,
     ackScanNudge,
+    subagentClose,
+    subagentReopen,
     subagentInterrupt,
     subagentStop,
     subagentResume,

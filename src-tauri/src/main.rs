@@ -13,7 +13,7 @@
 //! IPC surface (frontend calls via `invoke`, receives via `listen`):
 //!   commands: start_session, fork_session, set_approval_mode, restore_sessions, send_input, steer_input, approve,
 //!             cancel_session, kill_session, user_shell,
-//!             subagent_interrupt, subagent_stop, subagent_resume,
+//!             subagent_close, subagent_reopen, subagent_interrupt, subagent_stop, subagent_resume,
 //!             subagent_followup, subagent_read_result, subagent_drilldown
 //!   events:   output, subagent_event, tool_request, status
 //! Payloads always carry `session_id` so the hook demultiplexes sessions.
@@ -5389,6 +5389,8 @@ const SUBAGENT_STOP_METHOD: &str = "subagent/stop";
 const SUBAGENT_RESUME_METHOD: &str = "subagent/resume";
 const SUBAGENT_FOLLOWUP_METHOD: &str = "subagent/followupTask";
 const SUBAGENT_READ_RESULT_METHOD: &str = "subagent/readResult";
+const SUBAGENT_CLOSE_METHOD: &str = "subagent/close";
+const SUBAGENT_REOPEN_METHOD: &str = "subagent/reopen";
 /// Drill-down target: the child's own session transcript, when the host
 /// exposes it.
 const SESSION_READ_METHOD: &str = "session/read";
@@ -5455,6 +5457,46 @@ async fn subagent_control(
     let (method, params) = subagent_control_payload(method, session_id, agent_id)?;
     session_client(state, session_id)?.request(&method, params).await?;
     Ok(())
+}
+
+/// Params for `subagent/close`: the shared target plus an optional reason
+/// (`SubagentOwnerReasonParams`). Pure (unit-tested).
+fn subagent_close_payload(
+    session_id: &str,
+    agent_id: &str,
+    reason: Option<&str>,
+) -> Result<(String, Value), String> {
+    let (method, mut params) = subagent_control_payload(SUBAGENT_CLOSE_METHOD, session_id, agent_id)?;
+    let reason = reason.map(str::trim).filter(|value| !value.is_empty());
+    if let Some(reason) = reason {
+        params
+            .as_object_mut()
+            .ok_or("close payload is not an object")?
+            .insert("reason".to_string(), json!(reason));
+    }
+    Ok((method, params))
+}
+
+#[tauri::command]
+async fn subagent_close(
+    state: State<'_, AppState>,
+    session_id: String,
+    agent_id: String,
+    reason: Option<String>,
+) -> Result<(), String> {
+    let (method, params) =
+        subagent_close_payload(&session_id, &agent_id, reason.as_deref())?;
+    session_client(&state, &session_id)?.request(&method, params).await?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn subagent_reopen(
+    state: State<'_, AppState>,
+    session_id: String,
+    agent_id: String,
+) -> Result<(), String> {
+    subagent_control(&state, SUBAGENT_REOPEN_METHOD, &session_id, &agent_id).await
 }
 
 #[tauri::command]
@@ -8763,6 +8805,8 @@ fn main() {
             secure_store_set,
             secure_store_get,
             muse_auth_status,
+            subagent_close,
+            subagent_reopen,
             computer_status,
             computer_enable,
             computer_disable,
