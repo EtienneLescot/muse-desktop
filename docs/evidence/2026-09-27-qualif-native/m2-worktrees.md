@@ -64,6 +64,17 @@ Capture : [`shots/m2-worktree-session.png`](shots/m2-worktree-session.png).
 - **M2-05 (Local → Worktree)** : non rejoué aujourd'hui ; le défaut de raccordement ci-dessus en est le préalable.
 - **M2-07 (sous-agents réels)** : pièces prouvées (items `childSessionId` dans `read_session_history`, voies sous-agents avec boutons `subagent/stop` rendues et capturées) ; scénario fan-out complet + reprise du parent reste à rejouer.
 
+## Concurrence de lanes (M2-07) — observée, reproduction contrôlée hors de portée du modèle
+
+- **Observée en direct le 27/09/2026** : deux lanes `msg subagent subagent-running` **simultanées**
+  dans le même rendu (enfants `e8af2a61-…` et `47a01e3d-…`, « thinking… Running », 17:02:34-41) —
+  l'app rend et suit bien les enfants en parallèle.
+- **Reproduction contrôlée non obtenue** : malgré un ordre explicite de chevauchement (« do NOT
+  wait … the two subagents must overlap »), muse-spark sérialise sa délégation — 20 échantillons
+  sur 30 s (`window.__laneWatch`) : `maxLanes=1`, `maxConcurrentRunning=1`. Comportement de modèle,
+  non limite de l'app. La concurrence multi-fils (chaque fil déployant son enfant) reste la
+  reproduction propre à faire.
+
 ## Reproductibilité
 
 - Commit `4453efc`+ ; Windows 11 26200, WebView2, CDP 9222 ; `muse` 1.3.0.

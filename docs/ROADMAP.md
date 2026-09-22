@@ -400,6 +400,7 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
   - **Reste :** qualification des processus externes — l'inspection ne peut pas connaître tous les processus hors Muse.
 
 - ◐ **M2-07 — Piloter les sous-agents réels** *(Global : —)*
+  - **Qualification 27/09/2026 (concurrence) :** deux lanes `subagent-running` **simultanées** observées en direct (`e8af2a61` + `47a01e3d`), mais **reproduction contrôlée hors de portée du modèle** — muse-spark sérialise sa délégation malgré ordre de chevauchement (20 échantillons/30 s : `maxConcurrentRunning=1`) ; reste la reproduction propre multi-fils ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)).
   - Windows ◐ — états host normalisés et visibles, snapshots `item/updated` remplacés par révision dans la lane sous-agent, contrôles bornés selon le cycle de vie.
   - **Reste :** qualification native sur agents vivants et événements terminaux entrelacés. **Pièces mesurées le 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)) : le host publie de vrais items **`childSessionId`** (sessions enfants créées par le modèle) et l'UI rend des **voies sous-agents avec boutons stop** (`title="subagent/stop"`, capturés dans les runs `cdp-stop-terminal`) — reste le scénario fan-out complet avec reprise du parent.
   - macOS ☐ / Linux ☐ — non commencé.
