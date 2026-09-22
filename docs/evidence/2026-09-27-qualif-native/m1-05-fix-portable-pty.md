@@ -51,6 +51,20 @@ C:\Windows>
   d'entrée) et vérifier `Resize` visuellement ; le cœur « cmd.exe s'ouvre et le texte s'affiche »
   est prouvé.
 
+## Aller-retour interactif — prouvé (run3, même jour)
+
+```
+C:\Windows>set /p ANS=Name?
+Name? interactive-ok            ← le processus attendait ; la saisie lui est livrée
+C:\Windows>echo %ANS%
+interactive-ok                  ← variable peuplée : le processus a CAPTURÉ la saisie
+C:\Windows>
+```
+
+Attente → saisie → capture côté processus → écho : la **« saisie interactive fonctionnelle »** de
+l'acceptation M1-05 est prouvée. Reste : commande interactive longue type éditeur/REPL, `Resize`
+visuel, ANSI/raccourcis.
+
 ## Reproductibilité
 
 - Commit : cette note + `src-tauri/Cargo.toml`/`Cargo.lock` (downgrade) + `scripts/cdp-type.mjs`.

@@ -140,6 +140,15 @@ puis **`taskkill /F`** de l'app. Après relance : le run **affiche toujours « R
 remplie** : l'état affiché devient incohérent (« Running » pour un travail mort). À corriger /
 rejouer quand le marquage existera.
 
+## Réveil natif `AutomationWake` (M3-06) — tâche absente, statut de l'app honnête
+
+`schtasks /query /tn "Muse-Desktop\AutomationWake"` → **« Le fichier spécifié est introuvable »**
+(tâche non enregistrée sur cette machine). Le statut affiché par l'app — **« Native wake-up is
+unavailable; keep Muse open for automations. »** — est donc **honnête et exact**. Conséquence : le
+mécanisme `--automation-wakeup` n'est pas qualifiable ici tant que l'enregistrement de la tâche
+(nouvelle installation ? `scheduler_schedules_write` ?) n'a pas lieu ; c'est le point d'entrée de
+qualification restant.
+
 ## Reproductibilité
 
 - Commit `aff5467`+ ; Windows 11 26200, WebView2, CDP 9222 ; `muse` 1.3.0.
