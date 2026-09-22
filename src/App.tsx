@@ -38,6 +38,7 @@ import { userFacingError } from "./lib/errorCopy";
 import { displayPath } from "./lib/paths";
 import { signInCommand, type AuthStatusPayload } from "./lib/museAuth";
 import { ModelControl } from "./components/ModelControl";
+import { ComputerUsePanel } from "./components/ComputerUsePanel";
 import { isTauriRuntime } from "./lib/env";
 import { formatHandoffContext } from "./lib/handoff";
 import type { Artifact, ArtifactVersion } from "./lib/artifacts";
@@ -298,6 +299,11 @@ export default function App() {
     removeBrowserAnnotation,
     browserPermissions,
     setBrowserAppPermission,
+    computerUse,
+    computerBusy,
+    refreshComputerUse,
+    setComputerLevel,
+    disableComputerUse,
     memories,
     scanNudge,
     addMemoryEntry,
@@ -310,7 +316,7 @@ export default function App() {
     setError,
   } = useMuseSessions();
 
-  // US-20: one `@mem/…` token the panel asked the composer to insert.
+  // US-20: one `@mem/â€¦` token the panel asked the composer to insert.
   const [memoryInsert, setMemoryInsert] = useState<string | null>(null);
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
@@ -376,7 +382,7 @@ export default function App() {
     // Navigating from the sidebar must dismiss whatever overlay is up, or the
     // destination renders behind it. Settings was already closed here; search was
     // not, so opening Search and then clicking Automations/Extensions/Library left
-    // the dialog on top of the new view — measured with `dialog.task-search`
+    // the dialog on top of the new view â€” measured with `dialog.task-search`
     // covering the view's own `h1`, the navigation having already happened.
     setSettingsOpen(false);
     setSearchOpen(false);
@@ -481,7 +487,7 @@ export default function App() {
     active === null ? null : projectForSession(active.session_id);
   const activeProjectSettings =
     activeProject === null ? globalSettings : settingsFor(activeProject.id);
-  // M0-03: retryable sends of the viewed conversation only — a retry never
+  // M0-03: retryable sends of the viewed conversation only â€” a retry never
   // routes by this view, it goes to the entry's own sessionId.
   const activePendingSends =
     active !== null
@@ -634,7 +640,7 @@ export default function App() {
    *
    * Why a terminal and not an OAuth client: MSP is a stdio protocol with no
    * authentication concept, so there is no Meta/Muse endpoint the desktop could
-   * authenticate against on its own. `muse login` already implements the flow —
+   * authenticate against on its own. `muse login` already implements the flow â€”
    * it prints a URL and a code, the user approves in a browser, and the CLI
    * stores the credential itself. The desktop therefore never handles the
    * secret, which is strictly safer than storing one.
@@ -764,7 +770,7 @@ export default function App() {
           <button
             onClick={newTask}
             aria-label="New conversation"
-            title={`New conversation · ${modifier}+N`}
+            title={`New conversation Â· ${modifier}+N`}
           >
             <Icon name="plus" />
             <span>New conversation</span>
@@ -773,7 +779,7 @@ export default function App() {
             ref={searchTrigger}
             onClick={() => setSearchOpen(true)}
             aria-label="Search"
-            title={`Search · ${modifier}+K`}
+            title={`Search Â· ${modifier}+K`}
           >
             <Icon name="search" />
             <span>Search</span>
@@ -854,7 +860,7 @@ export default function App() {
             type="button"
             ref={settingsTrigger}
             className="account"
-            aria-label="Profile — Settings"
+            aria-label="Profile â€” Settings"
             onClick={() => setSettingsOpen(true)}
           >
             <span className="avatar" aria-hidden="true">
@@ -894,7 +900,7 @@ export default function App() {
                 className="workspace-button workspace-durability-note"
                 title="This host keeps sessions only while its process is running"
               >
-                Local transcript · session ended
+                Local transcript Â· session ended
               </span>
             )}
             {active && page === "task" && !settingsOpen && !backendMissing && active.session_durability?.toLowerCase() !== "ephemeral" && !connectedIds.includes(active.session_id) && (
@@ -902,7 +908,7 @@ export default function App() {
                 disabled={reconnectingId !== null || active.running}
                 onClick={() => void reconnectSession(active.session_id)}
                 title="Reconnect this saved conversation to its workspace engine">
-                {reconnectingId === active.session_id ? "Reconnecting…" : "Reconnect"}
+                {reconnectingId === active.session_id ? "Reconnectingâ€¦" : "Reconnect"}
               </button>
             )}
             <span className="pill">
@@ -1233,7 +1239,7 @@ export default function App() {
                         Permanent delete, the action this page was missing: an
                         archived conversation could only be restored, which left
                         no way to get rid of one. `killSession` is the same path
-                        the conversation-actions menu uses — it stops the session
+                        the conversation-actions menu uses â€” it stops the session
                         and records a persisted tombstone, so the entry does not
                         come back on the next `session/list`.
                       */}
@@ -1252,7 +1258,7 @@ export default function App() {
                           void killSession(session.session_id);
                         }}
                       >
-                        Delete…
+                        Deleteâ€¦
                       </button>
                     </div>
                   ))}
@@ -1266,7 +1272,7 @@ export default function App() {
           <>
             {backendMissing && (
               <div className="preview-notice">
-                Web preview · Open the desktop app to work with
+                Web preview Â· Open the desktop app to work with
                 Muse. Your local history is still available.
               </div>
             )}
@@ -1302,7 +1308,7 @@ export default function App() {
                     ? await startSessionInWorkspace(environment.workspace, settingsFor(project.id), project.id)
                     : await startSession();
                   if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
-                  // M0-03: honest result — when the first send fails the
+                  // M0-03: honest result â€” when the first send fails the
                   // welcome draft must not be reported as sent; the text
                   // stays recoverable via the retryable pending-send notice.
                   const res = await sendInput(id, draft, undefined, inputParts);
@@ -1326,11 +1332,11 @@ export default function App() {
                     <div className="task-metadata">
                       <span className="dot" data-running={active.running} />
                       {active.running ? "Working" : "Ready"}
-                      <span>·</span>
+                      <span>Â·</span>
                       <span title={displayPath(active.workspace)}>{displayPath(active.workspace)}</span>
                       {active.branch !== undefined && (
                         <>
-                          <span>·</span>
+                          <span>Â·</span>
                           <span title="Host-reported Git branch">{active.branch}</span>
                         </>
                       )}
@@ -1456,11 +1462,11 @@ export default function App() {
                       {queuedTurns.map((turn) => (
                         <div className={`queued-turn${turn.recovered ? " queued-turn-recovered" : ""}`} key={turn.turn_id}>
                           <span className="queued-turn-text" title={turn.text}>
-                            {turn.text.length > 120 ? `${turn.text.slice(0, 120)}…` : turn.text}
+                            {turn.text.length > 120 ? `${turn.text.slice(0, 120)}â€¦` : turn.text}
                           </span>
                           {turn.recovered && (
                             <span className="queued-turn-note">
-                              Saved before restart — verify the host queue
+                              Saved before restart â€” verify the host queue
                             </span>
                           )}
                           <button
@@ -1489,7 +1495,7 @@ export default function App() {
                       >
                         Unsent message:{" "}
                         {entry.text.length > 80
-                          ? `${entry.text.slice(0, 80)}…`
+                          ? `${entry.text.slice(0, 80)}â€¦`
                           : entry.text}
                       </span>
                       {entry.error !== null && (
@@ -1678,22 +1684,36 @@ export default function App() {
                         </>
                       )}
                       {workPanel === "desktop" && (
-                        <DesktopControlPanel
-                          permissions={browserPermissions}
-                          onSetPermission={setBrowserAppPermission}
-                          onInsertCapture={(capture) =>
-                            prepareDesktopCapture(active.session_id, capture)
-                          }
-                          onInsertContext={(context) =>
-                            prepareBrowserContext(active.session_id, context)
-                          }
-                          hostSkills={hostSkillsBySession[active.session_id] ?? []}
-                          skillProgress={skillInvocationsBySession[active.session_id]}
-                          onInvokeDesktopSkill={(selector, args) =>
-                            invokeSkill(active.session_id, selector, args)
-                          }
-                          onCancelDesktopSkill={() => cancelSession(active.session_id)}
-                        />
+                        <>
+                          {/*
+                            Computer use first: it is the whole permission model
+                            the user sees, and the native observation panel below
+                            is a manual inspection surface, not the feature.
+                          */}
+                          <ComputerUsePanel
+                            status={computerUse}
+                            busy={computerBusy}
+                            onRefresh={refreshComputerUse}
+                            onSetLevel={setComputerLevel}
+                            onDisable={disableComputerUse}
+                          />
+                          <DesktopControlPanel
+                            permissions={browserPermissions}
+                            onSetPermission={setBrowserAppPermission}
+                            onInsertCapture={(capture) =>
+                              prepareDesktopCapture(active.session_id, capture)
+                            }
+                            onInsertContext={(context) =>
+                              prepareBrowserContext(active.session_id, context)
+                            }
+                            hostSkills={hostSkillsBySession[active.session_id] ?? []}
+                            skillProgress={skillInvocationsBySession[active.session_id]}
+                            onInvokeDesktopSkill={(selector, args) =>
+                              invokeSkill(active.session_id, selector, args)
+                            }
+                            onCancelDesktopSkill={() => cancelSession(active.session_id)}
+                          />
+                        </>
                       )}
                       {workPanel === "memory" && (
                         <>
@@ -1919,7 +1939,7 @@ export default function App() {
         <input
           autoFocus
           aria-label="Search conversations"
-          placeholder="Conversation title or folder…"
+          placeholder="Conversation title or folderâ€¦"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(event) => {

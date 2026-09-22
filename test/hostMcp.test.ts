@@ -17,6 +17,33 @@ const local = (overrides: Partial<ConnectorEntry> = {}): ConnectorEntry => ({
 });
 
 describe("host MCP session configuration", () => {
+  it("hands computer use to the host, from the entry Rust built", () => {
+    // The renderer never composes a driver path or an endpoint: the entry it
+    // forwards is exactly what `computer_mcp_server` returned.
+    const entry = {
+      transport: "stdio" as const,
+      command: "C:\\Users\\u\\AppData\\Local\\Programs\\Cua\\cua-driver\\bin\\cua-driver.exe",
+      args: ["mcp", "--socket", "\\\\.\\pipe\\muse-desktop-computer"],
+      mode: "optional" as const,
+    };
+    const servers = buildHostMcpServers([], {}, entry);
+    assert.deepEqual(servers, [entry]);
+    // Without a live grant the caller passes null, and the host gets nothing.
+    assert.deepEqual(buildHostMcpServers([], {}, null), []);
+  });
+
+  it("does not attach the same driver twice when it is also a connector", () => {
+    const entry = {
+      transport: "stdio" as const,
+      command: "C:\\cua-driver.exe",
+      args: ["mcp", "--socket", "\\\\.\\pipe\\p"],
+      mode: "optional" as const,
+    };
+    const duplicate = local({ command: '"C:\\cua-driver.exe" mcp --socket \\\\.\\pipe\\p' });
+    const servers = buildHostMcpServers([duplicate], {}, entry);
+    assert.equal(servers.length, 1, "one runtime, one entry");
+  });
+
   it("tokenizes quoted executable paths without shell expansion", () => {
     assert.deepEqual(tokenizeMcpCommand('"C:\\Program Files\\node.exe" server.js'), [
       "C:\\Program Files\\node.exe",

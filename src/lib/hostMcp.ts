@@ -75,13 +75,25 @@ export function tokenizeMcpCommand(command: string): string[] | null {
   return tokens.length > 0 && tokens.length <= MAX_TOKENS ? tokens : null;
 }
 
-/** Convert explicitly enabled local connectors into host startup config. */
+/**
+ * Convert explicitly enabled local connectors into host startup config.
+ *
+ * `computerUseServer` is the entry Rust built for the app's own CUA service. It
+ * arrives fully formed on purpose: the renderer never composes a driver path or
+ * an endpoint, so a compromised renderer cannot aim computer use elsewhere.
+ */
 export function buildHostMcpServers(
   entries: ConnectorEntry[],
   remoteSessions: Record<string, RemoteMcpSession> = {},
+  computerUseServer: HostMcpStdioServer | null = null,
 ): HostMcpServer[] {
   const result: HostMcpServer[] = [];
   const seen = new Set<string>();
+  if (computerUseServer !== null) {
+    const tokens = [computerUseServer.command, ...(computerUseServer.args ?? [])];
+    seen.add(`stdio:${tokens.join("\u0000")}`);
+    result.push(computerUseServer);
+  }
   for (const entry of entries) {
     if (entry.status !== "installed" || entry.useInMuse !== true) continue;
     if (entry.kind === "local") {

@@ -89,6 +89,7 @@ Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `
 | `ux-panel-overflow.mjs` | débordements par onglet, **auto-test bloquant** | aucun |
 | `ux-breakpoint-sweep.mjs` | 13 largeurs de fenêtre, fuites superficielles **et imbriquées** | aucun |
 | `ux-composer-overflow.mjs` | 11 largeurs : la ligne de contrôles du composeur ne rogne jamais son sélecteur de modèle | aucun |
+| `ux-computer-use.mjs` | computer use de bout en bout : driver trouvé, niveaux, activation bornée, **outil hors manifeste refusé par le driver**, entrée MCP, révocation | aucun |
 | `ux-review-captures.mjs` | captures + assertions structurelles | aucun |
 | `ux-terminal-contrast.mjs` | contraste WCAG des contrôles, état actif **et** désactivé | aucun |
 | `ux-target-size-audit.mjs` | cibles < 24×24 px, débordement, éléments rognés par un ancêtre | aucun |

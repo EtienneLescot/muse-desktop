@@ -5,7 +5,11 @@ import { Icon } from "./Icon";
 import type { AuthorizationMode } from "../lib/authorization";
 import { ReasoningEffortControl } from "./ReasoningEffortControl";
 import type { ReasoningEffort } from "../lib/reasoning";
-import type { ProjectWorkspaceOption } from "../lib/projects";
+import {
+  folderName,
+  projectOptionLabels,
+  type ProjectWorkspaceOption,
+} from "../lib/projects";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
 import { userFacingError } from "../lib/errorCopy";
 import {
@@ -94,11 +98,8 @@ export function EmptySessionScreen({
     (option) => option.optionId === environmentId,
   );
   const selectedWorkspace = selectedEnvironment?.workspace ?? workspace;
-  const workspaceLabel = (path: string | null): string => {
-    if (path === null) return "Choose a folder";
-    const parts = path.split(/[\\/]/).filter((part) => part.length > 0);
-    return parts[parts.length - 1] ?? path;
-  };
+  // Computed as a set: a folder is appended only where it distinguishes the row.
+  const projectLabels = projectOptionLabels(environmentOptions);
   useEffect(() => {
     if (environmentId !== "default" && selectedEnvironment === undefined) {
       setEnvironmentId("default");
