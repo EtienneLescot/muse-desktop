@@ -58,8 +58,12 @@ interface Props {
   onCancelBrowserSkill?: () => Promise<void> | void;
 }
 
-/** Apps offered a computer-use toggle (explicit opt-in, default denied). */
-const KNOWN_APPS = ["browser", "finder", "terminal", "editor"];
+/**
+ * The page-control grant this panel enforces. It used to be a list of "apps"
+ * (`browser`, `finder`, `terminal`, `editor`); only `browser` was ever read, so
+ * the rest are gone rather than shown as switches that do nothing.
+ */
+const PAGE_CONTROL_APP = "browser";
 
 /**
  * US-19 in-app browser (scoped): a sandboxed iframe renders the URL, and
@@ -100,7 +104,6 @@ export function BrowserPanel({
   const [selection, setSelection] = useState("");
   const [elementAnchor, setElementAnchor] = useState<BrowserElementAnchor | null>(null);
   const [comment, setComment] = useState("");
-  const [appName, setAppName] = useState("");
   const [capture, setCapture] = useState<BrowserCapture | null>(null);
   const [captureRegion, setCaptureRegion] = useState<BrowserCaptureRegion | null>(null);
   const [captureZoom, setCaptureZoom] = useState(1);
@@ -377,7 +380,7 @@ export function BrowserPanel({
         return;
       }
       const target = new URL(targetUrl);
-      setDownloadStatus("Fetching the selected link…");
+      setDownloadStatus("Fetching the selected linkâ€¦");
       let encoded: string;
       let contentType = "application/octet-stream";
       let bytes: ArrayBuffer | null = null;
@@ -459,7 +462,7 @@ export function BrowserPanel({
       setCaptureStatus("Visual capture is unavailable in this browser build.");
       return;
     }
-    setCaptureStatus("Choose the browser surface to capture…");
+    setCaptureStatus("Choose the browser surface to captureâ€¦");
     let stream: MediaStream | null = null;
     try {
       stream = await getDisplayMedia.call(navigator.mediaDevices, {
@@ -687,7 +690,7 @@ export function BrowserPanel({
       setNativeBrowserStatus("The native browser is available in the desktop build.");
       return;
     }
-    setNativeBrowserStatus("Opening native browser…");
+    setNativeBrowserStatus("Opening native browserâ€¦");
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("open_native_browser", { url: normalized, sessionId });
@@ -725,15 +728,9 @@ export function BrowserPanel({
     onSetPermission(app, allowed);
   };
 
-  const addCustomApp = () => {
-    if (appName.trim().length === 0) return;
-    onSetPermission(appName.trim(), true);
-    setAppName("");
-  };
-
   const isAllowed = (app: string) =>
     permissions.find((p) => p.app === app)?.allowed === true;
-  const browserControlsAllowed = isAllowed("browser");
+  const browserControlsAllowed = isAllowed(PAGE_CONTROL_APP);
 
   const invokeBrowserSkill = (action: BrowserSkillAction): void => {
     const skill = findBrowserSkill(hostSkills, action);
@@ -768,7 +765,7 @@ export function BrowserPanel({
   const stopBrowserSkill = () => {
     if (!browserSkillInFlight || onCancelBrowserSkill === undefined || stoppingHostSkill) return;
     setStoppingHostSkill(true);
-    setControlStatus("Asking Muse to stop the browser action…");
+    setControlStatus("Asking Muse to stop the browser actionâ€¦");
     void Promise.resolve(onCancelBrowserSkill())
       .then(() => setControlStatus("Stop requested. Waiting for Muse to confirm."))
       .catch((error) => setControlStatus(`The browser action could not be stopped: ${error instanceof Error ? error.message : String(error)}`))
@@ -816,7 +813,7 @@ export function BrowserPanel({
                   title={`Close ${host} tab`}
                   onClick={() => closeTab(tab.id)}
                 >
-                  ×
+                  Ã—
                 </button>
               </div>
             );
@@ -846,8 +843,8 @@ export function BrowserPanel({
           <button type="submit" disabled={addressNormalized === null}>Go</button>
         </form>
         <div className="browser-nav-row" aria-label="Browser navigation">
-          <button type="button" onClick={goBack} disabled={historyIndex <= 0} aria-label="Back">←</button>
-          <button type="button" onClick={goForward} disabled={historyIndex < 0 || historyIndex >= history.length - 1} aria-label="Forward">→</button>
+          <button type="button" onClick={goBack} disabled={historyIndex <= 0} aria-label="Back">â†</button>
+          <button type="button" onClick={goForward} disabled={historyIndex < 0 || historyIndex >= history.length - 1} aria-label="Forward">â†’</button>
           <button type="button" onClick={() => renderable && setFrameKey((key) => key + 1)} disabled={!renderable}>Reload</button>
           <button
             type="button"
@@ -895,7 +892,7 @@ export function BrowserPanel({
         {/*
           The preview surface only exists once a URL is renderable, so a fresh
           tab used to show nothing at all between the navigation row and "Page
-          controls" — the one panel of the seven with no empty state. Reported by
+          controls" â€” the one panel of the seven with no empty state. Reported by
           an independent visual review and confirmed by structure measurement.
         */}
         {!renderable && frameError === null && (
@@ -991,7 +988,7 @@ export function BrowserPanel({
                   disabled={stoppingHostSkill}
                   title="Ask Muse to stop the active browser action"
                 >
-                  {stoppingHostSkill ? "Stopping…" : "Stop Muse action"}
+                  {stoppingHostSkill ? "Stoppingâ€¦" : "Stop Muse action"}
                 </button>
               )}
             </div>
@@ -1157,7 +1154,7 @@ export function BrowserPanel({
           )}
           {capture !== null && (
             <div className="muted browser-capture-meta">
-              {formatBrowserCaptureContext(capture).split("\n").slice(1, 4).join(" · ")}
+              {formatBrowserCaptureContext(capture).split("\n").slice(1, 4).join(" Â· ")}
             </div>
           )}
         </div>
@@ -1166,7 +1163,7 @@ export function BrowserPanel({
             {pageNotes.map((a) => (
               <li key={a.id} className="browser-note">
                 {a.selection !== "" && (
-                  <blockquote title="Anchored selection">“{a.selection}”</blockquote>
+                  <blockquote title="Anchored selection">â€œ{a.selection}â€</blockquote>
                 )}
                 <span>{a.comment}</span>
                 <button
@@ -1195,67 +1192,33 @@ export function BrowserPanel({
         )}
         <div className="browser-perms">
           <div className="muted browser-perms-title">
-            Computer-use permissions (default denied — background operation
-            needs an explicit opt-in per app)
+            Page control (denied by default)
           </div>
           <ul className="browser-perms-rows">
-            {KNOWN_APPS.map((app) => {
-              const allowed = isAllowed(app);
-              return (
-                <li key={app} className="browser-perm-row">
-                  <code>{app}</code>
-                  <span className="muted">{allowed ? "allowed" : "denied"}</span>
-                  <button
-                    type="button"
-                    aria-pressed={allowed}
-                    title={
-                      allowed
-                        ? `Revoke computer-use for ${app}`
-                        : `Allow computer-use for ${app}`
-                    }
-                    onClick={() => toggleApp(app, !allowed)}
-                  >
-                    {allowed ? "Revoke" : "Allow"}
-                  </button>
-                </li>
-              );
-            })}
+            {/*
+              One row, because one grant is enforced. This list used to offer
+              four "apps" â€” `browser`, `finder`, `terminal`, `editor` â€” plus a
+              free-text "other app": only `browser` is read anywhere, the rest
+              toggled nothing. Computer use proper is the Desktop panel's single
+              switch, which grants tools through the CUA driver.
+            */}
+            <li className="browser-perm-row">
+              <code>browser</code>
+              <span className="muted">{isAllowed(PAGE_CONTROL_APP) ? "allowed" : "denied"}</span>
+              <button
+                type="button"
+                aria-pressed={isAllowed(PAGE_CONTROL_APP)}
+                title={
+                  isAllowed(PAGE_CONTROL_APP)
+                    ? "Revoke page control for this preview"
+                    : "Allow clicking and typing inside this preview"
+                }
+                onClick={() => toggleApp(PAGE_CONTROL_APP, !isAllowed(PAGE_CONTROL_APP))}
+              >
+                {isAllowed(PAGE_CONTROL_APP) ? "Revoke" : "Allow"}
+              </button>
+            </li>
           </ul>
-          <div className="browser-perms-custom">
-            <input
-              aria-label="Other app name"
-              placeholder="Other app…"
-              value={appName}
-              onChange={(e) => setAppName(e.target.value)}
-            />
-            <button
-              type="button"
-              disabled={appName.trim().length === 0}
-              onClick={addCustomApp}
-            >
-              Allow app
-            </button>
-          </div>
-          {permissions.filter((p) => !KNOWN_APPS.includes(p.app)).length > 0 && (
-            <ul className="browser-perms-rows">
-              {permissions
-                .filter((p) => !KNOWN_APPS.includes(p.app))
-                .map((p) => (
-                  <li key={p.app} className="browser-perm-row">
-                    <code>{p.app}</code>
-                    <span className="muted">{p.allowed ? "allowed" : "denied"}</span>
-                    <button
-                      type="button"
-                      aria-pressed={p.allowed}
-                      title={p.allowed ? `Revoke computer-use for ${p.app}` : `Allow computer-use for ${p.app}`}
-                      onClick={() => toggleApp(p.app, !p.allowed)}
-                    >
-                      {p.allowed ? "Revoke" : "Allow"}
-                    </button>
-                  </li>
-                ))}
-            </ul>
-          )}
         </div>
         <div className="muted" role="note" title="Image generation scope">
           {IMAGE_GENERATION_NOTE}

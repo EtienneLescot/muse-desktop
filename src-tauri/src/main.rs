@@ -32,6 +32,7 @@ mod mcp;
 mod mcp_package;
 mod secret_store;
 mod muse_auth;
+mod computer;
 mod rules;
 mod skills;
 mod startup;
@@ -2636,6 +2637,50 @@ fn notification_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .app_data_dir()
         .map(|path| path.join("notifications"))
         .map_err(|error| format!("cannot resolve notification data directory: {error}"))
+}
+
+fn computer_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join("computer-use"))
+        .map_err(|error| format!("cannot resolve computer-use data directory: {error}"))
+}
+
+/// Computer use: what is installed, what is granted, and whether the grant is
+/// still live. Read-only, and the only computer-use command the UI polls.
+#[tauri::command]
+async fn computer_status(app: AppHandle) -> Result<Value, String> {
+    let dir = computer_data_dir(&app)?;
+    tokio::task::spawn_blocking(move || computer::status_json(&dir))
+        .await
+        .map_err(|e| format!("computer-use status task failed: {e}"))
+}
+
+/// Grant computer use at one level. The level is a name, never an argv: the
+/// binary, the endpoint and the manifest are built in `computer.rs`.
+#[tauri::command]
+async fn computer_enable(app: AppHandle, level: String) -> Result<Value, String> {
+    let dir = computer_data_dir(&app)?;
+    tokio::task::spawn_blocking(move || computer::enable(level.trim(), &dir))
+        .await
+        .map_err(|e| format!("computer-use enable task failed: {e}"))?
+}
+
+/// Revoke and stop. Revocation is deny-only, so this is safe to call twice and
+/// safe to call when nothing is running.
+#[tauri::command]
+async fn computer_disable(app: AppHandle) -> Result<Value, String> {
+    let dir = computer_data_dir(&app)?;
+    tokio::task::spawn_blocking(move || computer::disable(&dir))
+        .await
+        .map_err(|e| format!("computer-use disable task failed: {e}"))?
+}
+
+/// The MCP server entry the renderer may add to a conversation's host config.
+/// `None` means "no live grant", so the renderer never has to guess.
+#[tauri::command]
+fn computer_mcp_server(grant_state: String) -> Option<Value> {
+    computer::mcp_server_json(grant_state.trim())
 }
 
 /// Claim the native scheduler lease for this app process. The renderer keeps
@@ -8663,6 +8708,10 @@ fn main() {
             secure_store_set,
             secure_store_get,
             muse_auth_status,
+            computer_status,
+            computer_enable,
+            computer_disable,
+            computer_mcp_server,
             secure_store_remove,
             mcp_local_start,
             mcp_local_refresh,

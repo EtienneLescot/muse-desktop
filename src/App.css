@@ -6670,6 +6670,132 @@ body.dark .composer textarea::placeholder {
 /* M4-04: explicit, local desktop-control surface. The capability stays
    visually quiet until the user opts in; mutating controls remain disabled
    while the consent row is off. */
+/* Computer use: one switch, three levels, and the truth about the grant.
+   The engine is the CUA driver, which renders no authorization UI of its own —
+   so this section is the whole consent surface and is written to be read, not
+   skimmed. */
+.computer-use {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 60%, var(--bg));
+}
+
+.computer-use header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.computer-use header strong {
+  font-size: 0.95rem;
+}
+
+.computer-use-state {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.computer-use-state-on {
+  border-color: color-mix(in srgb, var(--success, #2aa876) 45%, var(--line));
+  color: var(--success, #2a8f65);
+}
+
+.computer-use-state-expired {
+  border-color: color-mix(in srgb, var(--warning, #c48721) 45%, var(--line));
+  color: var(--warning, #c48721);
+}
+
+.computer-use-summary {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.computer-use-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.computer-use-note-warning {
+  color: var(--warning, #c48721);
+}
+
+.computer-use-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.computer-use-level {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.computer-use-level input {
+  margin-top: 3px;
+}
+
+.computer-use-level span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+}
+
+.computer-use-level small {
+  color: var(--muted);
+}
+
+.computer-use-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.computer-use-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.computer-use-actions button {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+.computer-use-command {
+  display: block;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+
+.computer-use-probes {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--warning, #c48721);
+  font-size: 0.76rem;
+}
+
 .desktop-control-panel {
   display: flex;
   flex-direction: column;
