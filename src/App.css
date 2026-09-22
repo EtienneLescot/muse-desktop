@@ -2019,29 +2019,58 @@ body.dark .composer textarea::placeholder {
   min-width: 0;
 }
 
+/*
+ * The control row is allowed to wrap. Five pills, one of which carries a
+ * 25-character model id, cannot fit on one line at every width this window
+ * reaches — and the composer is not monotonic in the viewport (measured: 416px
+ * wide at a 1024px viewport, 610px at 900px, because the work panel takes a
+ * share). A viewport media query would therefore wrap in the wrong places.
+ *
+ * Wrapping is also what keeps the model label readable: the four fixed pills
+ * cannot shrink, so an unwrapped row either clips the model chip or squeezes it
+ * to an empty pill.
+ */
+.composer-context {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
 .composer-model {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   min-width: 0;
 }
 
 /*
- * A long model label ("muse-spark-1.3-contributor") used to break onto two lines
- * inside the model button, in a control that has room for it on one. The button
- * is a flex item with `min-width: 0` on its container, so nothing stopped the
- * text from wrapping. Keep it on one line and let it ellipsise at the end when
- * the label is genuinely too long for the space.
+ * The model label has to be able to shrink, and this is where it stopped being
+ * able to. An earlier fix capped `.composer-model > button` at 22ch because
+ * "muse-spark-1.3-contributor" wrapped onto two lines. When that button became
+ * the `<details>` picker, the selector stopped matching anything: no cap, no
+ * ellipsis, and the label pushed the chip past the composer's inner edge, where
+ * it was clipped mid-glyph.
+ *
+ * Measured before the fix, at 1296px: the chip needs 199px inside a 154px box,
+ * and the control row scrolls 579px inside 536.
+ *
+ * The catalog offers nothing shorter — `model/list` returns the id as its own
+ * `displayLabel` for all four rows — so the label ellipsises, and the full id
+ * stays reachable in the trigger's aria-label, its title, and the popover list.
  */
-.composer-model > button {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 22ch;
+.composer-model .model-control-compact,
+.composer-model .model-trigger {
+  min-width: 0;
 }
 
-.composer-model > span {
+.composer-model .model-trigger {
+  max-width: 100%;
+}
+
+.composer-model .model-trigger strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

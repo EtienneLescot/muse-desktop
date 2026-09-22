@@ -88,6 +88,7 @@ Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `
 | `ux-contrast-audit.mjs` | ratios WCAG réels, alpha composé, thème clair ou sombre | aucun |
 | `ux-panel-overflow.mjs` | débordements par onglet, **auto-test bloquant** | aucun |
 | `ux-breakpoint-sweep.mjs` | 13 largeurs de fenêtre, fuites superficielles **et imbriquées** | aucun |
+| `ux-composer-overflow.mjs` | 11 largeurs : la ligne de contrôles du composeur ne rogne jamais son sélecteur de modèle | aucun |
 | `ux-review-captures.mjs` | captures + assertions structurelles | aucun |
 | `ux-terminal-contrast.mjs` | contraste WCAG des contrôles, état actif **et** désactivé | aucun |
 | `ux-target-size-audit.mjs` | cibles < 24×24 px, débordement, éléments rognés par un ancêtre | aucun |
@@ -128,6 +129,7 @@ Ces documents conservent un résultat négatif ou une erreur de méthode. Ils so
 | [authentification-muse](2026-09-21-ux/authentification-muse.md) | pourquoi l'éditeur ne peut pas faire d'OAuth seul, et comment piloter le CLI à la place — avec le piège de priorité `META_API_KEY` |
 | [find-bar-flottante](2026-09-21-ux/find-bar-flottante.md) | **deux hypothèses fausses** (transparence, z-index) écartées par la mesure avant de trouver la cause réelle : une carte de 760 px dans un flux de 1034 px |
 | [regles-du-dossier](2026-09-21-ux/regles-du-dossier.md) | le client gardait ses propres instructions alors que le CLI lit des règles dans le dossier ; `max` manquait sur huit niveaux de réflexion, et `ultra` était décrit comme plus profond que `max` |
+| [composeur-modele-rogne](2026-09-21-ux/composeur-modele-rogne.md) | un correctif CSS qui a **cessé de s'appliquer** quand le bouton est devenu un `<details>` ; et un `<details>` fermé dont le contenu garde un rectangle, ce qui a produit un faux débordement de 200 px à toutes les largeurs |
 | [alignement-cli-projet-dossier](2026-09-21-ux/alignement-cli-projet-dossier.md) | un `--trust-workspace` manquant rendait les règles du dossier muettes **sans erreur** ; la décision d'écrire nos instructions dans `AGENTS.md` a été prise puis **retirée** (le fichier appartient à l'utilisateur) |
 
 ## Erreurs de méthode de la campagne, documentées plutôt que corrigées en silence
