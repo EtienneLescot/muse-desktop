@@ -111,6 +111,20 @@ useEffect(() => { saveSessions(sessions.map(({ running: _r, ...rest }) => rest))
 **Correctif suggéré :** ne pas écrire au montage (compteur de première mutation, ou double clé de
 secours `.bak` avec génération), et ne jamais persister un repli issu d'une lecture invalide.
 
+## Raccourcis restants — SÉANCE BLOQUÉE par « Terminal unavailable » (run6)
+
+Après les kills/relances et la reconstruction du binaire, le panneau terminal affiche
+**« Terminal unavailable — Try opening the panel again. »** : ni l'input ni un PTY n'apparaissent,
+et la réouverture via `scripts/ux-terminal-state.mjs` n'y change rien (préconditions « conversation
+affichée / panneau déplié / onglet Terminal rendu » OK, puis l'état d'erreur). Les tests
+Ctrl+L/Tab/Échap/Ctrl+D sont donc **reportés**. Les preuves run1-5 (sortie, interactif, ANSI,
+Ctrl+C) proviennent d'instances où le PTY s'ouvrait et restent valides.
+
+**Piste :** le même symptôme « l'app n'arrive pas à faire naître son shell » que le défaut voisin
+documenté M1-06 (`managed shell sandbox is unavailable` : shell spawné par l'app ≠ shell spawné de
+l'extérieur). `terminal_open` (Rust, `portable-pty 0.8.1`) inchangé depuis les runs réussis — à
+requalifier après investigation du chemin de spawn.
+
 ## Reproductibilité
 
 - Commit : cette note + `src-tauri/Cargo.toml`/`Cargo.lock` (downgrade) + `scripts/cdp-type.mjs`.
