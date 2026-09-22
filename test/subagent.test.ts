@@ -187,3 +187,12 @@ describe("child session label", () => {
     assert.equal(childSessionLabel("   "), "unknown session");
   });
 });
+describe("subagent close policy", () => {
+  it("does not offer to close an agent that is still working", () => {
+    // The gate is our own policy, not a host rule, and the reason says so:
+    // `stop` is the verb for a running agent, and it sits next to Close.
+    assert.equal(subagentControlAvailability("running").close.enabled, false);
+    assert.match(subagentControlAvailability("running").close.reason ?? "", /still working/);
+    assert.equal(subagentControlAvailability("completed").close.enabled, true);
+  });
+});

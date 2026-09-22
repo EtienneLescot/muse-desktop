@@ -161,6 +161,7 @@ function RichOfficeTable({ preview }: { preview: OfficePreview }) {
  *  to display text (also logged as system lines by the hook); the rest are
  *  fire-and-forget with errors surfaced in the hook error banner. */
 export interface SubagentControls {
+  /** `subagent/close`: the host carries an optional owner reason. */
   onInterrupt: (agentId: string) => void;
   onStop: (agentId: string) => void;
   onResume: (agentId: string) => void;
@@ -290,6 +291,9 @@ export function StreamView({
   }>>({});
   const [outputError, setOutputError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // A control's failure belongs to its block, not to the page. The banner still
+  // carries the host's exact words; this says which agent and which action.
+  const [failed, setFailed] = useState<Record<string, string>>({});
   const [retryingFailure, setRetryingFailure] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
@@ -684,7 +688,22 @@ export function StreamView({
         kind === "result"
           ? await controls.onReadResult(agentOf(entry))
           : await controls.onDrilldown(entry);
-      if (text !== null) setShown((cur) => ({ ...cur, [entry.id]: text }));
+      if (text !== null) {
+        setShown((cur) => ({ ...cur, [entry.id]: text }));
+      } else {
+        setFailed((cur) => ({
+          ...cur,
+          [entry.id]:
+            kind === "result"
+              ? "The host returned no result for this agent."
+              : "The host returned no conversation for this agent.",
+        }));
+      }
+    } catch (error) {
+      setFailed((cur) => ({
+        ...cur,
+        [entry.id]: error instanceof Error ? error.message : String(error),
+      }));
     } finally {
       setBusy(null);
     }
@@ -1113,6 +1132,11 @@ export function StreamView({
                   Send
                 </button>
               </div>
+            )}
+            {failed[e.id] && (
+              <p className="subagent-failure" role="alert">
+                {failed[e.id]}
+              </p>
             )}
             {shown[e.id] && (
               <pre className="subagent-result">{shown[e.id]}</pre>
