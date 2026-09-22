@@ -1,0 +1,254 @@
+{
+  "schema": "muse-desktop.native-smoke.v1",
+  "hosts": [
+    {
+      "host": "A",
+      "sessionId": "01a0c91f-8827-7513-a994-81239cbcff0e",
+      "sessionDurability": "ephemeral"
+    },
+    {
+      "host": "B",
+      "sessionId": "01a0c91f-9652-7921-93b9-9702e55a8c43",
+      "sessionDurability": "ephemeral"
+    }
+  ],
+  "distinctWorkspaces": true,
+  "modelCatalogue": "available",
+  "turnsSent": 2,
+  "controls": [
+    {
+      "host": "A",
+      "turnId": "01a0c91f-a2ec-7577-958a-973f8a72b876",
+      "status": "interrupted",
+      "terminalNotification": "unsupported"
+    },
+    {
+      "host": "B",
+      "turnId": "01a0c91f-a2ec-76b7-9fac-05fdf343bb5d",
+      "status": "interrupted",
+      "terminalNotification": "unsupported"
+    }
+  ],
+  "errorsChecked": 4,
+  "errors": [
+    {
+      "host": "A",
+      "method": "native-smoke/unknown",
+      "code": -32601,
+      "kind": "methodNotFound"
+    },
+    {
+      "host": "A",
+      "method": "turn/interrupt",
+      "code": -32602,
+      "kind": "invalidParams"
+    },
+    {
+      "host": "B",
+      "method": "native-smoke/unknown",
+      "code": -32601,
+      "kind": "methodNotFound"
+    },
+    {
+      "host": "B",
+      "method": "turn/interrupt",
+      "code": -32602,
+      "kind": "invalidParams"
+    }
+  ],
+  "approvalModes": [
+    {
+      "host": "A",
+      "startupMode": "promptUnmatched",
+      "attempts": [
+        {
+          "mode": "onRequest",
+          "status": "rejected",
+          "reason": "approval_mode_ceiling"
+        },
+        {
+          "mode": "promptUnmatched",
+          "status": "accepted",
+          "effectiveMode": "promptUnmatched"
+        },
+        {
+          "mode": "allowAll",
+          "status": "rejected",
+          "reason": "approval_mode_ceiling"
+        }
+      ]
+    },
+    {
+      "host": "B",
+      "startupMode": "promptUnmatched",
+      "attempts": [
+        {
+          "mode": "onRequest",
+          "status": "rejected",
+          "reason": "approval_mode_ceiling"
+        },
+        {
+          "mode": "promptUnmatched",
+          "status": "accepted",
+          "effectiveMode": "promptUnmatched"
+        },
+        {
+          "mode": "allowAll",
+          "status": "rejected",
+          "reason": "approval_mode_ceiling"
+        }
+      ]
+    }
+  ],
+  "isolation": {
+    "failedHost": "B",
+    "survivingHost": "A",
+    "survivingModelCatalogue": "available"
+  },
+  "userShell": [
+    {
+      "host": "A",
+      "status": "accepted",
+      "itemStarted": false,
+      "historyItem": false
+    },
+    {
+      "host": "B",
+      "status": "accepted",
+      "itemStarted": false,
+      "historyItem": false
+    }
+  ],
+  "reconnect": [
+    {
+      "host": "A",
+      "sessionRead": "unsupported",
+      "history": "omitted",
+      "approvals": 0,
+      "userInputs": 0
+    },
+    {
+      "host": "B",
+      "sessionRead": "unsupported",
+      "history": "omitted",
+      "approvals": 0,
+      "userInputs": 0
+    }
+  ],
+  "history": [
+    {
+      "host": "A",
+      "sessionList": "available",
+      "sessionCount": 19,
+      "sessionListPages": 1,
+      "sessionListHasCursor": false,
+      "viewPage": "unsupported",
+      "eventCount": 0
+    },
+    {
+      "host": "B",
+      "sessionList": "available",
+      "sessionCount": 20,
+      "sessionListPages": 1,
+      "sessionListHasCursor": false,
+      "viewPage": "unsupported",
+      "eventCount": 0
+    }
+  ],
+  "reasoningEffort": [
+    {
+      "host": "A",
+      "efforts": [
+        {
+          "requested": "none",
+          "status": "accepted",
+          "effective": null,
+          "projection": "not-reported"
+        },
+        {
+          "requested": "high",
+          "status": "accepted",
+          "effective": null,
+          "projection": "not-reported"
+        },
+        {
+          "requested": "ultra",
+          "status": "accepted",
+          "effective": null,
+          "projection": "not-reported"
+        }
+      ]
+    },
+    {
+      "host": "B",
+      "efforts": [
+        {
+          "requested": "none",
+          "status": "accepted",
+          "effective": null,
+          "projection": "not-reported"
+        },
+        {
+          "requested": "high",
+          "status": "accepted",
+          "effective": null,
+          "projection": "not-reported"
+        },
+        {
+          "requested": "ultra",
+          "status": "accepted",
+          "effective": null,
+          "projection": "not-reported"
+        }
+      ]
+    }
+  ],
+  "modelSelection": [
+    {
+      "host": "A",
+      "requested": "muse-spark-1.3",
+      "status": "accepted",
+      "active": false,
+      "projection": "reported"
+    },
+    {
+      "host": "B",
+      "requested": "muse-spark-1.3",
+      "status": "accepted",
+      "active": false,
+      "projection": "reported"
+    }
+  ],
+  "compaction": [
+    {
+      "host": "A",
+      "status": "missing-run"
+    },
+    {
+      "host": "B",
+      "status": "missing-run"
+    }
+  ],
+  "queue": [
+    {
+      "host": "A",
+      "firstTurnId": "01a0c91f-a1df-7761-aca5-bb11e580cdc7",
+      "second": {
+        "status": "accepted",
+        "disposition": "queued",
+        "turnId": "01a0c91f-a228-7520-8fce-30bd53f58fb9"
+      },
+      "reclaimed": "accepted"
+    },
+    {
+      "host": "B",
+      "firstTurnId": "01a0c91f-a26c-7549-bd4b-f06aff46ff94",
+      "second": {
+        "status": "accepted",
+        "disposition": "queued",
+        "turnId": "01a0c91f-a2a9-7b63-92d7-fe37fc3aa073"
+      },
+      "reclaimed": "accepted"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "schema": "muse-desktop.native-smoke.v1",
+  "hosts": [
+    {
+      "host": "A",
+      "sessionId": "01a0c927-21fd-74b3-8875-fce3aacb3a72",
+      "sessionDurability": "durable"
+    },
+    {
+      "host": "B",
+      "sessionId": "01a0c927-2430-7092-b115-30c82d6b46b2",
+      "sessionDurability": "durable"
+    }
+  ],
+  "distinctWorkspaces": true,
+  "modelCatalogue": "available",
+  "turnsSent": 2,
+  "controls": [
+    {
+      "host": "A",
+      "turnId": "01a0c927-25e1-74eb-bfbb-35a70ab014e9",
+      "status": "interrupted",
+      "terminalMethod": "turn/completed"
+    },
+    {
+      "host": "B",
+      "turnId": "01a0c927-25e1-7f19-8a1a-bb7cde9e67f6",
+      "status": "interrupted",
+      "terminalMethod": "turn/completed"
+    }
+  ]
+}
