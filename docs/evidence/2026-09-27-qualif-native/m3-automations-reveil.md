@@ -109,6 +109,27 @@ avertissement :** ni le saut d'heure ni le choix sur le doublon ne sont signalé
 l'acceptation « l'application **affiche** et persiste les avertissements de planification » n'est
 que moitié remplie (la persistance est prouvée, l'affichage non).
 
+## Cible sur conversation existante (M3-06) — refus honnête + défaut de comparaison de chemins
+
+Automatisation `Qualif M3 existing busy` créée avec `threadReuse: {"kind":"session","sessionId":"01a0c929-…"}`
+(fil « Count slowly… ») et lancée à la main (**Run**) pendant qu'un tour y tournait :
+
+```
+run-muct4y1i-5yagz7  status: failed  sessionId: ""
+error: "the recorded workspace no longer matches the target conversation"
+```
+
+- **Refus propre** : aucun état partiel (`sessionId: ""`), erreur explicite, run marqué `failed`
+  avec **notification persistée** (`kind: "run-failed"`, `dedupeKey: run-…:run-failed:<ts>`) —
+  aucun état incohérent du côté de l'acceptation « refusée sans état incohérent ».
+- **Mais la cause du refus est un défaut de comparaison de chemins**, pas l'occupation du fil :
+  l'automatisation enregistre `workspace: "G:\repos\openscreen"` alors que la conversation cible
+  porte `workspace: "\\\\?\\G:\\repos\\openscreen"` (la forme brute renvoyée par `start_session`).
+  **Même répertoire, deux orthographes → échec systématique.** Conséquence : cibler une
+  conversation existante ne peut **jamais** réussir en l'état, et la seconde moitié de l'acceptation
+  (« réutilise ensuite le même fil ») ne peut pas être jouée tant que la comparaison n'est pas
+  normalisée. À corriger côté app (comparaison normalisée ou stockage d'une seule forme).
+
 ## Reproductibilité
 
 - Commit `aff5467`+ ; Windows 11 26200, WebView2, CDP 9222 ; `muse` 1.3.0.

@@ -143,12 +143,22 @@ marqueur honnête de cette fenêtre.
 (`uiBeforeStop.healthText: null`), et le tour suivant (`--followup`) démarre immédiatement.
 L'UI ne propose pas d'arrêter ce qui est déjà fini et rien ne casse.
 
-### Reste : pendant un outil
+### Pendant un outil — variante mesurée : arrêt pendant une lane sous-agent en exécution
 
-Toujours bloqué par le défaut d'environnement (outil shell du modèle refusé — et depuis le
-27/09 au soir, `muse sandbox windows setup` est fait mais **un host lancé par l'app refuse
-toujours** (`managed shell sandbox is unavailable`) — voir [`m1-06-run-in-muse-sandbox.md`](m1-06-run-in-muse-sandbox.md)).
-À rejouer dès que le raccordement app↔host est corrigé, avec un outil long (shell ou recherche).
+Sur ce modèle (muse-spark), les travaux d'outil (recherches) sont **déportés en sous-agents** : pas
+de ligne outil sur le tour parent. Le 27/09 au soir, un Stop a été déclenché à l'instant où une
+lane `msg subagent subagent-running` était **« thinking… Running »** (travail d'outil en vol dans
+la session enfant) : `cancel_session` portant le `turnId` ×2, tour parent résolu (plus de bouton
+Stop), lanes closes à `subagent-completed`. C'est la phase « travail en cours interrompu » prouvée.
+
+**Variante stricte non atteignable en l'état :** un appel d'outil exécuté par le tour parent lui-même
+— les recherches partent systématiquement en sous-agents (« Do NOT use subagents » n'est pas suivi),
+et l'outil shell est bloqué par le défaut d'environnement (M1-06). La ligne outil parent reste à
+arrêter dans un environnement où les outils du modèle s'exécutent directement.
+
+**Note bonus :** pendant ces essais, une lane sous-agent `msg subagent subagent-complete` avec
+`childSessionId` et états `subagent-running` → `subagent-completed` a été observée en direct
+(consolidation M2-07).
 
 ## Reproductibilité
 
