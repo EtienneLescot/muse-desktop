@@ -7627,3 +7627,36 @@ body.dark .composer textarea::placeholder {
     border-color: var(--text);
   }
 }
+
+/* The worktree choice, made before the conversation exists. It sits under the
+   project picker because it answers a question about the *next* conversation:
+   work in the project folder, or in a copy on its own branch. */
+.welcome-worktree {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 520px;
+  margin: 10px auto 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.welcome-worktree input {
+  margin-top: 3px;
+}
+
+.welcome-worktree span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8rem;
+}
+
+.welcome-worktree small {
+  color: var(--muted);
+  font-size: 0.74rem;
+}

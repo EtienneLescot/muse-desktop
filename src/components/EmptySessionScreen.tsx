@@ -54,6 +54,8 @@ export interface NewConversationEnvironment {
   projectId: string | null;
   /** Workspace that the new session must use. */
   workspace: string | null;
+  /** True when the conversation must start in a fresh worktree of that folder. */
+  worktree?: boolean;
 }
 
 /**
@@ -80,6 +82,7 @@ export function EmptySessionScreen({
     writeSessionStorageString(welcomeDraftKey, draft);
   }, [draft]);
   const [starting, setStarting] = useState(false);
+  const [worktree, setWorktree] = useState(false);
   const [initialAttachmentDraft] = useState(() => loadAttachmentDraft("welcome"));
   const [attachments, setAttachments] = useState<ComposerAttachment[]>(
     initialAttachmentDraft.attachments,
@@ -146,6 +149,10 @@ export function EmptySessionScreen({
         {
           projectId: selectedEnvironment?.projectId ?? null,
           workspace: selectedWorkspace,
+          // The choice is made here, before the conversation exists: starting in
+          // a worktree is a decision about the next conversation, not a move of
+          // an existing one.
+          worktree,
         },
       );
       if (sent) {
@@ -197,6 +204,24 @@ export function EmptySessionScreen({
             ? "Choose a project folder: a project is a folder, and its name comes from it."
             : `Runs in ${folderName(workspace)} with the global settings. The agent reads that folder's rules.`}
       </p>
+      <label className="welcome-worktree">
+        <input
+          type="checkbox"
+          checked={worktree}
+          onChange={(event) => setWorktree(event.target.checked)}
+          disabled={selectedWorkspace === null}
+        />
+        <span>
+          <strong>Create a new worktree</strong>
+          <small>
+            {selectedWorkspace === null
+              ? "Choose a project folder first."
+              : worktree
+                ? `The conversation starts in a copy on a new branch, leaving ${folderName(selectedWorkspace)} untouched.`
+                : `The conversation works directly in ${folderName(selectedWorkspace)}.`}
+          </small>
+        </span>
+      </label>
       <div className="welcome-suggestions">
         {[
           [

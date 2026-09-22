@@ -3016,6 +3016,41 @@ async fn git_worktree_create(
     .map_err(|e| format!("worktree create task failed: {e}"))?
 }
 
+/// Create a worktree for a conversation that does not exist yet.
+///
+/// `git_worktree_create` resolves its workspace from a session id, and a
+/// conversation that has not started has none — which is exactly why the
+/// welcome screen could not offer the choice. The Git service never needed the
+/// session: it takes a root, a branch, a relative path and a base ref. The
+/// caller supplies the folder explicitly, and it is validated as a directory
+/// before Git runs.
+#[tauri::command]
+async fn git_worktree_create_for_workspace(
+    workspace: String,
+    branch: String,
+    relative_path: String,
+    base_ref: String,
+) -> Result<git::GitWorktreeResult, String> {
+    let trimmed = workspace.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("select a project folder before creating a worktree".to_string());
+    }
+    let root = PathBuf::from(&trimmed);
+    if !root.is_dir() {
+        return Err(format!("project folder is not a directory: {trimmed}"));
+    }
+    let mut result = tokio::task::spawn_blocking(move || {
+        git::create_worktree(&root, &branch, &relative_path, &base_ref)
+    })
+    .await
+    .map_err(|e| format!("worktree create task failed: {e}"))??;
+    // Git reports the path as Windows spells it canonically (`\\?\C:\…`). The
+    // renderer stores this value and starts the conversation in it, so it has to
+    // be the folder the user recognises — and the same string a project holds.
+    result.path = rules::display_path(Path::new(&result.path));
+    Ok(result)
+}
+
 /// Remove a managed worktree after the user confirms the destructive action.
 #[tauri::command]
 async fn git_worktree_remove(
@@ -8693,6 +8728,7 @@ fn main() {
             git_pull,
             git_create_pr,
             git_worktree_create,
+            git_worktree_create_for_workspace,
             git_worktree_create_session,
             git_worktree_remove,
             git_worktree_inspect,

@@ -904,6 +904,11 @@ interface UseMuseSessions {
   /** Explicit cleanup attempts that need a retry after an interruption. */
   cleanupIntents: WorktreeCleanupIntent[];
   /** Remove one managed worktree after explicit user confirmation in the UI. */
+  /** Creates the worktree a conversation will start in, before it exists. */
+  createWorktreeForWorkspace: (
+    workspace: string,
+    plan: WorktreePlan,
+  ) => Promise<WorktreeRecord | null>;
   removeWorktree: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
   /** M2-06: inspect one worktree before cleanup or handoff. */
   inspectWorktree: (
@@ -4163,9 +4168,38 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
+  /**
+   * Create the worktree a conversation will start in.
+   *
+   * The session does not exist yet, so the folder is passed explicitly and the
+   * native command validates it as a directory. The record is registered here so
+   * the retention and cleanup surfaces know about it from the first moment.
+   */
+  const createWorktreeForWorkspace = useCallback(
+    async (workspace: string, plan: WorktreePlan): Promise<WorktreeRecord | null> => {
+      try {
+        setError(null);
+        const result = await invoke<WorktreeRecord>("git_worktree_create_for_workspace", {
+          workspace,
+          branch: plan.branch,
+          relativePath: plan.path,
+          baseRef: plan.base,
+        });
+        setWorktrees((current) => [
+          ...current.filter((record) => record.path !== result.path),
+          result,
+        ]);
+        return result;
+      } catch (e) {
+        setError(`worktree creation failed: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
+
   const removeWorktree = useCallback(
-    async (sessionId: string, record: WorktreeRecord): Promise<boolean> => {
-      setCleanupIntents((current) => requestWorktreeCleanup(current, record));
+    async (sessionId: string, record: WorktreeRecord): Promise<boolean> => {      setCleanupIntents((current) => requestWorktreeCleanup(current, record));
       try {
         setError(null);
         await invoke("git_worktree_remove", {
@@ -8143,6 +8177,7 @@ export function useMuseSessions(): UseMuseSessions {
     worktrees,
     cleanupIntents,
     removeWorktree,
+    createWorktreeForWorkspace,
     inspectWorktree,
     checkWorktreeReadiness,
     runWorktreeSetup,

@@ -49,6 +49,7 @@ import {
   projectWorkspaces,
 } from "./lib/projects";
 import { parseHarnessRules } from "./lib/harnessRules";
+import { planConversationWorktree } from "./lib/worktrees";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -128,6 +129,7 @@ export default function App() {
     worktrees,
     cleanupIntents,
     removeWorktree,
+    createWorktreeForWorkspace,
     inspectWorktree,
     checkWorktreeReadiness,
     runWorktreeSetup,
@@ -1314,8 +1316,18 @@ export default function App() {
                   const project = environment?.projectId
                     ? projects.find((candidate) => candidate.id === environment.projectId) ?? null
                     : null;
-                  const id = project !== null && environment?.workspace
-                    ? await startSessionInWorkspace(environment.workspace, settingsFor(project.id), project.id)
+                  // A worktree is created before the conversation exists: the
+                  // folder is the one the user chose, and the session then starts
+                  // inside the copy. Nothing is moved afterwards.
+                  let startFolder = environment?.workspace ?? null;
+                  if (environment?.worktree === true && startFolder !== null) {
+                    const plan = planConversationWorktree(folderName(startFolder));
+                    const record = await createWorktreeForWorkspace(startFolder, plan);
+                    if (record === null) return false;
+                    startFolder = record.path;
+                  }
+                  const id = project !== null && startFolder !== null
+                    ? await startSessionInWorkspace(startFolder, settingsFor(project.id), project.id)
                     : await startSession();
                   if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
                   // M0-03: honest result — when the first send fails the

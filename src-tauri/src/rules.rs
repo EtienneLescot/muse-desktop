@@ -319,7 +319,7 @@ fn now_ms() -> u64 {
 /// so a rules panel that displayed it would look broken next to the folder
 /// field right above it. Measured on the live bridge: the first version of this
 /// module reported `\\?\C:\Users\…\AGENTS.md`.
-fn display_path(path: &Path) -> String {
+pub(crate) fn display_path(path: &Path) -> String {
     let text = path.display().to_string();
     if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
         return format!(r"\\{rest}");
