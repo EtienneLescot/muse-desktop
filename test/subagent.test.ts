@@ -7,10 +7,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  childSessionLabel,
   formatDrilldown,
   formatSubagentResult,
   isTerminalSubagentStatus,
   parseSubagentPayload,
+  subagentControlAvailability,
   subagentStatusLabel,
   subagentSummary,
 } from "../src/lib/subagent.ts";
@@ -130,5 +132,58 @@ describe("formatDrilldown", () => {
 
   it("falls back to the result formatter without events", () => {
     assert.equal(formatDrilldown("oops"), "oops");
+  });
+});
+
+describe("subagent controls", () => {
+  it("stops offering what a finished agent cannot do", () => {
+    // The reported defect: a Completed agent still offered Interrupt and Stop,
+    // and every click failed. A disabled control now carries the sentence.
+    const done = subagentControlAvailability("completed");
+    assert.equal(done.interrupt.enabled, false);
+    assert.equal(done.stop.enabled, false);
+    assert.match(done.interrupt.reason ?? "", /finished/);
+    // Reading a result and asking a follow-up stay available: we have no
+    // evidence they are refused, and guessing would be its own defect.
+    assert.equal(done.readResult.enabled, true);
+    assert.equal(done.followup.enabled, true);
+  });
+
+  it("resumes only what is resumable", () => {
+    assert.equal(subagentControlAvailability("running").resume.enabled, false);
+    assert.match(subagentControlAvailability("running").resume.reason ?? "", /interrupted, stopped or paused/);
+    for (const status of ["interrupted", "stopped", "paused"]) {
+      assert.equal(subagentControlAvailability(status).resume.enabled, true, status);
+    }
+  });
+
+  it("disables everything while a request is in flight", () => {
+    // `hasChildSession` so the busy reason is the one under test, not the
+    // missing-child one.
+    const busy = subagentControlAvailability("running", { busy: true, hasChildSession: true });
+    for (const control of Object.values(busy)) {
+      assert.equal(control.enabled, false);
+      assert.match(control.reason ?? "", /already in flight/);
+    }
+  });
+
+  it("requires a child session to offer the drill-down", () => {
+    assert.equal(subagentControlAvailability("running").drilldown.enabled, false);
+    assert.equal(
+      subagentControlAvailability("running", { hasChildSession: true }).drilldown.enabled,
+      true,
+    );
+  });
+});
+
+describe("child session label", () => {
+  it("prefers a known title and keeps the identifier in the tooltip", () => {
+    assert.equal(childSessionLabel("7d2adb74-1fa9-4316", { "7d2adb74-1fa9-4316": "Review pass" }), "Review pass");
+  });
+
+  it("shortens an unknown identifier instead of printing it whole", () => {
+    const label = childSessionLabel("7d2adb74-1fa9-4316-9fb9-397055ee3809");
+    assert.equal(label, "7d2adb74…");
+    assert.equal(childSessionLabel("   "), "unknown session");
   });
 });

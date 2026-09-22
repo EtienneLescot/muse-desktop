@@ -213,3 +213,87 @@ export function formatDrilldown(res: unknown): string {
   }
   return formatSubagentResult(res);
 }
+
+/**
+ * What each control can actually do, given the status the host reported.
+ *
+ * Two things went wrong here. The block offered six always-enabled buttons, and
+ * every one of them failed: the payload carried `agentId` where the MSP schema
+ * declares `subagentId`. So the buttons promised actions the app could not
+ * perform, and an agent that had already finished still offered "Interrupt".
+ *
+ * This table is deliberately narrow: it disables only where the reason is
+ * certain — nothing can be interrupted once the child has finished — and leaves
+ * the rest enabled rather than guessing at host policy we have not measured.
+ * Every disabled control carries the sentence the user needs.
+ */
+export interface SubagentControl {
+  enabled: boolean;
+  /** Present only when disabled: why, in one sentence. */
+  reason?: string;
+}
+
+export interface SubagentControls {
+  interrupt: SubagentControl;
+  stop: SubagentControl;
+  resume: SubagentControl;
+  followup: SubagentControl;
+  readResult: SubagentControl;
+  drilldown: SubagentControl;
+}
+
+const SUBAGENT_FINISHED: readonly string[] = ["completed", "failed", "cancelled", "stopped"];
+const SUBAGENT_RESUMABLE: readonly string[] = ["interrupted", "stopped", "paused"];
+
+export function subagentControlAvailability(
+  status: string,
+  options: { busy?: boolean; hasChildSession?: boolean } = {},
+): SubagentControls {
+  const finished = SUBAGENT_FINISHED.includes(status);
+  const busy = options.busy === true;
+  const busyReason = "A request for this agent is already in flight.";
+  const finishedReason = "This agent has finished; there is nothing to interrupt.";
+  const resumeReason = "Only an interrupted, stopped or paused agent can resume.";
+  return {
+    interrupt: busy
+      ? { enabled: false, reason: busyReason }
+      : finished
+        ? { enabled: false, reason: finishedReason }
+        : { enabled: true },
+    stop: busy
+      ? { enabled: false, reason: busyReason }
+      : finished
+        ? { enabled: false, reason: finishedReason }
+        : { enabled: true },
+    resume: busy
+      ? { enabled: false, reason: busyReason }
+      : SUBAGENT_RESUMABLE.includes(status)
+        ? { enabled: true }
+        : { enabled: false, reason: resumeReason },
+    followup: busy ? { enabled: false, reason: busyReason } : { enabled: true },
+    readResult: busy ? { enabled: false, reason: busyReason } : { enabled: true },
+    drilldown: options.hasChildSession !== true
+      ? { enabled: false, reason: "The host did not report a child session for this agent." }
+      : busy
+        ? { enabled: false, reason: busyReason }
+        : { enabled: true },
+  };
+}
+/**
+ * The child session's readable name.
+ *
+ * The block printed `child: 7d2adb74-1fa9-4316-9fb9-397055ee3809`, which tells a
+ * person nothing and cannot be checked at a glance. When the client knows the
+ * child's title it shows that, with the identifier kept in the tooltip; when it
+ * does not, it shortens the identifier rather than pretending to know more.
+ */
+export function childSessionLabel(
+  childSessionId: string,
+  titles: Readonly<Record<string, string>> = {},
+): string {
+  const id = childSessionId.trim();
+  if (id.length === 0) return "unknown session";
+  const title = titles[id]?.trim();
+  if (title !== undefined && title.length > 0) return title;
+  return id.length > 12 ? `${id.slice(0, 8)}…` : id;
+}
