@@ -86,6 +86,12 @@ export interface LogEntry {
   open?: boolean;
   /** Drill-down into the child's own transcript (`session/read`). */
   childSessionId?: string;
+  /**
+   * Host-internal child item (`reminderchild`): it keeps its own lane so its
+   * text can never merge into the answer, but it is not a controllable
+   * sub-agent and is never rendered as one.
+   */
+  subagentInternal?: boolean;
   /** Sub-agent header facts from `item/started` (objective/role/depth). */
   objective?: string;
   subagentRole?: string;
@@ -274,6 +280,24 @@ export function saveTombstones(ids: string[]): void {
   write(TOMBSTONES_KEY, ids.slice(-MAX_TOMBSTONES));
 }
 
+/**
+ * Host-internal children are named by the host itself. Logs written before the
+ * item kind was carried still hold one as an ordinary sub-agent entry, so the
+ * block (and its buttons, which can only fail) would survive the fix. Recognise
+ * the host's own label once, on read; entries written now are flagged from
+ * their item kind at ingest and never reach this path.
+ */
+const LEGACY_INTERNAL_CHILD_LABELS = new Set(["reminder child session"]);
+
+function isLegacyInternalChild(e: LogEntry): boolean {
+  if (e.role !== "subagent") return false;
+  const label = (e.objective ?? e.text.split("\n")[0] ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  return LEGACY_INTERNAL_CHILD_LABELS.has(label);
+}
+
 export function loadLog(sessionId: string): LogEntry[] {
   const raw = read<unknown>(logKey(sessionId), []);
   if (!Array.isArray(raw)) return [];
@@ -282,7 +306,13 @@ export function loadLog(sessionId: string): LogEntry[] {
   return raw
     .filter(isValidEntry)
     .slice(-MAX_LOG_ENTRIES)
-    .map((e) => (e.open ? { ...e, open: false } : e));
+    .map((e) => {
+      const closed: LogEntry = e.open ? { ...e, open: false } : e;
+      if (closed.subagentInternal !== true && isLegacyInternalChild(closed)) {
+        return { ...closed, subagentInternal: true };
+      }
+      return closed;
+    });
 }
 
 /** Append entries to the stored log (append-only; oldest pruned past cap). */

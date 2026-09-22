@@ -130,6 +130,27 @@ export function isSubagentItemKind(itemKind: string): boolean {
   return SUBAGENT_ITEM_KINDS.has(itemKind.toLowerCase());
 }
 
+/**
+ * Host-internal child items (`reminderchild`) are housekeeping the model never
+ * asked for. They keep their own lane so their text cannot merge into the
+ * answer, but they are **not** controllable sub-agents: the host publishes no
+ * `subagent/*` identity for them and `session/read` on their child session
+ * answers `sessionNotFound`. Rendering the interactive control console for them
+ * produced blocks whose buttons could only fail, so they are hidden.
+ *
+ * Kind is the only discriminator available today: the supervisor announces
+ * `agent_id` = item id for every sub-agent kind, so a genuine identity cannot be
+ * told from an internal one on the wire. If the host later exposes a distinct
+ * sub-agent id for such items, refine this to "internal unless identified".
+ */
+const INTERNAL_SUBAGENT_ITEM_KINDS = new Set(["reminderchild"]);
+
+export function isInternalSubagentItemKind(itemKind: string): boolean {
+  return INTERNAL_SUBAGENT_ITEM_KINDS.has(
+    itemKind.toLowerCase().replace(/[\s_-]+/g, ""),
+  );
+}
+
 /** True for reasoning item kinds emitted by the host. */
 export function isThinkingItemKind(itemKind: string): boolean {
   return THINKING_ITEM_KINDS.has(normalizeKind(itemKind));
@@ -303,10 +324,12 @@ export function upsertReflexivePlaceholder(
     /** Optional visible seed (for example `$ command` in a user-shell item). */
     initialText?: string;
     richContent?: RichContent[];
+    /** Host-internal child lane: created but never rendered as a sub-agent. */
+    internal?: boolean;
     stamp: PlaceholderStamp;
   },
 ): LogEntry[] {
-  const { itemId, turnId, agentId, role = "assistant", initialText = "", richContent, stamp } = opts;
+  const { itemId, turnId, agentId, role = "assistant", initialText = "", richContent, internal, stamp } = opts;
   if (agentId !== undefined) {
     const i = lastIndex(
       log,
@@ -322,6 +345,7 @@ export function upsertReflexivePlaceholder(
         text: "",
         agentId,
         itemId,
+        ...(internal ? { subagentInternal: true } : {}),
         ...(turnId ? { turnId } : {}),
         ...(richContent === undefined ? {} : { richContent: richContent.map((item) => ({ ...item })) }),
         open: true,

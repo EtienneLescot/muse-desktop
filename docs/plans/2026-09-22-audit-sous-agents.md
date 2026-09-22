@@ -50,7 +50,7 @@ Le bloc se présentait comme une console de contrôle opérationnelle. Il ne l'�
 
 | Point | Nature |
 |---|---|
-| **L'erreur dans le bloc, pas en haut de page** | demande un état d'erreur par entrée ; le bandeau global reste pour la conversation. Non fait ici. |
+| **L'erreur dans le bloc, pas en haut de page** | demande un état d'erreur par entrée ; le bandeau global reste pour la conversation. **Fait le 27/09/2026** : `subagentDrilldown`/`subagentReadResult` ne passent plus par `setError`, le bloc (`.subagent-failure`) est seul propriétaire du message. Vérifié natif : clic « Agent conversation » sur enfant non lisible → message dans le bloc, aucun bandeau. De plus, les enfants internes du host (kind `reminderchild`, objectif « Reminder child session ») ne sont plus rendus en console de sous-agent. Détails et rejeu : docs/evidence/2026-09-27-qualif-native/sous-agents-enfants-internes.md. |
 | **`subagent/close`** | à exposer ? Un enfant fini qui s'accumule dans la lane est un vrai sujet d'UX. |
 | **`followupTask` sur un agent fini** | **à mesurer** avant de le promettre ou de l'interdire. |
 | **Demander une délégation** | le client ne peut que demander ; `/fanout` le fait déjà en langage naturel. À aligner avec ce vocabulaire plutôt qu'à inventer un bouton « spawn » qui n'existe pas dans le contrat. |

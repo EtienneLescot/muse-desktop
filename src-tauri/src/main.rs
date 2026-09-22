@@ -1848,6 +1848,9 @@ where
                     announce.insert("itemId".to_string(), json!(item_id));
                     announce.insert("text".to_string(), json!(""));
                     announce.insert("status".to_string(), json!("running"));
+                    // The UI must know this is a `reminderchild` (host-internal
+                    // housekeeping) and not a controllable sub-agent lane.
+                    announce.insert("itemKind".to_string(), json!(kind));
                     if let Some(m) = meta {
                         if let Some(c) = m.child_session_id {
                             announce.insert("childSessionId".to_string(), json!(c));
@@ -1913,7 +1916,10 @@ where
                 .and_then(|refs| refs.get(&(sid.to_string(), item_id.to_string())).cloned());
             let item_ref = json!({"itemId": item_id, "text": delta, "outputRef": output_ref}).to_string();
             match kind.as_str() {
-                "subagent" | "workflow" | "reminderChild" => {
+                // Case-insensitive on purpose: the host emits `reminderChild`
+                // as well as `reminderchild`, and a missed arm would drop the
+                // item's text into the assistant answer lane below.
+                kind if is_subagent_item_kind(kind) => {
                     // Re-attach identity learned at `item/started` so entries
                     // created from a bare delta still carry drill-down data.
                     let meta = state
@@ -1928,6 +1934,7 @@ where
                     obj.insert("itemId".to_string(), json!(item_id));
                     obj.insert("text".to_string(), json!(delta));
                     obj.insert("status".to_string(), json!("running"));
+                    obj.insert("itemKind".to_string(), json!(kind));
                     if let Some(m) = meta {
                         if let Some(c) = m.child_session_id {
                             obj.insert("childSessionId".to_string(), json!(c));

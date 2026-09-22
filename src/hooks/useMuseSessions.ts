@@ -143,6 +143,7 @@ import {
   isRunningKind,
   isStoppedKind,
   isSubagentItemKind,
+  isInternalSubagentItemKind,
   isThinkingItemKind,
   upsertReflexivePlaceholder,
 } from "../lib/phase";
@@ -3045,6 +3046,9 @@ export function useMuseSessions(): UseMuseSessions {
     turnId?: string,
     initialText = "",
     richContent?: RichContent[],
+    /** Host-internal child lane: created so its text stays out of the answer,
+     *  never rendered as a controllable sub-agent block. */
+    internal = false,
   ): void {
     const stamp = { id: newId(), ts: Date.now() };
     setLogs((cur) => {
@@ -3055,6 +3059,7 @@ export function useMuseSessions(): UseMuseSessions {
         turnId,
         initialText,
         richContent,
+        internal,
         stamp,
       });
       if (next === (cur[sessionId] ?? [])) return cur;
@@ -3460,6 +3465,10 @@ export function useMuseSessions(): UseMuseSessions {
               ...prev,
               text: nextText,
               itemId: parsed.itemId ?? prev.itemId,
+              subagentInternal:
+                parsed.itemKind === undefined
+                  ? prev.subagentInternal
+                  : isInternalSubagentItemKind(parsed.itemKind),
               childSessionId: parsed.childSessionId ?? prev.childSessionId,
               objective: parsed.objective ?? prev.objective,
               subagentRole: parsed.role ?? prev.subagentRole,
@@ -3480,6 +3489,9 @@ export function useMuseSessions(): UseMuseSessions {
               text: parsed.text,
               agentId: parsed.agentId,
               itemId: parsed.itemId,
+              ...(parsed.itemKind === undefined
+                ? {}
+                : { subagentInternal: isInternalSubagentItemKind(parsed.itemKind) }),
               childSessionId: parsed.childSessionId,
               objective: parsed.objective,
               subagentRole: parsed.role,
@@ -3780,6 +3792,7 @@ export function useMuseSessions(): UseMuseSessions {
       let itemRole: "assistant" | "thinking" | "tool" = "assistant";
       let initialText = "";
       let richContent: RichContent[] | undefined;
+      let subagentInternal = false;
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const rawId = obj.itemId ?? obj.id;
@@ -3790,6 +3803,9 @@ export function useMuseSessions(): UseMuseSessions {
         if (typeof rawKind === "string") {
           if (isSubagentItemKind(rawKind)) {
             agentId = itemId ?? "agent";
+            // Host-internal housekeeping (`reminderchild`) keeps a lane so its
+            // text cannot leak into the answer, but never a control console.
+            subagentInternal = isInternalSubagentItemKind(rawKind);
           } else if (isThinkingItemKind(rawKind)) {
             itemRole = "thinking";
           } else if (rawKind.toLowerCase().replace(/[\s_-]+/g, "") === "usershell") {
@@ -3812,7 +3828,7 @@ export function useMuseSessions(): UseMuseSessions {
           cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
         );
       }
-      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId, initialText, richContent);
+      ensurePlaceholder(sid, itemId, agentId, itemRole, turnId, initialText, richContent, subagentInternal);
       return;
     }
     // status (and any future kinds): record + reflect liveness.
@@ -7255,8 +7271,9 @@ export function useMuseSessions(): UseMuseSessions {
         ]);
         kickPoll();
         return text;
-      } catch (e) {
-        setError(`subagent_read_result failed: ${String(e)}`);
+      } catch {
+        // The block owns this failure (`failed[entry.id]` in StreamView): a
+        // per-block control must not raise the conversation-wide banner.
         return null;
       }
     },
@@ -7266,9 +7283,8 @@ export function useMuseSessions(): UseMuseSessions {
   const subagentDrilldown = useCallback(
     async (sessionId: string, childSessionId: string | undefined): Promise<string | null> => {
       if (!childSessionId) {
-        // Explicit error, never a silent empty view: without an id there is
-        // nothing `session/read` could open.
-        setError("subagent drill-down unavailable: this block carries no child session id");
+        // Never a silent empty view: without an id there is nothing
+        // `session/read` could open, and the block says so itself.
         return null;
       }
       try {
@@ -7283,8 +7299,9 @@ export function useMuseSessions(): UseMuseSessions {
         ]);
         kickPoll();
         return text;
-      } catch (e) {
-        setError(`subagent drill-down failed: ${String(e)}`);
+      } catch {
+        // Reported in the block, never in the conversation-wide banner: this
+        // failure belongs to one sub-agent entry (see `failed` in StreamView).
         return null;
       }
     },

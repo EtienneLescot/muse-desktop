@@ -102,6 +102,43 @@ describe("log truncation", () => {
   });
 });
 
+describe("legacy host-internal child lanes", () => {
+  const subagent = (over: Partial<LogEntry>): LogEntry =>
+    ({ id: "a-1", role: "subagent", text: "", ts: 1, ...over }) as LogEntry;
+  const seed = (session: string, entries: LogEntry[]): void => {
+    (globalThis as unknown as { localStorage: Storage }).localStorage.setItem(
+      `muse-desktop.log.v1.${session}`,
+      JSON.stringify(entries),
+    );
+  };
+
+  it("flags a legacy reminder child so its block is never rendered", () => {
+    seed("s-legacy-internal", [subagent({ objective: "Reminder child session" })]);
+    assert.equal(loadLog("s-legacy-internal")[0]?.subagentInternal, true);
+  });
+
+  it("matches the host label on the first text line, case and spacing included", () => {
+    seed("s-legacy-text", [subagent({ text: "  Reminder   Child Session \nbody" })]);
+    assert.equal(loadLog("s-legacy-text")[0]?.subagentInternal, true);
+  });
+
+  it("leaves a real sub-agent alone", () => {
+    seed("s-real", [
+      subagent({ objective: "Summarise the roadmap" }),
+      { id: "u-1", role: "user", text: "Reminder child session", ts: 2 } as LogEntry,
+    ]);
+    const kept = loadLog("s-real");
+    assert.equal(kept[0]?.subagentInternal, undefined);
+    // The label only means "internal" on a sub-agent lane, never on a message.
+    assert.equal(kept[1]?.subagentInternal, undefined);
+  });
+
+  it("never un-flags an entry that already carries the flag", () => {
+    seed("s-flagged", [subagent({ subagentInternal: true, objective: "whatever" })]);
+    assert.equal(loadLog("s-flagged")[0]?.subagentInternal, true);
+  });
+});
+
 describe("allowlist truncation", () => {
   const rule = (n: number) => ({
     id: `id-${n}`,

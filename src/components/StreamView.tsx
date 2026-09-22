@@ -963,6 +963,12 @@ export function StreamView({
       )}
       {visibleEntries.map((e, visibleIndex) => {
         const entryIndex = safeWindowStart + visibleIndex;
+        // Host-internal child lane (`reminderchild`): the entry is kept in the
+        // log so its text can never merge into the answer, but it is not a
+        // controllable sub-agent — the host exposes no `subagent/*` identity for
+        // it and its child session is not readable. Rendering the control
+        // console produced blocks whose every button could only fail.
+        if (e.subagentInternal) return null;
         const entryA11y = streamEntryA11y(roleLabel(e), entryIndex, entries.length);
         const loadedOutput = loadedOutputs[e.id];
         const richPath = e.richContent?.[0]?.path ?? "";

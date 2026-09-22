@@ -39,6 +39,27 @@ describe("parseSubagentPayload", () => {
     assert.equal(p.depth, 1);
   });
 
+  it("carries the host item kind so internal children stay identifiable", () => {
+    const p = parseSubagentPayload(
+      JSON.stringify({
+        agent_id: "item-7",
+        itemId: "item-7",
+        text: "",
+        itemKind: "reminderChild",
+        objective: "Reminder child session",
+      }),
+    );
+    assert.equal(p.itemKind, "reminderChild");
+    assert.equal(p.objective, "Reminder child session");
+  });
+
+  it("accepts a snake_case item_kind", () => {
+    const p = parseSubagentPayload(
+      JSON.stringify({ agent_id: "item-8", item_kind: "reminderchild" }),
+    );
+    assert.equal(p.itemKind, "reminderchild");
+  });
+
   it("keeps the AC fallbacks: /*id*/, id: prefix, plain text", () => {
     assert.deepEqual(parseSubagentPayload("/*worker*/ doing things"), {
       agentId: "worker",

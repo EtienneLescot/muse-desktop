@@ -14,6 +14,12 @@ export interface ParsedSubagent {
   objective?: string;
   role?: string;
   depth?: number;
+  /**
+   * Host item kind (`subagent`, `workflow`, `reminderchild`). Carried so an
+   * entry created from a bare delta still knows whether it is a real
+   * sub-agent or host-internal housekeeping.
+   */
+  itemKind?: string;
   status?: SubagentStatus;
   /** A host item update is a full replacement rather than a delta. */
   replace?: boolean;
@@ -152,6 +158,11 @@ export function parseSubagentPayload(payload: string): ParsedSubagent {
       if (objective !== undefined) out.objective = objective;
       const role = nonEmptyString(obj.role);
       if (role !== undefined) out.role = role;
+      const itemKind =
+        nonEmptyString(obj.itemKind) ??
+        nonEmptyString(obj.item_kind) ??
+        nonEmptyString(obj.kind);
+      if (itemKind !== undefined) out.itemKind = itemKind;
       const depth = optionalDepth(obj.depth);
       if (depth !== undefined) out.depth = depth;
       const status = optionalStatus(obj.status ?? obj.state ?? obj.phase ?? obj.event);

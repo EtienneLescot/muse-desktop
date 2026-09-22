@@ -16,6 +16,7 @@ import {
   isRunningKind,
   isStoppedKind,
   isSubagentItemKind,
+  isInternalSubagentItemKind,
   isTerminalItemStatus,
   isThinkingItemKind,
   normalizeKind,
@@ -132,6 +133,33 @@ describe("isSubagentItemKind", () => {
     assert.equal(isSubagentItemKind("reminderChild"), true);
     assert.equal(isSubagentItemKind("agentMessage"), false);
     assert.equal(isSubagentItemKind("reasoning"), false);
+  });
+});
+
+describe("isInternalSubagentItemKind", () => {
+  it("recognises host-internal child kinds whatever their spelling", () => {
+    // The host spells it `reminderchild` in item kinds and `reminderChild` in
+    // deltas; both must land on the same answer.
+    for (const k of [
+      "reminderchild",
+      "reminderChild",
+      "ReminderChild",
+      "reminder_child",
+      "reminder-child",
+    ]) {
+      assert.equal(isInternalSubagentItemKind(k), true, k);
+    }
+    assert.equal(isInternalSubagentItemKind("subagent"), false);
+    assert.equal(isInternalSubagentItemKind("workflow"), false);
+  });
+
+  it("only ever marks kinds the subagent lane carries", () => {
+    // An internal kind that never reached the subagent lane would leak its
+    // text into the answer lane instead of being hidden here.
+    for (const k of ["reminderchild", "reminderChild"]) {
+      assert.equal(isSubagentItemKind(k), true, k);
+      assert.equal(isInternalSubagentItemKind(k), true, k);
+    }
   });
 });
 
