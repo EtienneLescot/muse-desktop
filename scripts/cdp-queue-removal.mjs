@@ -157,12 +157,12 @@ async function main() {
     })()`);
     await sleep(3_500);
 
-    report.preconditions.push(await waitFor(client, "composer prÃªt et vide",
+    report.preconditions.push(await waitFor(client, "composer prêt et vide",
       (s) => s.composerPresent && s.composerEnabled === true && s.composerLength === 0 && s.connected));
 
     report.firstType = await type(client, FIRST);
     report.submitFirst = await submit(client);
-    report.preconditions.push(await waitFor(client, "premier envoi acceptÃ© (composer vidÃ©)",
+    report.preconditions.push(await waitFor(client, "premier envoi accepté (composer vidé)",
       (s) => s.composerLength === 0, 20_000));
     report.preconditions.push(await waitFor(client, "premier tour en cours",
       (s) => s.working === true, 30_000));
