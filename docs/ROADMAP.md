@@ -352,6 +352,7 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 
 - ◐ **M2-03 — Créer automatiquement un worktree** *(Global : —)*
   - Windows ◐ / macOS ◐ / Linux ◐ — `git_worktree_create(sessionId, branch, relativePath, baseRef)` confiné à `.muse/worktrees/`, `git worktree add -b` hors thread UI, refus des chemins existants / références de type option / traversées, action atomique **Create & open** avec rollback d'admission. Git est identique sur les trois OS, mais **aucune preuve native** n'existe hors Windows.
+  - **Qualification 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)) : mécanisme **PASS intégral** (`ux-start-worktree.mjs` : création, branche `muse/…`, base `HEAD`, refus « worktree path must be relative and stay inside .muse/worktrees », rollback). **Défaut de raccordement mesuré au fil :** la case « Create a new worktree » crée le worktree (`git_worktree_create_for_workspace` → `…\.muse\worktrees\openscreen-rn3d0`) mais **la conversation démarre dans le dépôt principal** — `start_session` reçoit `workspacePath: G:\repos\openscreen` et `git_status` annonce `branch: "pr620"`, jamais `muse/openscreen-rn3d0`. Le `path` renvoyé n'est pas transmis à `start_session` : « Create & open » n'ouvre pas.
   - **Reste :** qualification native et pannes après admission.
 
 - ◐ **M2-04 — Préparer l'environnement du worktree** *(Global : —)*
@@ -371,7 +372,7 @@ Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu 
 
 - ◐ **M2-07 — Piloter les sous-agents réels** *(Global : —)*
   - Windows ◐ — états host normalisés et visibles, snapshots `item/updated` remplacés par révision dans la lane sous-agent, contrôles bornés selon le cycle de vie.
-  - **Reste :** qualification native sur agents vivants et événements terminaux entrelacés.
+  - **Reste :** qualification native sur agents vivants et événements terminaux entrelacés. **Pièces mesurées le 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)) : le host publie de vrais items **`childSessionId`** (sessions enfants créées par le modèle) et l'UI rend des **voies sous-agents avec boutons stop** (`title="subagent/stop"`, capturés dans les runs `cdp-stop-terminal`) — reste le scénario fan-out complet avec reprise du parent.
   - macOS ☐ / Linux ☐ — non commencé.
 
 - ◐ **M2-08 — Exécuter plusieurs writers sans collision** *(Global : —)*
