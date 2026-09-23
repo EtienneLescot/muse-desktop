@@ -32,7 +32,7 @@ pub fn validate(session: &Value, expected_id: &str, root: &Path) -> Result<(), S
     Ok(())
 }
 
-fn host_path(raw: &str) -> PathBuf {
+pub(crate) fn host_path(raw: &str) -> PathBuf {
     // The bundled Windows adapter uses WSL's default drive mounts. Fail closed
     // for custom mounts rather than guessing a different workspace.
     #[cfg(windows)]

@@ -441,3 +441,61 @@ export function dropEmptyPlaceholders(log: LogEntry[]): LogEntry[] {
       ),
   );
 }
+
+/**
+ * A closed assistant message with nothing to show. The host opens and closes
+ * message items around its internal children without text; rendering them left
+ * bare "Muse" headers with only a timestamp in the transcript.
+ */
+export function isEmptyAssistantEntry(e: LogEntry): boolean {
+  return (
+    e.role === "assistant" &&
+    e.open !== true &&
+    e.text.trim().length === 0 &&
+    (e.richContent?.length ?? 0) === 0 &&
+    e.outputRef === undefined &&
+    e.engineError === undefined
+  );
+}
+
+/** Consecutive tool calls and the reasoning between them, shown as one row. */
+export interface WorkRun {
+  /** Index of the first entry in the list the run was cut from. */
+  start: number;
+  entries: LogEntry[];
+  /** Tool calls in the run; below two, the entries render on their own. */
+  tools: number;
+}
+
+/**
+ * Cut a transcript into runs of work. A computer-use turn made 18 tool calls
+ * with a reasoning row between most of them, and each was a full row: the
+ * answer was buried under forty lines of mechanics. Entries the stream never
+ * renders (empty assistant items, host-internal children) do not break a run.
+ */
+export function workRuns(entries: LogEntry[]): WorkRun[] {
+  const runs: WorkRun[] = [];
+  let open: WorkRun | null = null;
+  for (const [index, e] of entries.entries()) {
+    const work =
+      e.role === "tool" || e.role === "thinking" || isEmptyAssistantEntry(e) || e.subagentInternal === true;
+    if (!work) {
+      open = null;
+      runs.push({ start: index, entries: [e], tools: 0 });
+      continue;
+    }
+    if (open === null) {
+      open = { start: index, entries: [], tools: 0 };
+      runs.push(open);
+    }
+    open.entries.push(e);
+    if (e.role === "tool") open.tools += 1;
+  }
+  return runs;
+}
+
+/** The one-line label of a tool entry: the host's summary line. */
+export function toolStepLabel(e: LogEntry): string {
+  const newline = e.text.indexOf("\n");
+  return (newline >= 0 ? e.text.slice(0, newline) : e.text).replace(/`/g, "");
+}

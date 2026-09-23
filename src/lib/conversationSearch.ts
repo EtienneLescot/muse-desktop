@@ -3,10 +3,12 @@ export interface SearchSession {
   title: string;
   workspace: string;
   archived?: boolean;
+  createdAt?: number;
 }
 
 export interface SearchLogEntry {
   text: string;
+  ts?: number;
 }
 
 export interface ConversationSearchHit {
@@ -23,6 +25,15 @@ function excerptFor(text: string, query: string): string {
   return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
 }
 
+/** Most recently active first, as in Claude Code and Codex: last message, else creation. Stable. */
+function byRecency(sessions: SearchSession[], logs: Record<string, SearchLogEntry[]>): SearchSession[] {
+  const lastActivity = (session: SearchSession): number => {
+    const log = logs[session.session_id];
+    return log?.[log.length - 1]?.ts ?? session.createdAt ?? 0;
+  };
+  return [...sessions].sort((a, b) => lastActivity(b) - lastActivity(a));
+}
+
 /** Search conversation metadata and persisted message text without mutating state. */
 export function searchConversations(
   sessions: SearchSession[],
@@ -31,9 +42,9 @@ export function searchConversations(
 ): ConversationSearchHit[] {
   const query = rawQuery.trim().toLocaleLowerCase();
   if (query.length === 0) {
-    return sessions.map((session) => ({ session, excerpt: null }));
+    return byRecency(sessions, logs).map((session) => ({ session, excerpt: null }));
   }
-  return sessions.flatMap((session) => {
+  return byRecency(sessions, logs).flatMap((session) => {
     const metadata = `${session.title} ${session.workspace}`.toLocaleLowerCase();
     const message = (logs[session.session_id] ?? []).find((entry) =>
       entry.text.toLocaleLowerCase().includes(query),

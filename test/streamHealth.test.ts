@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   STREAM_STALE_AFTER_MS,
+  STREAM_OPEN_WORK_STALE_AFTER_MS,
   classifyStreamHealth,
   formatElapsed,
   parseRetryScheduled,
@@ -55,6 +56,15 @@ describe("stream health", () => {
       "stalled",
     );
     assert.equal(classifyStreamHealth({ ...base, running: false }), "idle");
+  });
+
+  it("lets in-flight work stay quiet longer before calling the stream stalled", () => {
+    const quiet = { ...base, now: base.lastEventAt + STREAM_STALE_AFTER_MS + 1 };
+    assert.equal(classifyStreamHealth({ ...quiet, openWork: true }), "working");
+    assert.equal(
+      classifyStreamHealth({ ...base, openWork: true, now: base.lastEventAt + STREAM_OPEN_WORK_STALE_AFTER_MS }),
+      "stalled",
+    );
   });
 
   it("keeps a host retry visible through its backoff", () => {

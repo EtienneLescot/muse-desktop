@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/env";
+import { displayPath } from "../lib/paths";
 import type { StartupProbe } from "../lib/startupProbe";
 export type { StartupCheck, StartupProbe } from "../lib/startupProbe";
 import { loadQueuedTurns, reconcileQueuedTurns, saveQueuedTurns } from "../lib/queuedTurns";
@@ -107,11 +108,6 @@ import {
   type BrowserCapture,
   type BrowserElementAnchor,
 } from "../lib/browserAnnotate";
-import {
-  desktopCaptureAttachment,
-  formatDesktopCaptureContext,
-  type DesktopCapture,
-} from "../lib/desktopControl";
 export type {
   BrowserAnnotation,
   BrowserAppPermission,
@@ -161,7 +157,6 @@ import {
   buildSummary,
   COMPACT_AUTO_ENTRIES,
   dropSummary,
-  formatSummaryText,
   isCompactCommand,
   loadSummary,
   parseContextUsage,
@@ -181,7 +176,7 @@ import {
 import { statusLogText } from "../lib/statusLog";
 // Boot auto-resume candidate selection (pure, unit-tested): which stored
 // sessions need a silent `resume_session` after `restore_sessions` settles.
-import { selectBootResumeCandidates } from "../lib/bootResume";
+import { selectResumeOnOpen } from "../lib/bootResume";
 import {
   parseRetryScheduled,
   resumeRecoveryDelay,
@@ -219,18 +214,11 @@ import {
   type ThreadProjectMap,
 } from "../lib/projects";
 import {
-  validateSetupCommand,
   type WorktreePlan,
   type WorktreeRecord,
-  type WorktreeInspection,
-  type WorktreeSetupResult,
-  type WorktreeReadiness,
 } from "../lib/worktrees";
 import {
-  clearWorktreeCleanup,
   loadWorktreeCleanupIntents,
-  markWorktreeCleanupFailed,
-  requestWorktreeCleanup,
   saveWorktreeCleanupIntents,
   type WorktreeCleanupIntent,
 } from "../lib/worktreeCleanup";
@@ -347,12 +335,9 @@ import { createLatestWriteQueue } from "../lib/writeQueue";
 // unit-tested); restore reuses the US-4 composer prefill below.
 import {
   dropArtifacts,
-  editArtifactVersion,
-  findVersionText,
   loadArtifacts,
   mergeAssistantBlocks,
   saveArtifacts,
-  setVersionComment,
   type Artifact,
 } from "../lib/artifacts";
 // w-settings (US-16 sandbox + US-31 providers): pure settings helpers
@@ -363,7 +348,6 @@ import {
   PROVIDER_MAP_KEY,
   SETTINGS_KEY,
   parseModelList,
-  parseProviderId,
   parseProviderMap,
   parseSandboxSettings,
   providerForProject,
@@ -385,7 +369,6 @@ import {
   parseApprovalResolution,
   shouldCloseApprovalLane,
 } from "../lib/approvalResolution";
-import { checkScope, type ScopeVerdict } from "../lib/scope";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
 import { reconnectErrorMessage, userFacingError } from "../lib/errorCopy";
 import { forkFailureMessage } from "../lib/fork";
@@ -464,15 +447,12 @@ import {
 // unit-tested). `shareThread` is aliased: the hook exposes `shareSession`.
 import {
   emptyShareState,
-  listSessionBundles,
   loadShareState,
   revokeBundle,
   saveShareState,
   setShareMode as setShareModePure,
   shareThread as createShareBundle,
   shouldAutoShare,
-  type BundleFormat,
-  type ShareBundle,
   type ShareMode,
   type ShareState,
 } from "../lib/sharing";
@@ -848,7 +828,6 @@ interface UseMuseSessions {
   retryScheduledBySession: Record<string, RetryScheduled>;
   activeRetryScheduled: RetryScheduled | null;
   /** M2-08: host-authored terminal result, when the protocol provides one. */
-  turnCompletionBySession: Record<string, SessionTurnCompletion>;
   /** M0-04: cancellation accepted by the host, awaiting terminal status. */
   stoppingBySession: Record<string, boolean>;
   /** M0-02: connection lifecycle, separate from turn execution state. */
@@ -874,11 +853,9 @@ interface UseMuseSessions {
   /** w-settings: provider id selected for the current project. */
   providerId: string;
   /** w-settings: persist the provider selection for the current project. */
-  setProviderId: (id: string) => void;
   /** US-31: live host catalog (`model/list` snapshot), null when unloaded. */
   liveModels: LiveModel[] | null;
   /** US-31: last catalog load failure (panel shows it, picker falls back). */
-  modelsError: string | null;
   /** US-31: (re)load the catalog, optionally flagging one session active. */
   refreshModels: (sessionId?: string) => Promise<void>;
   /** US-31: model-picker gesture on one session, then reload the catalog. */
@@ -889,47 +866,20 @@ interface UseMuseSessions {
     reasoningEffort: ProjectSettings["reasoningEffort"],
   ) => Promise<boolean>;
   /** w-settings: route a path through the scope-guard prompt path. */
-  checkPathScope: (path: string) => Promise<ScopeVerdict>;
   /** M2-03: create a real Git worktree from a validated orchestration plan. */
-  createWorktree: (
-    sessionId: string,
-    plan: WorktreePlan,
-  ) => Promise<WorktreeRecord | null>;
   /** M2-03: atomically create a worktree and open its conversation. */
-  createWorktreeSession: (
-    sessionId: string,
-    plan: WorktreePlan,
-    projectSettings?: ProjectSettings,
-  ) => Promise<WorktreeRecord | null>;
   worktrees: WorktreeRecord[];
   /** Explicit cleanup attempts that need a retry after an interruption. */
-  cleanupIntents: WorktreeCleanupIntent[];
   /** Remove one managed worktree after explicit user confirmation in the UI. */
   /** Creates the worktree a conversation will start in, before it exists. */
   createWorktreeForWorkspace: (
     workspace: string,
     plan: WorktreePlan,
   ) => Promise<WorktreeRecord | null>;
-  removeWorktree: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
   /** M2-06: inspect one worktree before cleanup or handoff. */
-  inspectWorktree: (
-    sessionId: string,
-    record: WorktreeRecord,
-  ) => Promise<WorktreeInspection | null>;
   /** M2-04: inspect local manifests and required executables without running code. */
-  checkWorktreeReadiness: (
-    sessionId: string,
-    record: WorktreeRecord,
-  ) => Promise<WorktreeReadiness | null>;
   /** M2-04: run one user-entered setup command in an existing managed worktree. */
-  runWorktreeSetup: (
-    sessionId: string,
-    record: WorktreeRecord,
-    command: string,
-    envAllowlist: string[],
-  ) => Promise<WorktreeSetupResult | null>;
   /** M2-04: request cancellation of the active setup process, if any. */
-  cancelWorktreeSetup: (sessionId: string, record: WorktreeRecord) => Promise<boolean>;
   startSession: () => Promise<string | null>;
   startSessionInWorkspace: (
     workspacePath: string,
@@ -994,9 +944,7 @@ interface UseMuseSessions {
   /** US-4: summaries by source session id (a stored summary = compacted). */
   summaries: Record<string, ThreadSummary>;
   /** US-4: build the local summary now (`/compact` manual path / button). */
-  compactSession: (sessionId: string) => void;
   /** US-4: open a fresh thread pre-filled with the source summary. */
-  newFromSummary: (sourceId: string) => Promise<void>;
   /** US-4: prefill text for the composer after `newFromSummary`. */
   prefill: string | null;
   /** Put an explicit user-editable note into the active composer. */
@@ -1015,11 +963,8 @@ interface UseMuseSessions {
   /** US-12 + US-21: versioned artifacts per thread (extracted blocks). */
   artifacts: Record<string, Artifact[]>;
   /** US-21: 1-click restore — copy the version text via US-4 prefill. */
-  restoreArtifact: (sessionId: string, artifactId: string, v: number) => void;
   /** US-21: anchored per-version comment (persisted). */
-  commentArtifact: (sessionId: string, artifactId: string, v: number, comment: string, anchorQuote?: string) => void;
   /** Save a local artifact edit as the next version, preserving history. */
-  editArtifact: (sessionId: string, artifactId: string, v: number, text: string) => void;
   /** US-23 opt-in local index (panel state + folder-pick indexing). */
   index: IndexApi;
   /** M1-01/M1-03: Git status/diff snapshots and guarded Review mutations. */
@@ -1172,15 +1117,10 @@ interface UseMuseSessions {
   /** US-9: discard a pending review entry. */
   discardReview: (id: string) => void;
   /** w-collab US-27: share mode + bundles for one session (newest first). */
-  shareMode: ShareMode;
   setShareMode: (mode: ShareMode) => void;
-  sessionBundles: (sessionId: string) => ShareBundle[];
   /** Snapshot the thread log into a bundle (null when disabled/empty). */
-  shareSession: (sessionId: string, format: BundleFormat) => ShareBundle | null;
   /** Un-share: revoke the bundle locally (its link then 404s). */
-  unshareBundle: (bundleId: string) => void;
   /** w-collab US-28: channel stub flag (off) — never connected. */
-  channelsExperimental: boolean;
   /** w-collab US-34: resumable sessions surfaced by config imports. */
   importedSessions: ResumableSession[];
   importNotes: string[];
@@ -1195,7 +1135,6 @@ interface UseMuseSessions {
   /** M4-02: insert a captured page image and its provenance into the composer. */
   prepareBrowserCapture: (sessionId: string, capture: BrowserCapture) => boolean;
   /** M4-04: insert an explicitly captured desktop surface into the composer. */
-  prepareDesktopCapture: (sessionId: string, capture: DesktopCapture) => boolean;
   /** US-19: remove an anchored comment by id. */
   removeBrowserAnnotation: (id: string) => void;
   /** US-19: computer-use per-app permissions (default denied). */
@@ -1353,11 +1292,13 @@ interface BackendSessionMeta {
    * refuse with `sessionNotLoaded`.
    */
   loaded?: boolean;
+  /** Title the host keeps for this conversation, when it has one. */
+  title?: string;
 }
 
-interface BackendWorktreeSessionResult {
-  worktree: WorktreeRecord;
-  session: BackendSessionMeta;
+/** A placeholder title ("Session 01a0…" or none) gives way to the host title. */
+function withHostTitle(local: string, host: string | undefined): string {
+  return host !== undefined && (local === "" || local.startsWith("Session ")) ? host : local;
 }
 
 /** Status-kind mapping lives in ../lib/phase (unit-tested, US-10). */
@@ -1620,7 +1561,7 @@ export function useMuseSessions(): UseMuseSessions {
   const [retryScheduledBySession, setRetryScheduledBySession] = useState<
     Record<string, RetryScheduled>
   >({});
-  const [turnCompletionBySession, setTurnCompletionBySession] = useState<
+  const [, setTurnCompletionBySession] = useState<
     Record<string, SessionTurnCompletion>
   >({});
   // A cancel request is not the same thing as a confirmed stopped status.
@@ -1810,7 +1751,7 @@ export function useMuseSessions(): UseMuseSessions {
   const [sandbox, setSandboxState] = useState<SandboxSettings>(() => {
     return parseSandboxSettings(readStorageJson<unknown>(SETTINGS_KEY, null));
   });
-  const [providerMap, setProviderMap] = useState<Record<string, string>>(() => {
+  const [providerMap] = useState<Record<string, string>>(() => {
     return parseProviderMap(readStorageJson<unknown>(PROVIDER_MAP_KEY, null));
   });
   const [error, setError] = useState<string | null>(null);
@@ -1834,7 +1775,6 @@ export function useMuseSessions(): UseMuseSessions {
     }
   });
   // w-collab US-28: channel stub stays behind its flag (off, never live).
-  const [channelsExperimental] = useState(false);
   // w-collab US-34: resumable sessions from CLI/IDE config imports
   // (persisted under muse-desktop.import.v1; live sessions never touched).
   const [importedSessions, setImportedSessions] = useState<ResumableSession[]>(() => {
@@ -1881,7 +1821,7 @@ export function useMuseSessions(): UseMuseSessions {
     () => loadGlobalSettings(DEFAULT_PROJECT_SETTINGS),
   );
   const [worktrees, setWorktrees] = useState<WorktreeRecord[]>(() => loadWorktrees());
-  const [cleanupIntents, setCleanupIntents] = useState<WorktreeCleanupIntent[]>(() =>
+  const [cleanupIntents] = useState<WorktreeCleanupIntent[]>(() =>
     loadWorktreeCleanupIntents(),
   );
   const [projectError, setProjectError] = useState<string | null>(null);
@@ -1956,7 +1896,6 @@ export function useMuseSessions(): UseMuseSessions {
   const filesRequestSeq = useRef<Record<string, number>>({});
   // M2-04: operation ids let the renderer cancel a specific native setup
   // process without trying to infer it from the active view.
-  const setupOperationsRef = useRef<Map<string, string>>(new Map());
   // Mirror of "any session running", read by the poll loop to pick cadence.
   // Plain ref (not state): the loop lives outside render, StrictMode-safe.
   const runningRef = useRef(false);
@@ -1987,7 +1926,7 @@ export function useMuseSessions(): UseMuseSessions {
   const restoreSettledRef = useRef(false);
   // Boot auto-resume runs once: silent `resume_session` for the stored
   // sessions the backend did not admit (hosts do not survive a restart).
-  const bootResumeDoneRef = useRef(false);
+  const resumeAttemptedRef = useRef(new Set<string>());
   // M0-03 outbox: durable retryable sends per session, restored once. An
   // entry still `sending` at boot means the app died or reloaded mid-flight:
   // the outcome is unknown, so it recovers as failed/ambiguous (a retry
@@ -2262,6 +2201,7 @@ export function useMuseSessions(): UseMuseSessions {
             if (i >= 0) {
               next[i] = {
                 ...next[i],
+                title: withHostTitle(next[i].title, meta.title),
                 workspace: meta.workspace,
                 running: meta.running,
                 ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
@@ -2274,7 +2214,7 @@ export function useMuseSessions(): UseMuseSessions {
               next.push({
                 session_id: meta.session_id,
                 workspace: meta.workspace,
-                title: `Session ${meta.session_id.slice(0, 8)}`,
+                title: meta.title ?? `Session ${meta.session_id.slice(0, 8)}`,
                 createdAt: Date.now(),
                 running: meta.running,
                 ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
@@ -3324,6 +3264,12 @@ export function useMuseSessions(): UseMuseSessions {
       });
       clearStopping(sid);
       clearRetryScheduled(sid);
+      // A full host was replaced to make room (`HOST_RECYCLED_MESSAGE` in
+      // main.rs): opening this conversation again resumes it silently. A
+      // crashed host keeps the manual Reconnect, so a crash cannot loop.
+      if (payload.startsWith("Muse closed this conversation to make room")) {
+        resumeAttemptedRef.current.delete(sid);
+      }
     }
     if (kind === "output") {
       ensureSessionRow(sid, null);
@@ -3793,6 +3739,7 @@ export function useMuseSessions(): UseMuseSessions {
       let initialText = "";
       let richContent: RichContent[] | undefined;
       let subagentInternal = false;
+      let modelToolCall = false;
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const rawId = obj.itemId ?? obj.id;
@@ -3814,6 +3761,15 @@ export function useMuseSessions(): UseMuseSessions {
             if (typeof commandText === "string" && commandText.trim().length > 0) {
               initialText = `$ ${commandText.trim()}`;
             }
+          } else if (rawKind.toLowerCase() === "toolcall") {
+            // The model's own tool call: a tool row named by its summary
+            // ("powershell · List directory names"), not an empty assistant
+            // message that read as "thinking…" while a command ran or hung.
+            itemRole = "tool";
+            modelToolCall = true;
+            initialText = typeof obj.toolSummary === "string" && obj.toolSummary.trim().length > 0
+              ? obj.toolSummary.trim()
+              : "Tool call";
           }
         }
       } catch {
@@ -3823,7 +3779,8 @@ export function useMuseSessions(): UseMuseSessions {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
       }
-      if (itemRole !== "tool") {
+      // A user shell runs outside any turn; the model's tool call is its turn.
+      if (itemRole !== "tool" || modelToolCall) {
         setSessions((cur) =>
           cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
         );
@@ -3916,6 +3873,25 @@ export function useMuseSessions(): UseMuseSessions {
         // Older hosts may omit item/completed. Preserve the exact turn anchor
         // on any remaining open lane before closing it.
         closeOpenBlocks(sid, undefined, completion.turnId);
+      }
+      // A cancelled turn says so in the transcript, as Claude Code's
+      // "Interrupted": otherwise it simply ended on a half-run tool call.
+      if (completion !== null && /cancel|interrupt|stop/i.test(completion.terminal)) {
+        const stoppedTurn = completion.turnId;
+        setLogs((cur) => {
+          const log = cur[sid] ?? [];
+          if (log.some((e) => e.role === "system" && e.text === "Stopped" && e.turnId === stoppedTurn)) return cur;
+          const note: LogEntry = {
+            id: newId(),
+            ts: Date.now(),
+            role: "system",
+            text: "Stopped",
+            ...(stoppedTurn === undefined ? {} : { turnId: stoppedTurn }),
+          };
+          const next = [...log, note];
+          saveLog(sid, next);
+          return { ...cur, [sid]: next };
+        });
       }
       clearStopping(sid);
       delete turnIdsRef.current[sid];
@@ -4083,29 +4059,23 @@ export function useMuseSessions(): UseMuseSessions {
         return nextState;
       });
       if (failed > 0) {
+        const firstRejection = results.find((result) => result.status === "rejected");
+        const reason = firstRejection?.status === "rejected"
+          ? ` First reason: ${userFacingError(firstRejection.reason)}`
+          : "";
         setError(
-          `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host.`,
+          `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host.${reason}`,
         );
       }
     });
   }, [connectedIds, sessions]);
 
-  // w-settings: provider selection is per project (project id = workspace).
-  const setProviderId = useCallback((id: string) => {
-    setProviderMap((cur) => {
-      const ws = workspace ?? loadWorkspace() ?? "";
-      if (ws.length === 0) return cur;
-      const checked = parseProviderId(id);
-      if (cur[ws] === checked) return cur;
-      return { ...cur, [ws]: checked };
-    });
-  }, [workspace]);
 
   // US-31: live host catalog. Null until the first successful load (the
   // panel falls back to the sample registry); failures record modelsError
   // instead of clobbering the banner — a picker must degrade, not shout.
   const [liveModels, setLiveModels] = useState<LiveModel[] | null>(null);
-  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [, setModelsError] = useState<string | null>(null);
   const refreshModels = useCallback(async (sessionId?: string) => {
     try {
       const raw = await invoke("list_models", {
@@ -4167,39 +4137,7 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
-  // w-settings: out-of-scope attempts (path outside cwd) route to the
-  // existing scope-guard prompt path — the backend `check_scope` verdict,
-  // with an error-banner prompt when access is denied.
-  const checkPathScope = useCallback(async (path: string): Promise<ScopeVerdict> => {
-    const verdict = await checkScope(path);
-    if (!verdict.in_scope) {
-      setError(`Scope guard: ${verdict.reason} — approval required before opening.`);
-    }
-    return verdict;
-  }, []);
 
-  const createWorktree = useCallback(
-    async (sessionId: string, plan: WorktreePlan): Promise<WorktreeRecord | null> => {
-      try {
-        setError(null);
-        const result = await invoke<WorktreeRecord>("git_worktree_create", {
-          sessionId,
-          branch: plan.branch,
-          relativePath: plan.path,
-          baseRef: plan.base,
-        });
-        setWorktrees((current) => [
-          ...current.filter((record) => record.path !== result.path),
-          result,
-        ]);
-        return result;
-      } catch (e) {
-        setError(`worktree creation failed: ${e instanceof Error ? e.message : String(e)}`);
-        return null;
-      }
-    },
-    [],
-  );
 
   /**
    * Create the worktree a conversation will start in.
@@ -4231,119 +4169,10 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
-  const removeWorktree = useCallback(
-    async (sessionId: string, record: WorktreeRecord): Promise<boolean> => {      setCleanupIntents((current) => requestWorktreeCleanup(current, record));
-      try {
-        setError(null);
-        await invoke("git_worktree_remove", {
-          sessionId,
-          path: record.path,
-        });
-        setWorktrees((current) => current.filter((item) => item.path !== record.path));
-        setCleanupIntents((current) => clearWorktreeCleanup(current, record));
-        return true;
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
-        setCleanupIntents((current) => markWorktreeCleanupFailed(current, record, detail));
-        setError(`worktree removal failed: ${detail}`);
-        return false;
-      }
-    },
-    [],
-  );
 
-  const inspectWorktree = useCallback(
-    async (
-      sessionId: string,
-      record: WorktreeRecord,
-    ): Promise<WorktreeInspection | null> => {
-      try {
-        setError(null);
-        return await invoke<WorktreeInspection>("git_worktree_inspect", {
-          sessionId,
-          path: record.path,
-        });
-      } catch (e) {
-        setError(`worktree inspection failed: ${e instanceof Error ? e.message : String(e)}`);
-        return null;
-      }
-    },
-    [],
-  );
 
-  const runWorktreeSetup = useCallback(
-    async (
-      sessionId: string,
-      record: WorktreeRecord,
-      command: string,
-      envAllowlist: string[],
-    ): Promise<WorktreeSetupResult | null> => {
-      const validation = validateSetupCommand(command);
-      if (validation !== null) {
-        setError(validation);
-        return null;
-      }
-      try {
-        setError(null);
-        const operationId = newId();
-        const operationKey = `${sessionId}:${record.path}`;
-        setupOperationsRef.current.set(operationKey, operationId);
-        try {
-          return await invoke<WorktreeSetupResult>("worktree_setup_run", {
-            sessionId,
-            path: record.path,
-            command: command.trim(),
-            operationId,
-            envAllowlist,
-          });
-        } finally {
-          if (setupOperationsRef.current.get(operationKey) === operationId) {
-            setupOperationsRef.current.delete(operationKey);
-          }
-        }
-      } catch (e) {
-        setError(`worktree setup failed: ${e instanceof Error ? e.message : String(e)}`);
-        return null;
-      }
-    },
-    [],
-  );
 
-  const checkWorktreeReadiness = useCallback(
-    async (
-      sessionId: string,
-      record: WorktreeRecord,
-    ): Promise<WorktreeReadiness | null> => {
-      try {
-        setError(null);
-        return await invoke<WorktreeReadiness>("worktree_setup_readiness", {
-          sessionId,
-          path: record.path,
-        });
-      } catch (e) {
-        setError(`worktree readiness failed: ${e instanceof Error ? e.message : String(e)}`);
-        return null;
-      }
-    },
-    [],
-  );
 
-  const cancelWorktreeSetup = useCallback(
-    async (sessionId: string, record: WorktreeRecord): Promise<boolean> => {
-      const operationId = setupOperationsRef.current.get(`${sessionId}:${record.path}`);
-      if (operationId === undefined) return false;
-      try {
-        return await invoke<boolean>("worktree_setup_cancel", {
-          sessionId,
-          operationId,
-        });
-      } catch (e) {
-        setError(`worktree setup cancellation failed: ${e instanceof Error ? e.message : String(e)}`);
-        return false;
-      }
-    },
-    [],
-  );
 
   const setActive = useCallback((id: string | null) => {
     if (id !== null) setSessions((cur) => withUnreadFlag(cur, id, false));
@@ -4580,13 +4409,17 @@ export function useMuseSessions(): UseMuseSessions {
       if (meta.loaded !== undefined) {
         setSessionLoadedBySession((cur) => ({ ...cur, [id]: meta.loaded }));
       }
-      if (meta.model_id) {
-        setSessions((cur) =>
-          cur.map((session) =>
-            session.session_id === id ? { ...session, model_id: meta.model_id } : session,
-          ),
-        );
-      }
+      setSessions((cur) =>
+        cur.map((session) =>
+          session.session_id === id
+            ? {
+                ...session,
+                title: withHostTitle(session.title, meta.title),
+                ...(meta.model_id ? { model_id: meta.model_id } : {}),
+              }
+            : session,
+        ),
+      );
       // Resume restores the host's persisted posture. Reconcile it with the
       // current global selector before enabling the composer again. A host
       // ceiling must not make the saved conversation unusable: preserve the
@@ -4678,31 +4511,25 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, [authorizationMode, globalSettings, projects, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, sandbox]);
 
-  // Boot auto-resume: `restore_sessions` only admits sessions for
+  // Resume on open: `restore_sessions` only admits sessions for
   // already-connected hosts, and hosts do not survive an app restart. Once
-  // the backend restore settles, silently resume the stored sessions it did
-  // not admit (active first) so Terminal/Files find their native route
-  // without a manual Reconnect. Failures stay silent: rows keep
-  // 'disconnected' and the user can still reconnect by hand.
+  // the backend restore settles, silently resume the open conversation so
+  // Terminal/Files find their native route without a manual Reconnect — and
+  // only that one: a host holds 32 loaded sessions and resuming every stored
+  // row filled it (see lib/bootResume.ts). One automatic attempt per
+  // conversation per run; a failure stays 'disconnected' for a manual Reconnect.
   useEffect(() => {
-    if (!historyReady || !isTauriRuntime()) return;
-    if (bootResumeDoneRef.current || !restoreSettledRef.current) return;
-    bootResumeDoneRef.current = true;
-    const candidates = selectBootResumeCandidates({
+    if (!historyReady || !isTauriRuntime() || !restoreSettledRef.current) return;
+    const id = selectResumeOnOpen({
       stored: sessions,
       restoredIds: connectedIds,
       tombstonedIds: tombstoned.current,
       activeId,
     });
-    if (candidates.length === 0) return;
-    void (async () => {
-      for (const id of candidates) {
-        if (!aliveRef.current) return;
-        await reconnectSession(id, { silent: true });
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyReady, reconnectSession]);
+    if (id === null || resumeAttemptedRef.current.has(id)) return;
+    resumeAttemptedRef.current.add(id);
+    void reconnectSession(id, { silent: true });
+  }, [historyReady, activeId, connectedIds, sessions, reconnectSession]);
 
 
   const startSession = useCallback(async () => {
@@ -4738,85 +4565,6 @@ export function useMuseSessions(): UseMuseSessions {
     [globalSettings, startSessionRow],
   );
 
-  const createWorktreeSession = useCallback(
-    async (
-      sessionId: string,
-      plan: WorktreePlan,
-      projectSettings?: ProjectSettings,
-    ): Promise<WorktreeRecord | null> => {
-      if (!isTauriRuntime()) {
-        setError("Worktree conversations require the Muse Desktop runtime.");
-        return null;
-      }
-      try {
-        setError(null);
-        const sessionSettings = projectSettings ?? globalSettings;
-        const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSettings);
-        const result = await invoke<BackendWorktreeSessionResult>("git_worktree_create_session", {
-          sessionId,
-          branch: plan.branch,
-          relativePath: plan.path,
-          baseRef: plan.base,
-          authorizationMode,
-          sandboxMode: sandboxConfig.mode,
-          sandboxDisableWrite: sandboxConfig.disableWrite,
-          sandboxDisableShell: sandboxConfig.disableShell,
-          mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
-        });
-        setWorktrees((current) => [
-          ...current.filter((record) => record.path !== result.worktree.path),
-          result.worktree,
-        ]);
-        const meta = result.session;
-        const requestedModelId = sessionSettings.model.trim();
-        const record: MuseSession = {
-          session_id: meta.session_id,
-          workspace: meta.workspace,
-          title: `Session ${meta.session_id.slice(0, 8)}`,
-          createdAt: Date.now(),
-          running: meta.running,
-          ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
-          ...(requestedModelId && requestedModelId !== "default"
-            ? { model_id: requestedModelId }
-            : {}),
-        };
-        setGrantedCapabilitiesBySession((cur) => ({
-          ...cur,
-          [meta.session_id]: meta.granted_capabilities,
-        }));
-        setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
-        if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
-          setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
-        }
-        setConnectionState(meta.session_id, "connected");
-        setSessions((current) => [
-          ...current.filter((session) => session.session_id !== meta.session_id),
-          record,
-        ]);
-        setLogs((current) => (current[meta.session_id] ? current : { ...current, [meta.session_id]: [] }));
-        setActiveId(meta.session_id);
-        const modelId = requestedModelId;
-        if (modelId && modelId !== "default") await setSessionModel(meta.session_id, modelId);
-        if (sessionSettings.reasoningEffort !== undefined) {
-          await setSessionReasoningEffort(meta.session_id, sessionSettings.reasoningEffort);
-        }
-        void refreshHostSkills(meta.session_id);
-        return result.worktree;
-      } catch (e) {
-        setError(`worktree conversation failed: ${e instanceof Error ? e.message : String(e)}`);
-        return null;
-      }
-    },
-    [
-      authorizationMode,
-      sandbox,
-      globalSettings,
-      refreshHostSkills,
-      setConnectionState,
-      setSessionModel,
-      setSessionReasoningEffort,
-    ],
-  );
 
   const [forkingId, setForkingId] = useState<string | null>(null);
   const forkSession = useCallback(
@@ -5799,33 +5547,6 @@ export function useMuseSessions(): UseMuseSessions {
     [sendInput],
   );
 
-  /**
-   * US-4: open a fresh thread pre-filled with the source thread's summary.
-   * The summary must exist (manual `/compact`, Compacter button, or auto at
-   * the entry cap). The composer receives the formatted text as prefill —
-   * nothing is sent to the model until the user presses Send.
-   */
-  const newFromSummary = useCallback(
-    async (sourceId: string) => {
-      const summary =
-        summaries[sourceId] ?? loadSummary(sourceId);
-      if (!summary) {
-        setError(
-          `no summary for thread ${sourceId.slice(0, 8)}: compact it first (/compact).`,
-        );
-        return;
-      }
-      const id = await startSessionRow();
-      if (id === null) return;
-      setSessions((cur) =>
-        cur.map((s) =>
-          s.session_id === id ? { ...s, title: `Suite ${sourceId.slice(0, 8)}` } : s,
-        ),
-      );
-      setPrefill(formatSummaryText(summary));
-    },
-    [startSessionRow, summaries],
-  );
 
   const clearPrefill = useCallback(() => setPrefill(null), []);
   const prefillComposer = useCallback((text: string) => {
@@ -5833,49 +5554,8 @@ export function useMuseSessions(): UseMuseSessions {
     if (bounded.length > 0) setPrefill(bounded);
   }, []);
 
-  /**
-   * US-21: 1-click restore — the version text goes through the US-4
-   * composer prefill, so nothing is sent until the user presses Send.
-   */
-  const restoreArtifact = useCallback(
-    (sessionId: string, artifactId: string, v: number) => {
-      const text = findVersionText(artifacts[sessionId] ?? [], artifactId, v);
-      if (text === null) {
-        setError(`restore failed: version v${v} not found in this thread.`);
-        return;
-      }
-      setPrefill(text);
-    },
-    [artifacts],
-  );
 
-  /** US-21: anchored per-version comment (state + disk). */
-  const commentArtifact = useCallback(
-    (sessionId: string, artifactId: string, v: number, comment: string, anchorQuote?: string) => {
-      setArtifacts((cur) => {
-        const list = cur[sessionId] ?? [];
-        const next = setVersionComment(list, artifactId, v, comment, anchorQuote);
-        if (JSON.stringify(next) === JSON.stringify(list)) return cur;
-        saveArtifacts(sessionId, next);
-        return { ...cur, [sessionId]: next };
-      });
-    },
-    [],
-  );
 
-  /** US-21: local artifact edits become a new persisted version. */
-  const editArtifact = useCallback(
-    (sessionId: string, artifactId: string, v: number, text: string) => {
-      setArtifacts((cur) => {
-        const list = cur[sessionId] ?? [];
-        const next = editArtifactVersion(list, artifactId, v, text);
-        if (next === list || JSON.stringify(next) === JSON.stringify(list)) return cur;
-        saveArtifacts(sessionId, next);
-        return { ...cur, [sessionId]: next };
-      });
-    },
-    [],
-  );
 
   // US-23 local index: opt-in (default off, persisted), paused flag, and
   // the stored line index. Picked File handles stay in memory only — the
@@ -6579,7 +6259,9 @@ export function useMuseSessions(): UseMuseSessions {
       const targetSession = target === "new"
         ? null
         : sessions.find((session) => session.session_id === target) ?? null;
-      if (item.workspace && targetSession && targetSession.workspace !== item.workspace) {
+      // The conversation holds the native `\\?\G:\…` spelling, the schedule the
+      // folder as picked: same directory, compared without the prefix.
+      if (item.workspace && targetSession && displayPath(targetSession.workspace) !== displayPath(item.workspace)) {
         const message = "the recorded workspace no longer matches the target conversation";
         setError(`schedule run failed: ${message}`);
         failRun(message, false);
@@ -6678,21 +6360,6 @@ export function useMuseSessions(): UseMuseSessions {
     [sessions],
   );
 
-  const prepareDesktopCapture = useCallback(
-    (sessionId: string, capture: DesktopCapture): boolean => {
-      const target = sessions.find((session) => session.session_id === sessionId);
-      const attachment = desktopCaptureAttachment(capture);
-      const context = formatDesktopCaptureContext(capture);
-      if (target === undefined || attachment === null || context.length === 0) {
-        setError("desktop capture unavailable: the image or session is invalid");
-        return false;
-      }
-      setPrefill((current) => (current ? `${current}\n\n${context}` : context));
-      setPrefillAttachmentState({ sessionId, attachment });
-      return true;
-    },
-    [sessions],
-  );
 
   const clearPrefillAttachment = useCallback(() => {
     setPrefillAttachmentState(null);
@@ -7051,37 +6718,8 @@ export function useMuseSessions(): UseMuseSessions {
     setShareState((cur) => setShareModePure(cur, mode));
   }, []);
 
-  const sessionBundles = useCallback(
-    (sessionId: string): ShareBundle[] => listSessionBundles(shareState, sessionId),
-    [shareState],
-  );
 
-  const shareSession = useCallback(
-    (sessionId: string, format: BundleFormat): ShareBundle | null => {
-      const log = logsRef.current[sessionId] ?? loadLog(sessionId);
-      const title =
-        sessions.find((s) => s.session_id === sessionId)?.title ?? sessionId;
-      const created = createShareBundle(shareState, sessionId, title, log, format);
-      if (created === null) {
-        if (shareState.mode === "disabled") {
-          setError("sharing is disabled (share mode off).");
-        }
-        return null;
-      }
-      setShareState(created.state);
-      return created.bundle;
-    },
-    [shareState, sessions],
-  );
 
-  const unshareBundle = useCallback((bundleId: string) => {
-    setShareState((cur) => revokeBundle(cur, bundleId));
-    // A revoked auto snapshot stops being "the live one": the next turn
-    // end mints a fresh auto bundle instead of revoking an already-dead id.
-    for (const [sid, bid] of Object.entries(autoBundleIds.current ?? {})) {
-      if (bid === bundleId) delete (autoBundleIds.current as Record<string, string>)[sid];
-    }
-  }, []);
 
   /**
    * w-collab US-27 auto mode: on turn end, refresh this session's single
@@ -8204,7 +7842,6 @@ export function useMuseSessions(): UseMuseSessions {
     activeResumePending,
     retryScheduledBySession,
     activeRetryScheduled,
-    turnCompletionBySession,
     stoppingBySession,
     connectionBySession,
     activeConnectionState,
@@ -8221,23 +7858,12 @@ export function useMuseSessions(): UseMuseSessions {
     authorizationMode,
     setAuthorizationMode,
     providerId,
-    setProviderId,
     liveModels,
-    modelsError,
     refreshModels,
     setSessionModel,
     setSessionReasoningEffort,
-    checkPathScope,
-    createWorktree,
-    createWorktreeSession,
     worktrees,
-    cleanupIntents,
-    removeWorktree,
     createWorktreeForWorkspace,
-    inspectWorktree,
-    checkWorktreeReadiness,
-    runWorktreeSetup,
-    cancelWorktreeSetup,
     startSession,
     startSessionInWorkspace,
     forkSession,
@@ -8265,7 +7891,6 @@ export function useMuseSessions(): UseMuseSessions {
     addBrowserAnnotation: addBrowserAnnotationCb,
     prepareBrowserContext,
     prepareBrowserCapture,
-    prepareDesktopCapture,
     removeBrowserAnnotation: removeBrowserAnnotationCb,
     browserPermissions,
     setBrowserAppPermission: setBrowserAppPermissionCb,
@@ -8319,12 +7944,7 @@ export function useMuseSessions(): UseMuseSessions {
     retryScheduleRunNow,
     approveReview: approveReviewCb,
     discardReview: discardReviewCb,
-    shareMode: shareState.mode,
     setShareMode,
-    sessionBundles,
-    shareSession,
-    unshareBundle,
-    channelsExperimental,
     importedSessions,
     importNotes,
     importConfigText,
@@ -8374,11 +7994,9 @@ export function useMuseSessions(): UseMuseSessions {
     invokeSkill,
     scanSkills,
     summaries,
-    compactSession: doCompact,
     usageBySession,
     serverCompactionBySession,
     serverCompact,
-    newFromSummary,
     prefill,
     prefillComposer,
     clearPrefill,
@@ -8386,9 +8004,6 @@ export function useMuseSessions(): UseMuseSessions {
     prefillAttachmentSessionId: prefillAttachmentState?.sessionId ?? null,
     clearPrefillAttachment,
     artifacts,
-    restoreArtifact,
-    commentArtifact,
-    editArtifact,
     index,
     gitReview,
     gitTurnSnapshot,

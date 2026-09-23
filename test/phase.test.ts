@@ -8,6 +8,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   REFLEXIVE_LABEL,
+  isEmptyAssistantEntry,
+  toolStepLabel,
+  workRuns,
   applyItemSnapshotUpdate,
   dropEmptyPlaceholders,
   isItemStartKind,
@@ -377,5 +380,47 @@ describe("dropEmptyPlaceholders", () => {
 describe("REFLEXIVE_LABEL", () => {
   it("is a short non-empty label", () => {
     assert.ok(REFLEXIVE_LABEL.length > 0 && REFLEXIVE_LABEL.length <= 24);
+  });
+});
+
+describe("isEmptyAssistantEntry", () => {
+  const base = { id: "a", ts: 1, role: "assistant" as const, text: "" };
+  it("hides a closed assistant message with nothing to show", () => {
+    assert.equal(isEmptyAssistantEntry(base), true);
+    assert.equal(isEmptyAssistantEntry({ ...base, text: "  \n" }), true);
+  });
+  it("keeps streaming, textual, rich, output or failed messages", () => {
+    assert.equal(isEmptyAssistantEntry({ ...base, open: true }), false);
+    assert.equal(isEmptyAssistantEntry({ ...base, text: "hi" }), false);
+    assert.equal(isEmptyAssistantEntry({ ...base, outputRef: "ref" }), false);
+    assert.equal(isEmptyAssistantEntry({ ...base, role: "user" }), false);
+  });
+});
+
+describe("workRuns", () => {
+  const entry = (id: string, role: "user" | "assistant" | "tool" | "thinking", text = id) =>
+    ({ id, ts: 1, role, text }) as const;
+  it("folds consecutive tool calls and the reasoning between them", () => {
+    const log = [
+      entry("u", "user"),
+      entry("t1", "tool"),
+      entry("r1", "thinking"),
+      entry("empty", "assistant", ""),
+      entry("t2", "tool"),
+      entry("a", "assistant", "Résultat : 16."),
+    ];
+    const runs = workRuns(log);
+    assert.deepEqual(
+      runs.map((run) => [run.start, run.entries.map((e) => e.id), run.tools]),
+      [
+        [0, ["u"], 0],
+        [1, ["t1", "r1", "empty", "t2"], 2],
+        [5, ["a"], 0],
+      ],
+    );
+  });
+  it("labels a step by the host's summary line", () => {
+    assert.equal(toolStepLabel(entry("t", "tool", "Computer use · click · `element 28`\n✅ done")), "Computer use · click · element 28");
+    assert.equal(toolStepLabel(entry("t", "tool", "Computer use · list apps")), "Computer use · list apps");
   });
 });

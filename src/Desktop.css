@@ -10,7 +10,7 @@
 .mac-titlebar { flex: none; height: 44px; }
 .window-error { position: absolute; top: 40px; right: 0; width: 230px; background: var(--surface); color: var(--danger); padding: 10px; border: 1px solid var(--line); border-radius: 8px; z-index: 10; font-size: 12px; }
 .desktop-app {
-  grid-template-rows: minmax(0, 1fr) 28px;
+  grid-template-rows: minmax(0, 1fr);
 }
 .desktop-app > .conversation {
   border-radius: 16px 0 0 16px;
@@ -270,19 +270,6 @@
 .connection-error .connection-state-dot {
   background: var(--warning, #d89024);
 }
-.task-project-context {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.task-project-context span + span::before {
-  content: "·";
-  margin-right: 14px;
-  color: var(--line-strong, var(--line));
-}
 .desktop-app .stream {
   padding: 16px 32px 24px;
   gap: 24px;
@@ -335,6 +322,70 @@
 .desktop-app .msg.tool pre,
 .desktop-app .msg.system pre {
   font-size: 11px;
+}
+.tool-call summary {
+  cursor: pointer;
+  color: var(--muted);
+  list-style-position: inside;
+}
+.tool-call summary:hover {
+  color: var(--text);
+}
+.tool-call[open] summary {
+  margin-bottom: 8px;
+}
+.tool-call pre {
+  max-height: 320px;
+  overflow: auto;
+}
+.work-group {
+  margin: 4px 0 10px;
+}
+.work-group > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 0;
+}
+.work-group > summary:hover {
+  color: var(--text);
+}
+.work-group-count {
+  flex: none;
+  font-weight: 600;
+}
+.work-group-step {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.work-group[data-live="true"] .work-group-count::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  vertical-align: middle;
+  animation: work-group-pulse 1.2s ease-in-out infinite;
+}
+@keyframes work-group-pulse {
+  50% { opacity: 0.3; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .work-group[data-live="true"] .work-group-count::before { animation: none; }
+}
+.work-group[open] > summary {
+  margin-bottom: 6px;
+}
+.work-group[open] {
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
 }
 .desktop-app .composer-wrap {
   flex: none;
@@ -961,22 +1012,6 @@
   border-bottom: 1px solid var(--line);
   padding: 14px 0;
 }
-.desktop-status {
-  grid-column: 1/-1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 15px;
-  border-top: 1px solid var(--line);
-  font-size: 10px;
-  color: var(--muted);
-}
-.status-workspace {
-  margin-left: 12px;
-}
-.status-brand {
-  margin-left: auto;
-}
 .task-search {
   width: 540px;
   max-width: 90vw;
@@ -1257,7 +1292,7 @@
   min-height: 60px;
   border: 0;
   outline: none;
-  resize: vertical;
+  resize: none;
   background: transparent;
   font-size: 13px;
 }
@@ -1272,9 +1307,6 @@
   flex-wrap: wrap;
 }
 
-.welcome-draft-actions .authorization-mode-control {
-  margin-right: auto;
-}
 .welcome-draft small {
   font-size: 10px;
 }
@@ -1368,7 +1400,25 @@
 .destination-page .integration-form {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 12px;
+}
+/* The local MCP form inherited `align-items: center` from its compact row
+   layout, which shrank both fields to a narrow centered column here. */
+.destination-page .local-mcp .integration-form input {
+  flex: none;
+}
+.destination-page .integration-form > button[type="submit"] {
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 16px;
+  background: var(--bg);
+  font-size: 12px;
+}
+.destination-page .local-mcp p,
+.destination-page .local-mcp h4 {
+  font-size: 12px;
 }
 .destination-page .integration-panel h3 {
   font-size: 18px;
@@ -1384,14 +1434,65 @@
   white-space: pre-wrap;
   margin: 12px 0;
 }
-.message-content h3 {
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4 {
   font-size: 15px;
   font-weight: 600;
+  margin: 18px 0 6px;
 }
-.message-content ul {
-  padding-left: 20px;
+.message-content h1 {
+  font-size: 17px;
 }
-.message-content p code {
+.message-content ul,
+.message-content ol {
+  padding-left: 22px;
+  margin: 8px 0 12px;
+}
+.message-content li > p {
+  margin: 0;
+}
+.message-content li + li {
+  margin-top: 2px;
+}
+.message-content blockquote {
+  margin: 12px 0;
+  padding: 2px 14px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+.message-content a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.message-content hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 18px 0;
+}
+.message-table {
+  overflow-x: auto;
+  margin: 12px 0;
+}
+.message-content table {
+  border-collapse: collapse;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.message-content th,
+.message-content td {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.message-content th {
+  background: var(--surface);
+  font-weight: 600;
+}
+.message-content :not(pre) > code {
   font: 12px var(--font-code);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1418,6 +1519,7 @@
   font-size: 11px;
   padding: 4px 8px;
 }
+.desktop-app .msg .message-code pre,
 .desktop-app .message-code pre {
   font: 12px/1.8 var(--font-code);
   padding: 16px;
@@ -1633,6 +1735,174 @@
     outline-color: Highlight;
   }
 }
+.tool-call summary code {
+  font: 11px var(--font-code);
+  color: var(--text);
+}
+
+/* Transcript conventions shared with Claude Code and Codex desktop: the
+   user's turn is a compact bubble on the right, tool calls are one muted
+   line, and timestamps appear on hover instead of under every entry. */
+.desktop-app .stream > .msg.user {
+  align-self: flex-end;
+  max-width: min(78%, 640px);
+  background: var(--pale);
+  border: 0;
+  border-radius: 18px 18px 4px 18px;
+  padding: 10px 16px;
+}
+.desktop-app .msg.user .role {
+  display: none;
+}
+.desktop-app .msg.user pre {
+  margin: 0;
+}
+.desktop-app .stream > .msg.tool,
+.desktop-app .work-group > .msg.tool {
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+}
+/* Inside folded steps each step is one line: no footer, no gaps. */
+.desktop-app .work-group > .msg {
+  margin: 0;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.desktop-app .work-group > .msg .msg-footer {
+  display: none;
+}
+.desktop-app .msg.tool .role {
+  display: none;
+}
+.desktop-app .msg .msg-footer {
+  min-height: 16px;
+}
+.desktop-app .msg .msg-footer .ts {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.desktop-app .msg:hover .msg-footer .ts,
+.desktop-app .msg:focus-within .msg-footer .ts {
+  opacity: 1;
+}
+.desktop-app .msg.user .msg-footer {
+  justify-content: flex-end;
+}
+
+.welcome-draft .welcome-send {
+  margin-left: auto;
+  background: var(--blue);
+  color: #fff;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+.welcome-draft .welcome-send:hover:not(:disabled) {
+  background: var(--blue-hover);
+}
+.welcome-draft .welcome-send:disabled {
+  opacity: 0.45;
+}
+/* Text first, action below: side by side, the button took half the card and
+   squeezed the explanation to one word per line. */
+.destination-page .connector-session-apply {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.destination-page .connector-session-apply p {
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+.destination-page .connector-session-apply button {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 7px 14px;
+  background: var(--bg);
+  font-size: 12px;
+}
+/* The welcome column is centred; the worktree option reads as a form row. */
+.welcome-worktree span {
+  text-align: left;
+}
+/* The chevron stays at the right edge whether or not a folder is shown. */
+.project-trigger .project-chevron {
+  margin-left: auto;
+}
+/* A tool call still running shows it, instead of a silent summary line. */
+.desktop-app .msg.tool[data-open="true"] > pre::after {
+  content: " · running…";
+  color: var(--muted);
+  animation: stream-health-pulse 1.5s ease-in-out infinite;
+}
+/* System notes ("Turn queued…", "Stopped") are one muted line, not a boxed
+   "Information" card competing with the conversation. */
+.desktop-app .stream > .msg.system {
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+}
+.desktop-app .msg.system > .role {
+  display: none;
+}
+.desktop-app .msg.system > pre {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+/* Computer use and Memory read as settings sections, not floating cards. */
+.settings-extra > * {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  padding: 24px 0;
+}
+/* Context usage beside the model picker (Claude Code places it there). */
+.context-meter {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 5px 10px;
+  margin-left: 6px;
+  background: transparent;
+}
+.context-meter:hover:not(:disabled) {
+  color: var(--text);
+}
+.context-meter[data-pressure="high"] {
+  color: var(--warning, #d89024);
+  border-color: currentColor;
+}
+/* In-app browser laid out like one: tab strip, toolbar, full-height page. */
+.browser { display: flex; flex-direction: column; height: 100%; min-height: 0; margin: -16px; }
+.browser-tabstrip { display: flex; align-items: flex-end; gap: 2px; padding: 6px 8px 0; background: var(--surface); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.browser-tab { display: flex; align-items: center; max-width: 180px; min-width: 0; border-radius: 8px 8px 0 0; padding: 0 4px 0 10px; color: var(--muted); }
+.browser-tab[data-active="true"] { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-bottom-color: var(--bg); margin-bottom: -1px; }
+.browser-tab-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding: 7px 4px; text-align: left; }
+.browser-tab-close, .browser-tab-new { width: 22px; height: 22px; border-radius: 6px; font-size: 13px; color: var(--muted); }
+.browser-tab-new { margin: 0 0 4px 4px; }
+.browser-toolbar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.browser-toolbar > button { width: 28px; height: 28px; border-radius: 7px; font-size: 14px; color: var(--text); }
+.browser-toolbar > button:disabled { color: var(--muted); opacity: 0.5; }
+.browser-toolbar > button:hover:not(:disabled) { background: var(--surface); }
+.browser-address { flex: 1; min-width: 0; height: 30px; border-radius: 15px; border: 1px solid var(--line); background: var(--surface); padding: 0 12px; font-size: 12px; color: var(--text); }
+.browser-address:focus { outline: 2px solid var(--blue); outline-offset: -1px; background: var(--bg); }
+.browser-notice { margin: 0; padding: 6px 12px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.browser-viewport { flex: 1; min-height: 0; background: #fff; }
+.browser-viewport iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+.browser-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 24px; text-align: center; font-size: 13px; background: var(--bg); }
+.browser-empty p { margin: 0; }
 
 /* macOS first run: install the Muse CLI (no bundled engine). */
 .muse-setup {

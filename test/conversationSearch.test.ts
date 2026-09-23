@@ -23,3 +23,16 @@ test("searchConversations returns all sessions for an empty query", () => {
     ["one", "two"],
   );
 });
+
+test("searchConversations lists the most recently active conversation first", () => {
+  const dated = [
+    { session_id: "old", title: "Old", workspace: "C:/w", createdAt: 1 },
+    { session_id: "fresh", title: "Fresh", workspace: "C:/w", createdAt: 2 },
+    { session_id: "busy", title: "Busy", workspace: "C:/w", createdAt: 0 },
+  ];
+  const logs = { busy: [{ text: "latest message", ts: 9 }] };
+  assert.deepEqual(
+    searchConversations(dated, logs, "").map((hit) => hit.session.session_id),
+    ["busy", "fresh", "old"],
+  );
+});

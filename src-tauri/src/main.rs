@@ -24,13 +24,11 @@ mod resume;
 mod git;
 mod terminal;
 mod files;
-mod artifact_export;
 mod output_export;
 mod browser_download;
 #[cfg(target_os = "macos")]
 mod login_env;
 mod muse_install;
-mod setup;
 mod mcp;
 mod mcp_package;
 mod secret_store;
@@ -45,9 +43,7 @@ mod scheduler_schedules;
 mod scheduler_wakeup;
 mod notification_ledger;
 mod outbox_ledger;
-mod desktop_control;
 mod workspace_watch;
-mod writer_lock;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -103,6 +99,20 @@ pub struct SessionMeta {
     /// `Run in Muse` used to fail after the user had already clicked it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub loaded: Option<bool>,
+    /// Title the host keeps for the conversation (`session/list`,
+    /// `session/read`). Without it a restored or resumed row stayed "New
+    /// conversation" or "Session 01a0…" while the host knew it as "yo".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+/// Host title, trimmed, without control characters (a live title carried a
+/// trailing NUL), and bounded for the sidebar.
+fn session_title(session: &Value) -> Option<String> {
+    let raw = session.get("title").and_then(Value::as_str)?;
+    let clean: String = raw.chars().filter(|c| !c.is_control()).collect();
+    let clean = clean.trim();
+    (!clean.is_empty()).then(|| truncate(clean, 200))
 }
 
 /// Sandbox posture selected when a workspace-owned Muse host is spawned.
@@ -407,10 +417,6 @@ struct AppState {
     /// Capabilities are fixed for a connection lifetime and never inferred
     /// from the renderer's authorization posture.
     host_capabilities: Mutex<HashMap<PathBuf, Vec<String>>>,
-    /// Volatile native gate for computer-use actions. The renderer owns the
-    /// persisted product preference; this flag is reset on launch and must be
-    /// explicitly synchronized by the current webview before any action.
-    desktop_control_allowed: Mutex<bool>,
     approvals: Mutex<HashMap<(String, String), PendingApproval>>,
     /// (session_id, item_id) -> MSP item kind (`agentMessage`, `subagent`,
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
@@ -449,9 +455,6 @@ struct AppState {
     /// Process-level scheduler lease. The open native file handle makes the
     /// claim exclusive across separately launched app processes.
     scheduler_lease: Mutex<Option<scheduler::NativeLease>>,
-    /// Cross-process writer target leases. Handles stay open for the lease
-    /// lifetime so OS advisory locks release after a crashed process.
-    writer_locks: writer_lock::Registry,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -903,7 +906,51 @@ fn completed_item_text(item: &Value, kind: &str) -> Option<String> {
             .or_else(|| text("message"))
             .or_else(|| text("fallbackText"));
     }
+    if kind.eq_ignore_ascii_case("toolCall") {
+        // Joined under the one-line summary sent with `item_started` (the
+        // `shell_output` lane adds the line break), like the history entries.
+        return text("visibleOutput").map(|output| output.trim_end().to_string());
+    }
     None
+}
+
+/// One line naming what a tool call does, for the transcript while it runs.
+/// Measured on Muse 1.3: `toolCall` items carry `tool` ("powershell") and
+/// `args`, a JSON string with `description` and/or `command`/`path`; nothing
+/// was shown for them before, so a hung command read as "thinking…".
+fn tool_call_summary(item: &Value) -> Option<String> {
+    let tool = item.get("tool").and_then(Value::as_str)?.trim();
+    let args: Value = item
+        .get("args")
+        .and_then(Value::as_str)
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .unwrap_or(Value::Null);
+    let detail = ["description", "command", "path", "pattern", "query", "name", "aumid", "key", "text"]
+        .iter()
+        .find_map(|key| args.get(*key).and_then(Value::as_str))
+        .map(|value| value.split_whitespace().collect::<Vec<_>>().join(" "))
+        .or_else(|| match (args["x"].as_f64(), args["y"].as_f64()) {
+            (Some(x), Some(y)) => Some(format!("at ({x:.0}, {y:.0})")),
+            _ => args["element_index"].as_u64().map(|index| format!("element {index}")),
+        });
+    let tool = tool_label(tool);
+    let line = match detail {
+        Some(detail) if !detail.is_empty() => format!("{tool} · {detail}"),
+        _ => tool.to_string(),
+    };
+    (!line.is_empty()).then(|| truncate(&line, 200))
+}
+
+/// An MCP tool's wire name, readable: `mcp__computer_use__press_key` becomes
+/// `Computer use · press key`. Built-in tool names are left as they are.
+fn tool_label(tool: &str) -> String {
+    let Some((server, name)) = tool.strip_prefix("mcp__").and_then(|rest| rest.split_once("__")) else {
+        return tool.to_string();
+    };
+    let server = server.replace('_', " ");
+    let mut chars = server.chars();
+    let server: String = chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default();
+    format!("{server} · {}", name.replace('_', " "))
 }
 
 const MAX_OUTPUT_REF_CHARS: usize = 4096;
@@ -1083,6 +1130,20 @@ fn completion_preview_at(value: &Value, depth: u8) -> Option<String> {
     }
 }
 
+/// `session/list` is global to the Muse home: it returns the conversations of
+/// every workspace, not only the host's (measured: 66 rows over 16 folders).
+/// A row belongs to this host only when its `workspaceRoot` resolves to the
+/// same folder; otherwise restore attached other projects' conversations to
+/// this one. Rows without a workspace keep the legacy behaviour.
+fn listed_in_workspace(root: &Path, session: &Value) -> bool {
+    let Some(raw) = session.get("workspaceRoot").and_then(Value::as_str) else {
+        return true;
+    };
+    resume::host_path(raw)
+        .canonicalize()
+        .is_ok_and(|listed| listed == root)
+}
+
 fn session_meta_from_list_row(
     root: &Path,
     session: &Value,
@@ -1104,6 +1165,7 @@ fn session_meta_from_list_row(
         granted_capabilities,
         model_id: session_model_id(session),
         loaded: session_loaded(session),
+        title: session_title(session),
     })
 }
 
@@ -1287,6 +1349,7 @@ fn apply_resumed_session(meta: &mut SessionMeta, session: &Value) {
     meta.approval_mode = session_approval_mode(session).or_else(|| meta.approval_mode.clone());
     meta.model_id = session_model_id(session).or_else(|| meta.model_id.clone());
     meta.loaded = session_loaded(session).or(meta.loaded);
+    meta.title = session_title(session).or_else(|| meta.title.take());
 }
 
 fn push_event(state: &AppState, session_id: &str, kind: &str, payload: String) {
@@ -1376,7 +1439,7 @@ async fn ensure_host(
                 "initialize",
                 json!({
                     "clientInfo": {"name": "muse_desktop", "version": "0.1.0"},
-                    "capabilities": {"requestedCapabilities": ["userShell"]},
+                    "capabilities": {"requestedCapabilities": ["userShell", "sessionMcp"]},
                 }),
             )
             .await?;
@@ -1478,35 +1541,74 @@ async fn restart_host(
         });
     };
 
+    let session_ids = retire_host(
+        &app,
+        &state,
+        &root,
+        &old_client,
+        "Muse host restarted; reconnect the conversation to continue.",
+    )
+    .await?;
+    // `ensure_host` owns the creation mutex. Do not hold a lock across this
+    // await: the old client is fully detached above, so a concurrent start is
+    // safe and the winner's posture becomes the process-level authority.
+    ensure_host(
+        &app,
+        &state,
+        &root,
+        sandbox_mode.as_deref(),
+        sandbox_disable_write,
+        sandbox_disable_shell,
+    )
+    .await?;
+    let applied = state
+        .host_sandbox
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&root)
+        .cloned();
+    if applied.as_ref() != Some(&requested_policy) {
+        return Err("workspace host posture changed concurrently; retry the restart".into());
+    }
+    Ok(HostRestartResult {
+        workspace: root.display().to_string(),
+        restarted: true,
+        disconnected_sessions: session_ids.len(),
+    })
+}
+
+/// Detach a workspace host from every route, tell its conversations they
+/// are disconnected, and stop the process. Returns the detached session ids.
+async fn retire_host(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    root: &PathBuf,
+    old_client: &std::sync::Arc<MspClient>,
+    message: &str,
+) -> Result<Vec<String>, String> {
     let session_ids = state
         .hosts
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
-        .remove(&old_client);
+        .remove(old_client);
 
     // Retire volatile host facts before spawning the replacement. The new
     // handshake repopulates durability, capabilities and sandbox posture;
     // keeping stale values here would make the renderer claim a grant from a
     // process that no longer exists.
     if let Ok(mut sandbox) = state.host_sandbox.lock() {
-        sandbox.remove(&root);
+        sandbox.remove(root);
     }
     if let Ok(mut durability) = state.host_durability.lock() {
-        durability.remove(&root);
+        durability.remove(root);
     }
     if let Ok(mut capabilities) = state.host_capabilities.lock() {
-        capabilities.remove(&root);
+        capabilities.remove(root);
     }
 
     for session_id in &session_ids {
-        mark_running(&state, session_id, false);
-        emit(
-            &app,
-            "status",
-            session_id,
-            "host_exited",
-            "Muse host restarted; reconnect the conversation to continue.".to_string(),
-        );
+        mark_running(state, session_id, false);
+        emit(app, "status", session_id, "host_exited", message.to_string());
     }
 
     // Pending approvals and item tables belong to the old process. The
@@ -1535,32 +1637,57 @@ async fn restart_host(
     }
 
     old_client.shutdown().await;
-    // `ensure_host` owns the creation mutex. Do not hold a lock across this
-    // await: the old client is fully detached above, so a concurrent start is
-    // safe and the winner's posture becomes the process-level authority.
-    ensure_host(
-        &app,
-        &state,
-        &root,
-        sandbox_mode.as_deref(),
-        sandbox_disable_write,
-        sandbox_disable_shell,
-    )
-    .await?;
-    let applied = state
-        .host_sandbox
+    Ok(session_ids)
+}
+
+/// A Muse 1.3 host keeps at most 32 sessions loaded and never unloads an idle
+/// one, and MSP has no client unload (measured: 32 idle sessions, half of them
+/// unsubscribed, still loaded after six minutes; the 33rd start is refused
+/// with this error). Only a new process frees them.
+fn is_host_full(error: &str) -> bool {
+    error.contains("-32030") && error.contains("runtime_busy")
+}
+
+/// Sent with `host_exited` when a full host is replaced. The renderer matches
+/// it to reconnect these conversations silently when they are opened again.
+const HOST_RECYCLED_MESSAGE: &str =
+    "Muse closed this conversation to make room for another. It reconnects when you open it.";
+
+/// Replace a full workspace host with a fresh process, so the number of
+/// conversations a user keeps is not bounded by what one host can load.
+/// Refused while any of its conversations is working: that would kill the turn.
+async fn recycle_full_host(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    root: &PathBuf,
+    sandbox_mode: Option<&str>,
+    sandbox_disable_write: Option<bool>,
+    sandbox_disable_shell: Option<bool>,
+) -> Result<std::sync::Arc<MspClient>, String> {
+    let old_client = state
+        .hosts
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
-        .get(&root)
-        .cloned();
-    if applied.as_ref() != Some(&requested_policy) {
-        return Err("workspace host posture changed concurrently; retry the restart".into());
+        .workspace(root);
+    if let Some(old_client) = old_client {
+        let running = state
+            .sessions
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .iter()
+            .filter(|(_, meta)| meta.running)
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+        let busy = {
+            let hosts = state.hosts.lock().map_err(|e| format!("state lock: {e}"))?;
+            running.iter().any(|id| hosts.owns(id, &old_client))
+        };
+        if busy {
+            return Err("Muse already has 32 conversations open in this folder and one of them is still working. Try again when it finishes.".into());
+        }
+        retire_host(app, state, root, &old_client, HOST_RECYCLED_MESSAGE).await?;
     }
-    Ok(HostRestartResult {
-        workspace: root.display().to_string(),
-        restarted: true,
-        disconnected_sessions: session_ids.len(),
-    })
+    ensure_host(app, state, root, sandbox_mode, sandbox_disable_write, sandbox_disable_shell).await
 }
 
 fn tail_of(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>) -> String {
@@ -1954,6 +2081,7 @@ where
                         "itemId": item_id,
                         "itemKind": kind,
                         "commandText": item.get("commandText"),
+                        "toolSummary": tool_call_summary(item),
                         "outputRef": item_output_ref(item),
                         "richContent": item_rich_content(item),
                         "turnId": item.get("turnId"),
@@ -2142,7 +2270,7 @@ where
                         } else if let Some(text) = fallback_text.as_deref() {
                             let lane = if is_thinking_item_kind(kind) {
                                 "thinking"
-                            } else if kind.eq_ignore_ascii_case("usershell") {
+                            } else if kind.eq_ignore_ascii_case("usershell") || kind.eq_ignore_ascii_case("toolCall") {
                                 "shell_output"
                             } else {
                                 "output"
@@ -2179,6 +2307,7 @@ where
                                 "itemId": item_id,
                                 "itemKind": kind,
                                 "commandText": item.and_then(|i| i.get("commandText")),
+                                "toolSummary": item.and_then(tool_call_summary),
                                 "outputRef": output_ref,
                                 "richContent": item.and_then(item_rich_content),
                                 "turnId": turn_id,
@@ -2210,7 +2339,7 @@ where
                         } else if let Some(text) = fallback_text {
                             let lane = if is_thinking_item_kind(kind) {
                                 "thinking"
-                            } else if kind.eq_ignore_ascii_case("usershell") {
+                            } else if kind.eq_ignore_ascii_case("usershell") || kind.eq_ignore_ascii_case("toolCall") {
                                 "shell_output"
                             } else {
                                 "output"
@@ -2559,27 +2688,6 @@ fn workspace_for_inspection(state: &State<'_, AppState>, session_id: &str) -> Re
         .ok_or_else(|| "conversation workspace is unavailable".to_string())
 }
 
-/// Count renderer-visible sessions whose native workspace is this managed
-/// checkout. Cleanup treats an attached conversation as a live reference even
-/// when its current turn is idle: the session can still issue a new turn and
-/// the host process keeps the checkout as its working directory.
-fn attached_sessions_for_worktree(state: &AppState, path: &str) -> usize {
-    let Ok(candidate) = Path::new(path).canonicalize() else {
-        return 0;
-    };
-    let Ok(sessions) = state.sessions.lock() else {
-        return 0;
-    };
-    sessions
-        .values()
-        .filter(|session| {
-            Path::new(&session.workspace)
-                .canonicalize()
-                .map(|workspace| workspace == candidate)
-                .unwrap_or(false)
-        })
-        .count()
-}
 
 /// Read the real Git state for the workspace owned by this conversation.
 /// Git runs off the UI thread and only receives an absolute, canonicalized
@@ -3077,24 +3185,6 @@ async fn git_create_pr(
         .map_err(|e| format!("pull request task failed: {e}"))?
 }
 
-/// Create a real Git worktree below the conversation workspace. The caller
-/// supplies an explicit branch, base ref and relative `.muse/worktrees/` path;
-/// the Git service validates all three before running off the UI thread.
-#[tauri::command]
-async fn git_worktree_create(
-    state: State<'_, AppState>,
-    session_id: String,
-    branch: String,
-    relative_path: String,
-    base_ref: String,
-) -> Result<git::GitWorktreeResult, String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    tokio::task::spawn_blocking(move || {
-        git::create_worktree(&root, &branch, &relative_path, &base_ref)
-    })
-    .await
-    .map_err(|e| format!("worktree create task failed: {e}"))?
-}
 
 /// Create a worktree for a conversation that does not exist yet.
 ///
@@ -3131,179 +3221,13 @@ async fn git_worktree_create_for_workspace(
     Ok(result)
 }
 
-/// Remove a managed worktree after the user confirms the destructive action.
-#[tauri::command]
-async fn git_worktree_remove(
-    state: State<'_, AppState>,
-    session_id: String,
-    path: String,
-) -> Result<(), String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    let attached = attached_sessions_for_worktree(state.inner(), &path);
-    if attached > 0 {
-        return Err(format!(
-            "worktree has {attached} Muse conversation(s) attached; close them before removal"
-        ));
-    }
-    tokio::task::spawn_blocking(move || git::remove_worktree(&root, &path))
-        .await
-        .map_err(|e| format!("worktree remove task failed: {e}"))?
-}
 
-/// Inspect a managed worktree before cleanup or a handoff decision.
-#[tauri::command]
-async fn git_worktree_inspect(
-    state: State<'_, AppState>,
-    session_id: String,
-    path: String,
-) -> Result<git::GitWorktreeInspection, String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    let inspected_path = path.clone();
-    let mut inspection = tokio::task::spawn_blocking(move || git::inspect_worktree(&root, &path))
-        .await
-        .map_err(|e| format!("worktree inspect task failed: {e}"))??;
-    inspection.attached_session_count = attached_sessions_for_worktree(state.inner(), &inspected_path);
-    Ok(inspection)
-}
 
-/// Acquire OS advisory locks for all declared writer target paths. This guard
-/// complements the renderer lease and protects two Muse processes from
-/// dispatching overlapping writers in the same workspace.
-#[tauri::command]
-fn writer_lock_acquire(
-    state: State<'_, AppState>,
-    workspace: String,
-    agent: String,
-    target_paths: Vec<String>,
-    owner_id: String,
-) -> Result<writer_lock::AcquireResponse, String> {
-    writer_lock::acquire(&state.writer_locks, &workspace, &agent, &target_paths, &owner_id)
-}
 
-/// Release one writer lease. Releasing an unknown token is idempotent.
-#[tauri::command]
-fn writer_lock_release(state: State<'_, AppState>, token: String) -> Result<bool, String> {
-    writer_lock::release(&state.writer_locks, &token)
-}
 
-/// Run an explicitly requested setup command in a managed worktree. The
-/// command is bounded and never started by project import or app startup.
-#[tauri::command]
-async fn worktree_setup_run(
-    state: State<'_, AppState>,
-    session_id: String,
-    path: String,
-    command: String,
-    operation_id: String,
-    env_allowlist: Vec<String>,
-) -> Result<setup::SetupResult, String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    let key = (session_id, operation_id);
-    let cancel = Arc::new(AtomicBool::new(false));
-    state
-        .setup_cancellations
-        .lock()
-        .map_err(|_| "setup cancellation registry is unavailable".to_string())?
-        .insert(key.clone(), cancel.clone());
-    let joined = tokio::task::spawn_blocking(move || {
-        setup::run_with_cancel_and_env(&root, &path, &command, &env_allowlist, Some(cancel))
-    })
-    .await;
-    if let Ok(mut active) = state.setup_cancellations.lock() {
-        active.remove(&key);
-    }
-    joined.map_err(|e| format!("worktree setup task failed: {e}"))?
-}
 
-/// Create a managed worktree and start its conversation as one guarded
-/// operation. If session admission fails, remove the newly-created checkout
-/// before returning the error so the UI never advertises a half-created lane.
-#[tauri::command]
-async fn git_worktree_create_session(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    session_id: String,
-    branch: String,
-    relative_path: String,
-    base_ref: String,
-    authorization_mode: Option<String>,
-    sandbox_mode: Option<String>,
-    sandbox_disable_write: Option<bool>,
-    sandbox_disable_shell: Option<bool>,
-    mcp_servers: Option<Value>,
-) -> Result<WorktreeSessionResult, String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    let created = tokio::task::spawn_blocking({
-        let root = root.clone();
-        let branch = branch.clone();
-        let relative_path = relative_path.clone();
-        let base_ref = base_ref.clone();
-        move || git::create_worktree(&root, &branch, &relative_path, &base_ref)
-    })
-    .await
-    .map_err(|e| format!("git worktree create task failed: {e}"))??;
-    let child_root = PathBuf::from(&created.path);
-    match start_session_at_workspace(
-        app,
-        state,
-        child_root,
-        authorization_mode,
-        sandbox_mode,
-        sandbox_disable_write,
-        sandbox_disable_shell,
-        mcp_servers,
-    ).await {
-        Ok(session) => Ok(WorktreeSessionResult {
-            worktree: created,
-            session,
-        }),
-        Err(error) => {
-            let cleanup_path = created.path.clone();
-            let cleanup = tokio::task::spawn_blocking(move || git::remove_worktree(&root, &cleanup_path)).await;
-            let detail = match cleanup {
-                Ok(Ok(())) => error,
-                Ok(Err(cleanup_error)) => format!("{error}; worktree cleanup failed: {cleanup_error}"),
-                Err(join_error) => format!("{error}; worktree cleanup task failed: {join_error}"),
-            };
-            Err(format!("could not open conversation in worktree: {detail}"))
-        }
-    }
-}
 
-/// Inspect a managed worktree and its locally available project tools without
-/// executing project code. This gives the UI a conservative pre-flight state
-/// before a user chooses to run setup.
-#[tauri::command]
-async fn worktree_setup_readiness(
-    state: State<'_, AppState>,
-    session_id: String,
-    path: String,
-) -> Result<setup::ReadinessResult, String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    tokio::task::spawn_blocking(move || setup::readiness(&root, &path))
-        .await
-        .map_err(|e| format!("worktree readiness task failed: {e}"))?
-}
 
-/// Request cancellation of one running setup command. The process is killed
-/// by the setup worker, so this call stays non-blocking for the renderer.
-#[tauri::command]
-fn worktree_setup_cancel(
-    state: State<'_, AppState>,
-    session_id: String,
-    operation_id: String,
-) -> Result<bool, String> {
-    let active = state
-        .setup_cancellations
-        .lock()
-        .map_err(|_| "setup cancellation registry is unavailable".to_string())?;
-    if let Some(flag) = active.get(&(session_id, operation_id)) {
-        flag.store(true, Ordering::Relaxed);
-        Ok(true)
-    } else {
-        Ok(false)
-    }
-}
 
 /// Probe an explicitly configured local MCP server with initialize + tools/list.
 #[tauri::command]
@@ -3776,16 +3700,6 @@ async fn file_open(
         .map_err(|e| format!("could not open workspace path: {e}"))
 }
 
-/// Write one explicitly selected artifact to a local UTF-8 file. The save
-/// destination comes from the platform dialog; the backend still validates it
-/// and bounds the payload before writing.
-#[tauri::command]
-async fn artifact_export(path: String, content: String) -> Result<(), String> {
-    let target = PathBuf::from(path.trim());
-    tokio::task::spawn_blocking(move || artifact_export::write_text(&target, &content))
-        .await
-        .map_err(|e| format!("artifact export task failed: {e}"))?
-}
 
 /// Write an explicitly selected same-origin browser download after the
 /// renderer has shown a native save dialog. The payload is bounded and
@@ -3810,13 +3724,6 @@ async fn browser_download_fetch(
     browser_download::fetch_same_origin(&page_url, &target_url).await
 }
 
-/// Report whether this build has an OS-backed desktop-control runtime. The
-/// renderer still requires an explicit per-app consent row before calling any
-/// mutating command; this status only describes platform capability.
-#[tauri::command]
-fn desktop_control_status() -> desktop_control::DesktopControlStatus {
-    desktop_control::status()
-}
 
 /// Write one explicitly selected completed host output to a local binary file.
 /// The renderer obtains the destination from the native save dialog; the
@@ -3829,112 +3736,13 @@ async fn output_export(path: String, data: String) -> Result<(), String> {
         .map_err(|e| format!("output export task failed: {e}"))?
 }
 
-fn require_desktop_control_permission(allowed: bool) -> Result<(), String> {
-    if allowed {
-        Ok(())
-    } else {
-        Err("desktop control requires explicit Allow desktop control consent".to_string())
-    }
-}
 
-/// Synchronize the renderer's persisted checkbox into a volatile native gate.
-/// The value is intentionally not persisted here: reopening the app requires
-/// the current webview to reassert consent before input can be injected.
-#[tauri::command]
-fn set_desktop_control_permission(
-    state: State<'_, AppState>,
-    allowed: bool,
-) -> Result<(), String> {
-    *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())? = allowed;
-    Ok(())
-}
 
-/// Enumerate visible, titled top-level windows. The result is read-only and
-/// bounded by the native module; no process command line or document content
-/// is exposed to the renderer.
-#[tauri::command]
-fn desktop_windows() -> Result<Vec<desktop_control::DesktopWindow>, String> {
-    desktop_control::windows()
-}
 
-/// Read a bounded snapshot of visible child controls for one observed window.
-/// The snapshot is descriptive only; it never grants the host an input path.
-#[tauri::command]
-fn desktop_window_elements(
-    state: State<'_, AppState>,
-    window_id: String,
-) -> Result<Vec<desktop_control::DesktopElement>, String> {
-    let allowed = *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
-    require_desktop_control_permission(allowed)?;
-    desktop_control::elements(&window_id)
-}
 
-#[tauri::command]
-fn desktop_focus_window(state: State<'_, AppState>, window_id: String) -> Result<(), String> {
-    let allowed = *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
-    require_desktop_control_permission(allowed)?;
-    desktop_control::focus(&window_id)
-}
 
-#[tauri::command]
-fn desktop_send_text(
-    state: State<'_, AppState>,
-    window_id: String,
-    text: String,
-) -> Result<usize, String> {
-    let allowed = *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
-    require_desktop_control_permission(allowed)?;
-    if text.chars().count() > desktop_control::MAX_TEXT_CHARS {
-        return Err(format!(
-            "desktop text is limited to {} characters",
-            desktop_control::MAX_TEXT_CHARS
-        ));
-    }
-    desktop_control::send_text(&window_id, &text)
-}
 
-#[tauri::command]
-fn desktop_press_key(
-    state: State<'_, AppState>,
-    window_id: String,
-    key: String,
-) -> Result<(), String> {
-    let allowed = *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
-    require_desktop_control_permission(allowed)?;
-    let parsed = desktop_control::DesktopKey::parse(&key)
-        .ok_or_else(|| "unsupported desktop key".to_string())?;
-    desktop_control::press_key(&window_id, parsed)
-}
 
-#[tauri::command]
-fn desktop_click(
-    state: State<'_, AppState>,
-    window_id: String,
-    x: i32,
-    y: i32,
-) -> Result<(), String> {
-    let allowed = *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
-    require_desktop_control_permission(allowed)?;
-    desktop_control::click(&window_id, x, y)
-}
 
 /// Probe local prerequisites for the first-launch recovery screen. This is a
 /// read-only, bounded check: it never starts a sidecar or changes WSL/Muse.
@@ -4234,7 +4042,20 @@ fn mcp_session_config(value: Option<Value>) -> Result<Option<Value>, String> {
             other => return Err(format!("mcpServers[{index}] has unsupported transport {other:?}")),
         }
     }
-    Ok(Some(json!({"mcpServers": servers})))
+    // MSP `SessionConfig.mcpServers` is an object keyed by server name, not an
+    // array: an array was rejected with "mcpServers does not match the
+    // supported shape", so no session could start while computer use was on.
+    let mut named = serde_json::Map::new();
+    for (index, server) in servers.iter().enumerate() {
+        let mut entry = server.as_object().cloned().unwrap_or_default();
+        let name = entry
+            .remove("name")
+            .and_then(|name| name.as_str().map(str::trim).map(str::to_string))
+            .filter(|name| !name.is_empty() && !named.contains_key(name))
+            .unwrap_or_else(|| format!("mcp-{}", index + 1));
+        named.insert(name, Value::Object(entry));
+    }
+    Ok(Some(json!({"mcpServers": named})))
 }
 
 async fn start_session_at_workspace(
@@ -4247,7 +4068,7 @@ async fn start_session_at_workspace(
     sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
-    let client = ensure_host(
+    let mut client = ensure_host(
         &app,
         &state,
         &root,
@@ -4267,7 +4088,21 @@ async fn start_session_at_workspace(
     if let Some(config) = mcp_session_config(mcp_servers)? {
         params["config"] = config;
     }
-    let res = request_session_start(&client, params, authorization_mode.as_deref()).await?;
+    let res = match request_session_start(&client, params.clone(), authorization_mode.as_deref()).await {
+        Err(error) if is_host_full(&error) => {
+            client = recycle_full_host(
+                &app,
+                &state,
+                &root,
+                sandbox_mode.as_deref(),
+                sandbox_disable_write,
+                sandbox_disable_shell,
+            )
+            .await?;
+            request_session_start(&client, params, authorization_mode.as_deref()).await?
+        }
+        other => other?,
+    };
     let session = res.get("session").ok_or("session/start: no session in response")?;
     let session_id = session
         .get("sessionId")
@@ -4293,6 +4128,7 @@ async fn start_session_at_workspace(
         granted_capabilities,
         model_id: session_model_id(session),
         loaded: session_loaded(session),
+        title: None,
     };
     state
         .sessions
@@ -4431,6 +4267,7 @@ async fn fork_session(
         granted_capabilities: session_granted_capabilities(&state, &root)?,
         model_id: session_model_id(session),
         loaded: session_loaded(session),
+        title: None,
     };
     state
         .sessions
@@ -4517,6 +4354,7 @@ async fn resume_session_with_client(
             .get("session")
             .and_then(session_loaded)
             .or_else(|| session_loaded(&read)),
+        title: read.get("session").and_then(session_title),
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     if let Err(error) = state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client) {
@@ -4575,7 +4413,21 @@ async fn resume_session_inner(
         sandbox_disable_write,
         sandbox_disable_shell,
     ).await?;
-    resume_session_with_client(state, client, root, session_id, mcp_servers).await
+    match resume_session_with_client(state, client, root.clone(), session_id.clone(), mcp_servers.clone()).await {
+        Err(error) if is_host_full(&error) => {
+            let client = recycle_full_host(
+                app,
+                state,
+                &root,
+                sandbox_mode.as_deref(),
+                sandbox_disable_write,
+                sandbox_disable_shell,
+            )
+            .await?;
+            resume_session_with_client(state, client, root, session_id, mcp_servers).await
+        }
+        other => other,
+    }
 }
 
 #[tauri::command]
@@ -4807,7 +4659,7 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
                     else {
                         continue;
                     };
-                    if !seen_sessions.insert(sid.to_string()) {
+                    if !seen_sessions.insert(sid.to_string()) || !listed_in_workspace(&root, s) {
                         continue;
                     }
                     // A session listed by a workspace-owned host can be
@@ -5963,6 +5815,7 @@ mod tests {
                 model_id: None,
 
                 loaded: None,
+                title: None,
                 granted_capabilities: None,
             },
         );
@@ -5977,7 +5830,6 @@ mod tests {
             host_durability: Mutex::new(HashMap::new()),
             host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
-            desktop_control_allowed: Mutex::new(false),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -5992,7 +5844,6 @@ mod tests {
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             workspace_watchers: Mutex::new(HashMap::new()),
             scheduler_lease: Mutex::new(None),
-            writer_locks: writer_lock::Registry::default(),
         }
     }
 
@@ -6235,6 +6086,7 @@ mod tests {
                 model_id: None,
 
                 loaded: None,
+                title: None,
                 granted_capabilities: None,
             },
         );
@@ -6297,6 +6149,7 @@ mod tests {
                 model_id: None,
 
                 loaded: None,
+                title: None,
                 granted_capabilities: None,
             },
         );
@@ -6358,6 +6211,7 @@ mod tests {
                 model_id: None,
 
                 loaded: None,
+                title: None,
                 granted_capabilities: None,
             },
         );
@@ -8171,6 +8025,65 @@ mod tests {
     }
 
     #[test]
+    fn tool_calls_get_a_summary_line_then_their_output() {
+        // Shapes measured on a live Muse 1.3 host (`item/started`, `item/completed`).
+        let started = json!({
+            "kind": "toolCall", "tool": "powershell",
+            "args": "{\"command\":\"Get-ChildItem -Name\",\"description\":\"List directory names\"}"
+        });
+        assert_eq!(tool_call_summary(&started).as_deref(), Some("powershell · List directory names"));
+        let bare = json!({"kind": "toolCall", "tool": "read_file", "args": "{\"path\":\"src/a.ts\"}"});
+        assert_eq!(tool_call_summary(&bare).as_deref(), Some("read_file · src/a.ts"));
+        assert_eq!(tool_call_summary(&json!({"kind": "toolCall"})), None);
+        let mcp = |tool: &str, args: &str| tool_call_summary(&json!({"tool": tool, "args": args}));
+        assert_eq!(
+            mcp("mcp__computer_use__launch_app", "{\"name\":\"Calculator\"}").as_deref(),
+            Some("Computer use · launch app · Calculator")
+        );
+        assert_eq!(
+            mcp("mcp__computer_use__click", "{\"pid\":1,\"x\":265.0,\"y\":320.0}").as_deref(),
+            Some("Computer use · click · at (265, 320)")
+        );
+        assert_eq!(
+            mcp("mcp__computer_use__click", "{\"pid\":1,\"element_index\":28}").as_deref(),
+            Some("Computer use · click · element 28")
+        );
+        assert_eq!(mcp("mcp__computer_use__list_apps", "{}").as_deref(), Some("Computer use · list apps"));
+        let completed = json!({"kind": "toolCall", "tool": "powershell", "visibleOutput": "a.txt\r\n"});
+        assert_eq!(completed_item_text(&completed, "toolCall").as_deref(), Some("a.txt"));
+    }
+
+    #[test]
+    fn host_title_is_cleaned_and_absent_when_blank() {
+        assert_eq!(
+            session_title(&json!({"title": "Reply with exactly the word: PTY\u{0}"})).as_deref(),
+            Some("Reply with exactly the word: PTY")
+        );
+        assert_eq!(session_title(&json!({"title": "  "})), None);
+        assert_eq!(session_title(&json!({"sessionId": "x"})), None);
+    }
+
+    #[test]
+    fn restore_admits_only_rows_of_the_host_workspace() {
+        let root = std::env::current_dir().unwrap().canonicalize().unwrap();
+        let plain = rules::display_path(&root);
+        assert!(listed_in_workspace(&root, &json!({"workspaceRoot": root.display().to_string()})));
+        assert!(listed_in_workspace(&root, &json!({"workspaceRoot": plain})));
+        assert!(!listed_in_workspace(&root, &json!({"workspaceRoot": root.parent().unwrap()})));
+        assert!(!listed_in_workspace(&root, &json!({"workspaceRoot": "Z:\\no\\such\\folder"})));
+        assert!(listed_in_workspace(&root, &json!({"sessionId": "legacy"})));
+    }
+
+    #[test]
+    fn full_host_detection_matches_the_measured_capacity_error_only() {
+        assert!(is_host_full(
+            "could not reconnect conversation: MSP error -32030: host loaded-session capacity is exhausted [commandRejected] (runtime_busy) [retryable=true]"
+        ));
+        assert!(!is_host_full("MSP error -32030: command rejected [commandRejected] (approval_mode_ceiling)"));
+        assert!(!is_host_full("MSP error -32021: session is already in use"));
+    }
+
+    #[test]
     fn event_buffer_gap_is_reported_only_when_frames_were_dropped() {
         assert!(!event_buffer_gap(9, Some(10)));
         assert!(!event_buffer_gap(10, Some(10)));
@@ -8376,9 +8289,14 @@ mod tests {
         let config = mcp_session_config(Some(json!([
             {"transport": "stdio", "command": "node", "args": ["server.js"], "mode": "optional"}
         ]))).expect("valid MCP config");
-        assert_eq!(config, Some(json!({"mcpServers": [
-            {"transport": "stdio", "command": "node", "args": ["server.js"], "mode": "optional"}
-        ]})));
+        assert_eq!(config, Some(json!({"mcpServers": {
+            "mcp-1": {"transport": "stdio", "command": "node", "args": ["server.js"], "mode": "optional"}
+        }})));
+        let named = mcp_session_config(Some(json!([
+            {"name": "computer-use", "transport": "stdio", "command": "cua-driver"}
+        ]))).unwrap().unwrap();
+        assert_eq!(named["mcpServers"]["computer-use"]["command"], "cua-driver");
+        assert!(named["mcpServers"]["computer-use"].get("name").is_none());
     }
 
     #[test]
@@ -8690,6 +8608,7 @@ mod tests {
             granted_capabilities: Some(vec!["userShell".to_string()]),
             model_id: None,
             loaded: Some(false),
+            title: None,
         };
         apply_resumed_session(
             &mut meta,
@@ -8772,38 +8691,14 @@ mod tests {
         assert!(extract_subagent_meta(&json!({"kind": "subagent"})).is_none());
     }
 
-    #[test]
-    fn attached_worktree_sessions_are_counted_even_when_idle() {
-        let path = std::env::temp_dir().join(format!("muse-attached-{}", new_command_id()));
-        std::fs::create_dir_all(&path).unwrap();
-        let state = empty_state();
-        state.sessions.lock().unwrap().insert(
-            "session-attached".to_string(),
-            SessionMeta {
-                session_id: "session-attached".to_string(),
-                workspace: path.display().to_string(),
-                running: false,
-                session_durability: None,
-                approval_mode: None,
-                model_id: None,
 
-                loaded: None,
-                granted_capabilities: None,
-            },
-        );
-        assert_eq!(attached_sessions_for_worktree(&state, &path.display().to_string()), 1);
-        std::fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn desktop_control_gate_requires_explicit_consent() {
-        assert!(require_desktop_control_permission(true).is_ok());
-        let error = require_desktop_control_permission(false).unwrap_err();
-        assert!(error.contains("Allow desktop control"));
-    }
 }
 
 fn main() {
+    // The Muse host starts this executable as its computer-use MCP server.
+    if std::env::args().nth(1).as_deref() == Some(computer::RELAY_ARG) {
+        std::process::exit(computer::run_relay());
+    }
     #[cfg(target_os = "macos")]
     login_env::adopt_login_shell_path();
     tauri::Builder::default()
@@ -8818,7 +8713,6 @@ fn main() {
             host_durability: Mutex::new(HashMap::new()),
             host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
-            desktop_control_allowed: Mutex::new(false),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -8833,7 +8727,6 @@ fn main() {
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             workspace_watchers: Mutex::new(HashMap::new()),
             scheduler_lease: Mutex::new(None),
-            writer_locks: writer_lock::Registry::default(),
         })
         .invoke_handler(tauri::generate_handler![
             muse_cli_install_status,
@@ -8876,16 +8769,7 @@ fn main() {
             git_fetch,
             git_pull,
             git_create_pr,
-            git_worktree_create,
             git_worktree_create_for_workspace,
-            git_worktree_create_session,
-            git_worktree_remove,
-            git_worktree_inspect,
-            writer_lock_acquire,
-            writer_lock_release,
-            worktree_setup_run,
-            worktree_setup_readiness,
-            worktree_setup_cancel,
             mcp_local_probe,
             mcp_local_call,
             mcp_package_install,
@@ -8919,18 +8803,9 @@ fn main() {
             files_watch,
             files_unwatch,
             file_open,
-            artifact_export,
             output_export,
             browser_download_write,
             browser_download_fetch,
-            desktop_control_status,
-            set_desktop_control_permission,
-            desktop_windows,
-            desktop_window_elements,
-            desktop_focus_window,
-            desktop_send_text,
-            desktop_press_key,
-            desktop_click,
             probe_startup,
             list_models,
             set_model,
@@ -8987,7 +8862,6 @@ fn main() {
                         native.release();
                     }
                 };
-                writer_lock::release_all(&state.writer_locks);
             }
         });
 }

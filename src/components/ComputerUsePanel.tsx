@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   COMPUTER_LEVELS,
   DRIVER_HOME,
-  DRIVER_INSTALL_COMMAND,
+  driverInstallCommand,
   LEVEL_INFO,
   describeComputerUse,
   failedProbes,
@@ -58,7 +58,7 @@ export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisabl
           <button
             type="button"
             onClick={() => {
-              void navigator.clipboard?.writeText(DRIVER_INSTALL_COMMAND).then(
+              void navigator.clipboard?.writeText(driverInstallCommand()).then(
                 () => setCopied(true),
                 () => setCopied(false),
               );
@@ -70,7 +70,7 @@ export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisabl
             Check again
           </button>
         </div>
-        <code className="computer-use-command">{DRIVER_INSTALL_COMMAND}</code>
+        <code className="computer-use-command">{driverInstallCommand()}</code>
       </section>
     );
   }

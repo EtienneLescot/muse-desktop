@@ -83,10 +83,9 @@ console.log("\nverifications");
 check("le driver est trouve", before.available === true, String(before.driverPath));
 check("la version est lue", typeof before.driverVersion === "string", String(before.driverVersion));
 check(
-  "les trois niveaux grandissent",
+  "agir couvre plus qu observer",
   before.levelCounts.observe > 0 &&
-    before.levelCounts.observe < before.levelCounts.control &&
-    before.levelCounts.control < before.levelCounts.everything,
+    before.levelCounts.observe < before.levelCounts.act,
   JSON.stringify(before.levelCounts),
 );
 check(

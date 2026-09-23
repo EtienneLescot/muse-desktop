@@ -12,6 +12,7 @@ import {
 } from "../lib/projects";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
 import { userFacingError } from "../lib/errorCopy";
+import { displayPath } from "../lib/paths";
 import {
   buildTurnInputParts,
   MAX_ATTACHMENTS,
@@ -62,6 +63,14 @@ interface Props {
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
   reasoningEffort: ReasoningEffort;
   onReasoningEffortChange: (value: ReasoningEffort) => void;
+  /** Model picker for the next conversation; absent until a host lists models. */
+  modelControl?: ReactNode;
+}
+
+/** Same folder whatever the spelling: native `\\?\` prefix, separators, case. */
+function sameFolder(a: string, b: string): boolean {
+  const norm = (path: string) => displayPath(path).replace(/[\\/]+$/, "").toLowerCase();
+  return norm(a) === norm(b);
 }
 
 export interface NewConversationEnvironment {
@@ -92,6 +101,7 @@ export function EmptySessionScreen({
   onAuthorizationModeChange,
   reasoningEffort,
   onReasoningEffortChange,
+  modelControl = null,
 }: Props) {
   const welcomeDraftKey = "muse-desktop.welcome-draft";
   const [draft, setDraft] = useState(() => readSessionStorageString(welcomeDraftKey));
@@ -127,7 +137,23 @@ export function EmptySessionScreen({
       setEnvironmentId("default");
     }
   }, [environmentId, selectedEnvironment]);
-  const canStart = selectedWorkspace !== null && !backendMissing && !starting;
+  // Preselect the project of the current folder, as Codex reopens the last
+  // project: otherwise the picker read "Choose a project" right above "Runs in
+  // openscreen", two answers to the same question.
+  const currentProject = workspace === null
+    ? undefined
+    : environmentOptions.find((option) => sameFolder(option.workspace, workspace));
+  useEffect(() => {
+    if (environmentId === "default" && currentProject !== undefined) {
+      setEnvironmentId(currentProject.optionId);
+    }
+    // Only on arrival: a later explicit choice must stick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProject?.optionId]);
+  // A conversation starts with a message, as in Claude Code and Codex: an
+  // empty start only left "New conversation" rows with nothing in them.
+  const canStart = selectedWorkspace !== null && !backendMissing && !starting
+    && (draft.trim() !== "" || attachments.length > 0);
 
   async function addFiles(files: FileList | File[]): Promise<void> {
     const incoming = Array.from(files);
@@ -175,6 +201,9 @@ export function EmptySessionScreen({
         },
       );
       if (sent) {
+        // The state too, not only the stored copy: a sent message came back
+        // in the next conversation's composer and was sent twice.
+        setDraft("");
         removeSessionStorageKey(welcomeDraftKey);
         setAttachments([]);
       }
@@ -254,22 +283,25 @@ export function EmptySessionScreen({
         </div>
       )}
       <div className="welcome-suggestions">
-        {[
+        {([
           [
             "Build an interface",
             "Create a landing page using this project's components.",
+            "grid",
           ],
           [
             "Explore the project",
             "Explain the project structure and its main components.",
+            "search",
           ],
           [
             "Review code",
             "Analyze the changes and provide a code review.",
+            "code",
           ],
-        ].map(([title, prompt]) => (
+        ] as const).map(([title, prompt, icon]) => (
           <button key={title} onClick={() => setDraft(prompt)}>
-            <Icon name="code" />
+            <Icon name={icon} />
             {title}
             <small>Start with Muse ↗</small>
           </button>
@@ -370,22 +402,20 @@ export function EmptySessionScreen({
             onChange={onReasoningEffortChange}
             compact
           />
-          <small>
-            {backendMissing
-              ? "Available in the desktop app"
-              : selectedWorkspace
-                ? draft.trim() === ""
-                  ? "Press start to open the conversation."
-                  : "Your message is sent as soon as you start."
-                : "Choose a folder to get started."}
-          </small>
+          {modelControl}
+          {(backendMissing || !selectedWorkspace) && (
+            <small>
+              {backendMissing ? "Available in the desktop app" : "Choose a folder to get started."}
+            </small>
+          )}
           <button
-            className="primary"
+            className="welcome-send"
+            aria-label="Start conversation"
+            title="Start conversation · Enter"
             onClick={() => void start()}
             disabled={!canStart}
           >
-            {starting ? "Starting…" : "Start conversation"}
-            <Icon name="arrow-right" />
+            {starting ? "…" : "↑"}
           </button>
         </div>
       </div>

@@ -399,3 +399,11 @@ describe("image generation scope", () => {
     assert.match(IMAGE_GENERATION_NOTE, /not available/i);
   });
 });
+
+describe("normalizeBrowserUrl for local dev servers", () => {
+  it("opens localhost and loopback addresses over http", () => {
+    assert.equal(normalizeBrowserUrl("localhost:5173"), "http://localhost:5173/");
+    assert.equal(normalizeBrowserUrl("127.0.0.1:3000/app"), "http://127.0.0.1:3000/app");
+    assert.equal(normalizeBrowserUrl("example.com"), "https://example.com/");
+  });
+});

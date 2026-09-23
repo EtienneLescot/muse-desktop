@@ -43,8 +43,10 @@ configurations :
 | workspace `G:\repos\openscreen` (celui de l'app) | ✓ exécute |
 | `serve --sandbox-network restricted --trust-workspace` (flags exacts de l'app) | ✓ exécute |
 | binaire `src-tauri\target\debug\muse.exe` (celui de l'app) | ✓ exécute |
+| `workspaceRoot` **et** cwd du host en forme `\\?\C:\…` (celle que l'app envoie), 22/09 | ✓ exécute |
 
-Donc **ni** le workspace (lecteur `G:`), **ni** `--trust-workspace`, **ni** le binaire.
+Donc **ni** le workspace (lecteur `G:`), **ni** `--trust-workspace`, **ni** le binaire. **Ni** le
+préfixe `\\?\` non plus : il déviait le terminal de l'app (M1-05), mais le host l'accepte.
 
 ### Étape 3 — ce qui reste : le contexte de spawn depuis l'application
 
