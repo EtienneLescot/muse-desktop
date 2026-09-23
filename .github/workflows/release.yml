@@ -1,9 +1,17 @@
 name: Release
 
-# A version tag (v0.1.0-beta.2) builds the Windows installer, tests it and
-# publishes it as a GitHub release with its integrity manifest. A pull request
-# that changes this workflow runs the same build as a dry run: nothing is
-# published, the installer is kept as a workflow artifact.
+# A version tag (v0.1.0-beta.2) builds the Windows installer and the macOS DMG,
+# tests them, and publishes both in one GitHub release. A pull request that
+# changes this workflow runs the same builds as a dry run: nothing is
+# published, the artifacts are kept for a week.
+#
+# macOS signing and notarization need every one of these secrets; with none of
+# them the DMG is ad-hoc signed (dry runs, forks), with only some the job fails:
+#   MAC_CERTIFICATE_P12          base64 Developer ID Application .p12
+#   MAC_CERTIFICATE_PASSWORD     password of that .p12
+#   APPLE_ID                     Apple account used by notarytool
+#   APPLE_TEAM_ID                Apple Developer team (M4LK7C6S84)
+#   APPLE_APP_SPECIFIC_PASSWORD  app-specific password for notarytool
 on:
   push:
     tags: ["v*"]
@@ -89,23 +97,128 @@ jobs:
             --output "$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.manifest.json"
           cat "$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.manifest.json"
 
-      - name: Keep the dry-run installer
-        if: github.event_name == 'pull_request'
+      - name: Keep the installer
         uses: actions/upload-artifact@v4
         with:
-          name: muse-desktop-${{ env.VERSION }}-dry-run
+          name: muse-desktop-windows
           path: ${{ env.BUNDLE }}/Muse-Desktop_*_x64-setup.*
+          if-no-files-found: error
           retention-days: 7
 
-      - name: Publish the GitHub release
-        if: github.event_name == 'push'
+  macos:
+    name: macOS Apple Silicon DMG
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Read the version
+        run: echo "VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run supervisor tests
+        run: |
+          mkdir -p dist
+          [ -f dist/index.html ] || printf '<!doctype html><title>CI</title>\n' > dist/index.html
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+      # macOS bundles no engine: the app installs the Muse CLI on first run.
+      - name: Import the signing certificate
+        env:
+          MAC_CERTIFICATE_P12: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -eu
+          present=0
+          for value in "$MAC_CERTIFICATE_P12" "$MAC_CERTIFICATE_PASSWORD" "$APPLE_ID" "$APPLE_TEAM_ID" "$APPLE_APP_SPECIFIC_PASSWORD"; do
+            [ -n "$value" ] && present=$((present + 1))
+          done
+          if [ "$present" = 0 ]; then
+            if [ "$GITHUB_EVENT_NAME" = push ]; then
+              echo "::error::a published macOS build must be signed and notarized; set the Apple secrets"
+              exit 1
+            fi
+            echo "::warning::no Apple secrets: the dry-run DMG is ad-hoc signed"
+            exit 0
+          fi
+          if [ "$present" != 5 ]; then
+            echo "::error::the Apple signing secrets are incomplete ($present of 5)"
+            exit 1
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password=$(openssl rand -hex 24)
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          printf '%s' "$MAC_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" \
+            -P "$MAC_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity=$(security find-identity -v -p codesigning "$keychain" \
+            | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -n 1)
+          [ -n "$identity" ] || { echo "::error::no Developer ID Application identity in the certificate"; exit 1; }
+          xcrun notarytool store-credentials muse-notary --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --keychain "$keychain"
+          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "NOTARY_PROFILE=muse-notary" >> "$GITHUB_ENV"
+          echo "NOTARY_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Build, sign and notarize the DMG
+        run: sh scripts/build-macos.sh --bundle dmg --target aarch64-apple-darwin
+
+      - name: Keep the DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: muse-desktop-macos
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Muse-Desktop_*_aarch64.dmg
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish the GitHub release
+    if: github.event_name == 'push'
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Collect the builds
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-release
+          merge-multiple: true
+
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
           prerelease=""
-          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          case "$version" in *-*) prerelease="--prerelease" ;; esac
+          ls -la dist-release
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag $prerelease \
-            --title "Muse-Desktop $VERSION (Windows x64)" \
-            --notes-file "docs/releases/$VERSION.md" \
-            "$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.exe" \
-            "$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.manifest.json"
+            --title "Muse-Desktop $version (Windows x64, macOS Apple Silicon)" \
+            --notes-file "docs/releases/$version.md" \
+            dist-release/*

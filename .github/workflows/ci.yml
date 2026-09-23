@@ -121,3 +121,41 @@ jobs:
           path: ci-rust-test-report.log
           if-no-files-found: ignore
           retention-days: 7
+
+  rust-macos:
+    name: Rust supervisor tests (macOS)
+    # The macOS code paths (cfg(target_os = "macos"): login-shell PATH, the
+    # native Muse CLI resolution, CuaDriver.app launch, launchd wake-up) are
+    # only compiled and tested here.
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Provide CI frontend placeholder
+        shell: bash
+        run: |
+          mkdir -p dist
+          printf '<!doctype html><title>CI</title>\n' > dist/index.html
+      - name: Run supervisor tests
+        shell: bash
+        run: |
+          set +e
+          cargo test --manifest-path src-tauri/Cargo.toml > ci-rust-test.log 2>&1
+          status=$?
+          tail -n 300 ci-rust-test.log \
+            | sed -E 's#(/home/runner|/Users|C:\\Users)[^ ]*#<ci-path>#g; s#(token|password|api[_-]?key|authorization)[=:][^ ]+#\1=<redacted>#gi' \
+            > ci-rust-test-report.log
+          exit "$status"
+      - name: Upload Rust diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: muse-ci-rust-macos-diagnostics-${{ github.run_id }}
+          path: ci-rust-test-report.log
+          if-no-files-found: ignore
+          retention-days: 7

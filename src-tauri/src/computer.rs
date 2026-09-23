@@ -505,6 +505,55 @@ pub fn service_running(driver: &Path) -> bool {
 /// can act until the user allows it in System Settings.
 pub const GRANT_STATES: [&str; 4] = ["stopped", "active", "expired", "permissions"];
 
+/// Which macOS grant is missing, from the driver's own `check_permissions`:
+/// `{ "accessibility": bool, "screenRecording": bool }`, or `None` when the
+/// driver does not say. Only these two booleans are forwarded.
+pub fn macos_permissions(driver: &Path) -> Option<Value> {
+    let probe = run(
+        driver,
+        &["call", "check_permissions", "{}", "--socket", &endpoint()],
+        PROBE_TIMEOUT,
+    )
+    .ok()?;
+    parse_permissions(&probe.stdout)
+}
+
+fn parse_permissions(output: &str) -> Option<Value> {
+    let start = output.find('{')?;
+    let value: Value = serde_json::from_str(output[start..].trim()).ok()?;
+    let accessibility = value.get("accessibility")?.as_bool()?;
+    let screen_recording = value.get("screen_recording")?.as_bool()?;
+    Some(json!({ "accessibility": accessibility, "screenRecording": screen_recording }))
+}
+
+/// macOS: open the Privacy & Security pane where CuaDriver must be allowed.
+/// The pane is chosen from a closed list; the renderer never supplies a URL.
+pub fn open_privacy_pane(pane: &str) -> Result<(), String> {
+    let url = match pane {
+        "accessibility" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+        "screenRecording" => "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        _ => return Err("unknown privacy pane".to_string()),
+    };
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("/usr/bin/open")
+            .arg(url)
+            .status()
+            .map_err(|error| format!("cannot open System Settings: {error}"))
+            .and_then(|status| {
+                status
+                    .success()
+                    .then_some(())
+                    .ok_or_else(|| "System Settings did not open".to_string())
+            })
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = url;
+        Err("privacy panes exist only on macOS".to_string())
+    }
+}
+
 /// The driver answers `permissions_pending` (with exit code 0) while the macOS
 /// privacy gate is open.
 fn permissions_pending(output: &str) -> bool {
@@ -575,6 +624,7 @@ pub fn status_json(dir: &Path) -> Value {
             "levelCounts": level_counts(&[]),
             "unclassified": [],
             "grantState": "stopped",
+            "permissions": null,
             "manifest": manifest,
             "manifestDigest": manifest.as_ref().map(manifest_digest),
             "doctor": null,
@@ -588,13 +638,20 @@ pub fn status_json(dir: &Path) -> Value {
     let doctor = run(&driver, &["doctor", "--json"], PROBE_TIMEOUT)
         .ok()
         .and_then(|probe| serde_json::from_str::<Value>(&probe.stdout).ok());
+    let grant = grant_state(&driver);
+    let permissions = if grant == "permissions" {
+        macos_permissions(&driver)
+    } else {
+        None
+    };
     json!({
+        "permissions": permissions,
         "driverPath": driver.display().to_string(),
         "driverVersion": version,
         "available": !tools.is_empty(),
         "levelCounts": level_counts(&tools),
         "unclassified": unclassified(&tools),
-        "grantState": grant_state(&driver),
+        "grantState": grant,
         "manifest": manifest,
         "manifestDigest": read_manifest(dir).as_ref().map(manifest_digest),
         "doctor": doctor,
@@ -893,6 +950,7 @@ mod tests {
                 "levelCounts",
                 "manifest",
                 "manifestDigest",
+                "permissions",
                 "unclassified"
             ],
             "the computer-use payload changed shape; review any new field for path or argv control"
@@ -924,6 +982,17 @@ mod tests {
         assert_eq!(command.get_program(), "/usr/bin/open");
         let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert_eq!(args, ["-n", "-g", "-a", "/Applications/CuaDriver.app", "--args", "serve", "--socket", "/tmp/x.sock"]);
+    }
+
+    #[test]
+    fn only_the_two_macos_grants_are_forwarded() {
+        let out = "{\n  \"accessibility\": true,\n  \"screen_recording\": false,\n  \"source\": {\"attribution\": \"x\"}\n}";
+        assert_eq!(
+            parse_permissions(out),
+            Some(json!({"accessibility": true, "screenRecording": false}))
+        );
+        assert_eq!(parse_permissions("permissions_pending: …"), None);
+        assert!(open_privacy_pane("x-apple.systempreferences:evil").is_err());
     }
 
     #[test]
