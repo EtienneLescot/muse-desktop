@@ -1423,6 +1423,18 @@ export default function App() {
                 onAuthorizationModeChange={setAuthorizationMode}
                 reasoningEffort={globalSettings.reasoningEffort}
                 onReasoningEffortChange={(value) => setGlobalSettings({ reasoningEffort: value })}
+                modelControl={
+                  liveModels !== null && liveModels.length > 0 ? (
+                    <ModelControl
+                      // The catalog's isActive row is the last conversation's
+                      // model; here the choice for the next one must win.
+                      models={liveModels.map((model) => ({ ...model, isActive: false }))}
+                      value={globalSettings.model === "default" ? null : globalSettings.model}
+                      onSelect={(modelId) => setGlobalSettings({ model: modelId })}
+                      compact
+                    />
+                  ) : null
+                }
               />
             ) : (
               <div className="session-view">

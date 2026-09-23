@@ -57,6 +57,8 @@ interface Props {
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
   reasoningEffort: ReasoningEffort;
   onReasoningEffortChange: (value: ReasoningEffort) => void;
+  /** Model picker for the next conversation; absent until a host lists models. */
+  modelControl?: ReactNode;
 }
 
 /** Same folder whatever the spelling: native `\\?\` prefix, separators, case. */
@@ -92,6 +94,7 @@ export function EmptySessionScreen({
   onAuthorizationModeChange,
   reasoningEffort,
   onReasoningEffortChange,
+  modelControl = null,
 }: Props) {
   const welcomeDraftKey = "muse-desktop.welcome-draft";
   const [draft, setDraft] = useState(() => readSessionStorageString(welcomeDraftKey));
@@ -381,6 +384,7 @@ export function EmptySessionScreen({
             onChange={onReasoningEffortChange}
             compact
           />
+          {modelControl}
           {(backendMissing || !selectedWorkspace) && (
             <small>
               {backendMissing ? "Available in the desktop app" : "Choose a folder to get started."}

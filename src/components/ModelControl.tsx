@@ -84,10 +84,14 @@ export function ModelControl({ models, value, onSelect, fallbackLabel = "Model",
                 </span>
                 <span>
                   <strong>{model.displayLabel}</strong>
-                  <small>
-                    {model.modelId}
-                    {model.isDefault ? " · default" : ""}
-                  </small>
+                  {/* The id is shown only when it says more than the label. */}
+                  {(model.modelId !== model.displayLabel || model.isDefault) && (
+                    <small>
+                      {[model.modelId !== model.displayLabel ? model.modelId : null, model.isDefault ? "default" : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
+                  )}
                 </span>
               </button>
             );
