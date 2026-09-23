@@ -333,3 +333,9 @@ export function saveSummary(summary: ThreadSummary): void {
 export function dropSummary(sessionId: string): void {
   removeStorageKey(summaryKey(sessionId));
 }
+
+/** Share of the context window in use, 0–100; null when the host gave no window. */
+export function contextPercent(usage: ContextUsage): number | null {
+  if (usage.usedTokens === null || usage.windowTokens === null || usage.windowTokens <= 0) return null;
+  return Math.min(100, Math.round((usage.usedTokens / usage.windowTokens) * 100));
+}

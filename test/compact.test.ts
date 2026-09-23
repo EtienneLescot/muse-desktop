@@ -237,3 +237,12 @@ describe("server context usage (US-4 server half)", () => {
     assert.equal(parseTokenUsage({}), null);
   });
 });
+
+describe("contextPercent", () => {
+  it("rounds the used share of the window and caps it", async () => {
+    const { contextPercent } = await import("../src/lib/compact.ts");
+    assert.equal(contextPercent({ pressure: "normal", usedTokens: 25_959, windowTokens: 1_007_997 }), 3);
+    assert.equal(contextPercent({ pressure: "critical", usedTokens: 2_000, windowTokens: 1_000 }), 100);
+    assert.equal(contextPercent({ pressure: "normal", usedTokens: 10, windowTokens: null }), null);
+  });
+});

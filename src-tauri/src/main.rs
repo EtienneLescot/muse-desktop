@@ -24,10 +24,8 @@ mod resume;
 mod git;
 mod terminal;
 mod files;
-mod artifact_export;
 mod output_export;
 mod browser_download;
-mod setup;
 mod mcp;
 mod mcp_package;
 mod secret_store;
@@ -42,9 +40,7 @@ mod scheduler_schedules;
 mod scheduler_wakeup;
 mod notification_ledger;
 mod outbox_ledger;
-mod desktop_control;
 mod workspace_watch;
-mod writer_lock;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -418,10 +414,6 @@ struct AppState {
     /// Capabilities are fixed for a connection lifetime and never inferred
     /// from the renderer's authorization posture.
     host_capabilities: Mutex<HashMap<PathBuf, Vec<String>>>,
-    /// Volatile native gate for computer-use actions. The renderer owns the
-    /// persisted product preference; this flag is reset on launch and must be
-    /// explicitly synchronized by the current webview before any action.
-    desktop_control_allowed: Mutex<bool>,
     approvals: Mutex<HashMap<(String, String), PendingApproval>>,
     /// (session_id, item_id) -> MSP item kind (`agentMessage`, `subagent`,
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
@@ -460,9 +452,6 @@ struct AppState {
     /// Process-level scheduler lease. The open native file handle makes the
     /// claim exclusive across separately launched app processes.
     scheduler_lease: Mutex<Option<scheduler::NativeLease>>,
-    /// Cross-process writer target leases. Handles stay open for the lease
-    /// lifetime so OS advisory locks release after a crashed process.
-    writer_locks: writer_lock::Registry,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -2609,27 +2598,6 @@ fn workspace_for_inspection(state: &State<'_, AppState>, session_id: &str) -> Re
         .ok_or_else(|| "conversation workspace is unavailable".to_string())
 }
 
-/// Count renderer-visible sessions whose native workspace is this managed
-/// checkout. Cleanup treats an attached conversation as a live reference even
-/// when its current turn is idle: the session can still issue a new turn and
-/// the host process keeps the checkout as its working directory.
-fn attached_sessions_for_worktree(state: &AppState, path: &str) -> usize {
-    let Ok(candidate) = Path::new(path).canonicalize() else {
-        return 0;
-    };
-    let Ok(sessions) = state.sessions.lock() else {
-        return 0;
-    };
-    sessions
-        .values()
-        .filter(|session| {
-            Path::new(&session.workspace)
-                .canonicalize()
-                .map(|workspace| workspace == candidate)
-                .unwrap_or(false)
-        })
-        .count()
-}
 
 /// Read the real Git state for the workspace owned by this conversation.
 /// Git runs off the UI thread and only receives an absolute, canonicalized
@@ -3127,24 +3095,6 @@ async fn git_create_pr(
         .map_err(|e| format!("pull request task failed: {e}"))?
 }
 
-/// Create a real Git worktree below the conversation workspace. The caller
-/// supplies an explicit branch, base ref and relative `.muse/worktrees/` path;
-/// the Git service validates all three before running off the UI thread.
-#[tauri::command]
-async fn git_worktree_create(
-    state: State<'_, AppState>,
-    session_id: String,
-    branch: String,
-    relative_path: String,
-    base_ref: String,
-) -> Result<git::GitWorktreeResult, String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    tokio::task::spawn_blocking(move || {
-        git::create_worktree(&root, &branch, &relative_path, &base_ref)
-    })
-    .await
-    .map_err(|e| format!("worktree create task failed: {e}"))?
-}
 
 /// Create a worktree for a conversation that does not exist yet.
 ///
@@ -3181,179 +3131,13 @@ async fn git_worktree_create_for_workspace(
     Ok(result)
 }
 
-/// Remove a managed worktree after the user confirms the destructive action.
-#[tauri::command]
-async fn git_worktree_remove(
-    state: State<'_, AppState>,
-    session_id: String,
-    path: String,
-) -> Result<(), String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    let attached = attached_sessions_for_worktree(state.inner(), &path);
-    if attached > 0 {
-        return Err(format!(
-            "worktree has {attached} Muse conversation(s) attached; close them before removal"
-        ));
-    }
-    tokio::task::spawn_blocking(move || git::remove_worktree(&root, &path))
-        .await
-        .map_err(|e| format!("worktree remove task failed: {e}"))?
-}
 
-/// Inspect a managed worktree before cleanup or a handoff decision.
-#[tauri::command]
-async fn git_worktree_inspect(
-    state: State<'_, AppState>,
-    session_id: String,
-    path: String,
-) -> Result<git::GitWorktreeInspection, String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    let inspected_path = path.clone();
-    let mut inspection = tokio::task::spawn_blocking(move || git::inspect_worktree(&root, &path))
-        .await
-        .map_err(|e| format!("worktree inspect task failed: {e}"))??;
-    inspection.attached_session_count = attached_sessions_for_worktree(state.inner(), &inspected_path);
-    Ok(inspection)
-}
 
-/// Acquire OS advisory locks for all declared writer target paths. This guard
-/// complements the renderer lease and protects two Muse processes from
-/// dispatching overlapping writers in the same workspace.
-#[tauri::command]
-fn writer_lock_acquire(
-    state: State<'_, AppState>,
-    workspace: String,
-    agent: String,
-    target_paths: Vec<String>,
-    owner_id: String,
-) -> Result<writer_lock::AcquireResponse, String> {
-    writer_lock::acquire(&state.writer_locks, &workspace, &agent, &target_paths, &owner_id)
-}
 
-/// Release one writer lease. Releasing an unknown token is idempotent.
-#[tauri::command]
-fn writer_lock_release(state: State<'_, AppState>, token: String) -> Result<bool, String> {
-    writer_lock::release(&state.writer_locks, &token)
-}
 
-/// Run an explicitly requested setup command in a managed worktree. The
-/// command is bounded and never started by project import or app startup.
-#[tauri::command]
-async fn worktree_setup_run(
-    state: State<'_, AppState>,
-    session_id: String,
-    path: String,
-    command: String,
-    operation_id: String,
-    env_allowlist: Vec<String>,
-) -> Result<setup::SetupResult, String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    let key = (session_id, operation_id);
-    let cancel = Arc::new(AtomicBool::new(false));
-    state
-        .setup_cancellations
-        .lock()
-        .map_err(|_| "setup cancellation registry is unavailable".to_string())?
-        .insert(key.clone(), cancel.clone());
-    let joined = tokio::task::spawn_blocking(move || {
-        setup::run_with_cancel_and_env(&root, &path, &command, &env_allowlist, Some(cancel))
-    })
-    .await;
-    if let Ok(mut active) = state.setup_cancellations.lock() {
-        active.remove(&key);
-    }
-    joined.map_err(|e| format!("worktree setup task failed: {e}"))?
-}
 
-/// Create a managed worktree and start its conversation as one guarded
-/// operation. If session admission fails, remove the newly-created checkout
-/// before returning the error so the UI never advertises a half-created lane.
-#[tauri::command]
-async fn git_worktree_create_session(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    session_id: String,
-    branch: String,
-    relative_path: String,
-    base_ref: String,
-    authorization_mode: Option<String>,
-    sandbox_mode: Option<String>,
-    sandbox_disable_write: Option<bool>,
-    sandbox_disable_shell: Option<bool>,
-    mcp_servers: Option<Value>,
-) -> Result<WorktreeSessionResult, String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    let created = tokio::task::spawn_blocking({
-        let root = root.clone();
-        let branch = branch.clone();
-        let relative_path = relative_path.clone();
-        let base_ref = base_ref.clone();
-        move || git::create_worktree(&root, &branch, &relative_path, &base_ref)
-    })
-    .await
-    .map_err(|e| format!("git worktree create task failed: {e}"))??;
-    let child_root = PathBuf::from(&created.path);
-    match start_session_at_workspace(
-        app,
-        state,
-        child_root,
-        authorization_mode,
-        sandbox_mode,
-        sandbox_disable_write,
-        sandbox_disable_shell,
-        mcp_servers,
-    ).await {
-        Ok(session) => Ok(WorktreeSessionResult {
-            worktree: created,
-            session,
-        }),
-        Err(error) => {
-            let cleanup_path = created.path.clone();
-            let cleanup = tokio::task::spawn_blocking(move || git::remove_worktree(&root, &cleanup_path)).await;
-            let detail = match cleanup {
-                Ok(Ok(())) => error,
-                Ok(Err(cleanup_error)) => format!("{error}; worktree cleanup failed: {cleanup_error}"),
-                Err(join_error) => format!("{error}; worktree cleanup task failed: {join_error}"),
-            };
-            Err(format!("could not open conversation in worktree: {detail}"))
-        }
-    }
-}
 
-/// Inspect a managed worktree and its locally available project tools without
-/// executing project code. This gives the UI a conservative pre-flight state
-/// before a user chooses to run setup.
-#[tauri::command]
-async fn worktree_setup_readiness(
-    state: State<'_, AppState>,
-    session_id: String,
-    path: String,
-) -> Result<setup::ReadinessResult, String> {
-    let root = workspace_for_inspection(&state, &session_id)?;
-    tokio::task::spawn_blocking(move || setup::readiness(&root, &path))
-        .await
-        .map_err(|e| format!("worktree readiness task failed: {e}"))?
-}
 
-/// Request cancellation of one running setup command. The process is killed
-/// by the setup worker, so this call stays non-blocking for the renderer.
-#[tauri::command]
-fn worktree_setup_cancel(
-    state: State<'_, AppState>,
-    session_id: String,
-    operation_id: String,
-) -> Result<bool, String> {
-    let active = state
-        .setup_cancellations
-        .lock()
-        .map_err(|_| "setup cancellation registry is unavailable".to_string())?;
-    if let Some(flag) = active.get(&(session_id, operation_id)) {
-        flag.store(true, Ordering::Relaxed);
-        Ok(true)
-    } else {
-        Ok(false)
-    }
-}
 
 /// Probe an explicitly configured local MCP server with initialize + tools/list.
 #[tauri::command]
@@ -3826,16 +3610,6 @@ async fn file_open(
         .map_err(|e| format!("could not open workspace path: {e}"))
 }
 
-/// Write one explicitly selected artifact to a local UTF-8 file. The save
-/// destination comes from the platform dialog; the backend still validates it
-/// and bounds the payload before writing.
-#[tauri::command]
-async fn artifact_export(path: String, content: String) -> Result<(), String> {
-    let target = PathBuf::from(path.trim());
-    tokio::task::spawn_blocking(move || artifact_export::write_text(&target, &content))
-        .await
-        .map_err(|e| format!("artifact export task failed: {e}"))?
-}
 
 /// Write an explicitly selected same-origin browser download after the
 /// renderer has shown a native save dialog. The payload is bounded and
@@ -3860,13 +3634,6 @@ async fn browser_download_fetch(
     browser_download::fetch_same_origin(&page_url, &target_url).await
 }
 
-/// Report whether this build has an OS-backed desktop-control runtime. The
-/// renderer still requires an explicit per-app consent row before calling any
-/// mutating command; this status only describes platform capability.
-#[tauri::command]
-fn desktop_control_status() -> desktop_control::DesktopControlStatus {
-    desktop_control::status()
-}
 
 /// Write one explicitly selected completed host output to a local binary file.
 /// The renderer obtains the destination from the native save dialog; the
@@ -3879,112 +3646,13 @@ async fn output_export(path: String, data: String) -> Result<(), String> {
         .map_err(|e| format!("output export task failed: {e}"))?
 }
 
-fn require_desktop_control_permission(allowed: bool) -> Result<(), String> {
-    if allowed {
-        Ok(())
-    } else {
-        Err("desktop control requires explicit Allow desktop control consent".to_string())
-    }
-}
 
-/// Synchronize the renderer's persisted checkbox into a volatile native gate.
-/// The value is intentionally not persisted here: reopening the app requires
-/// the current webview to reassert consent before input can be injected.
-#[tauri::command]
-fn set_desktop_control_permission(
-    state: State<'_, AppState>,
-    allowed: bool,
-) -> Result<(), String> {
-    *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())? = allowed;
-    Ok(())
-}
 
-/// Enumerate visible, titled top-level windows. The result is read-only and
-/// bounded by the native module; no process command line or document content
-/// is exposed to the renderer.
-#[tauri::command]
-fn desktop_windows() -> Result<Vec<desktop_control::DesktopWindow>, String> {
-    desktop_control::windows()
-}
 
-/// Read a bounded snapshot of visible child controls for one observed window.
-/// The snapshot is descriptive only; it never grants the host an input path.
-#[tauri::command]
-fn desktop_window_elements(
-    state: State<'_, AppState>,
-    window_id: String,
-) -> Result<Vec<desktop_control::DesktopElement>, String> {
-    let allowed = *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
-    require_desktop_control_permission(allowed)?;
-    desktop_control::elements(&window_id)
-}
 
-#[tauri::command]
-fn desktop_focus_window(state: State<'_, AppState>, window_id: String) -> Result<(), String> {
-    let allowed = *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
-    require_desktop_control_permission(allowed)?;
-    desktop_control::focus(&window_id)
-}
 
-#[tauri::command]
-fn desktop_send_text(
-    state: State<'_, AppState>,
-    window_id: String,
-    text: String,
-) -> Result<usize, String> {
-    let allowed = *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
-    require_desktop_control_permission(allowed)?;
-    if text.chars().count() > desktop_control::MAX_TEXT_CHARS {
-        return Err(format!(
-            "desktop text is limited to {} characters",
-            desktop_control::MAX_TEXT_CHARS
-        ));
-    }
-    desktop_control::send_text(&window_id, &text)
-}
 
-#[tauri::command]
-fn desktop_press_key(
-    state: State<'_, AppState>,
-    window_id: String,
-    key: String,
-) -> Result<(), String> {
-    let allowed = *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
-    require_desktop_control_permission(allowed)?;
-    let parsed = desktop_control::DesktopKey::parse(&key)
-        .ok_or_else(|| "unsupported desktop key".to_string())?;
-    desktop_control::press_key(&window_id, parsed)
-}
 
-#[tauri::command]
-fn desktop_click(
-    state: State<'_, AppState>,
-    window_id: String,
-    x: i32,
-    y: i32,
-) -> Result<(), String> {
-    let allowed = *state
-        .desktop_control_allowed
-        .lock()
-        .map_err(|_| "desktop control permission state is unavailable".to_string())?;
-    require_desktop_control_permission(allowed)?;
-    desktop_control::click(&window_id, x, y)
-}
 
 /// Probe local prerequisites for the first-launch recovery screen. This is a
 /// read-only, bounded check: it never starts a sidecar or changes WSL/Muse.
@@ -6059,7 +5727,6 @@ mod tests {
             host_durability: Mutex::new(HashMap::new()),
             host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
-            desktop_control_allowed: Mutex::new(false),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -6074,7 +5741,6 @@ mod tests {
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             workspace_watchers: Mutex::new(HashMap::new()),
             scheduler_lease: Mutex::new(None),
-            writer_locks: writer_lock::Registry::default(),
         }
     }
 
@@ -8903,36 +8569,7 @@ mod tests {
         assert!(extract_subagent_meta(&json!({"kind": "subagent"})).is_none());
     }
 
-    #[test]
-    fn attached_worktree_sessions_are_counted_even_when_idle() {
-        let path = std::env::temp_dir().join(format!("muse-attached-{}", new_command_id()));
-        std::fs::create_dir_all(&path).unwrap();
-        let state = empty_state();
-        state.sessions.lock().unwrap().insert(
-            "session-attached".to_string(),
-            SessionMeta {
-                session_id: "session-attached".to_string(),
-                workspace: path.display().to_string(),
-                running: false,
-                session_durability: None,
-                approval_mode: None,
-                model_id: None,
 
-                loaded: None,
-                title: None,
-                granted_capabilities: None,
-            },
-        );
-        assert_eq!(attached_sessions_for_worktree(&state, &path.display().to_string()), 1);
-        std::fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn desktop_control_gate_requires_explicit_consent() {
-        assert!(require_desktop_control_permission(true).is_ok());
-        let error = require_desktop_control_permission(false).unwrap_err();
-        assert!(error.contains("Allow desktop control"));
-    }
 }
 
 fn main() {
@@ -8948,7 +8585,6 @@ fn main() {
             host_durability: Mutex::new(HashMap::new()),
             host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
-            desktop_control_allowed: Mutex::new(false),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -8963,7 +8599,6 @@ fn main() {
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             workspace_watchers: Mutex::new(HashMap::new()),
             scheduler_lease: Mutex::new(None),
-            writer_locks: writer_lock::Registry::default(),
         })
         .invoke_handler(tauri::generate_handler![
             start_session,
@@ -9000,16 +8635,7 @@ fn main() {
             git_fetch,
             git_pull,
             git_create_pr,
-            git_worktree_create,
             git_worktree_create_for_workspace,
-            git_worktree_create_session,
-            git_worktree_remove,
-            git_worktree_inspect,
-            writer_lock_acquire,
-            writer_lock_release,
-            worktree_setup_run,
-            worktree_setup_readiness,
-            worktree_setup_cancel,
             mcp_local_probe,
             mcp_local_call,
             mcp_package_install,
@@ -9043,18 +8669,9 @@ fn main() {
             files_watch,
             files_unwatch,
             file_open,
-            artifact_export,
             output_export,
             browser_download_write,
             browser_download_fetch,
-            desktop_control_status,
-            set_desktop_control_permission,
-            desktop_windows,
-            desktop_window_elements,
-            desktop_focus_window,
-            desktop_send_text,
-            desktop_press_key,
-            desktop_click,
             probe_startup,
             list_models,
             set_model,
@@ -9111,7 +8728,6 @@ fn main() {
                         native.release();
                     }
                 };
-                writer_lock::release_all(&state.writer_locks);
             }
         });
 }
