@@ -33,8 +33,15 @@ security export -k login.keychain-db -t identities -f pkcs12 -P "$p12_password" 
 # `security export` exports every identity; keep only the Developer ID one.
 openssl pkcs12 -in "$work/all.p12" -passin "pass:$p12_password" -nodes -legacy 2>/dev/null > "$work/all.pem" \
   || openssl pkcs12 -in "$work/all.p12" -passin "pass:$p12_password" -nodes > "$work/all.pem"
-awk -v want="$identity" '
-  /friendlyName:/ { keep = (index($0, want) > 0) }
+# The certificate and its key share a localKeyID (the key is often named
+# "Imported Private Key"): select both by that id, never by name alone.
+key_id=$(awk -v want="$identity" '
+  /friendlyName:/ { named = (index($0, want) > 0) }
+  /localKeyID:/ && named { sub(/.*localKeyID: */, ""); print; exit }
+' "$work/all.pem")
+[ -n "$key_id" ] || { echo "no certificate named $identity in the export" >&2; exit 1; }
+awk -v id="$key_id" '
+  /localKeyID:/ { line = $0; sub(/.*localKeyID: */, "", line); keep = (line == id) }
   /-----BEGIN/ { block = keep } block { print } /-----END/ { block = 0 }
 ' "$work/all.pem" > "$work/one.pem"
 grep -q "PRIVATE KEY" "$work/one.pem" || { echo "the private key of $identity was not exported" >&2; exit 1; }
