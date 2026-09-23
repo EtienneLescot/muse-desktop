@@ -17,7 +17,7 @@ function payload(overrides: Record<string, unknown> = {}) {
     driverPath: "C:\\Users\\u\\AppData\\Local\\Programs\\Cua\\cua-driver\\bin\\cua-driver.exe",
     driverVersion: "cua-driver 0.28.2",
     available: true,
-    levelCounts: { observe: 19, control: 38, everything: 57 },
+    levelCounts: { observe: 19, act: 57 },
     unclassified: [],
     grantState: "stopped",
     manifest: null,
@@ -43,7 +43,7 @@ describe("computer use", () => {
     assert.ok(status);
     assert.equal(status.available, true);
     assert.equal(status.grantState, "stopped");
-    assert.equal(status.levelCounts.control, 38);
+    assert.equal(status.levelCounts.act, 57);
     assert.equal(status.doctor?.probes?.length, 2);
   });
 
@@ -61,11 +61,11 @@ describe("computer use", () => {
   });
 
   it("never invents a tool count", () => {
-    const status = parseComputerStatus(payload({ levelCounts: { control: 38 } }));
+    const status = parseComputerStatus(payload({ levelCounts: { act: 57 } }));
     assert.ok(status);
-    assert.equal(levelToolCount(status, "control"), 38);
+    assert.equal(levelToolCount(status, "act"), 57);
     assert.equal(levelToolCount(status, "observe"), 0);
-    assert.equal(levelToolCount(null, "everything"), 0);
+    assert.equal(levelToolCount(null, "act"), 0);
   });
 
   it("tells the truth when the driver is missing", () => {
@@ -110,7 +110,7 @@ describe("computer use", () => {
   });
 
   it("describes every level in one sentence and in order", () => {
-    assert.deepEqual([...COMPUTER_LEVELS], ["observe", "control", "everything"]);
+    assert.deepEqual([...COMPUTER_LEVELS], ["observe", "act"]);
     for (const level of COMPUTER_LEVELS) {
       const info = LEVEL_INFO[level];
       assert.equal(info.level, level);

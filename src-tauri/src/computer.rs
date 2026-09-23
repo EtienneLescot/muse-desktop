@@ -51,8 +51,14 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 const START_TIMEOUT: Duration = Duration::from_secs(15);
 const MANIFEST_FILE: &str = "computer-manifest.json";
 
-/// What the user is granting. Three levels, not fifty-seven checkboxes.
-pub const LEVELS: [&str; 3] = ["observe", "control", "everything"];
+/// What the user is granting. Two levels, not fifty-seven checkboxes.
+///
+/// Only observation can be bounded. In bounded mode the driver acts only on
+/// applications listed by pid in the manifest, with no wildcard, and a manifest
+/// is enforced even in unrestricted mode (measured on 0.28.2). So "act" runs the
+/// driver unrestricted and without a manifest: the user's consent in Settings is
+/// the only gate, and the UI says so.
+pub const LEVELS: [&str; 2] = ["observe", "act"];
 
 /// Read-only observation: screenshots, windows, accessibility, sessions.
 const OBSERVE: [&str; 19] = [
@@ -130,11 +136,7 @@ fn level_tools(level: &str) -> Option<Vec<&'static str>> {
     let mut tools: Vec<&'static str> = Vec::new();
     match level {
         "observe" => tools.extend(OBSERVE),
-        "control" => {
-            tools.extend(OBSERVE);
-            tools.extend(CONTROL);
-        }
-        "everything" => {
+        "act" => {
             tools.extend(OBSERVE);
             tools.extend(CONTROL);
             tools.extend(EVERYTHING);
@@ -160,7 +162,7 @@ pub fn tools_for(level: &str, available: &[String]) -> Option<Vec<String>> {
 /// Tools the installed driver offers that no level covers. Reported in the UI
 /// rather than granted: an unknown tool is not an invitation.
 pub fn unclassified(available: &[String]) -> Vec<String> {
-    let classified = level_tools("everything").unwrap_or_default();
+    let classified = level_tools("act").unwrap_or_default();
     available
         .iter()
         .filter(|tool| !classified.iter().any(|known| known == tool))
@@ -168,11 +170,14 @@ pub fn unclassified(available: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// The capability manifest handed to the driver. Bounded mode only: the driver
-/// rejects a manifest whose mode is not `bounded`, and an unbounded manifest is
-/// precisely what the consent surface exists to avoid.
+/// The record of the grant. For "observe" it is the bounded manifest handed to
+/// the driver; for "act" it is never handed over (the driver runs unrestricted)
+/// and only records what the user granted, so the UI can show it.
 pub fn manifest(level: &str, available: &[String]) -> Option<Value> {
     let tools = tools_for(level, available)?;
+    if level == "act" {
+        return Some(json!({ "mode": "unrestricted", "allow": { "tools": tools } }));
+    }
     Some(json!({
         "version": 1,
         "mode": "bounded",
@@ -490,18 +495,26 @@ pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
         thread::sleep(Duration::from_millis(400));
     }
 
-    let mut command = Command::new(&driver);
-    command
-        .args([
+    let manifest_path = path.display().to_string();
+    let args: Vec<&str> = if manifest["mode"] == "bounded" {
+        vec![
             "serve",
             "--socket",
             PIPE,
             "--permission-mode",
             "bounded",
             "--capability-manifest",
-            &path.display().to_string(),
+            &manifest_path,
             "--approve-capability-manifest",
-        ])
+        ]
+    } else {
+        // The user consented to "act" in Settings; LEVELS says why it cannot
+        // be bounded.
+        vec!["serve", "--socket", PIPE, "--dangerously-bypass-approvals"]
+    };
+    let mut command = Command::new(&driver);
+    command
+        .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -612,39 +625,23 @@ mod tests {
             "these tools belong to no level and would be silently ungrantable: {:?}",
             unclassified(&available)
         );
-        let everything = tools_for("everything", &available).unwrap();
-        assert_eq!(
-            everything.len(),
-            57,
-            "the widest level must cover the whole reviewed surface"
-        );
+        assert_eq!(tools_for("act", &available).unwrap().len(), 57);
     }
 
     #[test]
-    fn levels_grow_strictly_and_keep_the_drivers_vocabulary() {
+    fn observe_cannot_click_or_type() {
         let available = fixture();
         let observe = tools_for("observe", &available).unwrap();
-        let control = tools_for("control", &available).unwrap();
-        let everything = tools_for("everything", &available).unwrap();
-        assert!(observe.len() < control.len());
-        assert!(control.len() < everything.len());
-        assert!(observe.iter().all(|tool| control.contains(tool)));
-        assert!(control.iter().all(|tool| everything.contains(tool)));
-        // Nothing is invented: every granted name exists in the driver's list.
-        assert!(everything.iter().all(|tool| available.contains(tool)));
+        assert!(!observe.contains(&"click".to_string()));
+        assert!(!observe.contains(&"type_text".to_string()));
+        assert!(observe.iter().all(|tool| available.contains(tool)));
     }
 
     #[test]
-    fn killing_an_application_is_not_part_of_control() {
+    fn only_observe_is_bounded() {
         let available = fixture();
-        let control = tools_for("control", &available).unwrap();
-        assert!(
-            !control.contains(&"kill_app".to_string()),
-            "terminating a program can lose unsaved work; it belongs to the widest level"
-        );
-        assert!(tools_for("everything", &available)
-            .unwrap()
-            .contains(&"kill_app".to_string()));
+        assert_eq!(manifest("observe", &available).unwrap()["mode"], "bounded");
+        assert_eq!(manifest("act", &available).unwrap()["mode"], "unrestricted");
     }
 
     #[test]
@@ -660,7 +657,7 @@ mod tests {
             .into_iter()
             .filter(|tool| tool != "click" && tool != "type_text")
             .collect();
-        let control = tools_for("control", &reduced).unwrap();
+        let control = tools_for("act", &reduced).unwrap();
         assert!(!control.contains(&"click".to_string()));
         assert!(!control.contains(&"type_text".to_string()));
         assert!(control.contains(&"get_screen_size".to_string()));
@@ -671,14 +668,14 @@ mod tests {
         let mut available = fixture();
         available.push("brand_new_tool".to_string());
         assert_eq!(unclassified(&available), vec!["brand_new_tool".to_string()]);
-        let everything = tools_for("everything", &available).unwrap();
+        let everything = tools_for("act", &available).unwrap();
         assert!(!everything.contains(&"brand_new_tool".to_string()));
     }
 
     #[test]
     fn the_manifest_is_always_bounded_and_time_boxed() {
         let available = fixture();
-        let value = manifest("control", &available).unwrap();
+        let value = manifest("observe", &available).unwrap();
         assert_eq!(value["version"], json!(1));
         assert_eq!(
             value["mode"], "bounded",
@@ -693,12 +690,9 @@ mod tests {
     }
 
     #[test]
-    fn every_level_grants_display_observation() {
-        let available = fixture();
-        for level in LEVELS {
-            let m = manifest(level, &available).unwrap();
-            assert_eq!(m["resources"]["desktop"]["display"], true, "{level}");
-        }
+    fn observe_grants_display_observation() {
+        let m = manifest("observe", &fixture()).unwrap();
+        assert_eq!(m["resources"]["desktop"]["display"], true);
     }
 
     #[test]
@@ -709,7 +703,7 @@ mod tests {
         assert_eq!(manifest_digest(&one), manifest_digest(&two));
         assert_ne!(
             manifest_digest(&one),
-            manifest_digest(&manifest("control", &available).unwrap())
+            manifest_digest(&manifest("act", &available).unwrap())
         );
         assert_eq!(manifest_digest(&one).len(), 16);
     }
