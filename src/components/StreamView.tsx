@@ -1178,6 +1178,7 @@ export function StreamView({
             key={e.id}
             className={`msg ${e.role}`}
             data-entry-index={entryIndex}
+            data-open={e.open === true ? "true" : undefined}
             role={entryA11y.role}
             aria-posinset={entryA11y.position}
             aria-setsize={entryA11y.setSize}

@@ -1772,3 +1772,25 @@
 .project-trigger .project-chevron {
   margin-left: auto;
 }
+/* A tool call still running shows it, instead of a silent summary line. */
+.desktop-app .msg.tool[data-open="true"] > pre::after {
+  content: " · running…";
+  color: var(--muted);
+  animation: stream-health-pulse 1.5s ease-in-out infinite;
+}
+/* System notes ("Turn queued…", "Stopped") are one muted line, not a boxed
+   "Information" card competing with the conversation. */
+.desktop-app .stream > .msg.system {
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+}
+.desktop-app .msg.system > .role {
+  display: none;
+}
+.desktop-app .msg.system > pre {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
