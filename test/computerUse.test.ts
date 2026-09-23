@@ -117,7 +117,7 @@ describe("computer use", () => {
       assert.ok(info.label.length > 0);
       assert.ok(info.summary.length > 20);
     }
-    assert.deepEqual([...GRANT_STATES], ["stopped", "active", "expired"]);
+    assert.deepEqual([...GRANT_STATES], ["stopped", "active", "expired", "permissions"]);
   });
 
   it("survives a round trip through JSON, as the bridge does", () => {

@@ -4,7 +4,7 @@
  */
 export type InstallState = "idle" | "running" | "succeeded" | "failed" | "cancelled";
 
-export type MuseTask = "install" | "login";
+export type MuseTask = "install" | "login" | "cua";
 
 export interface InstallStatus {
   kind: MuseTask;
@@ -29,7 +29,7 @@ export function parseInstallStatus(raw: unknown): InstallStatus | null {
     ? value.signInCode
     : null;
   return {
-    kind: value.kind === "login" ? "login" : "install",
+    kind: value.kind === "login" || value.kind === "cua" ? value.kind : "install",
     signInCode: code,
     state: value.state as InstallState,
     log: typeof value.log === "string" ? value.log.slice(-64_000) : "",
@@ -56,6 +56,20 @@ export function installHeadline(status: InstallStatus | null): string {
         return "Sign-in cancelled.";
       default:
         return "Sign in with your Meta account to use Muse.";
+    }
+  }
+  if (status?.kind === "cua") {
+    switch (status.state) {
+      case "running":
+        return "Installing cua-driver…";
+      case "succeeded":
+        return "cua-driver installed.";
+      case "failed":
+        return `The cua-driver installer stopped${status.exitCode !== null ? ` (exit code ${status.exitCode})` : ""}. Check the details, then try again.`;
+      case "cancelled":
+        return "Installation cancelled.";
+      default:
+        return "";
     }
   }
   switch (status?.state) {

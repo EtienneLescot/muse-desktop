@@ -500,7 +500,16 @@ pub fn service_running(driver: &Path) -> bool {
 /// service that is up can hold a grant that is over, and the UI must be able to
 /// tell those apart — "enabled" that silently does nothing is the failure mode
 /// this whole feature exists to avoid.
-pub const GRANT_STATES: [&str; 3] = ["stopped", "active", "expired"];
+/// `permissions`: the service is up but macOS has not granted the driver
+/// Accessibility and Screen Recording yet (`permissions_pending`), so no tool
+/// can act until the user allows it in System Settings.
+pub const GRANT_STATES: [&str; 4] = ["stopped", "active", "expired", "permissions"];
+
+/// The driver answers `permissions_pending` (with exit code 0) while the macOS
+/// privacy gate is open.
+fn permissions_pending(output: &str) -> bool {
+    output.to_ascii_lowercase().contains("permissions_pending")
+}
 
 pub fn grant_state(driver: &Path) -> &'static str {
     if !service_running(driver) {
@@ -509,6 +518,7 @@ pub fn grant_state(driver: &Path) -> &'static str {
     // A read-only tool call is the only honest probe: the daemon's own `status`
     // reports the manifest as valid even when the grant has expired.
     match run(driver, &["call", "get_screen_size", "{}", "--socket", &endpoint()], PROBE_TIMEOUT) {
+        Ok(probe) if permissions_pending(&probe.stdout) => "permissions",
         Ok(probe) if probe.ok => "active",
         Ok(probe) => {
             let text = probe.stdout.to_ascii_lowercase();
@@ -862,8 +872,16 @@ mod tests {
         let grant = object["grantState"].as_str().expect("grantState is a string");
         assert!(
             GRANT_STATES.contains(&grant),
-            "grantState must be one of the three documented values, got {grant}"
+            "grantState must be one of the documented values, got {grant}"
         );
+    }
+
+    #[test]
+    fn a_pending_macos_permission_is_not_a_live_grant() {
+        assert!(permissions_pending(
+            "permissions_pending: macOS Accessibility or Screen Recording permission is still pending"
+        ));
+        assert!(!permissions_pending("{\"width\":1456,\"height\":819}"));
     }
 
     #[test]

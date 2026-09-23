@@ -19,7 +19,7 @@ export const COMPUTER_LEVELS = ["observe", "act"] as const;
 export type ComputerLevel = (typeof COMPUTER_LEVELS)[number];
 
 /** The state of the grant, which is not the state of the service. */
-export const GRANT_STATES = ["stopped", "active", "expired"] as const;
+export const GRANT_STATES = ["stopped", "active", "expired", "permissions"] as const;
 
 export type GrantState = (typeof GRANT_STATES)[number];
 
@@ -144,6 +144,8 @@ export function describeComputerUse(status: ComputerStatus | null): string {
       return "Muse can use this computer, only through the granted tools, until you turn it off.";
     case "expired":
       return "The grant has lapsed. Turn computer use off and on again to grant it anew.";
+    case "permissions":
+      return "macOS has not allowed cua-driver yet. In System Settings › Privacy & Security, turn on CuaDriver under Accessibility and Screen Recording, then choose Check again.";
     default:
       return "Muse cannot control this computer.";
   }

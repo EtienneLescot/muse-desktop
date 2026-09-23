@@ -24,6 +24,11 @@ use std::thread;
 /// The official, documented install command.
 pub const INSTALL_URL: &str = "https://dev.meta.ai/install.sh";
 const INSTALL_SCRIPT: &str = "set -o pipefail; curl -fsSL https://dev.meta.ai/install.sh | bash";
+/// cua-driver's official installers (MIT, https://github.com/trycua/cua).
+#[cfg(not(windows))]
+const CUA_INSTALL_SCRIPT: &str = "set -o pipefail; curl -fsSL https://cua.ai/driver/install.sh | bash";
+#[cfg(windows)]
+const CUA_INSTALL_SCRIPT: &str = "irm https://cua.ai/driver/install.ps1 | iex";
 const MAX_LOG_CHARS: usize = 64_000;
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
@@ -164,7 +169,11 @@ fn refresh(inner: &mut Inner) {
     };
     if let Ok(Some(status)) = running.child.try_wait() {
         inner.exit_code = Some(status.exit_code());
-        let installed = inner.kind != "install" || cli_installed();
+        let installed = match inner.kind.as_str() {
+            "install" => cli_installed(),
+            "cua" => crate::computer::binary().is_some(),
+            _ => true,
+        };
         inner.state = if status.success() && installed {
             adopt_install_dir();
             "succeeded".to_string()
@@ -226,6 +235,21 @@ pub fn start(kind: &str) -> Result<InstallStatus, String> {
             vec!["-c", INSTALL_SCRIPT],
             format!("$ curl -fsSL {INSTALL_URL} | bash\n"),
         ),
+        "cua" => {
+            #[cfg(not(windows))]
+            let task = (
+                PathBuf::from("/bin/bash"),
+                vec!["-c", CUA_INSTALL_SCRIPT],
+                "$ curl -fsSL https://cua.ai/driver/install.sh | bash\n".to_string(),
+            );
+            #[cfg(windows)]
+            let task = (
+                PathBuf::from("powershell.exe"),
+                vec!["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", CUA_INSTALL_SCRIPT],
+                format!("PS> {CUA_INSTALL_SCRIPT}\n"),
+            );
+            task
+        }
         "login" => {
             let cli = cli_path()
                 .filter(|path| path.is_file())
@@ -239,7 +263,9 @@ pub fn start(kind: &str) -> Result<InstallStatus, String> {
     if inner.running.is_some() {
         return Ok(snapshot(&inner));
     }
-    let home = std::env::var_os("HOME").ok_or("HOME is not set")?;
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .ok_or("HOME is not set")?;
     let pair = native_pty_system()
         .openpty(PtySize {
             rows: 30,

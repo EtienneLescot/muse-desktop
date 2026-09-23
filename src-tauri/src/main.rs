@@ -1790,6 +1790,11 @@ async fn muse_cli_set_api_key(api_key: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn cua_driver_install_start() -> Result<muse_install::InstallStatus, String> {
+    muse_install::start("cua")
+}
+
+#[tauri::command]
 fn muse_cli_login_start() -> Result<muse_install::InstallStatus, String> {
     muse_install::start("login")
 }
@@ -8734,6 +8739,7 @@ fn main() {
             muse_cli_install_enter,
             muse_cli_install_cancel,
             muse_cli_login_start,
+            cua_driver_install_start,
             muse_cli_set_api_key,
             start_session,
             restart_host,
