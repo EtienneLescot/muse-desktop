@@ -261,13 +261,7 @@ export default function App() {
     watchWorkspaceFiles,
     unwatchWorkspaceFiles,
     openWorkspacePath,
-    browserAnnotations,
-    addBrowserAnnotation,
     prepareBrowserContext,
-    prepareBrowserCapture,
-    removeBrowserAnnotation,
-    browserPermissions,
-    setBrowserAppPermission,
     computerUse,
     computerBusy,
     refreshComputerUse,
@@ -1652,23 +1646,9 @@ export default function App() {
                           <BrowserPanel
                             key={active.session_id}
                             sessionId={active.session_id}
-                            annotations={browserAnnotations}
-                            permissions={browserPermissions}
-                            hostSkills={hostSkillsBySession[active.session_id] ?? []}
-                            skillProgress={skillInvocationsBySession[active.session_id]}
-                            onInvokeBrowserSkill={(selector, args) =>
-                              invokeSkill(active.session_id, selector, args)
-                            }
-                            onCancelBrowserSkill={() => cancelSession(active.session_id)}
-                            onAddAnnotation={addBrowserAnnotation}
                             onInsertContext={(context) => {
                               void prepareBrowserContext(active.session_id, context);
                             }}
-                            onInsertCapture={(capture) =>
-                              prepareBrowserCapture(active.session_id, capture)
-                            }
-                            onRemoveAnnotation={removeBrowserAnnotation}
-                            onSetPermission={setBrowserAppPermission}
                           />
                         </>
                       )}
