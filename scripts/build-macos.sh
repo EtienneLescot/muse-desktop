@@ -11,6 +11,11 @@
 #   sh scripts/build-macos.sh --dev-sidecar PATH   # dev only: stage a fake or
 #                                                  # local engine for `tauri dev`
 #
+# Signing and notarization (optional, like OpenScreen's release builds):
+#   APPLE_SIGNING_IDENTITY="Developer ID Application: …"  signs the app and DMG
+#   NOTARY_PROFILE=muse-notary   notarizes and staples the DMG with a profile
+#                                saved by `xcrun notarytool store-credentials`
+#
 #   --target  aarch64-apple-darwin (Apple Silicon, default on arm64 hosts) or
 #             x86_64-apple-darwin (Intel; needs `rustup target add`).
 set -eu
@@ -25,7 +30,7 @@ while [ $# -gt 0 ]; do
     --bundle) bundle=$2; shift 2 ;;
     --target) target=$2; shift 2 ;;
     --dev-sidecar) dev_sidecar=$2; shift 2 ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -69,7 +74,18 @@ npm run tauri -- build --target "$target" --bundles "$bundles"
 bundle_root="$repo/src-tauri/target/$target/release/bundle"
 echo "app: $bundle_root/macos/Muse-Desktop.app"
 if [ "$bundle" != app ]; then
-  ls -t "$bundle_root"/dmg/*.dmg 2>/dev/null | head -n 1 | sed 's/^/dmg: /'
+  dmg=$(ls -t "$bundle_root"/dmg/*.dmg 2>/dev/null | head -n 1)
+  echo "dmg: $dmg"
+  if [ -n "${NOTARY_PROFILE:-}" ]; then
+    if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
+      echo "NOTARY_PROFILE needs APPLE_SIGNING_IDENTITY: Apple only notarizes signed builds" >&2
+      exit 1
+    fi
+    xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun stapler staple "$dmg"
+    spctl -a -t open --context context:primary-signature -vv "$dmg"
+  fi
+  shasum -a 256 "$dmg"
 fi
 # The release manifest (scripts/release-manifest.mjs) pins a bundled sidecar
 # digest; macOS ships none, so manifests for macOS need a schema decision
