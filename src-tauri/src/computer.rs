@@ -249,6 +249,7 @@ fn mcp_server_for(binary: &Path, grant: &str) -> Option<Value> {
         return None;
     }
     Some(json!({
+        "name": "computer-use",
         "transport": "stdio",
         "command": binary.display().to_string(),
         "args": mcp_args(),

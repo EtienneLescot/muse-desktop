@@ -1419,7 +1419,7 @@ async fn ensure_host(
                 "initialize",
                 json!({
                     "clientInfo": {"name": "muse_desktop", "version": "0.1.0"},
-                    "capabilities": {"requestedCapabilities": ["userShell"]},
+                    "capabilities": {"requestedCapabilities": ["userShell", "sessionMcp"]},
                 }),
             )
             .await?;
@@ -3952,7 +3952,20 @@ fn mcp_session_config(value: Option<Value>) -> Result<Option<Value>, String> {
             other => return Err(format!("mcpServers[{index}] has unsupported transport {other:?}")),
         }
     }
-    Ok(Some(json!({"mcpServers": servers})))
+    // MSP `SessionConfig.mcpServers` is an object keyed by server name, not an
+    // array: an array was rejected with "mcpServers does not match the
+    // supported shape", so no session could start while computer use was on.
+    let mut named = serde_json::Map::new();
+    for (index, server) in servers.iter().enumerate() {
+        let mut entry = server.as_object().cloned().unwrap_or_default();
+        let name = entry
+            .remove("name")
+            .and_then(|name| name.as_str().map(str::trim).map(str::to_string))
+            .filter(|name| !name.is_empty() && !named.contains_key(name))
+            .unwrap_or_else(|| format!("mcp-{}", index + 1));
+        named.insert(name, Value::Object(entry));
+    }
+    Ok(Some(json!({"mcpServers": named})))
 }
 
 async fn start_session_at_workspace(
@@ -8172,9 +8185,14 @@ mod tests {
         let config = mcp_session_config(Some(json!([
             {"transport": "stdio", "command": "node", "args": ["server.js"], "mode": "optional"}
         ]))).expect("valid MCP config");
-        assert_eq!(config, Some(json!({"mcpServers": [
-            {"transport": "stdio", "command": "node", "args": ["server.js"], "mode": "optional"}
-        ]})));
+        assert_eq!(config, Some(json!({"mcpServers": {
+            "mcp-1": {"transport": "stdio", "command": "node", "args": ["server.js"], "mode": "optional"}
+        }})));
+        let named = mcp_session_config(Some(json!([
+            {"name": "computer-use", "transport": "stdio", "command": "cua-driver"}
+        ]))).unwrap().unwrap();
+        assert_eq!(named["mcpServers"]["computer-use"]["command"], "cua-driver");
+        assert!(named["mcpServers"]["computer-use"].get("name").is_none());
     }
 
     #[test]
