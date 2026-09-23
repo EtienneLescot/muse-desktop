@@ -479,6 +479,11 @@ pub fn status(root: &Path) -> Result<GitStatusSnapshot, String> {
             "-z",
             "--branch",
             "--untracked-files=all",
+            // The app's own checkouts live in `.muse/`; repositories set up
+            // before `.muse/.gitignore` existed listed them as changes.
+            "--",
+            ".",
+            ":(exclude).muse",
         ],
     )?;
     let root_string = canonical.display().to_string();
@@ -828,6 +833,13 @@ fn worktree_path(root: &Path, relative_path: &str) -> Result<PathBuf, String> {
     if let Some(parent) = candidate.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("could not prepare worktree parent: {e}"))?;
+    }
+    // `.muse/` holds the app's own checkouts. Without an ignore file every
+    // worktree showed up as untracked "changes" of the repository in Review.
+    let ignore = root.join(".muse").join(".gitignore");
+    if !ignore.exists() {
+        std::fs::write(&ignore, "# Muse-Desktop worktrees and state\n*\n")
+            .map_err(|e| format!("could not write .muse/.gitignore: {e}"))?;
     }
     Ok(candidate)
 }
@@ -1427,6 +1439,9 @@ mod tests {
         assert_eq!(result.base, "HEAD");
         assert!(Path::new(&result.path).join("main.txt").is_file());
         assert!(result.path.starts_with(&result.repo_root));
+        // The app's checkouts must not appear as repository changes.
+        let untracked = status(&root).unwrap().files.iter().any(|f| f.path.starts_with(".muse"));
+        assert!(!untracked, ".muse/ is listed as a change");
         assert!(create_worktree(&root, "task/two", "../outside", "HEAD").is_err());
         assert!(create_worktree(&root, "task/two", ".muse/other/agent", "HEAD").is_err());
         let _ = fs::remove_dir_all(root);

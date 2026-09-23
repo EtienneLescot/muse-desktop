@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
 import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
 import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
 import { cycleThreadId, selectActiveThreads } from "./lib/threads";
@@ -18,20 +17,14 @@ import { StreamView } from "./components/StreamView";
 import { ApprovalPanel } from "./components/ApprovalPanel";
 import { InputPanel } from "./components/InputPanel";
 import { Composer } from "./components/Composer";
-import { CompactBar } from "./components/CompactBar";
-import { OrchestrationPanel } from "./components/OrchestrationPanel";
 import { SchedulesPanel } from "./components/SchedulesPanel";
 import { ReviewQueuePanel } from "./components/ReviewQueuePanel";
-import { ArtifactsPane } from "./components/ArtifactsPane";
 import { ConnectorPanel } from "./components/ConnectorPanel";
 import { SkillPanel } from "./components/SkillPanel";
-import { SharePanel } from "./components/SharePanel";
-import { ChannelPanel } from "./components/ChannelPanel";
 import { ImportPanel } from "./components/ImportPanel";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { FilesPanel } from "./components/FilesPanel";
-import type { ShareBundle } from "./lib/sharing";
 import { formatReviewComment, type ReviewAnchor } from "./lib/reviewComments";
 import { diagnosticsJson, type NativeDiagnosticsSnapshot } from "./lib/diagnostics";
 import { userFacingError } from "./lib/errorCopy";
@@ -40,8 +33,7 @@ import { signInCommand, type AuthStatusPayload } from "./lib/museAuth";
 import { ModelControl } from "./components/ModelControl";
 import { ComputerUsePanel } from "./components/ComputerUsePanel";
 import { isTauriRuntime } from "./lib/env";
-import { formatHandoffContext, formatWorktreeContinuationNote } from "./lib/handoff";
-import type { Artifact, ArtifactVersion } from "./lib/artifacts";
+import { formatWorktreeContinuationNote } from "./lib/handoff";
 import {
   folderName,
   parseWorkspaceRootObservation,
@@ -60,7 +52,6 @@ import {
 } from "./lib/a11y";
 import { IndexPanel } from "./components/IndexPanel";
 import { BrowserPanel } from "./components/BrowserPanel";
-import { DesktopControlPanel } from "./components/DesktopControlPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
 import { searchConversations } from "./lib/conversationSearch";
@@ -101,7 +92,6 @@ export default function App() {
     activeRecoveryNotice,
     activeResumePending,
     activeRetryScheduled,
-    turnCompletionBySession,
     stoppingBySession,
     activeConnectionState,
     queuedTurns,
@@ -115,24 +105,10 @@ export default function App() {
     restartHost,
     authorizationMode,
     setAuthorizationMode,
-    providerId,
-    setProviderId,
     liveModels,
-    modelsError,
-    refreshModels,
     setSessionModel,
     setSessionReasoningEffort,
-    checkPathScope,
-    createWorktree,
-    createWorktreeSession,
-    worktrees,
-    cleanupIntents,
-    removeWorktree,
     createWorktreeForWorkspace,
-    inspectWorktree,
-    checkWorktreeReadiness,
-    runWorktreeSetup,
-    cancelWorktreeSetup,
     setActive,
     startSession,
     startSessionInWorkspace,
@@ -203,12 +179,6 @@ export default function App() {
     retryScheduleRunNow,
     approveReview,
     discardReview,
-    shareMode,
-    setShareMode,
-    sessionBundles,
-    shareSession,
-    unshareBundle,
-    channelsExperimental,
     importedSessions,
     importNotes,
     importConfigText,
@@ -253,21 +223,12 @@ export default function App() {
     invokeSkill,
     scanSkills,
     summaries,
-    compactSession,
-    usageBySession,
-    serverCompactionBySession,
-    serverCompact,
-    newFromSummary,
     prefill,
     prefillComposer,
     clearPrefill,
     prefillAttachment,
     prefillAttachmentSessionId,
     clearPrefillAttachment,
-    artifacts,
-    restoreArtifact,
-    commentArtifact,
-    editArtifact,
     index,
     gitReview,
     gitTurnSnapshot,
@@ -300,7 +261,6 @@ export default function App() {
     addBrowserAnnotation,
     prepareBrowserContext,
     prepareBrowserCapture,
-    prepareDesktopCapture,
     removeBrowserAnnotation,
     browserPermissions,
     setBrowserAppPermission,
@@ -342,12 +302,11 @@ export default function App() {
   const [pendingNotificationAction, setPendingNotificationAction] =
     useState<NotificationActionPayload | null>(null);
   const [workPanel, setWorkPanel] = useState<
-    "artifacts" | "browser" | "desktop" | "memory" | "tools" | "review" | "terminal" | "files" | null
+    "browser" | "review" | "terminal" | "files" | null
   >(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchIndex, setSearchIndex] = useState(0);
-  const [shareExportError, setShareExportError] = useState<string | null>(null);
   const searchTrigger = useRef<HTMLButtonElement>(null);
   const searchWasOpen = useRef(false);
   const settingsTrigger = useRef<HTMLButtonElement>(null);
@@ -523,39 +482,6 @@ export default function App() {
     [projects],
   );
 
-  // US-7/US-8: agent ids seen as `subagent` entries in the active thread
-  // drive the worktree plan panel (null panel until the first child).
-  const orchestrationAgents = useMemo(() => {
-    const seen: string[] = [];
-    for (const e of activeLog) {
-      if (
-        e.role === "subagent" &&
-        typeof e.agentId === "string" &&
-        !seen.includes(e.agentId)
-      ) {
-        seen.push(e.agentId);
-      }
-    }
-    return seen;
-  }, [activeLog]);
-
-  const orchestrationWriterPrompts = useMemo(() => {
-    const prompts: Record<string, string> = {};
-    for (const entry of activeLog) {
-      if (entry.role !== "subagent" || typeof entry.agentId !== "string") continue;
-      const objective =
-        typeof entry.objective === "string" && entry.objective.trim() !== ""
-          ? entry.objective
-          : entry.text;
-      if (objective.trim() !== "") prompts[entry.agentId] = objective.slice(0, 2_000);
-    }
-    return prompts;
-  }, [activeLog]);
-  const writerSessionRunning = useMemo(
-    () => Object.fromEntries(sessions.map((session) => [session.session_id, session.running])),
-    [sessions],
-  );
-
   // US-32: one polite live region announces stream running/stopped
   // transitions plus approval/input arrivals (not every render).
   const [liveMessage, setLiveMessage] = useState("");
@@ -715,41 +641,6 @@ export default function App() {
     anchor.download = `muse-desktop-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-  }
-
-  async function exportArtifact(
-    artifact: Artifact,
-    version: ArtifactVersion,
-  ): Promise<boolean> {
-    const slug = artifact.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 48) || "muse-artifact";
-    const extension = artifact.kind === "doc"
-      ? artifact.lang === "md" || artifact.lang === "markdown" ? "md" : "txt"
-      : artifact.lang.replace(/[^a-z0-9]+/gi, "").slice(0, 8) || "txt";
-    const filename = `${slug}-v${version.v}.${extension}`;
-    if (isTauriRuntime()) {
-      const target = await save({
-        title: "Export artifact",
-        defaultPath: filename,
-        filters: [{ name: artifact.kind === "doc" ? "Document" : "Source", extensions: [extension] }],
-      });
-      if (typeof target !== "string" || target.trim() === "") return false;
-      await invoke("artifact_export", { path: target, content: version.text });
-      return true;
-    }
-    const blob = new Blob([version.text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-    return true;
   }
 
   /**
@@ -1004,7 +895,7 @@ export default function App() {
             {active && page === "task" && !settingsOpen && (
               <button
                 className="icon"
-                onClick={() => setWorkPanel(workPanel ? null : "artifacts")}
+                onClick={() => setWorkPanel(workPanel ? null : "review")}
                 aria-label={
                   workPanel
                     ? "Hide work panel"
@@ -1032,23 +923,31 @@ export default function App() {
               onAuthorizationModeChange={setAuthorizationMode}
               reasoningEffort={globalSettings.reasoningEffort}
               onReasoningEffortChange={(value) => setGlobalSettings({ reasoningEffort: value })}
-              providerId={providerId}
-              onProviderChange={setProviderId}
-              liveModels={liveModels}
-              modelsError={modelsError}
-              activeSessionId={activeId}
-              selectedModelId={active?.model_id ?? null}
-              onRefreshModels={() => void refreshModels(activeId ?? undefined)}
-              onSelectModel={(modelId) => {
-                if (activeId !== null) void setSessionModel(activeId, modelId);
-              }}
               onExportDiagnostics={exportDiagnostics}
               startupProbe={startupProbe}
               onProbeStartup={() => probeStartup(workspace)}
-              checkPathScope={checkPathScope}
               onSignIn={signInWithMuseCli}
-              onClose={() => setSettingsOpen(false)}
             />
+            {/* Global capabilities, not work on the current conversation: they
+                used to be side-panel tabs next to Changes and Terminal. */}
+            <div className="settings-extra">
+              <ComputerUsePanel
+                status={computerUse}
+                busy={computerBusy}
+                onRefresh={refreshComputerUse}
+                onSetLevel={setComputerLevel}
+                onDisable={disableComputerUse}
+              />
+              <MemoryPanel
+                memories={memories}
+                now={Date.now()}
+                scanNudge={scanNudge}
+                onAdd={(text, source) => addMemoryEntry(text, source)}
+                onRemove={removeMemoryEntry}
+                onAckScan={ackScanNudge}
+                onMention={(query) => setMemoryInsert(query)}
+              />
+            </div>
           </section>
         ) : page !== "task" ? (
           <section className="destination-page">
@@ -1662,14 +1561,10 @@ export default function App() {
                     <nav className="work-tabs" aria-label="Work panel">
                       {(
                         [
-                          ["artifacts", "Content"],
-                          ["review", "Review"],
+                          ["review", "Changes"],
                           ["terminal", "Terminal"],
                           ["files", "Files"],
                           ["browser", "Browser"],
-                          ["desktop", "Desktop"],
-                          ["memory", "Memory"],
-                          ["tools", "Activity"],
                         ] as const
                       ).map(([id, label]) => (
                         <button
@@ -1689,20 +1584,6 @@ export default function App() {
                       </button>
                     </nav>
                     <div className="work-panel-body">
-                      {workPanel === "artifacts" && (
-                        <>
-                          {" "}
-                          <ArtifactsPane
-                            sessionId={active.session_id}
-                            log={activeLog}
-                            artifacts={artifacts[active.session_id] ?? []}
-                            onRestore={restoreArtifact}
-                            onComment={commentArtifact}
-                            onEdit={editArtifact}
-                            onExport={exportArtifact}
-                          />
-                        </>
-                      )}
                       {workPanel === "review" && (
                         <ReviewPanel
                           sessionId={active.session_id}
@@ -1778,227 +1659,6 @@ export default function App() {
                             onRemoveAnnotation={removeBrowserAnnotation}
                             onSetPermission={setBrowserAppPermission}
                           />
-                        </>
-                      )}
-                      {workPanel === "desktop" && (
-                        <>
-                          {/*
-                            Computer use first: it is the whole permission model
-                            the user sees, and the native observation panel below
-                            is a manual inspection surface, not the feature.
-                          */}
-                          <ComputerUsePanel
-                            status={computerUse}
-                            busy={computerBusy}
-                            onRefresh={refreshComputerUse}
-                            onSetLevel={setComputerLevel}
-                            onDisable={disableComputerUse}
-                          />
-                          <DesktopControlPanel
-                            permissions={browserPermissions}
-                            onSetPermission={setBrowserAppPermission}
-                            onInsertCapture={(capture) =>
-                              prepareDesktopCapture(active.session_id, capture)
-                            }
-                            onInsertContext={(context) =>
-                              prepareBrowserContext(active.session_id, context)
-                            }
-                            hostSkills={hostSkillsBySession[active.session_id] ?? []}
-                            skillProgress={skillInvocationsBySession[active.session_id]}
-                            onInvokeDesktopSkill={(selector, args) =>
-                              invokeSkill(active.session_id, selector, args)
-                            }
-                            onCancelDesktopSkill={() => cancelSession(active.session_id)}
-                          />
-                        </>
-                      )}
-                      {workPanel === "memory" && (
-                        <>
-                          {" "}
-                          <MemoryPanel
-                            memories={memories}
-                            now={Date.now()}
-                            scanNudge={scanNudge}
-                            onAdd={(text, source) =>
-                              addMemoryEntry(text, source)
-                            }
-                            onRemove={removeMemoryEntry}
-                            onAckScan={ackScanNudge}
-                            onMention={(query) => setMemoryInsert(query)}
-                          />
-                        </>
-                      )}
-                      {workPanel === "tools" && (
-                        <>
-                          {" "}
-                          <CompactBar
-                            entryCount={activeLog.length}
-                            summary={summaries[active.session_id] ?? null}
-                            onCompact={() => compactSession(active.session_id)}
-                            onNewFromSummary={() =>
-                              void newFromSummary(active.session_id)
-                            }
-                            usage={usageBySession[active.session_id] ?? null}
-                            serverCompaction={
-                              serverCompactionBySession[active.session_id] ?? { status: "idle" }
-                            }
-                            onServerCompact={() =>
-                              void serverCompact(active.session_id)
-                            }
-                          />{" "}
-                          <OrchestrationPanel
-                            agents={orchestrationAgents}
-                            sessionId={active.session_id}
-                            workspace={active.workspace}
-                            onCreateWorktree={createWorktree}
-                            onCreateConversationWorktree={(plan) =>
-                              createWorktreeSession(
-                                active.session_id,
-                                plan,
-                                activeProject !== null ? activeProjectSettings : undefined,
-                              )
-                            }
-                            onCreateSetupConversationWorktree={async (plan, command, envAllowlist, onCreated) => {
-                              const projectSettings = activeProject !== null ? activeProjectSettings : undefined;
-                              const created = await createWorktree(active.session_id, plan);
-                              if (created === null) return null;
-                              onCreated?.(created);
-                              const setup = await runWorktreeSetup(
-                                active.session_id,
-                                created,
-                                command,
-                                envAllowlist,
-                              );
-                              if (setup === null || setup.status !== "ready") {
-                                const status = setup?.status ?? "failed";
-                                const removed = await removeWorktree(active.session_id, created);
-                                setError(
-                                  `Worktree setup ${status}; the new checkout was ${removed ? "removed" : "kept for cleanup retry"}.`,
-                                );
-                                return null;
-                              }
-                              const opened = await startSessionInWorkspace(
-                                created.path,
-                                projectSettings,
-                              );
-                              if (opened === null) {
-                                const removed = await removeWorktree(active.session_id, created);
-                                setError(
-                                  `Conversation admission failed; the new checkout was ${removed ? "removed" : "kept for cleanup retry"}.`,
-                                );
-                                return null;
-                              }
-                              return created;
-                            }}
-                            worktrees={worktrees}
-                            cleanupIntents={cleanupIntents}
-                            onRemoveWorktree={removeWorktree}
-                            onOpenWorktree={async (record) =>
-                              startSessionInWorkspace(
-                                record.path,
-                                activeProject !== null ? activeProjectSettings : undefined,
-                              )
-                            }
-                            onOpenHandoffWorktree={async (record, plan) => {
-                              const opened = await startSessionInWorkspace(
-                                record.path,
-                                activeProject !== null ? activeProjectSettings : undefined,
-                              );
-                              if (opened !== null) {
-                                prefillComposer(formatHandoffContext(plan, logs[active.session_id] ?? []));
-                              }
-                              return opened;
-                            }}
-                            writerPrompts={orchestrationWriterPrompts}
-                            writerLogs={logs}
-                            writerSessionRunning={writerSessionRunning}
-                            writerCompletions={turnCompletionBySession}
-                            onDispatchWriter={async (record, prompt) => {
-                              const sourceId = activeId;
-                              try {
-                                const existing = sessions.find(
-                                  (session) =>
-                                    session.workspace.toLowerCase() === record.path.toLowerCase() &&
-                                    session.archived !== true &&
-                                    connectedIds.includes(session.session_id),
-                                );
-                                const writerId =
-                                  existing?.session_id ??
-                                  (await startSessionInWorkspace(
-                                    record.path,
-                                    activeProject !== null ? activeProjectSettings : undefined,
-                                  ));
-                                if (writerId === null) return null;
-                                const result = await sendInput(writerId, prompt);
-                                return result.ok ? { sessionId: writerId } : null;
-                              } finally {
-                                if (sourceId !== null) setActive(sourceId);
-                              }
-                            }}
-                            onStopWriter={async (writerId) => {
-                              await cancelSession(writerId);
-                            }}
-                            onOpenWriterConversation={(writerId) => setActive(writerId)}
-                            onInspectWorktree={inspectWorktree}
-                            onCheckReadiness={checkWorktreeReadiness}
-                            onRunSetup={runWorktreeSetup}
-                            onCancelSetup={cancelWorktreeSetup}
-                            sourceStatus={gitReview(active.session_id).status}
-                          />{" "}
-                          <SharePanel
-                            sessionId={active.session_id}
-                            mode={shareMode}
-                            bundles={sessionBundles(active.session_id)}
-                            exportError={shareExportError}
-                            onModeChange={setShareMode}
-                            onShare={(format) =>
-                              void shareSession(active.session_id, format)
-                            }
-                            onUnshare={unshareBundle}
-                            onCopy={(b: ShareBundle) => {
-                              try {
-                                void navigator.clipboard?.writeText(b.bundleId);
-                              } catch {
-                                // clipboard unavailable: the id stays visible for manual copy
-                              }
-                            }}
-                            onDownload={async (b: ShareBundle) => {
-                              const ext = b.format === "json" ? "json" : "md";
-                              const filename = `${b.bundleId}.${ext}`;
-                              try {
-                                setShareExportError(null);
-                                if (isTauriRuntime()) {
-                                  const target = await save({
-                                    title: "Save conversation export",
-                                    defaultPath: filename,
-                                    filters: [{
-                                      name: b.format === "json" ? "JSON" : "Markdown",
-                                      extensions: [ext],
-                                    }],
-                                  });
-                                  if (typeof target !== "string" || target.trim() === "") return;
-                                  await invoke("artifact_export", { path: target, content: b.body });
-                                  return;
-                                }
-                                const blob = new Blob([b.body], {
-                                  type: b.format === "json" ? "application/json" : "text/markdown",
-                                });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement("a");
-                                a.href = url;
-                                a.download = filename;
-                                document.body.appendChild(a);
-                                a.click();
-                                a.remove();
-                                URL.revokeObjectURL(url);
-                              } catch (error) {
-                                setShareExportError(`Export failed: ${userFacingError(error instanceof Error ? error.message : String(error))}`);
-                              }
-                            }}
-                          />{" "}
-                          {channelsExperimental && (
-                            <ChannelPanel experimental={channelsExperimental} />
-                          )}
                         </>
                       )}
                     </div>

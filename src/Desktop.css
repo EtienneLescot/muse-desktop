@@ -1794,3 +1794,13 @@
   color: var(--muted);
   margin: 0;
 }
+/* Computer use and Memory read as settings sections, not floating cards. */
+.settings-extra > * {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  padding: 24px 0;
+}
