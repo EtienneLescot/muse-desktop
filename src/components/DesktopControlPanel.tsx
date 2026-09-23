@@ -149,7 +149,7 @@ export function DesktopControlPanel({
 
   const insertObservation = () => {
     if (selected === null) return;
-    const context = formatDesktopObservation(selected, elements);
+    const context = formatDesktopObservation(selected, elements, status.platform);
     if (onInsertContext(context)) setMessage("Desktop observation added to the conversation draft.");
   };
 
@@ -365,7 +365,7 @@ export function DesktopControlPanel({
         <CapabilityBadge
           status={status.supported ? "available" : "unavailable"}
           reason={status.supported
-            ? "Windows desktop observation is connected; control actions still require explicit consent and an advertised host skill."
+            ? `${status.platform === "macos" ? "macOS" : "Windows"} desktop observation is connected; control actions still require explicit consent and an advertised host skill.`
             : status.reason}
         />
         <span>{status.reason}</span>

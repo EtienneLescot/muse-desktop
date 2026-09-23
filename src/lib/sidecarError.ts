@@ -1,3 +1,4 @@
+import { hostPlatform, type HostPlatform } from "./platform.ts";
 /**
  * US-33: classify backend sidecar/startup failures so the UI shows an
  * explicit message (never a blank screen). Pure helpers, unit-tested.
@@ -59,14 +60,16 @@ export function extractTriedPaths(message: string): string[] {
 
 /**
  * Turn the bounded startup error into a short, platform-aware recovery path.
- * The bridge remains responsible for probing WSL/Muse; this helper only
+ * On Windows the bridge remains responsible for probing WSL/Muse; this helper only
  * explains the evidence already returned by that probe and never claims that
  * a dependency was installed or authenticated.
  */
 export function startupRecoverySteps(
   kind: SidecarErrorKind,
   message: string,
+  platform: HostPlatform = hostPlatform(),
 ): SidecarRecoveryStep[] {
+  if (platform === "macos") return macRecoverySteps(kind, message);
   const lower = message.toLowerCase();
   const steps: SidecarRecoveryStep[] = [];
   const add = (title: string, detail: string) => {
@@ -114,6 +117,74 @@ export function startupRecoverySteps(
     add(
       "Choose an accessible folder",
       "Pick a local project folder with a stable Windows path. The folder must be visible to the WSL distribution used by the bridge.",
+    );
+  }
+  if (steps.length === 0) {
+    add(
+      "Verify the installation",
+      "Check that the sidecar and its dependencies match this app build, then retry the connection.",
+    );
+  }
+  add(
+    "Retry the connection",
+    "After correcting the reported issue, choose Try again. The current conversation and its local history remain available.",
+  );
+  return steps;
+}
+
+/**
+ * macOS runs the native `muse` CLI directly as the sidecar: there is no WSL
+ * layer, so recovery points at the bundled binary, the CLI's own sign-in and
+ * the macOS folder permissions instead.
+ */
+function macRecoverySteps(kind: SidecarErrorKind, message: string): SidecarRecoveryStep[] {
+  const lower = message.toLowerCase();
+  const steps: SidecarRecoveryStep[] = [];
+  const add = (title: string, detail: string) => {
+    if (!steps.some((step) => step.title === title)) steps.push({ title, detail });
+  };
+  if (kind === "missing") {
+    add(
+      "Install the Muse CLI",
+      "Choose Install Muse CLI above, or run `curl -fsSL https://dev.meta.ai/install.sh | bash` in Terminal. Muse-Desktop uses ~/.local/bin/muse.",
+    );
+  }
+  if (
+    lower.includes("install muse") ||
+    lower.includes(".local/bin/muse") ||
+    lower.includes("muse command")
+  ) {
+    add(
+      "Check the Muse CLI",
+      "In Terminal, run `muse --version` and install the Muse CLI if it is missing.",
+    );
+  }
+  if (
+    lower.includes("auth") ||
+    lower.includes("login") ||
+    lower.includes("unauthenticated") ||
+    lower.includes("credential")
+  ) {
+    add(
+      "Sign in to Muse",
+      "Authenticate the Muse CLI from Terminal, then return here and retry. Credentials stay with the CLI and are never bundled by the app.",
+    );
+  }
+  if (
+    lower.includes("workspace") ||
+    lower.includes("path") ||
+    lower.includes("operation not permitted") ||
+    lower.includes("permission denied")
+  ) {
+    add(
+      "Choose an accessible folder",
+      "Pick a local project folder. Folders under Desktop, Documents or Downloads may require allowing Muse-Desktop in System Settings › Privacy & Security › Files and Folders.",
+    );
+  }
+  if (lower.includes("damaged") || lower.includes("quarantine") || lower.includes("cannot be opened")) {
+    add(
+      "Allow the sidecar to run",
+      "macOS Gatekeeper blocked an unsigned binary. Open System Settings › Privacy & Security and choose Open Anyway, or reinstall a signed build.",
     );
   }
   if (steps.length === 0) {

@@ -2,11 +2,12 @@
 //!
 //! This module deliberately contains no agentic policy. The renderer must
 //! present the capability as denied until the user enables it, and every
-//! mutating action is a direct, user-visible gesture. Windows is the first
-//! supported runtime; other platforms return a structured unsupported error
-//! so the UI cannot imply parity that is not present.
+//! mutating action is a direct, user-visible gesture. Windows (Win32 + UI
+//! Automation) and macOS (Accessibility through System Events) are supported;
+//! other platforms return a structured unsupported error so the UI cannot
+//! imply parity that is not present.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub const MAX_TEXT_CHARS: usize = 2_000;
 pub const MAX_WINDOWS: usize = 200;
@@ -50,7 +51,7 @@ pub struct DesktopElement {
     pub offscreen: bool,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DesktopBounds {
     pub x: i32,
     pub y: i32,
@@ -98,13 +99,20 @@ pub fn status() -> DesktopControlStatus {
         }
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     {
-        #[cfg(target_os = "macos")]
-        let platform = "macos";
+        DesktopControlStatus {
+            supported: true,
+            platform: "macos".to_string(),
+            reason: "macOS desktop control is available after explicit consent; macOS also asks for Accessibility access the first time".to_string(),
+        }
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
         #[cfg(target_os = "linux")]
         let platform = "linux";
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(not(target_os = "linux"))]
         let platform = "unknown";
         DesktopControlStatus {
             supported: false,
@@ -114,49 +122,70 @@ pub fn status() -> DesktopControlStatus {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn unsupported() -> Result<(), String> {
     Err(status().reason)
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn windows() -> Result<Vec<DesktopWindow>, String> {
     unsupported()?;
     unreachable!()
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn elements(_id: &str) -> Result<Vec<DesktopElement>, String> {
     unsupported()?;
     unreachable!()
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn focus(_id: &str) -> Result<(), String> {
     unsupported()
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn send_text(_id: &str, _text: &str) -> Result<usize, String> {
     unsupported()?;
     unreachable!()
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn press_key(_id: &str, _key: DesktopKey) -> Result<(), String> {
     unsupported()
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn click(_id: &str, _x: i32, _y: i32) -> Result<(), String> {
     unsupported()
+}
+
+/// Shared by every backend: markers that make a control's value unsafe to
+/// surface even when the platform does not flag it as a secure field.
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
+fn looks_sensitive(title: &str, class_name: &str, role: &str, automation_id: &str) -> bool {
+    let haystack = format!("{title} {class_name} {role} {automation_id}").to_ascii_lowercase();
+    [
+        "password",
+        "passcode",
+        "secret",
+        "token",
+        "api key",
+        "apikey",
+        "credential",
+        "one-time code",
+        "otp",
+        "pin",
+    ]
+    .iter()
+    .any(|marker| haystack.contains(marker))
 }
 
 #[cfg(windows)]
 mod windows_impl {
     use super::{
-        DesktopBounds, DesktopElement, DesktopKey, DesktopWindow, MAX_ELEMENTS, MAX_TEXT_CHARS,
-        MAX_WINDOWS,
+        looks_sensitive, DesktopBounds, DesktopElement, DesktopKey, DesktopWindow, MAX_ELEMENTS,
+        MAX_TEXT_CHARS, MAX_WINDOWS,
     };
     use std::mem::size_of;
     use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, RECT, TRUE};
@@ -387,24 +416,6 @@ mod windows_impl {
             })
             .take(max)
             .collect()
-    }
-
-    fn looks_sensitive(title: &str, class_name: &str, role: &str, automation_id: &str) -> bool {
-        let haystack = format!("{title} {class_name} {role} {automation_id}").to_ascii_lowercase();
-        [
-            "password",
-            "passcode",
-            "secret",
-            "token",
-            "api key",
-            "apikey",
-            "credential",
-            "one-time code",
-            "otp",
-            "pin",
-        ]
-        .iter()
-        .any(|marker| haystack.contains(marker))
     }
 
     fn format_numeric(value: f64) -> Option<String> {
@@ -761,6 +772,13 @@ pub fn press_key(id: &str, key: DesktopKey) -> Result<(), String> {
 pub fn click(id: &str, x: i32, y: i32) -> Result<(), String> {
     windows_impl::click(id, x, y)
 }
+
+#[cfg(target_os = "macos")]
+#[path = "desktop_control_macos.rs"]
+mod macos_impl;
+
+#[cfg(target_os = "macos")]
+pub use macos_impl::{click, elements, focus, press_key, send_text, windows};
 
 #[cfg(test)]
 mod tests {

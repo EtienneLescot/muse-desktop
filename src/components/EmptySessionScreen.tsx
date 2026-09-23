@@ -51,6 +51,12 @@ interface Props {
   backendMissing?: boolean;
   /** US-33: explicit sidecar failure rendered instead of the blank screen. */
   sidecarError?: ReactNode | null;
+  /**
+   * Bumped by the app once a blocking setup step (installing the Muse CLI on
+   * macOS) is done: a start the user already asked for is replayed with the
+   * same draft, project, attachments and worktree choice.
+   */
+  resumeStartSignal?: number;
   /** Global tool-authorization posture shown in the first-message composer. */
   authorizationMode: AuthorizationMode;
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
@@ -81,6 +87,7 @@ export function EmptySessionScreen({
   onStart,
   backendMissing,
   sidecarError,
+  resumeStartSignal = 0,
   authorizationMode,
   onAuthorizationModeChange,
   reasoningEffort,
@@ -92,6 +99,7 @@ export function EmptySessionScreen({
     writeSessionStorageString(welcomeDraftKey, draft);
   }, [draft]);
   const [starting, setStarting] = useState(false);
+  const startAttempted = useRef(false);
   const [worktree, setWorktree] = useState(false);
   const [initialAttachmentDraft] = useState(() => loadAttachmentDraft("welcome"));
   const [attachments, setAttachments] = useState<ComposerAttachment[]>(
@@ -146,6 +154,7 @@ export function EmptySessionScreen({
 
   async function start() {
     if (!canStart) return;
+    startAttempted.current = true;
     const missing = attachments.filter((attachment) => attachment.missing === true);
     if (missing.length > 0) {
       setAttachmentError(`Reselect ${missing.map((attachment) => attachment.name).join(", ")} before starting.`);
@@ -186,6 +195,12 @@ export function EmptySessionScreen({
       setAttachmentError(`${file.name}: ${userFacingError(error, "This attachment could not be read.")}`);
     }
   }
+  useEffect(() => {
+    if (resumeStartSignal > 0 && startAttempted.current && !starting) void start();
+    // Only the signal replays a start; `start` is read from the latest render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeStartSignal]);
+
   if (sidecarError) {
     return <div className="empty-session wide">{sidecarError}</div>;
   }

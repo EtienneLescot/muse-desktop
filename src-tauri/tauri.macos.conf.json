@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "title": "Muse-Desktop",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 18,
+          "y": 22
+        },
+        "zoomHotkeysEnabled": true
+      }
+    ]
+  },
+  "bundle": {
+    "externalBin": [],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

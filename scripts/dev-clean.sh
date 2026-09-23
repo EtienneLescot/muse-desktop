@@ -12,5 +12,10 @@ pkill -f 'tauri de[v]' 2>/dev/null || true
 sleep 2
 rm -rf node_modules/.vite
 : > /tmp/tauri-dev.log
-setsid -f npm run tauri dev </dev/null >>/tmp/tauri-dev.log 2>&1
+if command -v setsid >/dev/null 2>&1; then
+  setsid -f npm run tauri dev </dev/null >>/tmp/tauri-dev.log 2>&1
+else
+  # macOS has no setsid(1); nohup + background detaches just as well here.
+  nohup npm run tauri dev </dev/null >>/tmp/tauri-dev.log 2>&1 &
+fi
 echo "dev launched (log: /tmp/tauri-dev.log)"

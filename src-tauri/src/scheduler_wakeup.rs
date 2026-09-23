@@ -1,7 +1,8 @@
 //! Native one-shot wake-up for the renderer scheduler.
 //!
-//! Windows uses Task Scheduler to launch the already-installed executable at
-//! the next occurrence. The launched application performs the normal SSOT
+//! Windows uses Task Scheduler, macOS a launchd LaunchAgent and Linux a
+//! systemd user timer to launch the already-installed app at the next
+//! occurrence. The launched application performs the normal SSOT
 //! due check; this module never executes a schedule or a prompt itself.
 
 use chrono::{SecondsFormat, Utc};
@@ -13,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub const SCHEMA: &str = "muse-desktop.scheduler-wakeup.v1";
+#[cfg(target_os = "windows")]
 const TASK_NAME: &str = "Muse-Desktop\\AutomationWake";
 #[cfg(any(target_os = "macos", test))]
 const MAC_LABEL: &str = "com.muse.desktop.automation-wake";
@@ -90,6 +92,22 @@ fn launchd_uid() -> Result<String, String> {
     Ok(uid)
 }
 
+/// Inside a bundle, launch through LaunchServices (`open -g`): an already
+/// running Muse is reused instead of a second process being started beside
+/// it, and a cold launch stays in the background. Outside a bundle (dev
+/// builds) the executable is started directly.
+#[cfg(any(target_os = "macos", test))]
+fn launchd_program(command: &str) -> String {
+    if let Some(end) = command.find(".app/Contents/MacOS/") {
+        let bundle = &command[..end + 4];
+        return format!(
+            "<string>/usr/bin/open</string><string>-g</string><string>{}</string><string>--args</string>",
+            xml_escape(bundle)
+        );
+    }
+    format!("<string>{}</string>", xml_escape(command))
+}
+
 #[cfg(any(target_os = "macos", test))]
 fn launchd_plist(executable: &Path, wake_at: u64) -> Result<String, String> {
     let command = executable
@@ -105,7 +123,7 @@ fn launchd_plist(executable: &Path, wake_at: u64) -> Result<String, String> {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>{label}</string>
-  <key>ProgramArguments</key><array><string>{command}</string><string>--automation-wakeup</string></array>
+  <key>ProgramArguments</key><array>{program}<string>--automation-wakeup</string></array>
   <key>StartCalendarInterval</key><dict>
     <key>Month</key><integer>{month}</integer>
     <key>Day</key><integer>{day}</integer>
@@ -117,7 +135,7 @@ fn launchd_plist(executable: &Path, wake_at: u64) -> Result<String, String> {
 </dict></plist>
 "#,
         label = xml_escape(MAC_LABEL),
-        command = xml_escape(command),
+        program = launchd_program(command),
         month = local.month(),
         day = local.day(),
         hour = local.hour(),
@@ -207,6 +225,7 @@ fn run_systemctl(args: &[&str]) -> Result<(), String> {
 
 /// Build the Task Scheduler XML without machine-specific state besides the
 /// executable path and the requested UTC start boundary.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn task_xml(executable: &Path, wake_at: u64) -> Result<String, String> {
     let path = executable
         .to_str()
@@ -292,6 +311,7 @@ pub fn sync(
     }
     #[cfg(target_os = "macos")]
     {
+        let _ = data_dir;
         let uid = launchd_uid()?;
         let home = std::env::var_os("HOME")
             .ok_or_else(|| "HOME is unavailable for launchd scheduling".to_string())?;
@@ -360,13 +380,9 @@ pub fn sync(
             "Native wake-up scheduled for the next automation.",
         ));
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        unreachable!("platform-specific scheduler branch returned above");
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let _ = (data_dir, executable, wake_at);
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         Ok(response(
             false,
             false,
@@ -415,6 +431,12 @@ mod tests {
         assert!(plist.contains("<key>Month</key><integer>1</integer>"));
         assert!(plist.contains("Muse &amp; Desktop"));
         assert!(plist.contains("--automation-wakeup"));
+        assert!(
+            plist.contains("<string>/usr/bin/open</string><string>-g</string><string>/Applications/Muse &amp; Desktop.app</string><string>--args</string>"),
+            "a bundled app is relaunched through LaunchServices, not as a second process"
+        );
+        let dev = launchd_plist(Path::new("/tmp/target/debug/muse-desktop"), 1_735_689_600_000).unwrap();
+        assert!(dev.contains("<array><string>/tmp/target/debug/muse-desktop</string><string>--automation-wakeup</string>"));
     }
 
     #[test]

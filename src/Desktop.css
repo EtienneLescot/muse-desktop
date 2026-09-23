@@ -4,6 +4,10 @@
 .window-controls button { width: 34px; height: 32px; padding: 9px; border-radius: 7px; color: var(--muted); }
 .window-controls button svg { width: 14px; height: 14px; stroke-width: 1.6; }
 .window-controls .window-close:hover { background: #c42b1c; color: white; }
+/* macOS: native traffic lights overlay the top-left corner of the sidebar. */
+.platform-macos .sidebar,
+.platform-macos.nav-collapsed .sidebar { padding-top: 0; }
+.mac-titlebar { flex: none; height: 44px; }
 .window-error { position: absolute; top: 40px; right: 0; width: 230px; background: var(--surface); color: var(--danger); padding: 10px; border: 1px solid var(--line); border-radius: 8px; z-index: 10; font-size: 12px; }
 .desktop-app {
   grid-template-rows: minmax(0, 1fr) 28px;
@@ -1629,3 +1633,51 @@
     outline-color: Highlight;
   }
 }
+
+/* macOS first run: install the Muse CLI (no bundled engine). */
+.muse-setup {
+  max-width: 520px; margin: 0 auto; padding: 48px 24px;
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px;
+}
+.muse-setup h2 { margin: 4px 0 0; font-size: 26px; letter-spacing: -0.5px; }
+.muse-setup-lead { margin: 0; color: var(--muted); line-height: 1.55; }
+.muse-setup-actions { display: flex; align-items: center; gap: 10px; margin-top: 6px; min-height: 40px; }
+.muse-setup-actions .primary { padding: 10px 18px; }
+.muse-setup-spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--text);
+  animation: muse-setup-spin 0.8s linear infinite;
+}
+@keyframes muse-setup-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .muse-setup-spinner { animation: none; } }
+.muse-setup-error { margin: 0; color: var(--danger); }
+.muse-setup-details { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.muse-setup-details .link { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 2px; }
+.muse-setup-log {
+  width: 100%; max-height: 240px; overflow: auto; margin: 0; padding: 10px 12px; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+}
+.muse-setup-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.muse-setup-steps { display: flex; gap: 8px; list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--muted); }
+.muse-setup-steps li { padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.muse-setup-steps li[aria-current="step"] { color: var(--text); border-color: var(--text); }
+.muse-setup-steps li[data-done="true"] { text-decoration: line-through; }
+.muse-setup-code {
+  font-family: var(--font-code); font-size: 28px; font-weight: 650; letter-spacing: 3px;
+  padding: 10px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+  user-select: all;
+}
+.muse-setup-overlay {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--text) 30%, transparent);
+}
+.muse-setup-overlay > .muse-setup {
+  background: var(--surface, #fff); border-radius: 16px; border: 1px solid var(--line);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2); padding: 36px 32px;
+}
+.muse-setup .link { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 2px; }
+.muse-setup-key { width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: stretch; gap: 8px; text-align: left; }
+.muse-setup-key label { font-size: 12px; color: var(--muted); }
+.muse-setup-key input { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.muse-setup-key .muse-setup-actions { justify-content: center; }

@@ -32,14 +32,33 @@
 use serde_json::{json, Value};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
 /// This app's private endpoint. Never discovered, never ambient: the driver
 /// documents that two bare runtimes share nothing and that callers must not
 /// rely on ambient discovery.
+#[cfg(windows)]
 pub const PIPE: &str = r"\\.\pipe\muse-desktop-computer";
+
+/// On macOS and Linux the driver's endpoint is a Unix-domain socket. It lives
+/// in the per-user temporary directory (`$TMPDIR` is private to the user on
+/// macOS), which also keeps it well under the 104-byte `sun_path` limit.
+#[cfg(not(windows))]
+pub const SOCKET_NAME: &str = "muse-desktop-computer.sock";
+
+/// The endpoint string handed to `--socket`.
+pub fn endpoint() -> String {
+    #[cfg(windows)]
+    {
+        PIPE.to_string()
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::temp_dir().join(SOCKET_NAME).display().to_string()
+    }
+}
 
 /// A grant is bounded in time by the driver itself, and the bounds are shown in
 /// the UI. They are constants rather than settings because a grant that silently
@@ -183,7 +202,7 @@ pub fn manifest(level: &str, available: &[String]) -> Option<Value> {
 }
 
 /// Where the driver lives: the PATH the app was started with, then the
-/// canonical per-user install directory the official installer uses.
+/// canonical install locations the official installer uses on each OS.
 pub fn binary() -> Option<PathBuf> {
     let names: Vec<&str> = if cfg!(windows) {
         vec!["cua-driver.exe", "cua-driver"]
@@ -217,6 +236,32 @@ pub fn binary() -> Option<PathBuf> {
             }
         }
     }
+    // A Finder-launched macOS app inherits launchd's minimal PATH, so the
+    // official install locations are probed explicitly: the installer keeps
+    // the TCC-stable bundle in /Applications and symlinks the CLI into
+    // ~/.local/bin (or a user-chosen bin dir such as Homebrew's).
+    #[cfg(target_os = "macos")]
+    {
+        let mut candidates = vec![PathBuf::from(
+            "/Applications/CuaDriver.app/Contents/MacOS/cua-driver",
+        )];
+        if let Some(home) = std::env::var_os("HOME").filter(|value| !value.is_empty()) {
+            let home = PathBuf::from(home);
+            candidates.push(
+                home.join("Applications")
+                    .join("CuaDriver.app")
+                    .join("Contents")
+                    .join("MacOS")
+                    .join("cua-driver"),
+            );
+            candidates.push(home.join(".local").join("bin").join("cua-driver"));
+        }
+        candidates.push(PathBuf::from("/opt/homebrew/bin/cua-driver"));
+        candidates.push(PathBuf::from("/usr/local/bin/cua-driver"));
+        if let Some(found) = candidates.into_iter().find(|candidate| candidate.is_file()) {
+            return Some(found);
+        }
+    }
     None
 }
 
@@ -226,7 +271,7 @@ pub fn mcp_args() -> Vec<String> {
     vec![
         "mcp".to_string(),
         "--socket".to_string(),
-        PIPE.to_string(),
+        endpoint(),
     ]
 }
 
@@ -256,6 +301,7 @@ struct Probe {
     stdout: String,
 }
 
+#[cfg_attr(not(windows), allow(unused_variables))]
 fn hidden_window(command: &mut Command) {
     #[cfg(windows)]
     {
@@ -350,7 +396,7 @@ pub fn available_tools(driver: &Path) -> Result<Vec<String>, String> {
 
 /// Whether this app's own service answers.
 pub fn service_running(driver: &Path) -> bool {
-    run(driver, &["status", "--socket", PIPE], PROBE_TIMEOUT)
+    run(driver, &["status", "--socket", &endpoint()], PROBE_TIMEOUT)
         .map(|probe| probe.ok && probe.stdout.contains("daemon is running"))
         .unwrap_or(false)
 }
@@ -371,7 +417,7 @@ pub fn grant_state(driver: &Path) -> &'static str {
     }
     // A read-only tool call is the only honest probe: the daemon's own `status`
     // reports the manifest as valid even when the grant has expired.
-    match run(driver, &["call", "get_screen_size", "{}", "--socket", PIPE], PROBE_TIMEOUT) {
+    match run(driver, &["call", "get_screen_size", "{}", "--socket", &endpoint()], PROBE_TIMEOUT) {
         Ok(probe) if probe.ok => "active",
         Ok(probe) => {
             let text = probe.stdout.to_ascii_lowercase();
@@ -479,8 +525,8 @@ pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
         // The mode and the manifest are fixed for the lifetime of the process:
         // the driver documents that an agent cannot widen them and that changing
         // them requires a restart. So a level change means a stop, not a patch.
-        let _ = run(&driver, &["revoke", "--all", "--socket", PIPE], PROBE_TIMEOUT);
-        let _ = run(&driver, &["stop", "--socket", PIPE], PROBE_TIMEOUT);
+        let _ = run(&driver, &["revoke", "--all", "--socket", &endpoint()], PROBE_TIMEOUT);
+        let _ = run(&driver, &["stop", "--socket", &endpoint()], PROBE_TIMEOUT);
         thread::sleep(Duration::from_millis(400));
     }
 
@@ -489,7 +535,7 @@ pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
         .args([
             "serve",
             "--socket",
-            PIPE,
+            &endpoint(),
             "--permission-mode",
             "bounded",
             "--capability-manifest",
@@ -521,8 +567,8 @@ pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
 /// which is what makes "turn it off" trustworthy even if the stop fails.
 pub fn disable(dir: &Path) -> Result<Value, String> {
     if let Some(driver) = binary() {
-        let _ = run(&driver, &["revoke", "--all", "--socket", PIPE], PROBE_TIMEOUT);
-        let _ = run(&driver, &["stop", "--socket", PIPE], PROBE_TIMEOUT);
+        let _ = run(&driver, &["revoke", "--all", "--socket", &endpoint()], PROBE_TIMEOUT);
+        let _ = run(&driver, &["stop", "--socket", &endpoint()], PROBE_TIMEOUT);
     }
     let _ = std::fs::remove_file(dir.join(MANIFEST_FILE));
     Ok(status_json(dir))
@@ -741,7 +787,16 @@ mod tests {
         let args = entry["args"].as_array().expect("args is an array");
         assert_eq!(args[0], json!("mcp"));
         assert_eq!(args[1], json!("--socket"));
-        assert_eq!(args[2], json!(PIPE), "the endpoint is ours, never discovered");
+        assert_eq!(args[2], json!(endpoint()), "the endpoint is ours, never discovered");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn the_unix_endpoint_is_a_private_short_socket() {
+        let endpoint = endpoint();
+        assert!(endpoint.ends_with(SOCKET_NAME));
+        assert!(endpoint.len() < 104, "sun_path limit: {endpoint}");
+        assert!(std::path::Path::new(&endpoint).is_absolute());
     }
 
     /// A grant that has lapsed must not be handed to the host: the service is

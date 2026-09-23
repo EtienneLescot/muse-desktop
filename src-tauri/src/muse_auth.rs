@@ -71,6 +71,10 @@ pub struct AuthObservation {
     pub environment_key: bool,
     /// Whether the CLI's credential file holds a provider key.
     pub stored_key: bool,
+    /// Whether the CLI's credential file records a Meta account login
+    /// (`muse login`: `mechanism: "oauth"`, the token itself kept in the OS
+    /// keychain rather than in the file).
+    pub stored_account: bool,
 }
 
 /// The reported posture.
@@ -95,12 +99,19 @@ pub fn decide(observation: &AuthObservation) -> AuthStatus {
         return AuthStatus {
             mode: AuthMode::ApiKey,
             source: AuthSource::Environment,
-            api_key_overrides_login: observation.stored_key,
+            api_key_overrides_login: observation.stored_key || observation.stored_account,
         };
     }
     if observation.stored_key {
         return AuthStatus {
             mode: AuthMode::ApiKey,
+            source: AuthSource::Stored,
+            api_key_overrides_login: false,
+        };
+    }
+    if observation.stored_account {
+        return AuthStatus {
+            mode: AuthMode::Account,
             source: AuthSource::Stored,
             api_key_overrides_login: false,
         };
@@ -151,6 +162,23 @@ fn stored_key_present(path: &std::path::Path) -> bool {
     key.is_some_and(|key| !key.trim().is_empty())
 }
 
+/// Whether the credential file records an account login. Only the recorded
+/// mechanism is read; the token is never in this file.
+fn stored_account_present(path: &std::path::Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return false;
+    };
+    value
+        .get("providers")
+        .and_then(|providers| providers.get("meta"))
+        .and_then(|meta| meta.get("mechanism"))
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|mechanism| mechanism == "oauth")
+}
+
 /// Whether `META_API_KEY` is set to something usable.
 fn environment_key_present() -> bool {
     std::env::var("META_API_KEY")
@@ -163,6 +191,7 @@ pub fn status() -> AuthStatus {
     let observation = AuthObservation {
         environment_key: environment_key_present(),
         stored_key: credentials_path().is_some_and(|path| stored_key_present(&path)),
+        stored_account: credentials_path().is_some_and(|path| stored_account_present(&path)),
     };
     decide(&observation)
 }
@@ -228,7 +257,24 @@ mod tests {
     use super::*;
 
     fn observe(environment_key: bool, stored_key: bool) -> AuthObservation {
-        AuthObservation { environment_key, stored_key }
+        AuthObservation { environment_key, stored_key, stored_account: false }
+    }
+
+    #[test]
+    fn an_oauth_login_is_reported_as_an_account() {
+        let status = decide(&AuthObservation {
+            environment_key: false,
+            stored_key: false,
+            stored_account: true,
+        });
+        assert_eq!(status.mode, AuthMode::Account);
+        let dir = std::env::temp_dir().join(format!("muse-auth-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("auth.json");
+        std::fs::write(&file, r#"{"providers":{"meta":{"mechanism":"oauth","storage":"keychain"}}}"#).unwrap();
+        assert!(stored_account_present(&file));
+        assert!(!stored_key_present(&file));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -27,6 +27,9 @@ mod files;
 mod artifact_export;
 mod output_export;
 mod browser_download;
+#[cfg(target_os = "macos")]
+mod login_env;
+mod muse_install;
 mod setup;
 mod mcp;
 mod mcp_package;
@@ -1605,6 +1608,76 @@ fn sidecar_missing_message(file: &str, tried: &[PathBuf]) -> String {
     )
 }
 
+/// macOS does not bundle the engine: the user's Muse CLI, installed by Meta's
+/// official installer (and self-updating), *is* the sidecar. Precedence:
+/// the installer's `~/.local/bin/muse`, then `muse` on PATH, then a binary
+/// staged in the dev tree (fixtures, local engine builds).
+#[cfg(target_os = "macos")]
+fn resolve_sidecar() -> Result<PathBuf, String> {
+    let mut tried = Vec::new();
+    if let Some(path) = muse_install::cli_path() {
+        tried.push(path.clone());
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path).filter(|dir| dir.is_absolute()) {
+            let candidate = dir.join("muse");
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+        }
+    }
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(sidecar_file_name());
+    tried.push(dev.clone());
+    if dev.is_file() {
+        return Ok(dev);
+    }
+    let tried_list = tried
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(format!(
+        "sidecar binary not found: the Muse CLI is not installed (tried {tried_list}, then PATH). Install it with the official installer ({}), then retry.",
+        muse_install::INSTALL_URL
+    ))
+}
+
+#[tauri::command]
+fn muse_cli_install_status() -> muse_install::InstallStatus {
+    muse_install::status()
+}
+
+#[tauri::command]
+fn muse_cli_install_start() -> Result<muse_install::InstallStatus, String> {
+    muse_install::start("install")
+}
+
+#[tauri::command]
+async fn muse_cli_set_api_key(api_key: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || muse_install::set_api_key(&api_key))
+        .await
+        .map_err(|error| format!("API key task failed: {error}"))?
+}
+
+#[tauri::command]
+fn muse_cli_login_start() -> Result<muse_install::InstallStatus, String> {
+    muse_install::start("login")
+}
+
+#[tauri::command]
+fn muse_cli_install_enter() -> Result<(), String> {
+    muse_install::press_enter()
+}
+
+#[tauri::command]
+fn muse_cli_install_cancel() -> muse_install::InstallStatus {
+    muse_install::cancel()
+}
+
+#[cfg(not(target_os = "macos"))]
 fn resolve_sidecar() -> Result<PathBuf, String> {
     let file = sidecar_file_name();
     let mut tried = Vec::new();
@@ -8731,6 +8804,8 @@ mod tests {
 }
 
 fn main() {
+    #[cfg(target_os = "macos")]
+    login_env::adopt_login_shell_path();
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -8761,6 +8836,12 @@ fn main() {
             writer_locks: writer_lock::Registry::default(),
         })
         .invoke_handler(tauri::generate_handler![
+            muse_cli_install_status,
+            muse_cli_install_start,
+            muse_cli_install_enter,
+            muse_cli_install_cancel,
+            muse_cli_login_start,
+            muse_cli_set_api_key,
             start_session,
             restart_host,
             fork_session,
