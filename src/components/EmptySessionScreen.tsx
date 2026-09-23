@@ -12,6 +12,7 @@ import {
 } from "../lib/projects";
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
 import { userFacingError } from "../lib/errorCopy";
+import { displayPath } from "../lib/paths";
 import {
   buildTurnInputParts,
   MAX_ATTACHMENTS,
@@ -56,6 +57,12 @@ interface Props {
   onAuthorizationModeChange: (mode: AuthorizationMode) => void;
   reasoningEffort: ReasoningEffort;
   onReasoningEffortChange: (value: ReasoningEffort) => void;
+}
+
+/** Same folder whatever the spelling: native `\\?\` prefix, separators, case. */
+function sameFolder(a: string, b: string): boolean {
+  const norm = (path: string) => displayPath(path).replace(/[\\/]+$/, "").toLowerCase();
+  return norm(a) === norm(b);
 }
 
 export interface NewConversationEnvironment {
@@ -119,6 +126,19 @@ export function EmptySessionScreen({
       setEnvironmentId("default");
     }
   }, [environmentId, selectedEnvironment]);
+  // Preselect the project of the current folder, as Codex reopens the last
+  // project: otherwise the picker read "Choose a project" right above "Runs in
+  // openscreen", two answers to the same question.
+  const currentProject = workspace === null
+    ? undefined
+    : environmentOptions.find((option) => sameFolder(option.workspace, workspace));
+  useEffect(() => {
+    if (environmentId === "default" && currentProject !== undefined) {
+      setEnvironmentId(currentProject.optionId);
+    }
+    // Only on arrival: a later explicit choice must stick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProject?.optionId]);
   // A conversation starts with a message, as in Claude Code and Codex: an
   // empty start only left "New conversation" rows with nothing in them.
   const canStart = selectedWorkspace !== null && !backendMissing && !starting
@@ -242,22 +262,25 @@ export function EmptySessionScreen({
         </div>
       )}
       <div className="welcome-suggestions">
-        {[
+        {([
           [
             "Build an interface",
             "Create a landing page using this project's components.",
+            "grid",
           ],
           [
             "Explore the project",
             "Explain the project structure and its main components.",
+            "search",
           ],
           [
             "Review code",
             "Analyze the changes and provide a code review.",
+            "code",
           ],
-        ].map(([title, prompt]) => (
+        ] as const).map(([title, prompt, icon]) => (
           <button key={title} onClick={() => setDraft(prompt)}>
-            <Icon name="code" />
+            <Icon name={icon} />
             {title}
             <small>Start with Muse ↗</small>
           </button>

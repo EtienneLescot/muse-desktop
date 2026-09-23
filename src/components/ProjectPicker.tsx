@@ -79,7 +79,7 @@ export function ProjectPicker({
           {/* The folder is shown only once a project is chosen: on its own it
               read as a second answer to the same question ("Choose a project ·
               openscreen"), which is the duplication this control replaced. */}
-          {selected !== null && (
+          {selected !== null && folderName(selected.workspace) !== selectedLabel && (
             <span className="project-trigger-folder">{folderName(selected.workspace)}</span>
           )}
           <span className="project-chevron" aria-hidden="true" />

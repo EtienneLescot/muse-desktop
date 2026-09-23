@@ -811,7 +811,7 @@ export default function App() {
           <span className="muse-logo">
             <img src="muse-logo.png" alt="" />
           </span>
-          <span className="brand-text">Muse-Desktop</span>
+          <span className="brand-text" title={zoomShortcutTitle()}>Muse-Desktop</span>
           <button
             className="icon"
             onClick={() => setCollapsed(!collapsed)}
@@ -970,11 +970,12 @@ export default function App() {
             {active !== null && page === "task" && (
               <button
                 type="button"
+                className="workspace-button"
                 disabled={movingToWorktree !== null || active.running || active.workspace.length === 0}
                 onClick={() => void moveToWorktree(active.session_id)}
                 title="Open a new conversation in a worktree of this folder; this conversation stays here"
               >
-                {movingToWorktree ?? "Move to a worktree…"}
+                {movingToWorktree ?? "Move to worktree"}
               </button>
             )}
             <span className="pill">
@@ -1996,14 +1997,6 @@ export default function App() {
           </>
         )}
       </main>
-      <footer className="desktop-status">
-        <span className="dot" />
-        {backendMissing ? "Web preview" : "Local execution"}
-        <span className="status-workspace">
-          {workspaceName || "No folder selected"}
-        </span>
-        <span className="status-brand" title={zoomShortcutTitle()}>Muse-Desktop</span>
-      </footer>
       <dialog
         ref={searchDialog}
         className="task-search"
