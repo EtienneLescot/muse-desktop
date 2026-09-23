@@ -2859,6 +2859,14 @@ async fn computer_enable(app: AppHandle, level: String) -> Result<Value, String>
         .map_err(|e| format!("computer-use enable task failed: {e}"))?
 }
 
+/// macOS: open the Privacy & Security pane CuaDriver must be allowed in.
+#[tauri::command]
+async fn computer_open_privacy_pane(pane: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || computer::open_privacy_pane(pane.trim()))
+        .await
+        .map_err(|e| format!("privacy pane task failed: {e}"))?
+}
+
 /// Revoke and stop. Revocation is deny-only, so this is safe to call twice and
 /// safe to call when nothing is running.
 #[tauri::command]
@@ -8739,6 +8747,7 @@ fn main() {
             muse_cli_install_enter,
             muse_cli_install_cancel,
             muse_cli_login_start,
+            computer_open_privacy_pane,
             cua_driver_install_start,
             muse_cli_set_api_key,
             start_session,

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { installHeadline, parseInstallStatus, type InstallStatus } from "../lib/museInstall";
 import { isTauriRuntime } from "../lib/env";
+import { MacPermissionsGuide } from "./MacPermissionsGuide";
 import {
   COMPUTER_LEVELS,
   DRIVER_HOME,
@@ -149,13 +150,15 @@ export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisabl
       <p className="computer-use-summary">{describeComputerUse(status)}</p>
 
       {status?.grantState === "permissions" && (
-        <div className="computer-use-note computer-use-note-warning" role="status">
-          <div className="computer-use-actions">
-            <button type="button" onClick={() => void onRefresh()} disabled={busy}>
-              Check again
-            </button>
-          </div>
-        </div>
+        <MacPermissionsGuide
+          permissions={status.permissions}
+          busy={busy}
+          onRefresh={onRefresh}
+          onRestart={async () => {
+            const level = currentLevel(status);
+            if (level !== null) await onSetLevel(level);
+          }}
+        />
       )}
 
       {status?.grantState === "expired" && (

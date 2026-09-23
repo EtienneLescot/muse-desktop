@@ -126,3 +126,14 @@ describe("computer use", () => {
     assert.deepEqual(status.unclassified, []);
   });
 });
+
+describe("macOS permissions for CuaDriver", () => {
+  it("keeps only the two grants, in the order the user gives them", async () => {
+    const { parseComputerStatus, PRIVACY_STEPS } = await import("../src/lib/computerUse.ts");
+    const base = { available: true, grantState: "permissions", levelCounts: {}, unclassified: [] };
+    const status = parseComputerStatus({ ...base, permissions: { accessibility: true, screenRecording: false, extra: 1 } });
+    assert.deepEqual(status?.permissions, { accessibility: true, screenRecording: false });
+    assert.equal(parseComputerStatus({ ...base, permissions: { accessibility: "yes" } })?.permissions, null);
+    assert.deepEqual(PRIVACY_STEPS.map((step) => step.pane), ["accessibility", "screenRecording"]);
+  });
+});

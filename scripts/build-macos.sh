@@ -81,7 +81,12 @@ if [ "$bundle" != app ]; then
       echo "NOTARY_PROFILE needs APPLE_SIGNING_IDENTITY: Apple only notarizes signed builds" >&2
       exit 1
     fi
-    xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait
+    # CI keeps the profile in a temporary keychain (NOTARY_KEYCHAIN).
+    if [ -n "${NOTARY_KEYCHAIN:-}" ]; then
+      xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --keychain "$NOTARY_KEYCHAIN" --wait
+    else
+      xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait
+    fi
     xcrun stapler staple "$dmg"
     spctl -a -t open --context context:primary-signature -vv "$dmg"
   fi

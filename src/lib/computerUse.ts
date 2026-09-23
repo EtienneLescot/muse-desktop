@@ -64,6 +64,36 @@ export interface ComputerStatus {
   manifest: unknown;
   manifestDigest: string | null;
   doctor: { ok?: boolean; probes?: ComputerProbe[] } | null;
+  /** macOS grants still missing for CuaDriver, while `grantState` is `permissions`. */
+  permissions: MacPermissions | null;
+}
+
+export interface MacPermissions {
+  accessibility: boolean;
+  screenRecording: boolean;
+}
+
+export type PrivacyPane = keyof MacPermissions;
+
+/** The two macOS grants, in the order the user should give them. */
+export const PRIVACY_STEPS: readonly { pane: PrivacyPane; label: string; detail: string }[] = [
+  {
+    pane: "accessibility",
+    label: "Accessibility",
+    detail: "Lets Muse click, type and read the controls of other apps.",
+  },
+  {
+    pane: "screenRecording",
+    label: "Screen Recording",
+    detail: "Lets Muse see the screen to know where to act.",
+  },
+];
+
+function parsePermissions(raw: unknown): MacPermissions | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.accessibility !== "boolean" || typeof value.screenRecording !== "boolean") return null;
+  return { accessibility: value.accessibility, screenRecording: value.screenRecording };
 }
 
 function isGrantState(value: unknown): value is GrantState {
@@ -122,6 +152,7 @@ export function parseComputerStatus(raw: unknown): ComputerStatus | null {
     manifest: value.manifest ?? null,
     manifestDigest: typeof value.manifestDigest === "string" ? value.manifestDigest : null,
     doctor,
+    permissions: parsePermissions(value.permissions),
   };
 }
 
@@ -145,7 +176,7 @@ export function describeComputerUse(status: ComputerStatus | null): string {
     case "expired":
       return "The grant has lapsed. Turn computer use off and on again to grant it anew.";
     case "permissions":
-      return "macOS has not allowed cua-driver yet. In System Settings › Privacy & Security, turn on CuaDriver under Accessibility and Screen Recording, then choose Check again.";
+      return "One more step: macOS must allow CuaDriver, the helper Muse uses to see and control this Mac.";
     default:
       return "Muse cannot control this computer.";
   }

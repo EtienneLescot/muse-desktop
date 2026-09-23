@@ -1274,6 +1274,17 @@ export default function App() {
           </section>
         ) : (
           <>
+            {computerUse?.grantState === "permissions" && (
+              <div className="app-banner" role="status">
+                <span>
+                  Computer use is on, but macOS has not allowed CuaDriver yet: Muse cannot see or
+                  control this Mac.
+                </span>
+                <button type="button" onClick={() => setSettingsOpen(true)}>
+                  Finish setup
+                </button>
+              </div>
+            )}
             {backendMissing && (
               <div className="preview-notice">
                 Web preview · Open the desktop app to work with
