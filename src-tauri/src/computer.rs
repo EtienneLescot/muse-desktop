@@ -649,9 +649,8 @@ pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
         // be bounded.
         vec!["serve", "--socket", &endpoint, "--dangerously-bypass-approvals"]
     };
-    let mut command = Command::new(&driver);
+    let mut command = service_command(&driver, &args);
     command
-        .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -662,7 +661,9 @@ pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
 
     let started = Instant::now();
     while started.elapsed() < START_TIMEOUT {
-        if grant_state(&driver) == "active" {
+        // A service waiting for the macOS privacy grants has started: the UI
+        // shows what to allow, instead of a timeout that reads as "off".
+        if matches!(grant_state(&driver), "active" | "permissions") {
             return Ok(status_json(dir));
         }
         thread::sleep(Duration::from_millis(250));
@@ -671,6 +672,34 @@ pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
         "the computer-use service did not start; run `cua-driver doctor` to see why (an interactive desktop session is required)"
             .to_string(),
     )
+}
+
+/// The `CuaDriver.app` bundle that holds `driver`, when it is one (the
+/// official macOS install symlinks `~/.local/bin/cua-driver` into it).
+fn driver_bundle(driver: &Path) -> Option<PathBuf> {
+    let resolved = driver.canonicalize().unwrap_or_else(|_| driver.to_path_buf());
+    let text = resolved.to_str()?;
+    let end = text.find(".app/Contents/MacOS/")?;
+    Some(PathBuf::from(&text[..end + 4]))
+}
+
+/// How the service is launched. On macOS, Accessibility and Screen Recording
+/// are granted to a responsible *app identity*: a raw `cua-driver serve`
+/// spawned by Muse-Desktop would be checked against Muse-Desktop instead, and
+/// CUA documents that mode as unsupported. So the daemon is started as
+/// `CuaDriver.app` itself (`open -n -g -a CuaDriver --args serve …`), the
+/// driver's documented standalone mode: the user grants CuaDriver once, under
+/// an identity CUA signs and that does not change with Muse-Desktop builds.
+fn service_command(driver: &Path, args: &[&str]) -> Command {
+    #[cfg(target_os = "macos")]
+    if let Some(bundle) = driver_bundle(driver) {
+        let mut command = Command::new("/usr/bin/open");
+        command.args(["-n", "-g", "-a"]).arg(bundle).arg("--args").args(args);
+        return command;
+    }
+    let mut command = Command::new(driver);
+    command.args(args);
+    command
 }
 
 /// Revoke first, then stop: revocation is deny-only and never needs a token,
@@ -874,6 +903,27 @@ mod tests {
             GRANT_STATES.contains(&grant),
             "grantState must be one of the documented values, got {grant}"
         );
+    }
+
+    #[test]
+    fn the_driver_bundle_is_found_from_its_executable() {
+        assert_eq!(
+            driver_bundle(Path::new("/Applications/CuaDriver.app/Contents/MacOS/cua-driver")),
+            Some(PathBuf::from("/Applications/CuaDriver.app"))
+        );
+        assert_eq!(driver_bundle(Path::new("/opt/bin/cua-driver-not-a-bundle")), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_starts_the_service_as_cuadriver_app() {
+        let command = service_command(
+            Path::new("/Applications/CuaDriver.app/Contents/MacOS/cua-driver"),
+            &["serve", "--socket", "/tmp/x.sock"],
+        );
+        assert_eq!(command.get_program(), "/usr/bin/open");
+        let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert_eq!(args, ["-n", "-g", "-a", "/Applications/CuaDriver.app", "--args", "serve", "--socket", "/tmp/x.sock"]);
     }
 
     #[test]
