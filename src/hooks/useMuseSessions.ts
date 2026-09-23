@@ -3808,6 +3808,7 @@ export function useMuseSessions(): UseMuseSessions {
       let initialText = "";
       let richContent: RichContent[] | undefined;
       let subagentInternal = false;
+      let modelToolCall = false;
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const rawId = obj.itemId ?? obj.id;
@@ -3829,6 +3830,15 @@ export function useMuseSessions(): UseMuseSessions {
             if (typeof commandText === "string" && commandText.trim().length > 0) {
               initialText = `$ ${commandText.trim()}`;
             }
+          } else if (rawKind.toLowerCase() === "toolcall") {
+            // The model's own tool call: a tool row named by its summary
+            // ("powershell · List directory names"), not an empty assistant
+            // message that read as "thinking…" while a command ran or hung.
+            itemRole = "tool";
+            modelToolCall = true;
+            initialText = typeof obj.toolSummary === "string" && obj.toolSummary.trim().length > 0
+              ? obj.toolSummary.trim()
+              : "Tool call";
           }
         }
       } catch {
@@ -3838,7 +3848,8 @@ export function useMuseSessions(): UseMuseSessions {
         turnIdsRef.current[sid] = turnId;
         delete lastTerminalTurnIdsRef.current[sid];
       }
-      if (itemRole !== "tool") {
+      // A user shell runs outside any turn; the model's tool call is its turn.
+      if (itemRole !== "tool" || modelToolCall) {
         setSessions((cur) =>
           cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
         );
@@ -3931,6 +3942,25 @@ export function useMuseSessions(): UseMuseSessions {
         // Older hosts may omit item/completed. Preserve the exact turn anchor
         // on any remaining open lane before closing it.
         closeOpenBlocks(sid, undefined, completion.turnId);
+      }
+      // A cancelled turn says so in the transcript, as Claude Code's
+      // "Interrupted": otherwise it simply ended on a half-run tool call.
+      if (completion !== null && /cancel|interrupt|stop/i.test(completion.terminal)) {
+        const stoppedTurn = completion.turnId;
+        setLogs((cur) => {
+          const log = cur[sid] ?? [];
+          if (log.some((e) => e.role === "system" && e.text === "Stopped" && e.turnId === stoppedTurn)) return cur;
+          const note: LogEntry = {
+            id: newId(),
+            ts: Date.now(),
+            role: "system",
+            text: "Stopped",
+            ...(stoppedTurn === undefined ? {} : { turnId: stoppedTurn }),
+          };
+          const next = [...log, note];
+          saveLog(sid, next);
+          return { ...cur, [sid]: next };
+        });
       }
       clearStopping(sid);
       delete turnIdsRef.current[sid];

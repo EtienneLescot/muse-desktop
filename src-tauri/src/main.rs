@@ -914,7 +914,34 @@ fn completed_item_text(item: &Value, kind: &str) -> Option<String> {
             .or_else(|| text("message"))
             .or_else(|| text("fallbackText"));
     }
+    if kind.eq_ignore_ascii_case("toolCall") {
+        // Joined under the one-line summary sent with `item_started` (the
+        // `shell_output` lane adds the line break), like the history entries.
+        return text("visibleOutput").map(|output| output.trim_end().to_string());
+    }
     None
+}
+
+/// One line naming what a tool call does, for the transcript while it runs.
+/// Measured on Muse 1.3: `toolCall` items carry `tool` ("powershell") and
+/// `args`, a JSON string with `description` and/or `command`/`path`; nothing
+/// was shown for them before, so a hung command read as "thinking…".
+fn tool_call_summary(item: &Value) -> Option<String> {
+    let tool = item.get("tool").and_then(Value::as_str)?.trim();
+    let args: Value = item
+        .get("args")
+        .and_then(Value::as_str)
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .unwrap_or(Value::Null);
+    let detail = ["description", "command", "path", "pattern", "query"]
+        .iter()
+        .find_map(|key| args.get(*key).and_then(Value::as_str))
+        .map(|value| value.split_whitespace().collect::<Vec<_>>().join(" "));
+    let line = match detail {
+        Some(detail) if !detail.is_empty() => format!("{tool} · {detail}"),
+        _ => tool.to_string(),
+    };
+    (!line.is_empty()).then(|| truncate(&line, 200))
 }
 
 const MAX_OUTPUT_REF_CHARS: usize = 4096;
@@ -1975,6 +2002,7 @@ where
                         "itemId": item_id,
                         "itemKind": kind,
                         "commandText": item.get("commandText"),
+                        "toolSummary": tool_call_summary(item),
                         "outputRef": item_output_ref(item),
                         "richContent": item_rich_content(item),
                         "turnId": item.get("turnId"),
@@ -2163,7 +2191,7 @@ where
                         } else if let Some(text) = fallback_text.as_deref() {
                             let lane = if is_thinking_item_kind(kind) {
                                 "thinking"
-                            } else if kind.eq_ignore_ascii_case("usershell") {
+                            } else if kind.eq_ignore_ascii_case("usershell") || kind.eq_ignore_ascii_case("toolCall") {
                                 "shell_output"
                             } else {
                                 "output"
@@ -2200,6 +2228,7 @@ where
                                 "itemId": item_id,
                                 "itemKind": kind,
                                 "commandText": item.and_then(|i| i.get("commandText")),
+                                "toolSummary": item.and_then(tool_call_summary),
                                 "outputRef": output_ref,
                                 "richContent": item.and_then(item_rich_content),
                                 "turnId": turn_id,
@@ -2231,7 +2260,7 @@ where
                         } else if let Some(text) = fallback_text {
                             let lane = if is_thinking_item_kind(kind) {
                                 "thinking"
-                            } else if kind.eq_ignore_ascii_case("usershell") {
+                            } else if kind.eq_ignore_ascii_case("usershell") || kind.eq_ignore_ascii_case("toolCall") {
                                 "shell_output"
                             } else {
                                 "output"
@@ -8224,6 +8253,21 @@ mod tests {
         assert!(is_approval_mode_ceiling("MSP error: approval_mode_ceiling"));
         assert!(is_approval_mode_ceiling("command rejected (approval mode ceiling)"));
         assert!(!is_approval_mode_ceiling("approval required for this command"));
+    }
+
+    #[test]
+    fn tool_calls_get_a_summary_line_then_their_output() {
+        // Shapes measured on a live Muse 1.3 host (`item/started`, `item/completed`).
+        let started = json!({
+            "kind": "toolCall", "tool": "powershell",
+            "args": "{\"command\":\"Get-ChildItem -Name\",\"description\":\"List directory names\"}"
+        });
+        assert_eq!(tool_call_summary(&started).as_deref(), Some("powershell · List directory names"));
+        let bare = json!({"kind": "toolCall", "tool": "read_file", "args": "{\"path\":\"src/a.ts\"}"});
+        assert_eq!(tool_call_summary(&bare).as_deref(), Some("read_file · src/a.ts"));
+        assert_eq!(tool_call_summary(&json!({"kind": "toolCall"})), None);
+        let completed = json!({"kind": "toolCall", "tool": "powershell", "visibleOutput": "a.txt\r\n"});
+        assert_eq!(completed_item_text(&completed, "toolCall").as_deref(), Some("a.txt"));
     }
 
     #[test]
