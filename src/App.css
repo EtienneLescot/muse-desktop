@@ -6778,6 +6778,17 @@ body.dark .composer textarea::placeholder {
   padding: 6px 10px;
 }
 
+.computer-use-actions button.primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  font-weight: 600;
+}
+
+.computer-use-actions button.primary:hover:not(:disabled) {
+  background: var(--blue-hover);
+}
+
 .computer-use-command {
   display: block;
   padding: 6px 8px;

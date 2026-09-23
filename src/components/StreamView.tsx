@@ -199,6 +199,8 @@ interface Props {
   onForceStop?: () => void;
   /** Retry the last user message when the host marks a turn retryable. */
   onRetryFailedTurn?: (entry: LogEntry) => Promise<void>;
+  /** `authRequired` failures: sign in to Muse, then the app replays the turn. */
+  onSignInForFailedTurn?: (entry: LogEntry) => void;
   /** Start a server-side branch from this completed turn. */
   onForkFromEntry?: (turnId: string) => void;
   /** Open a verified workspace output with the system default application. */
@@ -271,6 +273,7 @@ export function StreamView({
   onCancel,
   onForceStop,
   onRetryFailedTurn,
+  onSignInForFailedTurn,
   onForkFromEntry,
   onOpenWorkspacePath,
   controls,
@@ -1204,6 +1207,15 @@ export function StreamView({
                     <div><dt>Duration</dt><dd>{Math.round(e.engineError.durationMs / 1000)}s</dd></div>
                   )}
                 </dl>
+                {e.engineError.kind === "authRequired" && onSignInForFailedTurn && (
+                  <button
+                    type="button"
+                    className="engine-error-retry"
+                    onClick={() => onSignInForFailedTurn(e)}
+                  >
+                    Sign in with Meta
+                  </button>
+                )}
                 {e.engineError.retryable && onRetryFailedTurn && (
                   <button
                     type="button"

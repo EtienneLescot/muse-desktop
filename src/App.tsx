@@ -4,6 +4,8 @@ import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
 import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
 import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
+import { MuseSetupScreen } from "./components/MuseSetupScreen";
+import { isMacPlatform } from "./lib/platform";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -56,7 +58,7 @@ import { BrowserPanel } from "./components/BrowserPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
 import { searchConversations } from "./lib/conversationSearch";
-import { WindowControls, dragWindow } from "./components/WindowControls";
+import { WindowControls, dragWindow, usesNativeTrafficLights } from "./components/WindowControls";
 import { readStorageString, writeStorageString } from "./lib/storage.ts";
 import {
   NOTIFICATION_ACTION_EVENT,
@@ -293,6 +295,9 @@ export default function App() {
     "task" | "projects" | "automations" | "extensions" | "library" | "archives"
   >("task");
   const [collapsed, setCollapsed] = useState(false);
+  const [museInstalledSignal, setMuseInstalledSignal] = useState(0);
+  // A turn failed with `authRequired`: sign in, then replay that turn.
+  const [signInFor, setSignInFor] = useState<{ sessionId: string; entryId: string } | null>(null);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const scheduleRunsRef = useRef(scheduleRuns);
@@ -555,7 +560,20 @@ export default function App() {
   // US-33: sidecar startup failures surface explicitly (message + expected
   // paths + retry/re-pick actions), never as a blank screen.
   const sidecarKind = classifySidecarError(error);
-  const sidecarPanel = sidecarKind !== null && error !== null && (
+  // macOS does not bundle the engine: a missing sidecar there means the Muse
+  // CLI is simply not installed yet — a first-run step, not an error.
+  const needsMuseSetup = sidecarKind === "missing" && isMacPlatform() && isTauriRuntime();
+  const sidecarPanel = needsMuseSetup ? (
+    <MuseSetupScreen
+      onReady={() => {
+        // Back to the welcome screen; it replays the start the user asked for
+        // (draft, project, worktree) instead of an empty session here.
+        setError(null);
+        void probeStartup(workspace);
+        setMuseInstalledSignal((value) => value + 1);
+      }}
+    />
+  ) : sidecarKind !== null && error !== null && (
     <SidecarErrorPanel
       kind={sidecarKind}
       message={error}
@@ -688,7 +706,26 @@ export default function App() {
   }
 
   return (
-    <div className={`app desktop-app ${collapsed ? "nav-collapsed" : ""}`}>
+    <div className={`app desktop-app ${collapsed ? "nav-collapsed" : ""} ${usesNativeTrafficLights() ? "platform-macos" : ""}`}>
+      {signInFor !== null && (
+        <div className="muse-setup-overlay" role="dialog" aria-modal="true" aria-label="Sign in to Muse">
+          <MuseSetupScreen
+            initialStep="login"
+            onClose={() => setSignInFor(null)}
+            onReady={async () => {
+              const target = signInFor;
+              setSignInFor(null);
+              // A running Muse host read its credentials at start: restart it
+              // so it sees the new sign-in, reconnect, then replay the turn.
+              const session = sessions.find((candidate) => candidate.session_id === target.sessionId);
+              if (session !== undefined && await restartHost(session.workspace)) {
+                await reconnectSession(target.sessionId);
+              }
+              await retryFailedTurn(target.sessionId, target.entryId);
+            }}
+          />
+        </div>
+      )}
       <a className="skip-link" href="#composer">
         Skip to message input
       </a>
@@ -696,6 +733,9 @@ export default function App() {
         {liveMessage}
       </div>
       <aside className="sidebar" aria-label="Sidebar">
+        {usesNativeTrafficLights() && (
+          <div className="mac-titlebar" aria-hidden="true" onMouseDown={dragWindow} />
+        )}
         <div className="brand" onMouseDown={dragWindow}>
           <span className="muse-logo">
             <img src="muse-logo.png" alt="" />
@@ -1240,7 +1280,9 @@ export default function App() {
                 Muse. Your local history is still available.
               </div>
             )}
-            {sidecarKind !== null
+            {needsMuseSetup
+              ? null
+              : sidecarKind !== null
               ? sidecarPanel
               : error && (
                 <div className="error-banner" role="alert">
@@ -1316,6 +1358,7 @@ export default function App() {
                 }}
                 backendMissing={backendMissing}
                 sidecarError={sidecarPanel}
+                resumeStartSignal={museInstalledSignal}
                 authorizationMode={authorizationMode}
                 onAuthorizationModeChange={setAuthorizationMode}
                 reasoningEffort={globalSettings.reasoningEffort}
@@ -1420,6 +1463,11 @@ export default function App() {
                     onCancel={() => void cancelSession(active.session_id)}
                     onForceStop={() => void killSession(active.session_id)}
                     onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
+                    onSignInForFailedTurn={
+                      isMacPlatform() && isTauriRuntime()
+                        ? (entry) => setSignInFor({ sessionId: active.session_id, entryId: entry.id })
+                        : undefined
+                    }
                     onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
                     onOpenWorkspacePath={(path) => openWorkspacePath(active.session_id, path)}
                     controls={{

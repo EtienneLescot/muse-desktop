@@ -1,3 +1,4 @@
+import { hostPlatform, type HostPlatform } from "./platform.ts";
 /**
  * Computer use, as the renderer sees it.
  *
@@ -18,7 +19,7 @@ export const COMPUTER_LEVELS = ["observe", "act"] as const;
 export type ComputerLevel = (typeof COMPUTER_LEVELS)[number];
 
 /** The state of the grant, which is not the state of the service. */
-export const GRANT_STATES = ["stopped", "active", "expired"] as const;
+export const GRANT_STATES = ["stopped", "active", "expired", "permissions"] as const;
 
 export type GrantState = (typeof GRANT_STATES)[number];
 
@@ -143,6 +144,8 @@ export function describeComputerUse(status: ComputerStatus | null): string {
       return "Muse can use this computer, only through the granted tools, until you turn it off.";
     case "expired":
       return "The grant has lapsed. Turn computer use off and on again to grant it anew.";
+    case "permissions":
+      return "macOS has not allowed cua-driver yet. In System Settings › Privacy & Security, turn on CuaDriver under Accessibility and Screen Recording, then choose Check again.";
     default:
       return "Muse cannot control this computer.";
   }
@@ -159,4 +162,11 @@ export function failedProbes(status: ComputerStatus | null): ComputerProbe[] {
 
 /** The exact command that installs the driver, for a copy button. */
 export const DRIVER_INSTALL_COMMAND = "irm https://cua.ai/driver/install.ps1 | iex";
+/** macOS: the driver's official shell installer (CuaDriver.app + ~/.local/bin). */
+export const DRIVER_INSTALL_COMMAND_MACOS = '/bin/bash -c "$(curl -fsSL https://cua.ai/driver/install.sh)"';
+
+/** The install command for the host OS. */
+export function driverInstallCommand(platform: HostPlatform = hostPlatform()): string {
+  return platform === "macos" ? DRIVER_INSTALL_COMMAND_MACOS : DRIVER_INSTALL_COMMAND;
+}
 export const DRIVER_HOME = "https://github.com/trycua/cua";

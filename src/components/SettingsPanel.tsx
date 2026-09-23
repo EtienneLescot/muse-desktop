@@ -1,3 +1,4 @@
+import { isMacPlatform } from "../lib/platform";
 /**
  * w-settings (US-16 sandbox + US-31 providers): settings panel UI.
  *
@@ -280,7 +281,7 @@ export function SettingsPanel({
           <div>
             <h3>Environment</h3>
             <p className="settings-note">
-              Read-only checks for the desktop runtime, WSL, Muse CLI, and the selected workspace.
+              Read-only checks for the desktop runtime, {isMacPlatform() ? "" : "WSL, "}Muse CLI, and the selected workspace.
             </p>
           </div>
           {onProbeStartup && (

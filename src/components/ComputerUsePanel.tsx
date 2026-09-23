@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { installHeadline, parseInstallStatus, type InstallStatus } from "../lib/museInstall";
+import { isTauriRuntime } from "../lib/env";
 import {
   COMPUTER_LEVELS,
   DRIVER_HOME,
-  DRIVER_INSTALL_COMMAND,
+  driverInstallCommand,
   LEVEL_INFO,
   describeComputerUse,
   failedProbes,
@@ -35,6 +38,36 @@ interface Props {
  */
 export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisable }: Props) {
   const [copied, setCopied] = useState(false);
+  const [install, setInstall] = useState<InstallStatus | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
+  const [showLog, setShowLog] = useState(false);
+  const refreshed = useRef(false);
+  const installing = install?.kind === "cua" && install.state === "running";
+
+  const installCall = async (command: string) => {
+    try {
+      setInstallError(null);
+      const next = parseInstallStatus(await invoke(command));
+      if (next) setInstall(next);
+    } catch (error) {
+      setInstallError(String(error));
+    }
+  };
+
+  useEffect(() => {
+    if (!installing) return;
+    const timer = window.setInterval(() => void installCall("muse_cli_install_status"), 500);
+    return () => window.clearInterval(timer);
+  }, [installing]);
+
+  useEffect(() => {
+    if (install?.kind !== "cua") return;
+    if (install.state === "failed") setShowLog(true);
+    if (install.state === "succeeded" && !refreshed.current) {
+      refreshed.current = true;
+      void onRefresh();
+    }
+  }, [install?.kind, install?.state, onRefresh]);
   const active = status?.grantState === "active";
   const probes = failedProbes(status);
 
@@ -52,13 +85,31 @@ export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisabl
             cua-driver
           </a>
           , an open-source (MIT) driver. It is not bundled: installing it is your
-          decision, so the app shows the official command instead of running it.
+          decision. Install runs the driver's official installer; nothing runs
+          until you click.
         </p>
         <div className="computer-use-actions">
+          {isTauriRuntime() && !installing && (
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                refreshed.current = false;
+                void installCall("cua_driver_install_start");
+              }}
+            >
+              {install?.kind === "cua" && install.state === "failed" ? "Try again" : "Install cua-driver"}
+            </button>
+          )}
+          {installing && (
+            <button type="button" onClick={() => void installCall("muse_cli_install_cancel")}>
+              Cancel
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
-              void navigator.clipboard?.writeText(DRIVER_INSTALL_COMMAND).then(
+              void navigator.clipboard?.writeText(driverInstallCommand()).then(
                 () => setCopied(true),
                 () => setCopied(false),
               );
@@ -66,11 +117,21 @@ export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisabl
           >
             {copied ? "Copied" : "Copy install command"}
           </button>
-          <button type="button" onClick={() => void onRefresh()} disabled={busy}>
+          <button type="button" onClick={() => void onRefresh()} disabled={busy || installing}>
             Check again
           </button>
         </div>
-        <code className="computer-use-command">{DRIVER_INSTALL_COMMAND}</code>
+        {install?.kind === "cua" && install.state !== "idle" && (
+          <div className="computer-use-install" role="status" aria-live="polite">
+            <p>{installHeadline(install)}</p>
+            <button type="button" className="link" aria-expanded={showLog} onClick={() => setShowLog((value) => !value)}>
+              {showLog ? "Hide details" : "Show details"}
+            </button>
+            {showLog && <pre className="muse-setup-log">{install.log}</pre>}
+          </div>
+        )}
+        {installError && <p className="error" role="alert">{installError}</p>}
+        <code className="computer-use-command">{driverInstallCommand()}</code>
       </section>
     );
   }
@@ -80,12 +141,23 @@ export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisabl
       <header>
         <strong id="computer-use-title">Computer use</strong>
         <span
-          className={`computer-use-state computer-use-state-${active ? "on" : status?.grantState === "expired" ? "expired" : "off"}`}
+          className={`computer-use-state computer-use-state-${active ? "on" : status?.grantState === "expired" || status?.grantState === "permissions" ? "expired" : "off"}`}
         >
-          {active ? "Granted" : status?.grantState === "expired" ? "Grant expired" : "Off"}
+          {active ? "Granted" : status?.grantState === "expired" ? "Grant expired" : status?.grantState === "permissions" ? "Needs macOS permission" : "Off"}
         </span>
       </header>
       <p className="computer-use-summary">{describeComputerUse(status)}</p>
+
+      {status?.grantState === "permissions" && (
+        <div className="computer-use-note computer-use-note-warning" role="status">
+          <p>{describeComputerUse(status)}</p>
+          <div className="computer-use-actions">
+            <button type="button" onClick={() => void onRefresh()} disabled={busy}>
+              Check again
+            </button>
+          </div>
+        </div>
+      )}
 
       {status?.grantState === "expired" && (
         <p className="computer-use-note computer-use-note-warning" role="status">
@@ -102,7 +174,7 @@ export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisabl
               type="radio"
               name="computer-use-level"
               value={level}
-              checked={active && currentLevel(status) === level}
+              checked={(active || status?.grantState === "permissions") && currentLevel(status) === level}
               onChange={() => void onSetLevel(level)}
             />
             <span>

@@ -86,9 +86,10 @@ function InputCard({
     }
   }
 
-  // US-32: Ctrl+Enter answers, Escape skips — full keyboard operation.
+  // US-32: Ctrl+Enter (Cmd+Enter on macOS) answers, Escape skips — full
+  // keyboard operation.
   function onCardKeyDown(e: React.KeyboardEvent): void {
-    if (e.key === "Enter" && e.ctrlKey) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       submit();
     } else if (e.key === "Escape") {

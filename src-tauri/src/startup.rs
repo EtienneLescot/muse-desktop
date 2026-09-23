@@ -173,6 +173,7 @@ fn unknown(detail: impl Into<String>) -> StartupCheck {
     }
 }
 
+#[cfg_attr(not(windows), allow(unused_variables))]
 fn hidden_window(command: &mut Command) {
     #[cfg(windows)]
     {
@@ -272,6 +273,42 @@ fn probe_wsl() -> (StartupCheck, StartupCheck) {
     (wsl, muse)
 }
 
+/// On macOS the sidecar *is* the native Muse CLI (no WSL layer). Running its
+/// `--version` proves the binary is executable — not quarantined by
+/// Gatekeeper, right architecture — without starting a server.
+#[cfg(target_os = "macos")]
+fn probe_native_cli(path: &Path) -> StartupCheck {
+    let mut command = Command::new(path);
+    command.arg("--version");
+    // The official CLI is a self-updating launcher: a read-only probe must
+    // never download or prompt for a sign-in.
+    command.env("MUSE_NO_AUTO_UPDATE", "1").env("MUSE_LOGIN", "0");
+    match spawn_probe(command) {
+        Ok(child) => {
+            let check = finish_probe(child);
+            if check.status == "ready" {
+                let version = check.detail.lines().next().unwrap_or("").trim();
+                if version.is_empty() {
+                    ready("Muse CLI sidecar responds")
+                } else {
+                    ready(format!("Muse CLI sidecar responds ({})", clip_detail(version)))
+                }
+            } else if check.status == "blocked" {
+                blocked(format!(
+                    "The Muse CLI sidecar did not run: {}",
+                    clip_detail(&check.detail)
+                ))
+            } else {
+                check
+            }
+        }
+        Err(error) => blocked(format!(
+            "The Muse CLI sidecar cannot be executed: {}",
+            clip_detail(&error)
+        )),
+    }
+}
+
 fn probe_workspace(path: Option<&Path>) -> Option<StartupCheck> {
     let path = path?;
     if path.as_os_str().is_empty() {
@@ -296,6 +333,18 @@ fn probe_workspace(path: Option<&Path>) -> Option<StartupCheck> {
                     }
                 });
             }
+            // macOS privacy protection (TCC) lets `metadata` succeed on
+            // Desktop/Documents/Downloads and removable volumes while still
+            // refusing to list them until the user allows the app.
+            #[cfg(target_os = "macos")]
+            if let Err(error) = std::fs::read_dir(path) {
+                if error.kind() == std::io::ErrorKind::PermissionDenied {
+                    return Some(blocked(
+                        "macOS blocked access to this folder; allow Muse-Desktop in System Settings › Privacy & Security › Files and Folders",
+                    ));
+                }
+                return Some(blocked("Selected workspace folder cannot be listed"));
+            }
             Some(ready("Workspace folder is accessible"))
         }
         Ok(_) => Some(blocked("Selected workspace path is not a folder")),
@@ -307,6 +356,10 @@ fn probe_workspace(path: Option<&Path>) -> Option<StartupCheck> {
 /// `sidecar` is injected by the caller so tests can cover bundled/missing
 /// layouts without touching the machine's real installation.
 pub fn probe(sidecar: Result<PathBuf, String>, workspace: Option<&Path>) -> StartupProbe {
+    #[cfg(target_os = "macos")]
+    let native_cli = sidecar.as_ref().ok().map(|path| probe_native_cli(path));
+    #[cfg(not(target_os = "macos"))]
+    let native_cli: Option<StartupCheck> = None;
     let sidecar = match sidecar {
         Ok(path) => ready(format!(
             "Sidecar ready ({})",
@@ -318,7 +371,7 @@ pub fn probe(sidecar: Result<PathBuf, String>, workspace: Option<&Path>) -> Star
         let (wsl, muse) = probe_wsl();
         (Some(wsl), Some(muse))
     } else {
-        (None, None)
+        (None, native_cli)
     };
     StartupProbe {
         platform: platform_name().to_string(),
@@ -402,6 +455,26 @@ mod tests {
         let probe = probe(Ok(root.join("muse-test")), Some(&root));
         assert_eq!(probe.sidecar.status, "ready");
         assert!(probe.workspace.is_some());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_probes_the_native_cli_sidecar() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("muse-startup-cli-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let cli = root.join("muse-fake");
+        fs::write(&cli, "#!/bin/sh\necho 'muse 9.9.9'\n").unwrap();
+        fs::set_permissions(&cli, fs::Permissions::from_mode(0o755)).unwrap();
+        let probe = probe(Ok(cli), Some(&root));
+        let cli = probe.muse_cli.expect("macOS reports the native CLI");
+        assert_eq!(cli.status, "ready");
+        assert!(cli.detail.contains("9.9.9"), "{}", cli.detail);
+        assert!(probe.wsl.is_none());
+        assert_eq!(probe.workspace.unwrap().status, "ready");
+        let broken = probe_native_cli(&root.join("absent"));
+        assert_eq!(broken.status, "blocked");
         let _ = fs::remove_dir_all(root);
     }
 

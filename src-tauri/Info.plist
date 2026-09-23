@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Merged into the macOS bundle by Tauri. Desktop control drives the
+       Accessibility tree through System Events, which macOS gates behind an
+       Automation prompt that must explain why it is asked. -->
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Muse-Desktop uses System Events to inspect and control the desktop windows you explicitly select in the Desktop panel.</string>
+</dict>
+</plist>

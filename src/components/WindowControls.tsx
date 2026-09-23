@@ -3,6 +3,16 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Icon } from "./Icon";
 import { userFacingError } from "../lib/errorCopy";
+import { isMacPlatform } from "../lib/platform";
+
+/**
+ * macOS keeps its native traffic lights (see `tauri.macos.conf.json`, which
+ * overlays them on a hidden title bar), so the custom caption buttons are
+ * Windows/Linux only.
+ */
+export function usesNativeTrafficLights(): boolean {
+  return isTauri() && isMacPlatform();
+}
 
 export function dragWindow(event: MouseEvent<HTMLElement>) {
   if (!isTauri() || event.button !== 0 ||
@@ -16,7 +26,7 @@ export function WindowControls() {
   const [maximized, setMaximized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || usesNativeTrafficLights()) return;
     const window = getCurrentWindow();
     let disposed = false;
     let unlisten: (() => void) | undefined;
@@ -27,7 +37,7 @@ export function WindowControls() {
     void window.onResized(sync).then(stop => { if (disposed) stop(); else unlisten = stop; });
     return () => { disposed = true; unlisten?.(); };
   }, []);
-  if (!isTauri()) return null;
+  if (!isTauri() || usesNativeTrafficLights()) return null;
   async function act(action: "minimize" | "toggleMaximize" | "close") {
     try { setError(null); await getCurrentWindow()[action](); }
     catch (error) { setError(userFacingError(`window action failed: ${String(error)}`, "Unable to change the window.")); }

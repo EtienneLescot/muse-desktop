@@ -74,6 +74,7 @@ describe("startup recovery guidance", () => {
     const steps = startupRecoverySteps(
       "start-failed",
       "Muse WSL adapter: Install Muse in WSL (~/.local/bin/muse) first; WSL cannot open this workspace",
+      "windows",
     );
     const titles = steps.map((step) => step.title);
     assert.deepEqual(titles, [
@@ -86,7 +87,7 @@ describe("startup recovery guidance", () => {
   });
 
   it("gives a concrete sidecar step for a missing binary", () => {
-    const steps = startupRecoverySteps("missing", MISSING);
+    const steps = startupRecoverySteps("missing", MISSING, "windows");
     assert.equal(steps[0]?.title, "Provide the matching sidecar");
     assert.equal(steps.at(-1)?.title, "Retry the connection");
   });
@@ -95,6 +96,7 @@ describe("startup recovery guidance", () => {
     const steps = startupRecoverySteps(
       "start-failed",
       "MSP handshake failed: Muse authentication credentials are missing",
+      "windows",
     );
     const auth = steps.find((step) => step.title === "Sign in to Muse");
     assert.ok(auth);
@@ -106,5 +108,19 @@ describe("startup recovery guidance", () => {
     const steps = startupRecoverySteps("start-failed", "handshake failed");
     assert.match(steps[0]?.detail ?? "", /Check that the sidecar/);
     assert.doesNotMatch(steps[0]?.detail ?? "", /installed|authenticated/i);
+  });
+
+  it("gives native macOS guidance without WSL steps", () => {
+    const missing = startupRecoverySteps("missing", MISSING, "macos");
+    assert.equal(missing[0]?.title, "Install the Muse CLI");
+    assert.match(missing[0]?.detail ?? "", /dev\.meta\.ai\/install\.sh/);
+    const steps = startupRecoverySteps(
+      "start-failed",
+      "muse command not found; workspace: Operation not permitted",
+      "macos",
+    );
+    const titles = steps.map((step) => step.title);
+    assert.deepEqual(titles, ["Check the Muse CLI", "Choose an accessible folder", "Retry the connection"]);
+    assert.ok(steps.every((step) => !/WSL|PowerShell/.test(step.detail)));
   });
 });
