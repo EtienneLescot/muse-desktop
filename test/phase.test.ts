@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   REFLEXIVE_LABEL,
+  isEmptyAssistantEntry,
   applyItemSnapshotUpdate,
   dropEmptyPlaceholders,
   isItemStartKind,
@@ -377,5 +378,19 @@ describe("dropEmptyPlaceholders", () => {
 describe("REFLEXIVE_LABEL", () => {
   it("is a short non-empty label", () => {
     assert.ok(REFLEXIVE_LABEL.length > 0 && REFLEXIVE_LABEL.length <= 24);
+  });
+});
+
+describe("isEmptyAssistantEntry", () => {
+  const base = { id: "a", ts: 1, role: "assistant" as const, text: "" };
+  it("hides a closed assistant message with nothing to show", () => {
+    assert.equal(isEmptyAssistantEntry(base), true);
+    assert.equal(isEmptyAssistantEntry({ ...base, text: "  \n" }), true);
+  });
+  it("keeps streaming, textual, rich, output or failed messages", () => {
+    assert.equal(isEmptyAssistantEntry({ ...base, open: true }), false);
+    assert.equal(isEmptyAssistantEntry({ ...base, text: "hi" }), false);
+    assert.equal(isEmptyAssistantEntry({ ...base, outputRef: "ref" }), false);
+    assert.equal(isEmptyAssistantEntry({ ...base, role: "user" }), false);
   });
 });

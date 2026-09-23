@@ -100,6 +100,20 @@ pub struct SessionMeta {
     /// `Run in Muse` used to fail after the user had already clicked it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub loaded: Option<bool>,
+    /// Title the host keeps for the conversation (`session/list`,
+    /// `session/read`). Without it a restored or resumed row stayed "New
+    /// conversation" or "Session 01a0…" while the host knew it as "yo".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+/// Host title, trimmed, without control characters (a live title carried a
+/// trailing NUL), and bounded for the sidebar.
+fn session_title(session: &Value) -> Option<String> {
+    let raw = session.get("title").and_then(Value::as_str)?;
+    let clean: String = raw.chars().filter(|c| !c.is_control()).collect();
+    let clean = clean.trim();
+    (!clean.is_empty()).then(|| truncate(clean, 200))
 }
 
 /// Sandbox posture selected when a workspace-owned Muse host is spawned.
@@ -1080,6 +1094,20 @@ fn completion_preview_at(value: &Value, depth: u8) -> Option<String> {
     }
 }
 
+/// `session/list` is global to the Muse home: it returns the conversations of
+/// every workspace, not only the host's (measured: 66 rows over 16 folders).
+/// A row belongs to this host only when its `workspaceRoot` resolves to the
+/// same folder; otherwise restore attached other projects' conversations to
+/// this one. Rows without a workspace keep the legacy behaviour.
+fn listed_in_workspace(root: &Path, session: &Value) -> bool {
+    let Some(raw) = session.get("workspaceRoot").and_then(Value::as_str) else {
+        return true;
+    };
+    resume::host_path(raw)
+        .canonicalize()
+        .is_ok_and(|listed| listed == root)
+}
+
 fn session_meta_from_list_row(
     root: &Path,
     session: &Value,
@@ -1101,6 +1129,7 @@ fn session_meta_from_list_row(
         granted_capabilities,
         model_id: session_model_id(session),
         loaded: session_loaded(session),
+        title: session_title(session),
     })
 }
 
@@ -1284,6 +1313,7 @@ fn apply_resumed_session(meta: &mut SessionMeta, session: &Value) {
     meta.approval_mode = session_approval_mode(session).or_else(|| meta.approval_mode.clone());
     meta.model_id = session_model_id(session).or_else(|| meta.model_id.clone());
     meta.loaded = session_loaded(session).or(meta.loaded);
+    meta.title = session_title(session).or_else(|| meta.title.take());
 }
 
 fn push_event(state: &AppState, session_id: &str, kind: &str, payload: String) {
@@ -4298,6 +4328,7 @@ async fn start_session_at_workspace(
         granted_capabilities,
         model_id: session_model_id(session),
         loaded: session_loaded(session),
+        title: None,
     };
     state
         .sessions
@@ -4436,6 +4467,7 @@ async fn fork_session(
         granted_capabilities: session_granted_capabilities(&state, &root)?,
         model_id: session_model_id(session),
         loaded: session_loaded(session),
+        title: None,
     };
     state
         .sessions
@@ -4522,6 +4554,7 @@ async fn resume_session_with_client(
             .get("session")
             .and_then(session_loaded)
             .or_else(|| session_loaded(&read)),
+        title: read.get("session").and_then(session_title),
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     if let Err(error) = state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client) {
@@ -4826,7 +4859,7 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
                     else {
                         continue;
                     };
-                    if !seen_sessions.insert(sid.to_string()) {
+                    if !seen_sessions.insert(sid.to_string()) || !listed_in_workspace(&root, s) {
                         continue;
                     }
                     // A session listed by a workspace-owned host can be
@@ -5982,6 +6015,7 @@ mod tests {
                 model_id: None,
 
                 loaded: None,
+                title: None,
                 granted_capabilities: None,
             },
         );
@@ -6254,6 +6288,7 @@ mod tests {
                 model_id: None,
 
                 loaded: None,
+                title: None,
                 granted_capabilities: None,
             },
         );
@@ -6316,6 +6351,7 @@ mod tests {
                 model_id: None,
 
                 loaded: None,
+                title: None,
                 granted_capabilities: None,
             },
         );
@@ -6377,6 +6413,7 @@ mod tests {
                 model_id: None,
 
                 loaded: None,
+                title: None,
                 granted_capabilities: None,
             },
         );
@@ -8190,6 +8227,27 @@ mod tests {
     }
 
     #[test]
+    fn host_title_is_cleaned_and_absent_when_blank() {
+        assert_eq!(
+            session_title(&json!({"title": "Reply with exactly the word: PTY\u{0}"})).as_deref(),
+            Some("Reply with exactly the word: PTY")
+        );
+        assert_eq!(session_title(&json!({"title": "  "})), None);
+        assert_eq!(session_title(&json!({"sessionId": "x"})), None);
+    }
+
+    #[test]
+    fn restore_admits_only_rows_of_the_host_workspace() {
+        let root = std::env::current_dir().unwrap().canonicalize().unwrap();
+        let plain = rules::display_path(&root);
+        assert!(listed_in_workspace(&root, &json!({"workspaceRoot": root.display().to_string()})));
+        assert!(listed_in_workspace(&root, &json!({"workspaceRoot": plain})));
+        assert!(!listed_in_workspace(&root, &json!({"workspaceRoot": root.parent().unwrap()})));
+        assert!(!listed_in_workspace(&root, &json!({"workspaceRoot": "Z:\\no\\such\\folder"})));
+        assert!(listed_in_workspace(&root, &json!({"sessionId": "legacy"})));
+    }
+
+    #[test]
     fn full_host_detection_matches_the_measured_capacity_error_only() {
         assert!(is_host_full(
             "could not reconnect conversation: MSP error -32030: host loaded-session capacity is exhausted [commandRejected] (runtime_busy) [retryable=true]"
@@ -8718,6 +8776,7 @@ mod tests {
             granted_capabilities: Some(vec!["userShell".to_string()]),
             model_id: None,
             loaded: Some(false),
+            title: None,
         };
         apply_resumed_session(
             &mut meta,
@@ -8816,6 +8875,7 @@ mod tests {
                 model_id: None,
 
                 loaded: None,
+                title: None,
                 granted_capabilities: None,
             },
         );
