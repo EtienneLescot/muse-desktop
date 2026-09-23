@@ -179,6 +179,11 @@ pub fn manifest(level: &str, available: &[String]) -> Option<Value> {
         "expires_after": EXPIRES_AFTER,
         "idle_timeout": IDLE_TIMEOUT,
         "allow": { "tools": tools },
+        // The driver gates resources separately from tools: without this,
+        // even "observe" was refused (`list_windows` → "desktop display
+        // observation is outside the capability manifest", measured on
+        // cua-driver 0.28.2). Schema read from the driver's own validation.
+        "resources": { "desktop": { "display": true } },
     }))
 }
 
@@ -684,6 +689,15 @@ mod tests {
         let allow = value["allow"].as_object().expect("allow is an object");
         assert_eq!(allow.len(), 1);
         assert!(allow["tools"].is_array());
+    }
+
+    #[test]
+    fn every_level_grants_display_observation() {
+        let available = fixture();
+        for level in LEVELS {
+            let m = manifest(level, &available).unwrap();
+            assert_eq!(m["resources"]["desktop"]["display"], true, "{level}");
+        }
     }
 
     #[test]
