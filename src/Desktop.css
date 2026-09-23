@@ -266,19 +266,6 @@
 .connection-error .connection-state-dot {
   background: var(--warning, #d89024);
 }
-.task-project-context {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.task-project-context span + span::before {
-  content: "·";
-  margin-right: 14px;
-  color: var(--line-strong, var(--line));
-}
 .desktop-app .stream {
   padding: 16px 32px 24px;
   gap: 24px;
@@ -331,6 +318,21 @@
 .desktop-app .msg.tool pre,
 .desktop-app .msg.system pre {
   font-size: 11px;
+}
+.tool-call summary {
+  cursor: pointer;
+  color: var(--muted);
+  list-style-position: inside;
+}
+.tool-call summary:hover {
+  color: var(--text);
+}
+.tool-call[open] summary {
+  margin-bottom: 8px;
+}
+.tool-call pre {
+  max-height: 320px;
+  overflow: auto;
 }
 .desktop-app .composer-wrap {
   flex: none;
@@ -1380,14 +1382,65 @@
   white-space: pre-wrap;
   margin: 12px 0;
 }
-.message-content h3 {
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4 {
   font-size: 15px;
   font-weight: 600;
+  margin: 18px 0 6px;
 }
-.message-content ul {
-  padding-left: 20px;
+.message-content h1 {
+  font-size: 17px;
 }
-.message-content p code {
+.message-content ul,
+.message-content ol {
+  padding-left: 22px;
+  margin: 8px 0 12px;
+}
+.message-content li > p {
+  margin: 0;
+}
+.message-content li + li {
+  margin-top: 2px;
+}
+.message-content blockquote {
+  margin: 12px 0;
+  padding: 2px 14px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+.message-content a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.message-content hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 18px 0;
+}
+.message-table {
+  overflow-x: auto;
+  margin: 12px 0;
+}
+.message-content table {
+  border-collapse: collapse;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.message-content th,
+.message-content td {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.message-content th {
+  background: var(--surface);
+  font-weight: 600;
+}
+.message-content :not(pre) > code {
   font: 12px var(--font-code);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1414,6 +1467,7 @@
   font-size: 11px;
   padding: 4px 8px;
 }
+.desktop-app .msg .message-code pre,
 .desktop-app .message-code pre {
   font: 12px/1.8 var(--font-code);
   padding: 16px;
@@ -1628,4 +1682,8 @@
   .desktop-app summary:focus-visible {
     outline-color: Highlight;
   }
+}
+.tool-call summary code {
+  font: 11px var(--font-code);
+  color: var(--text);
 }

@@ -64,7 +64,6 @@ import { DesktopControlPanel } from "./components/DesktopControlPanel";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
 import { searchConversations } from "./lib/conversationSearch";
-import { reasoningEffortLabel } from "./lib/reasoning";
 import { WindowControls, dragWindow } from "./components/WindowControls";
 import { readStorageString, writeStorageString } from "./lib/storage.ts";
 import {
@@ -1454,28 +1453,6 @@ export default function App() {
                               : "Disconnected"}
                       </span>
                     </div>
-                    {activeProject !== null && (
-                      <div
-                        className="task-project-context"
-                        title="Project settings: the model and project isolation overrides are sent to a new workspace host; the global permission gate still applies and an existing host keeps its posture until restart."
-                      >
-                        <span>Project: {activeProject.name}</span>
-                        <span>
-                          Model: {activeProjectSettings.model === "default"
-                            ? "Host default"
-                            : activeProjectSettings.model}
-                        </span>
-                        <span title="Projected to host startup with the global permission gate; an existing host keeps its posture until restart">
-                          Sandbox preference: {activeProjectSettings.sandbox}
-                        </span>
-                        <span title="Project network preference remains the approval policy; host network posture is selected at workspace startup">
-                          Network preference: {activeProjectSettings.networkDefault}
-                        </span>
-                        <span>
-                          Reasoning: {reasoningEffortLabel(activeProjectSettings.reasoningEffort)}
-                        </span>
-                      </div>
-                    )}
                   </header>
                   {active.archived && (
                     <div className="preview-notice">

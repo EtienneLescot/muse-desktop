@@ -1354,6 +1354,13 @@ interface BackendSessionMeta {
    * refuse with `sessionNotLoaded`.
    */
   loaded?: boolean;
+  /** Title the host keeps for this conversation, when it has one. */
+  title?: string;
+}
+
+/** A placeholder title ("Session 01a0…" or none) gives way to the host title. */
+function withHostTitle(local: string, host: string | undefined): string {
+  return host !== undefined && (local === "" || local.startsWith("Session ")) ? host : local;
 }
 
 interface BackendWorktreeSessionResult {
@@ -2263,6 +2270,7 @@ export function useMuseSessions(): UseMuseSessions {
             if (i >= 0) {
               next[i] = {
                 ...next[i],
+                title: withHostTitle(next[i].title, meta.title),
                 workspace: meta.workspace,
                 running: meta.running,
                 ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
@@ -2275,7 +2283,7 @@ export function useMuseSessions(): UseMuseSessions {
               next.push({
                 session_id: meta.session_id,
                 workspace: meta.workspace,
-                title: `Session ${meta.session_id.slice(0, 8)}`,
+                title: meta.title ?? `Session ${meta.session_id.slice(0, 8)}`,
                 createdAt: Date.now(),
                 running: meta.running,
                 ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
@@ -4591,13 +4599,17 @@ export function useMuseSessions(): UseMuseSessions {
       if (meta.loaded !== undefined) {
         setSessionLoadedBySession((cur) => ({ ...cur, [id]: meta.loaded }));
       }
-      if (meta.model_id) {
-        setSessions((cur) =>
-          cur.map((session) =>
-            session.session_id === id ? { ...session, model_id: meta.model_id } : session,
-          ),
-        );
-      }
+      setSessions((cur) =>
+        cur.map((session) =>
+          session.session_id === id
+            ? {
+                ...session,
+                title: withHostTitle(session.title, meta.title),
+                ...(meta.model_id ? { model_id: meta.model_id } : {}),
+              }
+            : session,
+        ),
+      );
       // Resume restores the host's persisted posture. Reconcile it with the
       // current global selector before enabling the composer again. A host
       // ceiling must not make the saved conversation unusable: preserve the

@@ -9,6 +9,14 @@
 
 /** A quiet stream becomes actionable after this interval. */
 export const STREAM_STALE_AFTER_MS = 15_000;
+/**
+ * Silence allowed while work is in flight: an open item or a running
+ * sub-agent, host-internal children included. The host emits nothing while a
+ * child or a long tool runs. Measured on a README summary: the answer was
+ * complete, then a host-internal child kept the turn busy for 50 s more, which
+ * the 15 s threshold reported as a stalled stream.
+ */
+export const STREAM_OPEN_WORK_STALE_AFTER_MS = 120_000;
 
 /** Why a bounded recovery attempt could not provide durable progress. */
 export type StreamRecoveryNotice = "unsupported" | "failed";
@@ -52,6 +60,8 @@ export interface StreamHealthInput {
   resumePendingAt?: number | null;
   /** The host scheduled another attempt and supplied its backoff metadata. */
   retryScheduled?: RetryScheduled | null;
+  /** An item or sub-agent of the turn is still open on the host. */
+  openWork?: boolean;
   now: number;
 }
 
@@ -152,7 +162,8 @@ export function classifyStreamHealth(input: StreamHealthInput): StreamHealth {
   }
   if (input.lastEventAt === null) return "waiting-host";
   const elapsed = Math.max(0, input.now - input.lastEventAt);
-  return elapsed >= STREAM_STALE_AFTER_MS ? "stalled" : "working";
+  const allowed = input.openWork === true ? STREAM_OPEN_WORK_STALE_AFTER_MS : STREAM_STALE_AFTER_MS;
+  return elapsed >= allowed ? "stalled" : "working";
 }
 
 /** Stable wording for the compact status row in the conversation stream. */

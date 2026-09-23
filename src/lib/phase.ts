@@ -441,3 +441,19 @@ export function dropEmptyPlaceholders(log: LogEntry[]): LogEntry[] {
       ),
   );
 }
+
+/**
+ * A closed assistant message with nothing to show. The host opens and closes
+ * message items around its internal children without text; rendering them left
+ * bare "Muse" headers with only a timestamp in the transcript.
+ */
+export function isEmptyAssistantEntry(e: LogEntry): boolean {
+  return (
+    e.role === "assistant" &&
+    e.open !== true &&
+    e.text.trim().length === 0 &&
+    (e.richContent?.length ?? 0) === 0 &&
+    e.outputRef === undefined &&
+    e.engineError === undefined
+  );
+}
