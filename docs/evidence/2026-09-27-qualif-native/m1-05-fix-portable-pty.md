@@ -149,6 +149,17 @@ pour `cmd.exe`), qui la refuse et **dévie sur `C:\Windows`**. Conséquences :
 `\\?\G:\repos\openscreen` → `G:\repos\openscreen`) dans `terminal_open` — et la même normalisation
 dans la comparaison de workspaces des automations.
 
+**Correctif appliqué (22/09/2026).** Seul le PTY était touché. `std::process::Command` retire
+déjà le préfixe : un runner de setup lancé sur un chemin canonique affiche bien le worktree, pas
+`C:\Windows`. Donc `setup.rs` et `mcp.rs` sont sains, et `portable-pty` passe le chemin brut.
+
+- `terminal.rs` : le cwd du shell passe par `rules::display_path` avant le spawn.
+  `TerminalInfo.cwd` rapporte la même forme simple.
+- Test de non-régression Windows `terminal::tests::shell_starts_in_a_canonical_workspace` : PTY
+  réel sur un dossier canonique `\\?\…`, on attend le prompt `<dossier>>`. Il échouait avant le
+  correctif (`C:\Windows>` et avertissement UNC), il passe après. `cargo test` : 233/233.
+- **Reste :** rejouer en app. Le prompt du terminal doit montrer le workspace de la conversation.
+
 ## Reproductibilité
 
 - Commit : cette note + `src-tauri/Cargo.toml`/`Cargo.lock` (downgrade) + `scripts/cdp-type.mjs`.

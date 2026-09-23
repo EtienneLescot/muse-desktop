@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/env";
+import { displayPath } from "../lib/paths";
 import type { StartupProbe } from "../lib/startupProbe";
 export type { StartupCheck, StartupProbe } from "../lib/startupProbe";
 import { loadQueuedTurns, reconcileQueuedTurns, saveQueuedTurns } from "../lib/queuedTurns";
@@ -181,7 +182,7 @@ import {
 import { statusLogText } from "../lib/statusLog";
 // Boot auto-resume candidate selection (pure, unit-tested): which stored
 // sessions need a silent `resume_session` after `restore_sessions` settles.
-import { selectBootResumeCandidates } from "../lib/bootResume";
+import { selectResumeOnOpen } from "../lib/bootResume";
 import {
   parseRetryScheduled,
   resumeRecoveryDelay,
@@ -1987,7 +1988,7 @@ export function useMuseSessions(): UseMuseSessions {
   const restoreSettledRef = useRef(false);
   // Boot auto-resume runs once: silent `resume_session` for the stored
   // sessions the backend did not admit (hosts do not survive a restart).
-  const bootResumeDoneRef = useRef(false);
+  const resumeAttemptedRef = useRef(new Set<string>());
   // M0-03 outbox: durable retryable sends per session, restored once. An
   // entry still `sending` at boot means the app died or reloaded mid-flight:
   // the outcome is unknown, so it recovers as failed/ambiguous (a retry
@@ -3324,6 +3325,12 @@ export function useMuseSessions(): UseMuseSessions {
       });
       clearStopping(sid);
       clearRetryScheduled(sid);
+      // A full host was replaced to make room (`HOST_RECYCLED_MESSAGE` in
+      // main.rs): opening this conversation again resumes it silently. A
+      // crashed host keeps the manual Reconnect, so a crash cannot loop.
+      if (payload.startsWith("Muse closed this conversation to make room")) {
+        resumeAttemptedRef.current.delete(sid);
+      }
     }
     if (kind === "output") {
       ensureSessionRow(sid, null);
@@ -4083,8 +4090,12 @@ export function useMuseSessions(): UseMuseSessions {
         return nextState;
       });
       if (failed > 0) {
+        const firstRejection = results.find((result) => result.status === "rejected");
+        const reason = firstRejection?.status === "rejected"
+          ? ` First reason: ${userFacingError(firstRejection.reason)}`
+          : "";
         setError(
-          `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host.`,
+          `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host.${reason}`,
         );
       }
     });
@@ -4678,31 +4689,25 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, [authorizationMode, globalSettings, projects, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, sandbox]);
 
-  // Boot auto-resume: `restore_sessions` only admits sessions for
+  // Resume on open: `restore_sessions` only admits sessions for
   // already-connected hosts, and hosts do not survive an app restart. Once
-  // the backend restore settles, silently resume the stored sessions it did
-  // not admit (active first) so Terminal/Files find their native route
-  // without a manual Reconnect. Failures stay silent: rows keep
-  // 'disconnected' and the user can still reconnect by hand.
+  // the backend restore settles, silently resume the open conversation so
+  // Terminal/Files find their native route without a manual Reconnect — and
+  // only that one: a host holds 32 loaded sessions and resuming every stored
+  // row filled it (see lib/bootResume.ts). One automatic attempt per
+  // conversation per run; a failure stays 'disconnected' for a manual Reconnect.
   useEffect(() => {
-    if (!historyReady || !isTauriRuntime()) return;
-    if (bootResumeDoneRef.current || !restoreSettledRef.current) return;
-    bootResumeDoneRef.current = true;
-    const candidates = selectBootResumeCandidates({
+    if (!historyReady || !isTauriRuntime() || !restoreSettledRef.current) return;
+    const id = selectResumeOnOpen({
       stored: sessions,
       restoredIds: connectedIds,
       tombstonedIds: tombstoned.current,
       activeId,
     });
-    if (candidates.length === 0) return;
-    void (async () => {
-      for (const id of candidates) {
-        if (!aliveRef.current) return;
-        await reconnectSession(id, { silent: true });
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyReady, reconnectSession]);
+    if (id === null || resumeAttemptedRef.current.has(id)) return;
+    resumeAttemptedRef.current.add(id);
+    void reconnectSession(id, { silent: true });
+  }, [historyReady, activeId, connectedIds, sessions, reconnectSession]);
 
 
   const startSession = useCallback(async () => {
@@ -6579,7 +6584,9 @@ export function useMuseSessions(): UseMuseSessions {
       const targetSession = target === "new"
         ? null
         : sessions.find((session) => session.session_id === target) ?? null;
-      if (item.workspace && targetSession && targetSession.workspace !== item.workspace) {
+      // The conversation holds the native `\\?\G:\…` spelling, the schedule the
+      // folder as picked: same directory, compared without the prefix.
+      if (item.workspace && targetSession && displayPath(targetSession.workspace) !== displayPath(item.workspace)) {
         const message = "the recorded workspace no longer matches the target conversation";
         setError(`schedule run failed: ${message}`);
         failRun(message, false);

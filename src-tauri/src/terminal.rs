@@ -158,8 +158,11 @@ impl TerminalRegistry {
                 pixel_height: 0,
             })
             .map_err(|e| format!("open terminal: {e}"))?;
+        // cmd.exe reads the canonical `\\?\G:\…` form as a UNC path, refuses it
+        // and starts in C:\Windows; std::process strips it, portable-pty does not.
+        let shell_cwd = crate::rules::display_path(cwd);
         let mut command = CommandBuilder::new(&shell);
-        command.cwd(cwd);
+        command.cwd(&shell_cwd);
         command.env("TERM", "xterm-256color");
         let mut child = pair
             .slave
@@ -206,7 +209,7 @@ impl TerminalRegistry {
         let info = TerminalInfo {
             terminal_id: terminal_id.clone(),
             session_id: session_id.to_string(),
-            cwd: cwd.display().to_string(),
+            cwd: shell_cwd,
             shell: shell.clone(),
             generation,
             cols,
@@ -377,5 +380,27 @@ mod tests {
         assert_eq!(read.terminal_id, "term-1");
         assert!(read.output.chars().count() <= MAX_OUTPUT_CHARS);
         assert!(buffer.chunks.is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn shell_starts_in_a_canonical_workspace() {
+        let root = std::env::temp_dir().join(format!("muse-terminal-cwd-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        assert!(root.display().to_string().starts_with(r"\\?\"));
+        let registry = TerminalRegistry::default();
+        let info = registry.open("cwd-test", &root, None, None).unwrap();
+        // cmd.exe prints its cwd as the prompt.
+        let prompt = format!("{}>", crate::rules::display_path(&root));
+        let mut output = String::new();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline && !output.contains(&prompt) {
+            output.push_str(&registry.read(&info.terminal_id).unwrap().output);
+            thread::sleep(std::time::Duration::from_millis(100));
+        }
+        registry.close_all();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(output.contains(&prompt), "{output}");
     }
 }
