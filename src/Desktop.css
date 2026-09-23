@@ -1363,7 +1363,25 @@
 .destination-page .integration-form {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 12px;
+}
+/* The local MCP form inherited `align-items: center` from its compact row
+   layout, which shrank both fields to a narrow centered column here. */
+.destination-page .local-mcp .integration-form input {
+  flex: none;
+}
+.destination-page .integration-form > button[type="submit"] {
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 16px;
+  background: var(--bg);
+  font-size: 12px;
+}
+.destination-page .local-mcp p,
+.destination-page .local-mcp h4 {
+  font-size: 12px;
 }
 .destination-page .integration-panel h3 {
   font-size: 18px;
@@ -1742,4 +1760,23 @@
 }
 .welcome-draft .welcome-send:disabled {
   opacity: 0.45;
+}
+/* Text first, action below: side by side, the button took half the card and
+   squeezed the explanation to one word per line. */
+.destination-page .connector-session-apply {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.destination-page .connector-session-apply p {
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+.destination-page .connector-session-apply button {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 7px 14px;
+  background: var(--bg);
+  font-size: 12px;
 }
