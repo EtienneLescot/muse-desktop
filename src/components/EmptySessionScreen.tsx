@@ -192,6 +192,9 @@ export function EmptySessionScreen({
         },
       );
       if (sent) {
+        // The state too, not only the stored copy: a sent message came back
+        // in the next conversation's composer and was sent twice.
+        setDraft("");
         removeSessionStorageKey(welcomeDraftKey);
         setAttachments([]);
       }

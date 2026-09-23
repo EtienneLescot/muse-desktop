@@ -922,15 +922,32 @@ fn tool_call_summary(item: &Value) -> Option<String> {
         .and_then(Value::as_str)
         .and_then(|raw| serde_json::from_str(raw).ok())
         .unwrap_or(Value::Null);
-    let detail = ["description", "command", "path", "pattern", "query"]
+    let detail = ["description", "command", "path", "pattern", "query", "name", "aumid", "key", "text"]
         .iter()
         .find_map(|key| args.get(*key).and_then(Value::as_str))
-        .map(|value| value.split_whitespace().collect::<Vec<_>>().join(" "));
+        .map(|value| value.split_whitespace().collect::<Vec<_>>().join(" "))
+        .or_else(|| match (args["x"].as_f64(), args["y"].as_f64()) {
+            (Some(x), Some(y)) => Some(format!("at ({x:.0}, {y:.0})")),
+            _ => args["element_index"].as_u64().map(|index| format!("element {index}")),
+        });
+    let tool = tool_label(tool);
     let line = match detail {
         Some(detail) if !detail.is_empty() => format!("{tool} · {detail}"),
         _ => tool.to_string(),
     };
     (!line.is_empty()).then(|| truncate(&line, 200))
+}
+
+/// An MCP tool's wire name, readable: `mcp__computer_use__press_key` becomes
+/// `Computer use · press key`. Built-in tool names are left as they are.
+fn tool_label(tool: &str) -> String {
+    let Some((server, name)) = tool.strip_prefix("mcp__").and_then(|rest| rest.split_once("__")) else {
+        return tool.to_string();
+    };
+    let server = server.replace('_', " ");
+    let mut chars = server.chars();
+    let server: String = chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default();
+    format!("{server} · {}", name.replace('_', " "))
 }
 
 const MAX_OUTPUT_REF_CHARS: usize = 4096;
@@ -7945,6 +7962,20 @@ mod tests {
         let bare = json!({"kind": "toolCall", "tool": "read_file", "args": "{\"path\":\"src/a.ts\"}"});
         assert_eq!(tool_call_summary(&bare).as_deref(), Some("read_file · src/a.ts"));
         assert_eq!(tool_call_summary(&json!({"kind": "toolCall"})), None);
+        let mcp = |tool: &str, args: &str| tool_call_summary(&json!({"tool": tool, "args": args}));
+        assert_eq!(
+            mcp("mcp__computer_use__launch_app", "{\"name\":\"Calculator\"}").as_deref(),
+            Some("Computer use · launch app · Calculator")
+        );
+        assert_eq!(
+            mcp("mcp__computer_use__click", "{\"pid\":1,\"x\":265.0,\"y\":320.0}").as_deref(),
+            Some("Computer use · click · at (265, 320)")
+        );
+        assert_eq!(
+            mcp("mcp__computer_use__click", "{\"pid\":1,\"element_index\":28}").as_deref(),
+            Some("Computer use · click · element 28")
+        );
+        assert_eq!(mcp("mcp__computer_use__list_apps", "{}").as_deref(), Some("Computer use · list apps"));
         let completed = json!({"kind": "toolCall", "tool": "powershell", "visibleOutput": "a.txt\r\n"});
         assert_eq!(completed_item_text(&completed, "toolCall").as_deref(), Some("a.txt"));
     }
@@ -8591,6 +8622,10 @@ mod tests {
 }
 
 fn main() {
+    // The Muse host starts this executable as its computer-use MCP server.
+    if std::env::args().nth(1).as_deref() == Some(computer::RELAY_ARG) {
+        std::process::exit(computer::run_relay());
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())

@@ -243,23 +243,103 @@ pub fn mcp_args() -> Vec<String> {
 /// The MCP server entry handed to the Muse host. `None` unless this app's own
 /// service holds a live grant, so a stale switch cannot send the host hunting a
 /// socket, nor hand it a service whose authorization has already lapsed.
+///
+/// The host does not talk to the driver directly: it starts this app again in
+/// relay mode (see `run_relay`), which is the driver's MCP proxy plus one fix.
 pub fn mcp_server_json(grant: &str) -> Option<Value> {
-    mcp_server_for(&binary()?, grant)
+    binary()?;
+    mcp_server_for(&std::env::current_exe().ok()?, grant)
 }
 
-/// The construction itself, with the binary supplied: pure enough to test on a
-/// machine that has no driver installed, which is every CI runner.
-fn mcp_server_for(binary: &Path, grant: &str) -> Option<Value> {
+/// The construction itself, with the executable supplied: pure enough to test
+/// on a machine that has no driver installed, which is every CI runner.
+fn mcp_server_for(relay: &Path, grant: &str) -> Option<Value> {
     if grant != "active" {
         return None;
     }
     Some(json!({
         "name": "computer-use",
         "transport": "stdio",
-        "command": binary.display().to_string(),
-        "args": mcp_args(),
+        "command": relay.display().to_string(),
+        "args": [RELAY_ARG],
         "mode": "optional",
     }))
+}
+
+/// Starts this executable as the computer-use MCP relay instead of the app.
+pub const RELAY_ARG: &str = "--computer-use-mcp";
+
+/// Relay MCP between the Muse host (our stdin/stdout) and the driver's own
+/// proxy, `cua-driver mcp --socket <our pipe>`, rewriting nothing but tool
+/// results that carry a `snapshot_id`.
+///
+/// Why it exists: the driver refuses a bare `element_index` and wants the
+/// `snapshot_id` of the same response, which it returns only in
+/// `structuredContent`. The Muse host passes the model the text and the image
+/// and drops `structuredContent`, so every element click failed and the model
+/// fell back to guessing pixels and keys (measured: 4×4 in Calculator took five
+/// minutes). Repeating the id in the text is the whole fix.
+pub fn run_relay() -> i32 {
+    use std::io::{BufRead, BufReader, Write};
+    let Some(driver) = binary() else {
+        eprintln!("cua-driver is not installed");
+        return 1;
+    };
+    let mut command = Command::new(driver);
+    command
+        .args(mcp_args())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit());
+    hidden_window(&mut command);
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            eprintln!("cannot start the driver's MCP proxy: {error}");
+            return 1;
+        }
+    };
+    let mut to_driver = child.stdin.take().expect("piped stdin");
+    let from_driver = child.stdout.take().expect("piped stdout");
+    // Host → driver, untouched. The host closing our stdin closes the driver's,
+    // which ends it, which ends the loop below.
+    thread::spawn(move || {
+        let _ = std::io::copy(&mut std::io::stdin().lock(), &mut to_driver);
+    });
+    let mut out = std::io::stdout().lock();
+    for line in BufReader::new(from_driver).lines() {
+        let Ok(line) = line else { break };
+        let line = surface_snapshot(&line).unwrap_or(line);
+        if writeln!(out, "{line}").and_then(|()| out.flush()).is_err() {
+            break;
+        }
+    }
+    let _ = child.kill();
+    child.wait().ok().and_then(|status| status.code()).unwrap_or(0)
+}
+
+/// The one rewrite: a tool result with `structuredContent.snapshot_id` gets that
+/// id appended to its text, where a text-only host lets the model see it.
+/// `None` means "forward the line unchanged".
+fn surface_snapshot(line: &str) -> Option<String> {
+    let mut message: Value = serde_json::from_str(line).ok()?;
+    let result = message.get_mut("result")?;
+    let snapshot = result
+        .pointer("/structuredContent/snapshot_id")?
+        .as_str()?
+        .to_string();
+    let note = format!(
+        "snapshot_id: {snapshot} (pass it with element_index, for example click {{pid, window_id, element_index, snapshot_id}})"
+    );
+    let content = result.get_mut("content")?.as_array_mut()?;
+    match content.iter_mut().find(|part| part["type"] == "text") {
+        Some(part) => {
+            let text = part["text"].as_str().unwrap_or_default();
+            part["text"] = Value::String(format!("{text}\n\n{note}"));
+        }
+        None => content.insert(0, json!({ "type": "text", "text": note })),
+    }
+    serde_json::to_string(&message).ok()
 }
 
 struct Probe {
@@ -740,17 +820,45 @@ mod tests {
     }
 
     #[test]
-    fn the_mcp_entry_uses_this_apps_own_endpoint() {
-        let driver = Path::new("C:\\cua-driver.exe");
+    fn the_mcp_entry_is_this_app_as_relay_to_its_own_endpoint() {
+        let app = Path::new("C:\\Muse Desktop.exe");
         let entry =
-            mcp_server_for(driver, "active").expect("an entry is built while the grant is live");
+            mcp_server_for(app, "active").expect("an entry is built while the grant is live");
         assert_eq!(entry["transport"], json!("stdio"));
         assert_eq!(entry["mode"], json!("optional"));
-        assert_eq!(entry["command"], json!("C:\\cua-driver.exe"));
-        let args = entry["args"].as_array().expect("args is an array");
-        assert_eq!(args[0], json!("mcp"));
-        assert_eq!(args[1], json!("--socket"));
-        assert_eq!(args[2], json!(PIPE), "the endpoint is ours, never discovered");
+        assert_eq!(entry["command"], json!("C:\\Muse Desktop.exe"));
+        assert_eq!(entry["args"], json!([RELAY_ARG]));
+        // The relay reaches the driver through our pipe, never a discovered one.
+        assert_eq!(mcp_args(), ["mcp", "--socket", PIPE]);
+    }
+
+    #[test]
+    fn the_relay_surfaces_the_snapshot_id_and_nothing_else() {
+        let state = json!({"jsonrpc": "2.0", "id": 7, "result": {
+            "content": [{"type": "text", "text": "- [28] Button \"Quatre\""}, {"type": "image", "data": "x"}],
+            "structuredContent": {"snapshot_id": "s00000013", "elements": []},
+        }})
+        .to_string();
+        let out: Value = serde_json::from_str(&surface_snapshot(&state).unwrap()).unwrap();
+        let text = out["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.starts_with("- [28] Button \"Quatre\""));
+        assert!(text.contains("snapshot_id: s00000013"));
+        assert_eq!(out["result"]["content"][1]["type"], "image");
+        assert_eq!(out["id"], 7);
+
+        // Image-only result: the id still reaches the model.
+        let bare = json!({"id": 1, "result": {"content": [{"type": "image"}], "structuredContent": {"snapshot_id": "s1"}}});
+        let out: Value = serde_json::from_str(&surface_snapshot(&bare.to_string()).unwrap()).unwrap();
+        assert!(out["result"]["content"][0]["text"].as_str().unwrap().contains("s1"));
+
+        // Everything else is forwarded byte for byte.
+        for line in [
+            r#"{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"ok"}]}}"#,
+            r#"{"jsonrpc":"2.0","method":"notifications/progress","params":{}}"#,
+            "not json",
+        ] {
+            assert_eq!(surface_snapshot(line), None, "{line}");
+        }
     }
 
     /// A grant that has lapsed must not be handed to the host: the service is
