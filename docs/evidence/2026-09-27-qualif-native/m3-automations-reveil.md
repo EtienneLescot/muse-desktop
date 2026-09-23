@@ -129,6 +129,10 @@ error: "the recorded workspace no longer matches the target conversation"
   conversation existante ne peut **jamais** réussir en l'état, et la seconde moitié de l'acceptation
   (« réutilise ensuite le même fil ») ne peut pas être jouée tant que la comparaison n'est pas
   normalisée. À corriger côté app (comparaison normalisée ou stockage d'une seule forme).
+- **Corrigé le 22/09/2026 (comparaison normalisée).** `executeReviewItem` (`useMuseSessions.ts`)
+  compare `displayPath(conversation)` à `displayPath(automatisation)`. Le stockage garde sa forme
+  native : Rust s'en sert comme identité, notamment pour valider la reprise (`resume::validate`).
+  **Reste :** rejouer la cible sur conversation existante, sur un fil libre puis sur un fil occupé.
 
 ## Redémarrage en plein run (M3-07) — « Review needed » absent, état « Running » périmé
 

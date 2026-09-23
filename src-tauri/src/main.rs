@@ -1475,35 +1475,74 @@ async fn restart_host(
         });
     };
 
+    let session_ids = retire_host(
+        &app,
+        &state,
+        &root,
+        &old_client,
+        "Muse host restarted; reconnect the conversation to continue.",
+    )
+    .await?;
+    // `ensure_host` owns the creation mutex. Do not hold a lock across this
+    // await: the old client is fully detached above, so a concurrent start is
+    // safe and the winner's posture becomes the process-level authority.
+    ensure_host(
+        &app,
+        &state,
+        &root,
+        sandbox_mode.as_deref(),
+        sandbox_disable_write,
+        sandbox_disable_shell,
+    )
+    .await?;
+    let applied = state
+        .host_sandbox
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&root)
+        .cloned();
+    if applied.as_ref() != Some(&requested_policy) {
+        return Err("workspace host posture changed concurrently; retry the restart".into());
+    }
+    Ok(HostRestartResult {
+        workspace: root.display().to_string(),
+        restarted: true,
+        disconnected_sessions: session_ids.len(),
+    })
+}
+
+/// Detach a workspace host from every route, tell its conversations they
+/// are disconnected, and stop the process. Returns the detached session ids.
+async fn retire_host(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    root: &PathBuf,
+    old_client: &std::sync::Arc<MspClient>,
+    message: &str,
+) -> Result<Vec<String>, String> {
     let session_ids = state
         .hosts
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
-        .remove(&old_client);
+        .remove(old_client);
 
     // Retire volatile host facts before spawning the replacement. The new
     // handshake repopulates durability, capabilities and sandbox posture;
     // keeping stale values here would make the renderer claim a grant from a
     // process that no longer exists.
     if let Ok(mut sandbox) = state.host_sandbox.lock() {
-        sandbox.remove(&root);
+        sandbox.remove(root);
     }
     if let Ok(mut durability) = state.host_durability.lock() {
-        durability.remove(&root);
+        durability.remove(root);
     }
     if let Ok(mut capabilities) = state.host_capabilities.lock() {
-        capabilities.remove(&root);
+        capabilities.remove(root);
     }
 
     for session_id in &session_ids {
-        mark_running(&state, session_id, false);
-        emit(
-            &app,
-            "status",
-            session_id,
-            "host_exited",
-            "Muse host restarted; reconnect the conversation to continue.".to_string(),
-        );
+        mark_running(state, session_id, false);
+        emit(app, "status", session_id, "host_exited", message.to_string());
     }
 
     // Pending approvals and item tables belong to the old process. The
@@ -1532,32 +1571,57 @@ async fn restart_host(
     }
 
     old_client.shutdown().await;
-    // `ensure_host` owns the creation mutex. Do not hold a lock across this
-    // await: the old client is fully detached above, so a concurrent start is
-    // safe and the winner's posture becomes the process-level authority.
-    ensure_host(
-        &app,
-        &state,
-        &root,
-        sandbox_mode.as_deref(),
-        sandbox_disable_write,
-        sandbox_disable_shell,
-    )
-    .await?;
-    let applied = state
-        .host_sandbox
+    Ok(session_ids)
+}
+
+/// A Muse 1.3 host keeps at most 32 sessions loaded and never unloads an idle
+/// one, and MSP has no client unload (measured: 32 idle sessions, half of them
+/// unsubscribed, still loaded after six minutes; the 33rd start is refused
+/// with this error). Only a new process frees them.
+fn is_host_full(error: &str) -> bool {
+    error.contains("-32030") && error.contains("runtime_busy")
+}
+
+/// Sent with `host_exited` when a full host is replaced. The renderer matches
+/// it to reconnect these conversations silently when they are opened again.
+const HOST_RECYCLED_MESSAGE: &str =
+    "Muse closed this conversation to make room for another. It reconnects when you open it.";
+
+/// Replace a full workspace host with a fresh process, so the number of
+/// conversations a user keeps is not bounded by what one host can load.
+/// Refused while any of its conversations is working: that would kill the turn.
+async fn recycle_full_host(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    root: &PathBuf,
+    sandbox_mode: Option<&str>,
+    sandbox_disable_write: Option<bool>,
+    sandbox_disable_shell: Option<bool>,
+) -> Result<std::sync::Arc<MspClient>, String> {
+    let old_client = state
+        .hosts
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
-        .get(&root)
-        .cloned();
-    if applied.as_ref() != Some(&requested_policy) {
-        return Err("workspace host posture changed concurrently; retry the restart".into());
+        .workspace(root);
+    if let Some(old_client) = old_client {
+        let running = state
+            .sessions
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .iter()
+            .filter(|(_, meta)| meta.running)
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+        let busy = {
+            let hosts = state.hosts.lock().map_err(|e| format!("state lock: {e}"))?;
+            running.iter().any(|id| hosts.owns(id, &old_client))
+        };
+        if busy {
+            return Err("Muse already has 32 conversations open in this folder and one of them is still working. Try again when it finishes.".into());
+        }
+        retire_host(app, state, root, &old_client, HOST_RECYCLED_MESSAGE).await?;
     }
-    Ok(HostRestartResult {
-        workspace: root.display().to_string(),
-        restarted: true,
-        disconnected_sessions: session_ids.len(),
-    })
+    ensure_host(app, state, root, sandbox_mode, sandbox_disable_write, sandbox_disable_shell).await
 }
 
 fn tail_of(stderr_tail: &std::sync::Arc<Mutex<Vec<String>>>) -> String {
@@ -4174,7 +4238,7 @@ async fn start_session_at_workspace(
     sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
 ) -> Result<SessionMeta, String> {
-    let client = ensure_host(
+    let mut client = ensure_host(
         &app,
         &state,
         &root,
@@ -4194,7 +4258,21 @@ async fn start_session_at_workspace(
     if let Some(config) = mcp_session_config(mcp_servers)? {
         params["config"] = config;
     }
-    let res = request_session_start(&client, params, authorization_mode.as_deref()).await?;
+    let res = match request_session_start(&client, params.clone(), authorization_mode.as_deref()).await {
+        Err(error) if is_host_full(&error) => {
+            client = recycle_full_host(
+                &app,
+                &state,
+                &root,
+                sandbox_mode.as_deref(),
+                sandbox_disable_write,
+                sandbox_disable_shell,
+            )
+            .await?;
+            request_session_start(&client, params, authorization_mode.as_deref()).await?
+        }
+        other => other?,
+    };
     let session = res.get("session").ok_or("session/start: no session in response")?;
     let session_id = session
         .get("sessionId")
@@ -4502,7 +4580,21 @@ async fn resume_session_inner(
         sandbox_disable_write,
         sandbox_disable_shell,
     ).await?;
-    resume_session_with_client(state, client, root, session_id, mcp_servers).await
+    match resume_session_with_client(state, client, root.clone(), session_id.clone(), mcp_servers.clone()).await {
+        Err(error) if is_host_full(&error) => {
+            let client = recycle_full_host(
+                app,
+                state,
+                &root,
+                sandbox_mode.as_deref(),
+                sandbox_disable_write,
+                sandbox_disable_shell,
+            )
+            .await?;
+            resume_session_with_client(state, client, root, session_id, mcp_servers).await
+        }
+        other => other,
+    }
 }
 
 #[tauri::command]
@@ -8095,6 +8187,15 @@ mod tests {
         assert!(is_approval_mode_ceiling("MSP error: approval_mode_ceiling"));
         assert!(is_approval_mode_ceiling("command rejected (approval mode ceiling)"));
         assert!(!is_approval_mode_ceiling("approval required for this command"));
+    }
+
+    #[test]
+    fn full_host_detection_matches_the_measured_capacity_error_only() {
+        assert!(is_host_full(
+            "could not reconnect conversation: MSP error -32030: host loaded-session capacity is exhausted [commandRejected] (runtime_busy) [retryable=true]"
+        ));
+        assert!(!is_host_full("MSP error -32030: command rejected [commandRejected] (approval_mode_ceiling)"));
+        assert!(!is_host_full("MSP error -32021: session is already in use"));
     }
 
     #[test]
