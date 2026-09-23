@@ -334,6 +334,55 @@
   max-height: 320px;
   overflow: auto;
 }
+.work-group {
+  margin: 4px 0 10px;
+}
+.work-group > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 0;
+}
+.work-group > summary:hover {
+  color: var(--text);
+}
+.work-group-count {
+  flex: none;
+  font-weight: 600;
+}
+.work-group-step {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.work-group[data-live="true"] .work-group-count::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  vertical-align: middle;
+  animation: work-group-pulse 1.2s ease-in-out infinite;
+}
+@keyframes work-group-pulse {
+  50% { opacity: 0.3; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .work-group[data-live="true"] .work-group-count::before { animation: none; }
+}
+.work-group[open] > summary {
+  margin-bottom: 6px;
+}
+.work-group[open] {
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+}
 .desktop-app .composer-wrap {
   flex: none;
   padding: 12px 30px 16px;
@@ -1704,10 +1753,20 @@
 .desktop-app .msg.user pre {
   margin: 0;
 }
-.desktop-app .stream > .msg.tool {
+.desktop-app .stream > .msg.tool,
+.desktop-app .work-group > .msg.tool {
   background: transparent;
   border: 0;
   padding: 0 2px;
+}
+/* Inside folded steps each step is one line: no footer, no gaps. */
+.desktop-app .work-group > .msg {
+  margin: 0;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.desktop-app .work-group > .msg .msg-footer {
+  display: none;
 }
 .desktop-app .msg.tool .role {
   display: none;

@@ -4,7 +4,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import type { LogEntry } from "../lib/persist";
 import { isTauriRuntime } from "../lib/env";
 import type { ItemOutputChunk } from "../hooks/useMuseSessions";
-import { isEmptyAssistantEntry, REFLEXIVE_LABEL } from "../lib/phase";
+import { isEmptyAssistantEntry, REFLEXIVE_LABEL, toolStepLabel, workRuns } from "../lib/phase";
 import { childSessionLabel, subagentControlAvailability, subagentSummary } from "../lib/subagent";
 import {
   initialStreamWindowStart,
@@ -567,6 +567,8 @@ export function StreamView({
         `[data-entry-index="${findTarget}"]`,
       );
       if (target === null || target === undefined) return;
+      // A search hit inside folded steps must be shown, not scrolled to blind.
+      target.closest<HTMLDetailsElement>("details.work-group")?.setAttribute("open", "");
       target.scrollIntoView({ block: "center", behavior: "smooth" });
       target.classList.add("stream-find-target");
       window.setTimeout(() => target.classList.remove("stream-find-target"), 1200);
@@ -964,7 +966,8 @@ export function StreamView({
           Start a conversation. Your history is saved locally.
         </p>
       )}
-      {visibleEntries.map((e, visibleIndex) => {
+      {(() => {
+      const renderEntry = (e: LogEntry, visibleIndex: number) => {
         const entryIndex = safeWindowStart + visibleIndex;
         // Host-internal child lane (`reminderchild`): the entry is kept in the
         // log so its text can never merge into the answer, but it is not a
@@ -1354,7 +1357,30 @@ export function StreamView({
             </div>
           </div>
         );
-      })}
+      };
+      // Two or more tool calls in a row fold into one line: what is running
+      // now, how many steps, how long. The steps stay one click away.
+      return workRuns(visibleEntries).map((run) => {
+        const rendered = run.entries.map((e, offset) => renderEntry(e, run.start + offset));
+        if (run.tools < 2) return rendered;
+        const tools = run.entries.filter((e) => e.role === "tool");
+        const live = run.entries.some((e) => e.open === true);
+        const first = run.entries[0];
+        const last = run.entries[run.entries.length - 1];
+        return (
+          <details key={`work-${first.id}`} className="work-group" data-live={live ? "true" : undefined}>
+            <summary>
+              <span className="work-group-count">
+                {live ? "Working" : `${run.tools} steps`}
+                {` · ${formatElapsed(Math.max(0, (live ? now : last.ts) - first.ts))}`}
+              </span>
+              <span className="work-group-step">{toolStepLabel(tools[tools.length - 1])}</span>
+            </summary>
+            {rendered}
+          </details>
+        );
+      });
+      })()}
       {streamWindowed && windowPadding.bottom > 0 && (
         <div
           className="stream-window-spacer"
