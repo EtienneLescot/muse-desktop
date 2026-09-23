@@ -1,0 +1,111 @@
+name: Release
+
+# A version tag (v0.1.0-beta.2) builds the Windows installer, tests it and
+# publishes it as a GitHub release with its integrity manifest. A pull request
+# that changes this workflow runs the same build as a dry run: nothing is
+# published, the installer is kept as a workflow artifact.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: [".github/workflows/release.yml"]
+
+concurrency:
+  group: muse-desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  # Creating the release, and reading the draft release that holds the engine.
+  contents: write
+
+env:
+  # The Muse engine bundled in the installer is not in the repository. It
+  # lives in a draft release, visible to repository members only, and is
+  # checked against this digest before anything is built with it.
+  SIDECAR_RELEASE: sidecar-muse-1.3.0
+  SIDECAR_FILE: muse-x86_64-pc-windows-msvc.exe
+  SIDECAR_SHA256: e0a7cfef0755a6c7d249ad66a4d3cccdc52671563c8f1ff3a66881cdb11a6bba
+
+jobs:
+  windows:
+    name: Windows x64 installer
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Read the version, and check the tag matches it
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the app version $version"
+            exit 1
+          fi
+          test -f "docs/releases/$version.md" || { echo "::error::missing docs/releases/$version.md"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "BUNDLE=src-tauri/target/release/bundle/nsis" >> "$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch the Muse engine
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$SIDECAR_RELEASE" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$SIDECAR_FILE" --dir src-tauri/binaries
+          echo "$SIDECAR_SHA256  src-tauri/binaries/$SIDECAR_FILE" | sha256sum --check
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build the installer
+        run: npx tauri build --bundles nsis
+
+      - name: Run supervisor tests
+        run: cargo test --release --manifest-path src-tauri/Cargo.toml
+
+      - name: Write the integrity manifest
+        run: |
+          installer="$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.exe"
+          test -f "$installer" || { ls "$BUNDLE"; echo "::error::installer not found"; exit 1; }
+          node scripts/release-manifest.mjs --artifact "$installer" \
+            --sidecar "src-tauri/binaries/$SIDECAR_FILE" --version "$VERSION" \
+            --output "$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.manifest.json"
+          cat "$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.manifest.json"
+
+      - name: Keep the dry-run installer
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: muse-desktop-${{ env.VERSION }}-dry-run
+          path: ${{ env.BUNDLE }}/Muse-Desktop_*_x64-setup.*
+          retention-days: 7
+
+      - name: Publish the GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag $prerelease \
+            --title "Muse-Desktop $VERSION (Windows x64)" \
+            --notes-file "docs/releases/$VERSION.md" \
+            "$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.exe" \
+            "$BUNDLE/Muse-Desktop_${VERSION}_x64-setup.manifest.json"
