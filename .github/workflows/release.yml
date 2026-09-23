@@ -147,8 +147,10 @@ jobs:
         run: |
           set -eu
           present=0
-          for value in "$MAC_CERTIFICATE_P12" "$MAC_CERTIFICATE_PASSWORD" "$APPLE_ID" "$APPLE_TEAM_ID" "$APPLE_APP_SPECIFIC_PASSWORD"; do
-            [ -n "$value" ] && present=$((present + 1))
+          missing=""
+          for name in MAC_CERTIFICATE_P12 MAC_CERTIFICATE_PASSWORD APPLE_ID APPLE_TEAM_ID APPLE_APP_SPECIFIC_PASSWORD; do
+            # Names only: a value is never printed.
+            if [ -n "$(printenv "$name")" ]; then present=$((present + 1)); else missing="$missing $name"; fi
           done
           if [ "$present" = 0 ]; then
             if [ "$GITHUB_EVENT_NAME" = push ]; then
@@ -159,7 +161,7 @@ jobs:
             exit 0
           fi
           if [ "$present" != 5 ]; then
-            echo "::error::the Apple signing secrets are incomplete ($present of 5)"
+            echo "::error::the Apple signing secrets are incomplete ($present of 5); empty or missing:$missing"
             exit 1
           fi
           keychain="$RUNNER_TEMP/signing.keychain-db"
