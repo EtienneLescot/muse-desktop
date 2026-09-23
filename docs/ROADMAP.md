@@ -44,6 +44,18 @@ restants (PTY en commande interactive, outil pendant outil strict, clavier et at
 réelle, empaqueté), M2 restants (fermeture avec agents actifs, Local↔Worktree, fan-out de
 sous-agents), M3-01 à 05 (MCP, extensions, skills), réveil `AutomationWake` réel.
 
+## Retraits du 23 septembre 2026
+
+Surfaces retirées de l’app, **code supprimé** (front et Rust). Elles n’apportaient pas de résultat utilisateur vérifiable et encombraient le panneau latéral et les réglages :
+
+- **Content** : résumé extractif du fil et pièces « artifacts » (M4-05 côté artifacts) ; ses « Decisions » reprenaient des fragments bruts.
+- **Activity** : coordination de writers et verrous (M2-08), profils et exécution de setup (M2-04), inspection et nettoyage de worktrees depuis l’UI (M2-06).
+- **Contrôle desktop manuel** (inventaire de fenêtres, clic, frappe) : le computer use passe par le driver CUA, dans Settings (M4-04).
+- **Partage et channels** (M4-06, déjà reporté) et **environnements Remote/Cloud** sans transport (M4-07).
+- **Réglages sans effet** : « Check a path », « Web search », modèles en double du composeur.
+
+Restent : Changes, Terminal, Files, Browser dans le panneau ; Computer use et Memory dans Settings ; l’usage du contexte à côté du sélecteur de modèle, comme dans Claude Code. Les lignes des tickets concernés ci-dessous décrivent l’état d’avant le retrait.
+
 ## Comment lire cette roadmap
 
 ### Trois états, un seul critère

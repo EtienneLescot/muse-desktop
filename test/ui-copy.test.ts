@@ -4,8 +4,7 @@ import { readFileSync } from "node:fs";
 
 const files = [
   "../src/App.tsx",
-  "../src/components/ArtifactsPane.tsx",
-  "../src/components/CompactBar.tsx",
+  "../src/components/ContextMeter.tsx",
   "../src/components/ImportPanel.tsx",
   "../src/components/ProjectsPanel.tsx",
   "../src/components/SessionSidebar.tsx",

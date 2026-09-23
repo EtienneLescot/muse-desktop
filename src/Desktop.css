@@ -1804,3 +1804,20 @@
   margin: 0;
   padding: 24px 0;
 }
+/* Context usage beside the model picker (Claude Code places it there). */
+.context-meter {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 5px 10px;
+  margin-left: 6px;
+  background: transparent;
+}
+.context-meter:hover:not(:disabled) {
+  color: var(--text);
+}
+.context-meter[data-pressure="high"] {
+  color: var(--warning, #d89024);
+  border-color: currentColor;
+}

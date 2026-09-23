@@ -31,6 +31,7 @@ import { userFacingError } from "./lib/errorCopy";
 import { displayPath } from "./lib/paths";
 import { signInCommand, type AuthStatusPayload } from "./lib/museAuth";
 import { ModelControl } from "./components/ModelControl";
+import { ContextMeter } from "./components/ContextMeter";
 import { ComputerUsePanel } from "./components/ComputerUsePanel";
 import { isTauriRuntime } from "./lib/env";
 import { formatWorktreeContinuationNote } from "./lib/handoff";
@@ -108,6 +109,9 @@ export default function App() {
     liveModels,
     setSessionModel,
     setSessionReasoningEffort,
+    usageBySession,
+    serverCompactionBySession,
+    serverCompact,
     createWorktreeForWorkspace,
     setActive,
     startSession,
@@ -1515,16 +1519,23 @@ export default function App() {
                     sessionId={active.session_id}
                     disabled={backendMissing || active.archived === true || !connectedIds.includes(active.session_id)}
                     modelControl={
-                      <ModelControl
-                        models={liveModels}
-                        value={active.model_id ?? null}
-                        onSelect={(modelId) => void setSessionModel(active.session_id, modelId)}
-                        /* The composer sits at the bottom of the window, so the
-                           popover must open upward. Without this the list rendered
-                           downwards, off the viewport, and was clipped by the
-                           conversation's own overflow: hidden. */
-                        compact
-                      />
+                      <>
+                        <ModelControl
+                          models={liveModels}
+                          value={active.model_id ?? null}
+                          onSelect={(modelId) => void setSessionModel(active.session_id, modelId)}
+                          /* The composer sits at the bottom of the window, so the
+                             popover must open upward. Without this the list rendered
+                             downwards, off the viewport, and was clipped by the
+                             conversation's own overflow: hidden. */
+                          compact
+                        />
+                          <ContextMeter
+                          usage={usageBySession[active.session_id] ?? null}
+                          serverCompaction={serverCompactionBySession[active.session_id] ?? { status: "idle" }}
+                          onCompact={() => void serverCompact(active.session_id)}
+                        />
+                      </>
                     }
                     running={active.running}
                     stopping={stoppingBySession[active.session_id] === true}
