@@ -119,7 +119,10 @@ export function EmptySessionScreen({
       setEnvironmentId("default");
     }
   }, [environmentId, selectedEnvironment]);
-  const canStart = selectedWorkspace !== null && !backendMissing && !starting;
+  // A conversation starts with a message, as in Claude Code and Codex: an
+  // empty start only left "New conversation" rows with nothing in them.
+  const canStart = selectedWorkspace !== null && !backendMissing && !starting
+    && (draft.trim() !== "" || attachments.length > 0);
 
   async function addFiles(files: FileList | File[]): Promise<void> {
     const incoming = Array.from(files);
@@ -355,22 +358,19 @@ export function EmptySessionScreen({
             onChange={onReasoningEffortChange}
             compact
           />
-          <small>
-            {backendMissing
-              ? "Available in the desktop app"
-              : selectedWorkspace
-                ? draft.trim() === ""
-                  ? "Press start to open the conversation."
-                  : "Your message is sent as soon as you start."
-                : "Choose a folder to get started."}
-          </small>
+          {(backendMissing || !selectedWorkspace) && (
+            <small>
+              {backendMissing ? "Available in the desktop app" : "Choose a folder to get started."}
+            </small>
+          )}
           <button
-            className="primary"
+            className="welcome-send"
+            aria-label="Start conversation"
+            title="Start conversation · Enter"
             onClick={() => void start()}
             disabled={!canStart}
           >
-            {starting ? "Starting…" : "Start conversation"}
-            <Icon name="arrow-right" />
+            {starting ? "…" : "↑"}
           </button>
         </div>
       </div>
