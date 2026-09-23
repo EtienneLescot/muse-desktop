@@ -150,7 +150,6 @@ export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisabl
 
       {status?.grantState === "permissions" && (
         <div className="computer-use-note computer-use-note-warning" role="status">
-          <p>{describeComputerUse(status)}</p>
           <div className="computer-use-actions">
             <button type="button" onClick={() => void onRefresh()} disabled={busy}>
               Check again
