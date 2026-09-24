@@ -1,57 +1,86 @@
 # Muse-Desktop
 
-A desktop workspace for Muse Code, built with Tauri, React, and Vite.
+**A desktop app for Muse Code — and it can use your computer.**
 
-![Muse-Desktop on Windows — English interface with integrated window controls](assets/screenshot-windows.png)
+Muse Code is Meta's coding agent, and it lives in a terminal. Muse-Desktop gives it a
+window: conversations organised by project, the work visible as it happens, and an
+opt-in switch that lets the agent see your screen and drive your applications.
 
-Organize conversations by project, work with Muse, and review activity and generated content in a focused desktop interface.
+![Muse-Desktop on Windows](assets/screenshot-windows.png)
 
-The agent engine runs through the `muse` CLI sidecar. The current Windows build uses Muse installed in the default WSL distribution; WSL and Muse must already be configured. See the [Windows build instructions](scripts/wsl-bridge/README.md).
+> **Windows x64 · beta.** Muse must already be installed in your default WSL
+> distribution. The installer is unsigned, so Windows will show a SmartScreen warning.
+> [Download the latest release](https://github.com/EtienneLescot/muse-desktop/releases).
 
-## Development
+## What it does
+
+**Let the agent use your computer.** Turn it on and Muse can look at your screen and
+work in your applications — open a file, fill a form, click through a tool that has no
+API. Two levels, and it starts at neither:
+
+| Level | What Muse may do |
+|---|---|
+| Off | Nothing. This is the default. |
+| Observe only | Take screenshots, read windows. No clicks, no typing. |
+| Observe and act | Mouse, keyboard, clipboard. |
+
+You choose the level, you can revoke it at any moment, and the permission is a list of
+named tools rather than a blanket "allow". It runs on the open-source
+[cua driver](https://github.com/trycua/cua) (MIT), installed separately — Settings walks
+you through it.
+
+**Work by project.** A project is a folder. Conversations are grouped under the folder
+they run in, and each one carries its own model, reasoning effort and permissions.
+
+**See what the agent is doing.** Tool calls appear live, then fold into one line when
+they are done. Markdown answers with tables and copyable code blocks. A browser, a
+terminal, and a review panel for the files that changed.
+
+**Branch a conversation.** Fork it from any turn, or continue it in a git worktree so
+the agent works on a copy while your folder stays untouched.
+
+**Bring your own tools.** MCP servers, local or remote, with the tool catalogue verified
+before it is saved. Skills from the host and from your workspace, offered as you type `/`.
+
+## Install
+
+Download the installer from [Releases](https://github.com/EtienneLescot/muse-desktop/releases)
+and run it. Windows will warn that the publisher is unknown — the build is not code-signed
+yet. You need WSL with Muse already set up; see the
+[Windows setup notes](scripts/wsl-bridge/README.md).
+
+For computer use, install the cua driver when Settings offers to.
+
+## Build it yourself
 
 ```sh
 npm install
-npm run dev
-```
-
-The browser preview displays the interface. Working with the engine requires the desktop app and a compatible sidecar:
-
-```sh
 npm run tauri -- dev
 ```
 
-On Windows, use the clean launcher when a previous WebView or Vite process
-could be serving stale code:
+`npm run dev` alone opens the interface in a browser, which is useful for UI work but
+cannot talk to the engine. On Windows, `npm run dev:clean:windows` clears a stale Vite
+cache first.
 
-```powershell
-npm run dev:clean:windows
-```
-
-It only stops development processes tied to this checkout, clears the local
-Vite transform cache, and starts `tauri dev` with the renderer attached. The
-standalone `muse-desktop.exe` is not a development launch path because it
-expects the packaged renderer rather than a Vite server.
-
-To build the Windows x64 installer locally (the matching `muse` sidecar must be present in `src-tauri/binaries/`):
+To build the installer (the matching `muse` sidecar must be in `src-tauri/binaries/`):
 
 ```sh
 npm run tauri -- build --bundles nsis
 ```
 
-The NSIS installer is written to `src-tauri/target/release/bundle/nsis/`. Use `--bundles msi` or `--bundles all` for the MSI package or both formats. `scripts/build-windows.ps1` generates an adjacent `.manifest.json` for every requested installer and verifies deterministic SHA-256 checksums for the installer and the sidecar. `scripts/release-manifest.mjs` and `scripts/verify-release-manifest.mjs` support optional Ed25519 signing with an explicit trust key; `scripts/release-update.mjs` stages and swaps verified releases, and `npm run release:launch -- run --pid … --staged … --slots-root … --executable …` coordinates a bounded stop/swap/restart. `npm run release:installer -- --pid … --installer …` performs the explicit Windows NSIS/MSI handoff after Muse exits. `npm run release:delta -- create --from OLD --to NEW --output update.delta.gz` creates a verified local delta and `npm run release:delta -- apply --from OLD --patch update.delta.gz --output NEW` reconstructs it atomically. `npm run release:channel -- build --releases RELEASES.json --output release-channel.json` creates a path-free channel index; `verify` checks its Ed25519 signature and `select` chooses the newest compatible target. `npm run release:fetch -- fetch --url HTTPS_URL --bytes N --sha256 HASH --output FILE` retrieves one declared asset with redirect refusal, a body limit and atomic publication. `npm run release:orchestrate -- sync --index-url HTTPS_URL --target TARGET --current-version VERSION --cache-dir DIR --staging-root DIR --public-key TRUSTED_KEY --require-signature` verifies the signed channel, downloads the declared installer and sidecar, and stages the candidate for the existing launcher. Remote hosting operations, key management, and macOS/Linux qualification remain product work.
+Release tooling — manifests, signing, delta updates, channel indexes — is documented in
+[docs/SPEC.md](docs/SPEC.md) and the `scripts/release-*.mjs` files.
 
-On Windows, `powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1` performs the same build after checking that the x64 sidecar is present. Pass `-Bundle msi` or `-Bundle all` when another bundle format is needed.
+## Status
 
-Remote MCP endpoints can be tested from **Extensions** with a public HTTPS URL. Muse performs a real `initialize`/`tools/list` exchange (JSON or SSE) before saving the catalogue; bearer tokens remain in memory, are reused only for an explicit **Reconnect** while the app is open, and in the desktop build are also stored in the operating system credential manager for an explicit reconnect after relaunch. OAuth and provider-managed token refresh remain planned.
+Windows is the platform that is actually qualified. A macOS build exists and is not
+proven. Linux is not started. Feature-by-feature status lives in
+[docs/ROADMAP.md](docs/ROADMAP.md) — it is honest about what is measured and what is not.
 
 ## Documentation
 
 - [Product and technical specification](docs/SPEC.md)
-- [Implementation plan](docs/plans/2026-09-07-muse-desktop.md)
-- [Operational roadmap and feature status](docs/ROADMAP.md)
-- [Detailed implementation plan for coding agents](docs/plans/2026-09-15-agent-implementation-plan.md)
-- [Codex parity audit](docs/plans/2026-09-15-codex-parity-audit.md)
-- [Conversation UX refinements](docs/plans/2026-09-14-conversation-polish.md)
+- [Roadmap and feature status](docs/ROADMAP.md)
+- [What the Muse sidecar really supports](docs/SIDECAR-CONTRACT-GAPS.md)
 
-The screenshot shows the native Windows application. Some planning documents are currently in French.
+Built with Tauri, React and Vite. Some planning documents are in French.
