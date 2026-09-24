@@ -1,98 +1,98 @@
-# Manche 7 — tentative de correctif M1-05 + constat de perte de données au kill (27 septembre 2026)
+# Round 7 — an M1-05 fix attempt + a data-loss finding on kill (27 September 2026)
 
-## Correctif M1-05 : downgrade `portable-pty` 0.9.0 → 0.8.1 — build OK, rejoue UI en reste
+## M1-05 fix: downgrading `portable-pty` 0.9.0 → 0.8.1 — build OK, UI replay outstanding
 
-- `src-tauri/Cargo.toml` : `portable-pty = "0.8"` ; `cargo update -p portable-pty` → **0.9.0 → 0.8.1**
-  (nix 0.28→0.25 rétrogradé en conséquence).
-- `cargo build` : **OK en 1 min 13 s** (3 warnings préexistants, sans lien).
-- `npm test` : **exit 0** ; `npx tsc --noEmit` : **exit 0** (inchangé, le correctif est Rust).
-- App relancée avec le binaire corrigé (CDP 9222 opérationnel).
-- **Rejoue du scénario terminal (`ux-terminal-state.mjs --type "echo muse-pty-fix-2026"`) pas encore
-  réalisée** : bloquée par un état UI après la perte de données ci-dessous (bouton « Start
-  conversation » inactif malgré saisie réelle — `scripts/cdp-type.mjs` nouvellement ajouté, frappes
-  CDP `Input.dispatchKeyEvent` par caractère, le chemin de saisie fiable). À reprendre en manche 8 :
-  soit diagnostiquer le verrou du bouton, soit re-créer un projet via l'UI native.
+- `src-tauri/Cargo.toml`: `portable-pty = "0.8"`; `cargo update -p portable-pty` → **0.9.0 → 0.8.1**
+  (nix 0.28→0.25 downgraded as a consequence).
+- `cargo build`: **OK in 1 min 13 s** (3 pre-existing warnings, unrelated).
+- `npm test`: **exit 0**; `npx tsc --noEmit`: **exit 0** (unchanged, the fix is Rust).
+- App relaunched with the fixed binary (CDP 9222 operational).
+- **Replay of the terminal scenario (`ux-terminal-state.mjs --type "echo muse-pty-fix-2026"`) not yet
+  done**: blocked by a UI state after the data loss below (the "Start
+  conversation" button inactive despite real typing — `scripts/cdp-type.mjs` newly added, CDP
+  `Input.dispatchKeyEvent` keystrokes character by character, the reliable typing path). To pick up in round 8:
+  either diagnose the button's lock, or re-create a project through the native UI.
 
-## Constat : `taskkill /F` → projets et fils PERDUS (les autres clés survivent)
+## Finding: `taskkill /F` → projects and threads LOST (the other keys survive)
 
-Après le `taskkill /F /PID 44844` puis relance : `muse-desktop.projects.v1` = `"[]"` et
-`muse-desktop.sessions.v1` = `"[]"` — **toutes les conversations et projets effacés** — alors que
-`schedules.v1`, `schedule-runs.v1`, `notifications.v1`, `queued-turns.v1`, etc. sont intacts (23 clés
-présentes). Contraste avec le kill de la manche 6 (même procédure) qui avait **préservé** projets,
-fils et file.
+After `taskkill /F /PID 44844` then a relaunch: `muse-desktop.projects.v1` = `"[]"` and
+`muse-desktop.sessions.v1` = `"[]"` — **every conversation and project wiped** — while
+`schedules.v1`, `schedule-runs.v1`, `notifications.v1`, `queued-turns.v1` and so on are intact (23 keys
+present). In contrast with round 6's kill (same procedure), which had **preserved** projects,
+threads and the queue.
 
-- **Interprétation prudente :** la perte est réelle et reproductible à ne pas sous-estimer (un kill
-  brutal peut perdre les magasins `projects`/`sessions`) ; sa cause exacte n'est pas établie (écriture
-  en vol au moment du kill ? réinit. de migration au démarrage ? profil WebView2 ?). La manche 6
-  prouve par ailleurs que la file, elle, survit et reprend.
-- **Impact qualification :** M0-02 (« le travail enregistré survit ») mériterait d'être rouvert en
-  ◐ sur ce point : la reprise a été prouvée sur la file et les runs, **pas** sur projets/fils dans
-  toutes les configurations de kill.
+- **Cautious interpretation:** the loss is real and reproducible, not to be underestimated (a brutal
+  kill can lose the `projects`/`sessions` stores); its exact cause is not established (a write
+  in flight at the moment of the kill? a migration reset at startup? the WebView2 profile?). Round 6
+  otherwise proves the queue survives and resumes.
+- **Qualification impact:** M0-02 ("saved work survives") would deserve reopening at
+  ◐ on this point: resume was proved on the queue and the runs, **not** on projects/threads in
+  every kill configuration.
 
-## Rejoue — SORTIE PTY RÉTABLIE (run2, même jour)
+## Replay — PTY OUTPUT RESTORED (run2, same day)
 
-`node scripts/ux-terminal-state.mjs --port 9222 --type "echo muse-pty-fix-2026"` puis envoi depuis
-le panneau Terminal, sur l'app relancée avec le binaire `portable-pty 0.8.1`. Écran du terminal
-(`.terminal-panel`, capture dans `m1-05-fix-portable-pty-run2.json`) :
+`node scripts/ux-terminal-state.mjs --port 9222 --type "echo muse-pty-fix-2026"` then sending from
+the Terminal panel, on the app relaunched with the `portable-pty 0.8.1` binary. The terminal's screen
+(`.terminal-panel`, captured in `m1-05-fix-portable-pty-run2.json`):
 
 ```
-Microsoft Windows [version 10.0.26200.9457] (c) Microsoft Corporation. Tous droits réservés.
+Microsoft Windows [version 10.0.26200.9457] (c) Microsoft Corporation. All rights reserved.
 C:\Windows>echo muse-pty-fix-2026
 muse-pty-fix-2026
 C:\Windows>
 ```
 
-- **Bannière cmd.exe rendue**, commande saisie en clavier réel (`scripts/cdp-type.mjs`), **sortie
-  `muse-pty-fix-2026` affichée**, prompt de retour — la boucle complète du PTY fonctionne.
-- **Cause racine confirmée : `portable-pty 0.9.0`** (régression aval, cf.
-  [turborepo#11816](https://github.com/vercel/turborepo/pull/11816)) ; `0.8.1` rétablit la lecture
-  de sortie sans aucun changement dans `terminal.rs`.
-- **Reste pour M1-05 :** rejouer une commande **interactif longue** (ex. `powershell` en attente
-  d'entrée) et vérifier `Resize` visuellement ; le cœur « cmd.exe s'ouvre et le texte s'affiche »
-  est prouvé.
+- **cmd.exe banner rendered**, command typed on a real keyboard (`scripts/cdp-type.mjs`), **output
+  `muse-pty-fix-2026` displayed**, prompt returned — the PTY's complete loop works.
+- **Root cause confirmed: `portable-pty 0.9.0`** (a downstream regression, see
+  [turborepo#11816](https://github.com/vercel/turborepo/pull/11816)); `0.8.1` restores output
+  reading without any change in `terminal.rs`.
+- **Remaining for M1-05:** replay a **long interactive** command (for example `powershell` waiting
+  for input) and check `Resize` visually; the core "cmd.exe opens and the text displays"
+  is proved.
 
-## Aller-retour interactif — prouvé (run3, même jour)
+## Interactive round trip — proved (run3, same day)
 
 ```
 C:\Windows>set /p ANS=Name?
-Name? interactive-ok            ← le processus attendait ; la saisie lui est livrée
+Name? interactive-ok            ← the process was waiting; the input is delivered to it
 C:\Windows>echo %ANS%
-interactive-ok                  ← variable peuplée : le processus a CAPTURÉ la saisie
+interactive-ok                  ← variable populated: the process CAPTURED the input
 C:\Windows>
 ```
 
-Attente → saisie → capture côté processus → écho : la **« saisie interactive fonctionnelle »** de
-l'acceptation M1-05 est prouvée. Reste : commande interactive longue type éditeur/REPL, `Resize`
-visuel, ANSI/raccourcis.
+Waiting → input → captured by the process → echo: M1-05's **"working interactive input"**
+acceptance is proved. Remaining: a long editor/REPL-type interactive command, visual `Resize`,
+ANSI/shortcuts.
 
-## Resize — DÉFAUT CONFIRMÉ (run4) : le volet suit, le PTY ignore
+## Resize — DEFECT CONFIRMED (run4): the pane follows, the PTY ignores it
 
-Chaîne testée : redimensionnement natif de la fenêtre (`set_window_frame` 1600×1000 puis 900×700) →
-volet terminal → `terminal_resize` → ConPTY, mesurée par `mode con` à chaque étape :
+Chain tested: native window resize (`set_window_frame` 1600×1000 then 900×700) →
+terminal pane → `terminal_resize` → ConPTY, measured by `mode con` at each step:
 
-| Fenêtre | Volet `.terminal-panel` | `mode con` |
+| Window | `.terminal-panel` pane | `mode con` |
 |---|---|---|
-| 1600×1000 | 506 × 820 | **Lignes 28 · Colonnes 100** |
-| 900×700 | **332 × 520** (suit la fenêtre) | **Lignes 28 · Colonnes 100** (inchangé) |
+| 1600×1000 | 506 × 820 | **Lines 28 · Columns 100** |
+| 900×700 | **332 × 520** (follows the window) | **Lines 28 · Columns 100** (unchanged) |
 
-Le layout est réactif mais **la géométrie du PTY ne bouge jamais** : `terminal_resize` n'est pas
-appelé (ou ConPTY l'ignore) — le défaut historique « resize sans effet » est donc **reproduit et
-localisé** : côté appel de resize dans l'app, pas côté portable-pty (la sortie, elle, fonctionne
-depuis le 0.8.1).
+The layout is responsive but **the PTY's geometry never moves**: `terminal_resize` is not
+called (or ConPTY ignores it) — the historical "resize with no effect" defect is therefore **reproduced and
+located**: on the app's resize call side, not on portable-pty's (output, for its part, has worked
+since 0.8.1).
 
-## ANSI SGR + Ctrl+C — prouvés (run5)
+## ANSI SGR + Ctrl+C — proved (run5)
 
-- **ANSI SGR :** `prompt $e[31mRED$e[32mGREEN$e[0m` (cmd, ESC réels) → rendu **en couleurs
-  distinctes** : span `RED` → `rgb(239,68,68)` (31m), span `GREEN` → `rgb(34,197,94)` (32m).
-  Palette 16 couleurs fonctionnelle.
-- **Ctrl+C :** `ping -n 20 127.0.0.1` interrompu à ~6 réponses (**pas de bilan final de 20
-  paquets**), marque **`^C`** affichée, retour au prompt. (Attention mesure : la fenêtre doit avoir
-  le focus sur l'input du terminal — un premier essai sans focus avait laissé le ping aller à son
-  terme, honnêteté méthodologique.)
+- **ANSI SGR:** `prompt $e[31mRED$e[32mGREEN$e[0m` (cmd, real ESC characters) → rendered **in distinct
+  colours**: the `RED` span → `rgb(239,68,68)` (31m), the `GREEN` span → `rgb(34,197,94)` (32m).
+  The 16-colour palette works.
+- **Ctrl+C:** `ping -n 20 127.0.0.1` interrupted after ~6 replies (**no final summary of 20
+  packets**), the **`^C`** mark displayed, back to the prompt. (A measurement caveat: the window must have
+  focus on the terminal's input — a first attempt without focus had let the ping run to its
+  end, in the interest of methodological honesty.)
 
-## Cause M0-02 trouvée dans le code : write-through au montage persiste le repli vide
+## M0-02 cause found in the code: the write-through at mount persists the empty fallback
 
-`src/hooks/useMuseSessions.ts` :
+`src/hooks/useMuseSessions.ts`:
 
 ```ts
 const [projects, setProjects] = useState<Project[]>(() => loadProjects());   // L1875
@@ -100,70 +100,70 @@ useEffect(() => { saveProjects(projects); }, [projects]);                    // 
 useEffect(() => { saveSessions(sessions.map(({ running: _r, ...rest }) => rest)); }, [sessions]); // L2361-2363
 ```
 
-- `loadProjects()` = `read(PROJECTS_KEY, [])` : toute valeur corrompue/absente (kill pendant une
-  écriture LevelDB de WebView2) redonne **`[]` en mémoire**.
-- Les `useEffect` de write-through s'exécutent **au montage**, sans distinction entre « mutation
-  utilisateur » et « état initial » : ils **persist aussitôt `[]`** dans `projects.v1` et
-  `sessions.v1` — une corruption transitoire devient un **effacement permanent**.
-- Cela cadre exactement l'observation : les deux clés à write-through fréquent sont effacées **de
-  façon persistée** (présentes à `"[]"`), les clés à écriture rare (schedules, runs…) survivent.
+- `loadProjects()` = `read(PROJECTS_KEY, [])`: any corrupted or missing value (a kill during a
+  WebView2 LevelDB write) gives **`[]` back in memory**.
+- The write-through `useEffect`s run **at mount**, making no distinction between "user
+  mutation" and "initial state": they **immediately persist `[]`** into `projects.v1` and
+  `sessions.v1` — a transient corruption becomes a **permanent erasure**.
+- That fits the observation exactly: the two keys with frequent write-through are wiped **in a
+  persisted way** (present at `"[]"`), the rarely written keys (schedules, runs…) survive.
 
-**Correctif suggéré :** ne pas écrire au montage (compteur de première mutation, ou double clé de
-secours `.bak` avec génération), et ne jamais persister un repli issu d'une lecture invalide.
+**Suggested fix:** do not write at mount (a first-mutation counter, or a double `.bak`
+backup key with a generation), and never persist a fallback coming from an invalid read.
 
-## Raccourcis restants — SÉANCE BLOQUÉE par « Terminal unavailable » (run6)
+## Remaining shortcuts — SESSION BLOCKED by "Terminal unavailable" (run6)
 
-Après les kills/relances et la reconstruction du binaire, le panneau terminal affiche
-**« Terminal unavailable — Try opening the panel again. »** : ni l'input ni un PTY n'apparaissent,
-et la réouverture via `scripts/ux-terminal-state.mjs` n'y change rien (préconditions « conversation
-affichée / panneau déplié / onglet Terminal rendu » OK, puis l'état d'erreur). Les tests
-Ctrl+L/Tab/Échap/Ctrl+D sont donc **reportés**. Les preuves run1-5 (sortie, interactif, ANSI,
-Ctrl+C) proviennent d'instances où le PTY s'ouvrait et restent valides.
+After the kills/relaunches and rebuilding the binary, the terminal panel shows
+**"Terminal unavailable — Try opening the panel again."**: neither the input nor a PTY appears,
+and reopening through `scripts/ux-terminal-state.mjs` changes nothing (preconditions "conversation
+displayed / panel unfolded / Terminal tab rendered" OK, then the error state). The
+Ctrl+L/Tab/Escape/Ctrl+D tests are therefore **postponed**. The run1-5 evidence (output, interactive, ANSI,
+Ctrl+C) comes from instances where the PTY opened and stays valid.
 
-**Piste :** le même symptôme « l'app n'arrive pas à faire naître son shell » que le défaut voisin
-documenté M1-06 (`managed shell sandbox is unavailable` : shell spawné par l'app ≠ shell spawné de
-l'extérieur). `terminal_open` (Rust, `portable-pty 0.8.1`) inchangé depuis les runs réussis — à
-requalifier après investigation du chemin de spawn.
+**Lead:** the same "the app cannot bring its shell to life" symptom as the neighbouring
+M1-06 defect (`managed shell sandbox is unavailable`: a shell spawned by the app ≠ a shell spawned
+from outside). `terminal_open` (Rust, `portable-pty 0.8.1`) unchanged since the successful runs — to
+requalify after investigating the spawn path.
 
-## CAUSE RACINE du cwd errant (run6 bis) : le préfixe `\\?\` passé tel quel à cmd.exe
+## ROOT CAUSE of the wandering cwd (run6 bis): the `\\?\` prefix passed as-is to cmd.exe
 
-Interception du trafic `terminal_*` (hook `window.fetch`, réponse brute) pendant l'ouverture :
+Intercepting the `terminal_*` traffic (a `window.fetch` hook, raw response) during the opening:
 
-- `terminal_open` **réussit** (200) : `{"shell":"C:\\WINDOWS\\system32\\cmd.exe","cwd":"\\\\?\\G:\\repos\\openscreen","cols":100,"rows":28}` ;
-- le **premier `terminal_read`** porte la réponse de `cmd.exe` :
+- `terminal_open` **succeeds** (200): `{"shell":"C:\\WINDOWS\\system32\\cmd.exe","cwd":"\\\\?\\G:\\repos\\openscreen","cols":100,"rows":28}`;
+- the **first `terminal_read`** carries `cmd.exe`'s reply:
 
-> `CMD.EXE a été démarré avec le chemin d'accès comme répertoire en cours. Les chemins d'accès UNC
-> ne sont pas prise en charge. … Windows par défaut.` puis bannière + prompt **`C:\Windows>`**.
+> `CMD.EXE was started with the above path as the current directory. UNC paths are not
+> supported. Defaulting to Windows directory.` then the banner + prompt **`C:\Windows>`**.
 
-**Défaut :** le workspace est passé au PTY sous sa forme `\\?\G:\…` (préfixe NT-DOS, syntaxe UNC
-pour `cmd.exe`), qui la refuse et **dévie sur `C:\Windows`**. Conséquences :
+**Defect:** the workspace is passed to the PTY in its `\\?\G:\…` form (the NT-DOS prefix, UNC syntax
+for `cmd.exe`), which refuses it and **falls back to `C:\Windows`**. Consequences:
 
-1. le shell n'est **jamais lié au cwd de la conversation** — pièce d'acceptation M1-05 non remplie
-   (le prompt `C:\Windows>` de tous les runs en est la trace visible) ;
-2. **même racine** que le défaut d'automations (`G:\…` vs `\\?\G:\…`, « recorded workspace no
-   longer matches ») : le préfixe `\\?\` est conservé là où il faut comparer/spawner en forme
-   simple ;
-3. le « Terminal unavailable » du run6 est un avatar de cette chaîne (ouverture initiale dégradée).
+1. the shell is **never bound to the conversation's cwd** — an unmet M1-05 acceptance piece
+   (the `C:\Windows>` prompt of every run is the visible trace of it);
+2. **the same root cause** as the automations defect (`G:\…` vs `\\?\G:\…`, "recorded workspace no
+   longer matches"): the `\\?\` prefix is kept where the comparison or the spawn needs the
+   simple form;
+3. run6's "Terminal unavailable" is a variant of that chain (a degraded initial opening).
 
-**Correctif attendu :** normaliser le cwd avant spawn (retirer le préfixe `\\?\`, ex.
-`\\?\G:\repos\openscreen` → `G:\repos\openscreen`) dans `terminal_open` — et la même normalisation
-dans la comparaison de workspaces des automations.
+**Expected fix:** normalise the cwd before spawning (strip the `\\?\` prefix, for example
+`\\?\G:\repos\openscreen` → `G:\repos\openscreen`) in `terminal_open` — and the same normalisation
+in the automations' workspace comparison.
 
-**Correctif appliqué (22/09/2026).** Seul le PTY était touché. `std::process::Command` retire
-déjà le préfixe : un runner de setup lancé sur un chemin canonique affiche bien le worktree, pas
-`C:\Windows`. Donc `setup.rs` et `mcp.rs` sont sains, et `portable-pty` passe le chemin brut.
+**Fix applied (22/09/2026).** Only the PTY was affected. `std::process::Command` already strips
+the prefix: a setup runner launched on a canonical path does show the worktree, not
+`C:\Windows`. So `setup.rs` and `mcp.rs` are sound, and `portable-pty` passes the raw path through.
 
-- `terminal.rs` : le cwd du shell passe par `rules::display_path` avant le spawn.
-  `TerminalInfo.cwd` rapporte la même forme simple.
-- Test de non-régression Windows `terminal::tests::shell_starts_in_a_canonical_workspace` : PTY
-  réel sur un dossier canonique `\\?\…`, on attend le prompt `<dossier>>`. Il échouait avant le
-  correctif (`C:\Windows>` et avertissement UNC), il passe après. `cargo test` : 233/233.
-- **Reste :** rejouer en app. Le prompt du terminal doit montrer le workspace de la conversation.
+- `terminal.rs`: the shell's cwd goes through `rules::display_path` before the spawn.
+  `TerminalInfo.cwd` reports the same simple form.
+- Windows regression test `terminal::tests::shell_starts_in_a_canonical_workspace`: a real PTY
+  on a canonical `\\?\…` folder, expecting the `<folder>>` prompt. It failed before the
+  fix (`C:\Windows>` and a UNC warning), it passes after. `cargo test`: 233/233.
+- **Remaining:** replay in the app. The terminal's prompt must show the conversation's workspace.
 
-## Reproductibilité
+## Reproducibility
 
-- Commit : cette note + `src-tauri/Cargo.toml`/`Cargo.lock` (downgrade) + `scripts/cdp-type.mjs`.
-- Commandes : `cargo update -p portable-pty` + `cargo build` (`src-tauri/`), `npm test`,
-  `npx tsc --noEmit`, `taskkill /F /PID 44844`, relance `src-tauri\target\debug\muse-desktop.exe`
-  avec `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`.
-- Plateforme : Windows 11 26200, WebView2 Edg/153, build dev.
+- Commit: this note + `src-tauri/Cargo.toml`/`Cargo.lock` (downgrade) + `scripts/cdp-type.mjs`.
+- Commands: `cargo update -p portable-pty` + `cargo build` (`src-tauri/`), `npm test`,
+  `npx tsc --noEmit`, `taskkill /F /PID 44844`, relaunch `src-tauri\target\debug\muse-desktop.exe`
+  with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`.
+- Platform: Windows 11 26200, WebView2 Edg/153, dev build.
