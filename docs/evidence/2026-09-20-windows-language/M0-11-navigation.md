@@ -1,62 +1,62 @@
-# Détails de navigation — câblage vérifié (M0-11, 20 septembre 2026)
+# Navigation details — wiring verified (M0-11, 20 September 2026)
 
-Second volet de M0-11, après l'[audit de copie anglaise](M0-11-copie-anglaise.md) qui couvrait le premier.
+The second half of M0-11, after the [English copy audit](M0-11-copie-anglaise.md) that covered the first.
 
-## Ce que le volet « détails de navigation » recouvre
+## What the "navigation details" half covers
 
-Trois éléments, tous déjà implémentés dans `src/lib/` :
+Three elements, all already implemented in `src/lib/`:
 
-| Helper | Rôle | Test de comportement existant |
+| Helper | Role | Existing behaviour test |
 |---|---|---|
-| `primaryModifier()` | renvoie `Cmd` sur Apple, `Ctrl` ailleurs | `test/a11y.test.ts` |
-| `zoomShortcutTitle()` | infobulle du raccourci de zoom, selon l'OS | `test/a11y.test.ts` |
-| `displayPath()` | chemin natif lisible pour l'utilisateur | — |
-| `userFacingError()` | copie d'erreur centralisée | `test/errorCopy.test.ts` |
+| `primaryModifier()` | returns `Cmd` on Apple, `Ctrl` elsewhere | `test/a11y.test.ts` |
+| `zoomShortcutTitle()` | zoom shortcut tooltip, per OS | `test/a11y.test.ts` |
+| `displayPath()` | native path made readable for the user | — |
+| `userFacingError()` | centralised error copy | `test/errorCopy.test.ts` |
 
-## Le trou que j'ai trouvé
+## The gap I found
 
-Les **fonctions** sont testées. Ce qui ne l'était pas, c'est que l'interface les **appelle**. Un composant pouvait coder `Ctrl` en dur dans une infobulle, ou afficher un chemin natif brut, et **tous les tests existants passaient quand même**.
+The **functions** are tested. What was not, is that the interface **calls** them. A component could hard-code `Ctrl` in a tooltip, or display a raw native path, and **all the existing tests would still pass**.
 
-Vérification du câblage réel par lecture de source — il est large :
+Checking the real wiring by reading the source — it is broad:
 
-| Surface | Appel |
+| Surface | Call |
 |---|---|
 | `App.tsx` | `primaryModifier()`, `zoomShortcutTitle()`, `displayPath(active.workspace)` |
 | `SessionSidebar.tsx` | `` `${primaryModifier()}+Tab to switch conversations` `` |
 | `InputPanel.tsx` | `` `Send answer (${primaryModifier()}+Enter)` `` |
-| **16 composants** | `userFacingError(` pour leurs échecs |
+| **16 components** | `userFacingError(` for their failures |
 
-## Le verrou ajouté
+## The lock added
 
-`test/navigationDetails.test.ts` — 7 tests qui échouent si un point d'appel disparaît ou si un helper est redéclaré localement (une copie locale dériverait de l'implémentation testée).
+`test/navigationDetails.test.ts` — 7 tests that fail if a call site disappears or if a helper is redeclared locally (a local copy would drift from the tested implementation).
 
-**Efficacité vérifiée, pas supposée :** en remplaçant dans `SessionSidebar.tsx` l'appel par un `Ctrl` codé en dur — exactement la régression que le test doit attraper — il **échoue** :
+**Effectiveness verified, not assumed:** by replacing the call in `SessionSidebar.tsx` with a hard-coded `Ctrl` — exactly the regression the test must catch — it **fails**:
 
 ```
 ✖ ../src/components/SessionSidebar.tsx no longer calls primaryModifier()
   — the sidebar shortcut hint switches conversations and is OS-dependent
 ```
 
-Après restauration : **942 tests, 942 passés, 0 échec** (contre 935 avant).
+After restoring: **942 tests, 942 passed, 0 failures** (against 935 before).
 
-## Établi
+## Established
 
-- Les trois helpers de navigation sont **réellement câblés** dans l'interface, sur les surfaces où M0-11 les attend, et cette liaison est désormais **verrouillée par un test** qui échoue sans elle.
-- La copie d'erreur des surfaces OSS passe bien par `userFacingError`, le module dont le comportement est testé ailleurs — **vérifié sur 6 composants nommés**.
+- The three navigation helpers are **really wired** into the interface, on the surfaces M0-11 expects them, and that link is now **locked by a test** that fails without it.
+- The error copy of the OSS surfaces does go through `userFacingError`, the module whose behaviour is tested elsewhere — **verified across 6 named components**.
 
-## Limites — ce qui n'est pas couvert
+## Limits — what is not covered
 
-- Le verrou est **structurel** : il prouve que l'appel existe, pas que l'infobulle **s'affiche correctement** dans la webview empaquetée. Un libellé mal rendu, tronqué ou écrasé par un style ne serait pas détecté.
-- **Aucune vérification sur macOS ni Linux** : `primaryModifier()` teste `navigator.platform`, mais seul le comportement de la fonction est testé, pas son effet sur un vrai système Apple. La branche `Cmd` est prouvée par test unitaire, pas par exécution.
-- **`displayPath()` n'a pas de test de comportement** : je n'ai verrouillé que son appel. Ses cas limites — chemins UNC, `\\?\`, espaces, longueur — ne sont pas exercés.
-- Les **infobulles ne sont pas auditées exhaustivement** : je n'ai vérifié que les points d'appel listés. D'autres surfaces peuvent porter des raccourcis écrits en dur sans que ce test les voie.
-- Le **rendu réel des infobulles** (survol, délai d'apparition, accessibilité) n'est pas mesuré.
+- The lock is **structural**: it proves the call exists, not that the tooltip **displays correctly** in the packaged webview. A badly rendered, truncated or style-crushed label would not be detected.
+- **No verification on macOS or Linux**: `primaryModifier()` tests `navigator.platform`, but only the function's behaviour is tested, not its effect on a real Apple system. The `Cmd` branch is proved by unit test, not by execution.
+- **`displayPath()` has no behaviour test**: I only locked down its call. Its edge cases — UNC paths, `\\?\`, spaces, length — are not exercised.
+- **Tooltips are not audited exhaustively**: I checked only the call sites listed. Other surfaces may carry hard-coded shortcuts without this test seeing them.
+- The **actual rendering of tooltips** (hover, appearance delay, accessibility) is not measured.
 
-## État de M0-11
+## State of M0-11
 
-| Volet | État |
+| Half | State |
 |---|---|
-| Finir l'anglais | **mesuré** sur 7 surfaces, limites déclarées |
-| Détails de navigation | **câblage vérifié et verrouillé** ; rendu natif et branches OS non exercés |
+| Finish the English | **measured** across 7 surfaces, limits stated |
+| Navigation details | **wiring verified and locked**; native rendering and OS branches unexercised |
 
-**M0-11 n'est pas clos.** Ses deux volets disposent maintenant d'une vérification reproductible, mais aucun des deux n'a été validé dans la webview empaquetée sur les trois OS.
+**M0-11 is not closed.** Both halves now have a reproducible check, but neither has been validated in the packaged webview on all three OSes.
