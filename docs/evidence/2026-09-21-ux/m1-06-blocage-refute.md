@@ -1,72 +1,72 @@
-# M1-06 — le « constat bloquant » était un artefact de mesure (21 septembre 2026)
+# M1-06 — the "blocking finding" was a measurement artefact (21 September 2026)
 
-**Verdict : le blocage attribué au host n'existe pas.** `session/userShell` exécute la commande et publie son résultat. Le « constat bloquant » du 19 septembre venait d'une sonde qui demandait la capacité sous une forme que le host lit comme « aucune capacité demandée ».
+**Verdict: the blocker attributed to the host does not exist.** `session/userShell` runs the command and publishes its result. The "blocking finding" of 19 September came from a probe that requested the capability in a shape the host reads as "no capability requested".
 
-## Ce que la roadmap affirmait
+## What the roadmap claimed
 
-> **Constat bloquant (Windows, 19/09/2026) :** `--exercise-user-shell --exercise-user-shell-slow` a obtenu `accepted` des deux côtés, mais **aucun** `item/started`, aucune notification portant le `commandId`, et aucun fichier témoin 14 s après l'admission. L'admission seule ne prouve ni exécution ni restitution — **le blocage est côté host**.
+> **Blocking finding (Windows, 19/09/2026):** `--exercise-user-shell --exercise-user-shell-slow` got `accepted` on both sides, but **no** `item/started`, no notification carrying the `commandId`, and no witness file 14 s after admission. Admission alone proves neither execution nor return — **the blocker is on the host side**.
 
-Cette phrase a orienté la campagne : elle classe M1-06 parmi les tickets qu'« aucune correction client ne fermera », et renvoie vers `SIDECAR-CONTRACT-GAPS.md`.
+That sentence steered the campaign: it classified M1-06 among the tickets that "no client fix will close", and pointed to `SIDECAR-CONTRACT-GAPS.md`.
 
-## La cause : une clé de capacité mal placée
+## The cause: a misplaced capability key
 
-`scripts/msp-user-shell-items.mjs` envoyait :
+`scripts/msp-user-shell-items.mjs` sent:
 
 ```js
-capabilities: {},                        // vide
-requestedCapabilities: ["userShell"],    // au premier niveau
+capabilities: {},                        // empty
+requestedCapabilities: ["userShell"],    // at the top level
 ```
 
-L'application envoie, depuis toujours (`src-tauri/src/main.rs`) :
+The application has always sent (`src-tauri/src/main.rs`):
 
 ```rust
 "capabilities": {"requestedCapabilities": ["userShell"]}
 ```
 
-La clé doit être **imbriquée**. Avec la forme à plat, le host ne voit aucune capacité demandée : il n'accorde rien, et répond à l'appel par `capabilityRequired`. La sonde en concluait qu'aucun item n'est publié — alors qu'**elle n'avait jamais exécuté la commande**.
+The key has to be **nested**. With the flat shape, the host sees no capability requested: it grants nothing, and answers the call with `capabilityRequired`. The probe concluded no item is published — when **it had never run the command**.
 
-C'est aussi pourquoi le bureau, lui, accorde `userShell` et active le bouton : il utilisait la bonne forme. **Deux mesures du même contrat se contredisaient, et c'est la mauvaise qui a été publiée.**
+That is also why the desktop app does get `userShell` granted and enables the button: it used the right shape. **Two measurements of the same contract contradicted each other, and the wrong one was published.**
 
-## Mesures, avant et après correction
+## Measurements, before and after the fix
 
-| | Forme à plat (fausse) | Forme imbriquée (celle de l'application) |
+| | Flat shape (wrong) | Nested shape (the application's) |
 |---|---|---|
 | `grantedCapabilities` | `[]` | **`["userShell"]`** |
-| `session/userShell` | `failed`, `capabilityRequired` | **`accepted`**, `commandId` renvoyé |
-| Notifications | **aucune** | **`item/started`** puis **`item/completed`**, type `userShell`, à 1 867 et 1 922 ms |
-| Sortie de la commande | — | **marqueur restitué** (`markerEchoed: true`) |
-| Verdict de la sonde | « the gap is confirmed outside the suspect harness » | « **the host DOES publish 2 userShell item(s) — the gap report is wrong here** » |
+| `session/userShell` | `failed`, `capabilityRequired` | **`accepted`**, `commandId` returned |
+| Notifications | **none** | **`item/started`** then **`item/completed`**, kind `userShell`, at 1,867 and 1,922 ms |
+| Command output | — | **marker returned** (`markerEchoed: true`) |
+| The probe's verdict | "the gap is confirmed outside the suspect harness" | "**the host DOES publish 2 userShell item(s) — the gap report is wrong here**" |
 
-Le script portait déjà, dans son propre commentaire, l'avertissement que la réclamation venait d'un harnais **déjà prouvé faussement négatif** ([`harness-faux-negatif.md`](../2026-09-20-windows-sessions/harness-faux-negatif.md)). Il a reproduit le même défaut de méthode en changeant de cause.
+The script already carried, in its own comment, the warning that the claim came from a harness **already proved falsely negative** ([`harness-faux-negatif.md`](../2026-09-20-windows-sessions/harness-faux-negatif.md)). It reproduced the same error of method with a different cause.
 
-## Ce qui reste vrai, et ce qui ne l'est plus
+## What stays true, and what no longer does
 
-**Réfuté :** « le host ne publie pas d'item `userShell` ». Il en publie deux, avec la sortie.
+**Disproved:** "the host does not publish a `userShell` item". It publishes two, with the output.
 
-**Confirmé, mais c'est le client :** la sortie n'est **pas rendue dans le transcript**. `BETA-0.1.0-SCOPE.md` disait déjà l'exact inverse du blocage — « le host fournit l'item, le client ne l'affiche pas » — et c'est cette lecture qui est juste. Le repli « Add output to prompt » fonctionne.
+**Confirmed, but it is the client:** the output is **not rendered in the transcript**. `BETA-0.1.0-SCOPE.md` already said the exact opposite of the blocker — "the host provides the item, the client does not display it" — and that reading is the right one. The "Add output to prompt" fallback works.
 
-**Confirmé, autre cause :** `Run in Muse` échoue en `sessionNotLoaded` sur une conversation jamais lancée. Le host **admet** la session au repos (elle figure dans `session/list`) mais ne la **charge** qu'à son premier tour. Le client active le bouton dans cet état et l'échec n'arrive qu'après le clic.
+**Confirmed, different cause:** `Run in Muse` fails with `sessionNotLoaded` on a conversation that was never started. The host **admits** the session at rest (it appears in `session/list`) but only **loads** it on its first turn. The client enables the button in that state and the failure arrives only after the click.
 
-**À revérifier :** M0-04 et M1-11 s'appuyaient sur le même harnais (`--exercise-user-shell`), dont la forme de capacité était fausse. Leur blocage doit être remesuré avant d'être cité à nouveau.
+**To re-check:** M0-04 and M1-11 rested on the same harness (`--exercise-user-shell`), whose capability shape was wrong. Their blocker must be re-measured before being cited again.
 
-## Le chemin client, vérifié de bout en bout
+## The client path, verified end to end
 
-| Étage | Mesure |
+| Layer | Measurement |
 |---|---|
-| Projection Rust | `restore_sessions` renvoie `granted_capabilities: ["userShell"]` pour les 11 sessions |
-| Fusion renderer | `grantedCapabilitiesBySession` (hook #82) contient `["userShell"]` pour la session active |
-| Prop React | `canRunThroughMuse` passe à **`true`** dès qu'une commande est saisie |
-| Bouton | `disabled=false`, infobulle « Run this command through the Muse host (userShell) » |
-| Appel | atteint le host, qui répond `sessionNotLoaded` — l'échec est **réel** et **rapporté** |
+| Rust projection | `restore_sessions` returns `granted_capabilities: ["userShell"]` for all 11 sessions |
+| Renderer merge | `grantedCapabilitiesBySession` (hook #82) holds `["userShell"]` for the active session |
+| React prop | `canRunThroughMuse` turns **`true`** as soon as a command is typed |
+| Button | `disabled=false`, tooltip "Run this command through the Muse host (userShell)" |
+| Call | reaches the host, which answers `sessionNotLoaded` — the failure is **real** and **reported** |
 
-**Une note de méthode sur ce dernier point.** Un tour précédent a conclu que ce bouton était bloqué par la capacité. C'était faux : `disabled` combine trois conditions (`!canRunThroughMuse || !command.trim() || runningThroughMuse`), et j'avais lu le `disabled` d'un champ **vide**. Le marqueur qui tranche est l'**infobulle**, qui change selon la cause : « did not grant the userShell capability » en cas de capacité manquante, « Run this command through the Muse host (userShell) » sinon. **Mesurer la cause, pas l'état composite.**
+**A method note on that last point.** An earlier round concluded this button was blocked by the capability. That was false: `disabled` combines three conditions (`!canRunThroughMuse || !command.trim() || runningThroughMuse`), and I had read the `disabled` of an **empty** field. The marker that settles it is the **tooltip**, which changes with the cause: "did not grant the userShell capability" when the capability is missing, "Run this command through the Muse host (userShell)" otherwise. **Measure the cause, not the composite state.**
 
 ## Instruments
 
-| Script | État |
+| Script | State |
 |---|---|
-| `msp-user-shell-items.mjs` | **corrigé** — forme de capacité imbriquée, avec le pourquoi en commentaire |
-| `ux-run-in-muse.mjs` | exerce le chemin UI : saisie, activation, clic, attente de l'item |
-| `ux-read-logs.mjs` | lit le transcript depuis l'état du hook, pas depuis le DOM |
-| `ux-terminal-state.mjs` | lit l'état des deux actions d'envoi **et la raison** de leur indisponibilité : distingue « échec » de « jamais tenté » |
-| `check-scripts-parse.mjs` | garde-fou : tout script de `scripts/` doit au moins compiler |
+| `msp-user-shell-items.mjs` | **fixed** — nested capability shape, with the reason in a comment |
+| `ux-run-in-muse.mjs` | exercises the UI path: typing, enabling, clicking, waiting for the item |
+| `ux-read-logs.mjs` | reads the transcript from the hook's state, not from the DOM |
+| `ux-terminal-state.mjs` | reads the state of both send actions **and the reason** they are unavailable: distinguishes "failed" from "never attempted" |
+| `check-scripts-parse.mjs` | guard rail: every script in `scripts/` must at least compile |
