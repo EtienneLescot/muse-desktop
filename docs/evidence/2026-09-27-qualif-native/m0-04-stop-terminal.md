@@ -1,29 +1,29 @@
-# M0-04 — Stop → terminal, avec trace du `turnId` transmis (27 septembre 2026)
+# M0-04 — Stop → terminal, with a trace of the `turnId` transmitted (27 September 2026)
 
-**Le chantier 5 du [plan client du 20 septembre](../../plans/2026-09-20-travail-client-restant.md) est tranché.** La
-question était : « reproduire l'arrêt depuis l'interface et vérifier le `turnId` effectivement
-transmis ». Réponse, mesurée sur le fil IPC réel : **le `turnId` est transmis, non vide, et l'état
-Stop se résout en ~1 s.** Le `Stopping…` figé de la campagne du 20/09 **ne se reproduit pas** au
+**Workstream 5 of the [20 September client plan](../../plans/2026-09-20-travail-client-restant.md) is settled.** The
+question was: "reproduce the stop from the interface and check the `turnId` actually
+transmitted". The answer, measured on the real IPC wire: **the `turnId` is transmitted, non-empty, and the
+Stop state resolves in ~1 s.** The frozen `Stopping…` of the 20/09 campaign **does not reproduce** at
 HEAD (`362c8bb`).
 
-## La mesure
+## The measurement
 
 ```powershell
 node scripts/cdp-stop-terminal.mjs
 ```
 
-Scénario complet depuis la webview : nouvelle conversation → tour long admis → **bouton Stop de
-l'interface** → observation de la résolution → **relance** (« reprendre »).
+A complete scenario from the webview: new conversation → long turn admitted → **the interface's Stop
+button** → observing the resolution → **relaunch** ("resume").
 
-| Fait | Mesure |
+| Fact | Measurement |
 |---|---|
-| `turnId` observé sur le fil | **oui** (`send_input` → `turnId` du tour) |
-| Bouton Stop cliqué | **oui** (bouton « Stop » de la ligne composer en état working) |
-| Appels `cancel_session` | **2/2 avec `turnId` non vide** |
-| Résolution de l'état Stop | **1 006 ms** après le clic |
-| Relance après arrêt | **oui** — le tour suivant démarre (`stream-health-working`, « work item started ») |
+| `turnId` observed on the wire | **yes** (`send_input` → the turn's `turnId`) |
+| Stop button clicked | **yes** (the "Stop" button on the composer row in the working state) |
+| `cancel_session` calls | **2/2 with a non-empty `turnId`** |
+| Resolution of the Stop state | **1,006 ms** after the click |
+| Relaunch after stopping | **yes** — the next turn starts (`stream-health-working`, "work item started") |
 
-La trace IPC, qui tranche (identifiants de la session en cours) :
+The IPC trace that settles it (the running session's identifiers):
 
 ```json
 { "cmd": "cancel_session",
@@ -32,54 +32,54 @@ La trace IPC, qui tranche (identifiants de la session en cours) :
   "result": "null" }
 ```
 
-`turnId` = l'identifiant de tour annoncé par `send_input` — **le renderer transmet le bon
-identifiant, non vide**. L'accusé `null` est l'admission (« admission only »), puis le terminal
-serveur `turn/completed` — établi par [`msp-interrupt-notifications.mjs`](session-log-expique-tout.md)
-à **+36 ms** — fait sortir l'interface de l'état Stop.
+`turnId` = the turn identifier announced by `send_input` — **the renderer transmits the right
+identifier, non-empty**. The `null` acknowledgement is the admission ("admission only"), then the server
+terminal `turn/completed` — established by [`msp-interrupt-notifications.mjs`](session-log-expique-tout.md)
+at **+36 ms** — takes the interface out of the Stop state.
 
-## Les trois possibilités du plan client, tranchées
+## The client plan's three possibilities, settled
 
-| Hypothèse (chantier 5) | Verdict |
+| Hypothesis (workstream 5) | Verdict |
 |---|---|
-| 1. le renderer n'appelle pas `interrupt_session` avec un `turnId` non vide | **réfutée** — `turnId` présent et correct à chaque appel |
-| 2. le terminal arrive mais n'est pas associé au bon tour côté client | **réfutée** — résolution UI en ~1 s |
-| 3. l'observation d'interface datait d'un état différent | **la plus probable** — voir ci-dessous |
+| 1. the renderer does not call `interrupt_session` with a non-empty `turnId` | **disproved** — `turnId` present and correct on every call |
+| 2. the terminal arrives but is not associated with the right turn on the client side | **disproved** — UI resolution in ~1 s |
+| 3. the interface observation dated from a different state | **the most likely** — see below |
 
-**Sur le 3 :** l'observation d'origine cliquait un bouton **désactivé** dont le `title` contenait
-« stop it first » (contrôle de lane sous-agent), et un autre essai rejetait le vrai bouton **à
-cause de son titre** — le bouton Stop du tour porte le titre trompeur
-**`"Stop the running sidecar"`**. Ce titre est un défaut de libellé restant (le bouton arrête le
-**tour**, pas le sidecar), à corriger côté interface.
+**On point 3:** the original observation clicked a **disabled** button whose `title` contained
+"stop it first" (a sub-agent lane control), and another attempt rejected the real button **because
+of its title** — the turn's Stop button carries the misleading title
+**`"Stop the running sidecar"`**. That title is a remaining label defect (the button stops the
+**turn**, not the sidecar), to fix on the interface side.
 
-## Deux défauts de méthode qui ont failli produire un faux constat
+## Two method defects that nearly produced a false finding
 
-Consignés pour ne pas les refaire :
+Recorded so as not to repeat them:
 
-1. **`__TAURI_INTERNALS__.invoke` n'est pas patchable** (Proxy qui rend l'ancien `invoke`) et
-   **`chrome.webview.postMessage` n'est pas la voie de transport** (0 trame). Le transport IPC
-   réel de ce build est **`window.fetch`** — chaque invoke est un fetch dont l'URL porte la
-   commande (`http://ipc.localhost/{cmd}`) et le corps les arguments. Mesuré : 153 appels/65 s
-   de trafic ordinaire dont les polls `poll_events` (`{"since":N}`).
-2. Le bouton Stop du tour **n'apparaît qu'avec l'état working**, avec 1 à 3 s de décalage sur
-   l'accusé de `send_input` ; un clic à +2,4 s ne trouve rien. Il faut **attendre** le bouton.
+1. **`__TAURI_INTERNALS__.invoke` cannot be patched** (a Proxy that returns the old `invoke`) and
+   **`chrome.webview.postMessage` is not the transport path** (0 frames). This build's real IPC
+   transport is **`window.fetch`** — each invoke is a fetch whose URL carries the
+   command (`http://ipc.localhost/{cmd}`) and whose body carries the arguments. Measured: 153 calls in 65 s
+   of ordinary traffic, including the `poll_events` polls (`{"since":N}`).
+2. The turn's Stop button **only appears in the working state**, 1 to 3 s after
+   `send_input`'s acknowledgement; a click at +2.4 s finds nothing. The button has to be **awaited**.
 
-## Comportement de liveness observé (honnête, à connaître)
+## Liveness behaviour observed (honest, worth knowing)
 
-Pendant la réflexion du modèle (avant le premier delta de texte), le bandeau passe en
-`stream-health-stalled` : **« No recent host update — No host event for 47s. Muse may still be
-working. Last event: work item started. »**, puis revient à « response update » dès le premier
-delta. Ce n'est **pas** un bug de flux : le modèle était silencieux 47 s. Le libellé reste
-calme et honnête (« Muse may still be working »).
+While the model is thinking (before the first text delta), the banner switches to
+`stream-health-stalled`: **"No recent host update — No host event for 47s. Muse may still be
+working. Last event: work item started."**, then returns to "response update" at the first
+delta. That is **not** a stream bug: the model was silent for 47 s. The label stays
+calm and honest ("Muse may still be working").
 
-## États terminaux quand la mort du processus est connue
+## Terminal states when the process death is known
 
-Voir [`m0-02-reprise-apres-mort-host.md`](m0-02-reprise-apres-mort-host.md) : le statut
-« Muse stopped because the host process ended. Reconnect to continue. » est honnête et actionnable.
+See [`m0-02-reprise-apres-mort-host.md`](m0-02-reprise-apres-mort-host.md): the status
+"Muse stopped because the host process ended. Reconnect to continue." is honest and actionable.
 
-## Complément : la distinction « demande acceptée » / « terminal confirmé » capturée en direct
+## Complement: the "request accepted" / "terminal confirmed" distinction captured live
 
-Run « outil » (`cdp-stop-terminal-outil-run1.json`, `MUSE_STOP_AFTER_MS=20000`) — état UI exact
-au moment du clic Stop :
+The "tool" run (`cdp-stop-terminal-outil-run1.json`, `MUSE_STOP_AFTER_MS=20000`) — the exact UI state
+at the moment of the Stop click:
 
 ```json
 { "stopping": true, "stoppingBanner": true,
@@ -87,27 +87,27 @@ au moment du clic Stop :
   "healthText": "Stopping Muse The stop request was accepted; waiting for the desktop host to confirm it." }
 ```
 
-→ puis résolution en **1 018 ms**, `cancel_session` avec `turnId` correct (3ᵉ appel consécutif
-conforme). Le critère « `Stopping Muse` reste une demande acceptée tant que le terminal n'est pas
-confirmé » est donc **prouvé avec son libellé exact**.
+→ then resolution in **1,018 ms**, `cancel_session` with the right `turnId` (the 3rd consecutive
+conforming call). The "`Stopping Muse` stays an accepted request until the terminal is
+confirmed" criterion is therefore **proved with its exact label**.
 
-**Constat d'environnement (M1-05/M0-10) :** le shell *utilisateur du modèle* (outil interne) est
-refusé dans cette configuration : le flux de sortie rapporte « enforcement unavailable:
-windows_elevated setup_required: sandbox users are not ready ». La phase « arrêt pendant un outil »
-n'a donc pas pu être jouée avec un outil modèle long ; elle reste à rejouer avec **Run in Muse**
-(`session/userShell`, lui fonctionnel — voir M1-06) comme outil long.
+**Environment finding (M1-05/M0-10):** the model's *user* shell (an internal tool) is
+refused in this configuration: the output stream reports "enforcement unavailable:
+windows_elevated setup_required: sandbox users are not ready". The "stop during a tool" phase
+could therefore not be played with a long model tool; it remains to be replayed with **Run in Muse**
+(`session/userShell`, which does work — see M1-06) as the long tool.
 
-## Phases spéciales jouées le 27/09/2026 (suite) — trois de quatre fermées
+## Special phases played on 27/09/2026 (continued) — three out of four closed
 
-Toutes via `scripts/cdp-stop-terminal.mjs` (`MUSE_STOP_AFTER_MS` pour cibler la phase,
-`--followup` pour prouver la relance) ; rapports bruts `cdp-stop-avant-token-run1.json`,
-`cdp-stop-reponse-tardive-run1.json` et `cdp-stop-reponse-tardive-run2.json`.
+All through `scripts/cdp-stop-terminal.mjs` (`MUSE_STOP_AFTER_MS` to target the phase,
+`--followup` to prove the relaunch); raw reports `cdp-stop-avant-token-run1.json`,
+`cdp-stop-reponse-tardive-run1.json` and `cdp-stop-reponse-tardive-run2.json`.
 
-### Avant le premier token — prouvé (`MUSE_STOP_AFTER_MS=1500`)
+### Before the first token — proved (`MUSE_STOP_AFTER_MS=1500`)
 
-Prompt à planification longue (« plan a 2500-word essay … then reply PLANNED ») ; arrêt à +1,5 s,
-**avant toute sortie** (`uiBeforeStop.healthText: null` — la rangée de stream n'a pas encore
-d'état ; l'état `reasoning update` du tour suivant est visible dans `uiAfterFollowup`).
+A long-planning prompt ("plan a 2500-word essay … then reply PLANNED"); stop at +1.5 s,
+**before any output** (`uiBeforeStop.healthText: null` — the stream row has no
+state yet; the next turn's `reasoning update` state is visible in `uiAfterFollowup`).
 
 ```
 verdict: {"turnIdObservedOnWire":true,"stopClicked":true,
@@ -115,16 +115,16 @@ verdict: {"turnIdObservedOnWire":true,"stopClicked":true,
           "stoppingResolved":true,"resolvedAtMs":1018}
 ```
 
-- `cancel_session` porte le **`turnId`** du tour dès la phase pré-token.
-- Bannière **acceptée** capturée en direct (`uiObservations[0]`, +2 ms après le clic) :
-  « Stopping Muse — The stop request was accepted; waiting for the desktop host to confirm it. »
-- **Résolution terminale en 1,0 s** puis **relance immédiate fonctionnelle** (`uiAfterFollowup` :
+- `cancel_session` carries the turn's **`turnId`** from the pre-token phase onwards.
+- The **accepted** banner captured live (`uiObservations[0]`, +2 ms after the click):
+  "Stopping Muse — The stop request was accepted; waiting for the desktop host to confirm it."
+- **Terminal resolution in 1.0 s** then an **immediate, working relaunch** (`uiAfterFollowup`:
   `Muse is working … · reasoning update.`).
 
-### Réponse tardive — prouvé (`MUSE_STOP_AFTER_MS=45000`)
+### Late answer — proved (`MUSE_STOP_AFTER_MS=45000`)
 
-Prompt très long (« 3000-word technical analysis … ») ; à **+45 s** le tour est **toujours vivant**
-(bouton Stop présent, cliqué) :
+A very long prompt ("3000-word technical analysis …"); at **+45 s** the turn is **still alive**
+(Stop button present, clicked):
 
 ```
 verdict: {"turnIdObservedOnWire":true,"stopClicked":true,
@@ -132,43 +132,43 @@ verdict: {"turnIdObservedOnWire":true,"stopClicked":true,
           "stoppingResolved":true,"resolvedAtMs":1016}
 ```
 
-Acceptation du même libellé (capturée live), `turnId` transmis, **résolution en 1,0 s**, relance
-OK. Le comportement de liveness (« No recent host update… Muse may still be working ») reste le
-marqueur honnête de cette fenêtre.
+Acceptance with the same label (captured live), `turnId` transmitted, **resolution in 1.0 s**, relaunch
+OK. The liveness behaviour ("No recent host update… Muse may still be working") stays the
+honest marker of that window.
 
-### Après la fin de la réponse — prouvé (`MUSE_STOP_AFTER_MS=60000`, réponse déjà terminée)
+### After the answer ends — proved (`MUSE_STOP_AFTER_MS=60000`, answer already finished)
 
-`cdp-stop-reponse-tardive-run1.json` : à +60 s la réponse était finie depuis longtemps —
-**aucun bouton Stop n'existe plus** (`stopClicked: false`), l'UI est au repos
-(`uiBeforeStop.healthText: null`), et le tour suivant (`--followup`) démarre immédiatement.
-L'UI ne propose pas d'arrêter ce qui est déjà fini et rien ne casse.
+`cdp-stop-reponse-tardive-run1.json`: at +60 s the answer had long finished —
+**no Stop button exists any more** (`stopClicked: false`), the UI is at rest
+(`uiBeforeStop.healthText: null`), and the next turn (`--followup`) starts immediately.
+The UI does not offer to stop what has already finished and nothing breaks.
 
-### Pendant un outil — variante mesurée : arrêt pendant une lane sous-agent en exécution
+### During a tool — variant measured: stopping during a running sub-agent lane
 
-Sur ce modèle (muse-spark), les travaux d'outil (recherches) sont **déportés en sous-agents** : pas
-de ligne outil sur le tour parent. Le 27/09 au soir, un Stop a été déclenché à l'instant où une
-lane `msg subagent subagent-running` était **« thinking… Running »** (travail d'outil en vol dans
-la session enfant) : `cancel_session` portant le `turnId` ×2, tour parent résolu (plus de bouton
-Stop), lanes closes à `subagent-completed`. C'est la phase « travail en cours interrompu » prouvée.
+On this model (muse-spark), tool work (searches) is **offloaded to sub-agents**: there is
+no tool row on the parent turn. On the evening of 27/09, a Stop was triggered at the moment a
+`msg subagent subagent-running` lane was **"thinking… Running"** (tool work in flight in
+the child session): `cancel_session` carrying the `turnId` ×2, the parent turn resolved (no more Stop
+button), lanes closed at `subagent-completed`. That is the "work in progress interrupted" phase, proved.
 
-**Variante stricte non atteignable en l'état :** un appel d'outil exécuté par le tour parent lui-même
-— les recherches partent systématiquement en sous-agents (« Do NOT use subagents » n'est pas suivi),
-et l'outil shell est bloqué par le défaut d'environnement (M1-06). La ligne outil parent reste à
-arrêter dans un environnement où les outils du modèle s'exécutent directement.
+**The strict variant is not reachable as things stand:** a tool call executed by the parent turn itself
+— searches systematically go to sub-agents ("Do NOT use subagents" is not followed),
+and the shell tool is blocked by the environment defect (M1-06). The parent tool row remains to
+be stopped in an environment where the model's tools run directly.
 
-**Note bonus :** pendant ces essais, une lane sous-agent `msg subagent subagent-complete` avec
-`childSessionId` et états `subagent-running` → `subagent-completed` a été observée en direct
-(consolidation M2-07).
+**Bonus note:** during these attempts, a `msg subagent subagent-complete` sub-agent lane with
+a `childSessionId` and states `subagent-running` → `subagent-completed` was observed live
+(consolidating M2-07).
 
-## Reproductibilité
+## Reproducibility
 
-- Commit : `362c8bb` (main), `target\debug\muse-desktop.exe` via `npm run tauri -- dev`.
-- Plateforme : Windows 11 (10.0.26200), WebView2, sidecar `muse-bin-1.3.0-R3401.1`.
-- Script : `scripts/cdp-stop-terminal.mjs` (captures dans `shots/m0-04-*.png`).
-- Sortie brute : `cdp-stop-terminal-run6.json` (verdict ci-dessus), `cdp-stop-terminal-run4.json`
-  (trace des formes d'appel).
+- Commit: `362c8bb` (main), `target\debug\muse-desktop.exe` through `npm run tauri -- dev`.
+- Platform: Windows 11 (10.0.26200), WebView2, sidecar `muse-bin-1.3.0-R3401.1`.
+- Script: `scripts/cdp-stop-terminal.mjs` (screenshots in `shots/m0-04-*.png`).
+- Raw output: `cdp-stop-terminal-run6.json` (the verdict above), `cdp-stop-terminal-run4.json`
+  (a trace of the call shapes).
 
-**Verdict M0-04 Windows :** « Stop résolu par un terminal serveur » est **prouvé en cours de
-réponse** avec `turnId` transmis et reprise prouvée. **Phases fermées le 27/09 : avant le premier
-token, réponse tardive, après la fin** (ci-dessus). Reste la phase **pendant un outil**, bloquée
-par le défaut d'environnement documenté dans [`m1-06-run-in-muse-sandbox.md`](m1-06-run-in-muse-sandbox.md).
+**M0-04 Windows verdict:** "Stop resolved by a server terminal" is **proved mid-answer**
+with the `turnId` transmitted and the resume proved. **Phases closed on 27/09: before the first
+token, late answer, after the end** (above). The **during a tool** phase remains, blocked
+by the environment defect documented in [`m1-06-run-in-muse-sandbox.md`](m1-06-run-in-muse-sandbox.md).
