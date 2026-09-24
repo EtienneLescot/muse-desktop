@@ -1,15 +1,15 @@
-# Cycle complet de distribution Windows — M4-09 (20 septembre 2026)
+# Complete Windows distribution cycle — M4-09 (20 September 2026)
 
-Installer, vérifier, désinstaller, et prouver que les projets survivent. C'est le critère de sortie de M4-09 qui n'avait jamais été exécuté.
-Test **volontairement destructif sur la machine de l'utilisateur**, avec son autorisation explicite ; état final vérifié et restauré.
+Install, verify, uninstall, and prove the projects survive. That is M4-09's exit criterion, which had never been run.
+A test **deliberately destructive on the user's machine**, with their explicit authorization; final state verified and restored.
 
-## Artefact utilisé
+## Artefact used
 
-`src-tauri/target/release/bundle/nsis/Muse-Desktop_0.1.0_x64-setup.exe` — **75 617 763 octets** (72,11 Mio), SHA-256 `c8fcb5da1c2f49c3527e83e9f4791c068811a2fc8e45d67c439294221a6c30bd`, construit au round 13 (`docs/evidence/2026-09-20-windows-release/M4-09.md`).
+`src-tauri/target/release/bundle/nsis/Muse-Desktop_0.1.0_x64-setup.exe` — **75,617,763 bytes** (72.11 MiB), SHA-256 `c8fcb5da1c2f49c3527e83e9f4791c068811a2fc8e45d67c439294221a6c30bd`, built at round 13 (`docs/evidence/2026-09-20-windows-release/M4-09.md`).
 
-## Ligne de base à préserver
+## Baseline to preserve
 
-Relevée par CDP sur le profil réel : **64 conversations**, **2 projets** (`openscreen`, `muse-desktop`), **13 journaux**, **61 clés** `localStorage`.
+Recorded over CDP on the real profile: **64 conversations**, **2 projects** (`openscreen`, `muse-desktop`), **13 logs**, **61** `localStorage` keys.
 
 ## 1. Installation
 
@@ -17,66 +17,66 @@ Relevée par CDP sur le profil réel : **64 conversations**, **2 projets** (`ope
 Start-Process -FilePath "…\Muse-Desktop_0.1.0_x64-setup.exe" -ArgumentList "/S" -Wait
 ```
 
-| Mesure | Résultat |
+| Measurement | Result |
 |---|---|
-| Code de sortie | **0** |
-| Répertoire d'installation | **`%LOCALAPPDATA%\Muse-Desktop`** — *pas* `Programs\`, contrairement à ce que j'attendais |
-| Contenu | `muse-desktop.exe` (20,05 Mo), **`muse.exe` (396,14 Mo)** — le sidecar est bien embarqué —, `uninstall.exe` (0,08 Mo) |
-| Entrée de désinstallation | `HKCU\…\Uninstall` → `DisplayName: Muse-Desktop`, `DisplayVersion: 0.1.0`, `UninstallString: …\uninstall.exe` |
-| Privilèges | aucun — installation en `currentUser`, cohérent avec `installMode: currentUser` de `tauri.conf.json` |
+| Exit code | **0** |
+| Install directory | **`%LOCALAPPDATA%\Muse-Desktop`** — *not* `Programs\`, contrary to what I expected |
+| Contents | `muse-desktop.exe` (20.05 MB), **`muse.exe` (396.14 MB)** — the sidecar is indeed bundled —, `uninstall.exe` (0.08 MB) |
+| Uninstall entry | `HKCU\…\Uninstall` → `DisplayName: Muse-Desktop`, `DisplayVersion: 0.1.0`, `UninstallString: …\uninstall.exe` |
+| Privileges | none — `currentUser` install, consistent with `installMode: currentUser` in `tauri.conf.json` |
 
-**L'application installée démarre** : `Muse-Desktop.exe` vivant, fenêtre « Muse-Desktop », `Responding: True`. Aucun sidecar n'est lancé **au démarrage** — cohérent avec le comportement documenté (un host par workspace, créé à la demande).
+**The installed application starts**: `Muse-Desktop.exe` alive, "Muse-Desktop" window, `Responding: True`. No sidecar is launched **at startup** — consistent with the documented behaviour (one host per workspace, created on demand).
 
-## 2. Désinstallation
+## 2. Uninstallation
 
 ```powershell
 Start-Process -FilePath "…\Muse-Desktop\uninstall.exe" -ArgumentList "/S" -Wait
 ```
 
-| Mesure | Résultat |
+| Measurement | Result |
 |---|---|
-| Code de sortie | **0** |
-| Répertoire d'installation | **supprimé** |
-| Entrée de désinstallation | **retirée** (0 entrée `*Muse*` restante) |
+| Exit code | **0** |
+| Install directory | **removed** |
+| Uninstall entry | **withdrawn** (0 `*Muse*` entries left) |
 
-## 3. Les projets survivent-ils ? — oui, à l'identique
+## 3. Do the projects survive? — yes, identically
 
-Relecture du `localStorage` après désinstallation, par le même chemin de lecture qu'avant :
+Reading `localStorage` back after uninstalling, through the same read path as before:
 
-| Mesure | Ligne de base | Après désinstallation |
+| Measurement | Baseline | After uninstalling |
 |---|---|---|
 | Conversations | 64 | **64** |
-| Projets | `openscreen`, `muse-desktop` | **`openscreen`, `muse-desktop`** |
-| Journaux | 13 | **13** |
-| Clés totales | 61 | **61** |
+| Projects | `openscreen`, `muse-desktop` | **`openscreen`, `muse-desktop`** |
+| Logs | 13 | **13** |
+| Total keys | 61 | **61** |
 
-**Établi :** la désinstallation retire le programme et son entrée de registre **sans toucher aux données utilisateur**. Le critère « désinstaller sans effacer les projets » est satisfait, mesuré sur un profil réel à 64 conversations.
+**Established:** uninstalling removes the program and its registry entry **without touching user data**. The "uninstall without wiping the projects" criterion is met, measured on a real profile with 64 conversations.
 
-### Un détail de méthode
+### A method detail
 
-Une première empreinte SHA-256 du dossier `leveldb` (nom + taille + horodatage de chaque fichier) **différait** avant/après : `F9C7813A…` → `8FECBA47…`. Ce n'était **pas** une perte de données : l'application installée avait tourné une douzaine de secondes et écrit dans ce stockage, ce qui modifie horodatages et taille (388,9 → 391,6 Ko, **9 fichiers dans les deux cas**). L'empreinte n'était donc pas un bon indicateur ici ; la **relecture du contenu** l'est, et elle est identique. Je le consigne parce que la conclusion « données modifiées » aurait été fausse.
+A first SHA-256 fingerprint of the `leveldb` folder (name + size + timestamp of each file) **differed** before and after: `F9C7813A…` → `8FECBA47…`. That was **not** data loss: the installed application had run for a dozen seconds and written into that storage, which changes timestamps and size (388.9 → 391.6 KB, **9 files in both cases**). The fingerprint was therefore not a good indicator here; **reading the content back** is, and it is identical. I record it because the conclusion "data modified" would have been wrong.
 
-### Emplacement des données
+### Where the data lives
 
-`%LOCALAPPDATA%\com.muse.desktop\EBWebView\` — l'identifiant du produit (`com.muse.desktop`). **L'application installée et la version de développement partagent ce dossier**, ce qui est précisément ce qui a permis de comparer avant/après avec le même chemin de lecture.
+`%LOCALAPPDATA%\com.muse.desktop\EBWebView\` — the product identifier (`com.muse.desktop`). **The installed application and the development build share that folder**, which is precisely what made it possible to compare before and after through the same read path.
 
-## Ce qui reste ouvert pour M4-09
+## What stays open for M4-09
 
-- **Mise à jour depuis une version précédente** : le critère comporte « mettre à jour depuis version précédente ». Je n'ai pas construit de version antérieure, donc **la chaîne de mise à jour n'a pas été exercée sur une installation réelle** — seulement testée en local via `release:update` (round 13) et la chaîne delta.
-- **Machine propre** : la machine avait déjà WSL, Muse et un profil à 64 conversations. Ce n'est **pas** un premier lancement sur machine vierge.
-- **MSI** : seul le NSIS a été installé et désinstallé.
-- **Signature** : l'installateur reste `NotSigned` (relevé au round 13), donc un avertissement SmartScreen est attendu sur une machine tierce.
-- **macOS / Linux** : aucun bundle construit pour ces cibles.
-- **Désinstallation et données d'autres profils** : non vérifié.
+- **Update from a previous version**: the criterion includes "update from a previous version". I did not build an earlier version, so **the update chain was not exercised on a real installation** — only tested locally through `release:update` (round 13) and the delta chain.
+- **Clean machine**: the machine already had WSL, Muse and a profile with 64 conversations. It is **not** a first launch on a blank machine.
+- **MSI**: only the NSIS package was installed and uninstalled.
+- **Signing**: the installer is still `NotSigned` (recorded at round 13), so a SmartScreen warning is expected on a third-party machine.
+- **macOS / Linux**: no bundle built for those targets.
+- **Uninstalling and data from other profiles**: not verified.
 
-**M4-09 n'est pas clos** sur la mise à jour réelle et la machine propre, mais son critère principal — installer, fonctionner, désinstaller **sans perdre les projets** — est désormais **exécuté et mesuré**, ce qui n'avait jamais été fait.
+**M4-09 is not closed** on the real update and the clean machine, but its main criterion — install, run, uninstall **without losing the projects** — is now **executed and measured**, which had never been done.
 
-## État final de la machine
+## Final state of the machine
 
-| Élément | État |
+| Element | State |
 |---|---|
-| Programme installé | **désinstallé** (répertoire et registre) |
-| Données applicatives | **intactes** — 64 conversations, 2 projets |
-| `%USERPROFILE%\.config\muse\auth.json` | présent |
-| WSL | distributions intactes |
-| Application | relancée en version de développement, fonctionnelle |
+| Installed program | **uninstalled** (directory and registry) |
+| Application data | **intact** — 64 conversations, 2 projects |
+| `%USERPROFILE%\.config\muse\auth.json` | present |
+| WSL | distributions intact |
+| Application | relaunched as the development build, working |
