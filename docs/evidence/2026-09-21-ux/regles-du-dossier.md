@@ -1,48 +1,48 @@
-# Les règles du dossier, et les vrais niveaux de réflexion (21 septembre 2026)
+# The folder's rules, and the real reasoning levels (21 September 2026)
 
-Deux sujets, une même cause : **le client inventait un vocabulaire que le backend n'a pas.** Il gardait des « instructions de projet » dans `localStorage` alors que le CLI lit des règles dans le dossier, et il proposait sept niveaux de réflexion alors que le contrat MSP en déclare huit — dont un mal étiqueté.
+Two subjects, one cause: **the client was inventing a vocabulary the backend does not have.** It kept "project instructions" in `localStorage` while the CLI reads rules from the folder, and it offered seven reasoning levels while the MSP contract declares eight — one of them mislabelled.
 
-## 1. Les instructions appartiennent au harnais, pas au client
+## 1. Instructions belong to the harness, not the client
 
-Décision : **on ne touche pas aux `AGENTS.md` de l'utilisateur.** Ce fichier lui appartient, et c'est au CLI de l'écrire (`muse init`, `/rules import`). Notre champ `instructions` de projet disparaît donc — pas remplacé par un fichier, simplement retiré — et ce qui le remplace est une **lecture** de ce que le harnais charge réellement.
+Decision: **we do not touch the user's `AGENTS.md` files.** That file belongs to them, and it is the CLI's job to write it (`muse init`, `/rules import`). Our project `instructions` field therefore disappears — not replaced by a file, simply removed — and what replaces it is a **reading** of what the harness actually loads.
 
-### Ce que le CLI documente, dans ses propres chaînes
+### What the CLI documents, in its own strings
 
-| Fait | Source |
+| Fact | Source |
 |---|---|
-| `muse init` écrit `<dossier>/AGENTS.md`, « read as project rules when it runs in this directory » | binaire 1.3.0 |
-| `CLAUDE.md` n'est sondé **que** si `AGENTS.md` est absent | « directly probe the active workspace's `AGENTS.md`; only when it is absent, directly probe its `CLAUDE.md` fallback » |
-| Règles personnelles : `~/.claude/CLAUDE.md` et `$CODEX_HOME/AGENTS.md` (défaut `~/.codex/AGENTS.md`) | message de `/rules import` |
-| Ordre de précédence : utilisateur puis projet, **le fichier le plus profond gagne** | « If project rules files conflict, the deeper file wins over the shallower one » |
-| Le host injecte lui-même un bloc `<rules-file scope="" path="" written-for="">` | chaîne de gabarit |
-| Le CLI a une commande `/rules` — « Show which md files govern this session » | table des commandes |
+| `muse init` writes `<folder>/AGENTS.md`, "read as project rules when it runs in this directory" | binary 1.3.0 |
+| `CLAUDE.md` is probed **only** if `AGENTS.md` is absent | "directly probe the active workspace's `AGENTS.md`; only when it is absent, directly probe its `CLAUDE.md` fallback" |
+| Personal rules: `~/.claude/CLAUDE.md` and `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) | the `/rules import` message |
+| Precedence order: user then project, **the deepest file wins** | "If project rules files conflict, the deeper file wins over the shallower one" |
+| The host injects a `<rules-file scope="" path="" written-for="">` block itself | template string |
+| The CLI has a `/rules` command — "Show which md files govern this session" | command table |
 
-### Ce que MSP n'expose pas
+### What MSP does not expose
 
-`muse schema generate-json-schema` (export hors ligne, exact pour ce binaire) : **46 méthodes, 28 notifications, et aucune ne parle de règles.** Le seul champ qui contient « rule » est `rulePreview`, sur les approbations. Aucune définition ne mentionne `AGENTS.md` ni `rules-file`.
+`muse schema generate-json-schema` (an offline export, exact for this binary): **46 methods, 28 notifications, and none of them is about rules.** The only field containing "rule" is `rulePreview`, on approvals. No definition mentions `AGENTS.md` or `rules-file`.
 
-Le client ne peut donc pas demander au host ce qu'il a chargé. Lire les mêmes fichiers que lui est la seule option honnête — d'où `rules_scan`, borné, en lecture seule.
+The client therefore cannot ask the host what it loaded. Reading the same files it reads is the only honest option — hence `rules_scan`, bounded and read only.
 
-### La sonde
+### The probe
 
-`src-tauri/src/rules.rs` ne connaît que quatre rôles, jamais un chemin arbitraire :
+`src-tauri/src/rules.rs` knows only four roles, never an arbitrary path:
 
-| id | rôle | statut |
+| id | role | status |
 |---|---|---|
-| `user-claude` | `~/.claude/CLAUDE.md` | `fallback` (soumis à la politique de contexte personnel) |
+| `user-claude` | `~/.claude/CLAUDE.md` | `fallback` (subject to the personal-context policy) |
 | `user-codex` | `$CODEX_HOME/AGENTS.md` | `fallback` |
-| `project-agents` | `<dossier>/AGENTS.md` | `governs` s'il existe |
-| `project-claude` | `<dossier>/CLAUDE.md` | `governs` si `AGENTS.md` absent, sinon `superseded` |
+| `project-agents` | `<folder>/AGENTS.md` | `governs` if it exists |
+| `project-claude` | `<folder>/CLAUDE.md` | `governs` if `AGENTS.md` is absent, otherwise `superseded` |
 
-Trois garanties structurelles, chacune testée :
+Three structural guarantees, each tested:
 
-- **aucune écriture** — un test écrit un `AGENTS.md`, sonde deux fois, et compare octets **et** date de modification ; il vérifie aussi que le fichier de repli n'est pas créé ;
-- **vocabulaire fermé** — un test épingle les quatre ids, les deux portées et les quatre statuts, parce que le renderer bascule dessus ;
-- **contrat inter-langages** — un test sérialise la charge et épingle les noms de champs exacts (`observedAt`, `governing`, `truncated`…) que `src/lib/harnessRules.ts` lit. Une renommage camelCase perdu se verrait sinon comme un panneau vide.
+- **no writing** — a test writes an `AGENTS.md`, probes twice, and compares bytes **and** modification time; it also checks the fallback file is not created;
+- **a closed vocabulary** — a test pins the four ids, the two scopes and the four statuses, because the renderer switches on them;
+- **a cross-language contract** — a test serialises the payload and pins the exact field names (`observedAt`, `governing`, `truncated`…) that `src/lib/harnessRules.ts` reads. A lost camelCase rename would otherwise show up as an empty panel.
 
-### Mesuré sur le pont vivant
+### Measured on the live bridge
 
-`node scripts/ux-rules-scan.mjs --workspace G:\repos\openscreen` — le dossier réel de l'utilisateur, avec ses **23 417 octets** d'`AGENTS.md` :
+`node scripts/ux-rules-scan.mjs --workspace G:\repos\openscreen` — the user's real folder, with its **23,417 bytes** of `AGENTS.md`:
 
 ```
 project-agents   governs     present=true   bytes=  23417  G:\repos\openscreen\AGENTS.md
@@ -51,68 +51,68 @@ user-codex       fallback    present=true   bytes=      0  C:\Users\etien\.codex
 project-claude   absent      present=false  bytes=      0  G:\repos\openscreen\CLAUDE.md
 ```
 
-Le script vérifie depuis Node, pas depuis la charge utile, que chaque ligne correspond au disque, et que les fichiers sont **inchangés** (octets + mtime) après l'appel. Verdict : `PASS`.
+The script checks from Node, not from the payload, that every row matches the disk, and that the files are **unchanged** (bytes + mtime) after the call. Verdict: `PASS`.
 
-Sur `muse-desktop`, aucun `AGENTS.md` : le résumé dit « No rules file in this folder; 1 personal rule file applies as a fallback. » — pas un silence, pas une invention.
+On `muse-desktop`, there is no `AGENTS.md`: the summary says "No rules file in this folder; 1 personal rule file applies as a fallback." — not a silence, not an invention.
 
-### Le rendu, vérifié dans l'application
+### The rendering, verified in the application
 
-`node scripts/ux-project-rules.mjs` ouvre Projets, déplie `openscreen` et lit le DOM rendu :
+`node scripts/ux-project-rules.mjs` opens Projects, unfolds `openscreen` and reads the rendered DOM:
 
-- `textarea[aria-label^="Instructions for project"]` : **0** — le champ retiré a bien disparu ;
-- quatre lignes, statuts `Fallback`/`Fallback`/`Loaded`/`Missing`, chacune avec son explication ;
-- résumé : « AGENTS.md in this folder governs the session (22.9 KB). » ;
-- **aucun chemin verbatim** ;
-- débordement mesuré de 1440 à 760 px : **0 px pour le bloc de règles**, à toutes les largeurs.
+- `textarea[aria-label^="Instructions for project"]`: **0** — the removed field has indeed disappeared;
+- four rows, statuses `Fallback`/`Fallback`/`Loaded`/`Missing`, each with its explanation;
+- summary: "AGENTS.md in this folder governs the session (22.9 KB).";
+- **no verbatim path**;
+- overflow measured from 1440 to 760 px: **0 px for the rules block**, at every width.
 
-Deux fuites subsistent dans le panneau à 820 px (`.workspace-root-row +32`, deux fois) et 760 px (`.project-actions +12`). Elles sont **antérieures** : mesurées à l'octet près avec le bloc de règles masqué puis affiché, elles sont identiques. Le script les imprime comme telles au lieu de les fondre dans sa vérification.
+Two leaks remain in the panel at 820 px (`.workspace-root-row +32`, twice) and 760 px (`.project-actions +12`). They **predate** this change: measured to the byte with the rules block hidden then shown, they are identical. The script prints them as such instead of folding them into its verification.
 
-### Le piège trouvé par la mesure
+### The trap found by measurement
 
-La première version renvoyait `\\?\C:\Users\…\AGENTS.md`. `canonicalize()` sous Windows produit un chemin verbatim : c'est le même fichier, mais pas ce que l'utilisateur a choisi ni ce que le projet stocke — le panneau aurait affiché un chemin différent du champ « Folders » juste au-dessus. Corrigé par `display_path`, testé sur les trois formes (verbatim, UNC, POSIX).
+The first version returned `\\?\C:\Users\…\AGENTS.md`. `canonicalize()` on Windows produces a verbatim path: it is the same file, but not what the user chose nor what the project stores — the panel would have shown a different path from the "Folders" field just above. Fixed with `display_path`, tested on all three forms (verbatim, UNC, POSIX).
 
-À noter : `skills::scan` a le même défaut, non corrigé ici pour ne pas mélanger deux sujets.
+Worth noting: `skills::scan` has the same defect, not fixed here so as not to mix two subjects.
 
-## 2. Les niveaux de réflexion : sept sur huit, et une description fausse
+## 2. Reasoning levels: seven out of eight, and one false description
 
-Question posée plus tôt : « ça correspond vraiment aux différents niveaux de réflexion de Muse Spark ? » Réponse mesurée : **non.**
+The question asked earlier: "does this really match Muse Spark's reasoning levels?" The measured answer: **no.**
 
-Le contrat (`$defs.ReasoningEffort` du schéma exporté, et `muse --help` pour `--reasoning-effort`) déclare huit valeurs :
+The contract (`$defs.ReasoningEffort` in the exported schema, and `muse --help` for `--reasoning-effort`) declares eight values:
 
 ```
 none, minimal, low, medium, high, xhigh, max, ultra
 ```
 
-Notre liste en avait **sept** : `max` manquait. Et deux validateurs le rejetaient de leur côté — `validate_reasoning_effort` dans Rust, et une liste recopiée à la main dans le panneau Projets. Le symptôme visible était donc un refus du client pour une valeur que le moteur accepte.
+Our list had **seven**: `max` was missing. And two validators rejected it on their side — `validate_reasoning_effort` in Rust, and a hand-copied list in the Projects panel. The visible symptom was therefore the client refusing a value the engine accepts.
 
-Vérifié sur un host vivant (`scripts/msp-reasoning-tiers.mjs`, huit niveaux) : **les huit répondent `accepted` et émettent `session/reasoningEffortChanged` avec la valeur envoyée**, `max` compris. Le script lit désormais la valeur annoncée plutôt que `session/read`, qui ne projette pas ce champ — il rapportait `kept: false` pour tout le monde, ce qui était un artefact de mesure, pas un downgrade.
+Verified against a live host (`scripts/msp-reasoning-tiers.mjs`, eight levels): **all eight answer `accepted` and emit `session/reasoningEffortChanged` with the value sent**, `max` included. The script now reads the announced value rather than `session/read`, which does not project that field — it reported `kept: false` for everyone, which was a measurement artefact, not a downgrade.
 
-Le CLI porte en réalité **deux** vocabulaires : `WireReasoningEffort` (huit valeurs, celui du contrat et de `--reasoning-effort`) et `ReasoningEffortV1` (sept, celui des réglages persistants, sans `max`). `none` est sur le fil mais pas dans les niveaux persistants ; `ultra` y est décrit comme « the saved client selection ». C'est ce qui explique la question posée : les deux listes existent, et nous avions recopié ni l'une ni l'autre.
+The CLI actually carries **two** vocabularies: `WireReasoningEffort` (eight values, the contract's and `--reasoning-effort`'s) and `ReasoningEffortV1` (seven, the persistent settings', without `max`). `none` is on the wire but not among the persistent levels; `ultra` is described there as "the saved client selection". That explains the question asked: both lists exist, and we had copied neither.
 
-Les descriptions étaient également fausses sur un point précis. Le CLI écrit :
+The descriptions were also wrong on one precise point. The CLI writes:
 
 > For Meta, the persistent effort tiers are `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, and `ultra`. `high` is the default Meta baseline; `xhigh` is the opt-in premium precision tier. `ultra` remains the saved client selection, **uses `max` reasoning on the Meta wire** (ADR 19425 D63), and currently enables proactive workflow/delegation guidance when that tool surface is available. It may proactively run multi-agent workflows and increase token usage quickly.
 
-Autrement dit `ultra` n'est **pas** un neuvième niveau plus profond : c'est `max` **plus** de l'autonomie (workflows, délégation), avec un coût en jetons. Notre texte disait « Maximum reasoning depth; responses may take longer » — faux, et le genre de faux qui fait choisir `ultra` en croyant choisir une profondeur. Corrigé, et un test interdit le retour de cette formulation.
+In other words `ultra` is **not** a ninth, deeper level: it is `max` **plus** autonomy (workflows, delegation), at a token cost. Our text said "Maximum reasoning depth; responses may take longer" — false, and the kind of false that makes people choose `ultra` believing they are choosing a depth. Fixed, and a test forbids that wording from coming back.
 
-`none` n'est pas un niveau persistant côté CLI, mais le contrat le déclare et le host l'accepte : il reste proposé.
+`none` is not a persistent level on the CLI side, but the contract declares it and the host accepts it: it stays on offer.
 
-## Fichiers
+## Files
 
-- `src-tauri/src/rules.rs` (nouveau) + `rules_scan` dans `main.rs` ; `muse_auth::home_dir` partagé.
-- `src/lib/harnessRules.ts` (nouveau) + `test/harnessRules.test.ts`.
-- `src/lib/projects.ts` : `instructions` devient optionnel et déprécié, `buildProjectInput` supprimé.
-- `src/lib/reasoning.ts`, `validate_reasoning_effort`, liste du panneau Projets : huit niveaux, une seule source.
-- `src/components/ProjectsPanel.tsx` : bloc « Rules » en lecture seule, avis ponctuel sur les anciennes instructions.
-- `scripts/ux-rules-scan.mjs`, `scripts/ux-project-rules.mjs` et `scripts/ux-legacy-instructions.mjs` (nouveaux), `scripts/msp-reasoning-tiers.mjs` (mis à jour).
+- `src-tauri/src/rules.rs` (new) + `rules_scan` in `main.rs`; `muse_auth::home_dir` shared.
+- `src/lib/harnessRules.ts` (new) + `test/harnessRules.test.ts`.
+- `src/lib/projects.ts`: `instructions` becomes optional and deprecated, `buildProjectInput` removed.
+- `src/lib/reasoning.ts`, `validate_reasoning_effort`, the Projects panel's list: eight levels, a single source.
+- `src/components/ProjectsPanel.tsx`: a read-only "Rules" block, a one-off notice about the old instructions.
+- `scripts/ux-rules-scan.mjs`, `scripts/ux-project-rules.mjs` and `scripts/ux-legacy-instructions.mjs` (new), `scripts/msp-reasoning-tiers.mjs` (updated).
 
-Tests : **220 Rust, 1102 Node, 0 échec.** Build vert.
+Tests: **220 Rust, 1102 Node, 0 failures.** Build green.
 
-Migration : les deux projets présents sur cette machine avaient `instructions: ""` — vérifié dans le `localStorage` de l'application lancée. Rien n'est perdu ici ; une valeur non vide reste affichée avec **Copy** et **Dismiss**, et n'est plus jamais envoyée. Ce chemin est exercé pour de vrai par `node scripts/ux-legacy-instructions.mjs` : il injecte une valeur, recharge, vérifie que l'encart apparaît, qu'il dit « no longer sent », qu'il n'y a **aucun champ éditable**, que **Dismiss** vide le stockage, puis restaure la chaîne d'origine (le script rend l'application telle qu'il l'a trouvée).
+Migration: the two projects present on this machine had `instructions: ""` — verified in the running application's `localStorage`. Nothing is lost here; a non-empty value stays displayed with **Copy** and **Dismiss**, and is never sent again. That path is exercised for real by `node scripts/ux-legacy-instructions.mjs`: it injects a value, reloads, checks the notice appears, that it says "no longer sent", that there is **no editable field**, that **Dismiss** empties the storage, then restores the original string (the script leaves the application as it found it).
 
-## Ce qui reste ouvert
+## What stays open
 
-- `workspaces[]` (multi-dossier) n'a toujours aucun équivalent backend — à retirer.
-- ~~« Start in » reste ambigu face au sélecteur de dossier.~~ **Corrigé** : le sélecteur s'appelle « Project », son option par défaut « No project », et le dossier n'apparaît que lorsqu'il distingue. Détails : [alignement-cli-projet-dossier](alignement-cli-projet-dossier.md).
-- La case worktree au démarrage exige une variante de `git_worktree_create_session` sans session parente.
-- `AuthMode::Account` n'est jamais produit par `decide()` — le mode est donc toujours soit `api_key`, soit `none`. À trancher : retirer la variante, ou distinguer un login de compte d'une clé API.
+- `workspaces[]` (multi-folder) still has no backend equivalent — to remove.
+- ~~"Start in" stays ambiguous next to the folder picker.~~ **Fixed**: the picker is called "Project", its default option "No project", and the folder only appears when it distinguishes. Details: [alignement-cli-projet-dossier](alignement-cli-projet-dossier.md).
+- The worktree checkbox at start needs a variant of `git_worktree_create_session` with no parent session.
+- `AuthMode::Account` is never produced by `decide()` — the mode is therefore always either `api_key` or `none`. To settle: remove the variant, or distinguish an account login from an API key.
