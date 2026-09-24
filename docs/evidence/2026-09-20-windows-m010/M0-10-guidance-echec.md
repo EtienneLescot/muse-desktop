@@ -1,55 +1,55 @@
-# Premier lancement : guidance d'échec exercée — M0-10 (20 septembre 2026)
+# First launch: failure guidance exercised — M0-10 (20 September 2026)
 
-Test volontairement destructif sur les prérequis de démarrage, avec **restauration vérifiée**. Autorisation explicite de l'utilisateur.
+A deliberately destructive test on the startup prerequisites, with **verified restoration**. Explicit user authorization.
 
-## Comment casser le démarrage pour de vrai — deux découvertes
+## How to break startup for real — two discoveries
 
-Les deux ont été nécessaires, et la première a invalide un premier essai :
+Both were necessary, and the first invalidated a first attempt:
 
-1. **Tauri copie le sidecar au moment du build.** Le binaire `src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe` est recopié en **`src-tauri/target/debug/muse.exe`**, et c'est **cette copie** que le superviseur lance. Renommer le fichier de `binaries/` ne casse **rien** au runtime : un host démarre normalement. Il faut neutraliser **les deux**.
-2. **L'exécutable de développement ne rend rien sans Vite.** Lancé seul, il charge le frontend depuis `localhost:1420` et la fenêtre affiche `ERR_CONNECTION_REFUSED` — une erreur du navigateur, pas une guidance de l'application. Le serveur Vite doit tourner pour que le test porte sur l'app.
+1. **Tauri copies the sidecar at build time.** The binary `src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe` is copied to **`src-tauri/target/debug/muse.exe`**, and it is **that copy** the supervisor launches. Renaming the file in `binaries/` breaks **nothing** at runtime: a host starts normally. **Both** have to be neutralised.
+2. **The development executable renders nothing without Vite.** Launched alone, it loads the frontend from `localhost:1420` and the window shows `ERR_CONNECTION_REFUSED` — a browser error, not the application's guidance. The Vite server has to be running for the test to be about the app.
 
-## État cassé obtenu
+## Broken state obtained
 
-| Prérequis | État |
+| Prerequisite | State |
 |---|---|
-| `src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe` | renommé en `.disabled` |
-| `src-tauri/target/debug/muse.exe` | renommé en `.disabled` |
-| `%USERPROFILE%\.config\muse\auth.json` | déplacé hors du profil |
-| Processus `muse.exe` | **0** — aucun host n'a pu démarrer |
+| `src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe` | renamed to `.disabled` |
+| `src-tauri/target/debug/muse.exe` | renamed to `.disabled` |
+| `%USERPROFILE%\.config\muse\auth.json` | moved out of the profile |
+| `muse.exe` processes | **0** — no host could start |
 
-## Résultat
+## Result
 
-**L'application démarre et reste stable** avec un sidecar absent : pas de crash, la liste des conversations s'affiche normalement, **aucun panneau de récupération sur l'accueil** — conforme à la documentation (« la sonde ne s'affiche pas sur l'écran d'accueil »).
+**The application starts and stays stable** with the sidecar absent: no crash, the conversation list displays normally, **no recovery panel on the welcome screen** — consistent with the documentation ("the probe does not appear on the welcome screen").
 
-La guidance apparaît **au moment où un host doit démarrer**, c'est-à-dire après création d'une conversation et envoi. Le panneau de récupération expose alors :
+The guidance appears **at the moment a host has to start**, that is, after creating a conversation and sending. The recovery panel then exposes:
 
-| Élément observé | Valeur |
+| Element observed | Value |
 |---|---|
-| Vocabulaire du diagnostic | **`sidecar`**, **`binary`**, **`triple`**, **`folder`** |
-| Actions proposées | **« Try again »**, **« Choose workspace folder »** |
+| Diagnostic vocabulary | **`sidecar`**, **`binary`**, **`triple`**, **`folder`** |
+| Actions offered | **"Try again"**, **"Choose workspace folder"** |
 
-C'est exactement ce que M0-10 décrit : un binaire correspondant au *target triple*, la disponibilité de la dépendance, l'accessibilité du dossier, et la relance explicite — **jamais** une installation implicite.
+That is exactly what M0-10 describes: a binary matching the *target triple*, the dependency's availability, the folder's accessibility, and an explicit relaunch — **never** an implicit install.
 
-## Restauration
+## Restoration
 
-Tout a été remis en place et **vérifié** :
+Everything was put back and **verified**:
 
-| Élément | État après restauration |
+| Element | State after restoration |
 |---|---|
-| `src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe` | présent, 396,1 Mo |
-| `src-tauri/target/debug/muse.exe` | présent |
-| `%USERPROFILE%\.config\muse\auth.json` | présent, 135 octets |
-| Fichiers `.disabled` résiduels | **aucun** |
-| Application relancée | **1 host démarré**, 63 conversations, aucun panneau d'erreur |
+| `src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe` | present, 396.1 MB |
+| `src-tauri/target/debug/muse.exe` | present |
+| `%USERPROFILE%\.config\muse\auth.json` | present, 135 bytes |
+| Leftover `.disabled` files | **none** |
+| Application relaunched | **1 host started**, 63 conversations, no error panel |
 
-Les chemins sont donnés **relatifs à la racine du dépôt**, comme dans le tableau de l'état cassé plus haut : ce document vit sous `docs/evidence/`, donc un chemin sans préfixe serait ambigu.
+Paths are given **relative to the repository root**, as in the broken-state table above: this document lives under `docs/evidence/`, so an unprefixed path would be ambiguous.
 
-## Ce qui reste non couvert pour M0-10
+## What stays uncovered for M0-10
 
-- **Détection sur machine propre** : la neutralisation du sidecar simule l'absence du binaire, **pas** un premier lancement sur une machine où rien n'a jamais été installé. Registre, WSL non configuré, profil vierge : non exercés.
-- **Distributions WSL non par défaut** : non exercées. WSL n'a pas été désinstallé — cela détruirait les distributions de l'utilisateur.
-- **Parcours d'authentification réel** : `auth.json` a été retiré, mais je n'ai **pas** vérifié que le panneau distingue ce cas d'un binaire manquant. Le mot `authentication` n'apparaît pas dans les correspondances relevées, ce qui peut signifier que le binaire absent masque les autres causes.
-- **Matrice multi-OS** : hors périmètre.
+- **Detection on a clean machine**: neutralising the sidecar simulates the binary's absence, **not** a first launch on a machine where nothing has ever been installed. Registry, unconfigured WSL, blank profile: not exercised.
+- **Non-default WSL distributions**: not exercised. WSL was not uninstalled — that would destroy the user's distributions.
+- **A real authentication path**: `auth.json` was removed, but I did **not** verify that the panel distinguishes that case from a missing binary. The word `authentication` does not appear in the matches recorded, which may mean the missing binary masks the other causes.
+- **Multi-OS matrix**: out of scope.
 
-**M0-10 n'est donc pas clos**, mais sa guidance d'échec est désormais **exercée sur un cas réel**, ce qui n'avait jamais été fait.
+**M0-10 is therefore not closed**, but its failure guidance is now **exercised on a real case**, which had never been done.
