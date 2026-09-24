@@ -1,55 +1,55 @@
-# Granularité réelle des écritures de journal (M1-13, 20 septembre 2026)
+# Real granularity of log writes (M1-13, 20 September 2026)
 
-Complète `cout-ecriture-journal.md`, où j'avais chiffré le coût d'**un** ajout sans savoir **combien** un tour en produit. Le coût par tour y était donc un **calcul**, pas une observation. Il l'est maintenant.
+Completes `cout-ecriture-journal.md`, where I quantified the cost of **one** append without knowing **how many** a turn produces. The per-turn cost there was therefore a **calculation**, not an observation. Now it is one.
 
-## Protocole
+## Protocol
 
 ```powershell
 node scripts/cdp-stream-granularity.mjs
 ```
 
-Le script enveloppe `localStorage.setItem` **dans la page**, au moment de l'exécution, et compte les écritures portant sur la clé du journal. **Aucun code de l'application n'est modifié.** Il envoie ensuite un vrai tour modèle (« Count slowly from one to thirty ») et échantillonne toutes les 4 s jusqu'à la fin du tour.
+The script wraps `localStorage.setItem` **inside the page**, at run time, and counts the writes touching the log's key. **No application code is modified.** It then sends a real model turn ("Count slowly from one to thirty") and samples every 4 s until the turn ends.
 
-## Résultat
+## Result
 
-| Mesure | Valeur |
+| Measurement | Value |
 |---|---|
-| **Écritures du journal** | **33** |
-| **Volume total écrit** | **1 231 Ko** |
-| Charge utile par écriture | **~37 Ko** (maximum 38 Ko) |
-| Entrées du journal avant / après | 74 → **79** |
-| Écritures **hors** journal | 17 |
+| **Log writes** | **33** |
+| **Total volume written** | **1,231 KB** |
+| Payload per write | **~37 KB** (maximum 38 KB) |
+| Log entries before / after | 74 → **79** |
+| Writes **outside** the log | 17 |
 
-Les 12 premières écritures font **toutes 37 Ko**, valeur constante.
+The first 12 writes are **all 37 KB**, a constant value.
 
-### Répartition dans le temps
+### Distribution over time
 
-| Échantillon | Écritures | Ko écrits | `working` |
+| Sample | Writes | KB written | `working` |
 |---|---|---|---|
-| 1 à 16 | **27** | 1 005 | oui |
-| 17 (fin) | 33 | 1 231 | non |
+| 1 to 16 | **27** | 1,005 | yes |
+| 17 (end) | 33 | 1,231 | no |
 
-Les 17 échantillons couvrent **plus d'une minute**. Le compteur reste à **27 écritures de l'échantillon 1 à l'échantillon 16** : les écritures sont **groupées au début du tour**, puis plus rien pendant que le tour continue. Six écritures supplémentaires surviennent à la fin.
+The 17 samples cover **more than a minute**. The counter stays at **27 writes from sample 1 to sample 16**: the writes are **grouped at the start of the turn**, then nothing while the turn continues. Six more writes happen at the end.
 
-## Ce que cela corrige dans mon raisonnement
+## What that corrects in my reasoning
 
-**Le volume domine, pas la fréquence.** Le tour a écrit **1 231 Ko** alors que le journal ne pèse que **~9 Ko** (37 Ko de charge utile pour un journal de 74 entrées indique une sérialisation bien plus large que le seul contenu du journal — l'objet stocké est plus volumineux que les entrées que j'y ai comptées). Autrement dit, **plus d'**un mégaoctet écrit pour une réponse de trente nombres : chaque écriture réécrit **tout** le journal, et `appendLog` relit en plus avant d'écrire.
+**Volume dominates, not frequency.** The turn wrote **1,231 KB** while the log itself weighs only **~9 KB** (a 37 KB payload for a 74-entry log indicates a serialisation much wider than the log's content alone — the stored object is larger than the entries I counted in it). In other words, **more than** a megabyte written for a thirty-number answer: each write rewrites **the whole** log, and `appendLog` also re-reads before writing.
 
-**Le coût par tour, désormais observé** : 33 écritures. En prenant le coût mesuré au round 41 (**1,15 ms** par ajout sur un journal à 2 000 entrées), cela donne **~38 ms** de persistance pour ce tour — négligeable pour l'utilisateur.
+**The per-turn cost, now observed**: 33 writes. Taking the cost measured at round 41 (**1.15 ms** per append on a 2,000-entry log), that gives **~38 ms** of persistence for that turn — negligible for the user.
 
-Le modèle « un ajout par token » que je redoutais est **démenti** : trente nombres n'ont pas produit trente écritures, et les écritures se concentrent au début plutôt que de suivre le stream.
+The "one append per token" model I feared is **disproved**: thirty numbers did not produce thirty writes, and the writes cluster at the start rather than following the stream.
 
 ## Conclusion
 
-**Pas de problème de performance.** La persistance coûte quelques dizaines de millisecondes par tour, sur un total de **2,02 s** de `ScriptDuration` mesuré au round 22. Le coût de persistance est **marginal** en regard du coût de rendu.
+**No performance problem.** Persistence costs a few tens of milliseconds per turn, against a total of **2.02 s** of `ScriptDuration` measured at round 22. The persistence cost is **marginal** next to the rendering cost.
 
-Le point qui mérite un œil n'est pas le temps mais le **volume** : 1,2 Mo écrits par tour pour une petite réponse, parce que chaque écriture réécrit le journal entier. Avec des réponses longues et un journal au plafond, le volume croît, et c'est la **latence de stockage** — non mesurée ici — qui pourrait se faire sentir.
+The point deserving an eye is not the time but the **volume**: 1.2 MB written per turn for a small answer, because every write rewrites the entire log. With long answers and a log at the ceiling, the volume grows, and it is **storage latency** — not measured here — that could start to show.
 
-## Portée — limites
+## Scope — limits
 
-- **Un seul tour**, court (30 nombres). Une réponse longue produirait plus d'écritures et un volume supérieur ; je ne l'ai pas mesuré.
-- Le compteur est **global à la page** : si une autre surface écrivait sur une clé `muse-desktop.log.v1.*`, elle serait comptée. Avec une seule session active, le risque est faible mais non nul.
-- **La latence réelle de `setItem` n'est pas mesurée** : je compte les appels, pas leur durée. Le banc du round 41 mesure le coût en mémoire ; le coût dans WebView2 peut être supérieur.
-- **Les 17 écritures « hors journal »** ne sont pas attribuées : je ne sais pas quelles clés elles touchent.
-- **`working` reste vrai** après la fin apparente des écritures : je ne sais pas si le tour était terminé ou si le stream était simplement silencieux.
-- Le ratio « 37 Ko pour 74 entrées » n'est **pas expliqué** ; je le signale comme observation sans conclure sur sa cause.
+- **A single turn**, a short one (30 numbers). A long answer would produce more writes and a larger volume; I did not measure it.
+- The counter is **global to the page**: if another surface wrote to a `muse-desktop.log.v1.*` key, it would be counted. With a single active session the risk is low but not nil.
+- **`setItem`'s real latency is not measured**: I count the calls, not their duration. The round 41 bench measures the in-memory cost; the cost inside WebView2 may be higher.
+- **The 17 "outside the log" writes** are not attributed: I do not know which keys they touch.
+- **`working` stays true** after the writes apparently end: I do not know whether the turn had finished or the stream was simply quiet.
+- The "37 KB for 74 entries" ratio is **not explained**; I report it as an observation without concluding on its cause.
