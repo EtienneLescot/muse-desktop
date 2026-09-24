@@ -1,87 +1,87 @@
-# Sous-agents : masquer les enfants internes + erreurs dans le bloc
+# Sub-agents: hiding internal children + errors inside the block
 
-Date campagne : 27/09/2026 · Plateforme : Windows 10 (build natif `src-tauri/target/debug/muse-desktop.exe`) · Commit : voir en fin de note.
+Campaign date: 27/09/2026 · Platform: Windows 10 (native build `src-tauri/target/debug/muse-desktop.exe`) · Commit: see the end of this note.
 
-## Symptôme rapporté
+## Symptom reported
 
-Sous la réponse de l'agent, des blocs « Reminder child session » inexploitables
-apparaissent, avec une rangée de boutons (Close, Reopen, Interrupt, Stop, Resume,
-Follow up, Read result, Agent conversation) qui **provoquent des erreurs** :
+Under the agent's answer, unusable "Reminder child session" blocks
+appear, with a row of buttons (Close, Reopen, Interrupt, Stop, Resume,
+Follow up, Read result, Agent conversation) that **cause errors**:
 
-- bandeau rouge global : `subagent drill-down failed: … {sessionNotFound} [retryable=false]`
-- et, dans le bloc : `The host returned no conversation for this agent.`
+- a global red banner: `subagent drill-down failed: … {sessionNotFound} [retryable=false]`
+- and, inside the block: `The host returned no conversation for this agent.`
 
-## Cause racine
+## Root cause
 
-1. Le host émet des items de kind **`reminderchild`** pour son propre interne
-   (« Reminder child session » est l'objectif qu'il se donne à lui-même).
-   `isSubagentItemKind` (phase.ts) et `is_subagent_item_kind` (main.rs) les
-   routent dans la **même lane interactive** que les vrais sous-agents : le bloc
-   complet US-6 est donc monté, avec une console de 8 commandes.
-2. Ces enfants ne sont **pas** de vrais sous-agents : le host ne publie aucune
-   identité `subagent/*` pour eux (superviseur : `agent_id` = item id) et
-   `session/read` sur leur `childSessionId` répond `sessionNotFound`. Tous les
-   contrôles ne peuvent donc qu'échouer.
-3. Double signalement d'échec : le hook mettait l'erreur dans le **bandeau
-   global** (`setError`) *et* le bloc affichait son propre message local
-   (`failed[entry.id]`). Point resté ouvert de l'audit du 22/09
+1. The host emits items of kind **`reminderchild`** for its own internal use
+   ("Reminder child session" is the goal it gives itself).
+   `isSubagentItemKind` (phase.ts) and `is_subagent_item_kind` (main.rs)
+   route them into the **same interactive lane** as real sub-agents: the full
+   US-6 block is therefore mounted, with an 8-command console.
+2. These children are **not** real sub-agents: the host publishes no
+   `subagent/*` identity for them (supervisor: `agent_id` = item id) and
+   `session/read` on their `childSessionId` answers `sessionNotFound`. Every
+   control can therefore only fail.
+3. The failure was reported twice: the hook put the error in the **global
+   banner** (`setError`) *and* the block showed its own local message
+   (`failed[entry.id]`). A point left open by the 22/09 audit
    (docs/plans/2026-09-22-audit-sous-agents.md).
-4. Latence de casse repérée au passage : le routage des deltas matchait
-   `"reminderChild"` en **casse sensible** alors que la table garde la casse
-   brute ; un `reminderchild` minuscule tombait dans la voie **assistant**
-   (pollution de la réponse).
+4. A latent case bug spotted along the way: delta routing matched
+   `"reminderChild"` **case-sensitively** while the table keeps the raw case;
+   a lower-case `reminderchild` fell into the **assistant** path
+   (polluting the answer).
 
-## Correctif
+## Fix
 
-- `src-tauri/src/main.rs` : `itemKind` propagé dans les annonces
-  `subagent_event` (`item/started` et delta) ; routage des deltas par
-  `is_subagent_item_kind` (insensible à la casse) au lieu du match littéral.
-- `src/lib/phase.ts` : `isInternalSubagentItemKind()` (kind `reminderchild`,
-  tolérant casse/séparateurs) + drapeau `internal` sur
+- `src-tauri/src/main.rs`: `itemKind` propagated in the `subagent_event`
+  announcements (`item/started` and delta); delta routing through
+  `is_subagent_item_kind` (case-insensitive) instead of a literal match.
+- `src/lib/phase.ts`: `isInternalSubagentItemKind()` (kind `reminderchild`,
+  tolerant of case and separators) + an `internal` flag on
   `upsertReflexivePlaceholder`.
-- `src/lib/persist.ts` : champ `subagentInternal` sur `LogEntry` ;
-  **rattrapage des logs historiques** au chargement (`loadLog`) : une entrée
-  sous-agent sans type d'item dont le libellé du host (objectif ou 1re ligne de
-  texte) est « Reminder child session » est marquée interne. Les données restent
-  dans le log, seul le rendu change.
-- `src/lib/subagent.ts` : `itemKind` lu du payload (`itemKind`/`item_kind`/`kind`).
-- `src/hooks/useMuseSessions.ts` : le drapeau est posé à l'ingestion
-  (`item/started` + `subagent_event`) ; les échecs `subagentDrilldown` /
-  `subagentReadResult` **ne montent plus** dans le bandeau global — le bloc est
-  le seul propriétaire du message.
-- `src/components/StreamView.tsx` : les entrées `subagentInternal` ne sont pas
-  rendues (pas de bloc, donc pas de boutons qui échouent).
-- Tests : `test/phase.test.ts` (2), `test/subagent.test.ts` (2),
+- `src/lib/persist.ts`: a `subagentInternal` field on `LogEntry`;
+  **historical logs caught up** on load (`loadLog`): a sub-agent entry with no
+  item type whose host label (goal or first line of text) is "Reminder child
+  session" is marked internal. The data stays in the log, only the rendering
+  changes.
+- `src/lib/subagent.ts`: `itemKind` read from the payload (`itemKind`/`item_kind`/`kind`).
+- `src/hooks/useMuseSessions.ts`: the flag is set at ingestion
+  (`item/started` + `subagent_event`); `subagentDrilldown` /
+  `subagentReadResult` failures **no longer reach** the global banner — the
+  block is the sole owner of the message.
+- `src/components/StreamView.tsx`: `subagentInternal` entries are not
+  rendered (no block, hence no buttons that fail).
+- Tests: `test/phase.test.ts` (2), `test/subagent.test.ts` (2),
   `test/persistCaps.test.ts` (4).
 
-## Preuves (rejouables)
+## Evidence (replayable)
 
-| Étape | Commande | Résultat |
+| Step | Command | Result |
 | --- | --- | --- |
-| Tests | `npm test` | **1141 pass / 0 fail** (1133 avant campagne, +8) |
-| Typage | `npx tsc --noEmit` | propre |
-| Front embarqué | `npm run build` | succès |
-| Natif | `cargo build` (workdir `src-tauri`, app fermée) | `Finished dev profile` en 25,18 s |
-| Blocs internes masqués | CDP : `document.body.innerText` sur la conversation « yo » | `hasReminderBlock: false` — les 2 blocs « Reminder child session » de la capture ont disparu |
-| Données conservées | CDP : lecture `muse-desktop.log.v1.*` | session « yo » (`…a98d2f994e78`) : 2 entrées `role=subagent` dont la 1re ligne de texte = « Reminder child session » — **toujours présentes**, seulement non rendues |
-| Pas de régression (vrais sous-agents) | CDP : compte `details.msg.subagent` sur « Session 01a0c9c0 » | **6 lanes rendues** pour 6 entrées réelles (objectifs « Summarize the README… » etc.) |
-| Erreur dans le bloc, pas en bandeau | CDP : clic sur `Agent conversation` (title `session/read`, enfant non lisible) | `anyGlobalDrilldownError: false` · message local `.subagent-failure` : « The host returned no conversation for this agent. » |
+| Tests | `npm test` | **1141 pass / 0 fail** (1133 before the campaign, +8) |
+| Typing | `npx tsc --noEmit` | clean |
+| Embedded frontend | `npm run build` | success |
+| Native | `cargo build` (workdir `src-tauri`, app closed) | `Finished dev profile` in 25.18 s |
+| Internal blocks hidden | CDP: `document.body.innerText` on the "yo" conversation | `hasReminderBlock: false` — the screenshot's 2 "Reminder child session" blocks are gone |
+| Data preserved | CDP: reading `muse-desktop.log.v1.*` | "yo" session (`…a98d2f994e78`): 2 `role=subagent` entries whose first line of text = "Reminder child session" — **still present**, simply not rendered |
+| No regression (real sub-agents) | CDP: count of `details.msg.subagent` on "Session 01a0c9c0" | **6 lanes rendered** for 6 real entries (goals "Summarize the README…" and so on) |
+| Error in the block, not in a banner | CDP: click on `Agent conversation` (title `session/read`, unreadable child) | `anyGlobalDrilldownError: false` · local message `.subagent-failure`: "The host returned no conversation for this agent." |
 
-Rejeu : `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`
-puis `scripts/cdp-drive.mjs eval '<js>'` (JS entre guillemets simples, pas de `$`
-ni de doubles guillemets).
+Replay: `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`
+then `scripts/cdp-drive.mjs eval '<js>'` (JS in single quotes, no `$`
+and no double quotes).
 
-## Décisions et limites
+## Decisions and limits
 
-- **Masquage, pas suppression** : l'entrée reste dans le log local (preuve
-  conservée) ; seul le rendu la filtre.
-- Le discriminant est le **kind d'item** : c'est aujourd'hui le seul signal
-  disponible (le superviseur annonce `agent_id` = item id pour tous les kinds
-  sous-agent). Si le host expose une identité de sous-agent distincte, la règle
-  deviendra « interne sauf identifié ».
-- Le rattrapage des logs écrits avant la propagation du kind s'appuie sur le
-  **libellé du host** (« Reminder child session »), uniquement pour les entrées
-  sans type d'item. Un vrai sous-agent dont l'objectif serait exactement ce
-  libellé serait masqué à tort — risque accepté et documenté.
-- Restant ouvert (audit du 22/09) : mesurer `subagent/followupTask` sur un agent
-  terminé ; exposition de `subagent/close`.
+- **Hiding, not deleting**: the entry stays in the local log (evidence
+  preserved); only the rendering filters it.
+- The discriminator is the **item kind**: today it is the only signal
+  available (the supervisor announces `agent_id` = item id for every sub-agent
+  kind). If the host exposes a distinct sub-agent identity, the rule
+  will become "internal unless identified".
+- Catching up logs written before the kind was propagated relies on the
+  **host's label** ("Reminder child session"), only for entries with no item
+  type. A real sub-agent whose goal were exactly that label would be hidden
+  wrongly — a risk accepted and documented.
+- Still open (22/09 audit): measure `subagent/followupTask` on a finished
+  agent; exposing `subagent/close`.
