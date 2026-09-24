@@ -1,62 +1,62 @@
-# Retrait de la file — test inabouti (M1-10, 20 septembre 2026)
+# Queue removal — inconclusive test (M1-10, 20 September 2026)
 
-Tentative de couvrir le seul critère de M1-10 encore non mesuré : l'action **Remove from queue** retire-t-elle réellement un tour en attente ?
+An attempt to cover M1-10's only remaining unmeasured criterion: does the **Remove from queue** action really remove a queued turn?
 
-**Le test n'a rien produit, et l'échec vient de mon protocole.** Je le consigne plutôt que de le passer sous silence.
+**The test produced nothing, and the failure comes from my protocol.** I record it rather than pass over it in silence.
 
-## Protocole prévu
+## Intended protocol
 
-1. ouvrir la conversation connue ;
-2. envoyer un premier tour long, qui doit tourner ;
-3. envoyer un second message, qui doit être **mis en file** faute de pouvoir démarrer ;
-4. cliquer **Remove from queue** ;
-5. vérifier que le tour disparaît de `muse-desktop.queued-turns.v1` **et** du panneau.
+1. open the known conversation;
+2. send a first long turn, which must run;
+3. send a second message, which must be **queued** since it cannot start;
+4. click **Remove from queue**;
+5. check the turn disappears from `muse-desktop.queued-turns.v1` **and** from the panel.
 
-## Ce qui s'est passé
+## What happened
 
-| Étape | File (`queued-turns.v1`) | Panneau | Bouton de retrait | `working` |
+| Step | Queue (`queued-turns.v1`) | Panel | Removal button | `working` |
 |---|---|---|---|---|
-| opened | 0 | non | 0 | **non** |
-| first-running | 0 | non | 0 | **non** |
-| second-queued | 0 | non | 0 | **non** |
-| after-removal | 0 | non | 0 | non |
-| after-removal-settled | 0 | non | 0 | non |
+| opened | 0 | no | 0 | **no** |
+| first-running | 0 | no | 0 | **no** |
+| second-queued | 0 | no | 0 | **no** |
+| after-removal | 0 | no | 0 | no |
+| after-removal-settled | 0 | no | 0 | no |
 
-`removal: {"clicked": false}` — le bouton n'a jamais existé, donc **rien n'a été mesuré**.
+`removal: {"clicked": false}` — the button never existed, so **nothing was measured**.
 
-## Cause, établie par diagnostic après coup
+## Cause, established by after-the-fact diagnosis
 
-Le diagnostic final montre :
+The final diagnosis shows:
 
-- `working: false`, `connected: true`, compositeur **actif** ;
-- le composer contenait **encore** `QUEUE-SECOND-8842 reply with j…` — soit **40 caractères** laissés en place, que j'ai nettoyés ensuite ;
-- le compteur d'entrées était à **50**, donc le **premier** envoi avait bien été soumis (le composer s'était vidé).
+- `working: false`, `connected: true`, composer **active**;
+- the composer **still** held `QUEUE-SECOND-8842 reply with j…` — that is, **40 characters** left in place, which I cleaned afterwards;
+- the entry counter was at **50**, so the **first** send had indeed been submitted (the composer had cleared).
 
-Autrement dit : le premier envoi a fonctionné, le second message a été **saisi mais jamais soumis** — mon `Enter` n'a pas déclenché l'envoi à ce moment.
+In other words: the first send worked, the second message was **typed but never submitted** — my `Enter` did not trigger the send at that moment.
 
-**Et surtout, je n'ai vérifié à aucune étape que le premier tour tournait réellement.** Sans cette vérification, impossible de savoir si l'état attendu (« le second envoi doit être mis en file ») était même atteignable : si le premier tour était déjà terminé, un second envoi démarre normalement et **rien n'est mis en file**.
+**And above all, at no step did I check that the first turn was actually running.** Without that check, there is no way to know whether the expected state ("the second send must be queued") was even reachable: if the first turn had already finished, a second send starts normally and **nothing is queued**.
 
-C'est la **quatrième fois** dans cette campagne qu'un test échoue parce que je n'ai pas vérifié l'état de départ ou l'identité de la conversation avant d'agir. Les trois précédentes sont documentées : le mauvais cadrage de focus, la confusion sur l'ordre des entrées, et le sélecteur du conteneur au lieu de l'ouvreur.
+This is the **fourth time** in this campaign that a test fails because I did not check the starting state or the conversation's identity before acting. The previous three are documented: the wrong focus framing, the confusion over entry order, and the selector for the container instead of the opener.
 
-## Ce que M1-10 a tout de même d'établi
+## What M1-10 has established anyway
 
-Ces points viennent des campagnes précédentes et ne sont pas invalidés :
+These points come from earlier campaigns and are not invalidated:
 
-| Élément | Où |
+| Element | Where |
 |---|---|
-| Admission en file : `disposition: queued` renvoyé par le host, persisté dans `muse-desktop.queued-turns.v1` | campagne groupe 1, round 3 |
-| Panneau **Queued messages** ordonné, avec son action d'enlèvement visible | round 3 |
-| État **`Stopping…`** puis bandeau « waiting for the desktop host to confirm it » | round 3 |
-| File **vidée** après un Stop — le host consomme le tour en attente | round 3 |
-| Base de code : `turn/unqueue` est déclaré côté client (`src/lib/msp.ts`) | lecture de source |
+| Queue admission: `disposition: queued` returned by the host, persisted in `muse-desktop.queued-turns.v1` | group 1 campaign, round 3 |
+| **Queued messages** panel ordered, with its removal action visible | round 3 |
+| **`Stopping…`** state then the "waiting for the desktop host to confirm it" banner | round 3 |
+| Queue **emptied** after a Stop — the host consumes the queued turn | round 3 |
+| Code base: `turn/unqueue` is declared on the client side (`src/lib/msp.ts`) | source reading |
 
-**Ce qui manque :** la preuve que l'action de retrait **supprime** effectivement l'entrée au lieu de seulement la masquer.
+**What is missing:** proof that the removal action **deletes** the entry rather than merely hiding it.
 
-## Reprise — protocole corrigé
+## Picking this up — corrected protocol
 
-1. **Vérifier `working: true` après le premier envoi**, et attendre qu'il le devienne ; ne pas supposer qu'un tour long tourne parce qu'on l'a envoyé.
-2. **Vérifier que le composer s'est vidé** après chaque envoi, signe que la soumission a été acceptée — c'est le contrôle qui manquait ici.
-3. **Vérifier `queuedRows >= 1` avant de chercher le bouton**, au lieu de cliquer et de constater son absence.
-4. Ne lancer la recherche du bouton **Remove from queue** que dans le panneau réellement déplié — je sais depuis le round 20 que les surfaces de la barre de travail n'existent pas quand le panneau est replié.
+1. **Check `working: true` after the first send**, and wait for it to become so; do not assume a long turn is running because it was sent.
+2. **Check the composer cleared** after each send, a sign the submission was accepted — that is the check that was missing here.
+3. **Check `queuedRows >= 1` before looking for the button**, instead of clicking and noting its absence.
+4. Only start looking for the **Remove from queue** button in a panel that is actually unfolded — I have known since round 20 that the work bar's surfaces do not exist when the panel is folded.
 
-**M1-10 reste ouvert.** Aucune preuve nouvelle n'est apportée par ce round.
+**M1-10 stays open.** This round brings no new evidence.
