@@ -1,10 +1,10 @@
-# Où vivent réellement les conversations — découverte (20 septembre 2026)
+# Where conversations really live — a discovery (20 September 2026)
 
-Cette campagne a passé plusieurs rounds à essayer de supprimer des conversations de test, avec des résultats qui « ne tenaient pas ». La cause est ici, et elle n'était pas où je la cherchais.
+This campaign spent several rounds trying to delete test conversations, with results that "would not stick". The cause is here, and it was not where I was looking.
 
-## Le fait
+## The fact
 
-`session/list` retourne, pour chaque session, son **chemin de stockage** :
+`session/list` returns, for each session, its **storage path**:
 
 ```json
 {
@@ -25,56 +25,56 @@ Cette campagne a passé plusieurs rounds à essayer de supprimer des conversatio
 }
 ```
 
-**Les conversations sont des fichiers `session.jsonl` sur disque**, sous
-`%USERPROFILE%\.local\share\muse\sessions\<année>\<mois>\<jour>\<sessionId>\session.jsonl`.
+**Conversations are `session.jsonl` files on disk**, under
+`%USERPROFILE%\.local\share\muse\sessions\<year>\<month>\<day>\<sessionId>\session.jsonl`.
 
-Le **host en est le propriétaire** ; l'application ne fait que les refléter. D'où le comportement observé pendant le nettoyage : supprimer une conversation dans l'application ne supprime pas le fichier, et l'entrée **revient** dès que l'application redemande `session/list`.
+The **host owns them**; the application only mirrors them. Hence the behaviour observed during the cleanup: deleting a conversation in the application does not delete the file, and the entry **comes back** as soon as the application asks `session/list` again.
 
-## Champs exposés par `session/list`
+## Fields exposed by `session/list`
 
 `sessionId`, `path`, `status`, `activeTurnId`, `createdAt`, `updatedAt`, `workspaceRoot`, `providerId`, `modelId`, `turnCount`, `forkedFrom`, `title`, `firstUserPrompt`, `branch`.
 
-Sept de ces champs — `path`, `status`, `activeTurnId`, `turnCount`, `providerId`, `modelId`, `branch` — **n'étaient documentés nulle part** dans le dépôt avant cette mesure.
+Seven of those fields — `path`, `status`, `activeTurnId`, `turnCount`, `providerId`, `modelId`, `branch` — **were documented nowhere** in the repository before this measurement.
 
-## Inventaire mesuré (18 sessions sur disque)
+## Measured inventory (18 sessions on disk)
 
-| Identifiant | Lignes | Taille | Origine |
+| Identifier | Lines | Size | Origin |
 |---|---|---|---|
-| `01a0bb03` | **44 050** | **65 194 Ko** | campagne (le plus gros) |
-| `01a0bea1` | 737 | 1 468 Ko | campagne |
-| `01a0bead` | 384 | 645 Ko | campagne |
-| `01a0bb00` | 116 | 298 Ko | campagne |
-| `01a0beaf`, `01a0bec9` | ~165 | ~287 Ko | campagne |
-| `01a0bead` (2ᵉ), `01a0bf02` | ~110-164 | ~160-282 Ko | campagne |
-| `01a0be8a` | 73 | 147 Ko | campagne |
-| `01a0bafe` | 10 | 7 Ko | campagne |
-| `cd820fec`, `4306ea8c`, `5b38de0b`, `611bba64` | 34-38 | 68-115 Ko | **identifiants d'une autre forme** |
-| `803ede85`, `92015b53`, `f63e0cdb`, `72b8c035` | 34-52 | 61-93 Ko | idem |
+| `01a0bb03` | **44,050** | **65,194 KB** | campaign (the largest) |
+| `01a0bea1` | 737 | 1,468 KB | campaign |
+| `01a0bead` | 384 | 645 KB | campaign |
+| `01a0bb00` | 116 | 298 KB | campaign |
+| `01a0beaf`, `01a0bec9` | ~165 | ~287 KB | campaign |
+| `01a0bead` (2nd), `01a0bf02` | ~110-164 | ~160-282 KB | campaign |
+| `01a0be8a` | 73 | 147 KB | campaign |
+| `01a0bafe` | 10 | 7 KB | campaign |
+| `cd820fec`, `4306ea8c`, `5b38de0b`, `611bba64` | 34-38 | 68-115 KB | **identifiers of a different shape** |
+| `803ede85`, `92015b53`, `f63e0cdb`, `72b8c035` | 34-52 | 61-93 KB | same |
 
-**Onze sessions portent le préfixe `01a0…`** — la forme des identifiants générés pendant cette campagne. **Sept portent une forme différente** : elles ne viennent pas de ces tests, et je **ne les touche pas**.
+**Eleven sessions carry the `01a0…` prefix** — the shape of identifiers generated during this campaign. **Seven carry a different shape**: they do not come from these tests, and I **do not touch them**.
 
-Les sessions de campagne totalisent environ **70 Mo**, dont **65 Mo pour une seule**.
+The campaign's sessions total roughly **70 MB**, of which **65 MB is a single one**.
 
-## Pourquoi cela change le diagnostic du nettoyage
+## Why this changes the cleanup diagnosis
 
-Le document [`nettoyage-conversations.md`](../2026-09-20-windows-cleanup/nettoyage-conversations.md) concluait que le côté natif réintroduisait les sessions supprimées. **C'est exact, et voici le mécanisme précis** : le host relit ses propres fichiers `session.jsonl` et les re-liste ; l'application reconstruit une entrée locale pour chacune.
+The document [`nettoyage-conversations.md`](../2026-09-20-windows-cleanup/nettoyage-conversations.md) concluded that the native side reintroduced the deleted sessions. **That is accurate, and here is the precise mechanism**: the host re-reads its own `session.jsonl` files and re-lists them; the application rebuilds a local entry for each.
 
-Le bouton **Delete…** de l'interface, lui, envoie l'ordre de **tuer la session** — ce qui explique qu'il fonctionne, au moins tant que le host est vivant. Mais **il ne supprime pas forcément le fichier** : `01a0bea1` figurait encore sur disque après avoir été supprimée côté application, avec **1 468 Ko** et 737 lignes.
+The interface's **Delete…** button, for its part, sends the order to **kill the session** — which explains why it works, at least while the host is alive. But **it does not necessarily delete the file**: `01a0bea1` was still on disk after being deleted on the application side, with **1,468 KB** and 737 lines.
 
-## Ce qui reste à faire, et pourquoi je ne l'ai pas fait
+## What is left to do, and why I have not done it
 
-Effacer des fichiers de `%USERPROFILE%\.local\share\muse\sessions\` **dépasse le périmètre de l'objectif** et touche au stockage partagé avec Muse CLI : c'est une décision qui vous revient, pas à moi.
+Deleting files from `%USERPROFILE%\.local\share\muse\sessions\` **goes beyond the scope of the objective** and touches storage shared with the Muse CLI: that is a decision for you, not me.
 
-**Ce qui est sûr :** les 11 sessions au préfixe `01a0…` viennent de cette campagne de tests, et elles occupent ~70 Mo.
+**What is certain:** the 11 sessions with the `01a0…` prefix come from this test campaign, and they take ~70 MB.
 
-**Ce qui n'est pas sûr :** les 7 sessions à identifiant d'une autre forme. Elles pourraient être vos conversations Muse CLI, ou d'autres essais. Je n'y touche pas.
+**What is not certain:** the 7 sessions with a differently shaped identifier. They could be your Muse CLI conversations, or other experiments. I leave them alone.
 
-## Détail de protocole découvert au passage
+## Protocol detail discovered along the way
 
-**`session/start` exige un `commandId`** en plus de `workspaceRoot`. Sans lui :
+**`session/start` requires a `commandId`** in addition to `workspaceRoot`. Without it:
 
 ```
 invalid session/start params: missing field `commandId`  [invalidParams]
 ```
 
-Le rapport d'écart ne le mentionnait pas — il listait `workspaceRoot` mais pas `commandId`. À corriger dans [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md) à la prochaine mise à jour.
+The gap report did not mention it — it listed `workspaceRoot` but not `commandId`. To correct in [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md) at the next update.

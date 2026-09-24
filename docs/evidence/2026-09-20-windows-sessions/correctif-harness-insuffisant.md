@@ -1,76 +1,76 @@
-# Correctif du harness : nécessaire mais non suffisant (20 septembre 2026)
+# The harness fix: necessary but not sufficient (20 September 2026)
 
-Suite de [`terminal-apres-interruption.md`](terminal-apres-interruption.md). J'y annonçais que le harness « a besoin d'un correctif » et que je le ferais. **Je l'ai fait, et il ne suffit pas.** Ce document dit ce qui est corrigé, ce qui reste, et pourquoi je m'arrête là.
+Follows [`terminal-apres-interruption.md`](terminal-apres-interruption.md). There I announced the harness "needs a fix" and that I would do it. **I did, and it is not enough.** This document says what is fixed, what remains, and why I am stopping there.
 
-## Le correctif appliqué
+## The fix applied
 
-`scripts/native-smoke.mjs` appelait `turn/interrupt` sans `turnId` :
+`scripts/native-smoke.mjs` called `turn/interrupt` without a `turnId`:
 
 ```js
 await host.request("turn/interrupt", {
   commandId: uuidv7(),
   sessionId: sessions[index],
-  retract: false,          // ← turnId manquant
+  retract: false,          // ← turnId missing
 });
 ```
 
-alors que `turnIds[index]` était disponible deux lignes plus haut, et que la vérification de la réponse l'attendait. Ajouté :
+although `turnIds[index]` was available two lines above, and the response check expected it. Added:
 
 ```js
 turnId: turnIds[index],
 ```
 
-**Ce correctif est nécessaire** : le host exige `turnId`, et sans lui la requête est refusée en `invalidParams` — vérifié par lecture du code et par la mesure.
+**That fix is necessary**: the host requires `turnId`, and without it the request is refused with `invalidParams` — verified by reading the code and by measurement.
 
-## Mais le test échoue toujours
+## But the test still fails
 
 ```
 node scripts/native-smoke.mjs --exercise-control --exercise-terminal
 → host-A did not emit a terminal notification for 01a0c05f-…
 ```
 
-Le rapport n'est **même pas écrit** : l'échec survient avant.
+The report is **not even written**: the failure happens first.
 
-## Ce que la mesure isole
+## What the measurement isolates
 
-Le scénario **exact** du smoke — `turn/start` avec le prompt `"Native control smoke probe. Stop immediately."`, puis `turn/interrupt` **immédiat** avec `{commandId, sessionId, turnId, retract}` — exécuté en isolation :
+The smoke's **exact** scenario — `turn/start` with the prompt `"Native control smoke probe. Stop immediately."`, then an **immediate** `turn/interrupt` with `{commandId, sessionId, turnId, retract}` — run in isolation:
 
-| Étape | Résultat |
+| Step | Result |
 |---|---|
-| `turn/start` | `accepted`, `turnId` retourné |
-| `turn/interrupt` | **`ok`**, `status: accepted`, **même `turnId`** |
-| Terminal | **`turn/completed` à +2 019 ms** |
+| `turn/start` | `accepted`, `turnId` returned |
+| `turn/interrupt` | **`ok`**, `status: accepted`, **same `turnId`** |
+| Terminal | **`turn/completed` at +2,019 ms** |
 
-**La séquence fonctionne.** Le host émet le terminal, avec le bon `turnId`, en 2 secondes.
+**The sequence works.** The host emits the terminal, with the right `turnId`, in 2 seconds.
 
-## Donc il reste une cause que je n'ai pas identifiée
+## So a cause remains that I have not identified
 
-Le smoke et mon probe de scénario diffèrent sur au moins trois points, et je **n'ai pas** déterminé lequel est en cause :
+The smoke and my scenario probe differ on at least three points, and I have **not** determined which is responsible:
 
-1. **Deux hosts** en parallèle chez le smoke, un seul chez moi ;
-2. le smoke attend via sa propre fonction `waitForNotification(method, predicate, 2_500)` — **peut-être enregistrée trop tard**, après que la notification est déjà arrivée (mon terminal arrive à +39 ms dans un cas, +2 019 ms dans l'autre) ;
-3. le smoke interroge **trois alias en séquence** (`turn/completed`, `turn/retracted`, `turn/stopped`), ce qui peut épuiser son budget avant que le bon n'arrive.
+1. **Two hosts** in parallel in the smoke, one in mine;
+2. the smoke waits through its own `waitForNotification(method, predicate, 2_500)` function — **possibly registered too late**, after the notification has already arrived (my terminal arrives at +39 ms in one case, +2,019 ms in the other);
+3. the smoke queries **three aliases in sequence** (`turn/completed`, `turn/retracted`, `turn/stopped`), which can exhaust its budget before the right one arrives.
 
-**L'hypothèse 2 est la plus probable** — une attente enregistrée après l'événement ne le verra jamais, et c'est exactement le genre de course que ce harness est censé mesurer. Mais **je ne l'ai pas vérifiée**, et je ne l'écris donc pas comme un résultat.
+**Hypothesis 2 is the most likely** — a wait registered after the event will never see it, and that is exactly the kind of race this harness is supposed to measure. But **I have not verified it**, so I do not write it as a result.
 
-## Décision : je m'arrête ici, et je le dis
+## Decision: I stop here, and I say so
 
-Trois raisons :
+Three reasons:
 
-1. **Le correctif appliqué est juste** — il répare un vrai défaut, celui de transmettre un paramètre exigé. Le garder est fondé même si le test échoue encore.
-2. **Poursuivre demanderait d'instrumenter `native-smoke.mjs` lui-même** pour voir à quel instant l'attente s'enregistre par rapport à l'arrivée du terminal. C'est faisable, mais cela commence à empiler des modifications sur un harness dont **deux** défauts viennent d'être trouvés — le risque de le rendre moins fiable en croyant le réparer est réel.
-3. **Le résultat utile est déjà acquis** : le host émet son terminal après interruption, c'est mesuré quatre fois, avec le bon `turnId`. Le défaut restant est **dans mon outillage**, pas dans le produit.
+1. **The fix applied is right** — it repairs a real defect, that of passing a required parameter. Keeping it is justified even though the test still fails.
+2. **Going further would mean instrumenting `native-smoke.mjs` itself** to see when the wait registers relative to the terminal's arrival. That is feasible, but it starts stacking changes on a harness in which **two** defects have just been found — the risk of making it less reliable while believing it is being repaired is real.
+3. **The useful result is already secured**: the host emits its terminal after an interrupt, measured four times, with the right `turnId`. The remaining defect is **in my tooling**, not in the product.
 
-## Ce qui est établi, et ce qui ne l'est pas
+## What is established, and what is not
 
-| Affirmation | Statut |
+| Claim | Status |
 |---|---|
-| Le host émet `turn/completed` après `turn/interrupt` | **prouvé** — +39 ms et +2 019 ms selon le prompt |
-| `turn/interrupt` exige un `turnId` | **prouvé** — le code du host et la mesure concordent |
-| Le harness omettait ce `turnId` | **prouvé** — corrigé |
-| Le correctif fait passer `--exercise-terminal` | **réfuté** — le test échoue encore |
-| L'attente de notification est enregistrée trop tard | **hypothèse non vérifiée** |
+| The host emits `turn/completed` after `turn/interrupt` | **proved** — +39 ms and +2,019 ms depending on the prompt |
+| `turn/interrupt` requires a `turnId` | **proved** — the host's code and the measurement agree |
+| The harness omitted that `turnId` | **proved** — fixed |
+| The fix makes `--exercise-terminal` pass | **disproved** — the test still fails |
+| The notification wait registers too late | **unverified hypothesis** |
 
-## Ce qu'il faudrait pour finir
+## What it would take to finish
 
-Instrumenter `native-smoke.mjs` : journaliser l'instant d'enregistrement de chaque `waitForNotification` et l'instant d'arrivée de chaque notification, puis comparer. Si l'attente s'enregistre après l'arrivée, le correctif est de **s'abonner avant d'envoyer la requête** — un motif que mon propre `msp-interrupt-notifications.mjs` applique déjà, puisqu'il **enregistre en continu** dès le démarrage du host plutôt que d'attendre un événement précis.
+Instrument `native-smoke.mjs`: log the registration time of every `waitForNotification` and the arrival time of every notification, then compare. If the wait registers after the arrival, the fix is to **subscribe before sending the request** — a pattern my own `msp-interrupt-notifications.mjs` already applies, since it **records continuously** from the moment the host starts rather than waiting for a precise event.

@@ -1,13 +1,13 @@
-# Le harness produit un faux négatif — démontré (20 septembre 2026)
+# The harness produces a false negative — demonstrated (20 September 2026)
 
-Suite de [`harness-diagnostic-avale.md`](harness-diagnostic-avale.md). J'y avais laissé une hypothèse non vérifiée. Les deux correctifs annoncés sont appliqués, **le test échoue toujours**, mais le diagnostic préservé a livré la réponse — et elle est plus grave que prévu.
+Follows [`harness-diagnostic-avale.md`](harness-diagnostic-avale.md). I had left an unverified hypothesis there. Both announced fixes are applied, **the test still fails**, but the preserved diagnostic delivered the answer — and it is worse than expected.
 
-## Les deux correctifs appliqués
+## The two fixes applied
 
-1. **Le diagnostic n'est plus avalé.** `waitForTerminalNotification` conserve la raison de chaque tentative au lieu de l'ignorer.
-2. **Le délai passe de 2 500 ms à `TERMINAL_WAIT_MS = 15 000`**, avec la justification chiffrée dans le code (latences mesurées : 39 ms, 2 019 ms, 2 064 ms, **3 974 ms**).
+1. **The diagnostic is no longer swallowed.** `waitForTerminalNotification` keeps the reason for each attempt instead of ignoring it.
+2. **The timeout goes from 2,500 ms to `TERMINAL_WAIT_MS = 15,000`**, with the numeric justification in the code (measured latencies: 39 ms, 2,019 ms, 2,064 ms, **3,974 ms**).
 
-## Ce que le diagnostic révèle
+## What the diagnostic reveals
 
 ```
 host-A did not emit a terminal notification for 01a0c06a-0823-7649-a95e-715847cf45d4
@@ -16,70 +16,70 @@ host-A did not emit a terminal notification for 01a0c06a-0823-7649-a95e-715847cf
   turn/stopped:   host-A timed out waiting for turn/stopped   (notifications: session/started)
 ```
 
-**Trois fois 15 secondes, soit 45 s d'attente, et la seule notification reçue est `session/started`.**
+**Three times 15 seconds, so 45 s of waiting, and the only notification received is `session/started`.**
 
-Pas même `turn/started`. Le budget de temps n'est donc **pas** en cause : ce n'est pas un terminal arrivé trop tard, c'est **un tour qui n'a jamais commencé**.
+Not even `turn/started`. The time budget is therefore **not** at fault: this is not a terminal arriving too late, it is **a turn that never began**.
 
-## La contradiction, mesurée
+## The contradiction, measured
 
-Le scénario **exact** du smoke — `turn/start` avec le prompt `"Native control smoke probe. Stop immediately."`, puis `turn/interrupt` **immédiat** avec `{commandId, sessionId, turnId, retract: false}` — exécuté sur un host unique, sur la même machine, avec la même configuration de ligne de commande :
+The smoke's **exact** scenario — `turn/start` with the prompt `"Native control smoke probe. Stop immediately."`, then an **immediate** `turn/interrupt` with `{commandId, sessionId, turnId, retract: false}` — run against a single host, on the same machine, with the same command-line configuration:
 
 ```
 turn/start : accepted | turnId 01a0c06a
-interrupt immediat : ok status=accepted
-terminal en 20 s : turn/completed@+2055ms
-notifications    : session/started@1840, session/branchChanged@1922,
-                   session/statusChanged@1978, turn/started@1978,
-                   item/completed@1978, session/statusChanged@2054, turn/completed@2055
+immediate interrupt : ok status=accepted
+terminal within 20 s : turn/completed@+2055ms
+notifications        : session/started@1840, session/branchChanged@1922,
+                       session/statusChanged@1978, turn/started@1978,
+                       item/completed@1978, session/statusChanged@2054, turn/completed@2055
 ```
 
-**Mon probe voit tout. Le smoke ne voit rien.** Sur la même machine, le même jour, avec la même séquence d'appels.
+**My probe sees everything. The smoke sees nothing.** On the same machine, the same day, with the same call sequence.
 
-## Ce qui est établi
+## What is established
 
-| Affirmation | Statut |
+| Claim | Status |
 |---|---|
-| Le host émet `turn/completed` après `turn/interrupt` | **prouvé** — 5 mesures indépendantes, bon `turnId` |
-| Le scénario exact du smoke fonctionne en isolation | **prouvé** — séquence complète reproduite |
-| Le smoke ne reçoit que `session/started` | **prouvé** — diagnostic préservé, 45 s d'attente |
-| Le budget de temps du smoke était trop court | **écarté** — 45 s sans effet |
-| **`native-smoke.mjs --exercise-control --exercise-terminal` est un faux négatif** | **établi** |
+| The host emits `turn/completed` after `turn/interrupt` | **proved** — 5 independent measurements, right `turnId` |
+| The smoke's exact scenario works in isolation | **proved** — complete sequence reproduced |
+| The smoke receives only `session/started` | **proved** — diagnostic preserved, 45 s of waiting |
+| The smoke's time budget was too short | **ruled out** — 45 s made no difference |
+| **`native-smoke.mjs --exercise-control --exercise-terminal` is a false negative** | **established** |
 
-**Un seul des deux peut avoir raison, et ce n'est pas le smoke** : mon probe observe la séquence complète, sept notifications, avec le terminal attendu. Le smoke n'en observe qu'une.
+**Only one of the two can be right, and it is not the smoke**: my probe observes the complete sequence, seven notifications, with the expected terminal. The smoke observes one.
 
-## Ce que je n'explique pas, et pourquoi je m'arrête
+## What I do not explain, and why I stop
 
-Le smoke et mon probe diffèrent encore par des détails que je n'ai pas neutralisés : le smoke lance **deux hosts en parallèle**, utilise un **répertoire de travail temporaire** et des options de bac à sable propres à son harnais, et nomme la sonde différemment.
+The smoke and my probe still differ in details I have not neutralised: the smoke launches **two hosts in parallel**, uses a **temporary working directory** and sandbox options specific to its harness, and names the probe differently.
 
-**Je n'ai pas isolé lequel de ces détails empêche le tour de démarrer.** Le faire demanderait d'instrumenter le smoke lui-même — un **quatrième** correctif sur un outil dont trois défauts viennent d'être trouvés — et mon budget de contexte ne me laisse plus la marge de vérification nécessaire.
+**I have not isolated which of those details prevents the turn from starting.** Doing so would mean instrumenting the smoke itself — a **fourth** fix on a tool whose three defects have just been found — and my context budget no longer leaves the verification margin needed.
 
-**Je m'arrête ici, délibérément**, plutôt que d'empiler un correctif de plus dans l'instrument qui a déjà produit trois faux constats.
+**I stop here, deliberately**, rather than stack one more fix into the instrument that has already produced three false findings.
 
-## Pourquoi c'est le résultat le plus important de cette enquête
+## Why this is the most important result of this investigation
 
-Ce harness est présenté comme la **preuve native** de plusieurs tickets : `--exercise-control` alimente M0-04, `--exercise-approval` M0-01, `--exercise-user-shell` M1-06, `--exercise-reasoning` et `--exercise-model` M1-11.
+This harness is presented as the **native proof** for several tickets: `--exercise-control` feeds M0-04, `--exercise-approval` M0-01, `--exercise-user-shell` M1-06, `--exercise-reasoning` and `--exercise-model` M1-11.
 
-**Trois de ses constats se sont révélés faux**, et j'ai bâti mon rapport d'écart dessus avant de les démonter un par un :
+**Three of its findings turned out to be false**, and I built my gap report on them before dismantling them one by one:
 
-| Constat du harness | Réalité mesurée |
+| Harness finding | Measured reality |
 |---|---|
-| `turn/start` refuse sans `commandId` — noté, correct | — |
-| `turn/interrupt` sans `turnId` → `terminalNotification: unsupported` | **le host émet le terminal** |
-| `session/read` rapporté `unsupported` | **la méthode fonctionne** sur une session persistée |
+| `turn/start` refuses without `commandId` — noted, correct | — |
+| `turn/interrupt` without `turnId` → `terminalNotification: unsupported` | **the host emits the terminal** |
+| `session/read` reported `unsupported` | **the method works** on a persisted session |
 
-**Tant que ce harness produit des faux négatifs, tout constat qui s'appuie sur lui est suspect** — y compris les deux écarts qui restent (`session/userShell`, projections de modèle et d'effort), que je n'ai pas revérifiés hors de son cadre.
+**As long as this harness produces false negatives, any finding resting on it is suspect** — including the two gaps that remain (`session/userShell`, model and effort projections), which I have not re-checked outside its frame.
 
-## Ce qu'il faudrait pour finir
+## What it would take to finish
 
-1. **Isoler la différence** : exécuter le scénario de contrôle avec **un seul** host, puis avec deux, puis avec le répertoire temporaire du smoke, en comparant à chaque étape les notifications reçues.
-2. **Ou remplacer la mesure** : `msp-interrupt-notifications.mjs` observe en continu dès le démarrage du host, ne dépend d'aucune attente ciblée, et voit le terminal à chaque exécution. Il est plus simple et n'a produit aucun faux constat.
+1. **Isolate the difference**: run the control scenario with **one** host, then with two, then with the smoke's temporary directory, comparing the notifications received at each step.
+2. **Or replace the measurement**: `msp-interrupt-notifications.mjs` observes continuously from the moment the host starts, depends on no targeted wait, and sees the terminal on every run. It is simpler and has produced no false finding.
 
-## Reproductibilité
+## Reproducibility
 
 ```powershell
-# Faux négatif — ne voit que session/started
+# False negative — sees only session/started
 node scripts/native-smoke.mjs --exercise-control --exercise-terminal
 
-# Voit la séquence complète et le terminal, même scénario
+# Sees the complete sequence and the terminal, same scenario
 node scripts/msp-interrupt-notifications.mjs
 ```

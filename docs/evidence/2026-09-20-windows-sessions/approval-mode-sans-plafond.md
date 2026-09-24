@@ -1,33 +1,33 @@
-# Le plafond d'approbation n'existe pas — le dernier constat tombe (20 septembre 2026)
+# The approval ceiling does not exist — the last finding falls (20 September 2026)
 
-**Ce document corrige la dernière affirmation non remesurée de [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md)**, et ferme l'enquête. Le rapport présentait un plafond `promptUnmatched` comme la seule limite encore debout du sidecar.
+**This document corrects the last unre-measured claim in [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md)**, and closes the investigation. The report presented a `promptUnmatched` ceiling as the sidecar's only remaining limit.
 
-**Elle n'existe pas.**
+**It does not exist.**
 
-## La méthode
+## The method
 
-`session/read` expose `approvalMode` sur la session — découverte du round 61, non exploitée jusqu'ici. Elle permet de **lire** le mode effectif après chaque tentative, au lieu de se fier à l'accusé.
+`session/read` exposes `approvalMode` on the session — a round 61 discovery, unused until now. It makes it possible to **read** the effective mode after each attempt, instead of trusting the acknowledgement.
 
-Le script essaie quatre noms de méthode plausibles, puis balaie huit valeurs de mode, en **relisant la session** après chacune.
+The script tries four plausible method names, then sweeps eight mode values, **reading the session back** after each one.
 
-## Le résultat
+## The result
 
-**Une seule méthode existe :** `session/setApprovalMode`. Les trois autres (`session/setApproval`, `session/approvalMode`, `approval/setMode`) répondent `methodNotFound` — et la session reste inchangée, ce qui confirme qu'elles ne font rien.
+**Only one method exists:** `session/setApprovalMode`. The other three (`session/setApproval`, `session/approvalMode`, `approval/setMode`) answer `methodNotFound` — and the session stays unchanged, which confirms they do nothing.
 
-**Trois valeurs sont acceptées :**
+**Three values are accepted:**
 
-| Mode | Résultat | Mode effectif après |
+| Mode | Result | Effective mode afterwards |
 |---|---|---|
-| `onRequest` | **accepté** | `onRequest` |
-| **`allowAll`** | **accepté** | **`allowAll`** |
-| `promptUnmatched` | **accepté** | `promptUnmatched` |
-| `auto`, `yolo`, `never`, `ask`, `deny` | refusés en `invalidParams` | inchangé |
+| `onRequest` | **accepted** | `onRequest` |
+| **`allowAll`** | **accepted** | **`allowAll`** |
+| `promptUnmatched` | **accepted** | `promptUnmatched` |
+| `auto`, `yolo`, `never`, `ask`, `deny` | refused with `invalidParams` | unchanged |
 
-Les cinq refus sont **mes propres noms inventés** — `auto`, `yolo`, `never` ne font pas partie du vocabulaire du host. **Ils ne prouvent aucune limite.**
+The five refusals are **names I invented myself** — `auto`, `yolo`, `never` are not part of the host's vocabulary. **They prove no limit.**
 
-## Ce que le host expose réellement
+## What the host actually exposes
 
-L'accusé est complet :
+The acknowledgement is complete:
 
 ```json
 { "status": "accepted",
@@ -35,53 +35,53 @@ L'accusé est complet :
   "effectiveMode": { "mode": "allowAll", "source": "approvalReconfigure", … } }
 ```
 
-Et la session relue confirme :
+And the session read back confirms it:
 
 ```
 before : { "mode": "onRequest",  "source": "startup",              "lastCommandId": null }
-after  : { "mode": "allowAll",   "source": "approvalReconfigure",  "lastCommandId": "<le commandId envoyé>" }
+after  : { "mode": "allowAll",   "source": "approvalReconfigure",  "lastCommandId": "<the commandId sent>" }
 ```
 
-Avec, en plus, une notification **`session/approvalModeChanged`**.
+Plus a **`session/approvalModeChanged`** notification.
 
-**Le mode est configurable, appliqué, projeté sur la session, et signalé par notification.** Il n'y a **aucun plafond**.
+**The mode is configurable, applied, projected onto the session, and signalled by notification.** There is **no ceiling**.
 
-## La cause de mon erreur
+## The cause of my error
 
-Le constat d'origine venait de `native-smoke.mjs`, sur un scénario où une **demande d'approbation** n'était jamais apparue — en mode `ask`, un mode qui **n'existe pas**. J'en avais déduit un plafond du host, alors que c'était mon scénario qui ne sollicitait rien.
+The original finding came from `native-smoke.mjs`, on a scenario where an **approval request** never appeared — in `ask` mode, a mode that **does not exist**. I inferred a host ceiling, when it was my scenario that exercised nothing.
 
-C'est **exactement** la même erreur que les cinq écarts précédents : une erreur de contexte lue comme une absence de capacité.
+That is **exactly** the same error as the five previous gaps: a context error read as a missing capability.
 
-## Bilan définitif : six constats, six artefacts
+## Final summary: six findings, six artefacts
 
-| Constat | Affirmé | Mesuré |
+| Finding | Claimed | Measured |
 |---|---|---|
-| 1 | `session/read`, `session/resume` absents | **fonctionnels** |
-| 2 | aucun terminal après interruption | **`turn/completed` émis** |
-| 3 | `userShell` sans item ni sortie | **item publié, sortie incluse** |
-| 4 | projections non rapportées | **visibles (session + notification)** |
-| 5 | durabilité constamment `ephemeral` | **variable** |
-| 6 | plafond `approval_mode` à `promptUnmatched` | **inexistant** — trois modes acceptés |
+| 1 | `session/read`, `session/resume` missing | **they work** |
+| 2 | no terminal after an interrupt | **`turn/completed` emitted** |
+| 3 | `userShell` with no item and no output | **item published, output included** |
+| 4 | projections not reported | **visible (session + notification)** |
+| 5 | durability constantly `ephemeral` | **variable** |
+| 6 | `approval_mode` capped at `promptUnmatched` | **non-existent** — three modes accepted |
 
-**Aucun écart de contrat du sidecar n'est établi.** Le host 1.3.0 fait tout ce que je lui reprochais de ne pas faire.
+**No sidecar contract gap is established.** Host 1.3.0 does everything I accused it of not doing.
 
-## Ce que cela change pour les tickets du groupe 1
+## What that changes for the group 1 tickets
 
-| Ticket | Ce que je croyais | Mesuré |
+| Ticket | What I believed | Measured |
 |---|---|---|
-| **M0-01** — approbations simultanées | bloqué par le plafond du host | **pas de plafond** — `allowAll` est accepté |
-| **M0-02** — reprise | bloqué par le sidecar | **le host sait reprendre** |
-| **M0-04** — arrêt fiable | bloqué par l'absence de terminal | **le terminal est émis** |
-| **M0-06** — posture de permissions | limité par le plafond | **pas de plafond** |
-| **M1-06** — sortie terminal | bloqué par le sidecar | **l'item et la sortie existent** |
-| **M1-11** — modèle et effort | bloqué par l'absence de projection | **les projections existent** |
+| **M0-01** — concurrent approvals | blocked by the host's ceiling | **no ceiling** — `allowAll` is accepted |
+| **M0-02** — resume | blocked by the sidecar | **the host can resume** |
+| **M0-04** — reliable stop | blocked by the missing terminal | **the terminal is emitted** |
+| **M0-06** — permission posture | limited by the ceiling | **no ceiling** |
+| **M1-06** — terminal output | blocked by the sidecar | **the item and the output exist** |
+| **M1-11** — model and effort | blocked by the missing projection | **the projections exist** |
 
-**Aucun de ces tickets n'est bloqué par le sidecar.** Ce qui reste à faire est **côté client**, dans ce dépôt.
+**None of these tickets is blocked by the sidecar.** What is left to do is **on the client side**, in this repository.
 
-## Reproductibilité
+## Reproducibility
 
 ```powershell
 node scripts/msp-approval-mode-check.mjs
 ```
 
-Lance un host, démarre une session, essaie quatre noms de méthode, balaie huit valeurs de mode et **relit la session** après chaque tentative. Aucune supposition sur les noms : le script affiche ceux qui existent et ceux que le host refuse.
+Launches a host, starts a session, tries four method names, sweeps eight mode values and **reads the session back** after each attempt. No assumption about names: the script prints the ones that exist and the ones the host refuses.
