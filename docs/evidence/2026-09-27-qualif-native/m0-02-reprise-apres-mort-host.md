@@ -1,59 +1,59 @@
-# M0-02 — Mort du host → reconnexion → reprise avec historique (27 septembre 2026)
+# M0-02 — Host death → reconnection → resume with history (27 September 2026)
 
-**Les trois critères de M0-02 sont prouvés sur Windows**, contre un **host durable** (`muse
-serve` sans `--no-session-log`). Cela clôt la « reprise de conversation » côté Windows — le
-verdict « M0-02 is a client-side gap » de `msp-resume-free-session.mjs` (21/09) était daté : le
-chemin client `resume_session` + `read_session_history` **fonctionne** au HEAD `362c8bb`.
+**M0-02's three criteria are proved on Windows**, against a **durable host** (`muse
+serve` without `--no-session-log`). That closes "conversation resume" on the Windows side — the
+"M0-02 is a client-side gap" verdict from `msp-resume-free-session.mjs` (21/09) was dated: the
+client path `resume_session` + `read_session_history` **works** at HEAD `362c8bb`.
 
-## Protocole (exécuté ce jour, webview empaquetée en dev)
+## Protocol (run today, packaged webview in dev)
 
-1. Conversation ouverte avec historique, host vivant (`muse.exe serve --sandbox-network
-   restricted --trust-workspace`, host **durable**).
-2. **`taskkill /F` du host** en plein fonctionnement.
-3. Observation de l'interface, puis clic sur **« Reconnect »** (`title="Reconnect this saved
+1. Conversation open with history, host alive (`muse.exe serve --sandbox-network
+   restricted --trust-workspace`, a **durable** host).
+2. **`taskkill /F` on the host** while it is running.
+3. Observation of the interface, then a click on **"Reconnect"** (`title="Reconnect this saved
    conversation to its workspace engine"`).
-4. Envoi d'un message dans la conversation reprise.
+4. Sending a message in the resumed conversation.
 
-## Résultats
+## Results
 
-### 1. Statut terminal honnête quand la mort du processus est connue ✓
+### 1. Honest terminal status when the process death is known ✓
 
-Immédiatement après la mort du host, la conversation affiche :
+Immediately after the host died, the conversation shows:
 
 > **Muse stopped because the host process ended. Reconnect to continue.**
 
-Aucun spinner figé, aucune promesse : l'état est terminale et l'action est nommée.
+No frozen spinner, no promise: the state is terminal and the action is named.
 
-### 2. Reprise réelle : `resume_session` + hydratation complète ✓
+### 2. A real resume: `resume_session` + full hydration ✓
 
-Clic sur Reconnect → trace IPC (le host mort est **relancé** automatiquement) :
+Clicking Reconnect → IPC trace (the dead host is **relaunched** automatically):
 
-| Appel | Résultat clé |
+| Call | Key result |
 |---|---|
 | `resume_session` | `session_durability: "durable"`, **`loaded: true`**, `granted_capabilities: ["userShell"]`, `model_id: "muse-spark-1.3-contributor"` |
-| `set_approval_mode` | posture reappliquée (`effectiveMode: allowAll`) |
-| `read_session_history` | **historique complet** relu (userMessage + assistant items, `turnId` par entrée) |
+| `set_approval_mode` | posture reapplied (`effectiveMode: allowAll`) |
+| `read_session_history` | **full history** read back (userMessage + assistant items, `turnId` per entry) |
 | `list_pending_requests` | `{approvals: [], userInputs: []}` |
-| `read_queue_snapshot`, `list_models`, `list_skills` | catalogue et skills réhydratés (`is_active: true` sur le modèle effectif) |
+| `read_queue_snapshot`, `list_models`, `list_skills` | catalogue and skills rehydrated (`is_active: true` on the effective model) |
 
-### 3. Conservation des messages ✓ + reprise d'exécution ✓
+### 3. Messages preserved ✓ + execution resumed ✓
 
-Le transcript d'avant la mort est conservé, l'historique est relu depuis le host relancé, et
-**la conversation accepte et exécute un nouveau tour** : « Reply with exactly the word:
-RESUMED » → réponse **RESUMED** reçue, sous-agents en `Running`.
+The transcript from before the death is preserved, the history is read back from the relaunched host, and
+**the conversation accepts and executes a new turn**: "Reply with exactly the word:
+RESUMED" → answer **RESUMED** received, sub-agents `Running`.
 
-## Ce que ça change pour la roadmap
+## What that changes for the roadmap
 
-- **M0-02 Windows : les 3 critères sont prouvés** — « reprise d'un tour réellement rejouée contre
-  un host durable », « conservation des messages » (enfin observée sur une exécution native),
-  « statut terminal honnête ».
-- L'entrée « M0-02 — reprise bloquée par le sidecar » des comptes rendus du 21/09 est
-  **périmée** : elle mesurait un host `--no-session-log` (mémoire seule), où la reprise est
-  structurellement impossible — voir [`session-log-expique-tout.md`](session-log-expique-tout.md).
-- macOS/Linux : aucun scénario de reprise exécuté (colonne inchangée).
+- **M0-02 Windows: all 3 criteria are proved** — "a turn's resume actually replayed against
+  a durable host", "messages preserved" (finally observed on a native run),
+  "honest terminal status".
+- The "M0-02 — resume blocked by the sidecar" entry in the 21/09 reports is
+  **out of date**: it measured a `--no-session-log` host (memory only), where resume is
+  structurally impossible — see [`session-log-expique-tout.md`](session-log-expique-tout.md).
+- macOS/Linux: no resume scenario run (column unchanged).
 
-## Reproductibilité
+## Reproducibility
 
 - Commit `362c8bb`, Windows 11 26200, WebView2, sidecar `muse-bin-1.3.0-R3401.1`.
-- Commandes : `taskkill /PID <host> /F` puis pilotage CDP (`scripts/cdp-drive.mjs`) :
-  clic Reconnect → trace `resume_session` → envoi « Reply with exactly the word: RESUMED ».
+- Commands: `taskkill /PID <host> /F` then CDP driving (`scripts/cdp-drive.mjs`):
+  click Reconnect → `resume_session` trace → send "Reply with exactly the word: RESUMED".
