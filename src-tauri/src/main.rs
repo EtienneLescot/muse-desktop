@@ -4092,7 +4092,9 @@ async fn start_session_at_workspace(
     ).await?;
     let mut params = json!({
         "commandId": new_command_id(),
-        "workspaceRoot": root.display().to_string(),
+        // The host runs the agent's shell there: PowerShell shows the canonical
+        // `\\?\G:\…` form verbatim and some tools refuse it.
+        "workspaceRoot": rules::display_path(&root),
     });
     if let Some(mode) = authorization_mode.as_deref() {
         let wire_mode = host_approval_mode(mode)
