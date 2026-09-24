@@ -1,83 +1,83 @@
-# Course UI sur la file — mesurée (M1-10, 20 septembre 2026)
+# UI race on the queue — measured (M1-10, 20 September 2026)
 
-Complète `M1-10-retrait-file.md`, qui ne couvrait qu'un retrait **séquentiel**. Le critère central du ticket — la **course** entre la file et son vidage — est mesuré ici.
+Completes `M1-10-retrait-file.md`, which only covered a **sequential** removal. The ticket's central criterion — the **race** between the queue and its emptying — is measured here.
 
-## Pourquoi une course demandait une autre méthode
+## Why a race needed another method
 
-Les passes précédentes pilotaient chaque action par une commande CDP séparée. Chaque aller-retour ajoute des dizaines de millisecondes, ce qui rend une fenêtre de course **impossible à viser**. Cette fois, la rafale de retraits est exécutée **dans le contexte de page**, en une seule évaluation, avec des clics espacés de 90 ms.
+The earlier passes drove each action through a separate CDP command. Every round trip adds tens of milliseconds, which makes a race window **impossible to aim at**. This time, the burst of removals runs **in the page context**, in a single evaluation, with clicks 90 ms apart.
 
-## Protocole — préconditions attendues, jamais supposées
+## Protocol — preconditions awaited, never assumed
 
 ```powershell
 node scripts/cdp-queue-race.mjs
 ```
 
-Trois préconditions, chacune **attendue** par sondage :
+Three preconditions, each **awaited** by polling:
 
-| Précondition | Résultat |
+| Precondition | Result |
 |---|---|
-| Composer vide et connecté | **OK** |
-| Premier tour réellement en cours (`working: true`) | **OK** |
-| Deux tours effectivement en file (`queuedRows >= 2`) | **OK** |
+| Composer empty and connected | **OK** |
+| First turn really running (`working: true`) | **OK** |
+| Two turns actually queued (`queuedRows >= 2`) | **OK** |
 
-C'est la correction directe du défaut qui avait fait échouer la passe précédente.
+That is the direct fix for the defect that made the previous pass fail.
 
-## Résultat
+## Result
 
-| Étape | File | Panneau | Boutons de retrait | `working` | Entrées de log |
+| Step | Queue | Panel | Removal buttons | `working` | Log entries |
 |---|---|---|---|---|---|
-| **two-queued** | **2** — `RACE-QUEUED-A-3311`, `RACE-QUEUED-B-7722` | oui | 2 | oui | 70 |
-| **after-race** | **0** | **non** | **0** | oui | 72 |
-| after-race-settled | 0 | non | 0 | oui | 72 |
-| later | 0 | non | 0 | oui | 72 |
+| **two-queued** | **2** — `RACE-QUEUED-A-3311`, `RACE-QUEUED-B-7722` | yes | 2 | yes | 70 |
+| **after-race** | **0** | **no** | **0** | yes | 72 |
+| after-race-settled | 0 | no | 0 | yes | 72 |
+| later | 0 | no | 0 | yes | 72 |
 
-Les deux entrées de file portent exactement les marqueurs attendus, dans l'ordre.
+Both queue entries carry exactly the expected markers, in order.
 
-### Le transcript confirme l'opération
+### The transcript confirms the operation
 
-Les dernières entrées du journal, dans l'ordre :
+The log's last entries, in order:
 
 ```
 user       RACE-QUEUED-B-7722 say BETA
-assistant  1 2 3 4 5 … 23            <- le PREMIER tour, qui continue
+assistant  1 2 3 4 5 … 23            <- the FIRST turn, still going
 system     Turn queued — it will start after the current…
-subagent   (vide)
+subagent   (empty)
 system     Queued turn removed.
 system     Queued turn removed.
 ```
 
-**Deux lignes « Queued turn removed. » à 111 ms d'intervalle** — le vidage de la file a bien été enregistré, entrée par entrée.
+**Two "Queued turn removed." lines 111 ms apart** — the queue emptying was indeed recorded, entry by entry.
 
-## Le point décisif : aucun tour retiré n'a démarré
+## The decisive point: no removed turn started
 
-| Mesure | Résultat |
+| Measurement | Result |
 |---|---|
-| Occurrences de `ALPHA` dans le journal | **0** |
-| Occurrences de `BETA` dans le journal | **0** |
-| Dernières réponses assistant | le comptage `1 2 3 … 23` du **premier** tour uniquement |
+| Occurrences of `ALPHA` in the log | **0** |
+| Occurrences of `BETA` in the log | **0** |
+| Last assistant answers | the **first** turn's counting `1 2 3 … 23` only |
 
-Les invites des deux tours retirés apparaissent comme entrées `user` (elles ont été saisies) mais **aucune réponse ne leur correspond**. Ils ont été retirés de la file **avant** de démarrer, et le premier tour a continué sans être affecté (`working` reste vrai à toutes les étapes).
+The two removed turns' prompts appear as `user` entries (they were typed) but **no answer corresponds to them**. They were removed from the queue **before** starting, and the first turn carried on unaffected (`working` stays true at every step).
 
-**Établi :** la séquence mettre-en-file → retirer tient la course. Le retrait supprime l'entrée du stockage, le panneau se retire, l'opération est tracée dans le transcript, et **les tours retirés ne s'exécutent pas**.
+**Established:** the queue → remove sequence holds the race. Removal deletes the entry from storage, the panel goes away, the operation is traced in the transcript, and **removed turns do not run**.
 
-## Limites et une anomalie non expliquée
+## Limits, and one unexplained anomaly
 
-- **Anomalie : trois lignes « Turn queued »** apparaissent alors que je n'ai saisi que **deux** messages de file. Le total des entrées de journal passe de 70 à 72 pendant la course, ce qui correspond aux deux lignes de retrait. Je **n'explique pas** la troisième ligne « Turn queued » : peut-être une réémission, peut-être un reliquat d'une passe antérieure. Non tranché.
-- **Mon objet `race` est revenu vide** (`{}`) : l'évaluation asynchrone n'a pas renvoyé son résultat exploitable. Les clics ont bien eu lieu — la file est passée de 2 à 0 et deux lignes de retrait existent — mais je **n'ai pas le compte exact** des clics effectués ni des boutons trouvés à chaque tentative.
-- **Une seule prise**, sans répétition : la course n'est pas éprouvée statistiquement.
-- **`turn/unqueue` n'est pas observé côté host** — je constate la conséquence locale et le tracé du transcript, pas l'accusé du host pour la commande d'annulation.
-- **Aucun cas d'échec provoqué** : je n'ai pas testé le comportement si le retrait échouait côté host.
-- La précondition « deux tours en file » a réussi, mais la passe précédente avait montré que mon script **poursuit après une précondition manquée** — ce défaut n'est pas corrigé ici.
+- **Anomaly: three "Turn queued" lines** appear although I typed only **two** queued messages. The log's total entries go from 70 to 72 during the race, which matches the two removal lines. I **do not explain** the third "Turn queued" line: maybe a re-emission, maybe a leftover from an earlier pass. Unsettled.
+- **My `race` object came back empty** (`{}`): the asynchronous evaluation did not return a usable result. The clicks did happen — the queue went from 2 to 0 and two removal lines exist — but I **do not have the exact count** of clicks made nor of buttons found at each attempt.
+- **A single take**, with no repetition: the race is not tested statistically.
+- **`turn/unqueue` is not observed on the host side** — I see the local consequence and the transcript trace, not the host's acknowledgement of the cancellation command.
+- **No failure case provoked**: I did not test the behaviour if the removal failed on the host side.
+- The "two turns queued" precondition passed, but the previous pass had shown my script **continues after a failed precondition** — that defect is not fixed here.
 
-## État de M1-10
+## State of M1-10
 
-| Élément | État |
+| Element | State |
 |---|---|
-| Admission en file, `disposition: queued` persistée | mesuré |
-| Panneau **Queued messages** ordonné, action d'enlèvement | mesuré |
-| État **`Stopping…`** puis bandeau d'attente du host | mesuré |
-| File vidée après un Stop | mesuré |
-| Retrait séquentiel d'une entrée | mesuré |
-| **Course : retirer pendant que le tour précédent tourne** | **mesuré — les tours retirés ne démarrent pas** |
+| Queue admission, `disposition: queued` persisted | measured |
+| **Queued messages** panel ordered, removal action | measured |
+| **`Stopping…`** state then the host-wait banner | measured |
+| Queue emptied after a Stop | measured |
+| Sequential removal of an entry | measured |
+| **Race: removing while the previous turn runs** | **measured — removed turns do not start** |
 
-Ce que le ticket appelle « la course UI » est désormais exercé. **M1-10 n'est pas déclaré clos** pour autant : l'anomalie des trois lignes de file n'est pas expliquée, le compte exact des clics manque, et l'accusé du host n'est pas observé.
+What the ticket calls "the UI race" is now exercised. **M1-10 is not declared closed** for all that: the three-queue-lines anomaly is not explained, the exact click count is missing, and the host's acknowledgement is not observed.
