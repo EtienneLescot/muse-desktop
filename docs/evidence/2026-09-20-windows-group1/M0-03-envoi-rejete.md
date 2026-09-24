@@ -1,57 +1,57 @@
-# Envoi rejeté avec host vivant — prouvé (M0-03, 20 septembre 2026)
+# Rejected send with a live host — proved (M0-03, 20 September 2026)
 
-Remplace `M0-03-envoi-rejete-inabouti.md`. Le critère qui manquait à M0-03 est désormais couvert, avec une cause de rejet **déterministe**.
+Replaces `M0-03-envoi-rejete-inabouti.md`. The criterion M0-03 was missing is now covered, with a **deterministic** rejection cause.
 
-## Pourquoi les tentatives précédentes échouaient
+## Why the previous attempts failed
 
-Deux raisons, les deux corrigées ici :
+Two reasons, both fixed here:
 
-1. **Aucune cause de rejet provoquée.** Les essais précédents tuaient le host *pendant* l'envoi : la soumission était **acceptée** avant la mort, ce qui teste la survie à une panne, pas un rejet.
-2. **Identité de conversation non vérifiée.** Un essai mesurait l'état d'une conversation différente de celle où le texte avait été saisi, produisant un résultat ininterprétable.
+1. **No rejection cause provoked.** The earlier attempts killed the host *during* the send: the submission was **accepted** before the death, which tests survival of a crash, not a rejection.
+2. **Conversation identity unverified.** One attempt measured the state of a different conversation from the one where the text had been typed, producing an uninterpretable result.
 
-## La cause de rejet retenue
+## The rejection cause chosen
 
-Une **commande de skill inconnue**. Le pipeline d'envoi valide les skills **avant** d'atteindre le harness et retourne `unknown skill /<nom>` (`src/hooks/useMuseSessions.ts`, appel `sendFailed` lorsque la skill est introuvable). Aucun comportement du host n'est en jeu : le résultat est **reproductible à volonté**.
+An **unknown skill command**. The send pipeline validates skills **before** reaching the harness and returns `unknown skill /<name>` (`src/hooks/useMuseSessions.ts`, `sendFailed` call when the skill is not found). No host behaviour is involved: the result is **reproducible at will**.
 
 ```powershell
 node scripts/cdp-unknown-skill-reject.mjs
 ```
 
-## Résultat
+## Result
 
-L'identité de la conversation est relevée à **chaque** étape — `activeId` et titre affiché.
+The conversation's identity is recorded at **every** step — `activeId` and displayed title.
 
-| Étape | `activeId` | Titre | Composer | Copie d'échec visible |
+| Step | `activeId` | Title | Composer | Failure copy visible |
 |---|---|---|---|---|
-| opened | `01a0bea1-…` | *Enumerate the three Musketeers…* | vide | non |
-| typed | **identique** | **identique** | `/definitelynotaskill this command names a skill that does not exist` | non |
-| **submitted** | **identique** | **identique** | **texte conservé** | **oui** |
-| after-10s | identique | identique | **texte conservé** | oui |
+| opened | `01a0bea1-…` | *Enumerate the three Musketeers…* | empty | no |
+| typed | **identical** | **identical** | `/definitelynotaskill this command names a skill that does not exist` | no |
+| **submitted** | **identical** | **identical** | **text preserved** | **yes** |
+| after-10s | identical | identical | **text preserved** | yes |
 
-Extrait du corps de page après soumission : `…own skill /definitelynotaskill`. Le message d'erreur est **en anglais, borné, sans préfixe de protocole**.
+Excerpt from the page body after submission: `…own skill /definitelynotaskill`. The error message is **in English, bounded, with no protocol prefix**.
 
-**Établi — c'est le critère de M0-03 :**
+**Established — this is M0-03's criterion:**
 
-- le texte **reste dans le composer** après un rejet, il n'est **pas** vidé ;
-- **aucune entrée n'est créée dans l'outbox** (`outboxRows: 0`) — cohérent : un rejet local n'est pas un envoi en attente, il ne doit donc pas produire d'entrée « à réessayer » ;
-- **aucune affordance `Retry` / `Discard` / `Resend` n'apparaît**, ce qui est cohérent avec l'absence d'entrée d'outbox : le texte est simplement toujours là, prêt à être corrigé ;
-- l'erreur est **visible** et **explique la cause** (« unknown skill /definitelynotaskill ») ;
-- la conversation n'est **pas** quittée, le compositeur reste **actif** (`disabled: false`) — l'utilisateur peut corriger et renvoyer.
+- the text **stays in the composer** after a rejection, it is **not** cleared;
+- **no entry is created in the outbox** (`outboxRows: 0`) — consistent: a local rejection is not a pending send, so it must not produce a "to retry" entry;
+- **no `Retry` / `Discard` / `Resend` affordance appears**, which is consistent with the absence of an outbox entry: the text is simply still there, ready to be corrected;
+- the error is **visible** and **explains the cause** ("unknown skill /definitelynotaskill");
+- the conversation is **not** left, the composer stays **active** (`disabled: false`) — the user can correct and resend.
 
-C'est le comportement attendu : **le travail de l'utilisateur n'est jamais perdu**, et l'application ne prétend pas avoir envoyé.
+That is the expected behaviour: **the user's work is never lost**, and the application does not claim to have sent.
 
-## Distinction utile pour M0-03
+## A useful distinction for M0-03
 
-Le ticket distingue deux situations, et les deux sont maintenant documentées :
+The ticket separates two situations, and both are now documented:
 
-| Situation | Comportement observé | Preuve |
+| Situation | Behaviour observed | Evidence |
 |---|---|---|
-| **Rejet** (le host est vivant, l'envoi est refusé) | texte conservé dans le composer, erreur explicite, pas d'entrée d'outbox | **ce document** |
-| **Panne en cours d'envoi** (le host meurt) | envoi accepté puis interrompu ; texte déjà vidé, journal conservé | `README.md` de la campagne groupe 1 |
-| **Aucun host** (envoi impossible) | texte conservé, envoi non tenté, hint inchangé | `README.md` de la campagne groupe 1 |
+| **Rejection** (the host is alive, the send is refused) | text kept in the composer, explicit error, no outbox entry | **this document** |
+| **Crash mid-send** (the host dies) | send accepted then interrupted; text already cleared, log preserved | group 1 campaign `README.md` |
+| **No host** (sending impossible) | text kept, send not attempted, hint unchanged | group 1 campaign `README.md` |
 
-## Ce qui reste ouvert pour M0-03
+## What stays open for M0-03
 
-Le ticket liste aussi : **double-clic**, **IME**, **fermeture/rechargement**. Aucun des trois n'est exercé ici. Le double-clic est le plus accessible — il suffirait de soumettre deux fois rapidement et de vérifier qu'un seul tour est admis.
+The ticket also lists: **double-click**, **IME**, **close/reload**. None of the three is exercised here. The double-click is the most accessible — it would be enough to submit twice quickly and check that a single turn is admitted.
 
-**M0-03 n'est donc pas clos**, mais son critère central — « ne perdre aucun texte lors d'un envoi rejeté » — est désormais **prouvé par une reproduction déterministe**.
+**M0-03 is therefore not closed**, but its central criterion — "lose no text on a rejected send" — is now **proved by a deterministic reproduction**.
