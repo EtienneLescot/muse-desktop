@@ -1,69 +1,69 @@
-# `--no-session-log` explique tout — fin des deux mystères du harness (27 septembre 2026)
+# `--no-session-log` explains everything — the end of the harness's two mysteries (27 September 2026)
 
-**Ce document résout les deux énigmes laissées ouvertes par la campagne du 20 septembre** :
-le faux négatif de `native-smoke.mjs --exercise-control --exercise-terminal`
-([`harness-faux-negatif.md`](../2026-09-20-windows-sessions/harness-faux-negatif.md), « je
-n'explique pas ») et la durabilité « variable » du host
-([`durabilite-a-change.md`](../2026-09-20-windows-sessions/durabilite-a-change.md), « je
-n'explique pas le changement »). **Une seule cause, mesurée** : le drapeau `--no-session-log`
-de `muse serve`.
+**This document solves the two puzzles left open by the 20 September campaign**:
+the `native-smoke.mjs --exercise-control --exercise-terminal` false negative
+([`harness-faux-negatif.md`](../2026-09-20-windows-sessions/harness-faux-negatif.md), "I
+cannot explain it") and the host's "variable" durability
+([`durabilite-a-change.md`](../2026-09-20-windows-sessions/durabilite-a-change.md), "I
+cannot explain the change"). **A single cause, measured**: the `muse serve`
+`--no-session-log` flag.
 
-## La cause, en une phrase
+## The cause, in one sentence
 
-`muse serve --help` : `--no-session-log` = **« Use memory-only sessions »**. Ce n'est pas un
-simple choix de stockage : un host en mémoire seule répond `sessionDurability: "ephemeral"`
-**et n'admet jamais de tours qui se matérialisent** — `turn/start` répond `accepted`, puis
-la seule notification est `session/started`, sans `turn/started`, sans items, sans terminal.
+`muse serve --help`: `--no-session-log` = **"Use memory-only sessions"**. It is not a
+mere storage choice: a memory-only host answers `sessionDurability: "ephemeral"`
+**and never admits turns that materialise** — `turn/start` answers `accepted`, then
+the only notification is `session/started`, with no `turn/started`, no items, no terminal.
 
-`native-smoke.mjs` lançait **tous** ses hosts avec `--no-session-log`. Les sondes `msp-*.mjs`,
-elles, ne l'utilisent pas. D'où les mesures contradictoires sur la même machine, le même jour.
+`native-smoke.mjs` launched **all** its hosts with `--no-session-log`. The `msp-*.mjs` probes,
+for their part, do not use it. Hence the contradictory measurements on the same machine, the same day.
 
-## La mesure : `scripts/msp-session-log-effect.mjs`
+## The measurement: `scripts/msp-session-log-effect.mjs`
 
-Une sonde, deux hosts, identiques sauf le drapeau, même séquence exacte que le chemin de
-contrôle du smoke (`turn/start` → `turn/interrupt` immédiat, observation de 20 s) :
+One probe, two hosts, identical except for the flag, the exact same sequence as the smoke's
+control path (`turn/start` → immediate `turn/interrupt`, 20 s of observation):
 
-| Mesure | logging (défaut) | `--no-session-log` |
+| Measurement | logging (default) | `--no-session-log` |
 |---|---|---|
 | `sessionDurability` | **`durable`** | **`ephemeral`** |
 | `turn/start` | `accepted` | `accepted` |
-| `turn/started` | **oui** | **jamais** |
-| Notifications | `session/started`, `session/branchChanged`, `session/statusChanged`, `turn/started`, `item/completed`, `session/statusChanged`, **`turn/completed`** | `session/started` — et rien d'autre |
-| Terminal après interruption | **`turn/completed`** | **aucun** |
+| `turn/started` | **yes** | **never** |
+| Notifications | `session/started`, `session/branchChanged`, `session/statusChanged`, `turn/started`, `item/completed`, `session/statusChanged`, **`turn/completed`** | `session/started` — and nothing else |
+| Terminal after an interrupt | **`turn/completed`** | **none** |
 
 ```json
 "verdict": { "durabilityExplained": true, "controlPathExplained": true }
 ```
 
-**Les deux énigmes ont la même cause, et elle est prouvée par bifurcation d'un seul drapeau.**
+**Both puzzles have the same cause, and it is proved by forking a single flag.**
 
-## Ce que ça répare dans le récit de la campagne du 20/09
+## What that repairs in the 20/09 campaign's account
 
-| Mystère | Explication |
+| Mystery | Explanation |
 |---|---|
-| « `sessionDurability` varie : `ephemeral` puis `durable` » | **Ne varie pas** : le smoke (mémoire seule) mesurait `ephemeral`, les autres sondes (journalisées) `durable`. |
-| « Le smoke ne reçoit que `session/started`, le tour ne démarre jamais » | **C'est le mode mémoire seule** : le tour admis ne se matérialise pas dans ce mode. Le host n'est pas fautif. |
-| « `turn/start` accepté mais `missing_run` » (rapport msp-probe) | Même cause. |
-| Les rapports `sessionRead: unsupported`, `reconnect: sessionNotFound` du smoke | Même cause : sans journal de session, rien n'est persisté donc rien n'est relisible. |
+| "`sessionDurability` varies: `ephemeral` then `durable`" | **It does not vary**: the smoke (memory only) measured `ephemeral`, the other probes (logged) `durable`. |
+| "The smoke receives only `session/started`, the turn never starts" | **That is memory-only mode**: the admitted turn does not materialise in that mode. The host is not at fault. |
+| "`turn/start` accepted but `missing_run`" (msp-probe report) | Same cause. |
+| The smoke's `sessionRead: unsupported`, `reconnect: sessionNotFound` reports | Same cause: with no session log, nothing is persisted, so nothing can be read back. |
 
-**Conséquence méthodologique importante :** tout constat du smoke mesuré sur le chemin des
-tours (`--exercise-control`, `--exercise-terminal`, `--exercise-model`, `--exercise-compaction`,
-`--exercise-queue`) provient de ce mode dégénéré et doit être **remesuré sur un host
-journalisé** avant d'être cité. Les constats purement contractuels (formes de paramètres,
-catalogue, refus) restent valables.
+**An important methodological consequence:** every smoke finding measured on the turn
+path (`--exercise-control`, `--exercise-terminal`, `--exercise-model`, `--exercise-compaction`,
+`--exercise-queue`) comes from this degenerate mode and must be **re-measured on a
+logged host** before being cited. Purely contractual findings (parameter shapes,
+catalogue, refusals) stay valid.
 
-## Le correctif du harness, et sa vérification
+## The harness fix, and its verification
 
-`scripts/native-smoke.mjs` lance désormais les hosts **en mode journalisé par défaut** ;
-l'ancien comportement reste disponible avec `--memory-only-sessions`.
+`scripts/native-smoke.mjs` now launches hosts **in logged mode by default**;
+the old behaviour stays available with `--memory-only-sessions`.
 
-Avant (20/09, et encore ce matin) :
+Before (20/09, and again this morning):
 
 ```json
 "controls": [{ "host": "A", "status": "interrupted", "terminalNotification": "unsupported" }]
 ```
 
-Après le correctif :
+After the fix:
 
 ```powershell
 node scripts/native-smoke.mjs --exercise-control --exercise-terminal
@@ -76,39 +76,39 @@ node scripts/native-smoke.mjs --exercise-control --exercise-terminal
 ]
 ```
 
-**Les deux hosts, en parallèle, avec le bon `turnId`** : c'est le scénario exact qui échouait
-depuis le début de la campagne. Il passe. Le `terminalMethod` attendu est `turn/completed`
-sur les deux, `sessionDurability: "durable"`.
+**Both hosts, in parallel, with the right `turnId`**: this is the exact scenario that had been failing
+since the start of the campaign. It passes. The expected `terminalMethod` is `turn/completed`
+on both, `sessionDurability: "durable"`.
 
-## Effet de bord assumé du correctif
+## A side effect of the fix, accepted
 
-Les hosts journalisés **persisttent** les sessions de test dans
-`%USERPROFILE%\.local\share\muse\sessions\`. Le smoke n'est lancé qu'en opt-in sur un poste
-de développement (jamais en CI), et ses prompts sont triviaux. C'est le prix de mesurer le
-vrai comportement : l'ancien défaut du smoke était précisément de mesurer un host amputé.
-Le nettoyage reste manuel et délibéré (cf. [`stockage-des-sessions.md`](../2026-09-20-windows-sessions/stockage-des-sessions.md)).
+Logged hosts **persist** the test sessions in
+`%USERPROFILE%\.local\share\muse\sessions\`. The smoke is only run opt-in on a development
+machine (never in CI), and its prompts are trivial. That is the price of measuring the
+real behaviour: the smoke's old defect was precisely to measure a crippled host.
+Cleanup stays manual and deliberate (see [`stockage-des-sessions.md`](../2026-09-20-windows-sessions/stockage-des-sessions.md)).
 
-## Ce qui est désormais établi (contrat host, remesuré le 27/09/2026)
+## What is now established (the host contract, re-measured on 27/09/2026)
 
-Les sondes dédiées ont été réexécutées ce jour sur le binaire `muse-bin-1.3.0-R3401.1` :
+The dedicated probes were re-run today on the `muse-bin-1.3.0-R3401.1` binary:
 
-| Fait | Mesure du jour | Sonde |
+| Fact | Today's measurement | Probe |
 |---|---|---|
-| Reprise d'une session persistée libre | **`session/resume` succès**, `session/read` → `history`, `pendingRequests`, `session`, `viewCursor` | `msp-resume-free-session.mjs` |
-| Terminal après interruption | **`turn/completed` à +36 ms**, bon `turnId`, `terminal`, `reason`, `durationMs` | `msp-interrupt-notifications.mjs` |
-| `session/userShell` | items `userShell` publiés (`item/started` + `item/completed`), **sortie incluse** (marqueur restitué) | `msp-user-shell-items.mjs` |
-| userShell après reprise | fonctionne après `session/resume` — le `sessionNotLoaded` du desktop vient du host qui n'a pas la session en mémoire | `msp-user-shell-after-resume.mjs` |
-| Projections modèle/effort | `session/setModel` visible sur la session relue ; `session/modelChanged` et `session/reasoningEffortChanged` émis | `msp-projection-check.mjs` |
-| Modes d'approbation | `onRequest`, `allowAll`, `promptUnmatched` acceptés et projetés (`session/approvalModeChanged`) | `msp-approval-mode-check.mjs` |
+| Resuming a free, persisted session | **`session/resume` succeeds**, `session/read` → `history`, `pendingRequests`, `session`, `viewCursor` | `msp-resume-free-session.mjs` |
+| Terminal after an interrupt | **`turn/completed` at +36 ms**, right `turnId`, `terminal`, `reason`, `durationMs` | `msp-interrupt-notifications.mjs` |
+| `session/userShell` | `userShell` items published (`item/started` + `item/completed`), **output included** (marker returned) | `msp-user-shell-items.mjs` |
+| userShell after a resume | works after `session/resume` — the desktop's `sessionNotLoaded` comes from the host not holding the session in memory | `msp-user-shell-after-resume.mjs` |
+| Model/effort projections | `session/setModel` visible on the session read back; `session/modelChanged` and `session/reasoningEffortChanged` emitted | `msp-projection-check.mjs` |
+| Approval modes | `onRequest`, `allowAll`, `promptUnmatched` accepted and projected (`session/approvalModeChanged`) | `msp-approval-mode-check.mjs` |
 
-Aucun écart de contrat sidecar n'est établi. **Tout ce qui reste est client ou méthode.**
+No sidecar contract gap is established. **Everything left is client or method.**
 
-## Reproductibilité
+## Reproducibility
 
 ```powershell
-# La mesure de la cause (deux hosts, un seul drapeau de différence)
+# Measuring the cause (two hosts, a single flag of difference)
 node scripts/msp-session-log-effect.mjs
 
-# La preuve que le correctif fait passer le scénario qui échouait
+# Proof that the fix makes the failing scenario pass
 node scripts/native-smoke.mjs --exercise-control --exercise-terminal
 ```
