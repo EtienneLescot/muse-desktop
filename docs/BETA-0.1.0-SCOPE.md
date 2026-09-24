@@ -1,83 +1,83 @@
-# Périmètre de la beta 0.1.0 — Windows
+# Scope of the 0.1.0 beta — Windows
 
-**Objectif :** une beta **convergente**. On ne livre pas ce qui est prêt, on livre ce qui est **nécessaire**, et tout le reste est explicitement dehors.
+**Goal:** a **convergent** beta. We do not ship what is ready, we ship what is **necessary**, and everything else is explicitly out.
 
-Un périmètre se définit par ses exclusions. Ce document liste donc **ce qui est dedans**, mesuré, et **ce qui est dehors**, avec la raison.
+A scope is defined by its exclusions. This document therefore lists **what is in**, measured, and **what is out**, with the reason.
 
-## Le critère d'entrée : le parcours minimum, vérifié
+## The entry criterion: the minimum path, verified
 
-`scripts/beta-smoke.mjs`, exécuté sur la version de développement :
+`scripts/beta-smoke.mjs`, run against the development build:
 
-| Étape | Résultat |
+| Step | Result |
 |---|---|
-| Créer une conversation | **OK** |
-| Composer utilisable | **OK** |
-| Envoi accepté (composer vidé) | **OK** |
-| Tour en cours | **OK** |
-| **Réponse du modèle reçue** | **OK** |
-| Tour terminé | **OK** |
-| Aucune erreur affichée | **OK** |
+| Create a conversation | **OK** |
+| Composer usable | **OK** |
+| Send accepted (composer cleared) | **OK** |
+| Turn in progress | **OK** |
+| **Model answer received** | **OK** |
+| Turn finished | **OK** |
+| No error displayed | **OK** |
 
-Et la persistance, après **arrêt complet de l'application et des hosts**, puis relance :
+And persistence, after a **full shutdown of the application and its hosts**, then a relaunch:
 
-| Mesure | Résultat |
+| Measurement | Result |
 |---|---|
-| Conversations stockées | **2** — conservées |
-| Conversation active | conservée |
-| Projets | `openscreen`, `muse-desktop` — conservés |
-| **Réponse du modèle dans le journal** | **conservée** (2 entrées avec le marqueur) |
-| Compteur affiché | **2** |
+| Stored conversations | **2** — kept |
+| Active conversation | kept |
+| Projects | `openscreen`, `muse-desktop` — kept |
+| **Model answer in the log** | **kept** (2 entries with the marker) |
+| Displayed counter | **2** |
 
-**Le parcours qu'un utilisateur fera en premier fonctionne, et son travail survit à un redémarrage.**
+**The path a user will take first works, and their work survives a restart.**
 
-## Dans la beta
+## In the beta
 
-| # | Élément | Statut |
+| # | Item | Status |
 |---|---|---|
-| 1 | Lancer l'application, créer une conversation, envoyer un message, recevoir une réponse | **vérifié** |
-| 2 | Retrouver ses conversations et ses projets après un redémarrage | **vérifié** |
-| 3 | Installer, mettre à jour et désinstaller **sans perdre ses projets** | **vérifié** (`M4-09`) |
-| 4 | Webview sécurisée (contexte isolé, pas de Node exposé) | vérifié |
-| 5 | Interface en anglais, navigation au clavier fonctionnelle | vérifié (`M0-11`, `M0-12`) |
-| 6 | Transcript utilisable sur un long historique (fenêtre bornée, finder) | vérifié (`M1-13`) |
-| 7 | Installateur NSIS Windows x64 | construit, `NotSigned` |
-| 8 | Notes de version 0.1.0 | à écrire |
+| 1 | Launch the app, create a conversation, send a message, get an answer | **verified** |
+| 2 | Find conversations and projects again after a restart | **verified** |
+| 3 | Install, update and uninstall **without losing projects** | **verified** (`M4-09`) |
+| 4 | Secure webview (isolated context, no Node exposed) | verified |
+| 5 | English interface, working keyboard navigation | verified (`M0-11`, `M0-12`) |
+| 6 | Transcript usable over a long history (bounded window, finder) | verified (`M1-13`) |
+| 7 | Windows x64 NSIS installer | built, `NotSigned` |
+| 8 | 0.1.0 release notes | to write |
 
-## Exclu de la beta, avec la raison
+## Out of the beta, with the reason
 
-| Élément | Pourquoi c'est dehors |
+| Item | Why it is out |
 |---|---|
-| **Signature Authenticode** | demande un certificat et une décision d'achat. L'installateur affichera un avertissement SmartScreen. **Documenté dans les notes de version**, pas caché. |
-| **Mise à jour automatique en ligne** | demande un hébergement qui n'existe pas. La **mise à jour par installateur** est vérifiée et suffit pour une beta. |
-| **macOS et Linux** | aucun bundle construit, aucune preuve. Hors sujet pour une beta Windows. |
-| **Qualification par lecteur d'écran** | je ne peux pas piloter un lecteur d'écran. Le balisage est vérifié (`M0-12`), l'annonce réelle ne l'est pas. |
-| **Le site du navigateur intégré** (recadrage de région, capture visuelle) | la navigation et les annotations fonctionnent ; les deux fonctions manquantes ne bloquent pas le parcours principal. |
-| **Les quatre chantiers client** du plan du 20/09 | aucun défaut n'a été **reproduit**. Les écrire maintenant serait deviner — l'erreur que cette campagne a corrigée sept fois. Ils restent planifiés, pas dans la beta. |
-| **Affichage de la sortie `userShell` dans le transcript** | le host **publie bien** l'item et sa sortie (mesuré le 21/09 : `item/started` + `item/completed` de type `userShell`, marqueur restitué) ; c'est **le client** qui ne la rend pas dans le fil. Le repli existe (insérer la sortie dans le prompt). Gênant, pas bloquant. |
-| **Confirmation visuelle du modèle et de l'effort** | le client affiche le modèle demandé, marqué comme non live. Honnête, imparfait, non bloquant. |
-| **`M0-01`, `M0-14`, `M1-10` — critères non couverts** | ce sont des critères de robustesse sur des cas limites. Une beta n'a pas à les couvrir tous, et les documents de preuves disent lesquels. |
+| **Authenticode signing** | needs a certificate and a purchase decision. The installer will show a SmartScreen warning. **Documented in the release notes**, not hidden. |
+| **Online automatic updates** | needs hosting that does not exist. **Updating through the installer** is verified and is enough for a beta. |
+| **macOS and Linux** | no bundle built, no evidence. Out of scope for a Windows beta. |
+| **Screen-reader qualification** | I cannot drive a screen reader. The markup is verified (`M0-12`), the actual announcement is not. |
+| **The built-in browser's remaining surface** (region cropping, visual capture) | navigation and annotations work; the two missing functions do not block the main path. |
+| **The four client workstreams** from the 20/09 plan | no defect was **reproduced**. Writing them now would be guessing — the mistake this campaign corrected seven times. They stay planned, not in the beta. |
+| **Showing `userShell` output in the transcript** | the host **does publish** the item and its output (measured 21/09: `item/started` + `item/completed` of kind `userShell`, marker returned); it is **the client** that does not render it in the thread. A fallback exists (insert the output into the prompt). Annoying, not blocking. |
+| **Visual confirmation of model and effort** | the client shows the requested model, marked as not live. Honest, imperfect, not blocking. |
+| **`M0-01`, `M0-14`, `M1-10` — uncovered criteria** | these are robustness criteria on edge cases. A beta does not have to cover them all, and the evidence documents say which ones. |
 
-## Ce qui doit encore être fait pour livrer
+## What still has to be done to ship
 
-1. **Vérifier le paquet installé** — lancer l'application **installée** (pas la version de développement) et refaire le parcours minimum sur le paquet NSIS. C'est la différence entre « ça marche chez moi en dev » et « ça marche pour un utilisateur ».
-2. **Notes de version** — ce qui marche, ce qui ne marche pas, l'avertissement SmartScreen, la configuration requise (Muse Code installé).
-3. **Tag et version** — `v0.1.0-beta.1`, cohérent entre `package.json`, `tauri.conf.json` et le nom de l'installateur.
-4. **Nettoyer les conversations de test** avant livraison, pour que l'application ne s'ouvre pas sur des résidus.
+1. **Verify the installed package** — launch the **installed** application (not the development build) and replay the minimum path on the NSIS package. That is the difference between "it works on my machine in dev" and "it works for a user".
+2. **Release notes** — what works, what does not, the SmartScreen warning, the requirements (Muse Code installed).
+3. **Tag and version** — `v0.1.0-beta.1`, consistent across `package.json`, `tauri.conf.json` and the installer name.
+4. **Clean up the test conversations** before shipping, so the app does not open on leftovers.
 
-## Ce qui **n'est pas** un critère de sortie
+## What is **not** an exit criterion
 
-- Aucun ticket du groupe 1 n'a besoin d'être **clos**. La beta se juge sur le parcours utilisateur, pas sur une matrice.
-- Aucune preuve macOS ou Linux.
-- Aucune revue CodeRabbit : elle a été rate-limited pendant toute la campagne, et je n'en fais pas une dépendance.
+- No group 1 ticket needs to be **closed**. The beta is judged on the user path, not on a matrix.
+- No macOS or Linux evidence.
+- No CodeRabbit review: it was rate-limited throughout the campaign, and I am not making it a dependency.
 
-## Le risque principal, et il est assumé
+## The main risk, knowingly accepted
 
-**L'application n'est pas signée.** Windows affichera un avertissement SmartScreen au premier lancement. C'est le propre d'une beta, mais cela doit être **écrit dans les notes de version** — un utilisateur qui découvre l'avertissement sans explication conclura à un logiciel douteux.
+**The application is not signed.** Windows will show a SmartScreen warning on first launch. That is normal for a beta, but it has to be **written in the release notes** — a user who meets the warning with no explanation will conclude the software is dubious.
 
-## Ce que la beta ne prétend pas être
+## What the beta does not claim to be
 
-- Ce n'est pas une version stable : la reprise après plantage d'un host n'est pas garantie dans tous les cas.
-- Ce n'est pas une version complète : plusieurs fonctions de l'interface existent sans être qualifiées.
-- Ce n'est pas une version signée.
+- Not a stable version: recovery after a host crash is not guaranteed in every case.
+- Not a complete version: several interface functions exist without being qualified.
+- Not a signed version.
 
-**Une beta sert à recueillir des retours sur un parcours réel.** Ce périmètre est choisi pour que ce parcours soit solide, et pour que le reste soit **dit** plutôt que découvert.
+**A beta exists to collect feedback on a real path.** This scope is chosen so that path is solid, and so the rest is **stated** rather than discovered.
