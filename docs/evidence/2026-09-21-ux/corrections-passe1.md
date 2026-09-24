@@ -1,28 +1,28 @@
-# Passe UX/UI n° 1 — corrections et échecs (21 septembre 2026)
+# UX/UI pass no. 1 — fixes and failures (21 September 2026)
 
-Complète [`constats-passe1.md`](constats-passe1.md). Ce document liste ce qui a été **corrigé et vérifié**, et ce qui a été **tenté puis retiré** — la seconde liste compte autant que la première.
+Completes [`constats-passe1.md`](constats-passe1.md). This document lists what was **fixed and verified**, and what was **attempted then withdrawn** — the second list counts as much as the first.
 
-## Corrigé, avec vérification
+## Fixed, with verification
 
-| # | Défaut | Correctif | Vérification |
+| # | Defect | Fix | Verification |
 |---|---|---|---|
-| 1 | **Le libellé du modèle se coupait sur deux lignes** dans le composeur (`muse-spark-1.3-contributor` dans un bouton de 168×48 px) | `white-space: nowrap` + ellipsis à 22ch | 1 ligne, bouton 64×32 px |
-| 2 | **Le thème clair violait WCAG AA** : `--muted` à `#78828a` donnait **3,62:1** sur la sidebar et **3,92:1** sur blanc, pour 4,5 requis — toute la navigation, les libellés de section, la barre de statut, les métadonnées | `--muted: #6a7279`, valeur **calculée** (la plus petite qui passe sur les deux fonds : 4,52 et 4,89) | **0 texte sous le seuil**, deux thèmes — et **verrouillé par 7 tests** (`test/paletteContrast.test.ts`) dont l'efficacité est prouvée par mutation |
-| 3 | **La modale de recherche survivait à la navigation** : après Automations/Extensions/Library, `dialog.task-search` **masquait le titre de la vue** (mesuré : `elementFromPoint` sur le `h1` renvoyait `DIALOG.task-search`) | `openPage` ferme désormais `searchOpen` — il fermait déjà `settingsOpen`, l'asymétrie était d'une ligne (`App.tsx:363`) | après navigation : `modales: []`, `dessusDuTitre: "H1."` |
-| 4 | **`outil` en français** dans le résumé du panneau (`2 subagent, 0 outil, 0 system`) | `tool` (`ArtifactsPane.tsx:116`) | garde `ui-copy.test.ts` étendu à ce fichier ; mutation → échec nommant `} outil` |
-| 5 | **Débordement horizontal du panneau Terminal** (+121 px) : `.terminal-toolbar` avait 411 px pour 548 px de contenu, car `.terminal-actions` est `flex-shrink: 0` et le bloc libellé ne pouvait pas rétrécir (`min-width: auto`) | `min-width: 0` sur le bloc libellé (`Desktop.css`) | **0 débordement** sur Terminal |
+| 1 | **The model label wrapped onto two lines** in the composer (`muse-spark-1.3-contributor` in a 168×48 px button) | `white-space: nowrap` + ellipsis at 22ch | 1 line, button 64×32 px |
+| 2 | **The light theme violated WCAG AA**: `--muted` at `#78828a` gave **3.62:1** on the sidebar and **3.92:1** on white, against the 4.5 required — all navigation, section labels, the status bar, metadata | `--muted: #6a7279`, a **computed** value (the smallest that passes on both backgrounds: 4.52 and 4.89) | **0 texts below the threshold**, both themes — and **locked by 7 tests** (`test/paletteContrast.test.ts`) whose effectiveness is proved by mutation |
+| 3 | **The search modal survived navigation**: after Automations/Extensions/Library, `dialog.task-search` **hid the view's title** (measured: `elementFromPoint` on the `h1` returned `DIALOG.task-search`) | `openPage` now closes `searchOpen` — it already closed `settingsOpen`, the asymmetry was one line (`App.tsx:363`) | after navigation: `modals: []`, `onTopOfTitle: "H1."` |
+| 4 | **`outil` in French** in the panel summary (`2 subagent, 0 outil, 0 system`) | `tool` (`ArtifactsPane.tsx:116`) | the `ui-copy.test.ts` guard extended to that file; mutation → a failure naming `} outil` |
+| 5 | **Horizontal overflow of the Terminal panel** (+121 px): `.terminal-toolbar` had 411 px for 548 px of content, because `.terminal-actions` is `flex-shrink: 0` and the label block could not shrink (`min-width: auto`) | `min-width: 0` on the label block (`Desktop.css`) | **0 overflow** on Terminal |
 
-## Tenté, mesuré, retiré
+## Attempted, measured, withdrawn
 
-### La grille du panneau Desktop
+### The Desktop panel's grid
 
-**Hypothèse :** `.desktop-control-layout` déclarait `minmax(180px, .8fr) minmax(240px, 1.2fr)` avec `gap: 14px` — soit un **plancher de 434 px** pour un corps de panneau d'environ 405 px. La grille ne pouvait donc pas tenir, et ses six descendants rapportaient `scrollWidth > clientWidth`.
+**Hypothesis:** `.desktop-control-layout` declared `minmax(180px, .8fr) minmax(240px, 1.2fr)` with `gap: 14px` — a **floor of 434 px** for a panel body of about 405 px. The grid could therefore not fit, and its six descendants reported `scrollWidth > clientWidth`.
 
-**Correction appliquée :** planchers abaissés à `minmax(120px, .8fr) minmax(160px, 1.2fr)`.
+**Fix applied:** floors lowered to `minmax(120px, .8fr) minmax(160px, 1.2fr)`.
 
-**Résultat mesuré — mixte, donc rejeté :**
+**Measured result — mixed, so rejected:**
 
-| Conteneur | Avant | Après |
+| Container | Before | After |
 |---|---|---|
 | `.desktop-control-layout` | +65 | **+41** ✅ |
 | `.desktop-control-panel` | +49 | **+25** ✅ |
@@ -30,53 +30,53 @@ Complète [`constats-passe1.md`](constats-passe1.md). Ce document liste ce qui a
 | `.desktop-window-list` | +25 | **+40** ❌ |
 | `.desktop-control-click` | +47 | **+53** ❌ |
 
-**Correctif retiré** (`git checkout -- src/App.css`). Améliorer trois mesures en en dégradant deux n'est pas une correction, et je ne livre pas un changement dont je ne peux pas démontrer qu'il est meilleur.
+**Fix withdrawn** (`git checkout -- src/App.css`). Improving three measurements while degrading two is not a fix, and I do not ship a change I cannot show is better.
 
-> **Mise à jour du 21 septembre (passe 2).** Cette première tentative reste retirée, mais **le défaut a été corrigé depuis, par une autre voie**, et les chiffres de ce document provenaient d'un instrument défectueux. Deux jeux de valeurs différents, à ne pas confondre : la tentative **retirée** était `minmax(120px, .8fr) minmax(160px, 1.2fr)` ; l'état **livré** est `minmax(140px, .8fr) minmax(190px, 1.2fr)`. L'état livré est donc :
+> **Update of 21 September (pass 2).** This first attempt stays withdrawn, but **the defect has since been fixed by another route**, and this document's figures came from a faulty instrument. Two different sets of values, not to be confused: the **withdrawn** attempt was `minmax(120px, .8fr) minmax(160px, 1.2fr)`; the **shipped** state is `minmax(140px, .8fr) minmax(190px, 1.2fr)`. The shipped state is therefore:
 >
-> - `.desktop-control-layout` : `minmax(140px, .8fr) minmax(190px, 1.2fr)`, avec repli à une colonne sous `1400px` (ligne de clic) et `1290px` (grille) ;
-> - `.files-layout` : `minmax(140px, .85fr) minmax(190px, 1.4fr)`, repli sous `1230px`, dans `Desktop.css` **à côté** de la règle de base à cause de l'ordre d'import ;
-> - **0 débordement** sur les 7 onglets et sur 13 largeurs de fenêtre de 720 à 1440 px.
+> - `.desktop-control-layout`: `minmax(140px, .8fr) minmax(190px, 1.2fr)`, collapsing to a single column below `1400px` (click row) and `1290px` (grid);
+> - `.files-layout`: `minmax(140px, .85fr) minmax(190px, 1.4fr)`, collapsing below `1230px`, in `Desktop.css` **next to** the base rule because of the import order;
+> - **0 overflow** across the 7 tabs and across 13 window widths from 720 to 1440 px.
 >
-> Le récit complet et les mesures valides sont dans [`debordement-desktop.md`](debordement-desktop.md). **Ne reprenez aucun chiffre de la section ci-dessous sans le revérifier** : ils venaient d'un détecteur qui comptait la troncature volontaire (`overflow: hidden`, ellipse, `.sr-only`) comme un défaut.
+> The full story and the valid measurements are in [`debordement-desktop.md`](debordement-desktop.md). **Do not carry over any figure from the section below without re-checking it**: they came from a detector that counted deliberate truncation (`overflow: hidden`, ellipsis, `.sr-only`) as a defect.
 
-### Ce que la mesure a écarté
+### What the measurement ruled out
 
-J'ai ensuite cherché la **feuille** la plus large du panneau, en supposant qu'un élément de contenu imposait sa largeur intrinsèque à toute la chaîne :
+I then looked for the widest **leaf** in the panel, assuming a content element was imposing its intrinsic width on the whole chain:
 
 ```
-largeur du panneau : 437 px
-feuille la plus large : 405 px  (P.muted, « Actions are local, bounded… »)
+panel width      : 437 px
+widest leaf      : 405 px  (P.muted, "Actions are local, bounded…")
 ```
 
-**La feuille la plus large tient dans le panneau.** Aucune feuille ne dépasse sa largeur. Le débordement vient donc de la **structure** (largeurs intrinsèques de conteneurs imbriqués), pas d'un élément de contenu — ce qui invalide mon hypothèse et explique pourquoi réduire les planchers de grille n'a fait que déplacer le problème.
+**The widest leaf fits in the panel.** No leaf exceeds its width. The overflow therefore comes from the **structure** (intrinsic widths of nested containers), not from a content element — which invalidates my hypothesis and explains why lowering the grid floors only moved the problem around.
 
-C'est le **sixième faux diagnostic** de cette campagne sur le même schéma : une cause plausible acceptée sans vérifier qu'elle rend compte de **toutes** les mesures.
+That is the **sixth false diagnosis** of this campaign on the same pattern: a plausible cause accepted without checking it accounts for **all** the measurements.
 
-## Reste ouvert, mesuré
+## Still open, measured
 
-État au **21 septembre, après la passe 2** ([`revue-passe2.md`](revue-passe2.md)). Les lignes **6, 8, 9 et 10** sont **corrigées**, les lignes **7, 11 et 12** étaient des **faux positifs**, et les autres sont requalifiées par la mesure.
+State on **21 September, after pass 2** ([`revue-passe2.md`](revue-passe2.md)). Rows **6, 8, 9 and 10** are **fixed**, rows **7, 11 and 12** were **false positives**, and the others are requalified by measurement.
 
-| # | Défaut | État | Mesure / preuve |
+| # | Defect | State | Measurement / proof |
 |---|---|---|---|
-| 6 | **Panneau Desktop** : six conteneurs débordaient en cascade | **CORRIGÉ** | 3 causes distinctes (planchers `minmax`, `min-width: auto`, ligne de clic) ; **0 débordement** sur 13 largeurs |
-| 7 | **Review** : `.work-panel-body` débordait | **FAUX POSITIF** | mesuré sur un instrument qui comptait la troncature volontaire ; 0 débordement réel |
-| 8 | **Files** : `.files-panel` débordait | **CORRIGÉ** | planchers 180/250 → 140/190 + `min-width: 0`, repli sous `1230px` |
-| 9 | **Panneau Browser** : « Embedded preview » promis, **aucune surface d'aperçu** ni état vide | **CORRIGÉ** | `BrowserPanel` explique désormais l'état vide (« No page loaded yet. Enter an http or https address above and press Go. ») ; capture `pass2/pass2-browser-etat-vide.png` |
-| 10 | **Message utilisateur dupliqué** : deux bulles identiques, même horodatage | **CORRIGÉ, cause confirmée** | cause réelle : `mergeHistoryLog` cherchait la bulle par identifiant **sans vérifier le rôle**, donc un message utilisateur distant écrasait le rôle du placeholder assistant. Corrigé (comparaison de rôle) **et verrouillé par test**, écrit avant le correctif. L'hypothèse « dédoublonnage distant » avait été **réfutée** par les données persistées |
-| 11 | Le libellé du modèle se couperait panneau déplié | **FAUX POSITIF** | mesuré sous le bon état ; le libellé générique « Model » venait de `model_id` **non transmis par Rust** — corrigé et vérifié sur 11 sessions |
-| 12 | « Run in Muse » quasi blanc sur blanc | **FAUX POSITIF** | bouton **`disabled` + `opacity: .45`**, que WCAG exempte ; « Send » actif mesure **4,82:1** |
-| 13 | Deux encadrés du panneau Desktop avec bordure épaisse ~2 px | **REQUALIFIÉ** | contours natifs non stylés `#545D62`/`#687075`/`#767676` contre `#E6E9ED` ailleurs : **hors charte**, pas « quasi noirs » |
-| 14 | Bas du transcript coupé en plein glyphe | **NON DÉMONTRÉ** | la mesure ne montre pas de glyphe coupé en pleine hauteur, seulement du contenu atteignant le bord |
-| 15 | Hiérarchie d'en-tête incohérente (kicker en majuscules sur Review/Desktop) | **OUVERT** | confirmé : hauteur d'en-tête 100 px (Review) contre 26 px (Memory) |
-| 16 | **« Close panel » à 16 px de large** | **CORRIGÉ** | `padding: 15px 1px` réduisait la cible à la largeur du glyphe ; `min-width: 24px` sur `.icon` — 24×50 px, et les autres boutons (28×30, 32×32) inchangés |
-| 17 | **« Run in Muse » reste désactivé** alors que le host accorde `userShell` | **OUVERT, non tranché** | pont : `["userShell"]` · prop React lue sur la fibre : `false` · infobulle : « did not grant ». Écart prouvé, chaîne non élucidée |
+| 6 | **Desktop panel**: six containers overflowed in cascade | **FIXED** | 3 distinct causes (`minmax` floors, `min-width: auto`, click row); **0 overflow** across 13 widths |
+| 7 | **Review**: `.work-panel-body` overflowed | **FALSE POSITIVE** | measured with an instrument counting deliberate truncation; 0 real overflow |
+| 8 | **Files**: `.files-panel` overflowed | **FIXED** | floors 180/250 → 140/190 + `min-width: 0`, collapse below `1230px` |
+| 9 | **Browser panel**: "Embedded preview" promised, **no preview surface** and no empty state | **FIXED** | `BrowserPanel` now explains the empty state ("No page loaded yet. Enter an http or https address above and press Go."); screenshot `pass2/pass2-browser-etat-vide.png` |
+| 10 | **Duplicated user message**: two identical bubbles, same timestamp | **FIXED, cause confirmed** | real cause: `mergeHistoryLog` looked up the bubble by identifier **without checking the role**, so a remote user message overwrote the assistant placeholder's role. Fixed (role comparison) **and locked by a test**, written before the fix. The "remote deduplication" hypothesis had been **disproved** by the persisted data |
+| 11 | The model label would be cut off with the panel unfolded | **FALSE POSITIVE** | measured in the right state; the generic "Model" label came from `model_id` **not passed on by Rust** — fixed and verified across 11 sessions |
+| 12 | "Run in Muse" nearly white on white | **FALSE POSITIVE** | a **`disabled` + `opacity: .45`** button, which WCAG exempts; the active "Send" measures **4.82:1** |
+| 13 | Two Desktop panel boxes with a ~2 px thick border | **REQUALIFIED** | unstyled native outlines `#545D62`/`#687075`/`#767676` against `#E6E9ED` elsewhere: **off the design system**, not "nearly black" |
+| 14 | Bottom of the transcript cut mid-glyph | **NOT DEMONSTRATED** | the measurement shows no glyph cut at full height, only content reaching the edge |
+| 15 | Inconsistent header hierarchy (upper-case kicker on Review/Desktop) | **OPEN** | confirmed: header height 100 px (Review) against 26 px (Memory) |
+| 16 | **"Close panel" 16 px wide** | **FIXED** | `padding: 15px 1px` reduced the target to the glyph's width; `min-width: 24px` on `.icon` — 24×50 px, and the other buttons (28×30, 32×32) unchanged |
+| 17 | **"Run in Muse" stays disabled** although the host grants `userShell` | **OPEN, unsettled** | bridge: `["userShell"]` · React prop read off the fiber: `false` · tooltip: "did not grant". Gap proved, chain not elucidated |
 
-## Ce qui a été vérifié comme correct
+## What was verified as correct
 
-- **Bande d'onglets** : pixel-identique sur les six panneaux, soulignement actif toujours sous le bon onglet, aucun décalage ni réordonnancement.
-- **Thème clair** : intégralement appliqué, aucune zone restée sombre.
-- **Cibles interactives** : aucune sous 24×24 px hormis l'attache-fichier, masqué volontairement.
-- **Aucun défilement horizontal** au niveau du document.
-- Panneaux **Files** et **Memory** : leurs états vides sont expliqués.
-- **Chemins ellipsés**, badges et horodatages des cartes d'outil restent lisibles.
+- **Tab strip**: pixel-identical across the six panels, active underline always under the right tab, no offset or reordering.
+- **Light theme**: fully applied, no area left dark.
+- **Interactive targets**: none under 24×24 px apart from the attach-file input, deliberately hidden.
+- **No horizontal scrolling** at the document level.
+- **Files** and **Memory** panels: their empty states are explained.
+- **Ellipsised paths**, badges and timestamps on the tool cards stay readable.
