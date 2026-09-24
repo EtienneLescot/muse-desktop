@@ -1,159 +1,159 @@
-# Index des preuves natives — campagne Windows du 20 septembre 2026
+# Index of native evidence — Windows campaign of 20 September 2026
 
-Point d'entrée unique vers les preuves produites par la campagne. Chaque ticket renvoie à ses documents, à **ce qui est prouvé**, à **ce qui reste**, et à **la commande qui reproduit la mesure**.
+The single entry point to the evidence produced by the campaign. Each ticket points to its documents, to **what is proved**, to **what remains**, and to **the command that reproduces the measurement**.
 
-Mise à jour après la fusion de la PR #195.
+Updated after PR #195 was merged.
 
-## Comment lire ce dossier
+## How to read this folder
 
-Un dossier par sujet. **Chaque document déclare ses propres limites** : aucun ne présente un scénario unique comme la preuve qu'un ticket est clos.
+One folder per subject. **Every document states its own limits**: none presents a single scenario as proof that a ticket is closed.
 
-| Dossier | Sujet | Documents |
+| Folder | Subject | Documents |
 |---|---|---|
-| [`2026-09-20-windows-group1/`](2026-09-20-windows-group1/) | M0-03 (envoi), M1-10 (file d'attente), campagne générale | 8 documents + 29 captures |
-| [`2026-09-20-windows-ab-projects/`](2026-09-20-windows-ab-projects/) | isolation entre deux projets — M0-01, M0-14 | 1 |
-| [`2026-09-20-windows-browser/`](2026-09-20-windows-browser/) | navigateur intégré — M4-01, M4-02 | 1 |
-| [`2026-09-20-windows-transcript/`](2026-09-20-windows-transcript/) | fenêtre du transcript, persistance, performance — M1-13 | 7 |
-| [`2026-09-20-windows-a11y/`](2026-09-20-windows-a11y/) | accessibilité — M0-12 | 1 |
-| [`2026-09-20-windows-language/`](2026-09-20-windows-language/) | copie anglaise, navigation, chemins — M0-11 | 4 |
-| [`2026-09-20-windows-m010/`](2026-09-20-windows-m010/) | premier lancement et guidance d'échec — M0-10 | 1 |
+| [`2026-09-20-windows-group1/`](2026-09-20-windows-group1/) | M0-03 (sending), M1-10 (queue), general campaign | 8 documents + 29 screenshots |
+| [`2026-09-20-windows-ab-projects/`](2026-09-20-windows-ab-projects/) | isolation between two projects — M0-01, M0-14 | 1 |
+| [`2026-09-20-windows-browser/`](2026-09-20-windows-browser/) | built-in browser — M4-01, M4-02 | 1 |
+| [`2026-09-20-windows-transcript/`](2026-09-20-windows-transcript/) | transcript window, persistence, performance — M1-13 | 7 |
+| [`2026-09-20-windows-a11y/`](2026-09-20-windows-a11y/) | accessibility — M0-12 | 1 |
+| [`2026-09-20-windows-language/`](2026-09-20-windows-language/) | English copy, navigation, paths — M0-11 | 4 |
+| [`2026-09-20-windows-m010/`](2026-09-20-windows-m010/) | first launch and failure guidance — M0-10 | 1 |
 | [`2026-09-20-windows-release/`](2026-09-20-windows-release/) | distribution — M4-09 | 3 |
-| [`2026-09-20-windows-ledgers/`](2026-09-20-windows-ledgers/) | miroirs natifs et testabilité — M3-07, M3-09 | 2 |
-| [`2026-09-20-windows-cleanup/`](2026-09-20-windows-cleanup/) | nettoyage des conversations de test | 1 |
+| [`2026-09-20-windows-ledgers/`](2026-09-20-windows-ledgers/) | native mirrors and testability — M3-07, M3-09 | 2 |
+| [`2026-09-20-windows-cleanup/`](2026-09-20-windows-cleanup/) | cleaning up test conversations | 1 |
 
-Le rapport destiné au mainteneur du sidecar est hors de ce dossier : [`../SIDECAR-CONTRACT-GAPS.md`](../SIDECAR-CONTRACT-GAPS.md).
+The report addressed to the sidecar maintainer lives outside this folder: [`../SIDECAR-CONTRACT-GAPS.md`](../SIDECAR-CONTRACT-GAPS.md).
 
-## Matrice de couverture
+## Coverage matrix
 
-| Ticket | Prouvé | Reste | Nature du blocage | Documents |
+| Ticket | Proved | Remaining | Nature of the blocker | Documents |
 |---|---|---|---|---|
-| **M0-01** | deux hosts simultanés · mort d'un host sans effet sur l'autre · tour mené à terme **pendant** la mort de l'autre, sans stale | **approbations simultanées** | plafond `promptUnmatched` du host — le mode `ask` n'a présenté aucune demande | [M0-01-M0-14](2026-09-20-windows-ab-projects/M0-01-M0-14.md), [groupe 1](2026-09-20-windows-group1/README.md) |
-| **M0-02** | `ephemeral` annoncé · détection de la mort du host · `Disconnected` + envoi bloqué + transcript conservé · échec de reprise **honnête** (`sessionNotFound [retryable=false]`) | reprise durable d'un tour | **contrat sidecar** : `session/read` et `session/resume` absents | [groupe 1](2026-09-20-windows-group1/README.md), [écarts](../SIDECAR-CONTRACT-GAPS.md) |
-| **M0-03** | **les 4 critères** : envoi rejeté conserve le texte · double Entrée = 1 tour · brouillon et envoi survivent au rechargement · Entrée en composition IME ne soumet pas | variantes : IME chinois/coréen, rechargement **avant** acquittement, double clic **à la souris** | méthode | [rejet](2026-09-20-windows-group1/M0-03-envoi-rejete.md), [double envoi](2026-09-20-windows-group1/M0-03-double-envoi.md), [rechargement](2026-09-20-windows-group1/M0-03-rechargement.md), [IME](2026-09-20-windows-group1/M0-03-ime.md) |
-| **M0-04** | interruption affichée (`Stopping…`) · état stale correctement signalé · aucun faux succès | **terminal confirmé** | **contrat sidecar** : `turn/completed`/`retracted`/`stopped` jamais émis | [groupe 1](2026-09-20-windows-group1/README.md), [écarts](../SIDECAR-CONTRACT-GAPS.md) |
-| **M0-10** | guidance d'échec exercée sur sidecar neutralisé : `sidecar`/`binary`/`triple`/`folder`, **Try again**, **Choose workspace folder**, aucune installation implicite | **machine propre** | infrastructure (WSL, Muse et des conversations déjà présents) | [M0-10](2026-09-20-windows-m010/M0-10-guidance-echec.md) |
-| **M0-11** | copie anglaise sur 7 surfaces et 129 fichiers sources · câblage des helpers de navigation **verrouillé par test** · `displayPath()` couvert, cas UNC limites inclus | rendu natif des infobulles · branche `Cmd` sur un vrai macOS | infrastructure | [copie](2026-09-20-windows-language/M0-11-copie-anglaise.md), [navigation](2026-09-20-windows-language/M0-11-navigation.md), [chemins](2026-09-20-windows-language/M0-11-display-path.md) |
-| **M0-12** | `forced-colors` honoré · 24 arrêts de tabulation sans piège · `Ctrl+F` lié · contraste AA sur 60 textes · **un défaut corrigé** (`prefers-contrast` inerte) avec test de non-régression | **lecteur d'écran réel** | hors de portée | [M0-12](2026-09-20-windows-a11y/M0-12.md) |
-| **M0-14** | idem M0-01 | idem M0-01 | idem M0-01 | [M0-01-M0-14](2026-09-20-windows-ab-projects/M0-01-M0-14.md) |
-| **M1-06** | `userShell` **négocié et accepté** | item publié, `outputRef`, sortie relisible | **contrat sidecar** | [écarts](../SIDECAR-CONTRACT-GAPS.md) |
-| **M1-10** | admission en file persistée · panneau **Queued messages** ordonné · `Stopping…` · file vidée après Stop · **retrait séquentiel** · **course : les tours retirés ne démarrent pas** | compte exact des clics · accusé `turn/unqueue` du host · une anomalie de journal non expliquée | méthode + contrat sidecar | [retrait](2026-09-20-windows-group1/M1-10-retrait-file.md), [course](2026-09-20-windows-group1/M1-10-course-file.md) |
-| **M1-11** | `setModel` et `setReasoningEffort` **acceptés** | projection effective | **contrat sidecar** : `projection: not-reported`, `isActive: false` | [écarts](../SIDECAR-CONTRACT-GAPS.md) |
-| **M1-13** | fenêtre bornée à **160 articles sur 2 001** · chargement incrémental de 120 à DOM constant · finder atteignant un **résultat hors fenêtre** · coût de rendu mesuré · **plafonds de persistance verrouillés par test** · **coût d'écriture chiffré et sa fréquence observée** | **qualification assistive** · mesures sur build de développement seul | hors de portée · infrastructure | [fenêtre](2026-09-20-windows-transcript/M1-13.md), [finder](2026-09-20-windows-transcript/finder-hors-fenetre.md), [rendu](2026-09-20-windows-transcript/perf-rendu.md), [plafonds](2026-09-20-windows-transcript/plafonds-persistance.md), [coût](2026-09-20-windows-transcript/cout-ecriture-journal.md), [fréquence](2026-09-20-windows-transcript/granularite-ecritures.md) |
-| **M3-07** | miroir natif du registre des exécutions rendu **importable par un test** et couvert (contrat d'échec, ordre du garde) | appel IPC réel · écriture durable dans l'app empaquetée | hors de portée d'un processus node | [schedule ledger](2026-09-20-windows-ledgers/schedule-ledger-et-garde.md) |
-| **M3-09** | miroir natif des notifications couvert · **fusion des écritures** vérifiée | appel IPC réel | idem | [modules inatteignables](2026-09-20-windows-ledgers/modules-inaccessibles-aux-tests.md) |
-| **M4-01** | navigation native (iframe montée) · persistance par onglet · **isolation par `sessionId`** | qualification macOS/Linux · téléchargements initiés par navigation | infrastructure | [M4-01-M4-02](2026-09-20-windows-browser/M4-01-M4-02.md) |
-| **M4-02** | annotation **réellement créée** (ancre URL, citation, commentaire) · **garde de contexte** après changement de domaine | recadrage de région · capture visuelle | infrastructure | [M4-01-M4-02](2026-09-20-windows-browser/M4-01-M4-02.md) |
-| **M4-09** | build NSIS (SHA-256 vérifié) · **installation et désinstallation sans perte** · **mise à jour 0.0.9 → 0.1.0 sans perte** · chaîne delta (~1250× plus petite, reconstruction à l'octet près) | **machine propre** · **signature** (`NotSigned`) · MSI · rollback réel | infrastructure | [build](2026-09-20-windows-release/M4-09.md), [cycle](2026-09-20-windows-release/M4-09-cycle-installation.md), [mise à jour](2026-09-20-windows-release/M4-09-mise-a-jour.md) |
+| **M0-01** | two simultaneous hosts · one host dying with no effect on the other · a turn carried to completion **while** the other died, with no stale | **concurrent approvals** | the host's `promptUnmatched` ceiling — `ask` mode presented no request | [M0-01-M0-14](2026-09-20-windows-ab-projects/M0-01-M0-14.md), [group 1](2026-09-20-windows-group1/README.md) |
+| **M0-02** | `ephemeral` announced · host death detected · `Disconnected` + sending blocked + transcript preserved · **honest** resume failure (`sessionNotFound [retryable=false]`) | durable resume of a turn | **sidecar contract**: `session/read` and `session/resume` missing | [group 1](2026-09-20-windows-group1/README.md), [gaps](../SIDECAR-CONTRACT-GAPS.md) |
+| **M0-03** | **all 4 criteria**: a rejected send keeps the text · a double Enter = 1 turn · draft and send survive a reload · Enter during an IME composition does not submit | variants: Chinese/Korean IME, reload **before** acknowledgement, **mouse** double-click | method | [rejection](2026-09-20-windows-group1/M0-03-envoi-rejete.md), [double send](2026-09-20-windows-group1/M0-03-double-envoi.md), [reload](2026-09-20-windows-group1/M0-03-rechargement.md), [IME](2026-09-20-windows-group1/M0-03-ime.md) |
+| **M0-04** | interrupt displayed (`Stopping…`) · stale state correctly flagged · no false success | **confirmed terminal** | **sidecar contract**: `turn/completed`/`retracted`/`stopped` never emitted | [group 1](2026-09-20-windows-group1/README.md), [gaps](../SIDECAR-CONTRACT-GAPS.md) |
+| **M0-10** | failure guidance exercised on a neutralised sidecar: `sidecar`/`binary`/`triple`/`folder`, **Try again**, **Choose workspace folder**, no implicit install | **a clean machine** | infrastructure (WSL, Muse and conversations already present) | [M0-10](2026-09-20-windows-m010/M0-10-guidance-echec.md) |
+| **M0-11** | English copy across 7 surfaces and 129 source files · navigation helper wiring **locked by test** · `displayPath()` covered, UNC edge cases included | native tooltip rendering · the `Cmd` branch on a real macOS | infrastructure | [copy](2026-09-20-windows-language/M0-11-copie-anglaise.md), [navigation](2026-09-20-windows-language/M0-11-navigation.md), [paths](2026-09-20-windows-language/M0-11-display-path.md) |
+| **M0-12** | `forced-colors` honoured · 24 tab stops with no trap · `Ctrl+F` bound · AA contrast on 60 texts · **one defect fixed** (inert `prefers-contrast`) with a regression test | **a real screen reader** | out of reach | [M0-12](2026-09-20-windows-a11y/M0-12.md) |
+| **M0-14** | same as M0-01 | same as M0-01 | same as M0-01 | [M0-01-M0-14](2026-09-20-windows-ab-projects/M0-01-M0-14.md) |
+| **M1-06** | `userShell` **negotiated and accepted** | item published, `outputRef`, output readable | **sidecar contract** | [gaps](../SIDECAR-CONTRACT-GAPS.md) |
+| **M1-10** | queue admission persisted · **Queued messages** panel ordered · `Stopping…` · queue emptied after Stop · **sequential removal** · **race: removed turns do not start** | exact click count · the host's `turn/unqueue` acknowledgement · one unexplained log anomaly | method + sidecar contract | [removal](2026-09-20-windows-group1/M1-10-retrait-file.md), [race](2026-09-20-windows-group1/M1-10-course-file.md) |
+| **M1-11** | `setModel` and `setReasoningEffort` **accepted** | effective projection | **sidecar contract**: `projection: not-reported`, `isActive: false` | [gaps](../SIDECAR-CONTRACT-GAPS.md) |
+| **M1-13** | window bounded to **160 articles out of 2,001** · incremental loading of 120 with a constant DOM · finder reaching a **result outside the window** · rendering cost measured · **persistence ceilings locked by test** · **write cost quantified and its frequency observed** | **assistive qualification** · measurements on the development build only | out of reach · infrastructure | [window](2026-09-20-windows-transcript/M1-13.md), [finder](2026-09-20-windows-transcript/finder-hors-fenetre.md), [rendering](2026-09-20-windows-transcript/perf-rendu.md), [ceilings](2026-09-20-windows-transcript/plafonds-persistance.md), [cost](2026-09-20-windows-transcript/cout-ecriture-journal.md), [frequency](2026-09-20-windows-transcript/granularite-ecritures.md) |
+| **M3-07** | the run registry's native mirror made **importable by a test** and covered (failure contract, guard order) | a real IPC call · durable writing in the packaged app | out of reach for a node process | [schedule ledger](2026-09-20-windows-ledgers/schedule-ledger-et-garde.md) |
+| **M3-09** | the notifications' native mirror covered · **write coalescing** verified | a real IPC call | same | [unreachable modules](2026-09-20-windows-ledgers/modules-inaccessibles-aux-tests.md) |
+| **M4-01** | native navigation (iframe mounted) · per-tab persistence · **isolation by `sessionId`** | macOS/Linux qualification · downloads initiated by navigation | infrastructure | [M4-01-M4-02](2026-09-20-windows-browser/M4-01-M4-02.md) |
+| **M4-02** | annotation **actually created** (URL anchor, quote, comment) · **context guard** after a domain change | region cropping · visual capture | infrastructure | [M4-01-M4-02](2026-09-20-windows-browser/M4-01-M4-02.md) |
+| **M4-09** | NSIS build (SHA-256 verified) · **install and uninstall with no loss** · **update 0.0.9 → 0.1.0 with no loss** · delta chain (~1250× smaller, byte-exact reconstruction) | **a clean machine** · **signing** (`NotSigned`) · MSI · a real rollback | infrastructure | [build](2026-09-20-windows-release/M4-09.md), [cycle](2026-09-20-windows-release/M4-09-cycle-installation.md), [update](2026-09-20-windows-release/M4-09-mise-a-jour.md) |
 
-Tickets **non entamés** faute d'accès : M2 et M3 (hors M3-07 et M3-09) demandent un host qui expose les contrats correspondants ; voir leurs lignes dans [`../ROADMAP.md`](../ROADMAP.md).
+Tickets **not started** for lack of access: M2 and M3 (apart from M3-07 and M3-09) need a host that exposes the matching contracts; see their lines in [`../ROADMAP.md`](../ROADMAP.md).
 
-## Outils de mesure livrés
+## Measurement tools shipped
 
-Tous sous `scripts/`. Les scripts `cdp-*` supposent l'application lancée avec `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>` ; ils activent une fonctionnalité de WebView2 et **ne modifient pas** le code de l'application.
+All under `scripts/`. The `cdp-*` scripts assume the application was launched with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>`; they enable a WebView2 feature and **do not modify** the application's code.
 
-| Script | Rôle | Coût modèle |
+| Script | Role | Model cost |
 |---|---|---|
-| `msp-probe.mjs` | décrit le contrat du host (surfaces, `userShell`, `approval/listPending`) | **aucun** |
-| `native-smoke.mjs` | contrôle, erreurs, approbation, isolation, file, compaction sur deux hosts | quelques tours |
-| `cdp-drive.mjs` | inspection et pilotage du DOM (`snapshot`, `eval`, `click`, `fill`) | aucun |
-| `cdp-panel.mjs` | ouvre la barre de travail et exerce le navigateur intégré | aucun |
-| `cdp-annotate.mjs` | crée une annotation et vérifie sa persistance | aucun |
-| `cdp-scenario.mjs` | tour, file, Stop, stale | un tour |
-| `cdp-ab-projects.mjs` | isolation entre deux projets | un tour |
-| `cdp-concurrent-turns.mjs` | tours concurrents | un tour |
-| `cdp-unknown-skill-reject.mjs` | rejet déterministe d'envoi | aucun |
-| `cdp-double-send.mjs` | double soumission | un tour |
-| `cdp-reload-mid-send.mjs` | brouillon et envoi face au rechargement | un tour |
-| `cdp-ime-compose.mjs` | composition IME | aucun |
-| `cdp-long-transcript.mjs` | fenêtre bornée sur un journal fabriqué | aucun |
-| `cdp-scroll-window.mjs` | chargement incrémental | aucun |
-| `cdp-finder-jump.mjs` | finder vers un résultat hors fenêtre | aucun |
-| `cdp-perf.mjs` | coût de rendu et mémoire | aucun |
-| `cdp-a11y-probe.mjs` | ordre de tabulation, focus, contraste | aucun |
-| `cdp-contrast-probe.mjs` | `forced-colors` et `prefers-contrast` émulés | aucun |
-| `cdp-focus-pixels.mjs` | indicateur de focus par comparaison de pixels | aucun |
-| `cdp-language-audit.mjs` | copie française dans le DOM rendu | aucun |
-| `cdp-queue-removal.mjs` | retrait d'une entrée de file | un tour |
-| `cdp-queue-race.mjs` | course file/retrait | un tour |
-| `cdp-stream-granularity.mjs` | nombre et volume des écritures de journal d'un tour | un tour |
-| `cdp-delete-conversations.mjs` | supprime des conversations de test par la boîte de dialogue de l'application | aucun |
-| `bench-log-append.mts` | coût d'un ajout au journal selon sa taille | aucun |
+| `msp-probe.mjs` | describes the host's contract (surfaces, `userShell`, `approval/listPending`) | **none** |
+| `native-smoke.mjs` | control, errors, approval, isolation, queue, compaction on two hosts | a few turns |
+| `cdp-drive.mjs` | DOM inspection and driving (`snapshot`, `eval`, `click`, `fill`) | none |
+| `cdp-panel.mjs` | opens the work bar and exercises the built-in browser | none |
+| `cdp-annotate.mjs` | creates an annotation and checks it persists | none |
+| `cdp-scenario.mjs` | turn, queue, Stop, stale | one turn |
+| `cdp-ab-projects.mjs` | isolation between two projects | one turn |
+| `cdp-concurrent-turns.mjs` | concurrent turns | one turn |
+| `cdp-unknown-skill-reject.mjs` | deterministic send rejection | none |
+| `cdp-double-send.mjs` | double submission | one turn |
+| `cdp-reload-mid-send.mjs` | draft and send against a reload | one turn |
+| `cdp-ime-compose.mjs` | IME composition | none |
+| `cdp-long-transcript.mjs` | bounded window on a fabricated log | none |
+| `cdp-scroll-window.mjs` | incremental loading | none |
+| `cdp-finder-jump.mjs` | finder to a result outside the window | none |
+| `cdp-perf.mjs` | rendering cost and memory | none |
+| `cdp-a11y-probe.mjs` | tab order, focus, contrast | none |
+| `cdp-contrast-probe.mjs` | emulated `forced-colors` and `prefers-contrast` | none |
+| `cdp-focus-pixels.mjs` | focus indicator by pixel comparison | none |
+| `cdp-language-audit.mjs` | French copy in the rendered DOM | none |
+| `cdp-queue-removal.mjs` | removing a queue entry | one turn |
+| `cdp-queue-race.mjs` | queue/removal race | one turn |
+| `cdp-stream-granularity.mjs` | number and volume of log writes in a turn | one turn |
+| `cdp-delete-conversations.mjs` | deletes test conversations through the application's dialog | none |
+| `bench-log-append.mts` | cost of appending to the log by its size | none |
 
-### Passe UX 1 (21 septembre 2026)
+### UX pass 1 (21 September 2026)
 
-| Script | Rôle | Coût modèle |
+| Script | Role | Model cost |
 |---|---|---|
-| `ux-capture.mjs` | 13 surfaces de l'interface, préconditions assertées | aucun |
-| `ux-force-conversation.mjs` | force la vue conversation et les 8 onglets du panneau | aucun |
-| `ux-contrast-audit.mjs` | ratios WCAG réels, alpha composé, thème clair ou sombre | aucun |
-| `ux-panel-overflow.mjs` | débordements par onglet, **auto-test bloquant** | aucun |
-| `ux-breakpoint-sweep.mjs` | 13 largeurs de fenêtre, fuites superficielles **et imbriquées** | aucun |
-| `ux-composer-overflow.mjs` | 11 largeurs : la ligne de contrôles du composeur ne rogne jamais son sélecteur de modèle | aucun |
-| `ux-computer-use.mjs` | computer use de bout en bout : driver trouvé, niveaux, activation bornée, **outil hors manifeste refusé par le driver**, entrée MCP, révocation | aucun |
-| `ux-review-captures.mjs` | captures + assertions structurelles | aucun |
-| `ux-terminal-contrast.mjs` | contraste WCAG des contrôles, état actif **et** désactivé | aucun |
-| `ux-target-size-audit.mjs` | cibles < 24×24 px, débordement, éléments rognés par un ancêtre | aucun |
-| `ux-session-meta-probe.mjs` | projection brute du pont Rust (autorité sur le rendu) | aucun |
-| `ux-react-state-probe.mjs` | prop React lue sur la fibre, quand DOM et pont se contredisent | aucun |
-| `ux-verify-pass2.mjs` | vérifie les décisions de la passe 2 au DOM et par capture | aucun |
-| `ux-terminal-state.mjs` | état des actions du terminal **et la raison** de leur indisponibilité | aucun |
-| `ux-read-logs.mjs` | transcript lu depuis l'état du hook, pas depuis le DOM | aucun |
-| `ux-run-in-muse.mjs` | exerce `Run in Muse` : saisie, activation, clic, attente de l'item | un appel shell |
-| `msp-user-shell-items.mjs` | le host publie-t-il les items `userShell` ? (**forme de capacité corrigée**) | un appel shell |
-| `msp-user-shell-after-resume.mjs` | `userShell` avant/après `session/resume`, sur une session neuve | un appel shell |
-| `ux-rules-scan.mjs` | `rules_scan` sur le pont vivant : chaque ligne confrontée au disque, fichiers **inchangés** après lecture | aucun |
-| `ux-project-rules.mjs` | le panneau Projets : champ `Instructions` disparu, 4 rôles listés, débordement de 1440 à 760 px | aucun |
-| `ux-terminal-precondition.mjs` | parcourt les conversations et vérifie qu'aucune n'est refusée pour cause de « session non chargée » | aucun |
-| `ux-legacy-instructions.mjs` | l'encart des instructions retirées : apparition, Copy/Dismiss, stockage vidé — **et restauré** | aucun |
-| `check-scripts-parse.mjs` | garde-fou : tout script de `scripts/` doit compiler **et** ne pas refermer un gabarit page-side avec un backtick (scanner auto-testé) | aucun |
+| `ux-capture.mjs` | 13 interface surfaces, preconditions asserted | none |
+| `ux-force-conversation.mjs` | forces the conversation view and the panel's 8 tabs | none |
+| `ux-contrast-audit.mjs` | real WCAG ratios, composited alpha, light or dark theme | none |
+| `ux-panel-overflow.mjs` | overflows per tab, **blocking self-test** | none |
+| `ux-breakpoint-sweep.mjs` | 13 window widths, shallow **and nested** leaks | none |
+| `ux-composer-overflow.mjs` | 11 widths: the composer's control row never clips its model picker | none |
+| `ux-computer-use.mjs` | computer use end to end: driver found, levels, bounded activation, **a tool outside the manifest refused by the driver**, MCP entry, revocation | none |
+| `ux-review-captures.mjs` | screenshots + structural assertions | none |
+| `ux-terminal-contrast.mjs` | WCAG contrast of the controls, active **and** disabled | none |
+| `ux-target-size-audit.mjs` | targets < 24×24 px, overflow, elements clipped by an ancestor | none |
+| `ux-session-meta-probe.mjs` | the Rust bridge's raw projection (the authority over what is rendered) | none |
+| `ux-react-state-probe.mjs` | a React prop read off the fiber, when the DOM and the bridge contradict each other | none |
+| `ux-verify-pass2.mjs` | checks the pass 2 decisions against the DOM and by screenshot | none |
+| `ux-terminal-state.mjs` | the state of the terminal's actions **and the reason** they are unavailable | none |
+| `ux-read-logs.mjs` | transcript read from the hook's state, not from the DOM | none |
+| `ux-run-in-muse.mjs` | exercises `Run in Muse`: typing, enabling, clicking, waiting for the item | one shell call |
+| `msp-user-shell-items.mjs` | does the host publish `userShell` items? (**capability shape corrected**) | one shell call |
+| `msp-user-shell-after-resume.mjs` | `userShell` before and after `session/resume`, on a fresh session | one shell call |
+| `ux-rules-scan.mjs` | `rules_scan` on the live bridge: every line checked against the disk, files **unchanged** after reading | none |
+| `ux-project-rules.mjs` | the Projects panel: `Instructions` field gone, 4 roles listed, overflow from 1440 to 760 px | none |
+| `ux-terminal-precondition.mjs` | walks the conversations and checks none is refused for "session not loaded" | none |
+| `ux-legacy-instructions.mjs` | the removed-instructions notice: appearance, Copy/Dismiss, storage emptied — **and restored** | none |
+| `check-scripts-parse.mjs` | guard rail: every script in `scripts/` must compile **and** must not close a page-side template with a backtick (self-tested scanner) | none |
 
-**`ux-panel-overflow.mjs` refuse d'imprimer le moindre chiffre si son auto-test échoue** : une sonde de 300 px dans une boîte de 100 px doit être signalée à +200 px, et la même sonde avec `overflow-x: hidden` doit être ignorée. Ce garde-fou existe parce que trois versions successives de ce détecteur ont produit des rapports plausibles et faux — détails dans [`2026-09-21-ux/debordement-desktop.md`](2026-09-21-ux/debordement-desktop.md).
+**`ux-panel-overflow.mjs` refuses to print a single figure if its self-test fails**: a 300 px probe inside a 100 px box must be reported at +200 px, and the same probe with `overflow-x: hidden` must be ignored. That guard rail exists because three successive versions of this detector produced plausible and false reports — details in [`2026-09-21-ux/debordement-desktop.md`](2026-09-21-ux/debordement-desktop.md).
 
-`ux-review-captures.mjs` porte un avertissement : il force la largeur du panneau **sans** changer celle de la fenêtre, ce qui produit un état qu'aucune fenêtre réelle ne peut atteindre. Pour les questions de mise en page responsive, l'instrument est `ux-breakpoint-sweep.mjs`.
+`ux-review-captures.mjs` carries a warning: it forces the panel's width **without** changing the window's, which produces a state no real window can reach. For responsive layout questions, the instrument is `ux-breakpoint-sweep.mjs`.
 
-## Documents qui tracent un échec ou une erreur
+## Documents recording a failure or an error
 
-Ces documents conservent un résultat négatif ou une erreur de méthode. Ils sont volontairement conservés :
+These documents keep a negative result or an error of method. They are deliberately preserved:
 
-| Document | Ce qu'il trace |
+| Document | What it records |
 |---|---|
-| [M0-03-envoi-rejete-inabouti](2026-09-20-windows-group1/M0-03-envoi-rejete-inabouti.md) | première tentative d'envoi rejeté, remplacée depuis |
-| [M1-10-retrait-file-inabouti](2026-09-20-windows-group1/M1-10-retrait-file-inabouti.md) | file jamais alimentée — préconditions non vérifiées |
-| [finder-hors-fenetre-inabouti](2026-09-20-windows-transcript/finder-hors-fenetre-inabouti.md) | mauvais sélecteur : le conteneur du finder au lieu de son ouvreur |
-| [M0-12](2026-09-20-windows-a11y/M0-12.md) | contient le faux positif « aucun indicateur de focus » **et** sa correction |
-| [modules-inaccessibles-aux-tests](2026-09-20-windows-ledgers/modules-inaccessibles-aux-tests.md) | faux diagnostic initial : 15 modules annoncés au lieu de 2 |
-| [nettoyage-conversations](2026-09-20-windows-cleanup/nettoyage-conversations.md) | **trois** méthodes de suppression en échec avant la bonne |
-| [debordement-desktop](2026-09-21-ux/debordement-desktop.md) | **trois** bugs d'instrument successifs, dont un `NaN` silencieux qui vidait le rapport ; remplace une version dont tous les chiffres étaient faux |
-| [revue-passe2](2026-09-21-ux/revue-passe2.md) | **quatre faux positifs** (dont deux que j'avais relayés) et une hypothèse de doublon **réfutée par les données persistées** |
-| [m1-06-blocage-refute](2026-09-21-ux/m1-06-blocage-refute.md) | un « constat bloquant » publié contre le host, réfuté : la sonde demandait la capacité **à plat** et n'exécutait donc jamais la commande |
-| [m1-06-capacites-au-montage](2026-09-21-ux/m1-06-capacites-au-montage.md) | trois sources qui se contredisent sur la même capacité, et le défaut de synchronisation qui les explique |
-| [authentification-muse](2026-09-21-ux/authentification-muse.md) | pourquoi l'éditeur ne peut pas faire d'OAuth seul, et comment piloter le CLI à la place — avec le piège de priorité `META_API_KEY` |
-| [find-bar-flottante](2026-09-21-ux/find-bar-flottante.md) | **deux hypothèses fausses** (transparence, z-index) écartées par la mesure avant de trouver la cause réelle : une carte de 760 px dans un flux de 1034 px |
-| [regles-du-dossier](2026-09-21-ux/regles-du-dossier.md) | le client gardait ses propres instructions alors que le CLI lit des règles dans le dossier ; `max` manquait sur huit niveaux de réflexion, et `ultra` était décrit comme plus profond que `max` |
-| [composeur-modele-rogne](2026-09-21-ux/composeur-modele-rogne.md) | un correctif CSS qui a **cessé de s'appliquer** quand le bouton est devenu un `<details>` ; et un `<details>` fermé dont le contenu garde un rectangle, ce qui a produit un faux débordement de 200 px à toutes les largeurs |
-| [alignement-cli-projet-dossier](2026-09-21-ux/alignement-cli-projet-dossier.md) | un `--trust-workspace` manquant rendait les règles du dossier muettes **sans erreur** ; la décision d'écrire nos instructions dans `AGENTS.md` a été prise puis **retirée** (le fichier appartient à l'utilisateur) |
+| [M0-03-envoi-rejete-inabouti](2026-09-20-windows-group1/M0-03-envoi-rejete-inabouti.md) | first attempt at a rejected send, since replaced |
+| [M1-10-retrait-file-inabouti](2026-09-20-windows-group1/M1-10-retrait-file-inabouti.md) | queue never fed — preconditions unverified |
+| [finder-hors-fenetre-inabouti](2026-09-20-windows-transcript/finder-hors-fenetre-inabouti.md) | wrong selector: the finder's container instead of its opener |
+| [M0-12](2026-09-20-windows-a11y/M0-12.md) | contains the false positive "no focus indicator" **and** its correction |
+| [modules-inaccessibles-aux-tests](2026-09-20-windows-ledgers/modules-inaccessibles-aux-tests.md) | initial false diagnosis: 15 modules announced instead of 2 |
+| [nettoyage-conversations](2026-09-20-windows-cleanup/nettoyage-conversations.md) | **three** deletion methods that failed before the right one |
+| [debordement-desktop](2026-09-21-ux/debordement-desktop.md) | **three** successive instrument bugs, including a silent `NaN` that emptied the report; replaces a version whose every figure was wrong |
+| [revue-passe2](2026-09-21-ux/revue-passe2.md) | **four false positives** (two of which I had relayed) and a duplicate hypothesis **disproved by the persisted data** |
+| [m1-06-blocage-refute](2026-09-21-ux/m1-06-blocage-refute.md) | a "blocking finding" published against the host, disproved: the probe requested the capability **flat** and therefore never ran the command |
+| [m1-06-capacites-au-montage](2026-09-21-ux/m1-06-capacites-au-montage.md) | three sources contradicting each other about the same capability, and the synchronisation defect that explains them |
+| [authentification-muse](2026-09-21-ux/authentification-muse.md) | why the editor cannot do OAuth on its own, and how to drive the CLI instead — with the `META_API_KEY` precedence trap |
+| [find-bar-flottante](2026-09-21-ux/find-bar-flottante.md) | **two false hypotheses** (transparency, z-index) ruled out by measurement before finding the real cause: a 760 px card in a 1034 px flow |
+| [regles-du-dossier](2026-09-21-ux/regles-du-dossier.md) | the client kept its own instructions while the CLI reads rules from the folder; `max` was missing from eight reasoning levels, and `ultra` was described as deeper than `max` |
+| [composeur-modele-rogne](2026-09-21-ux/composeur-modele-rogne.md) | a CSS fix that **stopped applying** when the button became a `<details>`; and a closed `<details>` whose content keeps a rectangle, producing a false 200 px overflow at every width |
+| [alignement-cli-projet-dossier](2026-09-21-ux/alignement-cli-projet-dossier.md) | a missing `--trust-workspace` left the folder's rules silent **with no error**; the decision to write our instructions into `AGENTS.md` was taken and then **withdrawn** (the file belongs to the user) |
 
-## Erreurs de méthode de la campagne, documentées plutôt que corrigées en silence
+## Campaign errors of method, documented rather than quietly fixed
 
-1. **Indicateur de focus** : conclu absent en cadrant le seul `TEXTAREA`. L'anneau est sur le conteneur.
-2. **`prefers-contrast`** : d'abord attribué à la spécificité, correctif tenté, **échec**, correctif retiré, diagnostic corrigé, hypothèse réelle testée **hors du dépôt** avant application.
-3. **Ordre des entrées du transcript** : `streamWindowStart` est un offset depuis la fin, donc un marqueur « hors fenêtre » était en fait **dedans**.
-4. **Assertion tautologique sur Windows** : `pathToFileURL(url.pathname).pathname` diffère de `url.pathname` (double barre oblique), ce qui a fait échouer 92 tests pour rien.
-5. **Test faux, pas code faux** : `createLatestWriteQueue` fusionne délibérément les écritures ; mon assertion attendait l'inverse.
-6. **`returnByValue` oublié** sur `Runtime.evaluate` : renvoie une référence distante, donc `undefined`, indiscernable d'un échec.
-7. **Cycles de test sans vérification d'état initial** : quatre tests ont échoué faute d'avoir confirmé l'état de départ ou l'identité de la conversation.
-8. **Capture « conversation propre » non vérifiée** : le prédicat comptait `.message`/`.log-entry`/`[data-role]`, qui n'existent nulle part dans le DOM réel — la classe des lignes de transcript est `.msg`. Le compte valait donc **toujours 0**, et trois captures de la page **Library** ont été enregistrées comme « conversation propre » avec un `conversationOpen` nul. Le sélecteur est corrigé, et le script **refuse** désormais d'écrire la capture quand le transcript est vide. Le garde-fou `check-scripts-parse.mjs` détecte en plus la forme *équilibrée* du piège du backtick, celle que `node --check` laisse passer : c'est ce qui a produit ce bug, un commentaire contenant `.msg` entre backticks à l'intérieur du gabarit page-side.
-9. **Mojibake cp1252 dans huit fichiers sources** — la plus coûteuse des erreurs d'outillage de cette campagne, et la seule qui a atteint l'interface. Réécrire un fichier UTF-8 avec `Get-Content -Raw` (PowerShell décode en ANSI) puis `[System.IO.File]::WriteAllText` transforme chaque caractère non-ASCII en octet de tête suivi du caractère cp1252 : le tiret cadratin, l'ellipse, la flèche et le « ＋ » d'Attach sont devenus illisibles **dans l'application**, et 126 lignes de huit fichiers ont été abîmées par des réécritures successives. Symptôme visible : « Describe what you want to buildÃ¢â‚¬Â¦ » et « Ã¯Â¼Â‹ Attach ».
-   - **Réparation** : transformation inverse (octets cp1252 → UTF-8), appliquée **par ligne** avec le nombre de passes choisi par ce qui efface réellement les marqueurs — l'atteinte n'était pas uniforme (un fichier réécrit deux fois affiche `ÃƒÆ'Ã‚Â¢`).
-   - **Pertes définitives** : deux glyphes dont le dernier octet (0x90, 0x9D) n'existe pas en cp1252 — la flèche `←` et le guillemet fermant `”` — ont été restaurés à la main.
-   - **Garde-fou** : `test/encoding.test.ts` refuse tout fichier source contenant un octet de tête suivi d'un caractère non-ASCII, avec des fixtures écrites en échappements pour que le test ne contienne jamais ce qu'il interdit.
-   - **Règle** : ne jamais réécrire un fichier source avec un outil qui ne lit pas explicitement en UTF-8. C'est aussi ce qui a produit les deux fichiers `cdp-*.mjs` déjà abîmés avant cette session.
+1. **Focus indicator**: concluded absent by framing only the `TEXTAREA`. The ring is on the container.
+2. **`prefers-contrast`**: first attributed to specificity, a fix attempted, **failed**, the fix withdrawn, the diagnosis corrected, the real hypothesis tested **outside the repository** before being applied.
+3. **Transcript entry order**: `streamWindowStart` is an offset from the end, so an "outside the window" marker was in fact **inside** it.
+4. **Tautological assertion on Windows**: `pathToFileURL(url.pathname).pathname` differs from `url.pathname` (a double slash), which failed 92 tests for nothing.
+5. **Wrong test, not wrong code**: `createLatestWriteQueue` deliberately coalesces writes; my assertion expected the opposite.
+6. **`returnByValue` forgotten** on `Runtime.evaluate`: returns a remote reference, hence `undefined`, indistinguishable from a failure.
+7. **Test cycles with no initial-state check**: four tests failed for want of confirming the starting state or the conversation's identity.
+8. **Unverified "clean conversation" capture**: the predicate counted `.message`/`.log-entry`/`[data-role]`, which exist nowhere in the real DOM — the transcript row class is `.msg`. The count was therefore **always 0**, and three captures of the **Library** page were recorded as "clean conversation" with a null `conversationOpen`. The selector is fixed, and the script now **refuses** to write the capture when the transcript is empty. The `check-scripts-parse.mjs` guard rail additionally detects the *balanced* form of the backtick trap, the one `node --check` lets through: that is what produced this bug, a comment containing `.msg` between backticks inside the page-side template.
+9. **cp1252 mojibake in eight source files** — the most expensive tooling error of this campaign, and the only one that reached the interface. Rewriting a UTF-8 file with `Get-Content -Raw` (PowerShell decodes as ANSI) then `[System.IO.File]::WriteAllText` turns every non-ASCII character into a lead byte followed by the cp1252 character: the em dash, the ellipsis, the arrow and Attach's "＋" became unreadable **inside the application**, and 126 lines across eight files were damaged by successive rewrites. Visible symptom: "Describe what you want to buildÃ¢â‚¬Â¦" and "Ã¯Â¼Â‹ Attach".
+   - **Repair**: the inverse transformation (cp1252 bytes → UTF-8), applied **line by line** with the number of passes chosen by what actually erases the markers — the damage was not uniform (a file rewritten twice shows `ÃƒÆ'Ã‚Â¢`).
+   - **Permanent losses**: two glyphs whose last byte (0x90, 0x9D) does not exist in cp1252 — the arrow `←` and the closing quote `”` — were restored by hand.
+   - **Guard rail**: `test/encoding.test.ts` refuses any source file containing a lead byte followed by a non-ASCII character, with fixtures written as escapes so the test never contains what it forbids.
+   - **Rule**: never rewrite a source file with a tool that does not explicitly read UTF-8. That is also what produced the two `cdp-*.mjs` files already damaged before this session.
 
-## Ce que cette campagne n'a pas fait
+## What this campaign did not do
 
-- **Aucune preuve macOS ni Linux**, pour aucun ticket.
-- **Aucune qualification par un lecteur d'écran réel.**
-- **Aucun test sur machine propre** : la machine de test a déjà WSL, Muse et des conversations.
-- **Aucune installation signée** : les deux installeurs sont `NotSigned`.
-- **Aucun test des contrats M2 et M3** (worktrees, MCP, scheduler, notifications) hors les deux ledgers.
-- **Aucune correction du produit** hors le défaut `prefers-contrast` : cette campagne mesure et documente, elle ne refactorise pas.
+- **No macOS or Linux evidence**, for any ticket.
+- **No qualification with a real screen reader.**
+- **No test on a clean machine**: the test machine already has WSL, Muse and conversations.
+- **No signed installation**: both installers are `NotSigned`.
+- **No test of the M2 and M3 contracts** (worktrees, MCP, scheduler, notifications) beyond the two ledgers.
+- **No product fix** apart from the `prefers-contrast` defect: this campaign measures and documents, it does not refactor.
