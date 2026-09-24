@@ -18,6 +18,7 @@
   --line: #e6e9ed;
   --blue: #0866ff;
   --blue-hover: #0055d9;
+  --accent: var(--blue);
   --pale: #eaf2ff;
   --green: #23846c;
   --danger: #b3261e;
@@ -7805,11 +7806,16 @@ body.dark .composer textarea::placeholder {
 }
 
 .welcome-worktree input:checked {
-  background: var(--accent);
+  background: var(--blue);
+}
+
+.welcome-worktree input:checked::before {
+  background: #fff;
 }
 
 .welcome-worktree input:checked::before {
   transform: translateX(13px);
+  background: #fff;
 }
 
 .welcome-worktree input:focus-visible {
