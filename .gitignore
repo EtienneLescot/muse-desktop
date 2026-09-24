@@ -27,3 +27,6 @@ scripts/wsl-bridge/target/
 # are derived from the captures next to them and are not evidence themselves.
 **/_crops/
 **/_zoom/
+
+# Claude Code local state: session worktrees live here.
+.claude/

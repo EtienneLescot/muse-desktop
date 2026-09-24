@@ -35,6 +35,8 @@ const paths = {
     "M6 8v8" +
     "M18 8v3a3 3 0 0 1-3 3H6",
   pin: "M8 3h8l-1 6 3 3v2h-5v7l-1 1-1-1v-7H6v-2l3-3-1-6Z",
+  copy: "M9 9h11v11H9zM5 15H4V4h11v1",
+  check: "m5 13 4 4 10-10",
 };
 export function Icon({ name }: { name: keyof typeof paths }) {
   return (

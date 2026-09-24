@@ -35,9 +35,31 @@ import { streamNavigationTarget } from "../lib/streamNavigation";
 import { subagentStatusLabel } from "../lib/subagent";
 import { officePreviewForFile, type OfficePreview } from "../lib/officePreview";
 import { MessageContent } from "./MessageContent";
+import { Icon } from "./Icon";
 import { loadStreamPosition, saveStreamPosition } from "../lib/streamPosition";
 
 const MAX_INLINE_RICH_PDF_BYTES = 5 * 1024 * 1024;
+
+/** Copy a message to the clipboard, with the result shown in place. */
+function CopyButton({ text }: { text: string }) {
+  const [state, setState] = useState<"idle" | "done" | "failed">("idle");
+  return (
+    <button
+      type="button"
+      className="msg-copy"
+      title={state === "failed" ? "Clipboard unavailable" : "Copy this message"}
+      aria-label="Copy this message"
+      onClick={() => {
+        navigator.clipboard?.writeText(text).then(
+          () => setState("done"),
+          () => setState("failed"),
+        );
+      }}
+    >
+      <Icon name={state === "done" ? "check" : "copy"} />
+    </button>
+  );
+}
 
 function outputDownloadName(entry: LogEntry, mediaType?: string): string {
   const source = entry.richContent?.[0]?.path ?? "muse-output";
@@ -1356,6 +1378,9 @@ export function StreamView({
             )}
             <div className="msg-footer">
               <span className="ts">{timeOf(e.ts)}</span>
+              {(e.role === "user" || e.role === "assistant") && e.text.trim().length > 0 && (
+                <CopyButton text={e.text} />
+              )}
               {onForkFromEntry && e.turnId && !e.open && (e.role === "user" || e.role === "assistant") && (
                 <button
                   type="button"

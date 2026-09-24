@@ -958,6 +958,31 @@ body.dark .avatar {
   opacity: 1;
 }
 
+.msg-copy {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 2px;
+  line-height: 0;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.msg-copy svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+.msg:hover .msg-copy,
+.msg:focus-within .msg-copy,
+.msg-copy:focus-visible {
+  opacity: 1;
+}
+.msg-copy:hover {
+  color: var(--text);
+}
+
 .msg-fork:hover,
 .msg-fork:focus-visible {
   text-decoration: underline;
@@ -7651,6 +7676,106 @@ body.dark .composer textarea::placeholder {
     transform: rotate(360deg);
   }
 }
+
+/* The project row: the picker, and beside it the one bit that qualifies it.
+   The worktree choice used to be a full-width banner under the picker, which
+   spent a whole block of the welcome column on a single checkbox. */
+.welcome-project-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.welcome-project-row .project-picker {
+  flex: 1;
+  max-width: none;
+  margin: 0;
+}
+
+.welcome-worktree {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 8px 12px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.welcome-worktree:has(input:checked) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.welcome-worktree:has(input:disabled) {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* The switch itself: the checkbox is the track, its ::before the knob. No
+   extra element, so the label stays one control for pointer and keyboard. */
+.welcome-worktree input {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 30px;
+  height: 17px;
+  margin: 0;
+  flex: none;
+  border-radius: 9px;
+  background: var(--line);
+  transition: background 120ms ease;
+  cursor: inherit;
+}
+
+.welcome-worktree input::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--surface);
+  transition: transform 120ms ease;
+}
+
+.welcome-worktree input:checked {
+  background: var(--accent);
+}
+
+.welcome-worktree input:checked::before {
+  transform: translateX(13px);
+}
+
+.welcome-worktree input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* A conversation that has been started but has no session id yet: the host is
+   still creating the worktree or booting. The welcome screen used to hold a
+   spinner instead, which never showed that the message had left. */
+.pending-start .msg.user {
+  margin-left: auto;
+}
+
+.pending-start-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 @media (prefers-contrast: more) {
   .muted {
     color: var(--text);
@@ -7677,37 +7802,4 @@ body.dark .composer textarea::placeholder {
   .stream-recovery-note {
     border-color: var(--text);
   }
-}
-
-/* The worktree choice, made before the conversation exists. It sits under the
-   project picker because it answers a question about the *next* conversation:
-   work in the project folder, or in a copy on its own branch. */
-.welcome-worktree {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  width: 100%;
-  max-width: 520px;
-  margin: 10px auto 0;
-  padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  cursor: pointer;
-}
-
-.welcome-worktree input {
-  margin-top: 3px;
-}
-
-.welcome-worktree span {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 0.8rem;
-}
-
-.welcome-worktree small {
-  color: var(--muted);
-  font-size: 0.74rem;
 }

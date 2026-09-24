@@ -34,15 +34,6 @@ interface Props {
   onCreateProjectFromFolder: (path: string) => Promise<string | null>;
   /** Project roots available as explicit environments on the welcome screen. */
   environmentOptions?: ProjectWorkspaceOption[];
-  /**
-   * What the app is waiting for right now, in plain words; null when idle.
-   *
-   * Starting a conversation in a worktree copies the repository and starts a
-   * host for that folder. The screen used to say "Starting..." for the whole of
-   * it, which reads as a hang. The steps come from the caller, the only place
-   * that knows them.
-   */
-  preparation?: string | null;
   /** Creates the session and sends the first message right away. */
   onStart: (
     draft: string,
@@ -90,7 +81,6 @@ export interface NewConversationEnvironment {
  */
 export function EmptySessionScreen({
   workspace,
-  preparation = null,
   onCreateProjectFromFolder,
   environmentOptions = [],
   onStart,
@@ -244,44 +234,37 @@ export function EmptySessionScreen({
         A little further.
       </h2>
       <p>Build, explore, and ship with Muse.</p>
-      <ProjectPicker
-        options={environmentOptions}
-        labels={projectLabels}
-        value={environmentId}
-        onChange={setEnvironmentId}
-        onCreateFromFolder={onCreateProjectFromFolder}
-      />
-      <p className="welcome-project-note">
-        {selectedEnvironment
-          ? `Runs in ${folderName(selectedEnvironment.workspace)}. The agent reads the rules of that folder.`
-          : workspace === null
-            ? "Choose a project folder: a project is a folder, and its name comes from it."
-            : `Runs in ${folderName(workspace)} with the global settings. The agent reads that folder's rules.`}
-      </p>
-      <label className="welcome-worktree">
-        <input
-          type="checkbox"
-          checked={worktree}
-          onChange={(event) => setWorktree(event.target.checked)}
-          disabled={selectedWorkspace === null}
+      <div className="welcome-project-row">
+        <ProjectPicker
+          options={environmentOptions}
+          labels={projectLabels}
+          value={environmentId}
+          onChange={setEnvironmentId}
+          onCreateFromFolder={onCreateProjectFromFolder}
         />
-        <span>
-          <strong>Create a new worktree</strong>
-          <small>
-            {selectedWorkspace === null
-              ? "Choose a project folder first."
-              : worktree
-                ? `The conversation starts in a copy on a new branch, leaving ${folderName(selectedWorkspace)} untouched.`
-                : `The conversation works directly in ${folderName(selectedWorkspace)}.`}
-          </small>
-        </span>
-      </label>
-      {preparation !== null && (
-        <div className="welcome-preparation" role="status" aria-live="polite">
-          <span className="welcome-spinner" aria-hidden="true" />
-          <span>{preparation}</span>
-        </div>
-      )}
+        {/* The worktree choice is one bit, so it is a switch beside the picker it
+            qualifies. Its consequence is spelled out in the note below, where the
+            folder is already being explained, rather than in a banner of its own. */}
+        <label className="welcome-worktree" title="Start this conversation in a copy of the folder, on its own branch">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={worktree}
+            onChange={(event) => setWorktree(event.target.checked)}
+            disabled={selectedWorkspace === null}
+          />
+          <span>Worktree</span>
+        </label>
+      </div>
+      <p className="welcome-project-note">
+        {selectedWorkspace === null
+          ? "Choose a project folder: a project is a folder, and its name comes from it."
+          : worktree
+            ? `Runs in a copy of ${folderName(selectedWorkspace)} on a new branch, leaving it untouched.`
+            : selectedEnvironment
+              ? `Runs in ${folderName(selectedEnvironment.workspace)}. The agent reads the rules of that folder.`
+              : `Runs in ${folderName(selectedWorkspace)} with the global settings. The agent reads that folder's rules.`}
+      </p>
       <div className="welcome-suggestions">
         {([
           [

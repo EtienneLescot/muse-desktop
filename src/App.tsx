@@ -9,6 +9,7 @@ import { isMacPlatform } from "./lib/platform";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { MessageContent } from "./components/MessageContent";
 import {
   EmptySessionScreen,
   type NewConversationEnvironment,
@@ -289,8 +290,10 @@ export default function App() {
   // M2-05: the step a move to a worktree is on, or null. The button carries it
   // because the conversation screen has no preparation banner of its own.
   const [movingToWorktree, setMovingToWorktree] = useState<string | null>(null);
-  // What the welcome screen is waiting for, in plain words. Null when idle.
-  const [preparation, setPreparation] = useState<string | null>(null);
+  // The conversation being started, before the host has given it a session id:
+  // the first message as typed, and what the app is waiting for in plain words.
+  // Null when idle.
+  const [preparation, setPreparation] = useState<{ step: string; draft: string } | null>(null);
   const [page, setPage] = useState<
     "task" | "projects" | "automations" | "extensions" | "library" | "archives"
   >("task");
@@ -896,21 +899,12 @@ export default function App() {
                 {reconnectingId === active.session_id ? "Reconnecting…" : "Reconnect"}
               </button>
             )}
-            {active !== null && page === "task" && (
-              <button
-                type="button"
-                className="workspace-button"
-                disabled={movingToWorktree !== null || active.running || active.workspace.length === 0}
-                onClick={() => void moveToWorktree(active.session_id)}
-                title="Open a new conversation in a worktree of this folder; this conversation stays here"
-              >
-                {movingToWorktree ?? "Move to worktree"}
-              </button>
+            {backendMissing && (
+              <span className="pill">
+                <span className="dot" />
+                Web preview
+              </span>
             )}
-            <span className="pill">
-              <span className="dot" />
-              {backendMissing ? "Web preview" : "Local"}
-            </span>
             <button
               className="icon"
               onClick={() => setTheme(nextTheme(theme))}
@@ -920,15 +914,38 @@ export default function App() {
               <Icon name={theme === "dark" ? "sun" : "moon"} />
             </button>
             {active && page === "task" && !settingsOpen && (
-              <button
-                className="icon"
-                onClick={() => void forkSession(active.session_id)}
-                disabled={backendMissing || !connectedIds.includes(active.session_id)}
-                aria-label="Fork conversation"
-                title="Fork conversation from the latest completed turn"
-              >
-                <Icon name="branch" />
-              </button>
+              /* Forking and moving to a worktree are the same gesture seen twice
+                 — branch this conversation — so they share one control instead
+                 of a cryptic text button floating in the top bar. */
+              <details className="branch-menu" data-popover>
+                <summary className="icon" aria-label="Branch this conversation" title="Branch this conversation">
+                  <Icon name="branch" />
+                </summary>
+                <div className="branch-menu-popover">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                      void forkSession(active.session_id);
+                    }}
+                    disabled={backendMissing || !connectedIds.includes(active.session_id)}
+                  >
+                    <strong>Fork conversation</strong>
+                    <small>New thread from the latest completed turn, same folder.</small>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                      void moveToWorktree(active.session_id);
+                    }}
+                    disabled={movingToWorktree !== null || active.running || active.workspace.length === 0}
+                  >
+                    <strong>{movingToWorktree ?? "Continue in a worktree"}</strong>
+                    <small>New thread in a git worktree of this folder; this one stays here.</small>
+                  </button>
+                </div>
+              </details>
             )}
             {active && page === "task" && !settingsOpen && (
               <button
@@ -1312,7 +1329,20 @@ export default function App() {
                   )}
                 </div>
               )}
-            {active === null ? (
+            {active === null && preparation !== null ? (
+              /* The conversation opens on the first message, not on a spinner in
+                 the middle of the welcome screen: the host has no session id yet,
+                 so this stands in until it does — same shape, same bubble. */
+              <div className="stream pending-start" role="status" aria-live="polite">
+                <div className="msg user">
+                  <MessageContent text={preparation.draft} />
+                </div>
+                <p className="pending-start-step">
+                  <span className="welcome-spinner" aria-hidden="true" />
+                  <span>{preparation.step}</span>
+                </p>
+              </div>
+            ) : active === null ? (
               <EmptySessionScreen
                 workspace={workspace}
                 onCreateProjectFromFolder={async (path) => {
@@ -1325,7 +1355,6 @@ export default function App() {
                   return `${created.id}:${index >= 0 ? index : 0}`;
                 }}
                 environmentOptions={environmentOptions}
-                preparation={preparation}
                 onStart={async (draft, inputParts, environment?: NewConversationEnvironment) => {
                   const project = environment?.projectId
                     ? projects.find((candidate) => candidate.id === environment.projectId) ?? null
@@ -1341,23 +1370,24 @@ export default function App() {
                   let startFolder = environment?.workspace ?? null;
                   try {
                     if (environment?.worktree === true && startFolder !== null) {
-                      setPreparation(`Creating a worktree of ${folderName(startFolder)}…`);
+                      setPreparation({ draft, step: `Creating a worktree of ${folderName(startFolder)}…` });
                       // A short, unique tail: two conversations in the same project must not ask for the same folder and branch.
                       const plan = planConversationWorktree(folderName(startFolder), undefined, Date.now().toString(36).slice(-5));
                       const record = await createWorktreeForWorkspace(startFolder, plan);
                       if (record === null) return false;
                       startFolder = record.path;
                     }
-                    setPreparation(
-                      startFolder === null
+                    setPreparation({
+                      draft,
+                      step: startFolder === null
                         ? "Starting a Muse host…"
                         : `Starting Muse in ${folderName(startFolder)}…`,
-                    );
+                    });
                     const id = project !== null && startFolder !== null
                       ? await startSessionInWorkspace(startFolder, settingsFor(project.id), project.id)
                       : await startSession();
                     if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
-                    setPreparation("Sending your first message…");
+                    setPreparation({ draft, step: "Sending your first message…" });
                     // M0-03: honest result — when the first send fails the
                     // welcome draft must not be reported as sent; the text
                     // stays recoverable via the retryable pending-send notice.

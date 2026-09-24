@@ -371,7 +371,7 @@ import {
 } from "../lib/approvalResolution";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
 import { reconnectErrorMessage, userFacingError } from "../lib/errorCopy";
-import { forkFailureMessage } from "../lib/fork";
+import { forkFailureMessage, inheritedForkLog } from "../lib/fork";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
 import {
@@ -4586,11 +4586,12 @@ export function useMuseSessions(): UseMuseSessions {
           setError("The fork was created but is no longer available.");
           return null;
         }
-        // The server owns the durable branch. Copy only completed local
-        // entries for immediate continuity; live/open items belong to the
-        // source turn and must not be replayed into the fork transcript.
-        const inherited = (logsRef.current[sourceId] ?? loadLog(sourceId)).filter(
-          (entry) => entry.open !== true,
+        // The server owns the durable branch. Copy only the completed local
+        // entries up to the anchor turn: live/open items belong to the source
+        // turn, and anything after the anchor is not part of this branch.
+        const inherited = inheritedForkLog(
+          logsRef.current[sourceId] ?? loadLog(sourceId),
+          lastTurnId,
         );
         const record: MuseSession = {
           session_id: meta.session_id,
