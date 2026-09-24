@@ -1,25 +1,25 @@
-# Le host émet bien le terminal après une interruption (20 septembre 2026)
+# The host does emit the terminal after an interrupt (20 September 2026)
 
-**Ce document corrige l'écart n° 2 de [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md)**, qui affirmait qu'aucune notification terminale n'est émise après `turn/interrupt`. **C'est faux**, et j'ai trouvé pourquoi je le croyais.
+**This document corrects gap no. 2 of [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md)**, which claimed no terminal notification is emitted after `turn/interrupt`. **That is false**, and I found out why I believed it.
 
-## La mesure
+## The measurement
 
 ```powershell
 node scripts/msp-interrupt-notifications.mjs
 ```
 
-Un tour délibérément long est lancé, puis interrompu après 6 s avec `{sessionId, turnId, commandId}`, et **toutes** les notifications sont enregistrées pendant 45 s.
+A deliberately long turn is started, then interrupted after 6 s with `{sessionId, turnId, commandId}`, and **every** notification is recorded for 45 s.
 
-**Résultat — le host est bavard, et vite :**
+**Result — the host is talkative, and fast:**
 
-| Après l'interruption | Notification |
+| After the interrupt | Notification |
 |---|---|
 | +19 ms | `item/completed` |
 | +39 ms | `session/statusChanged` |
 | **+39 ms** | **`turn/completed`** |
-| deltas `item/delta` ensuite | **0** — le tour s'est bien arrêté |
+| `item/delta` deltas afterwards | **0** — the turn really stopped |
 
-Le terminal porte **exactement le `turnId` attendu** :
+The terminal carries **exactly the expected `turnId`**:
 
 ```json
 { "method": "turn/completed",
@@ -27,33 +27,33 @@ Le terminal porte **exactement le `turnId` attendu** :
   "keys": ["sessionId", "viewCursor", "sourceRange", "turnId", "terminal", "reason", "durationMs"] }
 ```
 
-(`turnId` envoyé et `turnId` reçu sont identiques.)
+(the `turnId` sent and the `turnId` received are identical.)
 
-## Pourquoi je croyais le contraire
+## Why I believed the opposite
 
-`native-smoke.mjs --exercise-control --exercise-terminal` **échoue**, avec :
+`native-smoke.mjs --exercise-control --exercise-terminal` **fails**, with:
 
 ```
 host-A did not emit a terminal notification for …
 ```
 
-Ce n'est **pas** le host qui est en cause. La ligne fautive est dans le harness :
+It is **not** the host at fault. The offending line is in the harness:
 
 ```js
 await host.request("turn/interrupt", {
   commandId: uuidv7(),
   sessionId: sessions[index],
-  retract: false,          // ← pas de turnId
+  retract: false,          // ← no turnId
 });
 ```
 
-**Le host exige `turnId`** — il le dit lui-même : `invalid session/start commandId: expected UUIDv7`, et pour l'interruption `turn/interrupt` exige `commandId` **en plus de** `turnId` (déjà noté au §« détails de forme » du rapport). Sans `turnId`, l'interruption est refusée en `invalidParams`, **le tour n'est jamais interrompu**, et aucun terminal ne peut arriver.
+**The host requires `turnId`** — it says so itself: `invalid session/start commandId: expected UUIDv7`, and for interrupts `turn/interrupt` requires `commandId` **in addition to** `turnId` (already noted in the report's "shape details" section). Without `turnId`, the interrupt is refused with `invalidParams`, **the turn is never interrupted**, and no terminal can arrive.
 
-Le harness traduisait ensuite cette absence en `terminalNotification: unsupported`, et **j'ai pris ce constat pour une propriété du host**. C'est la **quatrième** erreur de la même famille dans cette campagne : une erreur de méthode lue comme une absence de capacité.
+The harness then translated that absence into `terminalNotification: unsupported`, and **I took that finding for a property of the host**. It is the **fourth** error of the same family in this campaign: an error of method read as a missing capability.
 
-## Ce que le client fait, lui
+## What the client does, for its part
 
-Le code Rust **sait** envoyer le `turnId` — mais il est **optionnel** :
+The Rust code **knows** how to send the `turnId` — but it is **optional**:
 
 ```rust
 if let Some(turn_id) = turn_id.map(str::trim).filter(|value| !value.is_empty()) {
@@ -61,42 +61,42 @@ if let Some(turn_id) = turn_id.map(str::trim).filter(|value| !value.is_empty()) 
 }
 ```
 
-Et son commentaire énonce exactement l'intention du client :
+And its comment states the client's intent exactly:
 
 > An accepted `turn/interrupt` is admission only; the renderer remains in its stopping state until `turn/completed`, `turn/retracted` or another terminal notification arrives.
 
-**Donc le client attend délibérément un terminal — et le host le fournit**, à condition que le `turnId` soit transmis.
+**So the client deliberately waits for a terminal — and the host provides it**, provided the `turnId` is passed.
 
-## Ce qui reste à vérifier, et qui n'est plus un écart sidecar
+## What is left to check, and is no longer a sidecar gap
 
-L'interface a bel et bien montré un `Stopping…` qui ne se résolvait pas, avec le bandeau « waiting for the desktop host to confirm it ». **Quelque chose ne fonctionne pas sur ce chemin** — mais ce n'est **pas** l'absence de terminal côté host, c'est démontré.
+The interface did indeed show a `Stopping…` that never resolved, with the "waiting for the desktop host to confirm it" banner. **Something does not work on that path** — but it is **not** a missing terminal on the host side, that is demonstrated.
 
-Trois possibilités, aucune tranchée :
+Three possibilities, none settled:
 
-1. le renderer n'appelle pas `interrupt_session` avec un `turnId` non vide, donc le host refuse ou interrompt autre chose ;
-2. le terminal arrive mais n'est pas associé au bon tour côté client ;
-3. l'observation d'interface datait d'un état différent.
+1. the renderer does not call `interrupt_session` with a non-empty `turnId`, so the host refuses or interrupts something else;
+2. the terminal arrives but is not associated with the right turn on the client side;
+3. the interface observation dated from a different state.
 
-**Ce qu'il faudrait pour trancher :** reproduire l'arrêt depuis l'interface avec l'onglet réseau ou une trace des appels Rust, et vérifier **le `turnId` effectivement transmis**.
+**What it would take to settle it:** reproduce the stop from the interface with the network tab or a trace of the Rust calls, and check **the `turnId` actually transmitted**.
 
-## Vérification du harness
+## Checking the harness
 
 ```powershell
 node scripts/native-smoke.mjs --exercise-control --exercise-terminal
-# échoue : "did not emit a terminal notification" — harness sans turnId
+# fails: "did not emit a terminal notification" — harness with no turnId
 
 node scripts/msp-interrupt-notifications.mjs
-# réussit : turn/completed à +39 ms
+# succeeds: turn/completed at +39 ms
 ```
 
-**Le harness a besoin d'un correctif** : passer le `turnId` du tour qu'il interrompt. Tant qu'il ne le fait pas, il continuera de produire un faux constat d'absence, et toute documentation qui s'appuie sur lui sera fausse — comme la mienne l'a été.
+**The harness needs a fix**: pass the `turnId` of the turn it is interrupting. Until it does, it will keep producing a false finding of absence, and any documentation resting on it will be wrong — as mine was.
 
-## Bilan des corrections de ce rapport
+## Summary of this report's corrections
 
-| Écart | Ce que j'affirmais | Mesuré |
+| Gap | What I claimed | Measured |
 |---|---|---|
-| 1 | `session/read` et `session/resume` absents | **présents et fonctionnels** sur une session persistée |
-| 2 | aucun terminal après interruption | **`turn/completed` à +39 ms** |
-| 5 | `sessionDurability` constamment `ephemeral` | **variable** : `ephemeral` puis `durable` |
+| 1 | `session/read` and `session/resume` missing | **present and working** on a persisted session |
+| 2 | no terminal after an interrupt | **`turn/completed` at +39 ms** |
+| 5 | `sessionDurability` constantly `ephemeral` | **variable**: `ephemeral` then `durable` |
 
-**Trois écarts sur cinq étaient faux**, tous pour la même raison : mon outillage ne distinguait pas « la ressource n'existe pas » de « mon scénario ne la sollicitait pas ».
+**Three gaps out of five were false**, all for the same reason: my tooling did not distinguish "the resource does not exist" from "my scenario did not exercise it".

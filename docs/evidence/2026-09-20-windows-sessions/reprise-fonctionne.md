@@ -1,31 +1,31 @@
-# La reprise fonctionne côté host : M0-02 est un écart client (20 septembre 2026)
+# Resume works on the host side: M0-02 is a client gap (20 September 2026)
 
-**Ce document corrige les écarts n° 1 et n° 2 de [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md).** Les deux étaient faux, et le test qui les contredit est décisif.
+**This document corrects gaps no. 1 and no. 2 of [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md).** Both were false, and the test that contradicts them is decisive.
 
-## Le test
+## The test
 
 ```powershell
 node scripts/msp-resume-free-session.mjs
 ```
 
-Séquence complète, sans application lancée :
+Complete sequence, with no application running:
 
-1. host **A** neuf → `session/start` avec un `commandId` UUIDv7 ;
-2. un tour **réel** est mené à son terme, pour que la session soit écrite sur disque ;
-3. **host A est tué** — l'équivalent d'une fermeture d'application ou d'un plantage ;
-4. host **B** neuf → `session/list`, puis **`session/resume`** sur la session, **libre** cette fois ;
-5. `session/read` pour vérifier que l'historique est accessible.
+1. fresh host **A** → `session/start` with a UUIDv7 `commandId`;
+2. a **real** turn is carried to completion, so the session is written to disk;
+3. **host A is killed** — the equivalent of closing the application or a crash;
+4. fresh host **B** → `session/list`, then **`session/resume`** on the session, **free** this time;
+5. `session/read` to check the history is reachable.
 
-## Résultat
+## Result
 
-| Étape | Résultat |
+| Step | Result |
 |---|---|
-| Tour achevé sur A | **`turn/completed` reçu** |
-| Host B liste la session | **oui** — `status: notLoaded`, `turnCount: 1` |
-| **`session/resume` sur session libre** | **succès** |
-| `session/read` | **succès** — retourne `history`, `viewCursor`, `session`, `pendingRequests` |
+| Turn completed on A | **`turn/completed` received** |
+| Host B lists the session | **yes** — `status: notLoaded`, `turnCount: 1` |
+| **`session/resume` on a free session** | **success** |
+| `session/read` | **success** — returns `history`, `viewCursor`, `session`, `pendingRequests` |
 
-Notifications observées sur le tour nominal de A :
+Notifications observed on A's nominal turn:
 
 ```
 session/started, session/branchChanged, session/statusChanged,
@@ -33,62 +33,62 @@ turn/started, item/started, item/delta, item/completed,
 session/tokenUsage, session/contextUsage, turn/completed
 ```
 
-## Les deux corrections
+## The two corrections
 
-### Écart n° 1 — `session/read` et `session/resume` ne sont pas absents
+### Gap no. 1 — `session/read` and `session/resume` are not absent
 
-Le rapport les classait `unsupported` et en faisait le **premier chantier à demander au sidecar**. **Faux.**
+The report classified them as `unsupported` and made them the **first item to request from the sidecar**. **False.**
 
-La cause était dans ma sonde : `msp-probe.mjs` appelait ces surfaces sur une session **fraîchement créée**, jamais persistée → `sessionNotFound`, que la sonde ne distinguait pas de `methodNotFound`.
+The cause was in my probe: `msp-probe.mjs` called those surfaces on a **freshly created** session, never persisted → `sessionNotFound`, which the probe did not distinguish from `methodNotFound`.
 
-Sur une session **persistée et libre** : `session/read` répond `ok`, **`session/resume` répond succès**.
+On a **persisted and free** session: `session/read` answers `ok`, **`session/resume` succeeds**.
 
-**Conséquence : la reprise durable fonctionne au niveau du host.** Le blocage de M0-02 n'est **pas** dans le sidecar.
+**Consequence: durable resume works at the host level.** The M0-02 blocker is **not** in the sidecar.
 
-### Écart n° 2 — `turn/completed` **est** émis
+### Gap no. 2 — `turn/completed` **is** emitted
 
-Le rapport affirmait que les notifications terminales ne sont **jamais** émises. **Faux.**
+The report claimed terminal notifications are **never** emitted. **False.**
 
 | Situation | Terminal |
 |---|---|
-| Tour mené à son terme | **`turn/completed` émis** |
-| Tour interrompu par `turn/interrupt` | **aucun** — `native-smoke --exercise-control --exercise-terminal` échoue : `host-A did not emit a terminal notification` |
+| Turn carried to completion | **`turn/completed` emitted** |
+| Turn interrupted by `turn/interrupt` | **none** — `native-smoke --exercise-control --exercise-terminal` fails: `host-A did not emit a terminal notification` |
 
-**Cause de mon erreur :** `native-smoke.mjs` ne teste la notification terminale **qu'après une interruption**. Je n'avais jamais mesuré le cas nominal et j'ai généralisé.
+**Cause of my error:** `native-smoke.mjs` only tests the terminal notification **after an interrupt**. I had never measured the nominal case and generalised.
 
-**Ce qui manque réellement :** la confirmation d'un **arrêt demandé**. L'utilisateur appuie sur Stop, le host accuse, puis rien ne confirme que le tour s'est arrêté. C'est plus étroit que « aucune notification terminale ».
+**What is really missing:** confirmation of a **requested stop**. The user presses Stop, the host acknowledges, then nothing confirms the turn stopped. That is narrower than "no terminal notification at all".
 
-## Ce que cela change pour M0-02 et M0-04
+## What that changes for M0-02 and M0-04
 
-| Ticket | Ce que je croyais | Ce qui est mesuré |
+| Ticket | What I believed | What is measured |
 |---|---|---|
-| **M0-02** (reprise) | bloqué par l'absence de `session/read` et `session/resume` | **le host sait reprendre une session persistée.** Le défaut est **côté client** : `session/list` est déclaré dans `src/lib/msp.ts` ligne 32 mais **jamais appelé**, et rien ne réconcilie les conversations locales avec les sessions que le host connaît |
-| **M0-04** (arrêt fiable) | bloqué par l'absence de toute notification terminale | seul le **chemin d'arrêt** manque de terminal ; le chemin nominal en a un |
+| **M0-02** (resume) | blocked by the absence of `session/read` and `session/resume` | **the host can resume a persisted session.** The defect is **on the client side**: `session/list` is declared in `src/lib/msp.ts` line 32 but **never called**, and nothing reconciles local conversations with the sessions the host knows |
+| **M0-04** (reliable stop) | blocked by the absence of any terminal notification | only the **stop path** lacks a terminal; the nominal path has one |
 
-**M0-02 n'est donc pas un chantier sidecar.** C'est un défaut corrigeable dans ce dépôt — le plus prometteur que j'aie trouvé depuis le début de la campagne.
+**M0-02 is therefore not a sidecar workstream.** It is a fixable defect in this repository — the most promising one I have found since the campaign began.
 
-## Trois erreurs, une seule cause
+## Three errors, one single cause
 
-Mon rapport s'est trompé **trois fois** :
+My report was wrong **three times**:
 
-1. `session/read` / `session/resume` « absents » — la sonde testait une session non persistée ;
-2. `sessionDurability` constante `ephemeral` — sa valeur a changé en cours de campagne ;
-3. notifications terminales « jamais émises » — la sonde ne testait que le chemin d'interruption.
+1. `session/read` / `session/resume` "absent" — the probe tested an unpersisted session;
+2. `sessionDurability` constantly `ephemeral` — its value changed mid-campaign;
+3. terminal notifications "never emitted" — the probe only tested the interrupt path.
 
-**La même cause à chaque fois : une erreur de contexte interprétée comme une absence de capacité.** Une sonde qui ne distingue pas « la ressource n'existe pas » de « mon scénario ne la sollicitait pas » produit des constats d'absence qui sont en réalité des constats de méthode.
+**The same cause every time: a context error interpreted as a missing capability.** A probe that does not distinguish "the resource does not exist" from "my scenario did not exercise it" produces findings of absence that are really findings about method.
 
-## Ce qui reste à faire
+## What is left to do
 
-- **Vérifier le chemin client** : où le client échoue-t-il, et peut-il appeler `session/list` puis `session/resume` pour réconcilier ? C'est du code de ce dépôt.
-- **`view/page`** : le `viewCursor` retourné par `session/read` en tient peut-être lieu.
-- **Le terminal après interruption** : le seul écart sidecar confirmé de ce document, avec `session/userShell` §3 et les projections §4.
+- **Check the client path**: where does the client fail, and can it call `session/list` then `session/resume` to reconcile? That is code in this repository.
+- **`view/page`**: the `viewCursor` returned by `session/read` may stand in for it.
+- **The terminal after an interrupt**: the only confirmed sidecar gap in this document, along with `session/userShell` §3 and the projections §4.
 
-## Reproductibilité
+## Reproducibility
 
 ```powershell
-node scripts/msp-list-sessions.mjs          # sessions persistées
-node scripts/msp-session-survival.mjs       # survie à la mort du host
-node scripts/msp-resume-free-session.mjs    # reprise sur session libre (ce document)
+node scripts/msp-list-sessions.mjs          # persisted sessions
+node scripts/msp-session-survival.mjs       # survival when the host dies
+node scripts/msp-resume-free-session.mjs    # resume on a free session (this document)
 ```
 
-Les trois sont en **lecture seule** — sauf le second et le troisième, qui créent une session et un tour trivial pour rendre la persistance observable.
+All three are **read only** — except the second and third, which create a session and a trivial turn to make persistence observable.

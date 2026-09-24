@@ -1,10 +1,10 @@
-# Le harness : ce que j'ai trouvé, et où je m'arrête (20 septembre 2026)
+# The harness: what I found, and where I stop (20 September 2026)
 
-Suite de [`correctif-harness-insuffisant.md`](correctif-harness-insuffisant.md). J'y laissais trois hypothèses non tranchées. Ce document en **élimine deux**, en **ajoute une mesure inattendue**, et **s'arrête** au point où je ne peux plus avancer sans risque.
+Follows [`correctif-harness-insuffisant.md`](correctif-harness-insuffisant.md). I left three unsettled hypotheses there. This document **eliminates two**, **adds an unexpected measurement**, and **stops** at the point where I cannot go further without risk.
 
-## Hypothèse écartée : l'attente serait enregistrée trop tard
+## Hypothesis ruled out: the wait would be registered too late
 
-Je soupçonnais une course — une attente enregistrée après l'arrivée de la notification ne la verrait jamais. **Faux.** `waitForNotification` (`native-smoke.mjs:307`) commence par :
+I suspected a race — a wait registered after the notification arrived would never see it. **False.** `waitForNotification` (`native-smoke.mjs:307`) starts with:
 
 ```js
 const existing = notifications.find(
@@ -13,40 +13,40 @@ const existing = notifications.find(
 if (existing) return Promise.resolve(existing.params);
 ```
 
-Il **consulte d'abord les notifications déjà reçues**, puis enregistre une attente. La course est donc gérée, et mon hypothèse la plus probable tombe.
+It **first consults the notifications already received**, then registers a wait. The race is therefore handled, and my most likely hypothesis falls.
 
-## Hypothèse écartée : les `turnId` se confondraient entre hosts
+## Hypothesis ruled out: `turnId`s would collide between hosts
 
-Deux hosts lancés dans la même milliseconde produisent des `turnId` au **préfixe identique** — `01a0c064` dans un essai, `01a0c065` dans un autre. J'ai cru à une collision qui ferait apparier le terminal du mauvais host.
+Two hosts launched in the same millisecond produce `turnId`s with an **identical prefix** — `01a0c064` in one attempt, `01a0c065` in another. I suspected a collision that would pair the terminal with the wrong host.
 
-**Faux, et la mesure est nette :**
+**False, and the measurement is clear:**
 
 ```
-turnId A (complet) : 01a0c065-7833-7bcf-a0e4-1ee48dd10ad0
-turnId B (complet) : 01a0c065-7833-7053-845d-ffb4c96265b7
-IDENTIQUES ?       : false
+turnId A (full) : 01a0c065-7833-7bcf-a0e4-1ee48dd10ad0
+turnId B (full) : 01a0c065-7833-7053-845d-ffb4c96265b7
+IDENTICAL ?     : false
 ```
 
-Les identifiants sont **distincts** ; le préfixe commun vient du fait que les deux hosts démarrent dans la même milliseconde, et un UUIDv7 commence par un horodatage. **Une fausse alerte de ma part**, levée par la comparaison des chaînes complètes.
+The identifiers are **distinct**; the shared prefix comes from both hosts starting in the same millisecond, and a UUIDv7 begins with a timestamp. **A false alarm of mine**, lifted by comparing the full strings.
 
-## Une mesure inattendue : sans interruption, pas de terminal
+## An unexpected measurement: with no interrupt, no terminal
 
-Le même essai, **sans** `turn/interrupt`, a produit **zéro** `turn/completed` sur les deux hosts en 4 secondes :
+The same attempt, **without** `turn/interrupt`, produced **zero** `turn/completed` on either host in 4 seconds:
 
 ```
 terminal A : []
 terminal B : []
 ```
 
-Alors que **avec** interruption, les deux hosts émettent leur terminal — à **+2 064 ms** et **+3 974 ms** selon l'exécution.
+Whereas **with** an interrupt, both hosts emit their terminal — at **+2,064 ms** and **+3,974 ms** depending on the run.
 
-**Mon probe initial avait donc raison deux fois, et pour une raison plus précise que je ne le pensais :** `turn/completed` est bien émis, mais **après une interruption**, pas comme une fin naturelle dans cette fenêtre. C'est ce qui explique aussi pourquoi mes mesures donnaient +39 ms dans un cas et +2 019 ms dans l'autre : le délai dépend du prompt et de la machine, pas d'une constante.
+**My initial probe was therefore right twice, and for a more precise reason than I thought:** `turn/completed` is indeed emitted, but **after an interrupt**, not as a natural ending within that window. That also explains why my measurements gave +39 ms in one case and +2,019 ms in the other: the delay depends on the prompt and the machine, not on a constant.
 
-## Ce que cela implique pour le harness
+## What that implies for the harness
 
-Le délai du smoke est de **2 500 ms** par alias, trois alias en séquence. Or j'ai mesuré le terminal à **+2 064 ms** et **+3 974 ms**. **La marge est mince à nulle** : sur un host plus lent que le mien au moment du test, le terminal arrive après l'expiration.
+The smoke's timeout is **2,500 ms** per alias, three aliases in sequence. Yet I measured the terminal at **+2,064 ms** and **+3,974 ms**. **The margin is thin to non-existent**: on a host slower than mine at test time, the terminal arrives after the timeout.
 
-**C'est l'explication la plus cohérente** avec tout ce que j'ai mesuré — mais je ne l'ai **pas** vérifiée en relevant le délai exact du smoke sur un échec, parce que le harness **avale son propre diagnostic** :
+**That is the most coherent explanation** for everything I have measured — but I have **not** verified it by recording the smoke's exact timeout on a failure, because the harness **swallows its own diagnostic**:
 
 ```js
 // waitForTerminalNotification
@@ -55,39 +55,39 @@ catch {
 }
 ```
 
-Les trois tentatives échouent en silence, et le message final ne conserve **que** `did not emit a terminal notification` — sans la liste des notifications vues, que `waitForNotification` avait pourtant construite :
+The three attempts fail silently, and the final message keeps **only** `did not emit a terminal notification` — without the list of notifications seen, which `waitForNotification` had nevertheless built:
 
 ```js
 reject(new Error(`${label} timed out waiting for ${method} (notifications: ${seen})`));
 ```
 
-**Le harness jette l'information qui permettrait de trancher.** C'est le troisième défaut trouvé dans cet outil, après le `turnId` manquant.
+**The harness throws away the information that would settle it.** That is the third defect found in this tool, after the missing `turnId`.
 
-## Décision : je m'arrête ici
+## Decision: I stop here
 
-Trois raisons, et je les assume :
+Three reasons, and I stand by them:
 
-1. **Le défaut restant est dans mon outillage, pas dans le produit.** Le host émet son terminal après interruption, c'est mesuré quatre fois avec le bon `turnId`. Le produit n'est pas en cause.
-2. **Poursuivre demanderait un troisième correctif sur le harness** — remonter le délai et/ou préserver le diagnostic — sur un outil dont deux défauts viennent d'être trouvés. Empiler des correctifs non validés dans un instrument de mesure est exactement ce qui a produit les trois faux constats de cette campagne.
-3. **Mon budget de contexte est presque épuisé.** Continuer maintenant reviendrait à travailler sans la marge nécessaire pour vérifier ce que je fais, ce qui est précisément la condition dans laquelle j'ai commis mes erreurs précédentes.
+1. **The remaining defect is in my tooling, not in the product.** The host emits its terminal after an interrupt, measured four times with the right `turnId`. The product is not at fault.
+2. **Going further would mean a third fix to the harness** — raising the timeout and/or preserving the diagnostic — on a tool whose two defects have just been found. Stacking unvalidated fixes into a measuring instrument is exactly what produced this campaign's three false findings.
+3. **My context budget is nearly exhausted.** Continuing now would mean working without the margin needed to check what I am doing, which is precisely the condition in which I made my previous errors.
 
-## Ce qu'il faudrait pour finir, précisément
+## What it would take to finish, precisely
 
-1. **Préserver le diagnostic** : dans `waitForTerminalNotification`, ne pas avaler les erreurs des trois alias — remonter la liste des notifications vues au lieu du seul message final.
-2. **Élargir le délai** : 2 500 ms est inférieur au `+3 974 ms` mesuré sur un host chargé.
-3. **Réexécuter** `--exercise-control --exercise-terminal` et vérifier qu'il rapporte `terminalMethod: turn/completed` au lieu de `terminalNotification: unsupported`.
+1. **Preserve the diagnostic**: in `waitForTerminalNotification`, do not swallow the three aliases' errors — surface the list of notifications seen instead of only the final message.
+2. **Widen the timeout**: 2,500 ms is below the `+3,974 ms` measured on a loaded host.
+3. **Re-run** `--exercise-control --exercise-terminal` and check it reports `terminalMethod: turn/completed` instead of `terminalNotification: unsupported`.
 
-Ces trois étapes sont bornées et vérifiables. Elles ne sont **pas faites**, et je ne les présente pas comme telles.
+Those three steps are bounded and verifiable. They are **not done**, and I do not present them as such.
 
-## Bilan de l'enquête sur le terminal
+## Summary of the terminal investigation
 
-| Affirmation | Statut |
+| Claim | Status |
 |---|---|
-| Le host émet `turn/completed` après `turn/interrupt` | **prouvé** — 4 mesures, bon `turnId` |
-| Sans interruption, pas de terminal dans la fenêtre observée | **prouvé** — 2 hosts, 4 s |
-| `turn/interrupt` exige `turnId` | **prouvé** — code + mesure |
-| Le harness omettait ce `turnId` | **prouvé** — corrigé |
-| Le correctif fait passer `--exercise-terminal` | **réfuté** — échoue encore |
-| L'attente s'enregistre trop tard | **écarté** — `waitForNotification` lit d'abord le tampon |
-| Les `turnId` se confondent entre hosts | **écarté** — distincts, seule l'horodatage coïncide |
-| Le délai de 2 500 ms est trop court | **hypothèse cohérente, non vérifiée** |
+| The host emits `turn/completed` after `turn/interrupt` | **proved** — 4 measurements, right `turnId` |
+| With no interrupt, no terminal within the window observed | **proved** — 2 hosts, 4 s |
+| `turn/interrupt` requires `turnId` | **proved** — code + measurement |
+| The harness omitted that `turnId` | **proved** — fixed |
+| The fix makes `--exercise-terminal` pass | **disproved** — still fails |
+| The wait registers too late | **ruled out** — `waitForNotification` reads the buffer first |
+| `turnId`s collide between hosts | **ruled out** — distinct, only the timestamp coincides |
+| The 2,500 ms timeout is too short | **coherent hypothesis, unverified** |

@@ -1,20 +1,20 @@
-# M0-02 : ce qui est vraiment en cause (20 septembre 2026)
+# M0-02: what is really at fault (20 September 2026)
 
-Après [`reprise-fonctionne.md`](reprise-fonctionne.md), qui a montré que le host sait reprendre une session persistée, ce document cherche **qui** échoue. Il écarte deux hypothèses et en laisse une, sans conclure au-delà de ce qui est mesuré.
+After [`reprise-fonctionne.md`](reprise-fonctionne.md), which showed the host can resume a persisted session, this document looks for **who** fails. It rules out two hypotheses and leaves one, without concluding beyond what is measured.
 
-## Hypothèse 1 — le gate `ephemeral` du client : **écartée**
+## Hypothesis 1 — the client's `ephemeral` gate: **ruled out**
 
-Le client refuse la reprise quand sa session stockée est marquée `ephemeral`, à **deux endroits** :
+The client refuses a resume when its stored session is marked `ephemeral`, in **two places**:
 
 ```ts
 // useMuseSessions.ts, reconnectSession
-if (isEphemeralSession(session)) { /* erreur, return */ }
+if (isEphemeralSession(session)) { /* error, return */ }
 
 // bootResume.ts, isResumeEligible
 if (session.session_durability?.toLowerCase() === "ephemeral") return false;
 ```
 
-avec
+with
 
 ```ts
 function isEphemeralSession(session) {
@@ -22,66 +22,66 @@ function isEphemeralSession(session) {
 }
 ```
 
-**Cette valeur n'est écrite qu'à la création de la session** (six sites d'écriture, tous alimentés par `meta.session_durability` du host) et **jamais révisée**.
+**That value is written only when the session is created** (six write sites, all fed by the host's `meta.session_durability`) and **never revised**.
 
-**Tests menés :**
+**Tests run:**
 
-| Vérification | Résultat |
+| Check | Result |
 |---|---|
-| Durabilité stockée dans les 41 sessions de la sauvegarde | **41 × `durable`**, aucune `ephemeral` |
-| Durabilité stockée dans la session restante | **`durable`** |
-| Durabilité annoncée par le host aujourd'hui | **`durable`** |
+| Durability stored in the backup's 41 sessions | **41 × `durable`**, none `ephemeral` |
+| Durability stored in the remaining session | **`durable`** |
+| Durability announced by the host today | **`durable`** |
 
-**Le gate ne s'est donc jamais déclenché** : aucune session locale n'a jamais porté `ephemeral`. Je **ne peux pas** lui attribuer l'échec de reprise constaté pendant la campagne.
+**The gate therefore never fired**: no local session ever carried `ephemeral`. I **cannot** attribute the resume failure seen during the campaign to it.
 
-Le gate reste un **risque latent** — si la durabilité du host change, une session marquée `ephemeral` à sa création refuserait la reprise pour toujours, alors même que le host serait devenu durable. Mais **je n'ai aucune preuve que ce cas se soit produit**, et je n'ai donc **rien corrigé** à ce titre.
+The gate stays a **latent risk** — if the host's durability changes, a session marked `ephemeral` at creation would refuse resume forever, even once the host had become durable. But **I have no proof that case occurred**, so I have **fixed nothing** on that basis.
 
-## Hypothèse 2 — le client n'utilise pas `session/list` : **confirmée, mais pas causale**
+## Hypothesis 2 — the client does not use `session/list`: **confirmed, but not causal**
 
-`session/list` figure dans `MSP_METHODS_SENT` (`src/lib/msp.ts` ligne 32), la liste des méthodes que le Rust envoie. Mais côté application, **aucun appel** :
+`session/list` appears in `MSP_METHODS_SENT` (`src/lib/msp.ts` line 32), the list of methods the Rust side sends. But on the application side, **no call**:
 
-| Occurrence dans `src/` | Nature |
+| Occurrence in `src/` | Nature |
 |---|---|
-| `msp.ts:32` | déclaration dans la liste des méthodes |
-| `App.tsx:386` | un **commentaire** qui la mentionne |
+| `msp.ts:32` | declaration in the method list |
+| `App.tsx:386` | a **comment** mentioning it |
 
-**Le client ne demande donc jamais au host quelles sessions existent.** Il ne peut pas découvrir une session que le host connaît mais que le stockage local ignore, ni réconcilier un identifiant après un redémarrage.
+**The client therefore never asks the host which sessions exist.** It cannot discover a session the host knows but local storage ignores, nor reconcile an identifier after a restart.
 
-**Est-ce la cause de l'échec observé ?** Pas démontré. C'est une **capacité manquante**, pas un défaut prouvé.
+**Is that the cause of the failure observed?** Not demonstrated. It is a **missing capability**, not a proved defect.
 
-## Hypothèse 3 — la session n'avait jamais été persistée : **la plus probable**
+## Hypothesis 3 — the session had never been persisted: **the most likely**
 
-`msp-resume-free-session.mjs` a montré qu'une session **ne se persiste qu'en écrivant un tour** : le host A en listait 10, le host B **9** — la session créée sans tour avait disparu.
+`msp-resume-free-session.mjs` showed that a session **only persists by writing a turn**: host A listed 10, host B **9** — the session created with no turn had disappeared.
 
-L'échec documenté dans le README de campagne portait sur la session `01a0bd8e`, active pendant la campagne. Plusieurs des sessions de cette campagne ont été créées et utilisées **sans tour abouti** (le nettoyage l'a montré : des coquilles à `turnCount: 0`).
+The failure documented in the campaign README concerned session `01a0bd8e`, active during the campaign. Several sessions in that campaign were created and used **with no completed turn** (the cleanup showed it: shells at `turnCount: 0`).
 
-**Si la session n'a jamais été écrite sur disque, aucun host ne peut la reprendre** — et `sessionNotFound` est alors la **réponse correcte**, pas un défaut.
+**If the session was never written to disk, no host can resume it** — and `sessionNotFound` is then the **correct answer**, not a defect.
 
-**Je n'ai pas pu le vérifier pour `01a0bd8e` en particulier** : la session a été supprimée pendant le nettoyage. C'est une hypothèse étayée par un mécanisme mesuré, pas une preuve sur ce cas précis.
+**I could not verify it for `01a0bd8e` specifically**: the session was deleted during the cleanup. It is a hypothesis supported by a measured mechanism, not proof on that particular case.
 
-## Ce qui est établi, et ce qui ne l'est pas
+## What is established, and what is not
 
-| Affirmation | Statut |
+| Claim | Status |
 |---|---|
-| Le host sait reprendre une session persistée et libre | **prouvé** — `session/resume` réussit, `session/read` répond |
-| Une session sans tour abouti ne se persiste pas | **prouvé** — 10 sessions chez A, 9 chez B |
-| Le client n'appelle jamais `session/list` | **prouvé** — aucune occurrence d'appel dans `src/` |
-| Le gate `ephemeral` a bloqué une reprise | **non prouvé, et contredit** par les 41 × `durable` stockés |
-| L'échec de campagne venait d'une session non persistée | **probable, non prouvé** — le mécanisme est mesuré, le cas précis ne l'est pas |
+| The host can resume a persisted, free session | **proved** — `session/resume` succeeds, `session/read` answers |
+| A session with no completed turn does not persist | **proved** — 10 sessions on A, 9 on B |
+| The client never calls `session/list` | **proved** — no call occurrence in `src/` |
+| The `ephemeral` gate blocked a resume | **unproved, and contradicted** by the 41 × `durable` stored |
+| The campaign failure came from an unpersisted session | **likely, unproved** — the mechanism is measured, the specific case is not |
 
-## Ce que je n'ai pas fait, et pourquoi
+## What I did not do, and why
 
-Je n'ai **rien corrigé dans le code**. Deux raisons :
+I have **changed nothing in the code**. Two reasons:
 
-1. **Aucun défaut n'est prouvé.** Le gate ne s'est jamais déclenché, et l'absence d'appel à `session/list` est une capacité manquante, pas un bug démontré.
-2. Le chemin de reprise touche la **récupération des conversations**. Y introduire un changement non prouvé, sans pouvoir reproduire le défaut d'origine, serait exactement le genre de correctif que cette campagne a passé son temps à réfuter ailleurs — comme le correctif `prefers-contrast` tenté puis retiré.
+1. **No defect is proved.** The gate never fired, and the absence of a `session/list` call is a missing capability, not a demonstrated bug.
+2. The resume path touches **conversation recovery**. Introducing an unproved change there, without being able to reproduce the original defect, would be exactly the kind of fix this campaign spent its time disproving elsewhere — like the `prefers-contrast` fix attempted then withdrawn.
 
-**Ce qui serait à faire, si le sujet est repris :** reproduire l'échec de reprise **d'abord** — une session avec un tour abouti, l'application fermée, le host tué, puis une tentative de reprise depuis l'interface. Tant que ce scénario n'échoue pas de façon reproductible, il n'y a rien à corriger.
+**What would need doing, if the subject is picked up:** reproduce the resume failure **first** — a session with a completed turn, the application closed, the host killed, then a resume attempt from the interface. As long as that scenario does not fail reproducibly, there is nothing to fix.
 
-## Reproductibilité
+## Reproducibility
 
 ```powershell
-node scripts/msp-resume-free-session.mjs   # prouve que le host sait reprendre
-node scripts/msp-session-survival.mjs      # prouve qu'une session sans tour ne persiste pas
-node scripts/msp-list-sessions.mjs         # liste ce que le host connaît
+node scripts/msp-resume-free-session.mjs   # proves the host can resume
+node scripts/msp-session-survival.mjs      # proves a session with no turn does not persist
+node scripts/msp-list-sessions.mjs         # lists what the host knows
 ```
