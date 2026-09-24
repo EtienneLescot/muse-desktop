@@ -866,13 +866,13 @@ export default function App() {
             type="button"
             ref={settingsTrigger}
             className="account"
-            aria-label="Profile — Settings"
+            aria-label="Settings"
             onClick={() => setSettingsOpen(true)}
           >
             <span className="avatar" aria-hidden="true">
               M
             </span>
-            <span className="account-name">My profile</span>
+            <span className="account-name">Settings</span>
           </button>
         </div>
         <div
