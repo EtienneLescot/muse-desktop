@@ -1,16 +1,16 @@
-# Effort de raisonnement : le sélecteur aligné sur les niveaux Muse Spark
+# Reasoning effort: the picker aligned with the Muse Spark levels
 
-Date campagne : 27/09/2026 · Plateforme : Windows 10 · Binaire CLI mesuré : `muse-bin-1.3.0-R3401.1` (`C:\Users\etien\Programs\…\muse.cmd`)
+Campaign date: 27/09/2026 · Platform: Windows 10 · CLI binary measured: `muse-bin-1.3.0-R3401.1` (`C:\Users\etien\Programs\…\muse.cmd`)
 
-## Question posée
+## The question asked
 
-« On devait avoir aligné ça avec les réelles valeurs du CLI Muse et j'ai
-l'impression que les choix ne sont pas cohérents (aujourd'hui on a 8 choix et
-ça me paraît énorme par rapport à ce que propose Muse Spark). »
+"We were supposed to have aligned this with the Muse CLI's real values and I
+have the feeling the choices are not consistent (today we have 8 choices and
+that seems a lot compared with what Muse Spark offers)."
 
-## Mesures (sources de vérité, pas d'interprétation)
+## Measurements (sources of truth, no interpretation)
 
-**1. `muse --help`** — le drapeau du CLI :
+**1. `muse --help`** — the CLI's flag:
 
 ```
 --reasoning-effort <EFFORT>
@@ -18,21 +18,21 @@ l'impression que les choix ne sont pas cohérents (aujourd'hui on a 8 choix et
     (default: high)
 ```
 
-**2. `muse schema generate-json-schema --out <dir>`** — export **offline et exact**
-du binaire ; `$defs.ReasoningEffort` :
+**2. `muse schema generate-json-schema --out <dir>`** — an **offline and exact**
+export from the binary; `$defs.ReasoningEffort`:
 
 ```
 enum: none, minimal, low, medium, high, xhigh, max, ultra   (x-msp-openness: closed)
 ```
 
-avec la description du contrat : *« The **same closed tier vocabulary** on both
+with the contract's description: *"The **same closed tier vocabulary** on both
 the fresh-turn and steer lanes… `none` is a tier of the vocabulary (ask for no
-reasoning), not a way to say "unset". »* — le même type sert à
-`turn/start.reasoningEffort`, `session/setReasoningEffort` et
+reasoning), not a way to say "unset"."* — the same type serves
+`turn/start.reasoningEffort`, `session/setReasoningEffort` and
 `session/reasoningEffortChanged`.
 
-**3. Niveaux persistants du CLI** (guidance du produit, déjà relevée le 21/09
-dans [regles-du-dossier.md](../2026-09-21-ux/regles-du-dossier.md)) :
+**3. The CLI's persistent levels** (the product's guidance, already recorded on 21/09
+in [regles-du-dossier.md](../2026-09-21-ux/regles-du-dossier.md)):
 
 > For Meta, the persistent effort tiers are `minimal`, `low`, `medium`, `high`,
 > `xhigh`, `max`, and `ultra`. `high` is the default Meta baseline; `xhigh` is
@@ -40,52 +40,51 @@ dans [regles-du-dossier.md](../2026-09-21-ux/regles-du-dossier.md)) :
 > uses `max` reasoning on the Meta wire, and currently enables proactive
 > workflow/delegation guidance…
 
-Donc **deux vocabulaires réels** : 8 valeurs sur le fil, **7 niveaux persistants
-Muse Spark** (sans `none`). Et `ultra` n'est pas un cran de profondeur au-dessus
-de `max`, c'est `max` **plus** de l'autonomie.
+So **two real vocabularies**: 8 values on the wire, **7 persistent Muse Spark
+levels** (without `none`). And `ultra` is not a notch of depth above
+`max`, it is `max` **plus** autonomy.
 
-## Décision (choix de l'utilisateur)
+## Decision (the user's choice)
 
-Le sélecteur expose **les sept niveaux Muse Spark** : `minimal, low, medium,
+The picker exposes **the seven Muse Spark levels**: `minimal, low, medium,
 high, xhigh, max, ultra`.
 
-- `none` **sort du sélecteur** : le CLI ne le persiste jamais comme niveau, il
-  reste une valeur du fil (« ask for no reasoning »).
-- Les libellés reprennent l'**orthographe du CLI** (`xhigh` et non « Very high »)
-  pour que la liste soit lisible comme le produit qu'elle pilote.
-- `ultra` reste **distingué** : « Max depth plus proactive workflow and
-  delegation guidance; can raise token usage quickly ».
+- `none` **leaves the picker**: the CLI never persists it as a level, it
+  stays a wire value ("ask for no reasoning").
+- The labels use the **CLI's spelling** (`xhigh`, not "Very high")
+  so the list reads like the product it drives.
+- `ultra` stays **distinguished**: "Max depth plus proactive workflow and
+  delegation guidance; can raise token usage quickly".
 
-## Compatibilité assumée
+## Compatibility, by design
 
-- `reasoningEffortChoices(current)` : une valeur **déjà persistée** qui n'est
-  plus proposée (aujourd'hui `none`) reste affichée en tête de liste. La
-  supprimer silencieusement réécrirait le niveau de l'utilisateur à la
-  prochaine sauvegarde — le test « keeps a legacy `none` selection visible »
-  verrouille ce comportement.
-- Le vocabulaire **fil reste complet** : `REASONING_EFFORTS` (8) sert à parser
-  et valider tout ce qui vient du host, et `validate_reasoning_effort` côté Rust
-  accepte toujours les 8 (c'est ce que le contrat déclare ; c'est aussi ainsi
-  que `max` avait été perdu en son temps, en rétrécissant notre liste).
+- `reasoningEffortChoices(current)`: a value **already persisted** that is
+  no longer offered (today `none`) stays displayed at the top of the list.
+  Removing it silently would rewrite the user's level on the next save — the
+  "keeps a legacy `none` selection visible" test locks that behaviour down.
+- The **wire vocabulary stays complete**: `REASONING_EFFORTS` (8) serves to parse
+  and validate everything coming from the host, and `validate_reasoning_effort` on
+  the Rust side still accepts all 8 (that is what the contract declares; it is also
+  how `max` was lost in its day, by narrowing our list).
 
-## Fichiers
+## Files
 
-- `src/lib/reasoning.ts` : `REASONING_EFFORT_CHOICES` (7 niveaux), 
-  `reasoningEffortChoices(current)`, libellé `xhigh`, doc des deux vocabulaires.
+- `src/lib/reasoning.ts`: `REASONING_EFFORT_CHOICES` (7 levels),
+  `reasoningEffortChoices(current)`, the `xhigh` label, doc of the two vocabularies.
 - `src/components/ReasoningEffortControl.tsx`, `SettingsPanel.tsx`,
-  `ProjectsPanel.tsx` : itèrent sur `reasoningEffortChoices(...)` au lieu de la
-  liste fil.
-- `test/reasoning.test.ts` : +3 tests (liste des 7, `none` legacy conservé,
-  libellés CLI).
-- `src-tauri/src/main.rs` : **inchangé** — le validateur garde les 8 valeurs.
+  `ProjectsPanel.tsx`: iterate over `reasoningEffortChoices(...)` instead of the
+  wire list.
+- `test/reasoning.test.ts`: +3 tests (the list of 7, legacy `none` kept,
+  CLI labels).
+- `src-tauri/src/main.rs`: **unchanged** — the validator keeps all 8 values.
 
-## Preuves (rejouables)
+## Evidence (replayable)
 
-| Étape | Commande | Résultat |
+| Step | Command | Result |
 | --- | --- | --- |
-| Vocabulaire fil | `muse --help` | `none\|minimal\|low\|medium\|high\|xhigh\|max\|ultra` (défaut `high`) |
-| Contrat | `muse schema generate-json-schema --out <dir>` puis lecture `$defs.ReasoningEffort` | enum fermée à 8, `none` = « a tier of the vocabulary… not a way to say unset » |
-| Niveaux persistants | guidance CLI (`For Meta, the persistent effort tiers are…`) | 7 : `minimal, low, medium, high, xhigh, max, ultra` |
-| Tests | `npm test` | 0 échec, dont les 3 nouveaux (7 choix, `none` legacy affiché mais non proposé, libellés CLI) |
-| Typage | `npx tsc --noEmit` | propre |
-| App native | `npm run build` + `cargo build` + relance, puis `scripts/cdp-drive.mjs eval` sur le popover `Reasoning effort` | **7 options, aucune « None »** ; libellé `Xhigh` |
+| Wire vocabulary | `muse --help` | `none\|minimal\|low\|medium\|high\|xhigh\|max\|ultra` (default `high`) |
+| Contract | `muse schema generate-json-schema --out <dir>` then reading `$defs.ReasoningEffort` | closed enum of 8, `none` = "a tier of the vocabulary… not a way to say unset" |
+| Persistent levels | CLI guidance (`For Meta, the persistent effort tiers are…`) | 7: `minimal, low, medium, high, xhigh, max, ultra` |
+| Tests | `npm test` | 0 failures, including the 3 new ones (7 choices, legacy `none` shown but not offered, CLI labels) |
+| Typing | `npx tsc --noEmit` | clean |
+| Native app | `npm run build` + `cargo build` + relaunch, then `scripts/cdp-drive.mjs eval` on the `Reasoning effort` popover | **7 options, no "None"**; label `Xhigh` |
