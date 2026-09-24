@@ -1,54 +1,54 @@
-# `displayPath()` — comportement couvert (M0-11, 20 septembre 2026)
+# `displayPath()` — behaviour covered (M0-11, 20 September 2026)
 
-Comble un trou identifié au round 34 : `test/navigationDetails.test.ts` verrouillait **l'appel** à `displayPath()`, mais la **logique** de la fonction n'avait aucun test.
+Fills a gap identified at round 34: `test/navigationDetails.test.ts` locked down **the call** to `displayPath()`, but the function's **logic** had no test.
 
-## Pourquoi cette fonction mérite un test
+## Why this function deserves a test
 
-Le commentaire du module l'explique : la couche native canonise les espaces de travail en forme **verbeuse** `\\?\…`, correcte pour l'identité et les appels système mais **illisible dans l'interface**. `displayPath()` produit la forme affichable — et une erreur ici est **silencieuse** :
+The module's comment explains it: the native layer canonicalises workspaces into the **verbose** `\\?\…` form, correct for identity and system calls but **unreadable in the interface**. `displayPath()` produces the displayable form — and an error here is **silent**:
 
-- l'utilisateur voit `\\?\C:\Users\…` dans le libellé de son espace de travail ;
-- ou pire, sur un chemin UNC, il **perd le serveur ou le partage** sans qu'aucune erreur ne soit levée.
+- the user sees `\\?\C:\Users\…` in their workspace label;
+- or worse, on a UNC path, they **lose the server or the share** with no error raised.
 
-## Ce qui est couvert
+## What is covered
 
 ```powershell
 node --experimental-strip-types --test test/displayPath.test.ts
 ```
 
-| Cas | Attendu |
+| Case | Expected |
 |---|---|
-| `\\?\C:\Users\etien\repo` | `C:\Users\etien\repo` — préfixe verbeux retiré |
+| `\\?\C:\Users\etien\repo` | `C:\Users\etien\repo` — verbose prefix removed |
 | `\\?\D:\` | `D:\` |
-| `\\?\c:\temp` | `c:\temp` — lettre de lecteur **insensible à la casse** |
-| `\\?\UNC\server\share\folder\file.txt` | `\\server\share\folder\file.txt` — forme partage lisible |
-| `\\?\UNC\server\share` | `\\server\share` — sans partie terminale |
-| `C:\Users\…`, `\\server\share\folder`, `/home/etien/repo`, `relative/path`, `""` | **inchangés** — stockage et routage gardent la valeur stockée |
-| `\\?\UNC\` seul | **inchangé** — il manque le serveur *et* le partage |
-| `\\?\Volume{abc}\` | **inchangé** — pas un chemin UNC |
-| `\\?\UNC\server\share\a b\c d.txt` | `\\server\share\a b\c d.txt` — espaces et contenu final préservés |
+| `\\?\c:\temp` | `c:\temp` — drive letter **case insensitive** |
+| `\\?\UNC\server\share\folder\file.txt` | `\\server\share\folder\file.txt` — readable share form |
+| `\\?\UNC\server\share` | `\\server\share` — with no trailing part |
+| `C:\Users\…`, `\\server\share\folder`, `/home/etien/repo`, `relative/path`, `""` | **unchanged** — storage and routing keep the stored value |
+| `\\?\UNC\` alone | **unchanged** — both server *and* share are missing |
+| `\\?\Volume{abc}\` | **unchanged** — not a UNC path |
+| `\\?\UNC\server\share\a b\c d.txt` | `\\server\share\a b\c d.txt` — spaces and final content preserved |
 | `\\?\C:\Program Files\Muse` | `C:\Program Files\Muse` |
 
-**Le cas `\\?\UNC\` seul** est celui que je voulais verrouiller : la fonction exige **un serveur et un partage**. Un préfixe nu doit passer tel quel plutôt d'être tronqué en un chemin faux — c'est le genre d'erreur qui ne se voit qu'à l'usage.
+**The `\\?\UNC\` alone case** is the one I wanted to lock down: the function requires **a server and a share**. A bare prefix must pass through unchanged rather than be truncated into a wrong path — that is the kind of error that only shows up in use.
 
-## Efficacité vérifiée par mutation, pas supposée
+## Effectiveness verified by mutation, not assumed
 
-Deux régressions ont été posées dans `src/lib/paths.ts`, puis retirées :
+Two regressions were introduced into `src/lib/paths.ts`, then removed:
 
-| Régression posée | Résultat |
+| Regression introduced | Result |
 |---|---|
-| `return path.slice(4)` → `return path` (le préfixe verbeux n'est plus retiré) | **3 échecs** sur 6, avec l'écart affiché : `actual: '\\\\?\\C:\\Users\\etien\\repo'` |
-| réécriture UNC → `return path` | **2 échecs** sur 6 |
-| restauré | **6/6** |
+| `return path.slice(4)` → `return path` (the verbose prefix is no longer removed) | **3 failures** out of 6, with the difference shown: `actual: '\\\\?\\C:\\Users\\etien\\repo'` |
+| UNC rewrite → `return path` | **2 failures** out of 6 |
+| restored | **6/6** |
 
-Sans ce contrôle, j'aurais ajouté des tests qui passent sans rien prouver — c'est précisément l'erreur que je cherche à éviter.
+Without that check, I would have added tests that pass while proving nothing — precisely the error I am trying to avoid.
 
-## Suite complète
+## Full suite
 
-**948 tests, 217 suites, 948 passés, 0 échec** — contre 942 avant ce commit.
+**948 tests, 217 suites, 948 passed, 0 failures** — against 942 before this commit.
 
-## Portée
+## Scope
 
-- Test **unitaire uniquement** : le rendu réel du libellé d'espace de travail dans la webview empaquetée n'est pas vérifié.
-- **Aucun cas macOS ou Linux** : `displayPath()` traite les formes Windows ; les chemins POSIX traversent la fonction sans transformation, ce qui est testé, mais aucun cas spécifique à ces systèmes n'est couvert.
-- **Longueur et chemins très profonds** non éprouvés : aucune limite de longueur de chemin Windows (`MAX_PATH`, chemins étendus au-delà de 260 caractères) n'est testée.
-- La fonction **ne normalise rien** : séparateurs mélangés, `..` ou `.` ne sont pas traités, et je n'ai pas ajouté de test qui laisserait croire le contraire.
+- **Unit test only**: the actual rendering of the workspace label in the packaged webview is not verified.
+- **No macOS or Linux case**: `displayPath()` handles Windows forms; POSIX paths pass through the function untransformed, which is tested, but no case specific to those systems is covered.
+- **Length and very deep paths** untested: no Windows path length limit (`MAX_PATH`, extended paths beyond 260 characters) is tested.
+- The function **normalises nothing**: mixed separators, `..` or `.` are not handled, and I have added no test that would suggest otherwise.
