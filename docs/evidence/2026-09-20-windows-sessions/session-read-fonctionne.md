@@ -1,76 +1,76 @@
-# `session/read` fonctionne — correction d'un faux constat (20 septembre 2026)
+# `session/read` works — correcting a false finding (20 September 2026)
 
-**Ce document corrige l'écart n° 1 de [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md)**, qui classe `session/read` et `session/resume` comme `unsupported`. C'est **inexact**, et l'erreur vient de ma sonde.
+**This document corrects gap no. 1 of [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md)**, which classifies `session/read` and `session/resume` as `unsupported`. That is **inaccurate**, and the error comes from my probe.
 
-## Ce que la sonde faisait de travers
+## What the probe was doing wrong
 
-`msp-probe.mjs` appelle les surfaces de lecture sur une session qu'il **vient de créer** avec `session/start` (ligne 308 et suivantes) :
+`msp-probe.mjs` calls the read surfaces on a session it has **just created** with `session/start` (line 308 onwards):
 
 ```js
 await attempt("session/read", { sessionId, excludeItems: true })
 ```
 
-Or une session fraîchement créée **n'a jamais été persistée** — aucun tour ne l'a écrite sur disque. Le host répond donc `sessionNotFound`, et la sonde traduisait cela en :
+But a freshly created session **has never been persisted** — no turn has written it to disk. The host therefore answers `sessionNotFound`, and the probe translated that into:
 
 ```js
 return error?.kind === "methodNotFound" ? "unsupported" : `error: ${reason(error)}`;
 ```
 
-Le tri ne teste que `methodNotFound`. Comme la sonde rapportait malgré tout `unsupported` sur ces deux méthodes, **j'en avais conclu que les méthodes n'existaient pas** — sans vérifier la distinction entre « méthode absente » et « session absente ».
+The branch only tests `methodNotFound`. Since the probe nonetheless reported `unsupported` on those two methods, **I concluded the methods did not exist** — without checking the distinction between "missing method" and "missing session".
 
-## Ce que la mesure réelle donne
+## What the real measurement gives
 
-Sur une session **réellement présente sur disque**, avec un host neuf :
+On a session **actually present on disk**, with a fresh host:
 
-| Session | Tours | `session/read` | `session/resume` |
+| Session | Turns | `session/read` | `session/resume` |
 |---|---|---|---|
 | `01a0bea1` | 11 | **`ok`** | `sessionInUse` |
 | `01a0bead` | 1 | **`ok`** | `sessionInUse` |
 | `01a0bead` | 2 | **`ok`** | `sessionInUse` |
 | `01a0beaf` | 2 | **`ok`** | `sessionInUse` |
 
-**`session/read` répond `ok` sur les quatre.** Et `session/resume` ne répond **pas** `sessionNotFound` mais **`sessionInUse`** — un refus différent, qui signifie que le host considère la session **déjà ouverte**.
+**`session/read` answers `ok` on all four.** And `session/resume` does **not** answer `sessionNotFound` but **`sessionInUse`** — a different refusal, meaning the host considers the session **already open**.
 
-## Forme de la réponse de `session/read`
+## Shape of the `session/read` response
 
 ```
 { session, viewCursor, history, pendingRequests }
 ```
 
-- `session` : l'objet complet déjà décrit dans `stockage-des-sessions.md` — `path`, `status`, `turnCount`, `title`, `workspaceRoot`, `providerId`, `modelId`, `lastActivityAt`…
-- `viewCursor` : un curseur de vue, **la surface de pagination** que le rapport déclarait absente sous le nom `view/page`.
-- `history` : l'historique de la session.
-- `pendingRequests` : tableau, vide ici.
+- `session`: the complete object already described in `stockage-des-sessions.md` — `path`, `status`, `turnCount`, `title`, `workspaceRoot`, `providerId`, `modelId`, `lastActivityAt`…
+- `viewCursor`: a view cursor, **the pagination surface** the report declared absent under the name `view/page`.
+- `history`: the session's history.
+- `pendingRequests`: an array, empty here.
 
-## Les deux échecs, désormais distingués
+## The two failures, now distinguished
 
-La campagne observait deux erreurs et les avait confondues :
+The campaign observed two errors and had conflated them:
 
-| Situation | Réponse | Signification |
+| Situation | Response | Meaning |
 |---|---|---|
-| Session **jamais persistée** (créée, aucun tour) | `sessionNotFound` | la session n'existe pas sur disque — **pas** une méthode absente |
-| Session **persistée**, déjà ouverte ailleurs | `sessionInUse` | elle existe, mais le host la considère prise |
-| Session **persistée**, libre | **non observé** | c'est le cas à tester pour la reprise |
+| Session **never persisted** (created, no turn) | `sessionNotFound` | the session does not exist on disk — **not** a missing method |
+| Session **persisted**, already open elsewhere | `sessionInUse` | it exists, but the host considers it taken |
+| Session **persisted**, free | **not observed** | that is the case to test for resume |
 
-## Ce que cela change pour M0-02
+## What that changes for M0-02
 
-Le rapport présentait `session/read` et `session/resume` comme **absents du protocole**, donc comme un chantier d'implémentation côté sidecar. **`session/read` existe et fonctionne.** Ce qui reste ouvert est plus étroit :
+The report presented `session/read` and `session/resume` as **absent from the protocol**, hence as implementation work on the sidecar side. **`session/read` exists and works.** What stays open is narrower:
 
-1. **`session/resume` sur une session libre** n'a pas été observé — le test n'a rencontré que `sessionInUse`, parce que l'application tournait et tenait ces sessions.
-2. **`view/page`** est peut-être simplement `session/read` avec son `viewCursor` : à vérifier, le rapport le classait aussi absent.
-3. Le défaut de reprise observé dans l'interface (`sessionNotFound` après Reconnect) concerne des sessions **créées pendant la session de l'application sans tour abouti**, ou des identifiants que le nouveau host ne retrouve pas. À reprendre à la lumière de ce document.
+1. **`session/resume` on a free session** was not observed — the test only met `sessionInUse`, because the application was running and holding those sessions.
+2. **`view/page`** may simply be `session/read` with its `viewCursor`: to verify, since the report classified it as absent too.
+3. The resume defect observed in the interface (`sessionNotFound` after Reconnect) concerns sessions **created during the application's session with no completed turn**, or identifiers the new host cannot find. To be revisited in the light of this document.
 
-## Ce qu'il faut corriger dans le rapport d'écart
+## What has to be corrected in the gap report
 
-- L'écart n° 1 **ne doit plus présenter `session/read` comme absent**.
-- La sonde `msp-probe.mjs` doit **distinguer** `methodNotFound` de `sessionNotFound` et **tester les surfaces de lecture sur une session persistée**, pas sur une session fraîchement créée. Sans cette correction, la sonde continuera de produire un faux constat.
-- `view/page` doit être réévalué au regard de `viewCursor`.
+- Gap no. 1 **must no longer present `session/read` as absent**.
+- The `msp-probe.mjs` probe must **distinguish** `methodNotFound` from `sessionNotFound` and **test the read surfaces on a persisted session**, not on a freshly created one. Without that fix, the probe will keep producing a false finding.
+- `view/page` must be re-evaluated against `viewCursor`.
 
-## Reproductibilité
+## Reproducibility
 
 ```powershell
-node scripts/msp-list-sessions.mjs          # liste les sessions persistées
-node scripts/msp-session-survival.mjs       # survie d'une session à la mort de son host
+node scripts/msp-list-sessions.mjs          # lists the persisted sessions
+node scripts/msp-session-survival.mjs       # a session's survival when its host dies
 ```
 
-**Ce que ce document ne dit pas :** je n'ai pas encore prouvé qu'une reprise **complète** fonctionne de bout en bout — je n'ai observé `sessionInUse` que parce que l'application tenait les sessions. Le test décisif reste à faire : host seul, session libre, `session/resume` puis lecture de l'historique.
+**What this document does not say:** I have not yet proved that a **complete** resume works end to end — I only observed `sessionInUse` because the application was holding the sessions. The decisive test remains to be done: host alone, free session, `session/resume` then reading the history.

@@ -1,57 +1,57 @@
-# `sessionDurability` a changé : `ephemeral` → `durable` (20 septembre 2026)
+# `sessionDurability` changed: `ephemeral` → `durable` (20 September 2026)
 
-**Ce document corrige une affirmation de [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md) §5**, qui présente `ephemeral` comme une propriété du host. La mesure ne le confirme pas.
+**This document corrects a claim in [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md) §5**, which presents `ephemeral` as a property of the host. The measurement does not confirm it.
 
-## Les deux mesures
+## The two measurements
 
-| Quand | Mesure | Host |
+| When | Measurement | Host |
 |---|---|---|
-| Rounds 15–23 (matin et début d'après-midi) | **`sessionDurability: "ephemeral"`** | `initialize` sur deux hosts réels, `msp-probe` et `native-smoke` |
-| Round 50 (soir), **quatre fois** | **`sessionDurability: "durable"`** | quatre hosts neufs, lancés un par un |
+| Rounds 15–23 (morning and early afternoon) | **`sessionDurability: "ephemeral"`** | `initialize` on two real hosts, `msp-probe` and `native-smoke` |
+| Round 50 (evening), **four times** | **`sessionDurability: "durable"`** | four fresh hosts, launched one by one |
 
-La mesure récente est **reproductible** : obtenue quatre fois de suite, avec et sans `requestedCapabilities: ["userShell"]`, sur des processus neufs.
+The later measurement is **reproducible**: obtained four times in a row, with and without `requestedCapabilities: ["userShell"]`, on fresh processes.
 
-## Ce que j'ai vérifié pour écarter les fausses pistes
+## What I checked to rule out false leads
 
-- **La configuration n'a pas bougé** : `~/.config/muse/settings.json` date du **19/09 21:30** et `auth.json` du **19/09 20:47** — soit **avant** la première mesure `ephemeral`. Aucun des deux ne contient de champ de durabilité.
-- **Ce n'est pas un effet de `clientInfo.name`** : `muse_durability_check` et `muse_list_sessions` donnent tous deux `durable`.
-- **Ce n'est pas un effet des capacités demandées** : avec et sans `userShell`, le résultat est identique.
+- **The configuration did not move**: `~/.config/muse/settings.json` dates from **19/09 21:30** and `auth.json` from **19/09 20:47** — that is, **before** the first `ephemeral` measurement. Neither contains a durability field.
+- **It is not an effect of `clientInfo.name`**: `muse_durability_check` and `muse_list_sessions` both give `durable`.
+- **It is not an effect of the requested capabilities**: with and without `userShell`, the result is identical.
 
-## Ce que je ne sais pas
+## What I do not know
 
-**Je n'explique pas le changement.** Je n'ai pas la cause, et je préfère l'écrire plutôt que d'inventer une théorie. Ce qui est certain, c'est que **`sessionDurability` ne peut pas être documenté comme une constante du host 1.3.0** — sa valeur a changé sur la même machine, dans la même journée, sans modification de configuration.
+**I cannot explain the change.** I do not have the cause, and I would rather write that than invent a theory. What is certain is that **`sessionDurability` cannot be documented as a constant of host 1.3.0** — its value changed on the same machine, on the same day, with no configuration change.
 
-## L'implication, et elle est importante pour M0-02
+## The implication, and it matters for M0-02
 
-`session/list` énumère **9 sessions** que le host connaît, avec pour chacune son **chemin de stockage** :
+`session/list` enumerates **9 sessions** the host knows, each with its **storage path**:
 
 ```
-%USERPROFILE%\.local\share\muse\sessions\<année>\<mois>\<jour>\<sessionId>\session.jsonl
+%USERPROFILE%\.local\share\muse\sessions\<year>\<month>\<day>\<sessionId>\session.jsonl
 ```
 
-et des métadonnées complètes : `title`, `turnCount`, `status`, `workspaceRoot`, `branch`, `updatedAt`. **Neuf sessions, onze tours pour la plus longue, persistées sur disque.**
+and complete metadata: `title`, `turnCount`, `status`, `workspaceRoot`, `branch`, `updatedAt`. **Nine sessions, eleven turns for the longest, persisted on disk.**
 
-Autrement dit, quand le rapport d'écart demandait `session/read` et `session/resume`, il les présentait comme le moyen de **retrouver un historique**. Or **l'historique est déjà là, persistant et énumérable** — ce qui manque est l'API pour lire le contenu depuis un client.
+In other words, when the gap report asked for `session/read` and `session/resume`, it presented them as the means of **recovering a history**. But **the history is already there, persistent and enumerable** — what is missing is the API to read the content from a client.
 
-## Ce qui reste à tester, et qui pourrait fermer M0-02
+## What is left to test, and could close M0-02
 
-Le README de campagne documente qu'après un clic sur **Reconnect**, l'application affiche :
+The campaign README records that after clicking **Reconnect**, the application shows:
 
 > `This conversation could not be resumed. — MSP error -32020: session … was not found [sessionNotFound]`
 
-**Hypothèse non testée :** si le host est désormais `durable` et que `session/list` énumère ces sessions, alors **le host connaît la session** — et l'échec de reprise viendrait du **client**, qui lance un nouveau host et ne réconcilie pas avec les sessions déjà présentes. Ce serait un **défaut côté client, corrigible**, et non un blocage du sidecar.
+**Untested hypothesis:** if the host is now `durable` and `session/list` enumerates these sessions, then **the host knows the session** — and the resume failure would come from the **client**, which starts a new host and does not reconcile against the sessions already present. That would be a **client-side defect, fixable**, and not a sidecar blocker.
 
-C'est une hypothèse, pas un résultat. Elle est testable : relancer l'application, vérifier si `session/list` voit encore la session après redémarrage, et si le client la propose à la reprise.
+That is a hypothesis, not a result. It is testable: restart the application, check whether `session/list` still sees the session after the restart, and whether the client offers it for resume.
 
-## Méthode
+## Method
 
 ```powershell
 node scripts/msp-list-sessions.mjs
 node scripts/msp-list-sessions.mjs --json
 ```
 
-Le script lance un host, fait le handshake **complet** (`initialize` puis la notification `initialized`, sans quoi tout appel suivant répond `Not initialized`), interroge `session/list` et affiche les métadonnées. **Lecture seule** : il n'écrit et ne supprime rien.
+The script launches a host, performs the **complete** handshake (`initialize` then the `initialized` notification, without which every later call answers `Not initialized`), queries `session/list` and prints the metadata. **Read only**: it writes and deletes nothing.
 
-## Correction à porter dans le rapport d'écart
+## Correction to carry into the gap report
 
-Le §5 doit dire : `sessionDurability` **varie** — `ephemeral` observé en début de campagne, `durable` en fin de campagne, cause non identifiée. La conclusion « la reprise durable n'est pas démontrée » reste valable, mais **pas pour la raison invoquée**.
+§5 should say: `sessionDurability` **varies** — `ephemeral` observed early in the campaign, `durable` at the end, cause unidentified. The conclusion "durable resume is not demonstrated" still stands, but **not for the reason given**.

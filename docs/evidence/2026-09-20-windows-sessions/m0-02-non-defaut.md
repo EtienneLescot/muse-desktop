@@ -1,63 +1,63 @@
-# M0-02 : il n'y avait rien à corriger (20 septembre 2026)
+# M0-02: there was nothing to fix (20 September 2026)
 
-Ce document **clôt** l'enquête ouverte par [`reprise-fonctionne.md`](reprise-fonctionne.md) et [`m0-02-cause.md`](m0-02-cause.md). Sa conclusion est que **l'échec de reprise observé était une réponse correcte du client**, et non un défaut.
+This document **closes** the investigation opened by [`reprise-fonctionne.md`](reprise-fonctionne.md) and [`m0-02-cause.md`](m0-02-cause.md). Its conclusion is that **the resume failure observed was a correct response from the client**, not a defect.
 
-## La mesure qui tranche
+## The measurement that settles it
 
-La seule conversation restant dans l'application — `01a0bd8e`, « Explain the project structure and its main… », 15 entrées — a été confrontée à trois sources :
+The only conversation left in the application — `01a0bd8e`, "Explain the project structure and its main…", 15 entries — was checked against three sources:
 
-| Source | Résultat |
+| Source | Result |
 |---|---|
-| `session/list` du host (10 sessions) | **absente** |
-| Fichiers sur disque (`~/.local/share/muse/sessions`, 19 répertoires) | **aucun dossier `01a0bd8e*`** |
-| Stockage local de l'application | **présente**, `session_durability: durable`, 15 entrées |
+| The host's `session/list` (10 sessions) | **absent** |
+| Files on disk (`~/.local/share/muse/sessions`, 19 directories) | **no `01a0bd8e*` folder** |
+| The application's local storage | **present**, `session_durability: durable`, 15 entries |
 
-**Au moment de l'enquête, cette session n'existe que côté client.** Le host ne la liste pas et aucun fichier ne porte son identifiant sur disque.
+**At the time of the investigation, this session exists only on the client side.** The host does not list it and no file carries its identifier on disk.
 
-**Ce que ces trois sources ne prouvent pas, et que je n'affirme donc pas :** elles établissent une absence **à l'instant de la mesure**, pas que le host ne l'a **jamais** connue, ni qu'aucune donnée n'a jamais été écrite pour elle. Aucune preuve historique n'étaye ces deux affirmations plus fortes, et je les retire.
+**What those three sources do not prove, and which I therefore do not claim:** they establish an absence **at the moment of measurement**, not that the host **never** knew it, nor that no data was ever written for it. No historical proof supports those two stronger claims, and I withdraw them.
 
-## Conséquence : `sessionNotFound` était la bonne réponse
+## Consequence: `sessionNotFound` was the right answer
 
-Quand l'application tente de reprendre cette conversation, le host répond qu'il ne la trouve pas — **parce que, au moment de la reprise, elle ne figure pas parmi les sessions qu'il connaît**. Le client affiche alors :
+When the application tries to resume this conversation, the host answers that it cannot find it — **because, at the time of the resume, it is not among the sessions it knows**. The client then shows:
 
 > `This conversation could not be resumed. — MSP error -32020: session … was not found [sessionNotFound] [retryable=false]`
 
-**Ce n'est pas un défaut.** Le client a **raison** de rapporter l'échec, et le host a **raison** de refuser. Il n'y a **rien à corriger** : ni dans le client, ni dans le sidecar.
+**That is not a defect.** The client is **right** to report the failure, and the host is **right** to refuse. There is **nothing to fix**: neither in the client nor in the sidecar.
 
-C'est la conclusion que je n'avais pas su tirer pendant vingt rounds, parce que je cherchais un coupable dans le protocole au lieu de vérifier **si la session existait**.
+That is the conclusion I failed to draw across twenty rounds, because I was looking for a culprit in the protocol instead of checking **whether the session existed**.
 
-## Ce que l'enquête a établi au passage
+## What the investigation established along the way
 
-| Affirmation | Statut |
+| Claim | Status |
 |---|---|
-| Le host sait reprendre une session **persistée et libre** | **prouvé** — `session/resume` réussit, `session/read` répond `ok` |
-| `session/read` existe et retourne `{session, viewCursor, history, pendingRequests}` | **prouvé** — mon rapport le déclarait `unsupported` à tort |
-| Une session **sans tour abouti** ne se persiste pas | **prouvé** — 10 sessions chez le host A, 9 chez le host B |
-| Les notifications terminales **sont** émises à la fin normale d'un tour | **prouvé** — `turn/completed` reçu |
-| `session/list` est **déclaré** côté client mais **aucun appel n'a été trouvé** dans `src/` | **prouvé** — la méthode figure dans le tableau exécutable `MSP_METHODS_SENT` (`msp.ts:32`), mais aucune invocation |
-| Le gate `ephemeral` du client a bloqué une reprise | **écarté** — les 41 sessions sauvegardées portaient toutes `durable` |
-| L'échec de reprise était un défaut | **réfuté** — la session est absente des sessions que le host liste |
+| The host can resume a **persisted and free** session | **proved** — `session/resume` succeeds, `session/read` answers `ok` |
+| `session/read` exists and returns `{session, viewCursor, history, pendingRequests}` | **proved** — my report wrongly declared it `unsupported` |
+| A session **with no completed turn** does not persist | **proved** — 10 sessions on host A, 9 on host B |
+| Terminal notifications **are** emitted at the normal end of a turn | **proved** — `turn/completed` received |
+| `session/list` is **declared** on the client side but **no call was found** in `src/` | **proved** — the method appears in the executable `MSP_METHODS_SENT` table (`msp.ts:32`), but with no invocation |
+| The client's `ephemeral` gate blocked a resume | **ruled out** — all 41 saved sessions carried `durable` |
+| The resume failure was a defect | **disproved** — the session is absent from the sessions the host lists |
 
-## Le vrai écart, qui n'est pas celui que je cherchais
+## The real gap, which is not the one I was looking for
 
-Le client **peut** afficher dans sa barre latérale une conversation que le host ne connaît pas. C'est ce qui s'est produit, et c'est ce qui rend l'échec déroutant pour l'utilisateur : la conversation est **visible**, son historique est **lisible**, et pourtant elle n'est **pas reprenable** — sans que rien n'indique pourquoi.
+The client **can** show, in its sidebar, a conversation the host does not know. That is what happened, and that is what makes the failure confusing for the user: the conversation is **visible**, its history is **readable**, and yet it is **not resumable** — with nothing to say why.
 
-**Aucun appel à `session/list` n'a été trouvé dans l'application**, donc rien ne lui permet de savoir quelles conversations sont réellement reprenables. Il ne peut ni marquer les conversations orphelines, ni avertir l'utilisateur, ni éviter de proposer une reprise qui échouera.
+**No call to `session/list` was found in the application**, so nothing lets it know which conversations are really resumable. It can neither mark orphaned conversations, nor warn the user, nor avoid offering a resume that will fail.
 
-**Précision sur cette absence** : `session/list` est bien déclaré dans `MSP_METHODS_SENT` (`src/lib/msp.ts:32`), le tableau que le pont Rust utilise — ce n'est donc pas une simple mention documentaire, et une revue automatisée a eu raison de me le signaler. Ce qui est établi, c'est qu'**aucune invocation n'existe côté application** ; l'absence d'appel dans `src/` n'exclut pas qu'un chemin Rust l'emprunte.
+**A note on that absence:** `session/list` is indeed declared in `MSP_METHODS_SENT` (`src/lib/msp.ts:32`), the table the Rust bridge uses — so it is not a mere documentary mention, and an automated review was right to flag it to me. What is established is that **no invocation exists on the application side**; the absence of a call in `src/` does not exclude a Rust path taking it.
 
-**C'est une capacité manquante, pas un bug** — et c'est la seule amélioration que cette enquête justifie. Encore faudrait-il la valider par un scénario qui échoue de façon reproductible, ce qui n'est pas le cas aujourd'hui.
+**That is a missing capability, not a bug** — and it is the only improvement this investigation justifies. It would still need validating with a scenario that fails reproducibly, which is not the case today.
 
-## Méthode
+## Method
 
 ```powershell
-node scripts/msp-list-sessions.mjs        # ce que le host connaît
-node scripts/msp-resume-free-session.mjs  # le host sait reprendre une session persistée
-node scripts/msp-session-survival.mjs     # une session sans tour ne persiste pas
+node scripts/msp-list-sessions.mjs        # what the host knows
+node scripts/msp-resume-free-session.mjs  # the host can resume a persisted session
+node scripts/msp-session-survival.mjs     # a session with no turn does not persist
 ```
 
-Puis, côté application : lire `muse-desktop.sessions.v1`, et confronter chaque identifiant aux sessions listées par le host et aux répertoires sur disque. **C'est la confrontation des trois sources qui a tranché** — aucune des trois ne suffisait seule.
+Then, on the application side: read `muse-desktop.sessions.v1`, and check every identifier against the sessions the host lists and the directories on disk. **It is the confrontation of the three sources that settled it** — none of the three was enough on its own.
 
-## Note sur la conversation préservée
+## Note on the preserved conversation
 
-`01a0bd8e` a été créée le **20/09 à 06:44**, soit **cinq heures avant** la première session de ma campagne (`01a0bea1`, 11:44). Son contenu porte sur OpenScreen. **Elle n'est pas de moi et je ne l'ai pas touchée**, bien que son titre (« Explain the project structure and its main… ») soit celui d'une de mes sessions de test — le marqueur textuel seul n'était pas concluant, la datation l'a été.
+`01a0bd8e` was created on **20/09 at 06:44**, that is **five hours before** the first session of my campaign (`01a0bea1`, 11:44). Its content is about OpenScreen. **It is not mine and I did not touch it**, even though its title ("Explain the project structure and its main…") is the same as one of my test sessions — the textual marker alone was not conclusive, the timestamp was.

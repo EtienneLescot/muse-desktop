@@ -1,72 +1,72 @@
-# `session/userShell` fonctionne — quatrième faux écart (20 septembre 2026)
+# `session/userShell` works — the fourth false gap (20 September 2026)
 
-**Ce document corrige l'écart n° 3 de [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md).** Le rapport affirmait que le host accepte `session/userShell` sans jamais publier d'item. **C'est faux sur les deux points.**
+**This document corrects gap no. 3 of [`SIDECAR-CONTRACT-GAPS.md`](../../SIDECAR-CONTRACT-GAPS.md).** The report claimed the host accepts `session/userShell` without ever publishing an item. **That is wrong on both counts.**
 
-## La correction décisive : la forme de la capacité
+## The decisive correction: the shape of the capability
 
-`msp-probe.mjs` demande la capacité ainsi :
+`msp-probe.mjs` requests the capability like this:
 
 ```js
 connect(host, { requestedCapabilities: ["userShell"] })
 // → initialize({ clientInfo, capabilities: { requestedCapabilities: ["userShell"] } })
 ```
 
-**La demande est imbriquée dans `capabilities`.** Mes tentatives utilisaient `capabilities: { userShell: true }`, `capabilities: ["userShell"]` ou `requestedCapabilities` au niveau racine — **les trois échouent** avec `grantedCapabilities: []`, et `session/userShell` répond alors :
+**The request is nested inside `capabilities`.** My attempts used `capabilities: { userShell: true }`, `capabilities: ["userShell"]` or `requestedCapabilities` at the root level — **all three fail** with `grantedCapabilities: []`, and `session/userShell` then answers:
 
 > `session/userShell requires the userShell capability`
 
-**J'ai failli conclure une seconde fois à un écart à partir d'une sonde mal formée.** C'est le même travers que pour `session/read` : une erreur de contexte lue comme une absence de capacité.
+**I nearly concluded a gap a second time from a malformed probe.** It is the same trap as `session/read`: a context error read as a missing capability.
 
-## La mesure, avec la bonne forme
+## The measurement, with the right shape
 
-| Mesure | Résultat |
+| Measurement | Result |
 |---|---|
 | `grantedCapabilities` | **`["userShell"]`** |
 | `session/userShell` | **`ok`** — `{"commandId": …, "status": "accepted"}` |
-| Notifications publiées | **`item/started`, `item/completed`** |
-| `kind` des items | **`userShell`** |
-| **Sortie de la commande** | **le marqueur `muse-ushell-…` figure dans les notifications** |
-| `outputRef` | absent — mais **la sortie est là** |
+| Notifications published | **`item/started`, `item/completed`** |
+| Items' `kind` | **`userShell`** |
+| **Command output** | **the marker `muse-ushell-…` appears in the notifications** |
+| `outputRef` | absent — but **the output is there** |
 
-**Les deux affirmations du rapport tombent :** le host **publie** un item `userShell`, et l'**output est reporté** — pas par un `outputRef`, mais **dans la charge utile de l'item**.
+**Both claims in the report fall:** the host **publishes** a `userShell` item, and the **output is reported** — not through an `outputRef`, but **in the item's payload**.
 
-**Méthode :** la commande exécutée écrit un marqueur unique (`muse-ushell-<horodatage>`) et le cherche dans toutes les notifications reçues après l'appel. Le marqueur est **retrouvé** — c'est une preuve par contenu, pas par présence d'un champ.
+**Method:** the command executed writes a unique marker (`muse-ushell-<timestamp>`) and looks for it in every notification received after the call. The marker is **found** — proof by content, not by the presence of a field.
 
-## Ce que cela change pour M1-06
+## What that changes for M1-06
 
-« Faire lire la sortie terminal au moteur » était classé **bloqué par le contrat sidecar**. **Il ne l'est pas** : le host accepte la commande, publie un item typé, et y met la sortie.
+"Have the engine read the terminal output" was classified as **blocked by the sidecar contract**. **It is not**: the host accepts the command, publishes a typed item, and puts the output in it.
 
-Ce qui manque, s'il manque quelque chose, est **côté client** : le client doit demander la capacité sous la bonne forme et lire l'item. Le rapport lui attribuait un blocage qui n'existe pas.
+What is missing, if anything is, is **on the client side**: the client has to request the capability in the right shape and read the item. The report attributed a blocker to it that does not exist.
 
-## Le quatrième écart était mal mesuré, lui aussi
+## The fourth gap was badly measured too
 
-L'écart n° 4 (projections de modèle et d'effort) a été remesuré hors du harness. **Mes appels échouent en `invalidParams`** :
+Gap no. 4 (model and effort projections) was re-measured outside the harness. **My calls fail with `invalidParams`:**
 
 ```
 setReasoningEffort(none|high|ultra)  → invalidParams
 setModel(muse-spark-1.3)             → invalidParams: missing f…
 ```
 
-Un `invalidParams` sur **ma** requête ne dit **rien** de la capacité du host — c'est le même piège que `approval/listPending` sans `sessionId`, qui avait déjà produit un faux constat dans ce dépôt.
+An `invalidParams` on **my** request says **nothing** about the host's capability — it is the same trap as `approval/listPending` without a `sessionId`, which had already produced a false finding in this repository.
 
-**Je n'ai donc pas de mesure valide de l'écart n° 4.** Il n'est ni confirmé ni infirmé, et le rapport ne devrait pas l'affirmer.
+**I therefore have no valid measurement of gap no. 4.** It is neither confirmed nor refuted, and the report should not assert it.
 
-Au passage, `session/read` expose un champ **`approvalMode`** sur la session — utile pour M0-06, non exploité jusqu'ici.
+Incidentally, `session/read` exposes an **`approvalMode`** field on the session — useful for M0-06, unused until now.
 
-## Bilan : les cinq écarts
+## Summary: the five gaps
 
-| Écart | Affirmé | Mesuré |
+| Gap | Claimed | Measured |
 |---|---|---|
-| 1 — `session/read`, `session/resume` absents | écart | **inexistant** — fonctionnels |
-| 2 — aucun terminal après interruption | écart | **inexistant** — `turn/completed` émis |
-| 3 — `userShell` accepté sans item ni sortie | écart | **inexistant** — item `userShell` publié, sortie incluse |
-| 4 — projections non rapportées | écart | **non mesuré** — mes appels sont refusés en `invalidParams` |
-| 5 — durabilité constamment `ephemeral` | écart | **inexistant** — variable |
+| 1 — `session/read`, `session/resume` missing | a gap | **non-existent** — they work |
+| 2 — no terminal after an interrupt | a gap | **non-existent** — `turn/completed` emitted |
+| 3 — `userShell` accepted with no item and no output | a gap | **non-existent** — `userShell` item published, output included |
+| 4 — projections not reported | a gap | **not measured** — my calls are refused with `invalidParams` |
+| 5 — durability constantly `ephemeral` | a gap | **non-existent** — variable |
 
-**Aucun des cinq écarts n'est confirmé.** Trois sont formellement démentis, un n'a jamais été mesuré valablement, et le cinquième était une constante mal lue.
+**None of the five gaps is confirmed.** Three are formally disproved, one was never validly measured, and the fifth was a misread constant.
 
-## Ce que je ne fais pas, et pourquoi
+## What I am not doing, and why
 
-Je **n'instruis pas** l'écart n° 4 maintenant : il demande de retrouver la forme correcte de `session/setModel` et `session/setReasoningEffort`, ce qui est un travail de sonde à part entière. **Mon budget de contexte est presque épuisé**, et refaire à la hâte une mesure qui a déjà produit quatre faux constats serait la pire façon de finir.
+I am **not** investigating gap no. 4 now: it requires finding the correct shape of `session/setModel` and `session/setReasoningEffort`, which is probe work in its own right. **My context budget is nearly exhausted**, and hastily redoing a measurement that has already produced four false findings would be the worst way to finish.
 
-**La leçon de ces dix rounds est nette :** je n'ai pas un problème de connaissance du host, j'ai un problème d'**outillage**. Cinq constats d'absence, cinq artefacts de méthode.
+**The lesson of these ten rounds is clear:** I do not have a knowledge problem about the host, I have a **tooling** problem. Five findings of absence, five artefacts of method.
