@@ -33,6 +33,7 @@ use serde_json::{json, Value};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -770,6 +771,32 @@ pub fn disable(dir: &Path) -> Result<Value, String> {
     Ok(status_json(dir))
 }
 
+/// The level a recorded manifest grants. The manifest file is the user's
+/// consent on disk: `enable` writes it, only `disable` removes it.
+fn recorded_level(manifest: &Value) -> Option<&'static str> {
+    match manifest["mode"].as_str()? {
+        "unrestricted" => Some("act"),
+        "bounded" => Some("observe"),
+        _ => None,
+    }
+}
+
+/// Start the service again for a consent still on record. The service does not
+/// survive a reboot, nor an app run by `cargo run` (`tauri dev`), whose job
+/// object kills every descendant when cargo exits: each restart used to undo
+/// the user's choice. `None` when there is nothing to resume.
+pub fn resume(dir: &Path) -> Option<Value> {
+    // StrictMode mounts twice: two resumes must not start two services on one pipe.
+    static RESUMING: Mutex<()> = Mutex::new(());
+    let _guard = RESUMING.lock().ok()?;
+    let level = recorded_level(&read_manifest(dir)?)?;
+    let driver = binary()?;
+    if service_running(&driver) {
+        return None;
+    }
+    enable(level, dir).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -916,6 +943,14 @@ mod tests {
     fn observe_grants_display_observation() {
         let m = manifest("observe", &fixture()).unwrap();
         assert_eq!(m["resources"]["desktop"]["display"], true);
+    }
+
+    #[test]
+    fn a_recorded_manifest_resumes_its_own_level() {
+        for level in LEVELS {
+            assert_eq!(recorded_level(&manifest(level, &fixture()).unwrap()), Some(level));
+        }
+        assert_eq!(recorded_level(&json!({})), None);
     }
 
     #[test]

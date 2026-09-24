@@ -2840,11 +2840,12 @@ fn computer_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 /// Computer use: what is installed, what is granted, and whether the grant is
-/// still live. Read-only, and the only computer-use command the UI polls.
+/// still live. The only computer-use command the UI polls; it restarts the
+/// service when the consent is on record but the service is gone.
 #[tauri::command]
 async fn computer_status(app: AppHandle) -> Result<Value, String> {
     let dir = computer_data_dir(&app)?;
-    tokio::task::spawn_blocking(move || computer::status_json(&dir))
+    tokio::task::spawn_blocking(move || computer::resume(&dir).unwrap_or_else(|| computer::status_json(&dir)))
         .await
         .map_err(|e| format!("computer-use status task failed: {e}"))
 }
@@ -4091,7 +4092,9 @@ async fn start_session_at_workspace(
     ).await?;
     let mut params = json!({
         "commandId": new_command_id(),
-        "workspaceRoot": root.display().to_string(),
+        // The host runs the agent's shell there: PowerShell shows the canonical
+        // `\\?\G:\…` form verbatim and some tools refuse it.
+        "workspaceRoot": rules::display_path(&root),
     });
     if let Some(mode) = authorization_mode.as_deref() {
         let wire_mode = host_approval_mode(mode)
