@@ -1,285 +1,285 @@
-# Preuves natives Windows — groupe 1 (20 septembre 2026)
+# Native Windows evidence — group 1 (20 September 2026)
 
-Campagne de validation native pilotée par CUA sur l'application desktop réelle, avec un sidecar Muse Windows natif.
+A native validation campaign driven by CUA on the real desktop application, with a native Windows Muse sidecar.
 
-## Environnement
+## Environment
 
-| Élément | Valeur |
+| Element | Value |
 |---|---|
 | Commit | `064e210` (main) |
-| Plateforme | Windows 10.0.26200 (x86_64), écran 1920×1080 @1x |
-| Application | `target\debug\muse-desktop.exe` lancé par `npm run tauri -- dev` (runtime Tauri 2.11.5, WebView2) |
-| Sidecar | **binaire Windows natif** `muse-bin-1.3.0-R3401.1.exe` copié en `src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe` |
-| Version moteur | Muse Code 1.3.0 (1.3.0-R3401.1) |
-| Authentification | `%USERPROFILE%\.config\muse\auth.json` (provider `meta`) |
-| Pilotage | cua-driver 0.28.2 (UIAutomation + Windows Graphics Capture) |
-| Workspace de test | `G:\repos\openscreen` (conversations) et `C:\Users\etien\Documents\repos\muse-desktop` (Automations) |
+| Platform | Windows 10.0.26200 (x86_64), 1920×1080 @1x display |
+| Application | `target\debug\muse-desktop.exe` launched by `npm run tauri -- dev` (Tauri runtime 2.11.5, WebView2) |
+| Sidecar | **native Windows binary** `muse-bin-1.3.0-R3401.1.exe` copied to `src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe` |
+| Engine version | Muse Code 1.3.0 (1.3.0-R3401.1) |
+| Authentication | `%USERPROFILE%\.config\muse\auth.json` (provider `meta`) |
+| Driving | cua-driver 0.28.2 (UIAutomation + Windows Graphics Capture) |
+| Test workspace | `G:\repos\openscreen` (conversations) and `C:\Users\etien\Documents\repos\muse-desktop` (Automations) |
 
-**Nouveauté par rapport à toutes les preuves antérieures :** les validations précédentes utilisaient le pont WSL (`muse-wsl-bridge.exe`). Cette campagne exerce le **binaire Muse Windows natif** comme sidecar, depuis l'interface Tauri empaquetée en mode dev.
+**What is new compared with all earlier evidence:** the previous validations used the WSL bridge (`muse-wsl-bridge.exe`). This campaign exercises the **native Windows Muse binary** as the sidecar, from the packaged Tauri interface in dev mode.
 
-### Méthode de pilotage (à réutiliser)
+### Driving method (to reuse)
 
-Le contenu WebView2 **n'est pas exposé** dans l'arbre UI Automation : `get_window_state` ne renvoie que 5 éléments (titre de fenêtre et boutons système). Le pilotage se fait donc par **capture + coordonnées**, en respectant deux conversions :
+The WebView2 content **is not exposed** in the UI Automation tree: `get_window_state` returns only 5 elements (the window title and the system buttons). Driving is therefore done by **screenshot + coordinates**, respecting two conversions:
 
-- `fenêtre = preview × 1,193` (la capture 884×1030 est réduite en preview 741×863) ;
-- `écran = fenêtre + (1035, 0)` (la fenêtre est positionnée à x=1035).
+- `window = preview × 1.193` (the 884×1030 screenshot is reduced to a 741×863 preview);
+- `screen = window + (1035, 0)` (the window sits at x=1035).
 
-Les **clics** fonctionnent en livraison `background`, mais la **saisie clavier et les raccourcis n'atteignent le renderer qu'en `foreground`** (SendInput). `PostMessage` est silencieusement ignoré par WebView2 : le tool le signale lui-même (« not verified — could not read the focused field back »).
+**Clicks** work with `background` delivery, but **keyboard input and shortcuts only reach the renderer in `foreground`** (SendInput). `PostMessage` is silently ignored by WebView2: the tool says so itself ("not verified — could not read the focused field back").
 
-## Ce qui a été prouvé
+## What was proved
 
-### 1. Le binaire Windows natif est un sidecar viable (`07`, `08`)
+### 1. The native Windows binary is a viable sidecar (`07`, `08`)
 
-Conversation créée depuis l'écran d'accueil. L'application affiche :
+A conversation created from the welcome screen. The application shows:
 
-- en-tête : `G:\repos\openscreen` · `pr620` · **`Connected`** (pastille verte) ;
-- en-tête de conversation : **`Ready`** ;
-- une carte **`Agent 740b927b-452b-49cb-afb7-731b6a33cf3f thinking…`** en **`Running`** ;
-- la ligne de liveness **`Muse is working — Last update 4s ago · work item started`** ;
-- la sidebar passe à **`CONVERSATIONS (55, 1 WORKING)`**.
+- header: `G:\repos\openscreen` · `pr620` · **`Connected`** (green pill);
+- conversation header: **`Ready`**;
+- a card **`Agent 740b927b-452b-49cb-afb7-731b6a33cf3f thinking…`** in **`Running`**;
+- the liveness line **`Muse is working — Last update 4s ago · work item started`**;
+- the sidebar goes to **`CONVERSATIONS (55, 1 WORKING)`**.
 
-Puis un **tour modèle live complet a abouti** : la question « Enumerate the three Musketeers by name. » reçoit la réponse **« Athos, Porthos, and Aramis. »**, les sous-agents passent à **`Completed`**, la pastille revient à **`Ready`** et la sidebar à **`CONVERSATIONS (55)`**.
+Then **a complete live model turn succeeded**: the question "Enumerate the three Musketeers by name." receives the answer **"Athos, Porthos, and Aramis."**, the sub-agents move to **`Completed`**, the pill returns to **`Ready`** and the sidebar to **`CONVERSATIONS (55)`**.
 
-**Verdict :** la chaîne application Tauri → sidecar natif Windows → moteur → streaming → transcript fonctionne de bout en bout. C'est le prérequis qui manquait à toutes les preuves « webview empaquetée » du groupe 1.
+**Verdict:** the chain Tauri application → native Windows sidecar → engine → streaming → transcript works end to end. That is the prerequisite every group 1 "packaged webview" proof was missing.
 
-### 2. Le host 1.3.0 n'émet pas de notification terminale (`08`)
+### 2. Host 1.3.0 emits no terminal notification (`08`)
 
-Immédiatement après la réponse, l'application affiche **`No recent host update — No host event for 57s. Muse may still be working. Last event: work item started.`** avec les actions **Sync now** / **Reconnect** / **Stop**.
+Immediately after the answer, the application shows **`No recent host update — No host event for 57s. Muse may still be working. Last event: work item started.`** with the actions **Sync now** / **Reconnect** / **Stop**.
 
-Le smoke harness confirme la cause sur ce même binaire :
+The smoke harness confirms the cause on this same binary:
 
 ```json
 "controls":[{"host":"A","turnId":"…","status":"interrupted","terminalNotification":"unsupported"}]
 ```
 
-**Verdict :** l'absence de terminal est une limite du host, pas un défaut de l'application — et l'application la surface honnêtement au lieu de conclure le tour artificiellement.
+**Verdict:** the missing terminal is a host limit, not an application defect — and the application surfaces it honestly instead of ending the turn artificially.
 
-### 3. Détection de panne du host (`10`, `14`)
+### 3. Detecting a host failure (`10`, `14`)
 
-Deux hosts coexistaient (`PID 47096` et `29580`, tous deux `muse.exe serve --sandbox-network restricted`). Après `Stop-Process` sur `29580` :
+Two hosts coexisted (`PID 47096` and `29580`, both `muse.exe serve --sandbox-network restricted`). After `Stop-Process` on `29580`:
 
-- l'application reste vivante et `Responding: True` ;
-- **aucun changement visible** (capture identique au bit près, même SHA-256) ;
-- aucun respawn.
+- the application stays alive and `Responding: True`;
+- **no visible change** (screenshot identical bit for bit, same SHA-256);
+- no respawn.
 
-Après `Stop-Process` sur le **dernier** host (`47096`) : **0 host**, application toujours vivante et répondante. En revenant dans une conversation, l'application affiche :
+After `Stop-Process` on the **last** host (`47096`): **0 hosts**, the application still alive and responding. Going back into a conversation, the application shows:
 
-- pastille **`Disconnected`** (gris) au lieu de `Connected` ;
-- un bouton **`Reconnect`** dans l'en-tête ;
-- le composer remplacé par **« Open the desktop app to continue. »** avec le bouton d'envoi **désactivé** ;
-- le transcript local **intégralement conservé** (messages `08:44`, cartes Tool `search` et `Read text file README.md` toujours affichées).
+- a **`Disconnected`** pill (grey) instead of `Connected`;
+- a **`Reconnect`** button in the header;
+- the composer replaced by **"Open the desktop app to continue."** with the send button **disabled**;
+- the local transcript **entirely preserved** (messages at `08:44`, Tool cards `search` and `Read text file README.md` still displayed).
 
-**Verdict :** détection, signalement et blocage des envois sont corrects. La mort d'un host n'entraîne ni crash ni perte de transcript, et aucun respawn silencieux n'a lieu.
+**Verdict:** detection, reporting and blocking of sends are correct. A host's death causes neither a crash nor transcript loss, and no silent respawn happens.
 
-### 4. Récupération explicite, et son échec honnête (`15`)
+### 4. Explicit recovery, and its honest failure (`15`)
 
-Clic sur **Reconnect** → un nouveau host est lancé (`PID 43432`, `muse.exe serve --sandbox-network restricted`). La reprise de session échoue et l'application affiche un bandeau d'erreur construit ainsi :
+Clicking **Reconnect** → a new host is launched (`PID 43432`, `muse.exe serve --sandbox-network restricted`). The session resume fails and the application shows an error banner built like this:
 
-> **This conversation could not be <mot illisible>. — MSP error -32020: session 01a0bd8e-… was not found [sessionNotFound] [retryable=false]. Your saved messages are still available.**
+> **This conversation could not be <illegible word>. — MSP error -32020: session 01a0bd8e-… was not found [sessionNotFound] [retryable=false]. Your saved messages are still available.**
 
-Le mot exact après `be` **n'a pas pu être transcrit de façon fiable** : une première recopie en français (« reconnecté ») contredisait le verdict anglais ci-dessous, et l'identifiant de session avait été recopié avec un dernier groupe de 11 caractères au lieu de 12. L'application ayant été redémarrée depuis, la chaîne verbatim n'est plus reproductible. Ce qui **est** établi est la structure du message, énumérée ci-dessous, et non son texte mot pour mot.
+The exact word after `be` **could not be transcribed reliably**: a first copy in French ("reconnecté") contradicted the English verdict below, and the session identifier had been copied with a last group of 11 characters instead of 12. The application having been restarted since, the verbatim string can no longer be reproduced. What **is** established is the message's structure, listed below, not its word-for-word text.
 
-La pastille passe à **`Connection error`** (orange), le transcript reste affiché, l'envoi reste bloqué, et **`Reconnect` reste proposé**.
+The pill switches to **`Connection error`** (orange), the transcript stays displayed, sending stays blocked, and **`Reconnect` stays on offer**.
 
-**Verdict :** c'est le comportement attendu pour un host `ephemeral` — la session n'existe pas dans un store durable, donc la reprise est impossible. L'application ne fabrique aucun faux succès. La copie d'erreur est **en anglais**, bornée, et porte le code (`-32020`), l'identifiant de session, la catégorie (`sessionNotFound`), l'état `retryable=false` et une phrase rassurante sur les messages conservés : c'est la forme de la copie `userFacingError` attendue par M0-11.
+**Verdict:** that is the expected behaviour for an `ephemeral` host — the session does not exist in a durable store, so resume is impossible. The application fabricates no false success. The error copy is **in English**, bounded, and carries the code (`-32020`), the session identifier, the category (`sessionNotFound`), the `retryable=false` state and a reassuring sentence about the preserved messages: that is the shape of `userFacingError` copy M0-11 expects.
 
-### 5. Conservation du texte et absence d'envoi sans host (`19`, `20`)
+### 5. Text preserved and no send without a host (`19`, `20`)
 
-Avec **zéro host disponible**, depuis l'écran d'accueil :
+With **zero hosts available**, from the welcome screen:
 
-- le texte reste dans le composer : **« Analyze the changes and provide a code review. »** ;
-- le bouton reste **`Start conversation`** (aucun envoi déclenché) ;
-- le hint reste **« Your message is sent as soon as you start. »** ;
-- **aucun host n'est lancé** par la tentative (compte vérifié : 0).
+- the text stays in the composer: **"Analyze the changes and provide a code review."**;
+- the button stays **`Start conversation`** (no send triggered);
+- the hint stays **"Your message is sent as soon as you start."**;
+- **no host is launched** by the attempt (count checked: 0).
 
-Le remplissage du composer par la carte de suggestion **`Review code`** a également été observé (le clic a inséré le libellé de la suggestion dans le champ).
+The composer being filled by the **`Review code`** suggestion card was also observed (the click inserted the suggestion's label into the field).
 
-**Verdict :** échec d'envoi non destructif et texte préservé — la propriété centrale de M0-03.
+**Verdict:** a non-destructive send failure and preserved text — M0-03's central property.
 
-### 6. Le bail du scheduler natif est visible (`13`)
+### 6. The native scheduler's lease is visible (`13`)
 
-L'onglet **Automations** affiche **`Native scheduler active — This desktop instance owns the native scheduler lease. Checked 13:47:00`** ainsi que `Native wake-up — Native wake-up cleared; no enabled automation is scheduled.` La navigation vers cet onglet a confirmé que l'application reste pleinement réactive après la mort des hosts.
+The **Automations** tab shows **`Native scheduler active — This desktop instance owns the native scheduler lease. Checked 13:47:00`** as well as `Native wake-up — Native wake-up cleared; no enabled automation is scheduled.` Navigating to that tab confirmed the application stays fully responsive after the hosts died.
 
-## Sonde de contrat host (`scripts/msp-probe.mjs`)
+## Host contract probe (`scripts/msp-probe.mjs`)
 
-Le pilotage de l'interface s'étant révélé impraticable (voir « Limites de la méthode »), une sonde MSP dédiée a été écrite pour mesurer directement ce que le host expose ou non. Elle parle le protocole sur stdio à un vrai `muse serve` et ne publie que des faits bornés.
+Driving the interface having proved impractical (see "Limits of the method"), a dedicated MSP probe was written to measure directly what the host does or does not expose. It speaks the protocol over stdio to a real `muse serve` and publishes only bounded facts.
 
 ```powershell
-node scripts/msp-probe.mjs --surfaces --user-shell   # aucun coût modèle
-node scripts/msp-probe.mjs --interrupt --live        # consomme un tour modèle
+node scripts/msp-probe.mjs --surfaces --user-shell   # no model cost
+node scripts/msp-probe.mjs --interrupt --live        # spends one model turn
 ```
 
-**Surfaces de lecture** (session créée, aucun tour) :
+**Read surfaces** (session created, no turn):
 
-| Méthode | Résultat | Conséquence |
+| Method | Result | Consequence |
 |---|---|---|
-| `session/list` | **available** | restauration paginée possible |
-| `approval/listPending` | **available** — forme `{approvals, userInputs}` | **correction d'une affirmation de la roadmap** (voir ci-dessous) |
-| `session/read` | unsupported | pas de relecture d'historique |
-| `session/resume` | unsupported | reprise durable impossible |
-| `view/page` | unsupported | pas de repli par curseur |
+| `session/list` | **available** | paginated restore possible |
+| `approval/listPending` | **available** — shape `{approvals, userInputs}` | **corrects a roadmap claim** (see below) |
+| `session/read` | unsupported | no history replay |
+| `session/resume` | unsupported | durable resume impossible |
+| `view/page` | unsupported | no cursor fallback |
 
-**`session/userShell`** : `accepted` mais **aucun `item/started`**, aucun `outputRef`, et l'historique n'est pas relisible. Le smoke harness attend déjà cette notification (ligne 738 de `native-smoke.mjs`) et ne l'obtient pas. **La restitution d'une commande shell au moteur n'est donc pas démontrable sur ce host** — M1-06 reste bloqué par le contrat, pas par le client.
+**`session/userShell`**: `accepted` but **no `item/started`**, no `outputRef`, and the history cannot be read back. The smoke harness already waits for that notification (line 738 of `native-smoke.mjs`) and does not get it. **Returning a shell command's output to the engine is therefore not demonstrable on this host** — M1-06 stays blocked by the contract, not by the client.
 
-**Contrat d'`initialize`** : champs retournés `experimentalApi`, `grantedCapabilities`, `museHome`, `platformFamily`, `platformOs`, `schema`, `serverInfo`, `sessionDurability`, `userAgent`. `sessionDurability` vaut `ephemeral`. `userShell` n'est accordé que s'il est demandé via `capabilities.requestedCapabilities`.
+**`initialize` contract**: fields returned `experimentalApi`, `grantedCapabilities`, `museHome`, `platformFamily`, `platformOs`, `schema`, `serverInfo`, `sessionDurability`, `userAgent`. `sessionDurability` is `ephemeral`. `userShell` is only granted if requested through `capabilities.requestedCapabilities`.
 
-**Détails de protocole utiles, absents de la documentation du dépôt :**
+**Useful protocol details, absent from the repository's documentation:**
 
-- `initialize` exige `clientInfo.name` conforme à `^[a-z0-9_]+$`.
-- `session/start` prend `workspaceRoot` (et non `cwd`) et répond `result.session.sessionId`.
-- `session/userShell` prend `commandText` (et non `command`).
-- `turn/interrupt` prend `commandId` **en plus** de `turnId`.
-- Un `turn/interrupt` sur un tour admis mais sans run retourne `missing_run`.
+- `initialize` requires a `clientInfo.name` matching `^[a-z0-9_]+$`.
+- `session/start` takes `workspaceRoot` (not `cwd`) and answers `result.session.sessionId`.
+- `session/userShell` takes `commandText` (not `command`).
+- `turn/interrupt` takes `commandId` **in addition to** `turnId`.
+- A `turn/interrupt` on an admitted turn with no run returns `missing_run`.
 
-**Limite rencontrée par la sonde :** un `turn/start` envoyé par un client MSP autonome est **accepté sans qu'aucun run ne se matérialise** (`turn/interrupt` répond `missing_run`, aucune notification au-delà de `session/started`). L'application, elle, obtient de vrais tours — elle dispose du contexte d'authentification du host, que la sonde n'a pas. Les chemins « tour live » restent donc hors de portée d'un client MSP nu.
+**A limit the probe ran into:** a `turn/start` sent by a standalone MSP client is **accepted without any run materialising** (`turn/interrupt` answers `missing_run`, no notification beyond `session/started`). The application, for its part, gets real turns — it has the host's authentication context, which the probe does not. The "live turn" paths therefore stay out of reach of a bare MSP client.
 
-### Correction d'une affirmation de la roadmap
+### Correcting a roadmap claim
 
-La roadmap indiquait que `session/read`, `view/page` **et** `approval/listPending` répondaient `methodNotFound`, en s'appuyant sur le smoke. La mesure directe montre que **`approval/listPending` est disponible** dès qu'on lui passe un `sessionId`, et qu'il retourne `{approvals, userInputs}` — c'est un appel **sans** `sessionId` qui produit `methodNotFound`. Ce point mérite d'être revérifié côté client : la carte de récupération des demandes en attente pourrait être plus capable que ce que M0-05 suppose.
+The roadmap stated that `session/read`, `view/page` **and** `approval/listPending` answered `methodNotFound`, based on the smoke. Direct measurement shows **`approval/listPending` is available** as soon as it is given a `sessionId`, and that it returns `{approvals, userInputs}` — it is a call **without** a `sessionId` that produces `methodNotFound`. That point deserves re-checking on the client side: the pending-request recovery card may be more capable than M0-05 assumes.
 
-## Déblocage : pilotage CDP du DOM (round 3)
+## Unblocking: driving the DOM over CDP (round 3)
 
-Le blocage UI décrit plus bas a été levé en activant le debug distant de WebView2 au lancement de la version de développement :
+The UI blocker described below was lifted by enabling WebView2's remote debugging when launching the development build:
 
 ```powershell
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
 npm run tauri -- dev
 ```
 
-WebView2 Runtime 153 expose alors un endpoint CDP (`Edg/153.0.4234.48`). Deux outils ont été écrits :
+WebView2 Runtime 153 then exposes a CDP endpoint (`Edg/153.0.4234.48`). Two tools were written:
 
-- **`scripts/cdp-drive.mjs`** — `snapshot`, `eval`, `click`, `fill` sur le DOM réel. **Instrumentation de développement uniquement** : elle active une fonctionnalité de WebView2, elle ne modifie pas le code de l'application.
-- **`scripts/cdp-scenario.mjs`** — scénario d'acceptation borné (`--live` pour consommer un tour modèle).
+- **`scripts/cdp-drive.mjs`** — `snapshot`, `eval`, `click`, `fill` on the real DOM. **Development instrumentation only**: it enables a WebView2 feature, it does not modify the application's code.
+- **`scripts/cdp-scenario.mjs`** — a bounded acceptance scenario (`--live` to spend a model turn).
 
-Le premier `snapshot` confirme `tauri: true`, l'accès aux 40 clés `muse-desktop.*` du `localStorage`, et un composer `TEXTAREA` avec son état `disabled` — c'est-à-dire tout ce que l'arbre UI Automation refusait.
+The first `snapshot` confirms `tauri: true`, access to the 40 `muse-desktop.*` keys in `localStorage`, and a `TEXTAREA` composer with its `disabled` state — that is, everything the UI Automation tree refused.
 
-### Scénario live exécuté (M0-03, M0-04, M1-10, M1-13)
+### Live scenario executed (M0-03, M0-04, M1-10, M1-13)
 
-| Étape | Observation |
+| Step | Observation |
 |---|---|
-| Remplissage du composer | `filled: true`, valeur posée via le setter natif + `input` |
-| Soumission | bouton **`Start conversation`** cliqué (l'accueil n'utilise pas de `<form>`) |
-| Tour démarré | `working: true`, corps « Starting… », `Connected` |
-| **2ᵉ envoi pendant le tour** | file persistée : `muse-desktop.queued-turns.v1` → `["01a0bead-d7da-7a52-910d-77f11763e84c"]` |
-| **UI de file** | panneau **« Queued messages — They will run in order — second turn: reply with just QUEUED-ACK — Remove from queue »** avec l'action d'enlèvement visible |
-| **Clic Stop** | état **`Stopping…`** puis bandeau **« …waiting for the desktop host to confirm it »** |
-| Après 20 s | `working: true`, **`stale: true`** — « No recent host update. Last event: work item started » |
-| File après Stop | **vidée** (`queueKeys: []`) : le host a consommé le tour en file |
+| Filling the composer | `filled: true`, value set through the native setter + `input` |
+| Submission | **`Start conversation`** button clicked (the welcome screen uses no `<form>`) |
+| Turn started | `working: true`, body "Starting…", `Connected` |
+| **2nd send during the turn** | queue persisted: `muse-desktop.queued-turns.v1` → `["01a0bead-d7da-7a52-910d-77f11763e84c"]` |
+| **Queue UI** | the **"Queued messages — They will run in order — second turn: reply with just QUEUED-ACK — Remove from queue"** panel with the removal action visible |
+| **Stop click** | **`Stopping…`** state then the **"…waiting for the desktop host to confirm it"** banner |
+| After 20 s | `working: true`, **`stale: true`** — "No recent host update. Last event: work item started" |
+| Queue after Stop | **emptied** (`queueKeys: []`): the host consumed the queued turn |
 | Sessions | `55 → 57 → 58`, `connected: true` |
 
-**Conclusion sur M0-04 :** l'interruption est demandée et affichée (`Stopping…`), mais **aucune notification terminale n'arrive** et l'état retombe en stale. Le critère « terminal confirmé » reste bloqué par le host, pas par le client — c'est désormais mesuré, plus inféré.
+**Conclusion on M0-04:** the interrupt is requested and displayed (`Stopping…`), but **no terminal notification arrives** and the state falls back to stale. The "terminal confirmed" criterion stays blocked by the host, not the client — it is now measured, no longer inferred.
 
-**Conclusion sur M1-10 :** l'admission en file, sa persistance, son affichage ordonné et l'action d'enlèvement sont **tous observés dans le DOM réel**. Ce qui reste non couvert est la preuve que l'enlèvement *avant lancement* retire bien le tour côté host.
+**Conclusion on M1-10:** queue admission, its persistence, its ordered display and the removal action are **all observed in the real DOM**. What stays uncovered is the proof that removing *before launch* really removes the turn on the host side.
 
-**Point de mesure de M1-13 confirmé :** le journal porte bien `data-entry-count`, `data-window-start` et `data-window-end` (ici `12 / 0 / 12`). La mesure native à 2 000 entrées demande un transcript de cette taille, qui n'existe pas dans ce profil et ne peut pas être fabriqué sans fausser la preuve.
+**M1-13 measurement point confirmed:** the log does carry `data-entry-count`, `data-window-start` and `data-window-end` (here `12 / 0 / 12`). The native measurement at 2,000 entries needs a transcript of that size, which does not exist in this profile and cannot be fabricated without distorting the proof.
 
-### Isolation A/B mesurée dans une seule fenêtre temporelle (M0-01, M0-14)
+### A/B isolation measured within a single time window (M0-01, M0-14)
 
-Contrairement à la première tentative — où la mort d'un host observée via captures n'avait produit **aucun** changement visible, résultat non concluant — la mesure DOM dans une unique fenêtre donne une preuve exploitable :
+Unlike the first attempt — where a host's death observed through screenshots had produced **no** visible change, an inconclusive result — the DOM measurement within a single window gives a usable proof:
 
-| Moment | Hosts `muse.exe` | Application | DOM |
+| Moment | `muse.exe` hosts | Application | DOM |
 |---|---|---|---|
-| Avant | **2** — `46536` (13:58:33), `17820` (13:58:35) | vivante | `connected: true`, 58 sessions |
-| Après `Stop-Process 17820` | **1** — `46536` | **vivante**, `Responding: True`, même PID | `connected: true`, `disconnected: false`, **`composerDisabled: false`**, 58 sessions, file intacte |
+| Before | **2** — `46536` (13:58:33), `17820` (13:58:35) | alive | `connected: true`, 58 sessions |
+| After `Stop-Process 17820` | **1** — `46536` | **alive**, `Responding: True`, same PID | `connected: true`, `disconnected: false`, **`composerDisabled: false`**, 58 sessions, queue intact |
 
-**Ce que cela établit :** la mort d'un host parmi deux simultanés ne tue pas l'application, ne provoque aucun respawn, ne casse aucune conversation, ne vide ni les sessions persistées ni la file, et laisse le compositeur utilisable.
+**What that establishes:** the death of one of two simultaneous hosts does not kill the application, causes no respawn, breaks no conversation, empties neither the persisted sessions nor the queue, and leaves the composer usable.
 
-**Ce que cela n'établit pas encore :** qu'une conversation servie par le host survivant **termine un tour réel après** la mort de l'autre, avec des approbations simultanées. C'est le critère de sortie restant de M0-01/M0-14.
+**What it does not establish yet:** that a conversation served by the surviving host **finishes a real turn after** the other's death, with concurrent approvals. That is M0-01/M0-14's remaining exit criterion.
 
-**Limite de configuration :** le scénario « deux projets » du texte de M0-01 n'est pas directement reproductible dans ce profil — un seul projet (`openscreen`) est déclaré dans `muse-desktop.projects.v1` alors que deux workspaces coexistent dans les sessions (`muse-dogfood` ×54, `openscreen` ×4). Le sélecteur « Start in » ne propose donc qu'une racine. Faire apparaître le second projet exigerait d'écrire dans l'état de l'application, ce qui a été écarté pour ne pas fausser la preuve.
+**A configuration limit:** the "two projects" scenario in M0-01's text is not directly reproducible in this profile — a single project (`openscreen`) is declared in `muse-desktop.projects.v1` while two workspaces coexist in the sessions (`muse-dogfood` ×54, `openscreen` ×4). The "Start in" picker therefore offers a single root. Making the second project appear would require writing into the application's state, which was ruled out so as not to distort the proof.
 
-### Un tour réel démarre et progresse sur le host survivant (M0-01, M0-14)
+### A real turn starts and progresses on the surviving host (M0-01, M0-14)
 
-Dernière étape du scénario A/B : après la mort de B, un nouveau tour a été lancé sur le host survivant `46536` via CDP.
+The last step of the A/B scenario: after B's death, a new turn was started on the surviving host `46536` over CDP.
 
-| Mesure | Valeur |
+| Measurement | Value |
 |---|---|
-| Hosts avant | 1 (`46536`) — B (`17820`) tué précédemment |
-| État DOM avant envoi | `connected: true`, `disconnected: false`, compositeur actif |
-| Après envoi + 15 s | `conn=True working=True completed=1 running=3 sessions=59` |
-| Après envoi + 30 s | `conn=True working=True completed=3 running=1 sessions=59` |
-| Après envoi + 90 s | `conn=True working=True completed=3 running=1 sessions=59` |
-| Hosts après | 1 (`46536`) — inchangé |
+| Hosts before | 1 (`46536`) — B (`17820`) killed earlier |
+| DOM state before sending | `connected: true`, `disconnected: false`, composer active |
+| After sending + 15 s | `conn=True working=True completed=1 running=3 sessions=59` |
+| After sending + 30 s | `conn=True working=True completed=3 running=1 sessions=59` |
+| After sending + 90 s | `conn=True working=True completed=3 running=1 sessions=59` |
+| Hosts after | 1 (`46536`) — unchanged |
 
-**Établi :** après la mort d'un host parmi deux, la conversation servie par le survivant **crée une nouvelle session (58 → 59)**, **admet un tour réel**, **reste connectée** et **fait progresser ses sous-agents** (`Completed` de 1 à 3). Aucun respawn, aucun crash, aucune perte.
+**Established:** after the death of one of two hosts, the conversation served by the survivor **creates a new session (58 → 59)**, **admits a real turn**, **stays connected** and **makes its sub-agents progress** (`Completed` from 1 to 3). No respawn, no crash, no loss.
 
-**Réserve honnête :** ce tour s'exécute alors qu'il ne reste **qu'un** host — il n'y a donc plus de B concurrent pour démontrer l'absence de contamination croisée *pendant* l'exécution. Le critère « approbations simultanées » de M0-01 n'est pas couvert, et l'attente d'un terminal a été bornée à 90 s sans confirmer la fin du tour (le host n'émet pas de notification terminale, cf. plus haut).
+**An honest reservation:** this turn runs while only **one** host is left — so there is no longer a concurrent B to demonstrate the absence of cross-contamination *during* execution. M0-01's "concurrent approvals" criterion is not covered, and the wait for a terminal was bounded at 90 s without confirming the turn's end (the host emits no terminal notification, see above).
 
-## Tentative M4-01/M4-02 — round 6 (périmée)
+## M4-01/M4-02 attempt — round 6 (out of date)
 
-Cette section décrit un échec **intermédiaire**, conservé pour mémoire. Elle est **périmée** : les deux tickets ont été qualifiés au round suivant, voir [`docs/evidence/2026-09-20-windows-browser/M4-01-M4-02.md`](../2026-09-20-windows-browser/M4-01-M4-02.md).
+This section describes an **intermediate** failure, kept for the record. It is **out of date**: both tickets were qualified in the following round, see [`docs/evidence/2026-09-20-windows-browser/M4-01-M4-02.md`](../2026-09-20-windows-browser/M4-01-M4-02.md).
 
-Ce que le round 6 avait observé, sur une conversation **ouverte mais panneau latéral replié** :
+What round 6 had observed, on a conversation **open but with the side panel folded**:
 
-- l'état persistant contenait `muse-desktop.browser.tabs.v1.session.84bb6c78`, réduit à un onglet **vide** : `[{"id":"tab-f3c1a7aa…","url":"","history":[],"historyIndex":-1}]` — le panneau avait déjà été ouvert, mais **n'avait jamais navigué** ;
-- `muse-desktop.browser.permissions.v1` et `muse-desktop.browser.annotations.v1` valaient tous deux `[]` ;
-- **aucun libellé de barre de travail** n'était détecté, et le clic ciblé échouait (`clicked: false`) ; aucun `iframe`, aucun champ d'URL.
+- the persistent state held `muse-desktop.browser.tabs.v1.session.84bb6c78`, reduced to an **empty** tab: `[{"id":"tab-f3c1a7aa…","url":"","history":[],"historyIndex":-1}]` — the panel had already been opened, but **had never navigated**;
+- `muse-desktop.browser.permissions.v1` and `muse-desktop.browser.annotations.v1` were both `[]`;
+- **no work bar label** was detected, and the targeted click failed (`clicked: false`); no `iframe`, no URL field.
 
-**Ce qui expliquait l'échec :** les onglets de la barre de travail n'existent dans le DOM **qu'une fois le panneau latéral déplié**. L'inspection portait sur un panneau replié, d'où l'absence totale de libellés. La conclusion d'alors — « étape d'interaction non identifiée » — était donc fausse, et le script `cdp-workbar.mjs` qui en découlait a été remplacé par **`scripts/cdp-panel.mjs`**, qui cible le contrôle libellé **« Hide work panel »**.
+**What explained the failure:** the work bar's tabs only exist in the DOM **once the side panel is unfolded**. The inspection was on a folded panel, hence the total absence of labels. The conclusion at the time — "interaction step not identified" — was therefore false, and the `cdp-workbar.mjs` script that followed from it was replaced by **`scripts/cdp-panel.mjs`**, which targets the control labelled **"Hide work panel"**.
 
-## Ce qui reste ouvert dans le groupe 1
+## What stays open in group 1
 
-Aucun ticket du groupe 1 ne réunit encore **tous** ses critères de sortie. État précis :
+No group 1 ticket meets **all** its exit criteria yet. The precise state:
 
-| Ticket | Prouvé dans cette campagne | Encore requis |
+| Ticket | Proved in this campaign | Still required |
 |---|---|---|
-| **M0-01** | Deux hosts simultanés ; mort d'un host sans effet sur l'autre ni sur l'application | Scénario A/B **depuis l'UI** avec approbations simultanées et un tour qui se termine sur A après la mort de B |
-| **M0-14** | Idem ci-dessus ; chaîne native complète exercée | Même scénario A/B depuis la webview (c'est le critère qui ferme le parent) |
-| **M4-01** | Navigation native (iframe montée), persistance par onglet, isolation par `sessionId`, contrôles présents — voir le [document dédié](../2026-09-20-windows-browser/M4-01-M4-02.md) | Qualification macOS/Linux ; téléchargements initiés par navigation |
-| **M4-02** | Surfaces d'annotation **et** annotation réellement créée (ancre URL normalisée, citation, commentaire) | Garde de contexte après navigation ; recadrage de région ; capture visuelle |
-| **M0-03** | Texte préservé et aucun envoi sans host ; transcript conservé après panne | Rejet d'un envoi **avec** host vivant, double-clic, IME, fermeture/rechargement |
-| **M0-04** | État stale `No recent host update` avec actions ; terminaison propre observée | Interruption (`Stopping Muse`) et terminal confirmé — **bloqué par `turn/completed` absent du host 1.3.0** |
-| **M0-10** | Application démarrée et fonctionnelle ; panneau de récupération et Settings à exercer | Détection sur machine propre, matrices WSL/auth |
-| **M0-11** | Titre, pastilles, hints et **copie d'erreur MSP structurée en anglais** en conditions réelles | Checklist finale des titres/erreurs secondaires |
-| **M0-12** | Navigation clavier et clic confirmés ; zoom déjà validé le 20/09 | Parcours complet sans souris, lecteur d'écran, contraste |
-| **M1-10** | — | Course UI file/`unqueue` avec host vivant |
-| **M1-13** | — | Mesure 2 000 entrées dans la webview |
-| **M4-01** | Navigation native (iframe montée), persistance par onglet, isolation par `sessionId`, contrôles présents | Qualification macOS/Linux ; téléchargements initiés par navigation |
-| **M4-02** | Surfaces d'annotation **et** annotation créée (ancre URL normalisée, citation, commentaire) | Garde de contexte après navigation ; recadrage de région ; capture visuelle |
-| **M4-09** | — | Installation NSIS/MSI, update, désinstallation |
+| **M0-01** | Two simultaneous hosts; one host dying with no effect on the other or on the application | An A/B scenario **from the UI** with concurrent approvals and a turn that finishes on A after B's death |
+| **M0-14** | Same as above; the complete native chain exercised | The same A/B scenario from the webview (the criterion that closes the parent) |
+| **M4-01** | Native navigation (iframe mounted), per-tab persistence, isolation by `sessionId`, controls present — see the [dedicated document](../2026-09-20-windows-browser/M4-01-M4-02.md) | macOS/Linux qualification; downloads initiated by navigation |
+| **M4-02** | Annotation surfaces **and** an annotation actually created (normalised URL anchor, quote, comment) | Context guard after navigation; region cropping; visual capture |
+| **M0-03** | Text preserved and no send without a host; transcript preserved after a crash | Rejecting a send **with** a live host, double-click, IME, close/reload |
+| **M0-04** | A stale `No recent host update` state with actions; a clean ending observed | Interrupt (`Stopping Muse`) and a confirmed terminal — **blocked by `turn/completed` missing from host 1.3.0** |
+| **M0-10** | Application started and working; the recovery panel and Settings to exercise | Detection on a clean machine, WSL/auth matrices |
+| **M0-11** | Title, pills, hints and **structured MSP error copy in English** in real conditions | The final checklist of secondary titles/errors |
+| **M0-12** | Keyboard navigation and click confirmed; zoom already validated on 20/09 | A complete mouse-free path, a screen reader, contrast |
+| **M1-10** | — | The UI queue/`unqueue` race with a live host |
+| **M1-13** | — | The 2,000-entry measurement in the webview |
+| **M4-01** | Native navigation (iframe mounted), per-tab persistence, isolation by `sessionId`, controls present | macOS/Linux qualification; downloads initiated by navigation |
+| **M4-02** | Annotation surfaces **and** an annotation created (normalised URL anchor, quote, comment) | Context guard after navigation; region cropping; visual capture |
+| **M4-09** | — | NSIS/MSI install, update, uninstall |
 
-Détail de M4-01/M4-02 : [`2026-09-20-windows-browser/M4-01-M4-02.md`](../2026-09-20-windows-browser/M4-01-M4-02.md).
+M4-01/M4-02 detail: [`2026-09-20-windows-browser/M4-01-M4-02.md`](../2026-09-20-windows-browser/M4-01-M4-02.md).
 
-## Limites de la méthode
+## Limits of the method
 
-1. **Pas d'accès déterministe à l'état.** Le contenu WebView2 n'étant pas dans l'arbre UIA, toute vérification passe par la lecture d'une capture. Il n'existe aucun moyen, depuis cet environnement, de lire le journal, le transcript ou la file de manière structurée pendant que l'application tourne (le profil est un `EBWebView` en mode dev).
-2. **Saisie clavier non fiable dans une conversation existante.** Le texte a été inséré avec succès dans le composer de l'écran d'accueil, mais **pas** dans celui d'une conversation ouverte (placeholders inchangés, captures identiques au bit près). Cause non déterminée à ce stade ; contournement possible via le presse-papiers et `Ctrl+V`, non concluant ici car le composer d'une conversation en erreur de connexion est désactivé par conception.
-3. **Machine non propre.** Le profil contenait 54 conversations préexistantes. L'état de « premier lancement » n'a donc pas pu être testé sur un profil vierge.
-4. **Provenance des preuves.** La campagne a été exécutée sur le commit historique `064e210`. Les preuves sont des captures, et **aucune écriture dans la base de code** n'a été faite pendant la campagne. Le commit `064e210` lui-même est un commit de fusion antérieur qui ne fait pas partie de ce travail : il contient `docs/ROADMAP.md` dans sa version par axes. Les scripts de pilotage et les documents de preuves ajoutés par cette campagne (`scripts/cdp-*.mjs`, `scripts/msp-probe.mjs`, `docs/evidence/**`) ne sont **pas** inclus dans `064e210` — ils appartiennent au commit de documentation et d'outillage qui a suivi.
+1. **No deterministic access to the state.** The WebView2 content not being in the UIA tree, every check goes through reading a screenshot. From this environment there is no way to read the log, the transcript or the queue in a structured way while the application runs (the profile is an `EBWebView` in dev mode).
+2. **Keyboard input unreliable in an existing conversation.** Text was inserted successfully into the welcome screen's composer, but **not** into an open conversation's (placeholders unchanged, screenshots identical bit for bit). The cause is undetermined at this stage; a workaround through the clipboard and `Ctrl+V` is possible, inconclusive here because the composer of a conversation in a connection error is disabled by design.
+3. **Not a clean machine.** The profile contained 54 pre-existing conversations. The "first launch" state could therefore not be tested on a blank profile.
+4. **Provenance of the evidence.** The campaign was run on the historical commit `064e210`. The evidence is screenshots, and **no write to the code base** was made during the campaign. Commit `064e210` itself is an earlier merge commit that is not part of this work: it contains `docs/ROADMAP.md` in its by-axis version. The driving scripts and evidence documents added by this campaign (`scripts/cdp-*.mjs`, `scripts/msp-probe.mjs`, `docs/evidence/**`) are **not** included in `064e210` — they belong to the documentation and tooling commit that followed.
 
 ## Artefacts
 
-Les 20 captures référencées (`01` à `20`) sont dans ce dossier. Les plus significatives :
+The 20 screenshots referenced (`01` to `20`) are in this folder. The most significant:
 
-- `07-conversation-ouverte.png` — session connectée au sidecar natif, agent `Running`
-- `08-reponse-recue.png` — tour modèle live terminé + état stale
-- `14-conversation-host-mort.png` — `Disconnected`, `Reconnect`, envoi bloqué, transcript conservé
-- `15-apres-reconnect.png` — échec de reprise structuré et honnête
-- `20-envoi-host-mort.png` — texte préservé, aucun envoi sans host
+- `07-conversation-ouverte.png` — session connected to the native sidecar, agent `Running`
+- `08-reponse-recue.png` — live model turn finished + stale state
+- `14-conversation-host-mort.png` — `Disconnected`, `Reconnect`, sending blocked, transcript preserved
+- `15-apres-reconnect.png` — a structured and honest resume failure
+- `20-envoi-host-mort.png` — text preserved, no send without a host
 
-## Reproductibilité
+## Reproducibility
 
 ```powershell
-# 1. Dépendances et artefact frontend
+# 1. Dependencies and the frontend artefact
 npm ci
 npm run build
 
-# 2. Sidecar natif (binaire non versionné)
+# 2. Native sidecar (unversioned binary)
 Copy-Item "$env:LOCALAPPDATA\Programs\muse\muse-bin-1.3.0-R3401.1.exe" `
           "src-tauri\binaries\muse-x86_64-pc-windows-msvc.exe" -Force
 
 # 3. Application
 npm run tauri -- dev
 
-# 4. Contrôles transport (indépendants de l'UI)
+# 4. Transport checks (independent of the UI)
 node scripts/native-smoke.mjs --exercise-control --exercise-errors --exercise-approval `
   --exercise-isolation --exercise-user-shell --exercise-reconnect --exercise-history `
   --exercise-reasoning --exercise-model --exercise-queue --exercise-compaction `
   --report smoke-win.json
 ```
 
-Résultat du smoke sur ce binaire : `distinctWorkspaces: true`, `sessionDurability: "ephemeral"`,
+The smoke's result on this binary: `distinctWorkspaces: true`, `sessionDurability: "ephemeral"`,
 `sessionRead: "unsupported"`, `viewPage: "unsupported"`, `terminalNotification: "unsupported"`,
-`userShell` accepté mais `itemStarted: false` / `historyItem: false`,
-`reasoningEffort` accepté mais `projection: "not-reported"`,
-`modelSelection` accepté mais `active: false`, `compaction: "missing-run"`, queue et `turn/unqueue` acceptés.
+`userShell` accepted but `itemStarted: false` / `historyItem: false`,
+`reasoningEffort` accepted but `projection: "not-reported"`,
+`modelSelection` accepted but `active: false`, `compaction: "missing-run"`, queue and `turn/unqueue` accepted.
