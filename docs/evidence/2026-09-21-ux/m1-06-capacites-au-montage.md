@@ -1,69 +1,69 @@
-# M1-06 — la carte des capacités n'est peuplée qu'au montage (21 septembre 2026)
+# M1-06 — the capability map is only populated at mount (21 September 2026)
 
-Deux faits établis dans la même session, et ils vont ensemble.
+Two facts established in the same session, and they go together.
 
-## 1. Le « blocage côté host » est réfuté
+## 1. The "host-side blocker" is disproved
 
-Voir [`m1-06-blocage-refute.md`](m1-06-blocage-refute.md) : avec la forme de capacité que l'application utilise (`capabilities.requestedCapabilities`, imbriquée), le sidecar 1.3.0 **publie** `item/started` et `item/completed` de type `userShell`, avec la sortie de la commande. La sonde qui affirmait le contraire envoyait la capacité **à plat**, n'obtenait rien, et concluait à un écart de contrat.
+See [`m1-06-blocage-refute.md`](m1-06-blocage-refute.md): with the capability shape the application uses (`capabilities.requestedCapabilities`, nested), sidecar 1.3.0 **publishes** `item/started` and `item/completed` of kind `userShell`, with the command's output. The probe that claimed otherwise sent the capability **flat**, got nothing, and concluded a contract gap.
 
-## 2. Le vrai défaut est côté client, et il est de synchronisation
+## 2. The real defect is on the client side, and it is a synchronisation one
 
-**Mesure.** Sur un lancement frais, au moment où l'onglet Terminal est affiché :
+**Measurement.** On a fresh launch, at the moment the Terminal tab is shown:
 
-| Source | Réponse pour la session active `01a0bb03` |
+| Source | Answer for the active session `01a0bb03` |
 |---|---|
-| Pont Rust (`restore_sessions`) | `granted_capabilities: ["userShell"]` |
-| Carte du renderer (`grantedCapabilitiesBySession`, hook #82) | **absente** — la carte ne contient que `01a0c2d7` |
-| Prop React `canRunThroughMuse` lue sur la fibre | **`false`** |
-| Infobulle du bouton | « This Muse host did not grant the userShell capability » |
+| Rust bridge (`restore_sessions`) | `granted_capabilities: ["userShell"]` |
+| Renderer map (`grantedCapabilitiesBySession`, hook #82) | **absent** — the map holds only `01a0c2d7` |
+| React prop `canRunThroughMuse` read off the fiber | **`false`** |
+| The button's tooltip | "This Muse host did not grant the userShell capability" |
 
-**Cause.** `restore_sessions` est appelé **au montage**, et l'effet qui peuple `grantedCapabilitiesBySession` ne s'exécute qu'à ce moment-là. Or les hôtes sont lancés **par workspace** : au premier passage, toutes les sessions ne sont pas encore admises, donc la carte n'en reçoit qu'une partie. **Rien ne la repeuple ensuite** — seuls `start_session`, `resume_session` et `fork_session` renseignent une entrée, pour la session qu'ils créent.
+**Cause.** `restore_sessions` is called **at mount**, and the effect populating `grantedCapabilitiesBySession` only runs at that moment. But hosts are launched **per workspace**: on the first pass, not all sessions are admitted yet, so the map receives only some of them. **Nothing repopulates it afterwards** — only `start_session`, `resume_session` and `fork_session` fill an entry, for the session they create.
 
-**Conséquence visible :** après un lancement, « Run in Muse » annonce que le host n'a pas accordé la capacité **alors que le host l'a accordée**. Le motif affiché est faux, et l'action reste indisponible jusqu'à ce qu'une autre voie renseigne la carte.
+**Visible consequence:** after a launch, "Run in Muse" announces the host did not grant the capability **although the host did grant it**. The reason displayed is false, and the action stays unavailable until some other path fills the map.
 
-**Ce n'est pas la même chose que le point précédent** : la capacité existe et fonctionne ; c'est la copie que le renderer en garde qui est incomplète.
+**This is not the same as the previous point**: the capability exists and works; it is the renderer's copy of it that is incomplete.
 
-## 3. Un état intermédiaire, mesuré
+## 3. An intermediate state, measured
 
-Sur une instance plus ancienne, la même carte contenait **11 sessions** avec `["userShell"]`. La différence est le moment du peuplement, pas le contenu négocié. Cela explique pourquoi ce défaut a été pris plus tôt pour un problème de capacité : selon l'instant de la mesure, le bouton était activé ou non.
+On an older instance, the same map held **11 sessions** with `["userShell"]`. The difference is when it was populated, not what was negotiated. That explains why this defect was earlier mistaken for a capability problem: depending on when you measured, the button was enabled or not.
 
-## 4. Ce qui a été corrigé
+## 4. What was fixed
 
-**`sessionNotLoaded` n'est pas un échec opaque.** `Run in Muse` s'activait sur une conversation que le host n'avait pas chargée, et l'échec n'arrivait **qu'après le clic**. Le host rapporte `status: "notLoaded"` pour **toutes** les sessions persistées après une relance — y compris celles à 27 tours — donc « le host la liste » et « le host l'a en mémoire » sont deux états distincts.
+**`sessionNotLoaded` is not an opaque failure.** `Run in Muse` was enabled on a conversation the host had not loaded, and the failure arrived **only after the click**. The host reports `status: "notLoaded"` for **every** persisted session after a relaunch — including those at 27 turns — so "the host lists it" and "the host holds it in memory" are two distinct states.
 
-`SessionMeta` porte désormais `loaded`, dérivé de ce statut, et le bouton est indisponible avec un motif explicite tant que la conversation n'est pas chargée. Le message ne prétend plus que la capacité manque.
+`SessionMeta` now carries `loaded`, derived from that status, and the button is unavailable with an explicit reason while the conversation is not loaded. The message no longer claims the capability is missing.
 
-**Mesure de la chaîne complète :** `restore_sessions` renvoie `"loaded": false` pour les 13 sessions, aux côtés de `model_id` et `granted_capabilities`, qui traversent donc bien la même projection.
+**Measurement of the full chain:** `restore_sessions` returns `"loaded": false` for all 13 sessions, alongside `model_id` and `granted_capabilities`, which therefore travel through the same projection.
 
-**Et le chemin fonctionne une fois la session chargée :** `session/resume` puis `session/userShell` donnent `accepted`, **2 items `userShell`**, et le marqueur de la commande **restitué** — mesuré deux fois, avant et après la reprise, dans `scripts/msp-user-shell-after-resume.mjs`.
+**And the path works once the session is loaded:** `session/resume` then `session/userShell` give `accepted`, **2 `userShell` items**, and the command's marker **returned** — measured twice, before and after the resume, in `scripts/msp-user-shell-after-resume.mjs`.
 
-## 5. Ce qui a été corrigé depuis : le drapeau `loaded` ne revenait jamais
+## 5. What has been fixed since: the `loaded` flag never came back
 
-Le point 2 ci-dessus (« charger la session à la demande ») supposait que le refus persistant venait de l'absence de reprise. **Mesure du 21 septembre : la reprise avait déjà lieu, et le drapeau ne suivait pas.**
+Point 2 above ("load the session on demand") assumed the persistent refusal came from the absence of a resume. **Measurement of 21 September: the resume was already happening, and the flag did not follow.**
 
-Il existe en effet une reprise automatique au démarrage : `selectBootResumeCandidates` reprend les sessions que `restore_sessions` n'a pas admises, active d'abord, en silence. Chaque conversation atteignable est donc **chargée** par le host quelques secondes après le lancement.
+There is indeed an automatic resume at startup: `selectBootResumeCandidates` resumes the sessions `restore_sessions` did not admit, the active one first, silently. Every reachable conversation is therefore **loaded** by the host a few seconds after launch.
 
-Mais les deux moitiés de l'information manquaient :
+But both halves of the information were missing:
 
-- **côté Rust**, `resume_session` construisait `SessionMeta` à partir du `session/read` **d'avant** la reprise, puis ne mettait à jour que `running` et `approval_mode` dans la branche de succès. `loaded` restait donc `false` pour une conversation que l'appel venait précisément de charger ;
-- **côté renderer**, `reconnectSession` recopiait `granted_capabilities` mais ignorait `meta.loaded`. La carte `sessionLoadedBySession` n'était peuplée **qu'au montage**, par un `restore_sessions` qui répond `loaded: false` pour toutes les sessions persistées.
+- **on the Rust side**, `resume_session` built `SessionMeta` from the `session/read` taken **before** the resume, then updated only `running` and `approval_mode` in the success branch. `loaded` therefore stayed `false` for a conversation the call had just loaded;
+- **on the renderer side**, `reconnectSession` copied `granted_capabilities` but ignored `meta.loaded`. The `sessionLoadedBySession` map was populated **only at mount**, by a `restore_sessions` that answers `loaded: false` for every persisted session.
 
-Résultat : le host chargeait la conversation, et l'interface continuait d'afficher « Send a message in this conversation first: the host only runs shell commands for a conversation it has loaded ». **Le remède proposé ne pouvait pas fonctionner** : envoyer un message ne changeait pas la valeur figée au montage.
+Result: the host loaded the conversation, and the interface kept showing "Send a message in this conversation first: the host only runs shell commands for a conversation it has loaded". **The remedy offered could not work**: sending a message did not change the value frozen at mount.
 
-**Correctif.** `apply_resumed_session` (fonction pure, testée) replie la charge utile de la reprise dans les métadonnées — `loaded`, `model_id`, `approval_mode`, `running` — et le renderer recopie `meta.loaded` et `meta.model_id` après une reprise réussie.
+**Fix.** `apply_resumed_session` (a pure, tested function) folds the resume's payload back into the metadata — `loaded`, `model_id`, `approval_mode`, `running` — and the renderer copies `meta.loaded` and `meta.model_id` after a successful resume.
 
-**Vérifié dans l'application** (`scripts/ux-terminal-precondition.mjs`) : six conversations parcourues, commande saisie dans chacune, **aucune** n'est refusée pour cause de chargement ; celle qui a un transcript affiche `disabled=false` et l'infobulle « Run this command through the Muse host (userShell) ». Les cinq conversations sans message sont comptées **ignorées** — elles ne rendent aucun panneau de travail, il n'y a rien à décider — et non comme des succès.
+**Verified in the application** (`scripts/ux-terminal-precondition.mjs`): six conversations walked, a command typed in each, **none** refused for loading reasons; the one with a transcript shows `disabled=false` and the tooltip "Run this command through the Muse host (userShell)". The five conversations with no message are counted as **skipped** — they render no work panel, there is nothing to decide — not as successes.
 
-**Un correctif écarté, et pourquoi.** J'avais ajouté un bouton « Load conversation » dans le terminal, affiché quand `loaded` est faux, qui appelait `session/resume`. La sonde l'a écarté : sur un host sain, **cet état n'est pas atteignable** — la reprise au démarrage charge toutes les conversations candidates, et les six mesurées répondaient `loaded`. Le bouton n'aurait été visible que si une reprise avait échoué, c'est-à-dire dans le seul cas où le clic échoue aussi, et l'interface offre déjà **Reconnect** pour ce cas. Livrer une action qu'aucune fenêtre réelle ne peut atteindre n'est pas une fonctionnalité : elle a été retirée, le correctif de métadonnées conservé.
+**A fix discarded, and why.** I had added a "Load conversation" button in the terminal, shown when `loaded` is false, which called `session/resume`. The probe discarded it: on a healthy host, **that state is unreachable** — startup resume loads every candidate conversation, and the six measured answered `loaded`. The button would only have been visible if a resume had failed, that is, in the only case where the click also fails, and the interface already offers **Reconnect** for that. Shipping an action no real window can reach is not a feature: it was removed, the metadata fix kept.
 
-## 6. Reste ouvert
+## 6. Still open
 
-1. **Repeupler la carte des capacités** après le lancement des hôtes, plutôt qu'au seul montage. La reprise automatique la renseigne pour les sessions qu'elle reprend (`resume_session` écrit une entrée), ce qui explique qu'elle ne se voie plus guère — mais rien ne garantit qu'une session non reprise en reçoive une.
+1. **Repopulate the capability map** after the hosts launch, rather than only at mount. The automatic resume fills it for the sessions it resumes (`resume_session` writes an entry), which explains why it is rarely seen now — but nothing guarantees a session that is not resumed gets one.
 
-2. **Qualification native interactive sur les trois OS**, exigée par le ticket.
+2. **Interactive native qualification on all three OSes**, required by the ticket.
 
-## La leçon, une fois de plus
+## The lesson, once again
 
-Trois mesures du même contrat se sont contredites dans cette campagne — le pont, la prop React, le DOM — et à chaque fois j'ai d'abord cru la plus commode. Ce qui a tranché est chaque fois **une source supplémentaire**, pas un raisonnement : le journal persisté pour le doublon de message, la fibre React ici, la forme de capacité envoyée pour le faux blocage.
+Three measurements of the same contract contradicted each other in this campaign — the bridge, the React prop, the DOM — and each time I first believed the most convenient one. What settled it was, each time, **an additional source**, not reasoning: the persisted log for the duplicate message, the React fiber here, the capability shape sent for the false blocker.
 
-Et une note sur les états composites : `disabled` sur ce bouton combine **quatre** conditions (capacité, session chargée, commande non vide, exécution en cours). J'ai tiré deux conclusions fausses de sa seule valeur. **L'infobulle est le discriminant** — elle nomme la cause — et c'est elle qu'il faut lire.
+And a note on composite states: `disabled` on this button combines **four** conditions (capability, session loaded, command non-empty, execution in progress). I drew two false conclusions from its value alone. **The tooltip is the discriminator** — it names the cause — and it is the one to read.
