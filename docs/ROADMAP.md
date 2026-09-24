@@ -1,587 +1,587 @@
-# Roadmap opérationnelle — Muse-Desktop
+# Operational roadmap — Muse-Desktop
 
-État de référence : **20 septembre 2026**, dépôt à `064e210` (main, après fusion des PRs #18–#153).
-Mis à jour le **27 septembre 2026** par une campagne de **qualification native Windows** (dépôt à `362c8bb`, PRs jusqu'à #227) : preuves dans [`docs/evidence/2026-09-27-qualif-native/`](evidence/2026-09-27-qualif-native/). Objectif : finir les parcours existants, puis atteindre la parité des workflows desktop de Codex en conservant le branding Muse. Ordre M0 → M4 validé par Étienne.
+Reference state: **20 September 2026**, repository at `064e210` (main, after merging PRs #18–#153).
+Updated **27 September 2026** by a **native Windows qualification** campaign (repository at `362c8bb`, PRs up to #227): evidence in [`docs/evidence/2026-09-27-qualif-native/`](evidence/2026-09-27-qualif-native/). Goal: finish the existing paths, then reach parity with the Codex desktop workflows while keeping Muse branding. The M0 → M4 order was approved by Étienne.
 
-Ce document est la source de vérité de l'avancement produit. Il est découpé **par plateforme** parce que la majorité des tickets restants ne se ferment pas au même moment selon l'OS. La [SPEC](SPEC.md) conserve les intentions initiales ; le [bilan du 13 septembre](plans/2026-09-13-roadmap-progress.md) est historique. L'[audit de parité](plans/2026-09-15-codex-parity-audit.md) contient les constats techniques et références officielles. Les chiffres de stories fusionnées ne sont pas un taux de parité.
+This document is the source of truth for product progress. It is split **by platform** because most remaining tickets do not close at the same time on every OS. The [SPEC](SPEC.md) preserves the original intentions; the [13 September review](plans/2026-09-13-roadmap-progress.md) is historical. The [parity audit](plans/2026-09-15-codex-parity-audit.md) holds the technical findings and official references. Counts of merged stories are not a parity rate.
 
-**Pour les agents de codage :** le [plan d'implémentation détaillé](plans/2026-09-15-agent-implementation-plan.md) couvre les 53 IDs ci-dessous : code à lire, contrats proposés, étapes, dépendances, tests d'acceptation et format de livraison. Ce plan complète les statuts ; il ne constitue pas une preuve d'implémentation.
+**For coding agents:** the [detailed implementation plan](plans/2026-09-15-agent-implementation-plan.md) covers the 53 IDs below: code to read, proposed contracts, steps, dependencies, acceptance tests and delivery format. That plan complements the statuses; it is not proof of implementation.
 
-> **Révision du 20 septembre 2026.** Cette roadmap remplace la version précédente, organisée par axes (Design / UI / Fonction / Validation) et enrichie de bilans de livraison détaillés. Elle est désormais organisée par **état d'avancement** et par **plateforme**, avec trois états seulement. La version antérieure reste consultable dans l'historique Git :
+> **Revision of 20 September 2026.** This roadmap replaces the previous version, which was organised by axis (Design / UI / Function / Validation) and enriched with detailed delivery reviews. It is now organised by **progress state** and by **platform**, with three states only. The earlier version is still readable in the Git history:
 >
 > ```sh
-> git show 064e210:docs/ROADMAP.md        # version par axes, 720 lignes, blob 319cb128
+> git show 064e210:docs/ROADMAP.md        # by-axis version, 720 lines, blob 319cb128
 > ```
 >
-> Rien n'a été perdu : les bilans de livraison, les mesures de tests et les empreintes de bundles de l'ancienne version restent dans cet historique. Les constats de limites qui conditionnent les critères de sortie ont été repris ici ticket par ticket.
+> Nothing was lost: the delivery reviews, test measurements and bundle fingerprints of the old version stay in that history. The limit findings that condition exit criteria were carried over here, ticket by ticket.
 
-## Point d'étape — qualification native Windows (27 septembre 2026)
+## Checkpoint — native Windows qualification (27 September 2026)
 
-Campagne de qualification native (app Tauri + webview, pilotage CDP ; preuves dans
+Native qualification campaign (Tauri app + webview, driven over CDP; evidence in
 [`docs/evidence/2026-09-27-qualif-native/`](evidence/2026-09-27-qualif-native/)).
 
-**Prouvé nativement cette campagne :** M0-01 deux projets simultanés · M0-02/03 arrêt du host →
-message honest « Its process exited… » + recovery en 7,6 s (cause racine : drop stdin) · M0-04
-Stop → terminal avec `turnId` + phases **avant premier token / réponse tardive / après la fin** +
-variante « pendant outil » (lane sous-agent en vol) · M1-05 PTY : défaut isolé sur
-`portable-pty 0.9.0` · M1-06 chaîne Run in Muse prouvée + déclenchement corrigé + défaut
-environnement de spawn isolé · M1-10 queue : course propre à deux tours + **restauration et reprise
-après `taskkill /F`** · M1-11 modèle effectif par session + défaut de label UI · M2-03/07 worktrees
-et lanes sous-agents + défaut « Create & open » · M3-06/07 run sans clic, bail natif, claim
-anti-doublon, DST résolus · M3-08 cartes de run · M3-09 notification persistée.
+**Proved natively this campaign:** M0-01 two simultaneous projects · M0-02/03 host shutdown → honest
+"Its process exited…" message + recovery in 7.6 s (root cause: dropped stdin) · M0-04
+Stop → terminal with `turnId` + phases **before first token / late answer / after the end** +
+"during a tool" variant (sub-agent lane in flight) · M1-05 PTY: defect isolated to
+`portable-pty 0.9.0` · M1-06 Run in Muse chain proved + trigger fixed + spawn environment defect
+isolated · M1-10 queue: clean two-turn race + **restore and resume
+after `taskkill /F`** · M1-11 effective model per session + UI label defect · M2-03/07 worktrees
+and sub-agent lanes + "Create & open" defect · M3-06/07 run without a click, native lease,
+anti-duplicate claim, DST resolved · M3-08 run cards · M3-09 persisted notification.
 
-**Défauts ouverts à corriger (preuves jointes) :** sandbox shell indisponible pour un host lancé
-par l'app (`m1-06-run-in-muse-sandbox.md`) · PTY sans sortie (`m1-05-pty-sortie-vide.md`) · label
-de modèle partagé entre fils (`m1-11-bascule-modele.md`) · worktree créé mais inutilisé
-(`m2-worktrees.md`) · comparaison de chemins `G:\…` vs `\\?\G:\…` qui rend toute cible sur
-conversation existante impossible (`m3-automations-reveil.md`), **corrigée le 22/09 avec le cwd du
-terminal, à rejouer en app** · « Review needed » jamais marqué
-après redémarrage · avertissements DST absents · libellés de boutons (« Stop the running sidecar »,
-`terminal.read-output` en contenu au lieu de rôle).
+**Open defects to fix (evidence attached):** shell sandbox unavailable for a host started
+by the app (`m1-06-run-in-muse-sandbox.md`) · PTY with no output (`m1-05-pty-sortie-vide.md`) · model
+label shared between threads (`m1-11-bascule-modele.md`) · worktree created but unused
+(`m2-worktrees.md`) · path comparison `G:\…` vs `\\?\G:\…` which makes any target on an
+existing conversation impossible (`m3-automations-reveil.md`), **fixed on 22/09 with the terminal
+cwd, to be replayed in-app** · "Review needed" never marked
+after a restart · DST warnings absent · button labels ("Stop the running sidecar",
+`terminal.read-output` as content instead of role).
 
-**Reste à qualifier :** M0-05/07/11-14 (stale races, support macOS/Linux, CI, installations), M1
-restants (PTY en commande interactive, outil pendant outil strict, clavier et attachments en UI
-réelle, empaqueté), M2 restants (fermeture avec agents actifs, Local↔Worktree, fan-out de
-sous-agents), M3-01 à 05 (MCP, extensions, skills), réveil `AutomationWake` réel.
+**Still to qualify:** M0-05/07/11-14 (stale races, macOS/Linux support, CI, installs), remaining M1
+(PTY in an interactive command, strict tool-during-tool, keyboard and attachments in the real UI,
+packaged), remaining M2 (closing with active agents, Local↔Worktree, sub-agent fan-out), M3-01 to 05
+(MCP, extensions, skills), real `AutomationWake` wake-up.
 
-## Retraits du 23 septembre 2026
+## Removals of 23 September 2026
 
-Surfaces retirées de l’app, **code supprimé** (front et Rust). Elles n’apportaient pas de résultat utilisateur vérifiable et encombraient le panneau latéral et les réglages :
+Surfaces removed from the app, **code deleted** (front end and Rust). They delivered no verifiable user result and cluttered the side panel and the settings:
 
-- **Content** : résumé extractif du fil et pièces « artifacts » (M4-05 côté artifacts) ; ses « Decisions » reprenaient des fragments bruts.
-- **Activity** : coordination de writers et verrous (M2-08), profils et exécution de setup (M2-04), inspection et nettoyage de worktrees depuis l’UI (M2-06).
-- **Contrôle desktop manuel** (inventaire de fenêtres, clic, frappe) : le computer use passe par le driver CUA, dans Settings (M4-04).
-- **Partage et channels** (M4-06, déjà reporté) et **environnements Remote/Cloud** sans transport (M4-07).
-- **Réglages sans effet** : « Check a path », « Web search », modèles en double du composeur.
+- **Content**: extractive thread summary and "artifacts" attachments (M4-05, artifacts side); its "Decisions" reused raw fragments.
+- **Activity**: writer coordination and locks (M2-08), profiles and setup execution (M2-04), worktree inspection and cleanup from the UI (M2-06).
+- **Manual desktop control** (window inventory, click, typing): computer use goes through the CUA driver, in Settings (M4-04).
+- **Sharing and channels** (M4-06, already postponed) and **Remote/Cloud environments** with no transport (M4-07).
+- **Settings with no effect**: "Check a path", "Web search", duplicate models in the composer.
 
-Restent : Changes, Terminal, Files, Browser dans le panneau ; Computer use et Memory dans Settings ; l’usage du contexte à côté du sélecteur de modèle, comme dans Claude Code. Les lignes des tickets concernés ci-dessous décrivent l’état d’avant le retrait.
+What remains: Changes, Terminal, Files, Browser in the panel; Computer use and Memory in Settings; context usage next to the model picker, as in Claude Code. The ticket lines below describe the state before the removal.
 
-## Comment lire cette roadmap
+## How to read this roadmap
 
-### Trois états, un seul critère
+### Three states, one criterion
 
-| État | Signification |
+| State | Meaning |
 |---|---|
-| ☐ **Pas commencé** | Aucun code, aucune interface, ou ticket volontairement reporté faute de spécification produit. |
-| ◐ **Commencé** | Du code ou une interface existe et est couvert par des tests, **mais au moins un critère de sortie n'est pas prouvé** sur la plateforme concernée. |
-| ☑ **Terminé** | Tous les critères de sortie du ticket sont prouvés **sur cette plateforme précise**, avec une preuve reproductible. |
+| ☐ **Not started** | No code, no interface, or a ticket deliberately postponed for lack of product specification. |
+| ◐ **Started** | Code or an interface exists and is covered by tests, **but at least one exit criterion is unproven** on the platform concerned. |
+| ☑ **Done** | Every exit criterion of the ticket is proved **on that precise platform**, with a reproducible proof. |
 
-**Règle de fermeture.** Un ticket n'est **Terminé** que lorsque l'effet réel est obtenu, les erreurs et la reprise sont traitées, les permissions effectives sont respectées, le scénario a été validé nativement **et** les limites sont documentées. Une interface présente, un test unitaire vert ou un accusé de réception du host ne suffisent jamais à clore un ticket.
+**Closing rule.** A ticket is only **Done** once the real effect is obtained, errors and recovery are handled, effective permissions are respected, the scenario has been validated natively **and** the limits are documented. An interface that exists, a green unit test or a host acknowledgement never suffice to close a ticket.
 
-**Règle de plateforme.** Un ticket sans dépendance OS est évalué une seule fois (colonnes `Global` fusionnées). Un ticket dépendant d'un runtime natif est évalué **par OS**, et un statut favorable sur Windows ne dit rien de macOS ni de Linux.
+**Platform rule.** A ticket with no OS dependency is assessed once (merged `Global` columns). A ticket that depends on a native runtime is assessed **per OS**, and a favourable status on Windows says nothing about macOS or Linux.
 
-### Conventions de plateforme
+### Platform conventions
 
-- **Windows** — cible principale. WebView2, sidecar Muse x64 et smoke natif sur deux hôtes réels. Toutes les validations natives existantes ont été produites ici.
-- **macOS** — cible annoncée, **aucune validation native produite à ce jour**.
-- **Linux** — cible annoncée et **plateforme de la CI**. Attention : la CI (`ubuntu-latest`) exécute `npm test`, `npm run build` et `cargo test` — c'est-à-dire les contrats purs et le superviseur Rust — mais **ne lance ni webview, ni sidecar Muse réel, ni installeur**. Une CI verte sur Linux n'est pas une preuve d'exécution Linux.
-- **`n/a`** — la plateforme n'est pas concernée par ce ticket.
+- **Windows** — primary target. WebView2, x64 Muse sidecar and a native smoke test on two real hosts. Every existing native validation was produced here.
+- **macOS** — announced target, **no native validation produced to date**.
+- **Linux** — announced target and **the CI platform**. Careful: CI (`ubuntu-latest`) runs `npm test`, `npm run build` and `cargo test` — that is, the pure contracts and the Rust supervisor — but **launches no webview, no real Muse sidecar and no installer**. Green CI on Linux is not proof of Linux execution.
+- **`n/a`** — the platform is not concerned by that ticket.
 
-### Notes de lecture
+### Reading notes
 
-- **« Câblée » n'est pas « Terminé ».** La quasi-totalité des tickets M0–M4 a du code livré et des tests unitaires ; ce qui bloque la fermeture est presque toujours la **preuve native**. C'est pourquoi le statut dominant est ◐ Commencé.
-- **L'exécution des futurs tickets est à planifier** : un état ◐ décrit le code existant, pas un chantier en cours.
-- Les dépendances ne sont pas levées partout : `M1-01 → M1-02/03/04`, `M0-01 → M1-05/06/09/10`, `M2-03 → M2-04/05/06/08`, `M3-06/07 → M3-09`. Une dépendance non levée interdit de déclarer son résultat livré.
+- **"Wired" is not "Done".** Nearly every M0–M4 ticket has shipped code and unit tests; what blocks closure is almost always the **native proof**. That is why the dominant status is ◐ Started.
+- **Execution of future tickets is still to be planned**: a ◐ state describes existing code, not work in progress.
+- Dependencies are not cleared everywhere: `M1-01 → M1-02/03/04`, `M0-01 → M1-05/06/09/10`, `M2-03 → M2-04/05/06/08`, `M3-06/07 → M3-09`. An uncleared dependency forbids declaring its result delivered.
 
-## Point d'étape — 20 septembre 2026
+## Checkpoint — 20 September 2026
 
-**Preuves reproductibles actuelles :** mesurées sur **Windows** le 20 septembre 2026 au commit `064e210` — `npm test` : **829 tests Node, 193 suites, 0 échec** (11,0 s) ; `npm run build` : **vert** (`tsc --noEmit` + Vite) ; `cargo test --manifest-path src-tauri/Cargo.toml` : **200 tests Rust, 0 échec**. La CI exécute les deux suites sur `ubuntu-latest` avec des placeholders de frontend et de sidecar, sans credential ni tour modèle.
+**Current reproducible measurements:** taken on **Windows** on 20 September 2026 at commit `064e210` — `npm test`: **829 Node tests, 193 suites, 0 failures** (11.0 s); `npm run build`: **green** (`tsc --noEmit` + Vite); `cargo test --manifest-path src-tauri/Cargo.toml`: **200 Rust tests, 0 failures**. CI runs both suites on `ubuntu-latest` with frontend and sidecar placeholders, with no credential and no model turn.
 
-> **Le nombre de tests Rust dépend de la plateforme.** `scheduler_wakeup.rs` porte des tests gatés par `#[cfg(target_os = …)]` (Task Scheduler / `launchd` / `systemd`) : au même commit `064e210`, la mesure Windows donne **200** tests là où les publications antérieures annonçaient **194**. Ne pas comparer un total Rust obtenu sous Linux avec un total obtenu sous Windows sans le dire.
+> **The Rust test count depends on the platform.** `scheduler_wakeup.rs` carries tests gated by `#[cfg(target_os = …)]` (Task Scheduler / `launchd` / `systemd`): at the same commit `064e210`, the Windows measurement gives **200** tests where earlier publications announced **194**. Do not compare a Rust total obtained under Linux with one obtained under Windows without saying so.
 >
-> Pour rejouer ces mesures localement, deux prérequis non versionnés sont nécessaires : `npm ci`, puis un placeholder de sidecar (Tauri valide chaque `externalBin` et `frontendDist` à la compilation) et un `dist/` produit par `npm run build`. Les tests Rust n'exécutent aucun sidecar.
+> To replay these measurements locally, two unversioned prerequisites are needed: `npm ci`, then a sidecar placeholder (Tauri validates every `externalBin` and `frontendDist` at build time) and a `dist/` produced by `npm run build`. The Rust tests run no sidecar.
 >
-> Les totaux Node sont, eux, identiques sur les trois OS — mais n'ont été exécutés nativement que sous Windows et Linux (CI).
+> The Node totals, by contrast, are identical on all three OSes — but have only been run natively on Windows and Linux (CI).
 
-**Campagne native du 20 septembre 2026 (groupe 1, pilotage CUA puis CDP) :** [`docs/evidence/2026-09-20-windows-group1/`](evidence/2026-09-20-windows-group1/). Premier exercice de l'application Tauri avec le **binaire Muse Windows natif** comme sidecar, et non le pont WSL utilisé jusqu'ici : tour modèle live complet dans la webview, détection de la mort du host (`Disconnected`, pastille `Connection error`, envoi bloqué, transcript intégralement conservé), récupération explicite échouant proprement sur une session `ephemeral`, et texte conservé sans host disponible.
+**Native campaign of 20 September 2026 (group 1, driven by CUA then CDP):** [`docs/evidence/2026-09-20-windows-group1/`](evidence/2026-09-20-windows-group1/). First exercise of the Tauri application with the **native Windows Muse binary** as the sidecar, rather than the WSL bridge used until then: a complete live model turn in the webview, detection of host death (`Disconnected`, `Connection error` pill, sending blocked, transcript entirely preserved), explicit recovery failing cleanly on an `ephemeral` session, and text preserved with no host available.
 
-**Déblocage du pilotage UI (round 3) :** l'arbre UI Automation n'expose pas le DOM de la webview et l'entrée clavier synthétique ne l'atteint pas ; les scénarios d'acceptation « depuis la webview » étaient donc hors de portée. Lancer la version de développement avec `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` expose un endpoint CDP, exploité par **`scripts/cdp-drive.mjs`** (inspection, remplissage, clic sur le DOM réel) et **`scripts/cdp-scenario.mjs`** (scénario borné, `--live` pour un tour modèle). Instrumentation de développement uniquement : elle active une fonctionnalité de WebView2, elle ne modifie pas le code de l'application. Un premier scénario live a observé l'admission en file (`muse-desktop.queued-turns.v1`), le panneau **Queued messages** ordonné avec son action d'enlèvement, l'état **`Stopping…`**, puis l'absence de terminal et la bascule en stale.
+**UI driving unblocked (round 3):** the UI Automation tree does not expose the webview's DOM and synthetic keyboard input does not reach it; the "from the webview" acceptance scenarios were therefore out of reach. Launching the development build with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` exposes a CDP endpoint, used by **`scripts/cdp-drive.mjs`** (inspection, filling, clicking on the real DOM) and **`scripts/cdp-scenario.mjs`** (bounded scenario, `--live` for a model turn). Development instrumentation only: it enables a WebView2 feature, it does not change the application's code. A first live scenario observed queue admission (`muse-desktop.queued-turns.v1`), the **Queued messages** panel ordered with its removal action, the **`Stopping…`** state, then the absence of a terminal and the switch to stale.
 
-**Aucun ticket du groupe 1 n'est clos pour autant** — les critères restants sont listés dans le document de preuves.
+**No group 1 ticket is closed as a result** — the remaining criteria are listed in the evidence document.
 
-**Campagne du 20 septembre 2026 — état consolidé (27 PR mergées, #154 à #180) :** les preuves natives sont regroupées sous [`docs/evidence/`](evidence/), un dossier par sujet, et le contrat du sidecar est analysé dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md).
+**Campaign of 20 September 2026 — consolidated state (27 PRs merged, #154 to #180):** the native evidence is gathered under [`docs/evidence/`](evidence/), one folder per subject, and the sidecar contract is analysed in [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md).
 
-| Ticket | Ce qui est désormais mesuré | Livrable |
+| Ticket | What is now measured | Deliverable |
 |---|---|---|
-| **M0-03** | **les 4 critères du ticket** : envoi rejeté (skill inconnue) conserve le texte · double Entrée n'admet qu'un tour (1 identifiant client) · brouillon et envoi en cours survivent au rechargement · Entrée pendant une composition IME **ne soumet pas** | [#177](https://github.com/EtienneLescot/muse-desktop/pull/177) [#178](https://github.com/EtienneLescot/muse-desktop/pull/178) [#179](https://github.com/EtienneLescot/muse-desktop/pull/179) [#180](https://github.com/EtienneLescot/muse-desktop/pull/180) |
-| **M0-10** | guidance d'échec exercée sur un cas réel : sidecar neutralisé → panneau `sidecar`/`binary`/`triple`/`folder` avec **Try again** et **Choose workspace folder**, aucune installation implicite | [#172](https://github.com/EtienneLescot/muse-desktop/pull/172) |
-| **M0-12** | `forced-colors` honoré (couleurs système sur les 5 contrôles) · 24 arrêts de tabulation sans piège · `Ctrl+F` lié au finder · contraste AA sur 60 textes · **un défaut corrigé** : la règle `prefers-contrast` était inerte, avec test de non-régression | [#162](https://github.com/EtienneLescot/muse-desktop/pull/162) [#163](https://github.com/EtienneLescot/muse-desktop/pull/163) [#165](https://github.com/EtienneLescot/muse-desktop/pull/165) |
-| **M1-13** | fenêtre DOM bornée à **160 articles sur 2 001** · chargement incrémental de **120 entrées** avec DOM constant · finder atteignant un résultat **hors fenêtre** · coût de rendu mesuré (layout 12 ms, script 2,02 s, +160 KiB de tas) | [#166](https://github.com/EtienneLescot/muse-desktop/pull/166) [#167](https://github.com/EtienneLescot/muse-desktop/pull/167) [#169](https://github.com/EtienneLescot/muse-desktop/pull/169) [#170](https://github.com/EtienneLescot/muse-desktop/pull/170) |
-| **M4-01 / M4-02** | navigation native, isolation par `sessionId`, annotation créée, **garde de contexte après navigation** prouvée | [#154](https://github.com/EtienneLescot/muse-desktop/pull/154) [#155](https://github.com/EtienneLescot/muse-desktop/pull/155) |
-| **M4-09** | installation, désinstallation et **mise à jour de version montante** exécutées sans perte : 64 conversations et 2 projets identiques après chaque transaction | [#174](https://github.com/EtienneLescot/muse-desktop/pull/174) [#176](https://github.com/EtienneLescot/muse-desktop/pull/176) |
-| **M0-01 / M0-14** | deux hosts simultanés · mort d'un host sans effet sur l'autre · tour mené à terme **pendant** la mort de l'autre host, sans stale | [#158](https://github.com/EtienneLescot/muse-desktop/pull/158) [#159](https://github.com/EtienneLescot/muse-desktop/pull/159) |
+| **M0-03** | **all 4 criteria of the ticket**: a rejected send (unknown skill) keeps the text · a double Enter admits only one turn (1 client identifier) · draft and in-flight send survive a reload · Enter during an IME composition **does not submit** | [#177](https://github.com/EtienneLescot/muse-desktop/pull/177) [#178](https://github.com/EtienneLescot/muse-desktop/pull/178) [#179](https://github.com/EtienneLescot/muse-desktop/pull/179) [#180](https://github.com/EtienneLescot/muse-desktop/pull/180) |
+| **M0-10** | failure guidance exercised on a real case: sidecar neutralised → `sidecar`/`binary`/`triple`/`folder` panel with **Try again** and **Choose workspace folder**, no implicit install | [#172](https://github.com/EtienneLescot/muse-desktop/pull/172) |
+| **M0-12** | `forced-colors` honoured (system colors on all 5 controls) · 24 tab stops with no trap · `Ctrl+F` bound to the finder · AA contrast on 60 texts · **one defect fixed**: the `prefers-contrast` rule was inert, with a regression test | [#162](https://github.com/EtienneLescot/muse-desktop/pull/162) [#163](https://github.com/EtienneLescot/muse-desktop/pull/163) [#165](https://github.com/EtienneLescot/muse-desktop/pull/165) |
+| **M1-13** | DOM window bounded to **160 articles out of 2,001** · incremental loading of **120 entries** with a constant DOM · finder reaching a result **outside the window** · rendering cost measured (layout 12 ms, script 2.02 s, +160 KiB of heap) | [#166](https://github.com/EtienneLescot/muse-desktop/pull/166) [#167](https://github.com/EtienneLescot/muse-desktop/pull/167) [#169](https://github.com/EtienneLescot/muse-desktop/pull/169) [#170](https://github.com/EtienneLescot/muse-desktop/pull/170) |
+| **M4-01 / M4-02** | native navigation, isolation by `sessionId`, annotation created, **context guard after navigation** proved | [#154](https://github.com/EtienneLescot/muse-desktop/pull/154) [#155](https://github.com/EtienneLescot/muse-desktop/pull/155) |
+| **M4-09** | install, uninstall and **upward version update** performed with no loss: 64 conversations and 2 projects identical after each transaction | [#174](https://github.com/EtienneLescot/muse-desktop/pull/174) [#176](https://github.com/EtienneLescot/muse-desktop/pull/176) |
+| **M0-01 / M0-14** | two simultaneous hosts · one host dying with no effect on the other · a turn carried to completion **while** the other host died, with no stale | [#158](https://github.com/EtienneLescot/muse-desktop/pull/158) [#159](https://github.com/EtienneLescot/muse-desktop/pull/159) |
 
-**Ce qui bloque encore, par nature :**
+**What still blocks, by nature:**
 
-- **M1-06 : RÉFUTÉ le 21/09/2026.** Le « blocage côté host » venait d'une sonde qui demandait la capacité sous une forme que le host lit comme « aucune capacité demandée ». Avec la forme correcte, le sidecar 1.3.0 **publie bien** les items `userShell` **et** leur sortie. Détail et mesures dans la ligne M1-06 plus bas ; **ne citez plus `SIDECAR-CONTRACT-GAPS.md` pour ce ticket.**
-- **M0-04, M1-11 : revérifiés le 27/09/2026 — les deux « blocages sidecar » étaient faux.** Le host **émet** bien une notification terminale (`turn/completed` à **+36 ms** après `turn/interrupt`) et **rapporte** bien les projections de modèle (`model_id` sur la session, `is_active` sur `model/list`) ; la mesure qui les étayait partageait le harnais `--no-session-log` de M1-06 (voir [`session-log-expique-tout.md`](evidence/2026-09-27-qualif-native/session-log-expique-tout.md)). **Seul `outputRef` reste plausible** dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md). M0-04 garde ses phases d'arrêt spéciales à qualifier — côté scénario, pas côté host.
-- **Révision du 27/09/2026 :** M0-02 et M0-03 **fermés sur Windows** (preuves : [`m0-02-reprise-apres-mort-host.md`](evidence/2026-09-27-qualif-native/m0-02-reprise-apres-mort-host.md), [`M0-03-texte-en-rejet-conserve.md`](evidence/2026-09-20-windows-group1/M0-03-texte-en-rejet-conserve.md)) ; M0-04 **avancé à la preuve du `turnId` transmis et de la résolution en ~1 s** ([`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md)).
-- **M0-01** : le critère « approbations simultanées » reste ouvert — le plafond du host est `promptUnmatched` et aucune demande d'approbation n'a pu être provoquée, même en mode `ask`.
-- **M0-10, M4-09** : la « machine propre » n'est pas couverte — la machine de test a déjà WSL, Muse et 64 conversations. La signature des installeurs est également absente (`NotSigned`).
-- **M0-12, M1-13** : la qualification par un **lecteur d'écran réel** n'a pas été faite ; les rôles et libellés observés sont une condition nécessaire, pas une preuve d'annonce correcte.
-- **M4-01, M4-02** : la qualification **macOS et Linux** n'existe pas.
-- **M0-11, M1-10** : partiels.
+- **M1-06: DISPROVED on 21/09/2026.** The "host-side blocker" came from a probe that requested the capability in a shape the host reads as "no capability requested". With the right shape, sidecar 1.3.0 **does publish** the `userShell` items **and** their output. Detail and measurements in the M1-06 line below; **stop citing `SIDECAR-CONTRACT-GAPS.md` for this ticket.**
+- **M0-04, M1-11: re-checked on 27/09/2026 — both "sidecar blockers" were false.** The host **does emit** a terminal notification (`turn/completed` at **+36 ms** after `turn/interrupt`) and **does report** model projections (`model_id` on the session, `is_active` on `model/list`); the measurement backing them shared the `--no-session-log` harness of M1-06 (see [`session-log-expique-tout.md`](evidence/2026-09-27-qualif-native/session-log-expique-tout.md)). **Only `outputRef` stays plausible** in [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md). M0-04 keeps its special stop phases to qualify — on the scenario side, not the host side.
+- **Revision of 27/09/2026:** M0-02 and M0-03 **closed on Windows** (evidence: [`m0-02-reprise-apres-mort-host.md`](evidence/2026-09-27-qualif-native/m0-02-reprise-apres-mort-host.md), [`M0-03-texte-en-rejet-conserve.md`](evidence/2026-09-20-windows-group1/M0-03-texte-en-rejet-conserve.md)); M0-04 **advanced to proof of the transmitted `turnId` and resolution in ~1 s** ([`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md)).
+- **M0-01**: the "concurrent approvals" criterion stays open — the host ceiling is `promptUnmatched` and no approval request could be provoked, even in `ask` mode.
+- **M0-10, M4-09**: the "clean machine" is not covered — the test machine already has WSL, Muse and 64 conversations. Installer signing is also absent (`NotSigned`).
+- **M0-12, M1-13**: qualification with a **real screen reader** has not been done; the roles and labels observed are a necessary condition, not proof of correct announcement.
+- **M4-01, M4-02**: **macOS and Linux** qualification does not exist.
+- **M0-11, M1-10**: partial.
 
-**Trois erreurs de la campagne, corrigées et conservées** : un faux positif sur l'indicateur de focus (mesuré sur le champ au lieu du conteneur), un diagnostic erroné sur `prefers-contrast` (spécificité au lieu de l'ordre de déclaration, avec correctif retiré puis validé autrement), et une confusion sur l'ordre des entrées du transcript qui avait produit un « succès » sans valeur. Les documents concernés gardent les deux versions.
+**Three campaign errors, corrected and kept on record**: a false positive on the focus indicator (measured on the field instead of the container), an erroneous diagnosis on `prefers-contrast` (specificity instead of declaration order, with a fix withdrawn then validated differently), and a confusion over transcript entry order that had produced a worthless "success". The documents concerned keep both versions.
 
-**Preuve navigateur intégré (20/09/2026) :** [`docs/evidence/2026-09-20-windows-browser/`](evidence/2026-09-20-windows-browser/M4-01-M4-02.md). Les onglets de la barre de travail n'existent dans le DOM qu'une fois le panneau latéral déplié — un point qui avait fait conclure à tort à leur inaccessibilité. Sur une conversation ouverte, les sept onglets **Content · Review · Terminal · Files · Browser · Desktop · Memory** sont présents. En **M4-01**, la navigation native est prouvée dans la webview : `<input type="url">`, `iframe` montée sur `https://example.com/`, persistance par onglet et **isolation par `sessionId`** (deux clés `browser.tabs.v1.session.*` distinctes). En **M4-02**, les trois champs d'annotation sont présents, une **annotation a réellement été créée** (ancre URL normalisée, citation de sélection, commentaire, identifiant et horodatage persistés), et la **garde de contexte après navigation est prouvée** : après passage de l'onglet à un autre domaine, les notes ancrées sur la première page cessent d'être affichées (2 → 0) tout en restant persistées avec leur ancre d'origine. Restent ouverts pour M4-02 le recadrage de région et la capture visuelle.
+**Built-in browser evidence (20/09/2026):** [`docs/evidence/2026-09-20-windows-browser/`](evidence/2026-09-20-windows-browser/M4-01-M4-02.md). The work bar tabs only exist in the DOM once the side panel is unfolded — a point that had led to the wrong conclusion that they were inaccessible. On an open conversation, the seven tabs **Content · Review · Terminal · Files · Browser · Desktop · Memory** are present. In **M4-01**, native navigation is proved in the webview: `<input type="url">`, `iframe` mounted on `https://example.com/`, per-tab persistence and **isolation by `sessionId`** (two distinct `browser.tabs.v1.session.*` keys). In **M4-02**, the three annotation fields are present, an **annotation was actually created** (normalised URL anchor, selection quote, comment, identifier and timestamp persisted), and the **context guard after navigation is proved**: after moving the tab to another domain, notes anchored to the first page stop being shown (2 → 0) while staying persisted with their original anchor. Region cropping and visual capture stay open for M4-02.
 
-**Dernière preuve native (Windows, 19–20 septembre 2026) :** deux sidecars Muse Code 1.3.0 réels, deux sessions et workspaces distincts ; smoke `--exercise-control --exercise-errors --exercise-approval --exercise-isolation --exercise-user-shell --exercise-reconnect --exercise-history --exercise-reasoning --exercise-model --exercise-queue --exercise-compaction` réussi ; dogfood natif du 20/09 sur le pont MCP direct (parcours Tab, frappe, Ctrl+F, zoom natif Ctrl+0 puis Ctrl+Plus×2).
+**Latest native evidence (Windows, 19–20 September 2026):** two real Muse Code 1.3.0 sidecars, two distinct sessions and workspaces; smoke `--exercise-control --exercise-errors --exercise-approval --exercise-isolation --exercise-user-shell --exercise-reconnect --exercise-history --exercise-reasoning --exercise-model --exercise-queue --exercise-compaction` passed; native dogfood of 20/09 on the direct MCP bridge (Tab path, typing, Ctrl+F, native zoom Ctrl+0 then Ctrl+Plus ×2).
 
-**Limites de plateforme connues :**
+**Known platform limits:**
 
-- Le host Muse 1.3.0 observé reste **`ephemeral`** : `session/read` et `view/page` répondent `methodNotFound`, donc la reprise durable et la réconciliation native restent non démontrées, quel que soit l'OS. **Correction (20/09/2026) :** `approval/listPending` **est** disponible dès qu'on lui passe un `sessionId` et retourne `{approvals, userInputs}` — c'est un appel sans `sessionId` qui produit `methodNotFound`. Les mentions antérieures qui le classaient comme absent doivent être relues ; voir [`msp-probe.mjs`](../scripts/msp-probe.mjs) et le [rapport de campagne](evidence/2026-09-20-windows-group1/).
-- **Aucune preuve native macOS ni Linux** n'existe dans ce dépôt à ce jour, pour aucun ticket.
-- Le contrôle desktop (`desktop_control.rs`) est implémenté sur **Windows** (Win32/UIA) et **macOS** (Accessibility via System Events, `desktop_control_macos.rs`) ; Linux renvoie explicitement `supported: false`. Portage macOS (build `scripts/build-macos.sh`, moteur non embarqué : installation de Muse CLI pilotée par l'app au premier lancement via l'installeur officiel, barre de titre native, PATH du shell de connexion, sonde de démarrage native, endpoint cua-driver en socket Unix, réveil launchd via LaunchServices) : code livré et testé unitairement, **preuve native d'usage réel encore à produire**.
-- **`turn/completed`, `turn/retracted` et `turn/stopped` ne sont jamais émis**, même après `turn/interrupt` ou un `Stop` utilisateur : l'état final d'un tour est **déduit** côté client, jamais reçu. Constaté sur deux hosts réels et depuis l'interface.
+- The Muse 1.3.0 host observed stays **`ephemeral`**: `session/read` and `view/page` answer `methodNotFound`, so durable resume and native reconciliation stay undemonstrated, on any OS. **Correction (20/09/2026):** `approval/listPending` **is** available as soon as it is given a `sessionId` and returns `{approvals, userInputs}` — it is a call without a `sessionId` that produces `methodNotFound`. Earlier mentions classifying it as absent must be re-read; see [`msp-probe.mjs`](../scripts/msp-probe.mjs) and the [campaign report](evidence/2026-09-20-windows-group1/).
+- **No native macOS or Linux evidence** exists in this repository to date, for any ticket.
+- Desktop control (`desktop_control.rs`) is implemented on **Windows** (Win32/UIA) and **macOS** (Accessibility through System Events, `desktop_control_macos.rs`); Linux explicitly returns `supported: false`. macOS port (build `scripts/build-macos.sh`, engine not bundled: Muse CLI install driven by the app on first launch through the official installer, native title bar, login shell PATH, native startup probe, cua-driver endpoint over a Unix socket, launchd wake-up through LaunchServices): code shipped and unit-tested, **native proof of real use still to be produced**.
+- **`turn/completed`, `turn/retracted` and `turn/stopped` are never emitted**, even after `turn/interrupt` or a user `Stop`: a turn's final state is **inferred** on the client side, never received. Observed on two real hosts and from the interface.
 
-**Prochaine reprise :** les preuves natives M0 sur Windows sont largement avancées (voir le tableau consolidé ci-dessus). Ce qui reste dépend de trois natures de travail :
+**Next pickup:** the native M0 evidence on Windows is well advanced (see the consolidated table above). What remains depends on three kinds of work:
 
-1. **Côté sidecar** — **plus aucun blocage mesuré** (révision du 27/09/2026). La notification terminale de tour existe (`turn/completed` à +36 ms), les projections de modèle existent, la reprise `session/read`/`session/resume` fonctionne. Seul `outputRef` reste à confirmer dans [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md). La leçon de méthode reste valable : mesurez avec les formes du contrat (`capabilities` imbriqué, host avec log de session), sinon vous fabriquez des blocages fictifs.
-2. **Côté infrastructure** — machine propre pour M0-10 et M4-09, signature Authenticode des installeurs, hébergement du canal de mise à jour, VM macOS et Linux pour M4-01/M4-02.
-3. **Côté méthode** — qualification par un lecteur d'écran réel pour M0-12 et M1-13 ; compléter les variantes de scénarios déjà couverts (IME chinois et coréen, rechargement avant acquittement, double clic à la souris pour M0-03 ; les phases d'arrêt restantes de M0-04 : avant premier token, pendant outil, après fin, réponse tardive ; services nommés et verrous pour M1-05 et M2-08) ; M0 et M1 restants en qualification native Windows (scénarios outillés : `cdp-concurrent-turns`, `cdp-queue-race`, `cdp-ab-projects`, `cdp-stop-terminal`).
+1. **Sidecar side** — **no measured blocker left** (revision of 27/09/2026). The turn terminal notification exists (`turn/completed` at +36 ms), model projections exist, `session/read`/`session/resume` resume works. Only `outputRef` stays to be confirmed in [`SIDECAR-CONTRACT-GAPS.md`](SIDECAR-CONTRACT-GAPS.md). The methodological lesson stands: measure with the contract's shapes (nested `capabilities`, a host with a session log), otherwise you manufacture fictional blockers.
+2. **Infrastructure side** — a clean machine for M0-10 and M4-09, Authenticode signing of the installers, update channel hosting, macOS and Linux VMs for M4-01/M4-02.
+3. **Method side** — qualification with a real screen reader for M0-12 and M1-13; completing the variants of scenarios already covered (Chinese and Korean IME, reload before acknowledgement, mouse double-click for M0-03; the remaining M0-04 stop phases: before first token, during a tool, after the end, late answer; named services and locks for M1-05 and M2-08); remaining M0 and M1 in native Windows qualification (tooled scenarios: `cdp-concurrent-turns`, `cdp-queue-race`, `cdp-ab-projects`, `cdp-stop-terminal`).
 
-Les critères restants et leurs limites précises sont énumérés dans chaque document de [`docs/evidence/`](evidence/) : aucun des documents de cette campagne ne déclare un ticket clos sur un seul scénario.
+The remaining criteria and their precise limits are listed in each document under [`docs/evidence/`](evidence/): none of this campaign's documents declares a ticket closed on a single scenario.
 
-## Récapitulatif
+## Summary
 
-### Par état
+### By state
 
-| État | Total | Répartition |
+| State | Total | Breakdown |
 |---|---|---|
-| ☐ Pas commencé | **1** | M4-06 |
-| ◐ Commencé | **49** | tout le reste |
-| ☑ Terminé | **3** | M1-12, **M0-02** et **M0-03** (prouvés sur Windows le 20-27/09) |
+| ☐ Not started | **1** | M4-06 |
+| ◐ Started | **49** | everything else |
+| ☑ Done | **3** | M1-12, **M0-02** and **M0-03** (proved on Windows on 20-27/09) |
 | **Total** | **53** | |
 
-Ce récapitulatif est volontairement sévère : 49 tickets ont du code livré, mais ne réunissent pas encore l'ensemble de leurs critères de sortie sur une plateforme. Les trois tickets clos : M1-12 sans **aucune** dépendance OS ni native ; M0-02 et M0-03 dont les critères sont entièrement prouvés dans la webview Windows ([preuves](evidence/2026-09-27-qualif-native/)) — les colonnes macOS/Linux de ces deux-là restent ◐, faute de preuve native sur ces plateformes.
+This summary is deliberately severe: 49 tickets have shipped code, but do not yet meet all their exit criteria on a platform. The three closed tickets: M1-12 with **no** OS or native dependency; M0-02 and M0-03, whose criteria are entirely proved in the Windows webview ([evidence](evidence/2026-09-27-qualif-native/)) — the macOS/Linux columns of those two stay ◐, for lack of native proof on those platforms.
 
-### Par plateforme
+### By platform
 
-Les 53 tickets se répartissent en trois groupes, dénombrés depuis les tableaux ci-dessous.
+The 53 tickets fall into three groups, counted from the tables below.
 
-| Groupe | Tickets | ☐ | ◐ | ☑ |
+| Group | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
-| **A** — sans dépendance OS (colonne `Global` renseignée) | 34 | 1 | 31 | 2 |
-| **B** — dépendants d'un runtime natif (colonne `Global` = `—`) | 18 | 0 | 18 | 0 |
-| **C** — M1-12, clos et identique sur les trois OS | 1 | 0 | 0 | 1 |
+| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 31 | 2 |
+| **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 18 | 0 |
+| **C** — M1-12, closed and identical on all three OSes | 1 | 0 | 0 | 1 |
 | **Total** | **53** | **1** | **49** | **3** |
 
-Le groupe B est le seul à porter du code **différent** selon la plateforme : c'est là que la distinction par OS change réellement la réponse.
+Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer.
 
-Répartition exacte des 18 tickets du groupe B (◐ sur Windows, ☐ sur macOS et Linux) :
+Exact breakdown of the 18 group B tickets (◐ on Windows, ☐ on macOS and Linux):
 
-- **M0** (5) : M0-01, M0-05, M0-06, M0-08, M0-10
-- **M1** (4) : M1-06, M1-09, M1-10, M1-11
-- **M2** (3) : M2-02, M2-05, M2-07
-- **M3** (1) : M3-05
-- **M4** (5) : M4-01, M4-02, M4-03, M4-04, M4-09
+- **M0** (5): M0-01, M0-05, M0-06, M0-08, M0-10
+- **M1** (4): M1-06, M1-09, M1-10, M1-11
+- **M2** (3): M2-02, M2-05, M2-07
+- **M3** (1): M3-05
+- **M4** (5): M4-01, M4-02, M4-03, M4-04, M4-09
 
-Les 18 tickets du groupe B sont donc les seuls dont la fermeture est **atteignable à court terme sur Windows** : leur code existe et la chaîne de preuve native y est déjà outillée (`smoke:native`, bundles NSIS/MSI, dogfood). Hors Windows, aucun d'eux n'est commencé.
+The 18 group B tickets are therefore the only ones whose closure is **reachable in the short term on Windows**: their code exists and the native proof chain is already tooled there (`smoke:native`, NSIS/MSI bundles, dogfood). Outside Windows, none of them is started.
 
-À l'inverse, **15 tickets du groupe A affichent ◐ sur macOS et Linux alors que le code est partagé et non spécifique** : M0-02, M0-03, M0-09, M1-01, M1-02, M1-03, M1-04, M1-07, M1-08, M1-13, M3-01, M3-03, M3-04, M3-08, M4-07. Pour eux, le ◐ hors Windows reflète **l'absence de preuve native**, pas un défaut de code : ils sont mécaniquement moins chers à fermer que le groupe B.
+Conversely, **15 group A tickets show ◐ on macOS and Linux although the code is shared and not platform-specific**: M0-02, M0-03, M0-09, M1-01, M1-02, M1-03, M1-04, M1-07, M1-08, M1-13, M3-01, M3-03, M3-04, M3-08, M4-07. For those, the ◐ outside Windows reflects **the absence of native proof**, not a code defect: they are mechanically cheaper to close than group B.
 
-Parmi les tickets du groupe A, **trois** restent ☐ sur macOS et Linux au lieu de ◐ : **M0-04**, **M3-02** et **M4-06**. Les deux premiers portent une dépendance OS réelle malgré une colonne `Global` favorable — la preuve terminale dépend du comportement du host pour M0-04, le trousseau macOS et Secret Service Linux n'ont jamais été exercés pour M3-02 — tandis que M4-06 est reporté faute de spécification produit. Tous les autres tickets du groupe A se contentent d'attendre une preuve native sur du code déjà partagé.
+Among the group A tickets, **three** stay ☐ on macOS and Linux instead of ◐: **M0-04**, **M3-02** and **M4-06**. The first two carry a real OS dependency despite a favourable `Global` column — the terminal proof depends on host behaviour for M0-04, the macOS keychain and Linux Secret Service have never been exercised for M3-02 — while M4-06 is postponed for lack of a product specification. Every other group A ticket is simply waiting for native proof on code that is already shared.
 
-> **Convention de la colonne `Global` :** elle porte l'état du ticket considéré indépendamment de l'OS, c'est-à-dire **le meilleur état atteint**. Elle n'affirme pas que les trois plateformes sont au même niveau — seules les colonnes par OS le font.
+> **Convention for the `Global` column:** it carries the ticket's state considered independently of the OS, that is, **the best state reached**. It does not claim the three platforms are level — only the per-OS columns do that.
 
 ---
 
-## M0 — Fiabiliser et finir l'existant
+## M0 — Make the existing solid and finish it
 
-*Priorité immédiate. Ne pas ajouter de nouvelles surfaces avant de sécuriser ces parcours.*
+*Immediate priority. Do not add new surfaces before securing these paths.*
 
-| ID | Résultat attendu | Global | Windows | macOS | Linux |
+| ID | Expected result | Global | Windows | macOS | Linux |
 |---|---|---|---|---|---|
-| M0-01 | A continue à travailler quand on ouvre le projet B | — | ◐ | ☐ | ☐ |
-| M0-02 | Reprendre une conversation après fermeture ou panne du moteur | ☑ | ☑ | ◐ | ◐ |
-| M0-03 | Ne perdre aucun texte lors d'un envoi rejeté | ☑ | ☑ | ◐ | ◐ |
-| M0-04 | Arrêter et reprendre avec des états fiables | ◐ | ◐ | ☐ | ☐ |
-| M0-05 | Répondre aux permissions/questions même après incident | — | ◐ | ☐ | ☐ |
-| M0-06 | Afficher la politique de permissions réellement effective | — | ◐ | ☐ | ☐ |
-| M0-07 | Protéger les diagnostics et éviter un crash sur Unicode | — | ◐ | ◐ | ◐ |
-| M0-08 | Détecter une incompatibilité du moteur | — | ◐ | ☐ | ☐ |
-| M0-09 | Conserver les données sans échec silencieux | ◐ | ◐ | ◐ | ◐ |
-| M0-10 | Réussir le premier lancement | — | ◐ | ☐ | ☐ |
-| M0-11 | Finir l'anglais et les détails de navigation | — | ◐ | ◐ | ◐ |
-| M0-12 | Utiliser l'existant au clavier et au lecteur d'écran | — | ◐ | ◐ | ◐ |
-| M0-13 | Identifier clairement les capacités non connectées | — | ◐ | ◐ | ◐ |
-| M0-14 | Disposer de contrôles reproductibles avant fusion | — | ◐ | ◐ | ◐ |
+| M0-01 | A keeps working when project B is opened | — | ◐ | ☐ | ☐ |
+| M0-02 | Resume a conversation after the engine closes or crashes | ☑ | ☑ | ◐ | ◐ |
+| M0-03 | Lose no text on a rejected send | ☑ | ☑ | ◐ | ◐ |
+| M0-04 | Stop and resume with reliable states | ◐ | ◐ | ☐ | ☐ |
+| M0-05 | Answer permissions and questions even after an incident | — | ◐ | ☐ | ☐ |
+| M0-06 | Show the permission policy that is really in force | — | ◐ | ☐ | ☐ |
+| M0-07 | Protect diagnostics and avoid a crash on Unicode | — | ◐ | ◐ | ◐ |
+| M0-08 | Detect an engine incompatibility | — | ◐ | ☐ | ☐ |
+| M0-09 | Keep data with no silent failure | ◐ | ◐ | ◐ | ◐ |
+| M0-10 | Succeed on first launch | — | ◐ | ☐ | ☐ |
+| M0-11 | Finish the English and the navigation details | — | ◐ | ◐ | ◐ |
+| M0-12 | Use what exists by keyboard and screen reader | — | ◐ | ◐ | ◐ |
+| M0-13 | Clearly identify capabilities that are not connected | — | ◐ | ◐ | ◐ |
+| M0-14 | Have reproducible checks before merging | — | ◐ | ◐ | ◐ |
 
-### Détail
+### Detail
 
-- ◐ **M0-01 — A continue à travailler quand on ouvre le projet B** *(Global : —)*
-  - Windows ◐ — routage isolé par chemin canonique, appartenance explicite des sessions, isolation des approbations ; prouvé par deux processus enfants réels (Rust + Node) avec mort subite de B et complétion de A. **Reste :** E2E WebView2 empaquetée.
-  - **Progrès natif (20/09/2026, CUA puis CDP) :** deux hosts simultanés observés ; mort du host B **sans effet** sur l'application, la conversation servie par A, les 58 sessions ou la file (aucun respawn, application toujours `Responding`). Puis, sur le host survivant : **nouvelle session créée (58 → 59), tour réel admis, conversation restée connectée, sous-agents passés de 1 à 3 `Completed`**.
-  - **Critère manquant du 20/09 PROUVÉ le 27/09/2026** ([`m0-01-deux-projets.md`](evidence/2026-09-27-qualif-native/m0-01-deux-projets.md)) : tours longs concurrents dans les deux projets → host de B tué à 15:37:24 en plein tour → **tour A terminé à 15:38:10 sans erreur**, statut honnête de B à la seconde près. **Reste :** E2E WebView2 empaquetée (le scénario ci-dessus tourne en build dev) et répétition sur sessions fraîches.
-  - macOS ☐ / Linux ☐ — qualification multi-OS non commencée. La webview n'est pas WebView2 hors Windows.
-  - *Critère de sortie :* isolation prouvée depuis l'interface Tauri empaquetée, sur chaque OS annoncé.
+- ◐ **M0-01 — A keeps working when project B is opened** *(Global: —)*
+  - Windows ◐ — routing isolated by canonical path, explicit session ownership, approval isolation; proved with two real child processes (Rust + Node) with a sudden death of B and completion of A. **Remaining:** packaged WebView2 E2E.
+  - **Native progress (20/09/2026, CUA then CDP):** two simultaneous hosts observed; host B's death **with no effect** on the application, the conversation served by A, the 58 sessions or the queue (no respawn, application still `Responding`). Then, on the surviving host: **new session created (58 → 59), real turn admitted, conversation still connected, sub-agents moved from 1 to 3 `Completed`**.
+  - **Missing criterion of 20/09 PROVED on 27/09/2026** ([`m0-01-deux-projets.md`](evidence/2026-09-27-qualif-native/m0-01-deux-projets.md)): concurrent long turns in both projects → B's host killed at 15:37:24 mid-turn → **turn A finished at 15:38:10 with no error**, honest status for B to the second. **Remaining:** packaged WebView2 E2E (the scenario above runs in a dev build) and repetition on fresh sessions.
+  - macOS ☐ / Linux ☐ — multi-OS qualification not started. The webview is not WebView2 outside Windows.
+  - *Exit criterion:* isolation proved from the packaged Tauri interface, on every announced OS.
 
-- ◐ **M0-02 — Reprendre une conversation après fermeture ou panne** *(sans dimension OS)* — **rouvert le 27/09/2026 :** `taskkill /F` + relance peut **effacer `projects.v1` et `sessions.v1`** (toutes les conversations) tandis que file/runs/notifications survivent — alors qu'un kill identique plus tôt avait tout préservé ([`m1-05-fix-portable-pty.md`](evidence/2026-09-27-qualif-native/m1-05-fix-portable-pty.md)) ; la survie de la file et des runs est prouvée ([`m1-10-course-de-file.md`](evidence/2026-09-27-qualif-native/m1-10-course-de-file.md)), pas celle de projets/fils dans tous les modes de kill. **Cause trouvée dans le code :** `useMuseSessions.ts` L1875 + L2361-2383 — `useState(() => loadProjects())` avec repli `[]` sur lecture invalide, puis **write-through `useEffect` qui persiste `[]` au montage** : corruption transitoire → effacement permanent. Correctif suggéré : pas d'écriture au montage / jamais persister un repli de lecture invalide. **→ Correctif implémenté le 27/09/2026 :** gardes `sessionsHydratedRef`/`projectsHydratedRef` dans `useMuseSessions.ts` — l'état hydraté (éventuellement le repli) n'est **jamais** persisté, seules les mutations (nouvelle identité de tableau) écrivent (`npm test` 1133/1133 + `tsc` verts) ; reste à **rejouer le kill** pour prouver le comportement corrigé. **→ CORRECTIF CONFIRMÉ par rejeu le 27/09/2026 :** valeur corrompue `not-json-M02c` survit aux rechargements (+2 s, +10 s) sur le build corrigé — là où l'ancien build la remplaçait par `"[]"` en < 1 s ([`m0-02-fix-write-through.md`](evidence/2026-09-27-qualif-native/m0-02-fix-write-through.md), qui documente aussi le piège du front embarqué et la **rédemption par le host** : 59 fils reconstruits depuis son historique). État : pièces « panne » et « effacement » traitées ; reste le test du `taskkill /F` réel en conditions variées pour la clôture totale. **→ `taskkill /F` réel en plein tour RÉUSSI le 27/09/2026 :** kill brutal à +3 s d'un tour → projets **172 o octet à octet** + fils **13 557 → 13 578 o (59 → 61, JSON valide)** + 36 clés intactes — aucune corruption ni perte. Toutes les pièces de l'acceptation sont prouvées (non-envoyé = file prouvée M1-10, historique par fil = ce test, pas de second host = stop/relance immédiate) — seul le **brouillon** du composeur reste à éprouver directement. **→ Brouillon éprouvé le 27/09/2026 : DÉFAUT, non conservé** — saisi sans envoi, perdu au `taskkill /F`, aucune clé de stockage ne le porte (état React seul) ; pièce manquante pour la clôture ([`m0-02-fix-write-through.md`](evidence/2026-09-27-qualif-native/m0-02-fix-write-through.md)).
-  - Reconnexion explicite via `session/read` + `session/resume`, état de connexion par conversation (`disconnected / connecting / connected / error`), réhydratation des items pliés par `itemId`, liveness visible avec état stale, réconciliation bornée après 15 s de silence, fallback `view/page` par curseur, `session/list` paginé, pont **Muse is resuming**, bouton **Sync now**, détection de perte du ring d'événements.
-  - **Prouvé le 27/09/2026 sur Windows** ([`m0-02-reprise-apres-mort-host.md`](evidence/2026-09-27-qualif-native/m0-02-reprise-apres-mort-host.md)) : mort du host en fonctionnement → statut honnête « Muse stopped because the host process ended. Reconnect to continue. » → `resume_session` sur host relancé (`loaded: true`, grants, modèle) → **historique complet relu** (`read_session_history`) → **nouveau tour exécuté**. Les trois critères du ticket sont couverts.
-  - **Note du 27/09 :** l'ancien « Reste bloquant » (« le sidecar est `ephemeral` et ne sert pas `session/read`/`session/resume` ») était **faux** — mesuré avec un host `--no-session-log` (mémoire seule). Voir [`session-log-expique-tout.md`](evidence/2026-09-27-qualif-native/session-log-expique-tout.md).
-  - macOS ◐ / Linux ◐ — code partagé, aucune preuve native sur ces plateformes.
-  - *Critère de sortie :* reprise d'un tour réellement rejouée contre un host durable. **✓ fait sur Windows (27/09).**
+- ◐ **M0-02 — Resume a conversation after a close or a crash** *(no OS dimension)* — **reopened on 27/09/2026:** `taskkill /F` + relaunch can **wipe `projects.v1` and `sessions.v1`** (every conversation) while the queue, runs and notifications survive — whereas an identical kill earlier had preserved everything ([`m1-05-fix-portable-pty.md`](evidence/2026-09-27-qualif-native/m1-05-fix-portable-pty.md)); survival of the queue and runs is proved ([`m1-10-course-de-file.md`](evidence/2026-09-27-qualif-native/m1-10-course-de-file.md)), that of projects and threads in every kill mode is not. **Cause found in the code:** `useMuseSessions.ts` L1875 + L2361-2383 — `useState(() => loadProjects())` with a `[]` fallback on an invalid read, then a **write-through `useEffect` that persists `[]` at mount**: transient corruption → permanent erasure. Suggested fix: no write at mount / never persist a fallback from an invalid read. **→ Fix implemented on 27/09/2026:** `sessionsHydratedRef`/`projectsHydratedRef` guards in `useMuseSessions.ts` — hydrated state (possibly the fallback) is **never** persisted, only mutations (a new array identity) write (`npm test` 1133/1133 + `tsc` green); the kill still has to be **replayed** to prove the corrected behaviour. **→ FIX CONFIRMED by replay on 27/09/2026:** the corrupted value `not-json-M02c` survives reloads (+2 s, +10 s) on the fixed build — where the old build replaced it with `"[]"` in < 1 s ([`m0-02-fix-write-through.md`](evidence/2026-09-27-qualif-native/m0-02-fix-write-through.md), which also documents the embedded-frontend trap and the **host's redemption**: 59 threads rebuilt from its history). State: the "crash" and "erasure" pieces are handled; the real `taskkill /F` test under varied conditions remains for full closure. **→ Real `taskkill /F` mid-turn PASSED on 27/09/2026:** brutal kill at +3 s into a turn → projects **172 bytes byte for byte** + threads **13,557 → 13,578 bytes (59 → 61, valid JSON)** + 36 keys intact — no corruption, no loss. Every piece of the acceptance is proved (unsent = queue proved by M1-10, per-thread history = this test, no second host = immediate stop and relaunch) — only the composer's **draft** is left to test directly. **→ Draft tested on 27/09/2026: DEFECT, not preserved** — typed without sending, lost on `taskkill /F`, no storage key carries it (React state only); a missing piece for closure ([`m0-02-fix-write-through.md`](evidence/2026-09-27-qualif-native/m0-02-fix-write-through.md)).
+  - Explicit reconnection through `session/read` + `session/resume`, per-conversation connection state (`disconnected / connecting / connected / error`), rehydration of folded items by `itemId`, visible liveness with a stale state, bounded reconciliation after 15 s of silence, `view/page` fallback by cursor, paginated `session/list`, **Muse is resuming** bridge, **Sync now** button, detection of event ring loss.
+  - **Proved on 27/09/2026 on Windows** ([`m0-02-reprise-apres-mort-host.md`](evidence/2026-09-27-qualif-native/m0-02-reprise-apres-mort-host.md)): host death while running → honest status "Muse stopped because the host process ended. Reconnect to continue." → `resume_session` on a relaunched host (`loaded: true`, grants, model) → **full history read back** (`read_session_history`) → **new turn executed**. All three criteria of the ticket are covered.
+  - **Note of 27/09:** the old "blocking remainder" ("the sidecar is `ephemeral` and does not serve `session/read`/`session/resume`") was **false** — measured with a `--no-session-log` host (memory only). See [`session-log-expique-tout.md`](evidence/2026-09-27-qualif-native/session-log-expique-tout.md).
+  - macOS ◐ / Linux ◐ — shared code, no native proof on those platforms.
+  - *Exit criterion:* a turn's resume actually replayed against a durable host. **✓ done on Windows (27/09).**
 
-- ☑ **M0-03 — Ne perdre aucun texte lors d'un envoi rejeté** *(sans dimension OS)*
-  - Outbox durable par envoi (`clientMessageId`, `sending/accepted/failed`), brouillon vidé seulement à l'acquittement, vérification serveur avant retransmission, miroir natif sous `app_data/outbox/`, sidebar signalant les envois conservés.
-  - **Prouvé le 20/09/2026 sur Windows** pour les 4 critères ([`M0-03-texte-en-rejet-conserve.md`](evidence/2026-09-20-windows-group1/M0-03-texte-en-rejet-conserve.md)) : envoi rejeté (skill inconnue) conserve le texte · double-Entrée n'admet qu'un tour · brouillon et envoi en cours survivent au rechargement · Entrée pendant une composition IME ne soumet pas.
-  - **Reste (non bloquant) :** variantes de méthode — moteur coupé pendant l'envoi, double-clic souris, IME chinois et coréen (§Méthode) ; preuve macOS/Linux.
-  - *Critère de sortie :* aucun texte perdu sur les quatre scénarios du ticket. **✓ fait sur Windows (20/09).**
+- ☑ **M0-03 — Lose no text on a rejected send** *(no OS dimension)*
+  - Durable per-send outbox (`clientMessageId`, `sending/accepted/failed`), draft cleared only on acknowledgement, server check before retransmission, native mirror under `app_data/outbox/`, sidebar flagging preserved sends.
+  - **Proved on 20/09/2026 on Windows** for all 4 criteria ([`M0-03-texte-en-rejet-conserve.md`](evidence/2026-09-20-windows-group1/M0-03-texte-en-rejet-conserve.md)): a rejected send (unknown skill) keeps the text · a double Enter admits only one turn · draft and in-flight send survive a reload · Enter during an IME composition does not submit.
+  - **Remaining (non-blocking):** method variants — engine cut mid-send, mouse double-click, Chinese and Korean IME (§Method); macOS/Linux proof.
+  - *Exit criterion:* no text lost across the ticket's four scenarios. **✓ done on Windows (20/09).**
 
-- ◐ **M0-04 — Arrêter et reprendre avec des états fiables**
-  - Windows ◐ — distinction demande acceptée (`Stopping Muse`) / terminal confirmé, `turnId` transmis, alias `turn/completed|retracted|stopped`, récupération bornée après accusé sans terminal, double-clic ignoré.
-  - **Progrès décisif (27/09/2026, preuve native) :** [`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md) — clic Stop depuis la webview → `cancel_session` avec **`turnId` non vide et correct** → état résolu en **1 s** (terminal serveur) → **relance immédiate**. La phrase « le host 1.3.x n'émet aucun terminal après `turn/interrupt » » est **fausse** (`turn/completed` à +36 ms, prouvé) et l'ancien « Stopping… » figé ne se reproduit pas au HEAD.
-  - **Reste (Windows) :** uniquement la variante stricte **arrêt pendant un outil du tour parent** — inaccessible ici (muse-spark déporte toutes ses recherches en sous-agents ; outil shell bloqué par le défaut [`m1-06-run-in-muse-sandbox.md`](evidence/2026-09-27-qualif-native/m1-06-run-in-muse-sandbox.md)). **Variante mesurée le 27/09/2026 :** arrêt pendant une **lane sous-agent « Running »** (travail d'outil en vol dans la session enfant) — `cancel_session`+`turnId`, tour résolu, lanes closes. **Phases fermées** ([`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md)) : **avant le premier token** (arrêt à +1,5 s pré-sortie, `turnId` transmis, résolution 1,0 s, relance immédiate), **réponse tardive** (arrêt à +45 s sur tour vivant, idem), **après la fin** (plus de bouton Stop, UI au repos, tour suivant immédiat). La distinction « demande acceptée / terminal confirmé » est prouvée avec son libellé exact (`Stopping Muse…` capturé en direct, résolution en 1,0 s). **Défaut de libellé restant :** le bouton Stop du tour porte le titre `Stop the running sidecar`.
-  - macOS ☐ / Linux ☐ — non commencé.
+- ◐ **M0-04 — Stop and resume with reliable states**
+  - Windows ◐ — distinction between an accepted request (`Stopping Muse`) and a confirmed terminal, `turnId` transmitted, `turn/completed|retracted|stopped` aliases, bounded recovery after an acknowledgement with no terminal, double-click ignored.
+  - **Decisive progress (27/09/2026, native proof):** [`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md) — Stop clicked from the webview → `cancel_session` with a **non-empty, correct `turnId`** → state resolved in **1 s** (server terminal) → **immediate relaunch**. The sentence "host 1.3.x emits no terminal after `turn/interrupt`" is **false** (`turn/completed` at +36 ms, proved) and the old frozen "Stopping…" does not reproduce at HEAD.
+  - **Remaining (Windows):** only the strict variant **stopping during a parent-turn tool** — unreachable here (muse-spark offloads all its searches to sub-agents; the shell tool is blocked by the defect in [`m1-06-run-in-muse-sandbox.md`](evidence/2026-09-27-qualif-native/m1-06-run-in-muse-sandbox.md)). **Variant measured on 27/09/2026:** stopping during a **"Running" sub-agent lane** (tool work in flight in the child session) — `cancel_session`+`turnId`, turn resolved, lanes closed. **Phases closed** ([`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md)): **before the first token** (stop at +1.5 s pre-output, `turnId` transmitted, resolution 1.0 s, immediate relaunch), **late answer** (stop at +45 s on a live turn, same), **after the end** (no Stop button left, UI at rest, next turn immediate). The "accepted request / confirmed terminal" distinction is proved with its exact label (`Stopping Muse…` captured live, resolution in 1.0 s). **Remaining label defect:** the turn's Stop button carries the title `Stop the running sidecar`.
+  - macOS ☐ / Linux ☐ — not started.
 
-- ◐ **M0-05 — Répondre aux permissions/questions même après incident**
-  - Windows ◐ — `list_pending_requests` relit `approval/listPending` et reconstruit les cartes par session, déduplication par identifiant, refus ne peignant pas un faux état de reprise, bascule stale avec actions. **Reste :** validation native des courses stale. Le sidecar 1.3.0 ne sert pas `approval/listPending`.
-  - macOS ☐ / Linux ☐ — non commencé.
+- ◐ **M0-05 — Answer permissions and questions even after an incident**
+  - Windows ◐ — `list_pending_requests` re-reads `approval/listPending` and rebuilds the cards per session, deduplication by identifier, a refusal painting no false resume state, stale switch with actions. **Remaining:** native validation of stale races. Sidecar 1.3.0 does not serve `approval/listPending`.
+  - macOS ☐ / Linux ☐ — not started.
 
-- ◐ **M0-06 — Afficher la politique de permissions réellement effective**
-  - Windows ◐ — sélecteur global Ask / Approve on my behalf / YOLO, mapping vers l'enum MSP, persistance, `session/setApprovalMode`, distinction posture locale / plafond host. Contrat vérifié sur le binaire 1.3.0 : `promptUnmatched` accepté, `approval_mode_ceiling` pour `onRequest` et `allowAll`.
-  - macOS ☐ / Linux ☐ — le binaire de référence testé est Windows/WSL ; la matrice d'anciennes versions et les autres OS restent à qualifier.
-  - *Critère de sortie :* changement de posture sans redémarrage, conservation après relance, test natif de la décision refusée/stale.
+- ◐ **M0-06 — Show the permission policy that is really in force**
+  - Windows ◐ — global Ask / Approve on my behalf / YOLO picker, mapping onto the MSP enum, persistence, `session/setApprovalMode`, distinction between local posture and host ceiling. Contract verified on the 1.3.0 binary: `promptUnmatched` accepted, `approval_mode_ceiling` for `onRequest` and `allowAll`.
+  - macOS ☐ / Linux ☐ — the reference binary tested is Windows/WSL; the matrix of older versions and the other OSes remain to be qualified.
+  - *Exit criterion:* posture change without a restart, preserved after relaunch, native test of the refused/stale decision.
 
-- ◐ **M0-07 — Protéger les diagnostics et éviter un crash sur Unicode**
-  - Windows ◐ / macOS ◐ / Linux ◐ — le code est **commun** (renderer + bridge) : aucun wire log brut par défaut, stderr borné à 20 lignes / 8 000 caractères, secrets masqués, troncature UTF-8 sûre, `collect_diagnostics`, export Settings borné, erreurs terminales MSP structurées.
-  - **Reste :** qualification native des erreurs moteur détaillées, pour chaque OS — même si le chemin est partagé, la preuve ne l'est pas.
+- ◐ **M0-07 — Protect diagnostics and avoid a crash on Unicode**
+  - Windows ◐ / macOS ◐ / Linux ◐ — the code is **shared** (renderer + bridge): no raw wire log by default, stderr bounded to 20 lines / 8,000 characters, secrets masked, UTF-8-safe truncation, `collect_diagnostics`, bounded Settings export, structured MSP terminal errors.
+  - **Remaining:** native qualification of detailed engine errors, for each OS — even where the path is shared, the proof is not.
 
-- ◐ **M0-08 — Détecter une incompatibilité du moteur**
-  - Windows ◐ — handshake exigeant `serverInfo`, version, `schema.version=1` et fingerprint `sha256:*` ; registre compile-time des RPC émises ; erreur actionnable au démarrage. Binaire Windows/WSL 1.3.0 validé.
-  - macOS ☐ / Linux ☐ — matrice d'anciennes versions et autres OS à qualifier.
+- ◐ **M0-08 — Detect an engine incompatibility**
+  - Windows ◐ — handshake requiring `serverInfo`, version, `schema.version=1` and a `sha256:*` fingerprint; compile-time registry of the RPCs emitted; actionable error at startup. Windows/WSL 1.3.0 binary validated.
+  - macOS ☐ / Linux ☐ — the matrix of older versions and other OSes to qualify.
 
-- ◐ **M0-09 — Conserver les données sans échec silencieux** *(sans dimension OS)*
-  - Façade défensive sur tous les modules de persistance connus, signalement corruption/quota, export/import sélectif avec aperçu, classification durable/UI, checksum FNV-1a vérifié avant restauration, migration des alias `muse.*`, brouillons `sessionStorage` défensifs.
-  - **Reste :** qualification des formats externes et reprise après interruption avant tout changement de format de clé.
+- ◐ **M0-09 — Keep data with no silent failure** *(no OS dimension)*
+  - Defensive facade over every known persistence module, corruption/quota reporting, selective export/import with a preview, durable/UI classification, FNV-1a checksum verified before restore, migration of the `muse.*` aliases, defensive `sessionStorage` drafts.
+  - **Remaining:** qualification of external formats and recovery after an interruption, before any change to the key format.
 
-- ◐ **M0-10 — Réussir le premier lancement**
-  - Windows ◐ — guidance contextuelle (sidecar, WSL, Muse CLI, authentification, dossier), sonde `probe_startup` bornée affichée dans la récupération et Settings, états lisibles sans couleur, sorties UTF-16 décodées, `dev:clean:windows` borné au checkout.
-  - **Reste (Windows) :** détection sur machine propre, distributions WSL non par défaut, parcours d'authentification réel. **Prérequis découvert le 27/09/2026 :** `muse sandbox windows setup` (élevé) doit être exécuté avant tout shell — sinon `sandbox_users_missing` et tout `userShell` échoue ; à intégrer à la guidance de premier lancement ([`m1-06-run-in-muse-sandbox.md`](evidence/2026-09-27-qualif-native/m1-06-run-in-muse-sandbox.md)).
-  - macOS ☐ / Linux ☐ — la sonde et la guidance sont spécifiques à la chaîne sidecar Windows/WSL ; un équivalent natif reste à écrire.
+- ◐ **M0-10 — Succeed on first launch**
+  - Windows ◐ — contextual guidance (sidecar, WSL, Muse CLI, authentication, folder), bounded `probe_startup` probe shown in recovery and in Settings, states readable without colour, UTF-16 output decoded, `dev:clean:windows` bounded to the checkout.
+  - **Remaining (Windows):** detection on a clean machine, non-default WSL distributions, a real authentication path. **Prerequisite discovered on 27/09/2026:** `muse sandbox windows setup` (elevated) must be run before any shell — otherwise `sandbox_users_missing` and every `userShell` fails; to fold into the first-launch guidance ([`m1-06-run-in-muse-sandbox.md`](evidence/2026-09-27-qualif-native/m1-06-run-in-muse-sandbox.md)).
+  - macOS ☐ / Linux ☐ — the probe and the guidance are specific to the Windows/WSL sidecar chain; a native equivalent is still to be written.
 
-- ◐ **M0-11 — Finir l'anglais et les détails de navigation** *(sans dimension OS, vérifié sur Windows)*
-  - Libellés résiduels harmonisés, recherche indépendante de la locale française, infobulles `Ctrl`/`Cmd` via `primaryModifier()`, copie d'erreur centralisée `userFacingError`, chemin natif lisible `displayPath`, infobulle zoom documentée et vérifiée en dogfood le 20/09.
-  - **Reste :** checklist native finale des titres et erreurs spécifiques dans la webview empaquetée.
+- ◐ **M0-11 — Finish the English and the navigation details** *(no OS dimension, verified on Windows)*
+  - Residual labels harmonised, search independent of the French locale, `Ctrl`/`Cmd` tooltips through `primaryModifier()`, centralised error copy `userFacingError`, readable native path `displayPath`, zoom tooltip documented and verified in dogfood on 20/09.
+  - **Remaining:** final native checklist of titles and specific errors in the packaged webview.
 
-- ◐ **M0-12 — Utiliser l'existant au clavier et au lecteur d'écran**
-  - Windows ◐ — parcours Tab validé en dogfood (ordre logique, anneau de focus, activation Enter Summary→Content), frappe livrée, Ctrl+F correctement ignoré dans un input, zoom natif vérifié via `zoomHotkeysEnabled`, contraste forcé `Highlight`/`ButtonText`/`LinkText`.
-  - macOS ◐ / Linux ◐ — le code d'accessibilité est partagé, mais `forced-colors` est un mécanisme Windows et **aucune** preuve assistive n'existe hors Windows.
-  - **Reste :** lecteur d'écran réel, contraste natif, parcours complet sans souris — sur les trois OS.
+- ◐ **M0-12 — Use what exists by keyboard and screen reader**
+  - Windows ◐ — Tab path validated in dogfood (logical order, focus ring, Enter activation Summary→Content), typing delivered, Ctrl+F correctly ignored inside an input, native zoom verified through `zoomHotkeysEnabled`, forced contrast `Highlight`/`ButtonText`/`LinkText`.
+  - macOS ◐ / Linux ◐ — the accessibility code is shared, but `forced-colors` is a Windows mechanism and **no** assistive proof exists outside Windows.
+  - **Remaining:** a real screen reader, native contrast, a complete mouse-free path — on all three OSes.
 
-- ◐ **M0-13 — Identifier clairement les capacités non connectées** *(sans dimension OS)*
-  - Vocabulaire commun `Available` / `Local` / `Manual` / `Not connected` avec raison et prochaine étape, badges sur connecteurs, channels, exports, worktrees, index, import CLI/IDE, Browser et Desktop control.
-  - **Reste :** qualification native du consentement et des capacités annoncées par le host.
+- ◐ **M0-13 — Clearly identify capabilities that are not connected** *(no OS dimension)*
+  - Shared vocabulary `Available` / `Local` / `Manual` / `Not connected` with a reason and a next step, badges on connectors, channels, exports, worktrees, index, CLI/IDE import, Browser and Desktop control.
+  - **Remaining:** native qualification of consent and of the capabilities the host announces.
 
-- ◐ **M0-14 — Disposer de contrôles reproductibles avant fusion**
-  - Linux ◐ — c'est la **seule** plateforme où une vérification automatisée tourne : CI `ubuntu-latest` avec `npm ci`, `npm test`, `npm run build`, `cargo test` (dépendances Tauri Linux installées, placeholders de frontend et de sidecar), artefacts d'échec bornés et masqués. Fixtures MCP et Muse MSP livrées, `pump_stdout` validé sur un vrai processus enfant (`powershell.exe` sous Windows, `sh` ailleurs).
-  - Windows ◐ — smoke natif opt-in `npm run smoke:native` sur deux sidecars réels, hors CI.
-  - macOS ☐ — rien.
-  - **Reste :** scénario A/B depuis l'interface Tauri et sa webview empaquetée.
+- ◐ **M0-14 — Have reproducible checks before merging**
+  - Linux ◐ — the **only** platform where an automated check runs: CI on `ubuntu-latest` with `npm ci`, `npm test`, `npm run build`, `cargo test` (Linux Tauri dependencies installed, frontend and sidecar placeholders), bounded and masked failure artefacts. MCP and Muse MSP fixtures shipped, `pump_stdout` validated on a real child process (`powershell.exe` on Windows, `sh` elsewhere).
+  - Windows ◐ — opt-in native smoke `npm run smoke:native` on two real sidecars, outside CI.
+  - macOS ☐ — nothing.
+  - **Remaining:** an A/B scenario from the Tauri interface and its packaged webview.
 
-**🚦 Sortie M0 :** scénario natif créer → envoyer → stream → approuver → répondre → interrompre → réessayer, puis redémarrage et deux projets simultanés. Aucun réglage ne prétend modifier une capacité qu'il ne contrôle pas. **Validation Windows d'abord ; support macOS/Linux qualifié séparément.**
+**🚦 M0 exit:** a native scenario create → send → stream → approve → answer → interrupt → retry, then a restart and two simultaneous projects. No setting claims to change a capability it does not control. **Windows validation first; macOS/Linux support qualified separately.**
 
 ---
 
-## M1 — Terminer le workflow quotidien de développement
+## M1 — Finish the daily development workflow
 
-*La maquette `design/prototype` ne constitue pas une implémentation native. Les contrats d'erreur et les opérations destructives restent à concevoir même lorsqu'un écran existe.*
+*The `design/prototype` mockup is not a native implementation. Error contracts and destructive operations still have to be designed even where a screen exists.*
 
-| ID | Résultat attendu | Global | Windows | macOS | Linux |
+| ID | Expected result | Global | Windows | macOS | Linux |
 |---|---|---|---|---|---|
-| M1-01 | Voir les fichiers réellement modifiés | ◐ | ◐ | ◐ | ◐ |
-| M1-02 | Commenter une ligne de diff et demander sa correction | ◐ | ◐ | ◐ | ◐ |
-| M1-03 | Indexer ou annuler une modification | ◐ | ◐ | ◐ | ◐ |
-| M1-04 | Synchroniser, commit, push et création de PR | ◐ | ◐ | ◐ | ◐ |
-| M1-05 | Ouvrir et utiliser un terminal du projet | — | ◐ | ◐ | ◐ |
-| M1-06 | Faire lire au moteur la sortie du terminal | — | ◐ | ☐ | ☐ |
-| M1-07 | Consulter les vrais fichiers du projet | ◐ | ◐ | ◐ | ◐ |
-| M1-08 | Ajouter fichiers et images à une demande | ◐ | ◐ | ◐ | ◐ |
-| M1-09 | Créer une branche de conversation fidèle | — | ◐ | ☐ | ☐ |
-| M1-10 | Réorienter une exécution ou mettre en attente | — | ◐ | ☐ | ☐ |
-| M1-11 | Choisir un modèle disponible et suivre le contexte | — | ◐ | ☐ | ☐ |
-| M1-12 | Retrouver et organiser les conversations | ◐ | ☑ | ☑ | ☑ |
-| M1-13 | Lire une longue conversation confortablement | ◐ | ◐ | ◐ | ◐ |
+| M1-01 | See the files actually changed | ◐ | ◐ | ◐ | ◐ |
+| M1-02 | Comment a diff line and ask for a fix | ◐ | ◐ | ◐ | ◐ |
+| M1-03 | Stage or discard a change | ◐ | ◐ | ◐ | ◐ |
+| M1-04 | Sync, commit, push and create a PR | ◐ | ◐ | ◐ | ◐ |
+| M1-05 | Open and use a terminal in the project | — | ◐ | ◐ | ◐ |
+| M1-06 | Have the engine read the terminal output | — | ◐ | ☐ | ☐ |
+| M1-07 | Browse the project's real files | ◐ | ◐ | ◐ | ◐ |
+| M1-08 | Add files and images to a request | ◐ | ◐ | ◐ | ◐ |
+| M1-09 | Create a faithful conversation branch | — | ◐ | ☐ | ☐ |
+| M1-10 | Redirect an execution or queue it | — | ◐ | ☐ | ☐ |
+| M1-11 | Pick an available model and follow the context | — | ◐ | ☐ | ☐ |
+| M1-12 | Find and organise conversations | ◐ | ☑ | ☑ | ☑ |
+| M1-13 | Read a long conversation comfortably | ◐ | ◐ | ◐ | ◐ |
 
-### Détail
+### Detail
 
-- ◐ **M1-01 → M1-04 — revue Git et livraison** *(code partagé, preuves natives manquantes)*
-  - ◐ M1-01 — baseline Git capturé avant chaque tour avec délai borné, comparaison HEAD/fingerprint/chemins sans lire le texte de Muse ; listing paresseux, lecture bornée, watcher natif, handoff texte vers le prompt, tableaux CSV/TSV/JSON. **Reste :** E2E webview/live, gros dépôts, formats bureautiques.
-  - ◐ M1-02 — file multi-commentaires persistante bornée (40 entrées, 8 000 caractères), garde de fraîcheur refusant une ancre déplacée, ancres `stale` jamais déplacées silencieusement. **Reste :** qualification native avec moteur live, envoi collaboratif distant.
-  - ◐ M1-03 — stage/unstage/discard fichier et hunk, sélection multiple, garde HEAD/statut/patch avant écriture, non-suivis jamais supprimés. **Reste :** qualification native.
-  - ◐ M1-04 — commit, push à refspec explicite, PR idempotente via `gh`, **Fetch** et **Pull latest** en `--ff-only`. Rejets locaux prouvés sur dépôts temporaires avec le vrai binaire git. **Reste :** rejet d'authentification/permission distant live, aller-retour PR live, revue native.
-  - *Note :* ces quatre tickets sont **Git/OS-agnostiques** dans leur logique, mais aucune preuve native n'existe hors Windows — la colonne macOS/Linux reflète cette absence, pas un défaut de code.
+- ◐ **M1-01 → M1-04 — Git review and delivery** *(shared code, native proofs missing)*
+  - ◐ M1-01 — Git baseline captured before each turn with a bounded delay, HEAD/fingerprint/path comparison without reading Muse's text; lazy listing, bounded reading, native watcher, text handoff into the prompt, CSV/TSV/JSON tables. **Remaining:** webview/live E2E, large repositories, office formats.
+  - ◐ M1-02 — bounded persistent multi-comment queue (40 entries, 8,000 characters), a freshness guard refusing a moved anchor, `stale` anchors never moved silently. **Remaining:** native qualification with a live engine, remote collaborative send.
+  - ◐ M1-03 — stage/unstage/discard by file and by hunk, multiple selection, HEAD/status/patch guard before writing, untracked files never deleted. **Remaining:** native qualification.
+  - ◐ M1-04 — commit, push with an explicit refspec, idempotent PR through `gh`, **Fetch** and **Pull latest** as `--ff-only`. Local rejections proved on temporary repositories with the real git binary. **Remaining:** live remote authentication/permission rejection, live PR round trip, native review.
+  - *Note:* these four tickets are **Git/OS-agnostic** in their logic, but no native proof exists outside Windows — the macOS/Linux column reflects that absence, not a code defect.
 
-- ◐ **M1-05 — Ouvrir et utiliser un terminal du projet** *(Global : —)*
-  - Windows ◐ / macOS ◐ / Linux ◐ — registre PTY Rust persistant via `portable-pty`, shell lié au cwd de la conversation, sortie bornée à 200 000 caractères, resize, fermeture contrôlée, rendu ANSI SGR 16/256/24 bits, raccourcis Ctrl+C/Ctrl+D/Ctrl+L/Tab/Échap. Le PTY survit au changement d'onglet car détenu par le superviseur.
-  - **Défaut majeur mesuré le 27/09/2026** ([`m1-05-pty-sortie-vide.md`](evidence/2026-09-27-qualif-native/m1-05-pty-sortie-vide.md)) : **la sortie du PTY ne revient jamais** — `cmd.exe` et `conhost.exe` vivants, écritures acceptées (`write_all+flush`), ~700 `terminal_read` tous à `output: ""`, bannière de démarrage elle-même jamais reçue, resize sans effet. Piste racine : `portable-pty` **0.9.0** verrouillé, version réputée pour gels ConPTY Windows ([turborepo#11816](https://github.com/vercel/turborepo/pull/11816)). Remédiation : rétrograder/patcher la crate, rejouer le scénario.
-  - **CORRIGÉ le 27/09/2026** ([`m1-05-fix-portable-pty.md`](evidence/2026-09-27-qualif-native/m1-05-fix-portable-pty.md)) : cause racine **confirmée** = `portable-pty 0.9.0` ; **downgrade en 0.8.1** (`Cargo.toml` + lock, `cargo build` OK, `npm test` + `tsc` verts) et la boucle complète du PTY revient : **bannière `cmd.exe` rendue, commande saisie en clavier réel, sortie `muse-pty-fix-2026` affichée, prompt de retour** — sans aucun changement dans `terminal.rs`.
-  - **Reste :** commande interactive longue (éditeur/REPL), autres raccourcis (Ctrl+D/L/Tab/Échap). **⚠ CAUSE RACINE du cwd errant trouvée (27/09, run6 bis) :** `terminal_open` passe le workspace en forme `\\?\G:\…` (UNC pour `cmd.exe`) → **refusé, déviation forcée sur `C:\Windows`** — le shell n'est donc **jamais lié au cwd de la conversation** (pièce d'acceptation non remplie), et c'est la même racine que le défaut de comparaison de workspaces des automations ; correctif : normaliser le cwd (retirer `\\?\`) avant spawn ([`m1-05-fix-portable-pty.md`](evidence/2026-09-27-qualif-native/m1-05-fix-portable-pty.md)). **→ Corrigé le 22/09/2026** dans `terminal.rs`, seul spawn touché (`std::process` retire déjà le préfixe), avec un test PTY réel qui échouait sur `C:\Windows>` ; reste le rejeu en app. **ANSI + Ctrl+C prouvés le 27/09/2026 (run5) :** SGR `31m`/`32m` rendus en couleurs distinctes (`RED`→`rgb(239,68,68)`, `GREEN`→`rgb(34,197,94)`) ; `ping -n 20` interrompu à ~6 réponses avec marque `^C`. **Resize : DÉFAUT CONFIRMÉ le 27/09/2026 (run4)** — le volet suit la fenêtre (506×820 → 332×520 via `set_window_frame`) mais `mode con` reste **28×100** aux trois mesures : la géométrie du PTY ne bouge jamais (`terminal_resize` non appelé ou ignoré) ; localisé côté app, pas `portable-pty` ([`m1-05-fix-portable-pty.md`](evidence/2026-09-27-qualif-native/m1-05-fix-portable-pty.md)). **Aller-retour interactif prouvé le 27/09/2026** (run3) : `set /p ANS=Name?` en attente → saisie `interactive-ok` livrée → `echo %ANS%` → **`interactive-ok`** (capture côté processus). Le défaut historique ci-dessous garde sa trace.
+- ◐ **M1-05 — Open and use a terminal in the project** *(Global: —)*
+  - Windows ◐ / macOS ◐ / Linux ◐ — persistent Rust PTY registry through `portable-pty`, shell bound to the conversation's cwd, output bounded to 200,000 characters, resize, controlled close, ANSI SGR 16/256/24-bit rendering, Ctrl+C/Ctrl+D/Ctrl+L/Tab/Escape shortcuts. The PTY survives a tab change because the supervisor owns it.
+  - **Major defect measured on 27/09/2026** ([`m1-05-pty-sortie-vide.md`](evidence/2026-09-27-qualif-native/m1-05-pty-sortie-vide.md)): **PTY output never comes back** — `cmd.exe` and `conhost.exe` alive, writes accepted (`write_all+flush`), ~700 `terminal_read` calls all returning `output: ""`, the startup banner itself never received, resize with no effect. Root-cause lead: `portable-pty` **0.9.0** pinned, a version known for ConPTY freezes on Windows ([turborepo#11816](https://github.com/vercel/turborepo/pull/11816)). Remediation: downgrade or patch the crate, replay the scenario.
+  - **FIXED on 27/09/2026** ([`m1-05-fix-portable-pty.md`](evidence/2026-09-27-qualif-native/m1-05-fix-portable-pty.md)): root cause **confirmed** = `portable-pty 0.9.0`; **downgraded to 0.8.1** (`Cargo.toml` + lock, `cargo build` OK, `npm test` + `tsc` green) and the full PTY loop comes back: **`cmd.exe` banner rendered, command typed on a real keyboard, output `muse-pty-fix-2026` displayed, prompt returned** — with no change in `terminal.rs`.
+  - **Remaining:** a long interactive command (editor/REPL), the other shortcuts (Ctrl+D/L/Tab/Escape). **⚠ ROOT CAUSE of the wandering cwd found (27/09, run6 bis):** `terminal_open` passes the workspace in `\\?\G:\…` form (UNC, for `cmd.exe`) → **refused, forced deviation to `C:\Windows`** — so the shell is **never** bound to the conversation's cwd (an unmet acceptance piece), and it is the same root cause as the automations' workspace comparison defect; fix: normalise the cwd (strip `\\?\`) before spawning ([`m1-05-fix-portable-pty.md`](evidence/2026-09-27-qualif-native/m1-05-fix-portable-pty.md)). **→ Fixed on 22/09/2026** in `terminal.rs`, only the spawn touched (`std::process` already strips the prefix), with a real PTY test that failed on `C:\Windows>`; the in-app replay remains. **ANSI + Ctrl+C proved on 27/09/2026 (run5):** SGR `31m`/`32m` rendered in distinct colours (`RED`→`rgb(239,68,68)`, `GREEN`→`rgb(34,197,94)`); `ping -n 20` interrupted after ~6 replies with a `^C` mark. **Resize: DEFECT CONFIRMED on 27/09/2026 (run4)** — the pane follows the window (506×820 → 332×520 through `set_window_frame`) but `mode con` stays **28×100** across all three measurements: the PTY geometry never moves (`terminal_resize` not called or ignored); located on the app side, not `portable-pty` ([`m1-05-fix-portable-pty.md`](evidence/2026-09-27-qualif-native/m1-05-fix-portable-pty.md)). **Interactive round trip proved on 27/09/2026** (run3): `set /p ANS=Name?` waiting → input `interactive-ok` delivered → `echo %ANS%` → **`interactive-ok`** (captured on the process side). The historical defect below keeps its record.
 
-- ◐ **M1-06 — Faire lire au moteur la sortie du terminal**
-  - Windows ◐ — **Add output to prompt** (fallback borné à 12 000 caractères), **Run in Muse** négociant `userShell`, repli des `item/completed` sans delta, lecture différée `item/readOutput` par blocs de 64 KiB.
-  - **Constat bloquant du 19/09/2026 : RÉFUTÉ le 21/09/2026 — c'était un artefact de mesure.** Le harnais envoyait la capacité **à plat** (`capabilities: {}` **plus** `requestedCapabilities: ["userShell"]`), forme que le host lit comme « aucune capacité demandée ». Il obtenait donc `grantedCapabilities: []`, l'appel répondait `capabilityRequired`, et la sonde concluait « aucun item `userShell` ». Avec la forme que l'application utilise depuis toujours — **imbriquée**, `capabilities.requestedCapabilities` (`src-tauri/src/main.rs`) — la même sonde mesure : `grantedCapabilities: ["userShell"]`, `session/userShell` → **`accepted`** avec `commandId`, puis **`item/started` et `item/completed` de type `userShell`** (à 1 867 et 1 922 ms), et le marqueur de la commande **restitué**. Verdict de la sonde corrigée : « the host DOES publish 2 userShell item(s) — the gap report is wrong here ».
-  - **Conséquence :** le blocage n'est **pas** côté host. `SIDECAR-CONTRACT-GAPS.md` ne doit plus être invoqué pour M1-06, et le chemin `Run in Muse` côté client fonctionne : capacité projetée par Rust, fusionnée par le renderer, bouton activé dès qu'une commande est saisie.
-  - **Deuxième défaut trouvé, de synchronisation (21/09/2026) :** la carte `grantedCapabilitiesBySession` du renderer n'est peuplée **qu'au montage**, par un `restore_sessions` qui s'exécute avant que les hôtes par workspace soient lancés. Sur un lancement frais elle ne contient donc qu'une partie des sessions, et **rien ne la repeuple** — le bouton annonce « did not grant the userShell capability » alors que le host l'a accordée. Mesuré : pont `["userShell"]` pour les 13 sessions, carte du renderer réduite à `01a0c2d7`. Détail dans [`evidence/2026-09-21-ux/m1-06-capacites-au-montage.md`](evidence/2026-09-21-ux/m1-06-capacites-au-montage.md).
-  - **`sessionNotLoaded` n'est plus un échec opaque :** le host rapporte `status: "notLoaded"` pour **toutes** les sessions persistées après une relance — y compris à 27 tours — donc « listée » et « chargée » sont deux états. `SessionMeta` porte désormais `loaded` et le bouton est indisponible avec un motif exact tant que la conversation n'est pas chargée, au lieu d'échouer après le clic.
-  - **Reste :** (1) repeupler la carte des capacités après le lancement des hôtes — amorcé : les réponses `start_session`/`resume_session` portent `granted_capabilities` et le renderer les hydrate à la (re)connexion (**mesuré 27/09** : `["userShell"]` propagé) ; (2) **afficher la sortie `userShell` dans la carte Run in Muse** (les items et leur `output` sont bien publiés par le host — `msp-user-shell-items.mjs`) ; (3) qualification native interactive sur les trois OS.
-  - **Qualification 27/09/2026** ([`m1-06-run-in-muse-sandbox.md`](evidence/2026-09-27-qualif-native/m1-06-run-in-muse-sandbox.md)) : la chaîne complète est prouvée — clic **Run in Muse** → item `userShell` + sortie **affichés dans le fil en 1 s**. La commande **exécute réellement** en host externe (`markerEchoed: true`, 78 ms) avec le binaire, les flags et le workspace de l'app. **Défaut restant :** un host lancé **par** l'application répond `managed shell sandbox is unavailable` — même après `muse sandbox windows setup` (obligatoire : `sandbox_users_missing` sur machine neuve) et même sur session fraîche. Piste : contexte de spawn depuis le processus Tauri. Le préfixe `\\?\` est écarté : le host l'accepte en `workspaceRoot` comme en cwd (mesuré le 22/09). **Mesuré le 23/09 :** sous la sandbox `windows_elevated`, l'outil `powershell` du modèle ne revient jamais, que le host soit lancé par l'app ou non ; avec `--disable-sandbox`, il termine en 1 s. Bug du host à remonter ([`outil-shell-bloque-sandbox.md`](evidence/2026-09-21-ux/outil-shell-bloque-sandbox.md)). **Add output to prompt** reste à valider dès qu'une commande aboutit dans l'app.
-  - macOS ☐ / Linux ☐ — non commencé ; qualification native sur les trois OS requise par le ticket.
+- ◐ **M1-06 — Have the engine read the terminal output**
+  - Windows ◐ — **Add output to prompt** (fallback bounded to 12,000 characters), **Run in Muse** negotiating `userShell`, fallback for `item/completed` with no delta, deferred `item/readOutput` reading in 64 KiB blocks.
+  - **Blocking finding of 19/09/2026: DISPROVED on 21/09/2026 — it was a measurement artefact.** The harness sent the capability **flat** (`capabilities: {}` **plus** `requestedCapabilities: ["userShell"]`), a shape the host reads as "no capability requested". It therefore got `grantedCapabilities: []`, the call answered `capabilityRequired`, and the probe concluded "no `userShell` item". With the shape the application has always used — **nested**, `capabilities.requestedCapabilities` (`src-tauri/src/main.rs`) — the same probe measures: `grantedCapabilities: ["userShell"]`, `session/userShell` → **`accepted`** with a `commandId`, then **`item/started` and `item/completed` of kind `userShell`** (at 1,867 and 1,922 ms), and the command's marker **returned**. Verdict of the corrected probe: "the host DOES publish 2 userShell item(s) — the gap report is wrong here".
+  - **Consequence:** the blocker is **not** on the host side. `SIDECAR-CONTRACT-GAPS.md` must no longer be invoked for M1-06, and the client-side `Run in Muse` path works: capability projected by Rust, merged by the renderer, button enabled as soon as a command is typed.
+  - **Second defect found, a synchronisation one (21/09/2026):** the renderer's `grantedCapabilitiesBySession` map is populated **only at mount**, by a `restore_sessions` that runs before the per-workspace hosts are started. On a fresh launch it therefore holds only part of the sessions, and **nothing repopulates it** — the button announces "did not grant the userShell capability" although the host granted it. Measured: bridge `["userShell"]` for all 13 sessions, renderer map reduced to `01a0c2d7`. Detail in [`evidence/2026-09-21-ux/m1-06-capacites-au-montage.md`](evidence/2026-09-21-ux/m1-06-capacites-au-montage.md).
+  - **`sessionNotLoaded` is no longer an opaque failure:** the host reports `status: "notLoaded"` for **every** persisted session after a relaunch — including at 27 turns — so "listed" and "loaded" are two different states. `SessionMeta` now carries `loaded` and the button is unavailable with an exact reason while the conversation is not loaded, instead of failing after the click.
+  - **Remaining:** (1) repopulate the capability map after the hosts start — begun: the `start_session`/`resume_session` responses carry `granted_capabilities` and the renderer hydrates them on (re)connection (**measured 27/09**: `["userShell"]` propagated); (2) **show the `userShell` output in the Run in Muse card** (the items and their `output` are indeed published by the host — `msp-user-shell-items.mjs`); (3) interactive native qualification on all three OSes.
+  - **Qualification 27/09/2026** ([`m1-06-run-in-muse-sandbox.md`](evidence/2026-09-27-qualif-native/m1-06-run-in-muse-sandbox.md)): the full chain is proved — **Run in Muse** clicked → `userShell` item + output **shown in the thread in 1 s**. The command **really executes** in an external host (`markerEchoed: true`, 78 ms) with the app's binary, flags and workspace. **Remaining defect:** a host started **by** the application answers `managed shell sandbox is unavailable` — even after `muse sandbox windows setup` (mandatory: `sandbox_users_missing` on a fresh machine) and even on a fresh session. Lead: the spawn context from the Tauri process. The `\\?\` prefix is ruled out: the host accepts it as `workspaceRoot` and as cwd (measured 22/09). **Measured on 23/09:** under the `windows_elevated` sandbox, the model's `powershell` tool never returns, whether the host was started by the app or not; with `--disable-sandbox`, it finishes in 1 s. A host bug to report ([`outil-shell-bloque-sandbox.md`](evidence/2026-09-21-ux/outil-shell-bloque-sandbox.md)). **Add output to prompt** is still to be validated as soon as a command succeeds in the app.
+  - macOS ☐ / Linux ☐ — not started; native qualification on all three OSes is required by the ticket.
 
-- ◐ **M1-07 → M1-08 — fichiers et pièces jointes** *(code partagé)*
-  - ◐ M1-07 — `files_list`/`file_read`/`file_open` sessionnés, gardes de racine/absolu/traversal/symlink, listing 500 entrées, lecture 512 Ko, images et PDF sous 5 MiB en base64 borné, watcher natif signalant l'obsolescence, **Add to prompt** avec provenance. **Reste :** qualification native Windows/macOS/Linux, renommages, racines supprimées, formats bureautiques.
-  - ◐ M1-08 — parts MSP `text` et `image` réelles (le schéma n'accepte **pas** de part fichier arbitraire), validation Rust du type/MIME/base64/dimensions/bornes (8 parts, 120 000 caractères, 5 Mo), outbox persistant les parts exactes, brouillon borné avec **Reselect** au-delà. **Reste :** validation live sur les modèles image, qualification native.
+- ◐ **M1-07 → M1-08 — files and attachments** *(shared code)*
+  - ◐ M1-07 — session-scoped `files_list`/`file_read`/`file_open`, root/absolute/traversal/symlink guards, 500-entry listing, 512 KB reads, images and PDFs under 5 MiB as bounded base64, native watcher flagging staleness, **Add to prompt** with provenance. **Remaining:** native qualification on Windows/macOS/Linux, renames, deleted roots, office formats.
+  - ◐ M1-08 — real MSP `text` and `image` parts (the schema does **not** accept an arbitrary file part), Rust validation of type/MIME/base64/dimensions/bounds (8 parts, 120,000 characters, 5 MB), outbox persisting the exact parts, bounded draft with **Reselect** beyond that. **Remaining:** live validation on image models, native qualification.
 
-- ◐ **M1-09 — Créer une branche de conversation fidèle** *(Global : —)*
-  - Windows ◐ — `session/fork` vérifié dans le schéma du binaire Windows, `excludeItems: true`, ancre MSP `lastTurnId` précise via **Fork from here**, notification `session/branchChanged` persistée, récupération explicite sur ancre indisponible.
-  - **Limite host observée :** rejet `fork seed materialized 3 run ids for 2 stored turns` sur une session dogfood âgée avec sous-agents ; fork **OK** sur session fraîche à 1 tour le 20/09. Échec circonscrit au host 1.3.0, rien à corriger côté superviseur.
-  - macOS ☐ / Linux ☐ — contrat vérifié sur un binaire **Windows** uniquement.
+- ◐ **M1-09 — Create a faithful conversation branch** *(Global: —)*
+  - Windows ◐ — `session/fork` verified in the Windows binary's schema, `excludeItems: true`, precise MSP `lastTurnId` anchor through **Fork from here**, persisted `session/branchChanged` notification, explicit recovery on an unavailable anchor.
+  - **Host limit observed:** rejection `fork seed materialized 3 run ids for 2 stored turns` on an old dogfood session with sub-agents; fork **OK** on a fresh one-turn session on 20/09. Failure confined to host 1.3.0, nothing to fix on the supervisor side.
+  - macOS ☐ / Linux ☐ — contract verified on a **Windows** binary only.
 
-- ◐ **M1-10 — Réorienter une exécution ou mettre en attente** *(Global : —)*
-  - Windows ◐ — queue MSP par défaut, dispositions `queued`/`steered` visibles, ordre persisté sous `muse-desktop.queued-turns.v1`, `turn/unqueue`, réconciliation sur `history.snapshot.queuedTurns`. Smoke `--exercise-queue` réussi sur deux sessions : `disposition: queued` puis `turn/unqueue` accepté.
-  - **Progrès (27/09/2026) :** course de suppression en webview jouée pour de vrai ([`m1-10-course-de-file.md`](evidence/2026-09-27-qualif-native/m1-10-course-de-file.md)) : suppressions en rafale depuis le contexte de page pendant un premier tour — **aucun tour retiré n'a jamais démarré** (ni accusé ni réponse), file vidée, premier tour mené à son terminal. **Run de clôture de course le 27/09 au soir :** deux tours **correctement et distinctement enfilés** (A et B, sans doublon — la duplication venait du harnais : Enter synthétique double, corrigé), retirés pendant l'exécution, **jamais lancés** (file vide dès le retrait, premier tour toujours seul à +20 s), trace « non envoyé » au journal pour les deux.
-  - **Reste :** uniquement l'exécution en webview empaquetée (build dev ici). **Restauration après redémarrage prouvée le 27/09/2026** ([`m1-10-course-de-file.md`](evidence/2026-09-27-qualif-native/m1-10-course-de-file.md)) : deux tours enfilés → `taskkill /F` en plein tour → relance → stockage intact **et la file reprend toute seule, dans l'ordre** (A→ALPHA puis B→BETA), sans doublon ni inversion.
-  - macOS ☐ / Linux ☐ — non commencé.
+- ◐ **M1-10 — Redirect an execution or queue it** *(Global: —)*
+  - Windows ◐ — MSP queue by default, visible `queued`/`steered` dispositions, order persisted under `muse-desktop.queued-turns.v1`, `turn/unqueue`, reconciliation on `history.snapshot.queuedTurns`. Smoke `--exercise-queue` passed on two sessions: `disposition: queued` then `turn/unqueue` accepted.
+  - **Progress (27/09/2026):** the removal race played for real in the webview ([`m1-10-course-de-file.md`](evidence/2026-09-27-qualif-native/m1-10-course-de-file.md)): burst removals from the page context during a first turn — **no removed turn ever started** (neither acknowledgement nor answer), queue emptied, the first turn carried to its terminal. **Race-closing run on the evening of 27/09:** two turns **correctly and distinctly queued** (A and B, with no duplicate — the duplication came from the harness: a double synthetic Enter, fixed), removed during execution, **never launched** (queue empty as soon as they were removed, the first turn still alone at +20 s), with an "unsent" trace in the log for both.
+  - **Remaining:** only execution in the packaged webview (a dev build here). **Restore after restart proved on 27/09/2026** ([`m1-10-course-de-file.md`](evidence/2026-09-27-qualif-native/m1-10-course-de-file.md)): two turns queued → `taskkill /F` mid-turn → relaunch → storage intact **and the queue resumes on its own, in order** (A→ALPHA then B→BETA), with no duplicate and no inversion.
+  - macOS ☐ / Linux ☐ — not started.
 
-- ◐ **M1-11 — Choisir un modèle disponible et suivre le contexte** *(Global : —)*
-  - Windows ◐ — `model/list` comme source de vérité, `session/setModel`, compaction en geste séparé avec cycle `pending → accepted/noop/error`, `session/contextUsage` et `session/tokenUsage` affichés tels que fournis, effort de raisonnement : le sélecteur propose **les sept niveaux persistants Muse Spark** (`minimal`→`ultra` ; `none` retiré — valeur fil-only que le CLI ne persiste jamais, et `ultra` présenté comme `max` + autonomie) tandis que le validateur reste sur **les huit valeurs du contrat** (`none`→`ultra`, `max` compris), persisté global/projet et appliqué via `session/setReasoningEffort` ([preuve](evidence/2026-09-27-qualif-native/effort-raisonnement-sept-niveaux.md)), dernier modèle conservé dans `StoredSession.model_id`.
-  - **Preuves natives :** les **huit** niveaux sont acceptés par un host 1.3.0 vivant et chacun émet `session/reasoningEffortChanged` avec la valeur envoyée (`node scripts/msp-reasoning-tiers.mjs`) — le « sept sur huit » venait de notre liste, pas du moteur. **Mesures du 27/09/2026 :** l'« effectif du modèle » **est** visible côté host — `list_models` rend `is_active: true` sur le modèle courant, `start_session`/`resume_session` rapportent `model_id`, et `session/setModel` se projette sur la session (`msp-projection-check.mjs`) ; le vieux `isActive: false` de `--exercise-model` venait du host `--no-session-log` du harnais ([preuve](evidence/2026-09-27-qualif-native/session-log-expique-tout.md)). **Reste :** suivi du contexte (`contextUsage`) et qualification native.
-  - **Qualification 27/09/2026** ([`m1-11-bascule-modele.md`](evidence/2026-09-27-qualif-native/m1-11-bascule-modele.md)) : la bascule est prouvée sur le fil (`set_model` avec `modelId`+`providerId`+`profileId` par `sessionId` ; `list_models`→`is_active` suit) et **l'état du host est bien par session** (deux conversations du même workspace divergent). **Défaut bloquant la clôture : le libellé du sélecteur n'est pas par conversation** — au switch, l'UI annonce le dernier modèle choisi ailleurs (mesuré : A affiche `muse-spark-1.3` alors qu'elle tourne sur `muse-spark-1.2-contributor`) ; le libellé colle par contre exactement au modèle effectif après hydratation `resume_session` (`model_id` ↔ libellé). Secondaire : bascule sur conversation non chargée → rejet net du host (« conversation engine is unavailable — start or restore the conversation first ») sans explication dans le sélecteur.
-  - macOS ☐ / Linux ☐ — non commencé.
+- ◐ **M1-11 — Pick an available model and follow the context** *(Global: —)*
+  - Windows ◐ — `model/list` as the source of truth, `session/setModel`, compaction as a separate gesture with a `pending → accepted/noop/error` cycle, `session/contextUsage` and `session/tokenUsage` displayed as provided, reasoning effort: the picker offers **the seven persistent Muse Spark levels** (`minimal`→`ultra`; `none` removed — a thread-only value the CLI never persists, and `ultra` presented as `max` + autonomy) while the validator stays on **the contract's eight values** (`none`→`ultra`, `max` included), persisted globally and per project and applied through `session/setReasoningEffort` ([evidence](evidence/2026-09-27-qualif-native/effort-raisonnement-sept-niveaux.md)), last model kept in `StoredSession.model_id`.
+  - **Native proofs:** all **eight** levels are accepted by a live 1.3.0 host and each emits `session/reasoningEffortChanged` with the value sent (`node scripts/msp-reasoning-tiers.mjs`) — the "seven out of eight" came from our list, not the engine. **Measurements of 27/09/2026:** the model's "effective" state **is** visible on the host side — `list_models` returns `is_active: true` on the current model, `start_session`/`resume_session` report `model_id`, and `session/setModel` projects onto the session (`msp-projection-check.mjs`); the old `isActive: false` from `--exercise-model` came from the harness's `--no-session-log` host ([evidence](evidence/2026-09-27-qualif-native/session-log-expique-tout.md)). **Remaining:** context tracking (`contextUsage`) and native qualification.
+  - **Qualification 27/09/2026** ([`m1-11-bascule-modele.md`](evidence/2026-09-27-qualif-native/m1-11-bascule-modele.md)): the switch is proved on the thread (`set_model` with `modelId`+`providerId`+`profileId` per `sessionId`; `list_models`→`is_active` follows) and **the host's state really is per session** (two conversations in the same workspace diverge). **Defect blocking closure: the picker's label is not per conversation** — on a switch, the UI announces the last model chosen elsewhere (measured: A shows `muse-spark-1.3` while it runs on `muse-spark-1.2-contributor`); the label does match the effective model exactly after `resume_session` hydration (`model_id` ↔ label). Secondary: switching on an unloaded conversation → a clean host rejection ("conversation engine is unavailable — start or restore the conversation first") with no explanation in the picker.
+  - macOS ☐ / Linux ☐ — not started.
 
-- ☑ **M1-12 — Retrouver et organiser les conversations** *(sans dimension OS — seul ticket clos)*
-  - Recherche sur titre, dossier et texte des journaux locaux avec extrait ; épinglage persisté ; **Move up**/**Move down** attribuant des rangs persistants ; marqueur `new` effacé via `setActive` ; `session/rename` propagé au host quand disponible ; restauration `session/list` paginée (curseur opaque, 200/page, 20 pages max) avec déduplication et échec explicite sur curseur répété ou malformé.
-  - **Pourquoi clos :** tous les critères de sortie sont satisfaits et prouvés par les tests Node, sans aucune dépendance native ni OS. La virtualisation complète de la sidebar reste conditionnée à une mesure de performance — c'est un travail d'optimisation distinct, suivi par M1-13, pas un critère de ce ticket.
+- ☑ **M1-12 — Find and organise conversations** *(no OS dimension — the only closed ticket)*
+  - Search on title, folder and local log text with an excerpt; persisted pinning; **Move up**/**Move down** assigning persistent ranks; `new` marker cleared through `setActive`; `session/rename` propagated to the host when available; paginated `session/list` restore (opaque cursor, 200/page, 20 pages max) with deduplication and an explicit failure on a repeated or malformed cursor.
+  - **Why closed:** every exit criterion is met and proved by the Node tests, with no native or OS dependency. Full sidebar virtualisation stays conditioned on a performance measurement — that is separate optimisation work, tracked by M1-13, not a criterion of this ticket.
 
-- ◐ **M1-13 — Lire une longue conversation confortablement** *(sans dimension OS)*
-  - Fenêtre DOM bornée au-delà de 600 entrées (160 visibles, 120 anciens chargés), espaces virtuels proportionnels au journal complet, hauteurs mesurées par ResizeObserver, scroll compensé, position et index persistés sous `muse-desktop.stream-position.v1`, finder complet **Ctrl/Cmd+F** avec saut vers un résultat hors fenêtre, métadonnées `aria-posinset`/`aria-setsize`, navigation Home/End/PageUp/PageDown.
-  - **Reste :** mesure native à 2 000 entrées dans la webview empaquetée et qualification assistive.
+- ◐ **M1-13 — Read a long conversation comfortably** *(no OS dimension)*
+  - DOM window bounded beyond 600 entries (160 visible, 120 older loaded), virtual spacers proportional to the full log, heights measured by ResizeObserver, compensated scrolling, position and index persisted under `muse-desktop.stream-position.v1`, full **Ctrl/Cmd+F** finder jumping to a result outside the window, `aria-posinset`/`aria-setsize` metadata, Home/End/PageUp/PageDown navigation.
+  - **Remaining:** native measurement at 2,000 entries in the packaged webview and assistive qualification.
 
-**Dépendances :** M1-01 → M1-02/03/04 ; M0-01 → M1-05/06/09/10 ; capacités moteur à vérifier avant M1-08/09/10.
-**🚦 Sortie M1 :** réaliser, inspecter, corriger, tester et livrer une modification de dépôt depuis Muse, avec un chemin de récupération en cas d'erreur.
+**Dependencies:** M1-01 → M1-02/03/04; M0-01 → M1-05/06/09/10; engine capabilities to verify before M1-08/09/10.
+**🚦 M1 exit:** make, inspect, fix, test and ship a repository change from Muse, with a recovery path on error.
 
 ---
 
-## M2 — Projets et travail parallèle isolé
+## M2 — Projects and isolated parallel work
 
-| ID | Résultat attendu | Global | Windows | macOS | Linux |
+| ID | Expected result | Global | Windows | macOS | Linux |
 |---|---|---|---|---|---|
-| M2-01 | Un projet représente des dossiers persistants | — | ◐ | ☐ | ◐ |
-| M2-02 | Les paramètres projet s'appliquent réellement | — | ◐ | ☐ | ☐ |
-| M2-03 | Créer automatiquement un worktree | — | ◐ | ◐ | ◐ |
-| M2-04 | Préparer l'environnement du worktree | — | ◐ | ☐ | ◐ |
-| M2-05 | Passer de Local à Worktree et inversement | — | ◐ | ☐ | ☐ |
-| M2-06 | Nettoyer les worktrees sans supprimer du travail | — | ◐ | ◐ | ◐ |
-| M2-07 | Piloter les sous-agents réels | — | ◐ | ☐ | ☐ |
-| M2-08 | Exécuter plusieurs writers sans collision | — | ◐ | ☐ | ◐ |
+| M2-01 | A project represents persistent folders | — | ◐ | ☐ | ◐ |
+| M2-02 | Project settings really apply | — | ◐ | ☐ | ☐ |
+| M2-03 | Create a worktree automatically | — | ◐ | ◐ | ◐ |
+| M2-04 | Prepare the worktree's environment | — | ◐ | ☐ | ◐ |
+| M2-05 | Move from Local to Worktree and back | — | ◐ | ☐ | ☐ |
+| M2-06 | Clean up worktrees without deleting work | — | ◐ | ◐ | ◐ |
+| M2-07 | Drive the real sub-agents | — | ◐ | ☐ | ☐ |
+| M2-08 | Run several writers without collision | — | ◐ | ☐ | ◐ |
 
-### Détail
+### Detail
 
-- ◐ **M2-01 — Un projet représente des dossiers persistants** *(Global : —)*
-  - Windows ◐ — racines multiples persistantes avec `workspace` conservé comme racine primaire, migration guidée **N projects need a folder**, sonde native `inspect_workspace_root` (`Available`/`Not a folder`/`Missing`), sélecteur d'environnement `projectId:rootIndex` à la création de conversation.
-  - Windows ◐ — **règles du dossier** : sonde native `rules_scan` en lecture seule (`AGENTS.md` prioritaire, `CLAUDE.md` seulement en repli, règles personnelles en repli conditionnel), affichées dans le projet avec leur statut. Le champ d'instructions client a été **retiré** — un projet ne possède pas d'instructions, le CLI lit celles du dossier. Détails et limites : [regles-du-dossier](evidence/2026-09-21-ux/regles-du-dossier.md).
-  - Windows ◐ — **sélecteur de projet** : « Start in » devient « Project », l'option par défaut « No project », et le dossier n'est affiché que lorsqu'il distingue — un projet né de son propre dossier n'affiche plus « openscreen · openscreen » sous un sélecteur de dossier qui dit déjà « openscreen ». Deux racines qui se liraient encore pareil retombent sur le chemin entier (`projectOptionLabels`).
-  - **Reste :** `workspaces[]` n'a aucun équivalent backend (un projet = un dossier côté CLI).
-  - Linux ◐ — le chemin pur (modèle, migration, projection) est couvert par les tests Node et la CI tourne sur Linux ; la sonde native n'y est pas exercée.
-  - macOS ☐ — non commencé.
+- ◐ **M2-01 — A project represents persistent folders** *(Global: —)*
+  - Windows ◐ — persistent multiple roots with `workspace` kept as the primary root, guided migration **N projects need a folder**, native probe `inspect_workspace_root` (`Available`/`Not a folder`/`Missing`), `projectId:rootIndex` environment picker when creating a conversation.
+  - Windows ◐ — **folder rules**: read-only native probe `rules_scan` (`AGENTS.md` first, `CLAUDE.md` only as a fallback, personal rules as a conditional fallback), shown in the project with their status. The client instruction field has been **removed** — a project does not own instructions, the CLI reads the folder's. Details and limits: [regles-du-dossier](evidence/2026-09-21-ux/regles-du-dossier.md).
+  - Windows ◐ — **project picker**: "Start in" becomes "Project", the default option is "No project", and the folder is shown only when it distinguishes — a project born from its own folder no longer shows "openscreen · openscreen" under a folder picker that already says "openscreen". Two roots that would still read the same fall back to the full path (`projectOptionLabels`).
+  - **Remaining:** `workspaces[]` has no backend equivalent (one project = one folder on the CLI side).
+  - Linux ◐ — the pure path (model, migration, projection) is covered by the Node tests and CI runs on Linux; the native probe is not exercised there.
+  - macOS ☐ — not started.
 
-- ◐ **M2-02 — Les paramètres projet s'appliquent réellement** *(Global : —)*
-  - Windows ◐ — héritage global/projet via `settingsForThread` avec source visible (`g:`), modèle effectif appliqué après `session/start`, `autoCompact` respecté, et surtout **projection sandbox au lancement du host** : `workspace` → `--sandbox-network restricted`, `network` → `--sandbox-network enabled`, `elevated` → `--disable-sandbox --sandbox-network enabled`, projet `read-only` → `--disable-write --disable-shell`. Un host déjà lancé refuse explicitement une posture différente et demande **Restart workspace host**.
-  - **Reste :** qualification native de deux projets avec postures différentes et reconnexion durable après redémarrage. Le host ne fournit aucune mutation sandbox par MSP — toute bascule exige un redémarrage de processus.
-  - macOS ☐ / Linux ☐ — non commencé.
+- ◐ **M2-02 — Project settings really apply** *(Global: —)*
+  - Windows ◐ — global/project inheritance through `settingsForThread` with a visible source (`g:`), effective model applied after `session/start`, `autoCompact` honoured, and above all **sandbox projection when the host starts**: `workspace` → `--sandbox-network restricted`, `network` → `--sandbox-network enabled`, `elevated` → `--disable-sandbox --sandbox-network enabled`, a `read-only` project → `--disable-write --disable-shell`. A host already running explicitly refuses a different posture and asks for **Restart workspace host**.
+  - **Remaining:** native qualification of two projects with different postures and durable reconnection after a restart. The host provides no sandbox mutation over MSP — any switch requires a process restart.
+  - macOS ☐ / Linux ☐ — not started.
 
-- ◐ **M2-03 — Créer automatiquement un worktree** *(Global : —)*
-  - Windows ◐ / macOS ◐ / Linux ◐ — `git_worktree_create(sessionId, branch, relativePath, baseRef)` confiné à `.muse/worktrees/`, `git worktree add -b` hors thread UI, refus des chemins existants / références de type option / traversées, action atomique **Create & open** avec rollback d'admission. Git est identique sur les trois OS, mais **aucune preuve native** n'existe hors Windows.
-  - **Qualification 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)) : mécanisme **PASS intégral** (`ux-start-worktree.mjs` : création, branche `muse/…`, base `HEAD`, refus « worktree path must be relative and stay inside .muse/worktrees », rollback). **Défaut de raccordement mesuré au fil :** la case « Create a new worktree » crée le worktree (`git_worktree_create_for_workspace` → `…\.muse\worktrees\openscreen-rn3d0`) mais **la conversation démarre dans le dépôt principal** — `start_session` reçoit `workspacePath: G:\repos\openscreen` et `git_status` annonce `branch: "pr620"`, jamais `muse/openscreen-rn3d0`. Le `path` renvoyé n'est pas transmis à `start_session` : « Create & open » n'ouvre pas.
-  - **Reste :** qualification native et pannes après admission.
+- ◐ **M2-03 — Create a worktree automatically** *(Global: —)*
+  - Windows ◐ / macOS ◐ / Linux ◐ — `git_worktree_create(sessionId, branch, relativePath, baseRef)` confined to `.muse/worktrees/`, `git worktree add -b` off the UI thread, refusal of existing paths / option-shaped references / traversals, atomic **Create & open** action with admission rollback. Git is identical on all three OSes, but **no native proof** exists outside Windows.
+  - **Qualification 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)): the mechanism is a **full PASS** (`ux-start-worktree.mjs`: creation, `muse/…` branch, `HEAD` base, refusal "worktree path must be relative and stay inside .muse/worktrees", rollback). **Wiring defect measured on the thread:** the "Create a new worktree" checkbox creates the worktree (`git_worktree_create_for_workspace` → `…\.muse\worktrees\openscreen-rn3d0`) but **the conversation starts in the main repository** — `start_session` receives `workspacePath: G:\repos\openscreen` and `git_status` announces `branch: "pr620"`, never `muse/openscreen-rn3d0`. The `path` returned is not passed to `start_session`: "Create & open" does not open.
+  - **Remaining:** native qualification and failures after admission.
 
-- ◐ **M2-04 — Préparer l'environnement du worktree** *(Global : —)*
-  - Windows ◐ / Linux ◐ — profils persistants par workspace, commande utilisateur bornée à 2 000 caractères exécutée uniquement après **Run setup**, états `ready`/`failed`/`timedOut`/`cancelled`, annulation native ciblée, runner refusant les dossiers hors `.muse/worktrees` et tuant au-delà de dix minutes, **Check readiness** détectant `package.json`/`Cargo.toml`/`pyproject.toml`/`go.mod`.
-  - Linux ◐ — le runner purge l'environnement hérité et conserve `PATH`, dossiers temporaires, domicile et locale, plus des variables Windows (`PATHEXT`, `ComSpec`) neutralisées ailleurs : le chemin Linux est plausible et testé en Rust, non exercé nativement.
-  - macOS ☐ — non commencé.
-  - **Reste :** qualification native de la création atomique et du setup sur chaque plateforme.
+- ◐ **M2-04 — Prepare the worktree's environment** *(Global: —)*
+  - Windows ◐ / Linux ◐ — persistent per-workspace profiles, a user command bounded to 2,000 characters run only after **Run setup**, states `ready`/`failed`/`timedOut`/`cancelled`, targeted native cancellation, a runner refusing folders outside `.muse/worktrees` and killing past ten minutes, **Check readiness** detecting `package.json`/`Cargo.toml`/`pyproject.toml`/`go.mod`.
+  - Linux ◐ — the runner purges the inherited environment and keeps `PATH`, temporary folders, home and locale, plus Windows variables (`PATHEXT`, `ComSpec`) neutralised elsewhere: the Linux path is plausible and tested in Rust, not exercised natively.
+  - macOS ☐ — not started.
+  - **Remaining:** native qualification of atomic creation and of setup on each platform.
 
-- ◐ **M2-05 — Passer de Local à Worktree et inversement** *(Global : —)*
-  - Windows ◐ — **Prepare handoff** produit un plan local en lecture seule (workspace source, worktree cible, conflits, changements non commités, état cible, disponibilité de branche), checks `pass`/`warn`/`blocked`, invalidation en **refresh required**, **Open with handoff context** plaçant une note éditable bornée dans le composer.
-  - **Bloquant :** le transfert effectif (arrêt/reprise atomique du host, déplacement du contexte, rollback) reste **bloqué par l'absence de contrat MSP multi-workspace**. Aucune bascule implicite n'est déclenchée.
-  - macOS ☐ / Linux ☐ — non commencé.
+- ◐ **M2-05 — Move from Local to Worktree and back** *(Global: —)*
+  - Windows ◐ — **Prepare handoff** produces a read-only local plan (source workspace, target worktree, conflicts, uncommitted changes, target state, branch availability), `pass`/`warn`/`blocked` checks, invalidation as **refresh required**, **Open with handoff context** placing a bounded editable note in the composer.
+  - **Blocker:** the actual transfer (atomic host stop/resume, moving the context, rollback) stays **blocked by the absence of a multi-workspace MSP contract**. No implicit switch is triggered.
+  - macOS ☐ / Linux ☐ — not started.
 
-- ◐ **M2-06 — Nettoyer les worktrees sans supprimer du travail** *(Global : —)*
-  - Windows ◐ / macOS ◐ / Linux ◐ — **Inspect** lisant le statut Git réel, refus de suppression d'un checkout sale ou attaché à des conversations Muse, confinement `.muse/worktrees/`, politique de rétention par dépôt (7/14/30/90 jours ou indéfini) calculée **uniquement après inspection propre**, **Inspect all** en parallèle, intention de nettoyage persistante reprise après interruption. Git garde la décision finale si un checkout est verrouillé.
-  - **Reste :** qualification des processus externes — l'inspection ne peut pas connaître tous les processus hors Muse.
+- ◐ **M2-06 — Clean up worktrees without deleting work** *(Global: —)*
+  - Windows ◐ / macOS ◐ / Linux ◐ — **Inspect** reading the real Git status, refusal to delete a dirty checkout or one attached to Muse conversations, `.muse/worktrees/` confinement, per-repository retention policy (7/14/30/90 days or indefinite) computed **only after a clean inspection**, **Inspect all** in parallel, a persistent cleanup intent resumed after an interruption. Git keeps the final decision if a checkout is locked.
+  - **Remaining:** qualification of external processes — inspection cannot know about every process outside Muse.
 
-- ◐ **M2-07 — Piloter les sous-agents réels** *(Global : —)*
-  - **Qualification 27/09/2026 (concurrence) :** deux lanes `subagent-running` **simultanées** observées en direct (`e8af2a61` + `47a01e3d`), mais **reproduction contrôlée hors de portée du modèle** — muse-spark sérialise sa délégation malgré ordre de chevauchement (20 échantillons/30 s : `maxConcurrentRunning=1`) ; reste la reproduction propre multi-fils ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)). **→ CONCURRENCE PROUVÉE par la suite (run2) :** 3 lanes `running` simultanées dans un fil + 2 lanes `running` dans un second fil en même temps — l'app rend/suit/encontrôle plusieurs enfants en parallèle, multi-fils et intra-fil.
-  - Windows ◐ — états host normalisés et visibles, snapshots `item/updated` remplacés par révision dans la lane sous-agent, contrôles bornés selon le cycle de vie.
-  - **Reste :** qualification native sur agents vivants et événements terminaux entrelacés. **Pièces mesurées le 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)) : le host publie de vrais items **`childSessionId`** (sessions enfants créées par le modèle) et l'UI rend des **voies sous-agents avec boutons stop** (`title="subagent/stop"`, capturés dans les runs `cdp-stop-terminal`) — reste le scénario fan-out complet avec reprise du parent.
-  - macOS ☐ / Linux ☐ — non commencé.
+- ◐ **M2-07 — Drive the real sub-agents** *(Global: —)*
+  - **Qualification 27/09/2026 (concurrency):** two **simultaneous** `subagent-running` lanes observed live (`e8af2a61` + `47a01e3d`), but **controlled reproduction out of the model's reach** — muse-spark serialises its delegation despite an order to overlap (20 samples / 30 s: `maxConcurrentRunning=1`); clean multi-thread reproduction remains ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)). **→ CONCURRENCY PROVED afterwards (run2):** 3 simultaneous `running` lanes in one thread + 2 `running` lanes in a second thread at the same time — the app renders, follows and controls several children in parallel, across threads and within a thread.
+  - Windows ◐ — host states normalised and visible, `item/updated` snapshots replaced by revision in the sub-agent lane, controls bounded by lifecycle.
+  - **Remaining:** native qualification on live agents and interleaved terminal events. **Pieces measured on 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)): the host publishes real **`childSessionId`** items (child sessions created by the model) and the UI renders **sub-agent lanes with stop buttons** (`title="subagent/stop"`, captured in the `cdp-stop-terminal` runs) — the full fan-out scenario with parent resume remains.
+  - macOS ☐ / Linux ☐ — not started.
 
-- ◐ **M2-08 — Exécuter plusieurs writers sans collision** *(Global : —)*
-  - Windows ◐ / Linux ◐ — pré-vol des fichiers cibles persisté par workspace, détection des recouvrements bloquant deux writers sur un fichier ou sous-dossier commun, lanes `cores - 2` bornées à 4–8 et file FIFO, dispatch explicite vers la conversation du worktree via le chemin normal start/send, **lease renderer** borné au workspace + **verrou OS advisory Tauri** par cible libéré par l'OS après crash, accusé de Stop conservant le lease jusqu'au terminal, résumé extractif local.
-  - Linux ◐ — le verrou OS advisory est du Rust Tauri et donc portable en principe ; non exercé nativement.
-  - macOS ☐ — non commencé.
-  - **Reste :** annulation atomique MSP confirmée et collecte de résultat métier complète — le protocole MSP actuel ne fournit ni verrou de fichiers, ni résultat writer structuré, ni annulation atomique confirmée.
+- ◐ **M2-08 — Run several writers without collision** *(Global: —)*
+  - Windows ◐ / Linux ◐ — target files pre-flighted and persisted per workspace, overlap detection blocking two writers on a common file or subfolder, `cores - 2` lanes bounded to 4–8 and a FIFO queue, explicit dispatch to the worktree's conversation through the normal start/send path, **renderer lease** bounded to the workspace + **Tauri advisory OS lock** per target released by the OS after a crash, a Stop acknowledgement keeping the lease until the terminal, local extractive summary.
+  - Linux ◐ — the advisory OS lock is Tauri Rust and therefore portable in principle; not exercised natively.
+  - macOS ☐ — not started.
+  - **Remaining:** confirmed atomic MSP cancellation and complete business-result collection — the current MSP protocol provides neither a file lock, nor a structured writer result, nor confirmed atomic cancellation.
 
-**Dépendances :** M0-01/02 et M1-01 avant M2-03 ; M2-03 avant M2-04/05/06/08.
-**🚦 Sortie M2 :** deux conversations modifient/testent des espaces indépendants ; redémarrage, transfert et nettoyage préservent les changements.
+**Dependencies:** M0-01/02 and M1-01 before M2-03; M2-03 before M2-04/05/06/08.
+**🚦 M2 exit:** two conversations change and test independent spaces; restart, transfer and cleanup preserve the changes.
 
 ---
 
-## M3 — Extensions et automatisations opérationnelles
+## M3 — Operational extensions and automations
 
-| ID | Résultat attendu | Global | Windows | macOS | Linux |
+| ID | Expected result | Global | Windows | macOS | Linux |
 |---|---|---|---|---|---|
-| M3-01 | Connecter un serveur MCP local | ◐ | ◐ | ◐ | ◐ |
-| M3-02 | Connecter un serveur MCP distant | ◐ | ◐ | ☐ | ☐ |
-| M3-03 | Installer/désactiver une extension utilisable | ◐ | ◐ | ◐ | ◐ |
-| M3-04 | Découvrir les skills du disque et du projet | ◐ | ◐ | ◐ | ◐ |
-| M3-05 | Invoquer une skill avec son vrai contexte | — | ◐ | ☐ | ☐ |
-| M3-06 | Exécuter un travail planifié sans clic préalable | — | ◐ | ◐ | ◐ |
-| M3-07 | Gérer sommeil, reprise, doublons et échecs | — | ◐ | ◐ | ◐ |
-| M3-08 | Examiner les résultats des runs | ◐ | ◐ | ◐ | ◐ |
-| M3-09 | Recevoir une notification utile | — | ◐ | ◐ | ◐ |
+| M3-01 | Connect a local MCP server | ◐ | ◐ | ◐ | ◐ |
+| M3-02 | Connect a remote MCP server | ◐ | ◐ | ☐ | ☐ |
+| M3-03 | Install/disable a usable extension | ◐ | ◐ | ◐ | ◐ |
+| M3-04 | Discover skills on disk and in the project | ◐ | ◐ | ◐ | ◐ |
+| M3-05 | Invoke a skill with its real context | — | ◐ | ☐ | ☐ |
+| M3-06 | Run scheduled work with no prior click | — | ◐ | ◐ | ◐ |
+| M3-07 | Handle sleep, resume, duplicates and failures | — | ◐ | ◐ | ◐ |
+| M3-08 | Review run results | ◐ | ◐ | ◐ | ◐ |
+| M3-09 | Receive a useful notification | — | ◐ | ◐ | ◐ |
 
-### Détail
+### Detail
 
-- ◐ **M3-01 — Connecter un serveur MCP local** *(sans dimension OS dans le transport)*
-  - Transport stdio réel avec handshake `initialize` → `notifications/initialized` → `tools/list`/`tools/call`, frames `Content-Length` et JSON par ligne, processus persistant explicite **Start server**/**Stop server**, rafraîchissement manuel **Refresh tools**, hot-reload borné sur `tools/list_changed`, injection opt-in `config.mcpServers` sur start/resume/worktree, autorisation suivant la posture globale, **Reconnect with current connectors**.
-  - **Reste :** catalogue d'outils réellement exposé par le host Muse, autorité de permission native, qualification native. Les outils découverts ne sont **pas** copiés dans le catalogue MSP — l'injection laisse au host le soin d'initialiser ses propres capacités.
+- ◐ **M3-01 — Connect a local MCP server** *(no OS dimension in the transport)*
+  - Real stdio transport with a handshake `initialize` → `notifications/initialized` → `tools/list`/`tools/call`, `Content-Length` frames and line-delimited JSON, explicit persistent process **Start server**/**Stop server**, manual **Refresh tools**, bounded hot reload on `tools/list_changed`, opt-in `config.mcpServers` injection on start/resume/worktree, authorization following the global posture, **Reconnect with current connectors**.
+  - **Remaining:** the tool catalogue actually exposed by the Muse host, native permission authority, native qualification. Discovered tools are **not** copied into the MSP catalogue — the injection leaves the host to initialise its own capabilities.
 
-- ◐ **M3-02 — Connecter un serveur MCP distant**
-  - Windows ◐ / macOS ◐ / Linux ◐ *(code)* — transport streamable HTTP/SSE, `Mcp-Session-Id` repris, bearer en mémoire puis dans le **gestionnaire de credentials natif** via la crate `keyring` : Windows Credential Manager, macOS Keychain, Secret Service/keyutils sous Linux. **Forget token** révoque la copie native sans supprimer le connecteur. Endpoint public HTTPS obligatoire, refus des adresses privées, renouvellement automatique borné d'une session expirée (401/403, une seule fois).
-  - macOS ☐ / Linux ☐ *(preuve)* — le backend `keyring` est multi-plateforme mais **seul Windows est qualifié** : ni le trousseau macOS ni Secret Service Linux n'ont été exercés. Le réseau distant n'a pas été testé hors Windows.
-  - **Reste :** OAuth/refresh fournisseur, catalogue distant côté host, qualification réseau macOS/Linux.
+- ◐ **M3-02 — Connect a remote MCP server**
+  - Windows ◐ / macOS ◐ / Linux ◐ *(code)* — streamable HTTP/SSE transport, `Mcp-Session-Id` carried over, bearer in memory then in the **native credential manager** through the `keyring` crate: Windows Credential Manager, macOS Keychain, Secret Service/keyutils on Linux. **Forget token** revokes the native copy without deleting the connector. A public HTTPS endpoint is mandatory, private addresses are refused, and an expired session is renewed automatically once (401/403, a single time).
+  - macOS ☐ / Linux ☐ *(proof)* — the `keyring` backend is cross-platform but **only Windows is qualified**: neither the macOS keychain nor Linux Secret Service has been exercised. Remote networking has not been tested outside Windows.
+  - **Remaining:** OAuth/provider refresh, remote catalogue on the host side, macOS/Linux network qualification.
 
-- ◐ **M3-03 — Installer/désactiver une extension réellement utilisable** *(code partagé)*
-  - Enregistrement après probe `tools/list` réussi, runtime persistant explicite, hot-list, rollback de catalogue et de révision `.mcpb`/ZIP avec validation de `manifest.json`, semver, runtime et entry point, écriture sous `app_data/mcp-packages/<id>/<version>` par staging + renommage atomique, révisions immuables, le serveur n'est **jamais** exécuté pendant l'installation. Provenance, version et source affichées.
-  - **Reste :** catalogue d'outils réellement visible par le host et autorité de permission native ; qualification native d'un serveur packagé.
+- ◐ **M3-03 — Install/disable an actually usable extension** *(shared code)*
+  - Registration after a successful `tools/list` probe, explicit persistent runtime, hot list, catalogue and revision rollback for `.mcpb`/ZIP with validation of `manifest.json`, semver, runtime and entry point, writing under `app_data/mcp-packages/<id>/<version>` by staging plus atomic rename, immutable revisions, the server is **never** executed during installation. Provenance, version and source displayed.
+  - **Remaining:** the tool catalogue actually visible to the host and native permission authority; native qualification of a packaged server.
 
-- ◐ **M3-04 — Découvrir les skills du disque et du projet** *(code partagé)*
-  - `skills_scan` borné aux racines `.agents/skills`, `.muse/skills`, `.claude/skills` et `skills`, limité à 100 documents et 20 000 caractères par fichier, liens symboliques sortants ignorés, frontmatter exigeant `name` et `description`, ressources strictement relatives, précédence projet > repo > équipe > builtin, rechargement explicite.
-  - **Reste :** le catalogue hôte est chargé séparément via M3-05 pour éviter deux sources de vérité ; qualification du contrat host.
+- ◐ **M3-04 — Discover skills on disk and in the project** *(shared code)*
+  - `skills_scan` bounded to the roots `.agents/skills`, `.muse/skills`, `.claude/skills` and `skills`, limited to 100 documents and 20,000 characters per file, outbound symlinks ignored, frontmatter requiring `name` and `description`, strictly relative resources, precedence project > repo > team > builtin, explicit reload.
+  - **Remaining:** the host catalogue is loaded separately through M3-05 to avoid two sources of truth; qualification of the host contract.
 
-- ◐ **M3-05 — Invoquer une skill avec son vrai contexte** *(Global : —)*
-  - Windows ◐ — `skills_read_resources` relit les ressources juste avant envoi avec vérification Rust du chemin et du workspace, contexte balisé `<skill-resource>` avec indication de troncature, erreur de ressource créant une entrée système sans envoi partiel, catalogue `skill/list` hydraté par session et invalidé sur `skill/changed`, commande `/selector arguments` devenue part MSP `{type: "skill"}`, progression `preparing`→`failed`/`unknown` exposée.
-  - macOS ☐ / Linux ☐ — qualification du contrat host non commencée.
+- ◐ **M3-05 — Invoke a skill with its real context** *(Global: —)*
+  - Windows ◐ — `skills_read_resources` re-reads the resources just before sending with Rust verification of the path and the workspace, context tagged `<skill-resource>` with a truncation marker, a resource error creating a system entry with no partial send, `skill/list` catalogue hydrated per session and invalidated on `skill/changed`, the `/selector arguments` command turned into an MSP `{type: "skill"}` part, `preparing`→`failed`/`unknown` progress exposed.
+  - macOS ☐ / Linux ☐ — qualification of the host contract not started.
 
-- ◐ **M3-06 — Exécuter un travail planifié sans clic préalable** *(Global : —)*
-  - Windows ◐ / macOS ◐ / Linux ◐ — chaque schedule capture workspace, projet, modèle, politique et fuseau ; `ask` reste en revue, `workspace`/YOLO dispatchent ; journal local borné des runs ; fin de tour structurée marquant `completed`/`failed` ; **prochain déclenchement** calculé depuis le même curseur cron/fuseau que le dispatcher ; **réveil ponctuel multi-plateforme livré** : tâche `Muse-Desktop\AutomationWake` (Windows), job `com.muse.desktop.automation-wake` sous `~/Library/LaunchAgents` (macOS), timer `muse-desktop-automation-wake.timer` (Linux).
-  - **Reste :** le réveil relance l'exécutable avec `--automation-wakeup` — c'est un **mécanisme de relance, pas un service de fond**. Il dépend de la session utilisateur et n'est qualifié sur **aucun** OS (poste verrouillé, sommeil, crash du host). Signal métier fourni directement par le host encore ouvert.
-  - **État du réveil mesuré le 27/09/2026 :** `schtasks /query /tn "Muse-Desktop\AutomationWake"` → **tâche introuvable** (non enregistrée ici) — le statut de l'app « Native wake-up is unavailable; keep Muse open for automations. » est **exact** ; l'enregistrement de la tâche est le point d'entrée de qualification restant ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)).
-  - **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)) : **exécution sans clic prouvée en app ouverte** — automatisation `Once` créée pour 16:34:00, run créé 16:34:11, `completed` en 12 s, **nouvelle conversation** créée (`threadReuse: new` + `sessionId`), réponse `WOKEN` capturée. L'app déclare elle-même l'état du réveil natif : **« Native wake-up is unavailable; keep Muse open for automations. »** — le mécanisme `AutomationWake` reste à qualifier (il ne s'est pas déclaré disponible ici).
-  - **Cible sur conversation existante (27/09/2026, suite) :** refus honnête mesuré sur un fil occupé (run `failed`, `sessionId: ""`, erreur explicite, notification `run-failed` persistée — aucun état incohérent) — **mais défaut bloquant** : le dispatch compare `workspace: "G:\repos\openscreen"` (planification) à `workspace: "\\\\?\\G:\repos\\openscreen"` (conversation, forme brute de `start_instance`/`start_session`) → **même répertoire, deux orthographes, échec systématique**. La « réutilisation du même fil » est injouable tant que cette comparaison n'est pas normalisée. **→ Comparaison normalisée le 22/09/2026** (`displayPath` des deux côtés, stockage inchangé) ; reste à rejouer sur fil libre puis occupé.
-  - *Note :* **seul ticket M3 avec trois implémentations natives distinctes**, donc le seul où la colonne par OS reflète du code différent et non seulement une preuve manquante.
+- ◐ **M3-06 — Run scheduled work with no prior click** *(Global: —)*
+  - Windows ◐ / macOS ◐ / Linux ◐ — each schedule captures workspace, project, model, policy and time zone; `ask` stays in review, `workspace`/YOLO dispatch; bounded local run log; structured turn end marking `completed`/`failed`; **next trigger** computed from the same cron/time-zone cursor as the dispatcher; **cross-platform one-shot wake-up shipped**: `Muse-Desktop\AutomationWake` task (Windows), `com.muse.desktop.automation-wake` job under `~/Library/LaunchAgents` (macOS), `muse-desktop-automation-wake.timer` timer (Linux).
+  - **Remaining:** the wake-up relaunches the executable with `--automation-wakeup` — it is a **relaunch mechanism, not a background service**. It depends on the user session and is qualified on **no** OS (locked machine, sleep, host crash). The business signal is provided directly by the host while it is still open.
+  - **Wake-up state measured on 27/09/2026:** `schtasks /query /tn "Muse-Desktop\AutomationWake"` → **task not found** (not registered here) — the app's status "Native wake-up is unavailable; keep Muse open for automations." is **accurate**; registering the task is the remaining qualification entry point ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)).
+  - **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): **execution with no click proved with the app open** — a `Once` automation created for 16:34:00, run created at 16:34:11, `completed` in 12 s, a **new conversation** created (`threadReuse: new` + `sessionId`), the answer `WOKEN` captured. The app declares the native wake-up state itself: **"Native wake-up is unavailable; keep Muse open for automations."** — the `AutomationWake` mechanism is still to be qualified (it did not declare itself available here).
+  - **Targeting an existing conversation (27/09/2026, continued):** an honest refusal measured on a busy thread (run `failed`, `sessionId: ""`, explicit error, persisted `run-failed` notification — no inconsistent state) — **but a blocking defect**: the dispatch compares `workspace: "G:\repos\openscreen"` (scheduling) with `workspace: "\\\\?\\G:\repos\\openscreen"` (conversation, the raw form from `start_instance`/`start_session`) → **same directory, two spellings, systematic failure**. "Reusing the same thread" is unplayable until that comparison is normalised. **→ Comparison normalised on 22/09/2026** (`displayPath` on both sides, storage unchanged); a replay on a free thread then a busy one remains.
+  - *Note:* **the only M3 ticket with three distinct native implementations**, so the only one where the per-OS column reflects different code and not merely a missing proof.
 
-- ◐ **M3-07 — Gérer sommeil, reprise, doublons et échecs de planning** *(Global : —)*
-  - Windows ◐ / macOS ◐ / Linux ◐ — politique skip/latest, curseur d'occurrence stable, bail inter-fenêtres, claim anti-doublon, retries bornés (3 tentatives, backoff 15/30/60 s) annulables, réveil immédiat au retour de fenêtre, fuseau IANA capturé en heure murale avec résolution des trous et doublons DST, chaîne `setTimeout` unique, **bail natif exclusif Tauri** récupérable après crash avec fallback local en preview, miroirs natifs atomiques sous `app_data/scheduler/`, runs non terminaux marqués **Review needed** après redémarrage et bloqués jusqu'à réconciliation explicite.
-  - **Reste :** qualification native du bail et des déclencheurs **sur chaque OS** (Task Scheduler / `launchd` / `systemd` sont trois implémentations distinctes), preuve d'état du host après crash, poste verrouillé, sommeil/réveil.
-  - **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)) : pièces prouvées — **bail natif exclusif actif** (`scheduler_claim` → `{"acquired":true,"native":true}`, TTL 30 s, ownerId affiché dans le panneau), **claim anti-doublon** persisté (`occurrenceKey = scheduleId:occurrenceAt`), politique `missedPolicy` et curseur d'occurrence (`No further runs` après consommation d'un `once`). Reste : crash/relancement (« Review needed »), épuisement de tentatives, sommeil.
-  - **DST/fuseau mesurés le 27/09/2026 :** trous et doublons d'heure **résolus déterministiquement** (trou `28/03/2027 02:30` → `03:30` heure d'été ; doublon `31/10/2027 02:30` → **premier passage**), `timeZone` IANA persistée par planification — **mais aucun avertissement n'est affiché** pour ces ajustements : la moitié « affiche les avertissements » de l'acceptation fuseau reste ouverte.
-  - **Redémarrage en plein run (27/09/2026) :** run non terminal tué par `taskkill /F` puis app relancée → le run **affiche toujours « Running »** (travail mort) — **le marquage « Review needed » n'a pas lieu** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)) : l'acceptation « bloqué jusqu'à réconciliation explicite » n'est pas remplie, état affiché incohérent.
+- ◐ **M3-07 — Handle sleep, resume, duplicates and scheduling failures** *(Global: —)*
+  - Windows ◐ / macOS ◐ / Linux ◐ — skip/latest policy, stable occurrence cursor, cross-window lease, anti-duplicate claim, bounded retries (3 attempts, 15/30/60 s backoff) that can be cancelled, immediate wake on returning to the window, IANA time zone captured as wall-clock time with DST gaps and duplicates resolved, a single `setTimeout` chain, an **exclusive native Tauri lease** recoverable after a crash with a local fallback in preview, atomic native mirrors under `app_data/scheduler/`, non-terminal runs marked **Review needed** after a restart and blocked until explicit reconciliation.
+  - **Remaining:** native qualification of the lease and of the triggers **on each OS** (Task Scheduler / `launchd` / `systemd` are three distinct implementations), proof of host state after a crash, locked machine, sleep and wake.
+  - **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): proved pieces — **exclusive native lease active** (`scheduler_claim` → `{"acquired":true,"native":true}`, 30 s TTL, ownerId shown in the panel), persisted **anti-duplicate claim** (`occurrenceKey = scheduleId:occurrenceAt`), `missedPolicy` and the occurrence cursor (`No further runs` after a `once` is consumed). Remaining: crash and relaunch ("Review needed"), attempt exhaustion, sleep.
+  - **DST/time zone measured on 27/09/2026:** gaps and duplicate hours **resolved deterministically** (gap `28/03/2027 02:30` → `03:30` summer time; duplicate `31/10/2027 02:30` → **first occurrence**), IANA `timeZone` persisted per schedule — **but no warning is shown** for those adjustments: the "shows the warnings" half of the time-zone acceptance stays open.
+  - **Restart mid-run (27/09/2026):** a non-terminal run killed by `taskkill /F`, app relaunched → the run **still shows "Running"** (dead work) — **the "Review needed" marking does not happen** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): the "blocked until explicit reconciliation" acceptance is unmet, and the displayed state is inconsistent.
 
-- ◐ **M3-08 — Examiner les résultats des runs** *(code partagé)*
-  - Historique borné, aperçu, statut, non-lu, lien vers la conversation, archivage, filtres, retry manuel, inspecteur de contexte ; résumé extractif local borné (headline, compteurs, jusqu'à 12 fichiers, jusqu'à 12 issues) **sans appel modèle** ; lignes explicites **Issues / Warnings / Blockers / Risks** et **Next steps / Todo / Follow-up / Remaining** extraites séparément et persistées sans inférence ; aperçu structuré `result/output/summary/text` du host traversant le bridge Rust et conservé après bornage.
-  - **Reste :** résumé métier sémantique et fin de run native — dépend du host. **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)) : carte de run complète mesurée — `resultPreview: "WOKEN"`, `attempt`, `unread`, filtres `Queued/Running/Completed/Failed/Archived`, actions `Inspect run` / `Open conversation` / `Mark read` / `Archive` et retry manuel présents.
+- ◐ **M3-08 — Review run results** *(shared code)*
+  - Bounded history, preview, status, unread, link to the conversation, archiving, filters, manual retry, context inspector; bounded local extractive summary (headline, counters, up to 12 files, up to 12 issues) **with no model call**; explicit **Issues / Warnings / Blockers / Risks** and **Next steps / Todo / Follow-up / Remaining** lines extracted separately and persisted with no inference; structured `result/output/summary/text` preview from the host crossing the Rust bridge and preserved after bounding.
+  - **Remaining:** a semantic business summary and a native run end — depends on the host. **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): a complete run card measured — `resultPreview: "WOKEN"`, `attempt`, `unread`, filters `Queued/Running/Completed/Failed/Archived`, actions `Inspect run` / `Open conversation` / `Mark read` / `Archive` and manual retry all present.
 
-- ◐ **M3-09 — Recevoir une notification utile** *(Global : —)*
-  - Windows ◐ / macOS ◐ / Linux ◐ — inbox locale dédupliquée par clé d'idempotence, non-lus, filtres All/Unread, silence persistant, routage vers la conversation ciblée avec clic conservé pendant la réhydratation, ledger natif borné sous app data, acquittement unitaire ou global, issues et prochaines étapes structurées transportées.
-  - **Reste (bloquant par OS) :** la **qualification native du prompt de permission** reste à exécuter sur Windows/macOS/Linux, via `tauri-plugin-notification` avec fallback webview. L'application doit rester ouverte pour recevoir les événements du host — **pas de service persistant quand l'app est fermée**.
-  - **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)) : **notification utile prouvée en app** — « Automation completed: Qualif M3 wake — NEW — WOKEN — 16:34:23 » avec **résultat du run**, actions **Open conversation** et **Mark read**, compteur `Unread (1)`, filtres All/Unread. Seul le prompt de permission natif (bannière système) reste.
+- ◐ **M3-09 — Receive a useful notification** *(Global: —)*
+  - Windows ◐ / macOS ◐ / Linux ◐ — local inbox deduplicated by idempotency key, unread, All/Unread filters, persistent muting, routing to the target conversation with the click preserved during rehydration, bounded native ledger under app data, unit or global acknowledgement, structured issues and next steps carried through.
+  - **Remaining (blocking, per OS):** **native qualification of the permission prompt** is still to be run on Windows/macOS/Linux, through `tauri-plugin-notification` with a webview fallback. The application must stay open to receive host events — **no persistent service while the app is closed**.
+  - **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): **useful notification proved in-app** — "Automation completed: Qualif M3 wake — NEW — WOKEN — 16:34:23" with the **run's result**, actions **Open conversation** and **Mark read**, an `Unread (1)` counter, All/Unread filters. Only the native permission prompt (system banner) remains.
 
-**Dépendances :** M0-06/08 avant MCP ; M2-01 et M0-02/09 avant M3-06 ; M2-03 si run isolé ; M3-06/07 avant inbox.
-**🚦 Sortie M3 :** un run programmé utilise un vrai outil/skill, s'exécute selon la politique et produit un résultat consultable. Pour les runs locaux, app et ordinateur allumés restent une contrainte explicitée.
+**Dependencies:** M0-06/08 before MCP; M2-01 and M0-02/09 before M3-06; M2-03 if the run is isolated; M3-06/07 before the inbox.
+**🚦 M3 exit:** a scheduled run uses a real tool or skill, executes according to the policy and produces a reviewable result. For local runs, "app and computer switched on" stays an explicit constraint.
 
 ---
 
-## M4 — Parité étendue
+## M4 — Extended parity
 
-*Ces écarts restent visibles pour une ambition de parité complète. Leur faisabilité doit être vérifiée avec le moteur Muse avant engagement d'implémentation.*
+*These gaps stay visible for an ambition of full parity. Their feasibility must be checked against the Muse engine before committing to implementation.*
 
-| ID | Résultat attendu | Global | Windows | macOS | Linux |
+| ID | Expected result | Global | Windows | macOS | Linux |
 |---|---|---|---|---|---|
-| M4-01 | Naviguer dans un vrai navigateur intégré | — | ◐ | ☐ | ☐ |
-| M4-02 | Annoter visuellement une page | — | ◐ | ☐ | ☐ |
-| M4-03 | Faire piloter le navigateur par Muse | — | ◐ | ☐ | ☐ |
-| M4-04 | Faire piloter une application desktop | — | ◐ | ☐ | ☐ |
-| M4-05 | Produire/consulter des images et documents riches | — | ◐ | ◐ | ◐ |
-| M4-06 | Partager par URL et révoquer l'accès | ☐ | ☐ | ☐ | ☐ |
-| M4-07 | Contrôler une exécution sur un autre host / cloud | ◐ | ◐ | ◐ | ◐ |
-| M4-08 | Interagir par la voix | — | ◐ | ◐ | ◐ |
-| M4-09 | Installer et mettre à jour sur les plateformes annoncées | — | ◐ | ☐ | ☐ |
+| M4-01 | Browse in a real built-in browser | — | ◐ | ☐ | ☐ |
+| M4-02 | Annotate a page visually | — | ◐ | ☐ | ☐ |
+| M4-03 | Have Muse drive the browser | — | ◐ | ☐ | ☐ |
+| M4-04 | Have Muse drive a desktop application | — | ◐ | ☐ | ☐ |
+| M4-05 | Produce and read images and rich documents | — | ◐ | ◐ | ◐ |
+| M4-06 | Share by URL and revoke access | ☐ | ☐ | ☐ | ☐ |
+| M4-07 | Control an execution on another host or in the cloud | ◐ | ◐ | ◐ | ◐ |
+| M4-08 | Interact by voice | — | ◐ | ◐ | ◐ |
+| M4-09 | Install and update on the announced platforms | — | ◐ | ☐ | ☐ |
 
-### Détail
+### Detail
 
-- ◐ **M4-01 / M4-02 / M4-03 — navigateur intégré, annotations, pilotage** *(Global : —)*
-  - Windows ◐ — navigation normalisée, historique et huit onglets isolés par `sessionId` sous `muse-desktop.browser.tabs.v1`, téléchargement explicite same-origin borné à 10 MiB avec `credentials: omit` et refus des redirections, interception des liens `<a download>`, **Open native** ouvrant une webview Tauri dédiée `muse-browser` avec profil privé non persistant, **Close native** idempotent.
-  - **Fondamental :** la surface native repose sur **WebView2**, donc Windows. Les tickets parlent explicitement de « qualification WebView2 » — l'équivalent macOS (WKWebView) et Linux (WebKitGTK) n'est **pas commencé**. La sandbox iframe reste le repli du web preview.
-  - **Reste :** qualification native, pages cross-origin, réponses de téléchargement initiées par la navigation, capture automatique de la seule iframe, workflow complet.
+- ◐ **M4-01 / M4-02 / M4-03 — built-in browser, annotations, driving** *(Global: —)*
+  - Windows ◐ — normalised navigation, history and eight tabs isolated by `sessionId` under `muse-desktop.browser.tabs.v1`, explicit same-origin download bounded to 10 MiB with `credentials: omit` and redirects refused, interception of `<a download>` links, **Open native** opening a dedicated `muse-browser` Tauri webview with a non-persistent private profile, idempotent **Close native**.
+  - **Fundamental:** the native surface rests on **WebView2**, hence Windows. The tickets speak explicitly of "WebView2 qualification" — the macOS (WKWebView) and Linux (WebKitGTK) equivalents are **not started**. The iframe sandbox stays the web-preview fallback.
+  - **Remaining:** native qualification, cross-origin pages, download responses initiated by navigation, automatic capture of the iframe alone, the complete workflow.
 
-- ◐ **M4-04 — Faire piloter une application desktop** *(le ticket le plus asymétrique)*
-  - Windows ◐ — **computer use repose désormais sur le driver open source CUA** ([trycua/cua](https://github.com/trycua/cua), MIT) : l'application démarre **son propre service** sur un canal nommé privé, en mode `bounded`, avec un **manifeste de capacités qu'elle génère et approuve**, et remet au host Muse l'entrée MCP qui pointe dessus. Un interrupteur, trois niveaux (19 / 38 / 57 outils mesurés sur 0.28.2), aucune liste d'applications. **Vérifié de bout en bout** : `get_screen_size` répond, `click` est refusé par le driver lui-même (`outside the capability manifest`), la révocation arrête le service. Plan et mesures : [2026-09-22-computer-use-cua](plans/2026-09-22-computer-use-cua.md).
-  - Windows ◐ — l'ancienne surface native reste : inventaire borné des fenêtres visibles, observation read-only via UI Automation (rôle sémantique, identifiant d'automatisation, géométrie, visibilité, état), valeurs `ValuePattern`/`RangeValuePattern`/`SelectionItemPattern`/`TogglePattern`/`TextPattern` bornées pour les contrôles non sensibles, masquage `value hidden` des contrôles password/credential-like, repli Win32 explicite, focus/texte/touches/clics derrière le consentement **Allow desktop control** (OFF par défaut, réaffirmé dans un verrou natif volatile), capture via sélecteur OS, adaptateur `computer.*` conditionné au catalogue host, **Stop Muse action**.
-  - **Dogfood du 20/09 :** panneau atteint via onglets UIA, consentement OFF par défaut observé, badge `Available`, capture non automatique — consentement volontairement **non accordé**, donc les actions ne sont pas prouvées en conditions réelles.
-  - macOS ☐ / Linux ☐ — **non commencé, et explicitement hors périmètre du code** : `desktop_control.rs` renvoie `supported: false` avec la raison « Desktop control is not available on this platform yet » au lieu de simuler une disponibilité.
-  - **Reste :** un tour réel où le modèle appelle un outil `computer_*` ; appliquer un changement de niveau à une conversation déjà ouverte (la liste MCP est fixée à `session/start`/`session/resume`, donc il faut une reprise) ; installation du driver guidée plutôt qu'automatique ; runtimes macOS/Linux. Cette tranche **ne doit pas** être présentée comme un contrôle autonome du bureau tant que le tour réel n'est pas mesuré.
+- ◐ **M4-04 — Have Muse drive a desktop application** *(the most asymmetric ticket)*
+  - Windows ◐ — **computer use now rests on the open-source CUA driver** ([trycua/cua](https://github.com/trycua/cua), MIT): the application starts **its own service** on a private named channel, in `bounded` mode, with a **capability manifest it generates and approves**, and hands the Muse host the MCP entry pointing at it. One switch, three levels (19 / 38 / 57 tools measured on 0.28.2), no application list. **Verified end to end:** `get_screen_size` answers, `click` is refused by the driver itself (`outside the capability manifest`), revoking stops the service. Plan and measurements: [2026-09-22-computer-use-cua](plans/2026-09-22-computer-use-cua.md).
+  - Windows ◐ — the older native surface remains: bounded inventory of visible windows, read-only observation through UI Automation (semantic role, automation identifier, geometry, visibility, state), bounded `ValuePattern`/`RangeValuePattern`/`SelectionItemPattern`/`TogglePattern`/`TextPattern` values for non-sensitive controls, `value hidden` masking of password and credential-like controls, explicit Win32 fallback, focus/text/keys/clicks behind the **Allow desktop control** consent (OFF by default, reasserted in a volatile native lock), capture through the OS picker, `computer.*` adapter conditioned on the host catalogue, **Stop Muse action**.
+  - **Dogfood of 20/09:** panel reached through UIA tabs, consent observed OFF by default, `Available` badge, capture not automatic — consent deliberately **not granted**, so the actions are not proved in real conditions.
+  - macOS ☐ / Linux ☐ — **not started, and explicitly outside the code's scope**: `desktop_control.rs` returns `supported: false` with the reason "Desktop control is not available on this platform yet" instead of simulating availability.
+  - **Remaining:** a real turn where the model calls a `computer_*` tool; applying a level change to an already-open conversation (the MCP list is fixed at `session/start`/`session/resume`, so a resume is needed); guided rather than automatic driver installation; macOS/Linux runtimes. This slice **must not** be presented as autonomous desktop control until the real turn is measured.
 
-- ◐ **M4-05 — Produire/consulter des images et documents riches** *(code partagé)*
-  - Artefacts Markdown versionnés avec **Preview/Source**, édition locale **Save as new version**, notes avec citation bornée à 240 caractères, export texte UTF-8 borné à 2 MiB par sélecteur natif ; CSV/TSV/JSON en tableau accessible (100 lignes, 20 colonnes, 400 caractères/cellule) ; DOCX/XLSX/PPTX/ODT/ODS/ODP jusqu'à 5 MiB décompressés avec `fflate` en ne retenant que les parties XML utiles (plafonds 4 MiB/entrée, 8 MiB cumulés, 500 entrées) ; **extraction RTF bornée** ; sorties binaires `item/readOutput` par blocs de 64 KiB avec aperçu image/PDF/document, enregistrement natif et **Open in app** ; PDF complets dans le lecteur du WebView.
-  - Windows ◐ / macOS ◐ / Linux ◐ — parsing et rendu en JavaScript, donc réellement portables ; **aucune preuve native hors Windows**.
-  - **Reste :** génération effective par le moteur, formats hors OOXML/ODF/RTF, qualification native multi-plateforme.
+- ◐ **M4-05 — Produce and read images and rich documents** *(shared code)*
+  - Versioned Markdown artefacts with **Preview/Source**, local editing **Save as new version**, notes with a quote bounded to 240 characters, UTF-8 text export bounded to 2 MiB through the native picker; CSV/TSV/JSON as an accessible table (100 rows, 20 columns, 400 characters per cell); DOCX/XLSX/PPTX/ODT/ODS/ODP up to 5 MiB decompressed with `fflate`, keeping only the useful XML parts (ceilings of 4 MiB per entry, 8 MiB cumulative, 500 entries); **bounded RTF extraction**; binary `item/readOutput` output in 64 KiB blocks with image/PDF/document preview, native save and **Open in app**; full PDFs in the WebView's reader.
+  - Windows ◐ / macOS ◐ / Linux ◐ — parsing and rendering in JavaScript, so genuinely portable; **no native proof outside Windows**.
+  - **Remaining:** actual generation by the engine, formats beyond OOXML/ODF/RTF, cross-platform native qualification.
 
-- ☐ **M4-06 — Partager par URL et révoquer l'accès** *(Global : ☐ — reporté)*
-  - Windows ☐ / macOS ☐ / Linux ☐ — **décision : reporté en attente de spécification produit.**
-  - Ce qui existe : export local Markdown/JSON, bundles bornés (400 entrées, 12 000 caractères/entrée, corps 240 000 caractères), valeurs credential-shaped remplacées, métadonnées `redacted`/`truncated`/`omittedEntries`, sauvegarde native, rétention de 100 bundles, révocation **locale** dans la SSOT du profil.
-  - Ce qui manque : hébergement, identité, permissions et révocation réelle entre clients. **Aucun serveur, token, compte ou lien public n'est simulé.** C'est le seul ticket au statut ☐ : il est bloqué par une décision produit, pas par un manque de code.
+- ☐ **M4-06 — Share by URL and revoke access** *(Global: ☐ — postponed)*
+  - Windows ☐ / macOS ☐ / Linux ☐ — **decision: postponed pending a product specification.**
+  - What exists: local Markdown/JSON export, bounded bundles (400 entries, 12,000 characters per entry, 240,000-character body), credential-shaped values replaced, `redacted`/`truncated`/`omittedEntries` metadata, native save, retention of 100 bundles, **local** revocation in the profile's SSOT.
+  - What is missing: hosting, identity, permissions and real revocation between clients. **No server, token, account or public link is simulated.** It is the only ticket at ☐: it is blocked by a product decision, not by missing code.
 
-- ◐ **M4-07 — Contrôler une exécution sur un autre host ou dans le cloud** *(sans dimension OS dans le modèle)*
-  - Abstraction `HostConnection` pure sous `muse-desktop.host-connections.v1` : typage strict `local`/`remote-ssh`/`cloud-runner`, machine d'états `disconnected`/`connecting`/`connected`/`reconnecting`/`error`, masquage des secrets, assainissement des endpoints SSH/HTTPS, backoff de reconnexion borné, évaluation de heartbeat, routage isolé de sessions, destruction d'environnement sans orphelins, gestionnaire d'environnements dans Settings.
-  - **Reste :** authentification interactive par clé SSH native et runtime de conteneur cloud distant — le transport réel n'existe pas encore, seuls le modèle pur et 11 tests unitaires.
+- ◐ **M4-07 — Control an execution on another host or in the cloud** *(no OS dimension in the model)*
+  - Pure `HostConnection` abstraction under `muse-desktop.host-connections.v1`: strict `local`/`remote-ssh`/`cloud-runner` typing, a `disconnected`/`connecting`/`connected`/`reconnecting`/`error` state machine, secret masking, SSH/HTTPS endpoint sanitisation, bounded reconnection backoff, heartbeat evaluation, isolated session routing, environment teardown with no orphans, an environment manager in Settings.
+  - **Remaining:** interactive authentication with a native SSH key and a remote cloud container runtime — the real transport does not exist yet, only the pure model and 11 unit tests.
 
-- ◐ **M4-08 — Interagir par la voix** *(sans dimension OS dans le code)*
-  - Windows ◐ / macOS ◐ / Linux ◐ — **Voice** dans le composer via `SpeechRecognition`/`webkitSpeechRecognition` après geste utilisateur, résultats intermédiaires et finaux restant dans le brouillon éditable, pré-essai `getUserMedia({audio:true})` avec arrêt immédiat des pistes temporaires, refus éditable comme texte, aucun audio persisté ni envoyé au host, erreurs micro traduites en messages calmes.
-  - **Reste :** le runtime dépend du support Speech API du WebView — **WebView2, WKWebView et WebKitGTK ne l'exposent pas de la même façon**. Conversation temps réel, fournisseur distant et qualification du dialogue de permission Tauri par plateforme restent ouverts.
+- ◐ **M4-08 — Interact by voice** *(no OS dimension in the code)*
+  - Windows ◐ / macOS ◐ / Linux ◐ — **Voice** in the composer through `SpeechRecognition`/`webkitSpeechRecognition` after a user gesture, interim and final results staying in the editable draft, a `getUserMedia({audio:true})` pre-check with temporary tracks stopped immediately, refusal editable as text, no audio persisted or sent to the host, microphone errors translated into calm messages.
+  - **Remaining:** the runtime depends on the WebView's Speech API support — **WebView2, WKWebView and WebKitGTK do not expose it the same way**. Real-time conversation, a remote provider and per-platform qualification of the Tauri permission dialog stay open.
 
-- ◐ **M4-09 — Installer et mettre à jour sur les plateformes annoncées** *(le ticket de distribution)*
-  - Windows ◐ — bundles x64 **NSIS et MSI reproductibles** avec sidecar, icônes et manifestes d'intégrité SHA-256 ; manifeste `muse-desktop.release-manifest.v1` sans chemin machine ni horodatage, signable en Ed25519 et revalidé à chaque étape ; plan d'update `muse-desktop.release-update.v1`, staging recopié publié par renommage atomique, bascule `current`/`previous` avec rollback, `release:launch` demandant l'arrêt borné du PID puis relançant l'exécutable sans shell, handoff `release:installer` vers NSIS `.exe` ou `msiexec.exe`, `release:delta` vérifié SHA-256, `release:channel` signé, `release:fetch` refusant les redirections, `release:orchestrate sync` vérifiant puis stagant un candidat.
-  - **Reste (Windows) :** hébergement opérationnel, rotation des clés de confiance, publication du sidecar (fourni par l'environnement de build, **non versionné**), installation sur machine propre, branchement du rollback au programme d'installation.
-  - macOS ☐ / Linux ☐ — **non commencé**. Aucun bundle `.dmg`/`.app` ni `.deb`/`.rpm`/AppImage. Le sidecar est un `externalBin` à triple suffixe (`muse-x86_64-unknown-linux-gnu` en CI) : chaque OS exige son propre binaire Muse, non disponible dans ce dépôt. La `tauri.conf.json` déclare `minimumSystemVersion: 11.0` pour macOS et `targets: "all"`, mais aucune cible n'a été construite ni qualifiée hors Windows x64.
+- ◐ **M4-09 — Install and update on the announced platforms** *(the distribution ticket)*
+  - Windows ◐ — **reproducible x64 NSIS and MSI bundles** with the sidecar, icons and SHA-256 integrity manifests; a `muse-desktop.release-manifest.v1` manifest with no machine path and no timestamp, signable in Ed25519 and revalidated at every step; a `muse-desktop.release-update.v1` update plan, copied staging published by atomic rename, `current`/`previous` switch with rollback, `release:launch` asking for a bounded stop of the PID then relaunching the executable with no shell, `release:installer` handoff to the NSIS `.exe` or `msiexec.exe`, SHA-256-verified `release:delta`, signed `release:channel`, `release:fetch` refusing redirects, `release:orchestrate sync` verifying then staging a candidate.
+  - **Remaining (Windows):** operational hosting, rotation of the trust keys, publishing the sidecar (supplied by the build environment, **not versioned**), installation on a clean machine, wiring the rollback into the installer.
+  - macOS ☐ / Linux ☐ — **not started**. No `.dmg`/`.app` or `.deb`/`.rpm`/AppImage bundle. The sidecar is a triple-suffixed `externalBin` (`muse-x86_64-unknown-linux-gnu` in CI): each OS requires its own Muse binary, not available in this repository. `tauri.conf.json` declares `minimumSystemVersion: 11.0` for macOS and `targets: "all"`, but no target has been built or qualified outside Windows x64.
 
 ---
 
-## Périmètres à ne pas confondre avec la parité
+## Scopes not to be confused with parity
 
-- **US-28 coédition temps réel** : stub déconnecté, hors chemin critique. Besoin produit à confirmer ; ne pas le comptabiliser comme acquis ni comme prérequis Codex démontré.
-- **US-13 SSE** : choix de transport, pas résultat utilisateur. Aucun chantier de migration tant que le transport actuel répond aux critères.
-- **Providers arbitraires, quotas simulés et RAG annoncé** : ambitions de la SPEC initiale, pas capacités attestées de Muse. Ne pas promettre une liste de modèles indépendante du moteur.
-- **Mémoire proactive multi-services** : seules mémoire locale et références textuelles existent. Dépend de vrais connecteurs et d'une politique de fraîcheur ; à spécifier après M3, pas « terminée » avec le CRUD local.
-- **Import de configuration US-34** : import local existant ; migration fidèle de sessions moteur non prouvée. Étendre M0-02/M0-09 seulement après vérification des formats compatibles.
+- **US-28 real-time co-editing**: a disconnected stub, off the critical path. The product need is to be confirmed; do not count it as achieved or as a demonstrated Codex prerequisite.
+- **US-13 SSE**: a transport choice, not a user result. No migration work while the current transport meets the criteria.
+- **Arbitrary providers, simulated quotas and announced RAG**: ambitions of the original SPEC, not attested Muse capabilities. Do not promise a model list independent of the engine.
+- **Proactive multi-service memory**: only local memory and text references exist. It depends on real connectors and a freshness policy; to be specified after M3, not "done" with the local CRUD.
+- **US-34 configuration import**: local import exists; faithful migration of engine sessions is unproven. Extend M0-02/M0-09 only after verifying the compatible formats.
 
-## Correspondance avec les anciennes stories
+## Mapping to the old stories
 
-| Stories historiques | Nouveau suivi |
+| Historical stories | New tracking |
 |---|---|
-| US-1/2/5/10/11/29 | M0-01 à 05, M0-09, M1-09/10/12/13 |
-| US-3/30 | M2-01/02 ; partage distant séparé M4-06 |
-| US-4/31 | M1-11 ; pas d'assimilation résumé local/fork serveur |
-| US-6/7/8 | M2-03 à 08 |
-| US-9 | M3-06 à 09 |
-| US-12/21 | M1-01/02/07, M4-05 ; snippets et vrais fichiers séparés |
+| US-1/2/5/10/11/29 | M0-01 to 05, M0-09, M1-09/10/12/13 |
+| US-3/30 | M2-01/02; remote sharing split out as M4-06 |
+| US-4/31 | M1-11; no conflation of local summary with server fork |
+| US-6/7/8 | M2-03 to 08 |
+| US-9 | M3-06 to 09 |
+| US-12/21 | M1-01/02/07, M4-05; snippets and real files kept separate |
 | US-14/15/16/17/22 | M0-05/06 |
 | US-18/23 | M1-07/08 |
-| US-19 | M4-01 à 05 |
-| US-20 | M1-08 et mémoire proactive à spécifier après M3 |
-| US-24/25/26 | M3-01 à 05 |
-| US-27/28 | M4-06 ; coédition hors chemin critique |
-| US-32/33/34 | M0-10/11/12, M0-02/09 ; M4-09 |
-| US-13 | Pas de chantier dédié |
+| US-19 | M4-01 to 05 |
+| US-20 | M1-08 and proactive memory to be specified after M3 |
+| US-24/25/26 | M3-01 to 05 |
+| US-27/28 | M4-06; co-editing off the critical path |
+| US-32/33/34 | M0-10/11/12, M0-02/09; M4-09 |
+| US-13 | No dedicated work |
 
-## Règles de mise à jour
+## Update rules
 
-1. Chaque PR cite les IDs concernés et met à jour **uniquement les plateformes réellement touchées**. Une correction de contrat partagé ne fait pas passer macOS ou Linux de ☐ à ◐ sans preuve native.
-2. La preuve doit préciser **commit, commande ou scénario, plateforme et résultat**. Ne pas appliquer une preuve UI synthétique au moteur natif, ni une CI Linux à une exécution Linux.
-3. Un ticket ne passe à **Terminé** que lorsque tous ses critères de sortie sont prouvés **sur la plateforme concernée**. Une livraison partielle crée des sous-tickets (`M0-01a`, `M0-01b`) avec critères séparés ; elle ne clôt pas le parent.
-4. Pour déclarer un ticket terminé : effet réel, erreurs et reprise traitées, permissions effectives, validation native du scénario et documentation des limites.
-5. Les décisions de faisabilité et de produit sont consignées **avant** de transformer une hypothèse en engagement. Aucun pourcentage global tant que le périmètre et sa pondération ne sont pas fixés.
-6. Quand un ticket dépend d'un comportement du host Muse, la limite est écrite dans le ticket et **le statut n'est pas relevé** en attendant un host qui expose le contrat ou un adaptateur vérifié.
+1. Every PR cites the IDs concerned and updates **only the platforms actually touched**. A fix to a shared contract does not move macOS or Linux from ☐ to ◐ without native proof.
+2. The proof must state **commit, command or scenario, platform and result**. Do not apply a synthetic UI proof to the native engine, nor Linux CI to Linux execution.
+3. A ticket only moves to **Done** when all its exit criteria are proved **on the platform concerned**. A partial delivery creates sub-tickets (`M0-01a`, `M0-01b`) with separate criteria; it does not close the parent.
+4. To declare a ticket done: real effect, errors and recovery handled, effective permissions, native validation of the scenario and documented limits.
+5. Feasibility and product decisions are recorded **before** turning a hypothesis into a commitment. No global percentage until the scope and its weighting are settled.
+6. When a ticket depends on Muse host behaviour, the limit is written in the ticket and **the status is not raised** while waiting for a host that exposes the contract or a verified adapter.
