@@ -1,69 +1,68 @@
-# Roadmap — état d'avancement (2026-09-13, `main` @ `4d1f92c`)
+# Roadmap — progress report (2026-09-13, `main` @ `4d1f92c`)
 
-> Historique : ce bilan compte les stories fusionnées, pas la parité fonctionnelle. Pour l'état actuel par design, UI, câblage et validation, consulter la [roadmap opérationnelle](../ROADMAP.md) et l'[audit du 15 septembre](2026-09-15-codex-parity-audit.md).
+> Historical: this report counts merged stories, not functional parity. For the current state by design, UI, wiring and validation, see the [operational roadmap](../ROADMAP.md) and the [15 September audit](2026-09-15-codex-parity-audit.md).
 
-Arbre propre, poussé sur `origin/main`. Gates : `tsc` propre, 343/343 tests
-node, 23/23 tests Rust, `vite build` vert (node Linux
-`~/.nvm/versions/node/v22.16.0`, le `node` du PATH étant un shim Windows cassé).
+Clean tree, pushed to `origin/main`. Gates: `tsc` clean, 343/343 node tests,
+23/23 Rust tests, `vite build` green (Linux node
+`~/.nvm/versions/node/v22.16.0`, the `node` on PATH being a broken Windows shim).
 
-## Stories : 33/34 mergées, 2 partielles
+## Stories: 33/34 merged, 2 partial
 
-V1 Must 11/11 : US-1, US-2, US-6, US-10, US-11, US-14, US-17, US-18, US-22,
+V1 Must 11/11: US-1, US-2, US-6, US-10, US-11, US-14, US-17, US-18, US-22,
 US-29, US-33.
-V2 Should 20/22 : US-3, US-4 (compaction **locale** extractive), US-5, US-7
-(fan-out via tour parent — aucun spawn au schéma), US-8 (plan worktree +
-snippet manuel), US-9 (scheduling client-side), US-12, US-15, US-16, US-19
-(iframe + permission par app), US-20, US-21, US-23, US-24/25/26 (annuaire
-local, 1 remote guard), US-27 (bundles locaux), US-30, US-32, US-34.
-Partielles : US-28 (stub expérimental "non connecté"), US-31 (registre
-sample, `model/list` serveur non branché). US-13 = Won't (SSE, par spec).
+V2 Should 20/22: US-3, US-4 (**local** extractive compaction), US-5, US-7
+(fan-out through the parent turn — no spawn in the schema), US-8 (worktree plan +
+manual snippet), US-9 (client-side scheduling), US-12, US-15, US-16, US-19
+(iframe + per-app permission), US-20, US-21, US-23, US-24/25/26 (local
+directory, 1 remote guard), US-27 (local bundles), US-30, US-32, US-34.
+Partial: US-28 (experimental "not connected" stub), US-31 (sample registry,
+server `model/list` not wired). US-13 = Won't (SSE, by spec).
 
-## SDK Meta (`@muse-code/sdk@0.1.1`, épinglé)
+## Meta SDK (`@muse-code/sdk@0.1.1`, pinned)
 
-Adoption partielle actée : `src/lib/msp.ts` + `test/msp-conformance.test.ts`
-valident nos 8 méthodes / 15 notifications contre les unions officielles à
-la compilation (`import type` uniquement — bundle identique, zéro runtime).
-Audit schéma vs `msp.rs` : **zéro écart**. Transport Rust conservé (le SDK
-exige Node+spawn, indisponible en webview). Reste ouvert : fingerprint du
-binaire embarqué (`checkServedFingerprint`).
+Partial adoption agreed: `src/lib/msp.ts` + `test/msp-conformance.test.ts`
+validate our 8 methods / 15 notifications against the official unions at
+compile time (`import type` only — identical bundle, zero runtime). Schema audit
+against `msp.rs`: **zero gap**. Rust transport kept (the SDK requires Node+spawn,
+unavailable in a webview). Still open: fingerprint of the bundled binary
+(`checkServedFingerprint`).
 
-## Reste à faire (ordre suggéré)
+## Remaining (suggested order)
 
-1. ~~US-31~~ **fait** (`8f98fa1`) : `model/list` + `session/setModel`
-   réels, prouvés sur le binaire (`accepted`, `isActive` bascule ; id
-   invalide → `-32030 invalid_model`). Picker live avec fallback sample.
-   Note : le binaire annonce le fingerprint `sha256:03312c21…` alors que le
-   SDK épingle `sha256:cfd31ee7…` (schéma avancé côté host — warning, pas
-   erreur ; à surveiller).
-2. ~~US-4 serveur~~ **fait** (`5539be3`) : commande `compact_session`
-   (`session/compact`, statuts `accepted`/`noop`, rejets `missing_run` /
-   `run_active` mappés — tous prouvés live), routage
-   `session/contextUsage` → barre d'occupation + bouton « Compact server »
-   suggéré dès `warning` (jamais auto). Récap local inchangé.
-3. US-28 : channels temps réel (transport à spécifier) ou déclasser en
-   Won't documenté.
-4. Capacités serveur non exploitées : `turn/steer`, `session/fork`,
+1. ~~US-31~~ **done** (`8f98fa1`): real `model/list` + `session/setModel`,
+   proved on the binary (`accepted`, `isActive` flips; an invalid id →
+   `-32030 invalid_model`). Live picker with a sample fallback.
+   Note: the binary announces fingerprint `sha256:03312c21…` while the
+   SDK pins `sha256:cfd31ee7…` (schema ahead on the host side — a warning,
+   not an error; to watch).
+2. ~~US-4 server~~ **done** (`5539be3`): `compact_session` command
+   (`session/compact`, `accepted`/`noop` statuses, `missing_run` /
+   `run_active` rejections mapped — all proved live), `session/contextUsage`
+   routed to the occupancy bar + a "Compact server" button suggested from
+   `warning` up (never automatic). The local recap is unchanged.
+3. US-28: real-time channels (transport to specify) or downgrade to a
+   documented Won't.
+4. Unused server capabilities: `turn/steer`, `session/fork`,
    `turn/cancel`/`unqueue`, `view/page`, `approval/listPending`.
-5. Vérification live/E2E : subagents réels, `check_scope`, sidecar
-   (jamais exercés dans cette session ; pas d'automatisation sous WSLg).
-6. Ménage : branches `impl/w-*`, `impl/us-32-a11y`, `impl/v2-batch2`
-   encore sur origin ; worktrees déjà supprimés.
+5. Live/E2E verification: real sub-agents, `check_scope`, sidecar
+   (never exercised in this session; no automation under WSLg).
+6. Housekeeping: branches `impl/w-*`, `impl/us-32-a11y`, `impl/v2-batch2`
+   still on origin; worktrees already deleted.
 
-## Sidebar UX — threads first, maquette `design/prototype` (`be54165` → `4d1f92c`)
+## Sidebar UX — threads first, `design/prototype` mockup (`be54165` → `4d1f92c`)
 
-- Threads d'abord, sections secondaires en labels statiques (pas de
-  `<details>` — la maquette n'a aucun dépliant) : Projets, Automatisations,
-  Intégrations, Bibliothèque, Archivés.
-- Labels au token maquette (`.section-label` : 11px, capitales espacées,
-  muted, `margin: 28px 12px 9px`) ; bouton `+` discret comme le `[+]`
-  Projets de la maquette.
-- Workspace par thread (façon Codex) : picker de dossier à la création,
-  défaut réglable dans Settings ; plus de verrou global « Choose workspace
-  folder ».
+- Threads first, secondary sections as static labels (no `<details>` — the
+  mockup has no disclosure widgets): Projects, Automations, Integrations,
+  Library, Archived.
+- Labels on the mockup's token (`.section-label`: 11px, letter-spaced caps,
+  muted, `margin: 28px 12px 9px`); a discreet `+` button like the mockup's
+  Projects `[+]`.
+- Per-thread workspace (Codex style): a folder picker at creation, the default
+  set in Settings; no more global "Choose workspace folder" lock.
 
-## Risques connus
+## Known risks
 
-- Merges croisés sur `App.tsx` / `useMuseSessions.ts` / `App.css` résolus à
-  la main : gates verts mais régression UX silencieuse possible.
-- `wire_log` (`/tmp/muse-wire.log`, prompts en clair) toujours présent :
-  à retirer avant release (cf. SPEC).
+- Cross merges on `App.tsx` / `useMuseSessions.ts` / `App.css` resolved by
+  hand: gates green but a silent UX regression is possible.
+- `wire_log` (`/tmp/muse-wire.log`, prompts in clear) still present:
+  to remove before release (see SPEC).

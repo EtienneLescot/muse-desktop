@@ -1,62 +1,62 @@
-# Sous-agents : audit, et ce qui se passe le jour où on en demande vraiment (22 septembre 2026)
+# Sub-agents: an audit, and what happens the day we really ask for one (22 September 2026)
 
-Déclencheur : un bloc « Agent … Reminder child session » dont **les six boutons échouaient**, avec une erreur générique en haut de page. La cause immédiate était un nom de champ inventé (`agentId` au lieu de `subagentId`, corrigé dans la PR #224). Restait la vraie question : **qu'est-ce qui est réellement en place, et comment ça marchera le jour où on veut des sous-agents ?**
+Trigger: an "Agent … Reminder child session" block whose **six buttons all failed**, with a generic error at the top of the page. The immediate cause was an invented field name (`agentId` instead of `subagentId`, fixed in PR #224). The real question remained: **what is actually in place, and how will it work the day we want sub-agents?**
 
-## 1. Le client ne peut pas créer de sous-agent. Jamais.
+## 1. The client cannot create a sub-agent. Ever.
 
-Le schéma MSP exporté par le binaire 1.3.0 expose **huit** méthodes `subagent/*` :
+The MSP schema exported by the 1.3.0 binary exposes **eight** `subagent/*` methods:
 
-| Méthode | Ce qu'elle fait |
+| Method | What it does |
 |---|---|
-| `subagent/interrupt` | interrompt l'enfant |
-| `subagent/stop` | l'arrête |
-| `subagent/resume` | le reprend |
-| `subagent/followupTask` | lui envoie une nouvelle instruction (`body`) |
-| `subagent/readResult` | lit son résultat |
-| `subagent/close` | le ferme |
-| `subagent/reopen` | le rouvre |
-| `subagent/sendMessage` | lui envoie un message |
+| `subagent/interrupt` | interrupts the child |
+| `subagent/stop` | stops it |
+| `subagent/resume` | resumes it |
+| `subagent/followupTask` | sends it a new instruction (`body`) |
+| `subagent/readResult` | reads its result |
+| `subagent/close` | closes it |
+| `subagent/reopen` | reopens it |
+| `subagent/sendMessage` | sends it a message |
 
-**Aucune méthode de création.** Ni `spawn`, ni `start`, ni `create`. La liste complète des 46 méthodes du contrat n'en contient aucune. Créer un sous-agent est donc une décision **du modèle pendant son tour**, pas une commande du client. Les huit méthodes ci-dessus ne font que *piloter* ce qui existe déjà.
+**No creation method.** No `spawn`, no `start`, no `create`. The full list of 46 contract methods contains none. Creating a sub-agent is therefore a decision **made by the model during its turn**, not a client command. The eight methods above only *drive* what already exists.
 
-Conséquence directe pour l'interface : **tout bouton qui laisserait croire qu'on lance un sous-agent mentirait.** Ce qu'on peut honnêtement offrir, c'est *demander* au modèle de déléguer — c'est-à-dire du texte — puis piloter et observer ce qui en résulte.
+Direct consequence for the interface: **any button suggesting we launch a sub-agent would be lying.** What we can honestly offer is to *ask* the model to delegate — that is, text — then drive and observe what comes of it.
 
-## 2. Ce que le client utilise réellement, sur les huit
+## 2. What the client actually uses, out of the eight
 
-| Méthode | Appelée par le client ? |
+| Method | Called by the client? |
 |---|---|
-| `subagent/interrupt` · `stop` · `resume` · `followupTask` · `readResult` | oui (les six contrôles du bloc) |
-| `session/read` pour « Agent conversation » | oui |
-| `subagent/close` · `subagent/reopen` · `subagent/sendMessage` | **non, jamais** |
+| `subagent/interrupt` · `stop` · `resume` · `followupTask` · `readResult` | yes (the block's six controls) |
+| `session/read` for "Agent conversation" | yes |
+| `subagent/close` · `subagent/reopen` · `subagent/sendMessage` | **no, never** |
 
-Les trois non utilisées ne sont pas forcément nécessaires — mais elles existent, et l'audit doit dire pourquoi on ne les prend pas, ou les prendre. `close` en particulier a un sens produit évident : un enfant fini qui traîne dans la lane.
+The three unused ones are not necessarily needed — but they exist, and the audit must say why we do not take them, or take them. `close` in particular has an obvious product meaning: a finished child lingering in the lane.
 
-## 3. Le faux positif, nommé
+## 3. The false positive, named
 
-Le bloc se présentait comme une console de contrôle opérationnelle. Il ne l'était pas :
+The block presented itself as an operational control console. It was not:
 
-- **les six boutons échouaient tous** (mauvais champ), donc rien de ce qui était offert ne fonctionnait ;
-- **les boutons ne tenaient compte d'aucun état** : sur un agent `Completed`, « Interrupt » et « Stop » restaient cliquables — or il n'y a plus rien à interrompre ;
-- **l'échec s'affichait en bandeau global**, en haut de la page, alors qu'il concernait ce bloc ;
-- **l'identifiant enfant brut** (`child: 7d2adb74-1fa9-4316-9fb9-397055ee3809`) n'apprenait rien.
+- **all six buttons failed** (wrong field), so nothing on offer worked;
+- **the buttons accounted for no state**: on a `Completed` agent, "Interrupt" and "Stop" stayed clickable — yet there is nothing left to interrupt;
+- **the failure appeared as a global banner**, at the top of the page, although it concerned that block;
+- **the raw child identifier** (`child: 7d2adb74-1fa9-4316-9fb9-397055ee3809`) taught nothing.
 
-## 4. Ce qui est corrigé dans cette PR
+## 4. What this PR fixes
 
-1. **Une table de disponibilité** (`subagentControlAvailability`, pure et testée) remplace les booléens ad hoc. Elle ne désactive que là où la raison est **certaine** — on ne peut pas interrompre un agent fini — et chaque contrôle désactivé porte **sa phrase** (« This agent has finished; there is nothing to interrupt. »).
-   - Délibérément, `readResult` et `followupTask` restent disponibles sur un agent fini : on n'a **aucune mesure** disant que le host les refuse, et deviner serait reproduire le défaut qu'on corrige.
-2. **Le libellé de la session enfant** : le titre quand le client le connaît (identifiant conservé en infobulle), sinon un identifiant raccourci (`7d2adb74…`) — pas un UUID de 36 caractères.
+1. **An availability table** (`subagentControlAvailability`, pure and tested) replaces the ad hoc booleans. It disables only where the reason is **certain** — you cannot interrupt a finished agent — and every disabled control carries **its own sentence** ("This agent has finished; there is nothing to interrupt.").
+   - Deliberately, `readResult` and `followupTask` stay available on a finished agent: we have **no measurement** saying the host refuses them, and guessing would reproduce the very defect being fixed.
+2. **The child session's label**: the title when the client knows it (identifier kept in the tooltip), otherwise a shortened identifier (`7d2adb74…`) — not a 36-character UUID.
 
-## 5. Ce qui reste ouvert, et qui demande une décision ou une mesure
+## 5. What stays open, and needs a decision or a measurement
 
 | Point | Nature |
 |---|---|
-| **L'erreur dans le bloc, pas en haut de page** | demande un état d'erreur par entrée ; le bandeau global reste pour la conversation. **Fait le 27/09/2026** : `subagentDrilldown`/`subagentReadResult` ne passent plus par `setError`, le bloc (`.subagent-failure`) est seul propriétaire du message. Vérifié natif : clic « Agent conversation » sur enfant non lisible → message dans le bloc, aucun bandeau. De plus, les enfants internes du host (kind `reminderchild`, objectif « Reminder child session ») ne sont plus rendus en console de sous-agent. Détails et rejeu : docs/evidence/2026-09-27-qualif-native/sous-agents-enfants-internes.md. |
-| **`subagent/close`** | à exposer ? Un enfant fini qui s'accumule dans la lane est un vrai sujet d'UX. |
-| **`followupTask` sur un agent fini** | **à mesurer** avant de le promettre ou de l'interdire. |
-| **Demander une délégation** | le client ne peut que demander ; `/fanout` le fait déjà en langage naturel. À aligner avec ce vocabulaire plutôt qu'à inventer un bouton « spawn » qui n'existe pas dans le contrat. |
+| **The error in the block, not at the top of the page** | needs a per-entry error state; the global banner stays for the conversation. **Done on 27/09/2026**: `subagentDrilldown`/`subagentReadResult` no longer go through `setError`, and the block (`.subagent-failure`) is the sole owner of the message. Verified natively: clicking "Agent conversation" on an unreadable child → the message appears in the block, no banner. Also, the host's internal children (kind `reminderchild`, goal "Reminder child session") are no longer rendered as a sub-agent console. Details and replay: docs/evidence/2026-09-27-qualif-native/sous-agents-enfants-internes.md. |
+| **`subagent/close`** | expose it? A finished child accumulating in the lane is a real UX subject. |
+| **`followupTask` on a finished agent** | **to measure** before promising or forbidding it. |
+| **Asking for a delegation** | the client can only ask; `/fanout` already does it in natural language. To align with that vocabulary rather than invent a "spawn" button that does not exist in the contract. |
 
-## 6. La réponse à « le jour où on demande à spawner »
+## 6. The answer to "the day we ask to spawn one"
 
-**Mécanique :** on ne spawne pas. On écrit une demande de délégation dans le tour ; le modèle décide ; le host publie les items `subagent` ; le client pilote (8 méthodes) et observe (lanes). Toute mécanique qui prétendrait le contraire serait une simulation.
+**Mechanics:** we do not spawn. We write a delegation request into the turn; the model decides; the host publishes the `subagent` items; the client drives (8 methods) and observes (lanes). Any mechanism claiming otherwise would be a simulation.
 
-**UX :** le vocabulaire doit dire « demander », pas « lancer ». Et la lane sous-agent doit rendre trois choses lisibles : qui a été délégué (titre, pas UUID), où il en est (statut du host), et ce qu'on peut encore faire (les contrôles, avec leurs raisons).
+**UX:** the vocabulary has to say "ask", not "launch". And the sub-agent lane must make three things readable: who was delegated to (a title, not a UUID), where they are (the host's status), and what can still be done (the controls, with their reasons).

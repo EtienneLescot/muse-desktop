@@ -1,113 +1,113 @@
-# Travail restant côté client — plan (20 septembre 2026)
+# Remaining client-side work — plan (20 September 2026)
 
-Cette campagne a passé vingt rounds à demander au sidecar des choses qu'il **fournissait déjà**. Les six constats d'écart étaient six artefacts de méthode. Ce document transforme le résultat utile de cette enquête — **les formes d'appel correctes et les capacités réellement disponibles** — en plan de travail pour le client.
+This campaign spent twenty rounds asking the sidecar for things it **already provided**. The six gap findings were six artefacts of method. This document turns the useful result of that investigation — **the correct call shapes and the capabilities that really are available** — into a work plan for the client.
 
-Destinataire : la prochaine session, ou vous.
+Audience: the next session, or you.
 
-## Ce que le host 1.3.0 fournit, vérifié
+## What host 1.3.0 provides, verified
 
-| Capacité | Appel | Preuve |
+| Capability | Call | Proof |
 |---|---|---|
-| Reprendre une session persistée | `session/resume` + `session/read` | `msp-resume-free-session.mjs` — succès sur session libre |
-| Énumérer les sessions | `session/list` | 10 sessions avec `path`, `turnCount`, `status`, `branch`, `title` |
-| Lire l'historique | `session/read` | retourne `{session, viewCursor, history, pendingRequests}` |
-| Lire l'état d'approbation | `session/read` → `session.approvalMode` | `{mode, source, lastCommandId}` |
-| Configurer l'approbation | `session/setApprovalMode` | `onRequest`, `allowAll`, `promptUnmatched` acceptés |
-| Exécuter une commande et lire sa sortie | `session/userShell` | item `userShell` publié, sortie incluse |
-| Changer de modèle | `session/setModel` | `modelId` mis à jour sur la session |
-| Changer l'effort de raisonnement | `session/setReasoningEffort` | notification `session/reasoningEffortChanged` |
+| Resume a persisted session | `session/resume` + `session/read` | `msp-resume-free-session.mjs` — success on a free session |
+| Enumerate sessions | `session/list` | 10 sessions with `path`, `turnCount`, `status`, `branch`, `title` |
+| Read history | `session/read` | returns `{session, viewCursor, history, pendingRequests}` |
+| Read the approval state | `session/read` → `session.approvalMode` | `{mode, source, lastCommandId}` |
+| Configure approval | `session/setApprovalMode` | `onRequest`, `allowAll`, `promptUnmatched` accepted |
+| Run a command and read its output | `session/userShell` | `userShell` item published, output included |
+| Change model | `session/setModel` | `modelId` updated on the session |
+| Change reasoning effort | `session/setReasoningEffort` | `session/reasoningEffortChanged` notification |
 
-## Les formes d'appel, à ne pas redécouvrir
+## The call shapes, not to be rediscovered
 
-Chacune de ces formes a été trouvée **après** avoir produit un faux constat d'écart avec une forme incorrecte. Elles sont mesurées.
+Every one of these shapes was found **after** producing a false gap finding with an incorrect one. They are measured.
 
 ```js
-// Capacité userShell : IMBRIQUÉE dans capabilities. Les autres formes accordent [].
+// userShell capability: NESTED inside capabilities. The other shapes grant [].
 initialize({ clientInfo: { name: "muse_desktop", version: "1.0.0" },
              capabilities: { requestedCapabilities: ["userShell"] } })
 // → grantedCapabilities: ["userShell"]
 
-// Handshake incomplet sans cette notification : tout appel suivant répond `Not initialized`.
+// The handshake is incomplete without this notification: every later call answers `Not initialized`.
 notify("initialized", {})
 
-// commandId est un UUIDv7. crypto.randomUUID() (v4) est REFUSÉ.
+// commandId is a UUIDv7. crypto.randomUUID() (v4) is REFUSED.
 session/start        { commandId, workspaceRoot }
 turn/start           { sessionId, commandId, input: [{ type: "text", text }] }
-turn/interrupt       { sessionId, turnId, commandId }        // turnId OBLIGATOIRE
-session/userShell    { sessionId, commandText, commandId }   // commandText, pas command
-session/setModel     { sessionId, commandId, model: { modelId } }   // modelId est IMBRIQUÉ
-session/setReasoningEffort { sessionId, commandId, reasoningEffort } // pas `effort`
-session/setApprovalMode    { sessionId, commandId, mode }   // seuls onRequest, allowAll, promptUnmatched
+turn/interrupt       { sessionId, turnId, commandId }        // turnId REQUIRED
+session/userShell    { sessionId, commandText, commandId }   // commandText, not command
+session/setModel     { sessionId, commandId, model: { modelId } }   // modelId is NESTED
+session/setReasoningEffort { sessionId, commandId, reasoningEffort } // not `effort`
+session/setApprovalMode    { sessionId, commandId, mode }   // only onRequest, allowAll, promptUnmatched
 ```
 
-## Chantier 1 — **CORRIGÉ : il n'existe pas**
+## Workstream 1 — **CORRECTED: it does not exist**
 
-**Ce que ce document affirmait (round 63) :** « `session/list` est déclaré dans `src/lib/msp.ts:32` mais aucun appel n'existe côté application. »
+**What this document claimed (round 63):** "`session/list` is declared in `src/lib/msp.ts:32` but no call exists on the application side."
 
-**C'est faux, et l'erreur est la même que les six autres** : j'avais cherché dans `src/` seulement, en ignorant le pont Rust.
+**That is false, and the error is the same as the other six**: I had searched `src/` only, ignoring the Rust bridge.
 
-**La réalité, vérifiée dans `src-tauri/src/main.rs` :**
+**The reality, verified in `src-tauri/src/main.rs`:**
 
-| Élément | Constat |
+| Element | Finding |
 |---|---|
-| `session/list` est appelé | **oui**, `main.rs:4507`, avec pagination bornée (`MAX_SESSION_LIST_PAGES`) |
-| Par quelle commande | **`restore_sessions`** — qui ne prend aucun paramètre de workspace |
-| Portée | elle **parcourt tous les hosts** (`for (root, client) in clients`) |
-| Filtrage | `hosts.owns(sid, &client) \|\| hosts.bind(sid, &root, &client).is_ok()` (`main.rs:4529`) |
-| Métadonnées | `session_meta_from_list_row(&root, s, …)` — le `root` **du host courant**, correct |
+| `session/list` is called | **yes**, `main.rs:4507`, with bounded pagination (`MAX_SESSION_LIST_PAGES`) |
+| By which command | **`restore_sessions`** — which takes no workspace parameter |
+| Scope | it **walks every host** (`for (root, client) in clients`) |
+| Filtering | `hosts.owns(sid, &client) \|\| hosts.bind(sid, &root, &client).is_ok()` (`main.rs:4529`) |
+| Metadata | `session_meta_from_list_row(&root, s, …)` — the `root` **of the current host**, correct |
 
-**Le client demande donc bien au host quelles sessions existent, et ne restaure que celles qu'un host vivant possède.** C'est un comportement **correct et délibéré** : une session sans host ne peut pas être reprise, donc la restaurer ne servirait à rien.
+**The client therefore does ask the host which sessions exist, and restores only those a live host owns.** That is **correct and deliberate** behaviour: a session with no host cannot be resumed, so restoring it would serve no purpose.
 
-**Ce que cela explique :** la session `01a0bd8e`, visible dans la barre latérale et absente de `session/list`, était une **coquille locale** — le host ne la possédait pas, et `sessionNotFound` à la reprise était la bonne réponse. Ce n'était ni un défaut du client, ni du host.
+**What that explains:** session `01a0bd8e`, visible in the sidebar and absent from `session/list`, was a **local shell** — the host did not own it, and `sessionNotFound` on resume was the right answer. It was neither a client defect nor a host one.
 
-**Aucun chantier ici.** Je le retire, en laissant la trace de l'erreur parce qu'elle est représentative : **septième constat d'absence, septième artefact de méthode.**
+**No workstream here.** I am withdrawing it, leaving the record of the error because it is representative: **a seventh finding of absence, a seventh artefact of method.**
 
-## Chantier 2 — Le gate `ephemeral` ne se réévalue jamais
+## Workstream 2 — The `ephemeral` gate never re-evaluates
 
-**Constat :** `isEphemeralSession` (`useMuseSessions.ts:569`) et `isResumeEligible` (`bootResume.ts:39`) refusent la reprise si `session_durability === "ephemeral"`. Cette valeur est écrite **à la création de la session** et jamais révisée. Or le host a annoncé **`ephemeral` puis `durable`** dans la même journée, sans changement de configuration.
+**Finding:** `isEphemeralSession` (`useMuseSessions.ts:569`) and `isResumeEligible` (`bootResume.ts:39`) refuse a resume if `session_durability === "ephemeral"`. That value is written **when the session is created** and never revised. Yet the host announced **`ephemeral` then `durable`** on the same day, with no configuration change.
 
-**Ce qu'il faudrait :** ne pas traiter un `ephemeral` stocké comme définitif. Tenter la reprise et laisser le host répondre, ou relire la durabilité courante.
+**What is needed:** do not treat a stored `ephemeral` as final. Attempt the resume and let the host answer, or re-read the current durability.
 
-**Réserve honnête :** **aucune preuve que ce gate ait bloqué quoi que ce soit** — les 41 sessions sauvegardées portaient toutes `durable`. C'est un **risque latent**, pas un défaut observé. À traiter en connaissance de cause.
+**Honest reservation:** **no proof that this gate ever blocked anything** — all 41 saved sessions carried `durable`. It is a **latent risk**, not an observed defect. To be handled knowingly.
 
-## Chantier 3 — Afficher la sortie des commandes `userShell`
+## Workstream 3 — Show the output of `userShell` commands
 
-**Constat :** le host publie un item `userShell` dont la charge utile **contient la sortie**. Le client a un repli — insérer la sortie manuellement dans le prompt.
+**Finding:** the host publishes a `userShell` item whose payload **contains the output**. The client has a fallback — inserting the output into the prompt by hand.
 
-**Ce qu'il faudrait :** lire l'item et l'afficher dans l'interface. Aucun `outputRef` n'est fourni ; la sortie est **dans l'item**.
+**What is needed:** read the item and show it in the interface. No `outputRef` is provided; the output is **in the item**.
 
-## Chantier 4 — Confirmer les changements de modèle et d'effort
+## Workstream 4 — Confirm model and effort changes
 
-**Constat :** le modèle est visible dans `session.modelId` après l'appel, et l'effort est signalé par **`session/reasoningEffortChanged`**. Le client affiche aujourd'hui le dernier modèle **demandé**, marqué comme non live.
+**Finding:** the model is visible in `session.modelId` after the call, and the effort is signalled by **`session/reasoningEffortChanged`**. Today the client shows the last model **requested**, marked as not live.
 
-**Ce qu'il faudrait :** écouter `session/modelChanged` et `session/reasoningEffortChanged`, puis refléter l'état **confirmé** au lieu du demandé.
+**What is needed:** listen to `session/modelChanged` and `session/reasoningEffortChanged`, then reflect the **confirmed** state instead of the requested one.
 
-## Chantier 5 — Le terminal après un arrêt demandé
+## Workstream 5 — The terminal after a requested stop
 
-**Constat :** le host émet `turn/completed` **39 ms** après `turn/interrupt`, avec le bon `turnId`. Le client attend délibérément ce terminal (son commentaire Rust le dit).
+**Finding:** the host emits `turn/completed` **39 ms** after `turn/interrupt`, with the right `turnId`. The client deliberately waits for that terminal (its Rust comment says so).
 
-**Ce qu'il faudrait :** vérifier que `interrupt_session` reçoit un `turnId` **non vide** — il est optionnel dans le code Rust, et sans lui l'interruption est refusée. Reproduire ensuite un arrêt depuis l'interface avec une trace des appels.
+**What is needed:** check that `interrupt_session` receives a **non-empty** `turnId` — it is optional in the Rust code, and without it the interrupt is refused. Then reproduce a stop from the interface with a trace of the calls.
 
-**L'observation d'interface** — `Stopping…` qui ne se résout pas — **reste inexpliquée** et mérite d'être reproduite avant tout correctif : c'est la leçon des six faux constats.
+**The interface observation** — `Stopping…` that never resolves — **stays unexplained** and deserves reproducing before any fix: that is the lesson of the six false findings.
 
-## Avant de toucher au code : reproduire
+## Before touching the code: reproduce
 
-**Pour chacun de ces chantiers, la première étape est de reproduire le défaut de façon fiable.** Cette campagne a montré six fois qu'un constat d'absence non reproduit cachait une erreur de méthode. Un correctif écrit sans défaut reproduit est une supposition, et j'en ai retiré un pour cette raison exacte (le correctif `prefers-contrast`, round 16).
+**For each of these workstreams, the first step is to reproduce the defect reliably.** This campaign showed six times that an unreproduced finding of absence hid an error of method. A fix written without a reproduced defect is a guess, and I withdrew one for exactly that reason (the `prefers-contrast` fix, round 16).
 
-## Les outils de mesure, à utiliser plutôt que `native-smoke.mjs`
+## The measurement tools, to be used instead of `native-smoke.mjs`
 
-`native-smoke.mjs` a produit **trois faux négatifs** documentés. Pour toute vérification de contrat, préférer les sondes qui **enregistrent en continu** plutôt que celles qui attendent un événement précis :
+`native-smoke.mjs` produced **three documented false negatives**. For any contract check, prefer probes that **record continuously** over those that wait for a precise event:
 
-| Sonde | Ce qu'elle établit |
+| Probe | What it establishes |
 |---|---|
-| `msp-list-sessions.mjs` | ce que le host connaît, avec métadonnées |
-| `msp-resume-free-session.mjs` | la reprise fonctionne sur une session persistée et libre |
-| `msp-session-survival.mjs` | une session sans tour ne se persiste pas |
-| `msp-interrupt-notifications.mjs` | le terminal après interruption, toutes notifications enregistrées |
-| `msp-user-shell-capability.mjs` | la capacité et l'item `userShell` |
-| `msp-projection-check.mjs` | modèle et effort, avec relecture de la session |
-| `msp-approval-mode-check.mjs` | les modes d'approbation réellement acceptés |
+| `msp-list-sessions.mjs` | what the host knows, with metadata |
+| `msp-resume-free-session.mjs` | resume works on a persisted, free session |
+| `msp-session-survival.mjs` | a session with no turn does not persist |
+| `msp-interrupt-notifications.mjs` | the terminal after an interrupt, all notifications recorded |
+| `msp-user-shell-capability.mjs` | the `userShell` capability and item |
+| `msp-projection-check.mjs` | model and effort, with the session read back |
+| `msp-approval-mode-check.mjs` | the approval modes actually accepted |
 
-## La leçon, pour la prochaine session
+## The lesson, for the next session
 
-**Une erreur de contexte n'est pas une absence de capacité.** Six fois, un appel refusé — session non persistée, capacité mal demandée, paramètre manquant, mauvaise forme, attente trop courte, mode inexistant — a été lu comme « le host ne sait pas faire ». Avant d'écrire qu'une capacité manque, vérifier que **le scénario la sollicitait réellement**, sur une ressource **persistée**, avec les **paramètres exigés**.
+**A context error is not a missing capability.** Six times, a refused call — an unpersisted session, a capability requested wrongly, a missing parameter, a wrong shape, too short a wait, a mode that does not exist — was read as "the host cannot do this". Before writing that a capability is missing, check that **the scenario actually exercised it**, on a **persisted** resource, with the **required** parameters.
