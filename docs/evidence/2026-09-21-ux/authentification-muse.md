@@ -1,19 +1,19 @@
-# Authentification Muse dans l'éditeur — pourquoi, et comment (21 septembre 2026)
+# Muse authentication in the editor — why, and how (21 September 2026)
 
-Question posée : « l'application gère du PowerShell et du Bash, donc pourquoi ne pas utiliser le CLI pour s'authentifier ? » **C'est la bonne réponse au problème**, et ce document explique pourquoi, avec les mesures qui l'établissent.
+The question asked: "the application handles PowerShell and Bash, so why not use the CLI to authenticate?" **That is the right answer to the problem**, and this document explains why, with the measurements that establish it.
 
-## Le problème, énoncé correctement
+## The problem, stated correctly
 
-Le desktop **ne peut pas** s'authentifier seul :
+The desktop app **cannot** authenticate on its own:
 
-| Constat | Preuve |
+| Finding | Proof |
 |---|---|
-| MSP est un protocole `stdio` local, dans la session de l'utilisateur | `muse serve --help` : « The client owns this process's stdin and stdout and is its only connection » |
-| Le schéma MSP n'a **aucune** notion d'authentification | Recherche exhaustive dans `@muse-code/sdk` : les seules occurrences de « token » sont le jeton d'approbation SS5 et la consommation LLM (`windowTokens`, `outputTokens`) |
-| Aucun endpoint OAuth public Meta/Muse n'est exposé | Rien dans le schéma, rien dans l'aide du CLI |
-| Le CLI est **déjà** authentifié | `~/.config/muse/auth.json` |
+| MSP is a local `stdio` protocol, in the user's session | `muse serve --help`: "The client owns this process's stdin and stdout and is its only connection" |
+| The MSP schema has **no** notion of authentication | Exhaustive search in `@muse-code/sdk`: the only occurrences of "token" are the SS5 approval token and LLM consumption (`windowTokens`, `outputTokens`) |
+| No public Meta/Muse OAuth endpoint is exposed | Nothing in the schema, nothing in the CLI's help |
+| The CLI is **already** authenticated | `~/.config/muse/auth.json` |
 
-Donc un OAuth natif dans l'éditeur exigerait une API qui n'existe pas. Mais **le CLI a déjà le flux** :
+So a native OAuth inside the editor would require an API that does not exist. But **the CLI already has the flow**:
 
 ```
 muse login     Log in with your Meta account: approve a code in your browser.
@@ -21,16 +21,16 @@ muse login     Log in with your Meta account: approve a code in your browser.
 muse auth      Store provider API credentials
 ```
 
-## Le CLI est pilotable — mesuré
+## The CLI can be driven — measured
 
-| Vérification | Résultat |
+| Check | Result |
 |---|---|
-| `muse login` fonctionne-t-il sans TTY ? | **Oui** — écrit sur stdout, identique sur trois exécutions |
-| La sortie est-elle exploitable ? | **Oui** : URL et code sur des lignes séparées |
-| Le PTY peut-il exécuter une commande ? | **Oui** — `writeTerminal(id, cmd + "\r")`, le chemin du bouton « Send » |
-| Le PTY voit-il le `PATH` du CLI ? | **Oui** — `CommandBuilder` sans `env_clear`, donc héritage complet |
+| Does `muse login` work without a TTY? | **Yes** — writes to stdout, identical across three runs |
+| Is the output usable? | **Yes**: URL and code on separate lines |
+| Can the PTY run a command? | **Yes** — `writeTerminal(id, cmd + "\r")`, the "Send" button's path |
+| Does the PTY see the CLI's `PATH`? | **Yes** — `CommandBuilder` with no `env_clear`, hence full inheritance |
 
-Sortie réelle capturée :
+Real output captured:
 
 ```
 Open this page to sign in:
@@ -41,52 +41,52 @@ confirm this code matches:
 Waiting for approval…
 ```
 
-Le processus a été tué pendant l'attente : **`auth.json` porte `mtime = 2026-09-19T18:47:36Z`**, antérieur à cette session. La vérification n'a rien modifié.
+The process was killed while waiting: **`auth.json` carries `mtime = 2026-09-19T18:47:36Z`**, predating this session. The check modified nothing.
 
-## Pourquoi c'est meilleur que de stocker les identifiants
+## Why this is better than storing the credentials
 
-Le jeton **ne traverse jamais l'éditeur**. L'utilisateur approuve dans son navigateur, et le CLI écrit lui-même dans son stockage. L'application ne fait que lancer une commande et lire une classification.
+The token **never passes through the editor**. The user approves in their browser, and the CLI writes to its own storage itself. The application only launches a command and reads a classification.
 
-C'est structurellement plus sûr que toute alternative où l'éditeur deviendrait dépositaire d'un secret.
+That is structurally safer than any alternative in which the editor would become the custodian of a secret.
 
-## Le piège que la fonctionnalité existe pour exposer
+## The trap the feature exists to expose
 
-`muse login --help` documente que **`META_API_KEY` l'emporte toujours** sur le login de compte. Un éditeur qui se connecte pour utiliser son abonnement peut donc **continuer à consommer des crédits API sans aucun signal**.
+`muse login --help` documents that **`META_API_KEY` always wins** over the account login. An editor that signs in to use its subscription can therefore **keep consuming API credits with no signal at all**.
 
-C'est le cas que l'interface distingue explicitement :
+That is the case the interface distinguishes explicitly:
 
 | Situation | Message |
 |---|---|
-| `META_API_KEY` **et** identifiant stocké | **Avertissement** : le compte connecté est ignoré, retirer la variable |
-| `META_API_KEY` seul | Neutre : la clé prime sur un login |
-| Identifiant stocké seul | Neutre : se connecter remplace par un compte, ce qui utilise l'abonnement |
-| Rien | Avertissement : appeler Muse échouera |
+| `META_API_KEY` **and** a stored credential | **Warning**: the signed-in account is ignored, remove the variable |
+| `META_API_KEY` alone | Neutral: the key wins over a login |
+| A stored credential alone | Neutral: signing in replaces it with an account, which uses the subscription |
+| Nothing | Warning: calling Muse will fail |
 
-## Ce qui est livré
+## What is shipped
 
-| Élément | Rôle |
+| Element | Role |
 |---|---|
-| `muse_auth_status` (Rust) | Renvoie le mode effectif, la source, si la clé prime, et si le CLI est joignable |
-| `src/lib/museAuth.ts` | Décision **pure** : libellés, tonalité, opportunité de proposer la connexion |
-| Section « Muse authentication » | Affiche le mode, avec l'avertissement de priorité |
-| Action « Sign in with Meta » | Ouvre le terminal et lance `muse login` |
+| `muse_auth_status` (Rust) | Returns the effective mode, the source, whether the key wins, and whether the CLI is reachable |
+| `src/lib/museAuth.ts` | A **pure** decision: labels, tone, whether to offer sign-in |
+| "Muse authentication" section | Shows the mode, with the precedence warning |
+| "Sign in with Meta" action | Opens the terminal and runs `muse login` |
 
-**Le payload IPC ne peut pas transporter de secret**, et c'est vérifié à trois niveaux :
+**The IPC payload cannot carry a secret**, and that is verified at three levels:
 
-1. un test Rust asservit la **liste exacte des champs** et les **domaines de valeurs** ;
-2. ce garde-fou est **vérifié par mutation** — un payload transportant la valeur échoue avec « the auth status payload changed shape » ;
-3. `ux-auth-status.mjs` contrôle sur le pont réel que la valeur la plus longue fait **10 caractères** là où une clé en fait 48.
+1. a Rust test pins the **exact list of fields** and the **value domains**;
+2. that guard rail is **verified by mutation** — a payload carrying the value fails with "the auth status payload changed shape";
+3. `ux-auth-status.mjs` checks on the real bridge that the longest value is **10 characters** where a key is 48.
 
-**Injection impossible** : `signInCommand()` renvoie `null` pour toute commande autre que la forme exacte revue. `rm -rf /` et `muse login; curl evil` sont testés.
+**Injection impossible**: `signInCommand()` returns `null` for any command other than the exact reviewed form. `rm -rf /` and `muse login; curl evil` are tested.
 
-## Deux erreurs de méthode, toutes deux attrapées
+## Two errors of method, both caught
 
-**Le premier garde-fou était faux.** Il cherchait des mots interdits dans le texte sérialisé et échouait sur `"mode":"api_key"` — une valeur d'énumération **légitime**. J'ai failli l'assouplir. La bonne lecture était que l'invariant est **structurel, pas lexical** : une liste blanche exacte de champs et des domaines de valeurs contraints. Une vérification par sous-chaîne ne peut pas distinguer « nommer un mode » de « transporter un secret ».
+**The first guard rail was wrong.** It looked for forbidden words in the serialised text and failed on `"mode":"api_key"` — a **legitimate** enumeration value. I nearly relaxed it. The right reading was that the invariant is **structural, not lexical**: an exact whitelist of fields and constrained value domains. A substring check cannot distinguish "naming a mode" from "carrying a secret".
 
-**Et le chemin du fichier d'identifiants a dû sortir du payload** parce qu'il faisait échouer ce même garde-fou. Le renderer n'en a pas besoin pour agir, et le garde-fou reste absolu au lieu d'accumuler des exceptions.
+**And the credentials file's path had to leave the payload** because it made that same guard rail fail. The renderer does not need it to act, and the guard rail stays absolute instead of accumulating exceptions.
 
-## Reste ouvert
+## Still open
 
-- **Confirmer que le CLI ouvre le navigateur.** Son message dit « Open this page », ce qui suggère qu'il ne l'ouvre pas. Si c'est le cas, il faudra afficher l'URL pour que l'utilisateur la copie.
-- **Détecter la fin de la connexion.** Aujourd'hui « Check again » est manuel ; un sondage pendant l'attente serait plus confortable.
-- **`muse auth set`** n'est pas exposé, volontairement : il lit un secret sur stdin, ce que l'application ne doit pas manipuler.
+- **Confirm the CLI opens the browser.** Its message says "Open this page", which suggests it does not. If so, the URL will need displaying so the user can copy it.
+- **Detect when the sign-in completes.** Today "Check again" is manual; polling during the wait would be more comfortable.
+- **`muse auth set`** is not exposed, deliberately: it reads a secret on stdin, which the application must not handle.
