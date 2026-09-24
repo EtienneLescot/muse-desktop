@@ -1,35 +1,35 @@
 # Muse-Desktop · Design
 
-Livrable UX/UI indépendant de l’application Tauri. Maquette interactive en français et design system partageant les mêmes tokens et styles de composants.
+A UX/UI deliverable independent of the Tauri application: an interactive mockup and a design system sharing the same tokens and component styles.
 
-## Consulter
+## Viewing it
 
-Depuis la racine du dépôt : `node design/serve.cjs`.
+From the repository root: `node design/serve.cjs`.
 
-- Accueil : http://127.0.0.1:4174/
-- Maquette : http://127.0.0.1:4174/prototype/
-- Design system : http://127.0.0.1:4174/system/
+- Home: http://127.0.0.1:4174/
+- Mockup: http://127.0.0.1:4174/prototype/
+- Design system: http://127.0.0.1:4174/system/
 
-Les pages peuvent aussi s’ouvrir directement depuis le système de fichiers. Aucun build, package npm ou secret n’est requis. DM Sans est chargée depuis Google Fonts, avec Arial en secours.
+The pages can also be opened straight from the filesystem. No build, npm package or secret is required. DM Sans loads from Google Fonts, with Arial as a fallback.
 
-## Organisation
+## Layout
 
-- `prototype/` : application HTML/CSS/JS et documentation des parcours.
-- `system/tokens.css` : couleurs sémantiques clair/sombre, typographie, espacements et rayons.
-- `system/index.html` : référence visuelle des composants, états et règles de composition.
-- `assets/muse-logo.png` : logo original fourni par le commanditaire, transparence conservée.
-- `serve.cjs` : serveur statique local, limité à ce dossier.
+- `prototype/`: HTML/CSS/JS application and flow documentation.
+- `system/tokens.css`: semantic light and dark colors, typography, spacing and radii.
+- `system/index.html`: visual reference for components, states and composition rules.
+- `assets/muse-logo.png`: original logo supplied by the client, transparency preserved.
+- `serve.cjs`: local static server, scoped to this folder.
 
-## Principes UX
+## UX principles
 
-Le logo et le profil sont ancrés dans la barre latérale ; seul son contenu central défile. Le bloc du profil ouvre les paramètres au clic et au clavier. Conversation et panneau de travail défilent indépendamment. Le compositeur reste accessible en bas. Scrollbars de 6 px, bleu doux au repos et bleu Muse au survol. Arrondis modérés de 8 à 16 px sur les surfaces.
+The logo and the profile are anchored in the sidebar; only its middle scrolls. The profile block opens settings by click and by keyboard. The conversation and the work panel scroll independently. The composer stays reachable at the bottom. Scrollbars are 6 px, soft blue at rest and Muse blue on hover. Moderate radii, 8 to 16 px, on surfaces.
 
-La maquette couvre les principaux parcours de tâches, revue, aperçu, terminal, automatisations et extensions. Les résultats IA, commandes, autorisations et commits sont simulés. Les choix d’environnement et de modèle ne connectent aucun service. Les tâches et préférences persistent dans localStorage ; les réponses de suivi sont temporaires. Aucune donnée de test issue du navigateur n’est livrée.
+The mockup covers the main flows: tasks, review, preview, terminal, automations and extensions. AI results, commands, authorizations and commits are simulated. The environment and model pickers connect to no service. Tasks and preferences persist in localStorage; follow-up answers are temporary. No browser test data ships with it.
 
-## Références
+## References
 
 - https://ai.meta.com/muse/
 - https://developer.meta.com/ai/products/muse-code/
 - https://developers.openai.com/codex/app/features
 
-Références consultées le 13 septembre 2026. Cette proposition n’est pas une spécification officielle Meta ou OpenAI ni une garantie de parité exhaustive avec Codex.
+References consulted on 13 September 2026. This proposal is not an official Meta or OpenAI specification, nor a guarantee of exhaustive parity with Codex.

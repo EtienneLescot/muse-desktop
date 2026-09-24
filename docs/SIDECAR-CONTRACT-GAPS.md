@@ -1,249 +1,247 @@
-# Écarts de contrat du sidecar Muse — rapport au mainteneur
+# Muse sidecar contract gaps — report to the maintainer
 
-> ## ⚠️ Lire ceci avant le reste
+> ## ⚠️ Read this before the rest
 >
-> **Ce rapport a affirmé cinq écarts, plus un plafond d'approbation. Les six ont été démentis.**
+> **This report claimed five gaps, plus an approval ceiling. All six were disproved.**
 >
-> | Constat | Ce que ce rapport affirmait | Mesure ultérieure |
+> | Finding | What this report claimed | Later measurement |
 > |---|---|---|
-> | 1 | `session/read` et `session/resume` absents | **fonctionnels** sur une session persistée (§1) |
-> | 2 | aucune notification terminale après interruption | **`turn/completed` émis**, +39 ms (§2) |
-> | 3 | `userShell` accepté sans item ni sortie | **item `userShell` publié, sortie incluse** (§3) |
-> | 4 | projections non rapportées | **modèle visible sur la session, effort signalé par notification** (§4) |
-> | 5 | durabilité constamment `ephemeral` | **variable** (§5) |
-> | 6 | plafond `approval_mode` à `promptUnmatched` | **aucun plafond** — `onRequest`, `allowAll` et `promptUnmatched` acceptés |
+> | 1 | `session/read` and `session/resume` missing | **working** on a persisted session (§1) |
+> | 2 | no terminal notification after an interrupt | **`turn/completed` emitted**, +39 ms (§2) |
+> | 3 | `userShell` accepted with no item and no output | **`userShell` item published, output included** (§3) |
+> | 4 | projections not reported | **model visible on the session, effort signalled by notification** (§4) |
+> | 5 | durability constantly `ephemeral` | **variable** (§5) |
+> | 6 | `approval_mode` capped at `promptUnmatched` | **no ceiling** — `onRequest`, `allowAll` and `promptUnmatched` all accepted |
 >
-> **La cause était mon outillage, pas le sidecar.** Six constats d'absence, six artefacts de méthode : une erreur de contexte — session non persistée, capacité mal demandée, interruption sans le `turnId` exigé, paramètres sous la mauvaise forme, attente trop courte, mode inexistant — lue chaque fois comme une absence de capacité du host.
+> **The cause was my tooling, not the sidecar.** Six findings of absence, six artefacts of method: a context error every time — an unpersisted session, a capability requested in the wrong shape, an interrupt without the required `turnId`, parameters in the wrong form, too short a wait, a mode that does not exist — each read as a missing host capability.
 >
-> **Aucun écart de contrat du sidecar n'est établi.** Le host 1.3.0 fait ce que je lui reprochais de ne pas faire. Ce qui reste à construire est **côté client**, dans ce dépôt.
+> **No sidecar contract gap is established.** Host 1.3.0 does what I accused it of not doing. What is left to build is **on the client side**, in this repository.
 >
-> **Aucun écart de contrat du sidecar n'est établi.** Ce qui reste ouvert est ailleurs : le plafond `approval_mode` (non remesuré) et un faux négatif non expliqué dans `native-smoke.mjs`.
->
-> **Ne reprenez aucune conclusion de ce document sans la revérifier** sur une ressource **persistée** et avec les **paramètres exigés**. Les sections corrigées portent leur date et leur mesure ; les sections non corrigées n'ont pas cette garantie.
+> **Do not carry over any conclusion from this document without re-checking it** on a **persisted** resource and with the **required** parameters. Corrected sections carry their date and their measurement; uncorrected sections do not have that guarantee.
 
-**Destinataire :** mainteneur du sidecar Muse (nous).
-**Objet :** capacités que le client Muse-Desktop attend et que `muse serve` n'expose pas, avec mesures reproductibles et impact ticket par ticket.
-**Version mesurée :** Muse Code **1.3.0 (1.3.0-R3401.1)**, binaire Windows natif.
-**Date :** 20 septembre 2026.
+**Recipient:** the Muse sidecar maintainer (us).
+**Subject:** capabilities the Muse-Desktop client expects and `muse serve` does not expose, with reproducible measurements and ticket-by-ticket impact.
+**Version measured:** Muse Code **1.3.0 (1.3.0-R3401.1)**, native Windows binary.
+**Date:** 20 September 2026.
 
-Ce document ne décrit **pas** des bugs du client. Chaque écart a été confirmé en interrogeant le host directement, sans passer par l'interface. Les commandes sont fournies pour que chaque constat soit revérifiable.
+This document does **not** describe client bugs. Every gap was confirmed by querying the host directly, without going through the interface. The commands are provided so every finding can be re-checked.
 
-**Limite acquise à la fin de cette campagne :** une mesure d'absence ne vaut que si le scénario **sollicitait réellement** la ressource. Quatre des cinq constats de ce rapport ne le faisaient pas.
+**Lesson learned by the end of this campaign:** a measurement of absence is only worth something if the scenario **actually exercised** the resource. Four of the five findings in this report did not.
 
-## Comment reproduire toutes les mesures
+## How to reproduce every measurement
 
 ```powershell
-# Contrat du host, sans consommer de tour modèle
+# Host contract, without spending a model turn
 node scripts/msp-probe.mjs --surfaces --user-shell
 
-# Contrôle, raisonnement, modèle, compaction, sur deux sidecars réels
+# Control, reasoning, model, compaction, against two real sidecars
 node scripts/native-smoke.mjs --exercise-control --exercise-reasoning `
   --exercise-model --exercise-compaction --report gap-smoke.json
 ```
 
-`scripts/msp-probe.mjs` a été écrit pour ce rapport : c'est un client MSP minimal qui ne fait que décrire ce que le host expose.
+`scripts/msp-probe.mjs` was written for this report: a minimal MSP client that does nothing but describe what the host exposes.
 
-## 1. Surfaces de lecture
+## 1. Read surfaces
 
-Le client déclare ces méthodes dans `src/lib/msp.ts` (lignes 28–31) et les utilise pour la reprise et la réconciliation.
+The client declares these methods in `src/lib/msp.ts` (lines 28–31) and uses them for resume and reconciliation.
 
-| Méthode | Résultat mesuré | Conséquence pour le client |
+| Method | Measured result | Consequence for the client |
 |---|---|---|
-| `session/list` | **available** — énumère les sessions persistées avec leur chemin et leurs métadonnées | restauration paginée fonctionnelle |
-| `approval/listPending` | **available** — retourne `{approvals, userInputs}` | récupération des demandes en attente possible |
-| `session/read` | **available sur une session persistée** — retourne `{session, viewCursor, history, pendingRequests}` | **la relecture d'historique existe** ; voir la correction ci-dessous |
-| `session/resume` | **`sessionInUse`** sur une session persistée déjà ouverte ; `sessionNotFound` sur une session non persistée | refus **conditionnel**, pas méthode absente |
-| `view/page` | **unsupported** en tant que tel | `session/read` retourne un `viewCursor` : la pagination passe peut-être par lui |
+| `session/list` | **available** — enumerates persisted sessions with their path and metadata | paginated restore works |
+| `approval/listPending` | **available** — returns `{approvals, userInputs}` | pending requests can be recovered |
+| `session/read` | **available on a persisted session** — returns `{session, viewCursor, history, pendingRequests}` | **history replay exists**; see the correction below |
+| `session/resume` | **`sessionInUse`** on a persisted session already open; `sessionNotFound` on an unpersisted one | a **conditional** refusal, not a missing method |
+| `view/page` | **unsupported** as such | `session/read` returns a `viewCursor`: pagination may go through it |
 
-**Correction majeure (20/09/2026, fin de campagne).** Ce tableau classait `session/read` et `session/resume` comme `unsupported`. **C'est faux, et l'erreur vient de ma sonde.** `msp-probe.mjs` appelait ces surfaces sur une session **fraîchement créée**, jamais persistée : le host répondait `sessionNotFound`, et la sonde ne distinguait pas cette erreur de `methodNotFound`. Sur une session **réellement sur disque**, `session/read` répond **`ok`** et `session/resume` répond **`sessionInUse`** — quatre sessions testées, quatre fois.
+**Major correction (20/09/2026, end of campaign).** This table classified `session/read` and `session/resume` as `unsupported`. **That is wrong, and the error came from my probe.** `msp-probe.mjs` called these surfaces on a **freshly created** session, never persisted: the host answered `sessionNotFound`, and the probe did not distinguish that error from `methodNotFound`. On a session **actually on disk**, `session/read` answers **`ok`** and `session/resume` answers **`sessionInUse`** — four sessions tested, four times.
 
-**Impact :** la reprise ne repose donc **pas** sur des méthodes absentes. Deux questions plus étroites restent ouvertes : `session/resume` sur une session **libre** n'a jamais été observé (l'application tenait les sessions pendant le test), et `view/page` doit être réévalué au regard du `viewCursor` retourné par `session/read`. Détail complet dans [`session-read-fonctionne.md`](evidence/2026-09-20-windows-sessions/session-read-fonctionne.md).
+**Impact:** resume therefore does **not** rest on missing methods. Two narrower questions stay open: `session/resume` on a **free** session was never observed (the app held the sessions during the test), and `view/page` needs re-evaluating against the `viewCursor` that `session/read` returns. Full detail in [`session-read-fonctionne.md`](evidence/2026-09-20-windows-sessions/session-read-fonctionne.md).
 
-**Point d'attention :** `approval/listPending` **fonctionne** dès qu'on lui passe un `sessionId` ; un appel **sans** `sessionId` retourne `methodNotFound`. Le harness `native-smoke.mjs` l'appelait sans identifiant et le classait donc `unsupported` — la documentation du dépôt a porté cette erreur un moment. **C'est le même travers que pour `session/read`** : une erreur de contexte interprétée comme une absence de méthode. La sonde doit distinguer explicitement `methodNotFound` de `sessionNotFound`, et tester les surfaces de lecture sur une session **persistée**.
+**Worth noting:** `approval/listPending` **works** as soon as it is given a `sessionId`; a call **without** one returns `methodNotFound`. The `native-smoke.mjs` harness called it without an identifier and therefore classified it `unsupported` — the repository's documentation carried that error for a while. **This is the same trap as `session/read`**: a context error read as a missing method. The probe must explicitly distinguish `methodNotFound` from `sessionNotFound`, and test read surfaces on a **persisted** session.
 
-## 2. Notification terminale de tour — **émise à la fin normale, absente après une interruption**
+## 2. Turn terminal notification — **emitted on normal completion, absent after an interrupt**
 
-**Seconde correction (20/09/2026, round 55).** Ce paragraphe affirmait ensuite qu'**aucun** terminal n'est émis après une interruption. **C'est faux aussi**, et le tableau est désormais :
+**Second correction (20/09/2026, round 55).** This paragraph then claimed that **no** terminal is emitted after an interrupt. **That is wrong too**, and the table now reads:
 
-| Situation | Notification terminale | Mesure |
+| Situation | Terminal notification | Measurement |
 |---|---|---|
-| **Tour mené à son terme normalement** | **`turn/completed` émis** | `msp-resume-free-session.mjs` |
-| **Tour interrompu par `turn/interrupt`** | **`turn/completed` émis à +39 ms** | `msp-interrupt-notifications.mjs` — avec `{sessionId, turnId, commandId}` |
+| **Turn carried to normal completion** | **`turn/completed` emitted** | `msp-resume-free-session.mjs` |
+| **Turn interrupted by `turn/interrupt`** | **`turn/completed` emitted at +39 ms** | `msp-interrupt-notifications.mjs` — with `{sessionId, turnId, commandId}` |
 
-Après interruption, le host émet `item/completed` (+19 ms), `session/statusChanged` (+39 ms) puis **`turn/completed` (+39 ms)**, portant **le `turnId` attendu**, et **zéro** `item/delta` ensuite : le tour s'est bien arrêté, et le terminal le confirme.
+After an interrupt the host emits `item/completed` (+19 ms), `session/statusChanged` (+39 ms) then **`turn/completed` (+39 ms)**, carrying **the expected `turnId`**, and **zero** `item/delta` afterwards: the turn did stop, and the terminal confirms it.
 
-**Pourquoi je croyais le contraire :** `native-smoke.mjs` appelle `turn/interrupt` **sans `turnId`** (`{commandId, sessionId, retract}`), alors que le host l'exige. L'interruption était refusée en `invalidParams`, le tour n'était jamais interrompu, aucun terminal ne pouvait arriver — et le harness traduisait cette absence en `terminalNotification: unsupported`. **Le harness a besoin d'un correctif** : passer le `turnId` du tour qu'il interrompt.
+**Why I believed otherwise:** `native-smoke.mjs` calls `turn/interrupt` **without a `turnId`** (`{commandId, sessionId, retract}`), while the host requires one. The interrupt was refused with `invalidParams`, the turn was never interrupted, no terminal could arrive — and the harness translated that absence into `terminalNotification: unsupported`. **The harness needs a fix:** pass the `turnId` of the turn it is interrupting.
 
-**Impact, corrigé une seconde fois :** il n'y a **aucun écart de terminal côté host**, ni sur le chemin nominal, ni sur le chemin d'arrêt. L'observation d'interface — `Stopping…` qui ne se résout pas, bandeau « waiting for the desktop host to confirm it » — reste **inexpliquée**, mais elle ne peut plus être attribuée à une absence de terminal : le host le fournit. Trois pistes restent ouvertes, aucune tranchée : le renderer ne transmet peut-être pas de `turnId` non vide à `interrupt_session` ; le terminal arrive peut-être sans être associé au bon tour ; l'observation datait peut-être d'un état différent. Détail dans [`terminal-apres-interruption.md`](evidence/2026-09-20-windows-sessions/terminal-apres-interruption.md).
+**Impact, corrected a second time:** there is **no terminal gap on the host side**, neither on the nominal path nor on the stop path. The interface observation — `Stopping…` that never resolves, the "waiting for the desktop host to confirm it" banner — stays **unexplained**, but it can no longer be attributed to a missing terminal: the host provides it. Three leads remain open, none settled: the renderer may not be passing a non-empty `turnId` to `interrupt_session`; the terminal may be arriving without being associated with the right turn; the observation may date from a different state. Detail in [`terminal-apres-interruption.md`](evidence/2026-09-20-windows-sessions/terminal-apres-interruption.md).
 
-## 3. `session/userShell` — **fonctionne**, et la sortie est reportée
+## 3. `session/userShell` — **works**, and the output is reported
 
-**Correction (20/09/2026, round 59).** Ce paragraphe affirmait que le host accepte `session/userShell` **sans jamais publier d'item**. **C'est faux sur les deux points.**
+**Correction (20/09/2026, round 59).** This paragraph claimed the host accepts `session/userShell` **without ever publishing an item**. **That is wrong on both counts.**
 
-La cause était dans la façon dont je demandais la capacité. Elle doit être **imbriquée dans `capabilities`** :
+The cause was in how I requested the capability. It must be **nested inside `capabilities`**:
 
 ```js
 initialize({ clientInfo, capabilities: { requestedCapabilities: ["userShell"] } })
 ```
 
-Mes autres formes — `capabilities: { userShell: true }`, `capabilities: ["userShell"]`, ou `requestedCapabilities` au niveau racine — échouent toutes avec `grantedCapabilities: []`, et l'appel répond alors `session/userShell requires the userShell capability`. **Je lisais ce refus comme une absence de fonctionnalité.**
+My other shapes — `capabilities: { userShell: true }`, `capabilities: ["userShell"]`, or `requestedCapabilities` at the root level — all fail with `grantedCapabilities: []`, and the call then answers `session/userShell requires the userShell capability`. **I read that refusal as a missing feature.**
 
-Avec la bonne forme :
+With the right shape:
 
-| Mesure | Résultat |
+| Measurement | Result |
 |---|---|
 | `grantedCapabilities` | **`["userShell"]`** |
-| `session/userShell` avec `commandText` | **`ok`**, `status: accepted` |
-| Items publiés | **`item/started` et `item/completed`**, de `kind: "userShell"` |
-| **Sortie de la commande** | **présente dans la charge utile de l'item** |
-| `outputRef` | absent — mais la sortie est reportée autrement |
+| `session/userShell` with `commandText` | **`ok`**, `status: accepted` |
+| Items published | **`item/started` and `item/completed`**, of `kind: "userShell"` |
+| **Command output** | **present in the item payload** |
+| `outputRef` | absent — but the output is reported another way |
 
-**Preuve par contenu, pas par présence d'un champ :** la commande exécutée écrit un marqueur unique (`muse-ushell-<horodatage>`) et ce marqueur est **retrouvé dans les notifications** reçues après l'appel.
+**Proof by content, not by the presence of a field:** the command executed writes a unique marker (`muse-ushell-<timestamp>`) and that marker is **found in the notifications** received after the call.
 
-**Impact, corrigé :** le parcours « je lance une commande et je vois la sortie » **est tenable**. Rien de ce côté n'est bloqué par le sidecar. Ce qui manquerait, s'il manquait quelque chose, serait **côté client** — demander la capacité sous la bonne forme et lire l'item. Détail dans [`user-shell-fonctionne.md`](evidence/2026-09-20-windows-sessions/user-shell-fonctionne.md).
+**Impact, corrected:** the "run a command and see the output" path **is achievable**. Nothing on that side is blocked by the sidecar. What would be missing, if anything were, is **on the client side** — requesting the capability in the right shape and reading the item. Detail in [`user-shell-fonctionne.md`](evidence/2026-09-20-windows-sessions/user-shell-fonctionne.md).
 
-## 4. Projections effectives — **fonctionnent**
+## 4. Effective projections — **they work**
 
-**Correction (20/09/2026, round 61).** Ce paragraphe affirmait que les deux réglages sont acceptés sans projection exploitable. **C'est faux.**
+**Correction (20/09/2026, round 61).** This paragraph claimed both settings are accepted with no usable projection. **That is wrong.**
 
-La cause, comme pour les autres écarts : **mes paramètres étaient faux**.
+The cause, as with the other gaps: **my parameters were wrong**.
 
-| Méthode | Ce que j'envoyais | Ce que le host attend |
+| Method | What I was sending | What the host expects |
 |---|---|---|
 | `session/setModel` | `{ sessionId, modelId }` | `{ commandId, sessionId, model: { modelId } }` |
 | `session/setReasoningEffort` | `{ sessionId, effort }` | `{ commandId, sessionId, reasoningEffort }` |
 
-Mes appels étaient refusés en `invalidParams` — ce qui ne dit **rien** de la capacité du host.
+My calls were refused with `invalidParams` — which says **nothing** about the host's capability.
 
-Avec les bonnes formes :
+With the right shapes:
 
-| Mesure | Résultat |
+| Measurement | Result |
 |---|---|
 | `setModel({ model: { modelId } })` | `accepted` |
-| **`session.modelId` après l'appel** | **`muse-spark-1.3-contributor` → `muse-spark-1.3`** |
-| `setReasoningEffort("none" / "high" / "ultra")` | `accepted` (les trois) |
-| **Notifications reçues** | **`session/modelChanged`** et **3 × `session/reasoningEffortChanged`** |
+| **`session.modelId` after the call** | **`muse-spark-1.3-contributor` → `muse-spark-1.3`** |
+| `setReasoningEffort("none" / "high" / "ultra")` | `accepted` (all three) |
+| **Notifications received** | **`session/modelChanged`** and **3 × `session/reasoningEffortChanged`** |
 
-**Le modèle est visible dans la session relue, et l'effort est signalé par une notification dédiée.** La seule nuance : l'objet session ne porte pas de champ `reasoningEffort` — la projection passe par la notification, ce qui reste exploitable pour un client.
+**The model is visible in the session when it is read back, and the effort is signalled by a dedicated notification.** The only nuance: the session object carries no `reasoningEffort` field — the projection goes through the notification, which is still usable by a client.
 
-Détail dans [`projections-fonctionnent.md`](evidence/2026-09-20-windows-sessions/projections-fonctionnent.md).
+Detail in [`projections-fonctionnent.md`](evidence/2026-09-20-windows-sessions/projections-fonctionnent.md).
 
 <details>
-<summary>Ancien constat, conservé pour mémoire — <strong>démenti</strong></summary>
+<summary>Original finding, kept for the record — <strong>disproved</strong></summary>
 
-*Constat d'origine, produit par `native-smoke.mjs`, outil dont cette campagne a démontré qu'il produit des faux négatifs.*
+*Original finding, produced by `native-smoke.mjs`, a tool this campaign showed produces false negatives.*
 
-Recontrôlé hors de cet outil, avec `session/start`, `model/list`, puis les deux appels :
+Re-checked outside that tool, with `session/start`, `model/list`, then the two calls:
 
-| Appel | Résultat de mon contrôle |
+| Call | Result of my check |
 |---|---|
 | `session/setReasoningEffort` (`none`, `high`, `ultra`) | **`invalidParams`** |
 | `session/setModel` (`muse-spark-1.3`) | **`invalidParams: missing f…`** |
 
-Un `invalidParams` sur **ma** requête ne dit **rien** de la capacité du host : c'est le même piège que l'`approval/listPending` sans `sessionId` qui avait déjà produit un faux constat dans ce dépôt.
+An `invalidParams` on **my** request says **nothing** about the host's capability: it is the same trap as the `approval/listPending` call without a `sessionId` that had already produced a false finding in this repository.
 
-Ce que `model/list` retourne en revanche, et qui est mesuré : `{providerId: "meta", profileId: "tbh", source: "providerCatalog", models: [{modelId: "muse-spark-1.3", …}]}` — le catalogue existe et est interrogeable.
+What `model/list` does return, and which is measured: `{providerId: "meta", profileId: "tbh", source: "providerCatalog", models: [{modelId: "muse-spark-1.3", …}]}` — the catalogue exists and can be queried.
 
-| Réglage | Accusé | Projection | Effectif |
+| Setting | Acknowledged | Projection | Effective |
 |---|---|---|---|
-| `session/setReasoningEffort` — `none`, `high`, `ultra` | *accepted* (les trois) | **`not-reported`** | *vide* |
-| `session/setModel` — `muse-spark-1.3` | *accepted* | rapportée | **`isActive: false`** |
-| `session/compact` sur session vierge | — | — | **`missing-run`** |
+| `session/setReasoningEffort` — `none`, `high`, `ultra` | *accepted* (all three) | **`not-reported`** | *empty* |
+| `session/setModel` — `muse-spark-1.3` | *accepted* | reported | **`isActive: false`** |
+| `session/compact` on a blank session | — | — | **`missing-run`** |
 
 </details>
 
-**Impact : inconnu.** Ni « le client ne peut pas prouver qu'un réglage a pris effet », ni l'inverse, ne sont établis. `session/read` expose `modelId` et `providerId` sur la session — la projection est peut-être simplement lisible là, comme l'est `approvalMode`.
+**Impact: unknown.** Neither "the client cannot prove a setting took effect" nor the opposite is established. `session/read` exposes `modelId` and `providerId` on the session — the projection may simply be readable there, as `approvalMode` is.
 
-**Ce qu'il faudrait :** retrouver la forme correcte des deux appels, puis relire la session pour voir si le réglage y apparaît. Borné, non fait.
+**What would be needed:** find the correct shape of both calls, then read the session back to see whether the setting appears there. Bounded, not done.
 
-## 5. Durabilité de session — **variable**, et non `ephemeral`
+## 5. Session durability — **variable**, not `ephemeral`
 
-**Correction (20/09/2026, fin de campagne).** Ce paragraphe affirmait que `initialize` annonce `sessionDurability: "ephemeral"`. **C'est incomplet et trompeur.**
+**Correction (20/09/2026, end of campaign).** This paragraph claimed `initialize` announces `sessionDurability: "ephemeral"`. **That is incomplete and misleading.**
 
-Mesuré en début de campagne : **`ephemeral`**. Mesuré en fin de campagne, **quatre fois de suite sur des hosts neufs** : **`durable`**. La configuration n'a pas changé entre les deux (`settings.json` et `auth.json` datent du 19/09, avant la première mesure), et le résultat ne dépend ni de `clientInfo.name` ni des capacités demandées.
+Measured at the start of the campaign: **`ephemeral`**. Measured at the end, **four times in a row on fresh hosts**: **`durable`**. The configuration did not change between the two (`settings.json` and `auth.json` date from 19/09, before the first measurement), and the result depends neither on `clientInfo.name` nor on the capabilities requested.
 
-**Je n'identifie pas la cause.** Ce qui est établi, c'est que **`sessionDurability` ne peut pas être documenté comme une constante du host 1.3.0** : sa valeur a changé sur la même machine, le même jour, sans modification de configuration.
+**I cannot identify the cause.** What is established is that **`sessionDurability` cannot be documented as a constant of host 1.3.0**: its value changed on the same machine, the same day, with no configuration change.
 
-Conséquence directe de l'échec de reprise, observée depuis l'interface après reconnexion :
+Direct consequence of the resume failure, observed from the interface after reconnecting:
 
 > `MSP error -32020: session … was not found [sessionNotFound] [retryable=false]`
 
-Le client affiche « Your saved messages are still available » et ne fabrique aucun faux succès — comportement correct, mais **l'explication n'est plus la bonne**.
+The client shows "Your saved messages are still available" and fabricates no false success — correct behaviour, but **the explanation is no longer the right one**.
 
-### Ce que `session/list` démontre à la place
+### What `session/list` demonstrates instead
 
-Le host **connaît 9 sessions**, chacune avec son **chemin de stockage** sur disque
-
-```
-%USERPROFILE%\.local\share\muse\sessions\<année>\<mois>\<jour>\<sessionId>\session.jsonl
-```
-
-et des métadonnées complètes : `title`, `turnCount`, `status`, `workspaceRoot`, `branch`, `updatedAt`, `providerId`, `modelId`, `firstUserPrompt`.
-
-**L'historique est donc déjà persistant et énumérable.** `session/read` et `session/resume` ne manquent pas pour *créer* de la persistance, mais pour **lire depuis un client** ce que le host stocke déjà.
-
-### Hypothèse à tester, qui pourrait fermer M0-02
-
-Si le host est `durable` et que `session/list` énumère ces sessions, alors **le host connaît la session après redémarrage** — et l'échec de reprise viendrait du **client**, qui lance un nouveau host sans réconcilier avec les sessions déjà présentes. Ce serait alors un **défaut côté client, corrigible**, et non un blocage du sidecar.
-
-**C'est une hypothèse, pas un résultat.** Elle est testable : relancer l'application et vérifier si le client propose à la reprise une session que `session/list` énumère.
-
-**Impact :** aucune reprise après redémarrage n'est possible. Une valeur `durable` avec un `session/read` fonctionnel serait le chemin le plus court pour fermer plusieurs tickets à la fois.
-
-## 6. Champs `initialize` réellement exposés
-
-Mesuré : `experimentalApi`, `grantedCapabilities`, `museHome`, `platformFamily`, `platformOs`, `schema`, `serverInfo`, `sessionDurability`, `userAgent`.
-
-Deux remarques pour la documentation du protocole :
-
-- **`initialize` exige `clientInfo.name` conforme à `^[a-z0-9_]+$`** — un tiret fait échouer l'appel avec un message explicite (`SS1.4.1`). C'est correct mais non documenté côté client ; nous l'avons découvert en écrivant la sonde.
-- Détails de forme utiles, absents de notre documentation : `session/start` prend `workspaceRoot` (et non `cwd`) **et exige `commandId`** — sans lui, `invalid session/start params: missing field 'commandId'` — et répond `result.session.sessionId` ; `session/userShell` prend **`commandText`** (et non `command`) ; `turn/interrupt` exige **`commandId` en plus de `turnId`**. Un client doit donc aussi envoyer la notification **`initialized`** après `initialize`, sinon tout appel suivant répond `Not initialized`.
-
-## Où vivent les sessions — et pourquoi cela compte pour la reprise
-
-`session/list` retourne pour chaque session son **chemin de stockage** :
+The host **knows 9 sessions**, each with its **storage path** on disk
 
 ```
-%USERPROFILE%\.local\share\muse\sessions\<année>\<mois>\<jour>\<sessionId>\session.jsonl
+%USERPROFILE%\.local\share\muse\sessions\<year>\<month>\<day>\<sessionId>\session.jsonl
 ```
 
-Champs exposés : `sessionId`, `path`, `status`, `activeTurnId`, `createdAt`, `updatedAt`, `workspaceRoot`, `providerId`, `modelId`, `turnCount`, `forkedFrom`, `title`, `firstUserPrompt`, `branch`.
+and complete metadata: `title`, `turnCount`, `status`, `workspaceRoot`, `branch`, `updatedAt`, `providerId`, `modelId`, `firstUserPrompt`.
 
-**Conséquence directe sur le §1** : les conversations **existent sur disque** et le host les relit au démarrage. La persistance n'est donc pas ce qui manque — et `session/read` comme `session/resume` **existent et fonctionnent** (§1 corrigé). Les données sont là, et l'API pour les lire depuis un client aussi.
+**History is therefore already persistent and enumerable.** `session/read` and `session/resume` are not missing in order to *create* persistence, but to **read from a client** what the host already stores.
 
-## Impact consolidé sur les tickets du groupe 1
+### A hypothesis to test, which could close M0-02
 
-**Tableau corrigé (rounds 59 à 62).** L'ancienne version déclarait **quatre tickets M0 bloqués par le host**, puis laissait un plafond d'approbation comme seule limite. **Les deux lectures étaient fausses.**
+If the host is `durable` and `session/list` enumerates these sessions, then **the host knows the session after a restart** — and the resume failure would come from the **client**, which starts a new host without reconciling against the sessions already present. That would be a **client-side defect, fixable**, and not a sidecar blocker.
 
-| Ticket | Ce que ce rapport supposait | Mesuré |
+**This is a hypothesis, not a result.** It is testable: restart the application and check whether the client offers, on resume, a session that `session/list` enumerates.
+
+**Impact:** no resume after a restart is possible. A `durable` value with a working `session/read` would be the shortest path to closing several tickets at once.
+
+## 6. `initialize` fields actually exposed
+
+Measured: `experimentalApi`, `grantedCapabilities`, `museHome`, `platformFamily`, `platformOs`, `schema`, `serverInfo`, `sessionDurability`, `userAgent`.
+
+Two notes for the protocol documentation:
+
+- **`initialize` requires a `clientInfo.name` matching `^[a-z0-9_]+$`** — a hyphen fails the call with an explicit message (`SS1.4.1`). Correct, but undocumented on the client side; we discovered it while writing the probe.
+- Useful shape details, absent from our documentation: `session/start` takes `workspaceRoot` (not `cwd`) **and requires `commandId`** — without it, `invalid session/start params: missing field 'commandId'` — and answers `result.session.sessionId`; `session/userShell` takes **`commandText`** (not `command`); `turn/interrupt` requires **`commandId` in addition to `turnId`**. A client must also send the **`initialized`** notification after `initialize`, otherwise every later call answers `Not initialized`.
+
+## Where sessions live — and why that matters for resume
+
+`session/list` returns each session's **storage path**:
+
+```
+%USERPROFILE%\.local\share\muse\sessions\<year>\<month>\<day>\<sessionId>\session.jsonl
+```
+
+Fields exposed: `sessionId`, `path`, `status`, `activeTurnId`, `createdAt`, `updatedAt`, `workspaceRoot`, `providerId`, `modelId`, `turnCount`, `forkedFrom`, `title`, `firstUserPrompt`, `branch`.
+
+**Direct consequence for §1:** conversations **exist on disk** and the host reads them back at startup. Persistence is therefore not what is missing — and `session/read` and `session/resume` **exist and work** (§1 corrected). The data is there, and so is the API to read it from a client.
+
+## Consolidated impact on the group 1 tickets
+
+**Corrected table (rounds 59 to 62).** The old version declared **four M0 tickets blocked by the host**, then left an approval ceiling as the only limit. **Both readings were wrong.**
+
+| Ticket | What this report assumed | Measured |
 |---|---|---|
-| **M0-01** — approbations simultanées | bloqué par un plafond du host | **aucun plafond** — `onRequest`, `allowAll` et `promptUnmatched` sont acceptés, et `session/approvalModeChanged` est émis |
-| **M0-02** — reprendre après fermeture ou panne | `session/read` et `resume` absents | **fonctionnels** sur une session persistée |
-| **M0-04** — arrêter avec un état fiable | aucun terminal après interruption | **`turn/completed` émis à +39 ms** |
-| **M0-06** — posture de permissions | limité par le plafond | **aucun plafond** |
-| **M1-06** — lire la sortie terminal | item `userShell` jamais publié | **item publié, sortie incluse** |
-| **M1-11** — modèle et effort effectifs | projections non rapportées | **modèle visible sur la session, effort signalé par notification** |
+| **M0-01** — concurrent approvals | blocked by a host ceiling | **no ceiling** — `onRequest`, `allowAll` and `promptUnmatched` are accepted, and `session/approvalModeChanged` is emitted |
+| **M0-02** — resume after close or crash | `session/read` and `resume` missing | **working** on a persisted session |
+| **M0-04** — stop with reliable state | no terminal after an interrupt | **`turn/completed` emitted at +39 ms** |
+| **M0-06** — permission posture | limited by the ceiling | **no ceiling** |
+| **M1-06** — read terminal output | `userShell` item never published | **item published, output included** |
+| **M1-11** — effective model and effort | projections not reported | **model visible on the session, effort signalled by notification** |
 
-**Aucun de ces tickets n'est bloqué par le sidecar.** Ce qui reste à construire est **côté client**, dans ce dépôt — et c'est une bien meilleure nouvelle que ce rapport ne le laissait croire.
+**None of these tickets is blocked by the sidecar.** What is left to build is **on the client side**, in this repository — much better news than this report suggested.
 
-## Ce que nous demandons
+## What we are asking for
 
-**Rien.** Cette section demandait cinq évolutions du sidecar. **Aucune n'était fondée** : les cinq constats d'origine et le plafond d'approbation décrivaient **mon outillage**, pas le host.
+**Nothing.** This section asked for five sidecar changes. **None of them was founded:** the five original findings and the approval ceiling described **my tooling**, not the host.
 
-| Demande | Statut |
+| Request | Status |
 |---|---|
-| `session/read` et `session/resume` | **retirée** — fonctionnent |
-| Notification terminale de tour | **retirée** — `turn/completed` est émis |
-| Item `userShell` avec sa sortie | **retirée** — publié, sortie incluse |
-| Projection `setModel` / `setReasoningEffort` | **retirée** — visibles |
-| `approval_mode` au-delà de `promptUnmatched` | **retirée** — aucun plafond, `allowAll` est accepté |
+| `session/read` and `session/resume` | **withdrawn** — they work |
+| Turn terminal notification | **withdrawn** — `turn/completed` is emitted |
+| `userShell` item with its output | **withdrawn** — published, output included |
+| `setModel` / `setReasoningEffort` projection | **withdrawn** — visible |
+| `approval_mode` beyond `promptUnmatched` | **withdrawn** — no ceiling, `allowAll` is accepted |
 
-Le host 1.3.0 **fait tout** ce que ce rapport lui reprochait de ne pas faire. Ce qui reste à construire est **côté client**, et ce document n'a plus de destinataire côté sidecar.
+Host 1.3.0 **does everything** this report accused it of not doing. What is left to build is **on the client side**, and this document no longer has a recipient on the sidecar side.
 
-## Ce que ce rapport n'affirme pas
+## What this report does not claim
 
-- **Il a déjà affirmé deux choses fausses**, corrigées depuis : que `session/read` et `session/resume` étaient `unsupported` (§1 — faux, la sonde testait une session non persistée), et que `sessionDurability` valait constamment `ephemeral` (§5 — faux, sa valeur a changé en cours de campagne). Les deux erreurs venaient de la **même cause** : une erreur de contexte interprétée comme une absence de capacité. Toute conclusion de ce rapport doit donc être lue avec cette réserve, et revérifiée sur une session **persistée** avant d'être reprise.
-- Il ne dit pas **pourquoi** les capacités qui manquent vraiment sont absentes : choix de conception, retard d'implémentation ou limite du mode `serve` — nous ne le savons pas. À noter que `muse exec` (entrée headless) **produit** un tour complet, donc le moteur en est capable ; c'est la projection par `serve` qui manque.
-- Il ne prétend pas que ces changements sont simples : nous n'avons pas examiné le code du sidecar.
-- Il ne couvre **pas** le mode interactif `muse` ni `muse exec`, uniquement `muse serve`, qui est le seul chemin utilisé par l'application.
-- Toutes les mesures viennent d'un profil unique sur **Windows** ; aucun test macOS ou Linux n'a été fait.
+- **It has already claimed two false things**, corrected since: that `session/read` and `session/resume` were `unsupported` (§1 — false, the probe was testing an unpersisted session), and that `sessionDurability` was constantly `ephemeral` (§5 — false, its value changed mid-campaign). Both errors came from the **same cause**: a context error read as a missing capability. Every conclusion in this report should therefore be read with that reservation, and re-checked on a **persisted** session before being carried over.
+- It does not say **why** the capabilities that really are missing are absent: design choice, implementation lag or a limit of `serve` mode — we do not know. Note that `muse exec` (headless entry) **does** produce a complete turn, so the engine is capable of it; it is the projection through `serve` that is missing.
+- It does not claim these changes are simple: we have not examined the sidecar's code.
+- It does **not** cover interactive `muse` mode or `muse exec`, only `muse serve`, which is the only path the application uses.
+- All measurements come from a single profile on **Windows**; no macOS or Linux test was run.

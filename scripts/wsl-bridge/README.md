@@ -1,10 +1,10 @@
-# Build Windows avec moteur WSL
+# Windows build with a WSL engine
 
-Cette variante produit une interface Tauri native Windows x64. Le moteur
-reste Muse Code dans la distribution WSL par défaut, installé et authentifié
-via `~/.local/bin/muse`. Aucune information d'authentification n'est embarquée.
+This variant produces a native Windows x64 Tauri interface. The engine stays
+Muse Code inside the default WSL distribution, installed and authenticated
+through `~/.local/bin/muse`. No authentication material is bundled.
 
-Depuis la racine du dépôt, sous PowerShell :
+From the repository root, under PowerShell:
 
 ```powershell
 cargo build --manifest-path scripts/wsl-bridge/Cargo.toml --release
@@ -12,16 +12,17 @@ Copy-Item scripts/wsl-bridge/target/release/muse-wsl-bridge.exe src-tauri/binari
 npm run tauri -- build --bundles nsis
 ```
 
-L'installateur se trouve dans `src-tauri/target/release/bundle/nsis/`.
-Il n'installe pas WSL ni Muse. Cette variante est destinée à une machine déjà
-configurée ; ce n'est pas une distribution autonome du moteur Windows.
+The installer lands in `src-tauri/target/release/bundle/nsis/`.
+It installs neither WSL nor Muse. This variant targets a machine that is
+already configured; it is not a self-contained distribution of the Windows
+engine.
 
-Le pont conserve le flux JSON-RPC, traduit le dossier de `session/start`
-vers le chemin WSL et ferme l'entrée du moteur quand le superviseur se
-déconnecte. Les chemins de sortie des outils restent des chemins Linux.
-Les projets Windows doivent être accessibles à la distribution WSL.
+The bridge preserves the JSON-RPC stream, translates the `session/start`
+folder into its WSL path, and closes the engine's input when the supervisor
+disconnects. Tool output paths stay Linux paths. Windows projects must be
+reachable from the WSL distribution.
 
-Validation locale : `initialize`, `initialized`, `session/start` avec un
-dossier Windows ; fermeture propre sur EOF. Aucun tour modèle facturé
-n'est nécessaire à ce test de connexion. Les intégrations avancées entre
-chemins Windows et Linux restent à tester séparément.
+Local validation: `initialize`, `initialized`, `session/start` with a Windows
+folder; clean shutdown on EOF. No billed model turn is needed for that
+connection test. Advanced integrations between Windows and Linux paths remain
+to be tested separately.
