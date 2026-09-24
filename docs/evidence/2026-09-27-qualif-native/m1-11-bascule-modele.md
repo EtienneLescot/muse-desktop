@@ -1,75 +1,75 @@
-# M1-11 — Modèle effectif : bascule prouvée côté host, libellé UI non par session (27 septembre 2026)
+# M1-11 — Effective model: the switch is proved on the host side, the UI label is not per session (27 September 2026)
 
-**Bilan en deux temps :** la bascule de modèle **fonctionne** (appel `session/setModel` par session,
-`is_active` suit, `model_id` des réponses de session cohérent) — mais **le libellé du sélecteur
-n'est pas rafraîchi par conversation** : en basculant entre deux conversations ouvertes, l'UI
-annonce le dernier modèle choisi n'importe où, pas le modèle effectif de la conversation affichée.
+**A two-part result:** the model switch **works** (a `session/setModel` call per session,
+`is_active` follows, the `model_id` in session responses is consistent) — but **the picker's label
+is not refreshed per conversation**: when moving between two open conversations, the UI
+announces the last model chosen anywhere, not the effective model of the conversation displayed.
 
-## 1. Ce qui est prouvé (fonctionnel)
+## 1. What is proved (functional)
 
-**Bascule + fil** — sélection dans le sélecteur Modèle :
+**Switch + wire** — selecting in the Model picker:
 
 ```json
 {"cmd":"set_model","payload":{"sessionId":"01a0c96d-…","modelId":"muse-spark-1.2-contributor","providerId":"meta","profile_id":"tbh"},"result":"null"}
 ```
 
-puis `list_models` rafraîchi **pour cette session** : `is_active` suit la sélection.
+then `list_models` refreshed **for that session**: `is_active` follows the selection.
 
-**État réellement par session côté host** — deux conversations du même workspace, mêmes hôtes :
+**State really per session on the host side** — two conversations in the same workspace, same hosts:
 
-| Session | Action | `model_id` effectif |
+| Session | Action | Effective `model_id` |
 |---|---|---|
-| A `01a0c96d-…` | `set_model` → `muse-spark-1.2-contributor` (succès) | `muse-spark-1.2-contributor` |
-| B `01a0c955-…` | `resume_session` (aucune bascule) | **`muse-spark-1.3-contributor`** (défaut) |
+| A `01a0c96d-…` | `set_model` → `muse-spark-1.2-contributor` (success) | `muse-spark-1.2-contributor` |
+| B `01a0c955-…` | `resume_session` (no switch) | **`muse-spark-1.3-contributor`** (default) |
 
-B reprend son **propre** modèle alors qu'A venait d'être basculée — l'état du host est bien
-**par session**, et non global par hôte.
+B resumes its **own** model although A had just been switched — the host's state really is
+**per session**, not global per host.
 
-**Le libellé UI colle au modèle effectif après hydratation** — après `resume_session` de B :
-`model_id: "muse-spark-1.3-contributor"`, `list_models(B)` → `is_active: true` sur
-`muse-spark-1.3-contributor` (et `is_default: true`), et le déclencheur du sélecteur affiche
-exactement `muse-spark-1.3-contributor`. ✓
+**The UI label matches the effective model after hydration** — after B's `resume_session`:
+`model_id: "muse-spark-1.3-contributor"`, `list_models(B)` → `is_active: true` on
+`muse-spark-1.3-contributor` (and `is_default: true`), and the picker's trigger shows
+exactly `muse-spark-1.3-contributor`. ✓
 
-## 2. Défauts mesurés
+## 2. Defects measured
 
-### 2.1 Le libellé n'est pas par conversation (bloquant pour la clôture)
+### 2.1 The label is not per conversation (blocking closure)
 
-Séquence : bascule de B vers `muse-spark-1.3` (succès, `is_active: true` pour B) → retour sur A.
+Sequence: switch B to `muse-spark-1.3` (success, `is_active: true` for B) → back to A.
 
-- libellé affiché sur **A** : `muse-spark-1.3`
-- modèle effectif d'**A** : `muse-spark-1.2-contributor` (sa propre bascule, `set_model` → `null`)
+- label shown on **A**: `muse-spark-1.3`
+- **A**'s effective model: `muse-spark-1.2-contributor` (its own switch, `set_model` → `null`)
 
-**L'UI annonce un modèle que la conversation n'utilisera pas.** Mécanisme observé : le libellé
-est mis à jour par les actions du sélecteur et par l'hydratation `resume_session`, mais **pas au
-changement de conversation** (pas de `list_models` émis lors du switch — cache partagé).
+**The UI announces a model the conversation will not use.** Mechanism observed: the label
+is updated by the picker's actions and by `resume_session` hydration, but **not on
+a conversation change** (no `list_models` emitted on the switch — a shared cache).
 
-### 2.2 Bascule sur une conversation non chargée : rejet net mais sélecteur actif
+### 2.2 Switching on an unloaded conversation: a clean rejection but an active picker
 
-`set_model` sur une conversation sauvegardée sans moteur :
+`set_model` on a saved conversation with no engine:
 
 ```json
 {"result": "\"conversation engine is unavailable — start or restore the conversation first\""}
 ```
 
-Le libellé ne bouge pas (pas de mensonge optimiste ✓) et un bouton honnête
-**Reconnect** (« Reconnect this saved conversation to its workspace engine ») est proposé —
-mais le sélecteur reste manipulable et n'explique pas le rejet. Après Reconnect, la bascule
-fonctionne.
+The label does not move (no optimistic lie ✓) and an honest **Reconnect** button
+("Reconnect this saved conversation to its workspace engine") is offered —
+but the picker stays usable and does not explain the rejection. After Reconnect, the switch
+works.
 
-## Verdict M1-11 Windows
+## M1-11 Windows verdict
 
-- **Bascule entre conversations ouvertes : la capacité existe et l'état est par session** —
-  mais **le critère d'acceptation tombe** : « le libellé annoncé par l'UI correspond au modèle
-  effectivement transmis au host » est faux au changement de conversation (2.1).
-- **Reste :** rafraîchir (ou stocker par session) le modèle affiché au switch — par un
-  `list_models` par session ou un état local indexé par `session_id` ; la persistance de la
-  bascule après redémarrage de l'app reste à rejouer ; `contextUsage` invarié pendant le tour
-  non rejoué aujourd'hui.
+- **Switching between open conversations: the capability exists and the state is per session** —
+  but **the acceptance criterion fails**: "the label the UI announces matches the model
+  actually sent to the host" is false on a conversation change (2.1).
+- **Remaining:** refresh (or store per session) the model displayed on a switch — through a
+  per-session `list_models` or a local state keyed by `session_id`; persistence of the
+  switch after an app restart still to replay; `contextUsage` unchanged during the turn,
+  not replayed today.
 
-## Reproductibilité
+## Reproducibility
 
-- Commit `2f80148`+ ; Windows 11 26200, WebView2, CDP 9222 ; sidecar `muse` 1.3.0.
-- Séquence : `node scripts/ux-model-picker.mjs --port 9222` (ouverture du popover, 4 options,
-  libellé à la sélection) → bascule manuelle avec trace `window.fetch` (via
-  `scripts/cdp-drive.mjs eval`) : `set_model` + `list_models` par `sessionId` ; divergence
-  libellé/effetif mesurée en basculant entre `button.session-select`.
+- Commit `2f80148`+; Windows 11 26200, WebView2, CDP 9222; `muse` sidecar 1.3.0.
+- Sequence: `node scripts/ux-model-picker.mjs --port 9222` (opening the popover, 4 options,
+  label on selection) → manual switch with a `window.fetch` trace (through
+  `scripts/cdp-drive.mjs eval`): `set_model` + `list_models` per `sessionId`; label/effective
+  divergence measured by moving between `button.session-select` entries.
