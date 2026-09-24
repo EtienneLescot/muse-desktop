@@ -823,6 +823,9 @@ export default function App() {
             onMove={moveConversation}
             onArchive={archiveSession}
             onRestore={restoreSession}
+            onFork={(id) => void forkSession(id)}
+            onMoveToWorktree={(id) => void moveToWorktree(id)}
+            movingToWorktree={movingToWorktree}
             canStart
             projects={projects}
             threadProjects={threadProjects}
@@ -913,40 +916,6 @@ export default function App() {
             >
               <Icon name={theme === "dark" ? "sun" : "moon"} />
             </button>
-            {active && page === "task" && !settingsOpen && (
-              /* Forking and moving to a worktree are the same gesture seen twice
-                 — branch this conversation — so they share one control instead
-                 of a cryptic text button floating in the top bar. */
-              <details className="branch-menu" data-popover>
-                <summary className="icon" aria-label="Branch this conversation" title="Branch this conversation">
-                  <Icon name="branch" />
-                </summary>
-                <div className="branch-menu-popover">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.currentTarget.closest("details")?.removeAttribute("open");
-                      void forkSession(active.session_id);
-                    }}
-                    disabled={backendMissing || !connectedIds.includes(active.session_id)}
-                  >
-                    <strong>Fork conversation</strong>
-                    <small>New thread from the latest completed turn, same folder.</small>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.currentTarget.closest("details")?.removeAttribute("open");
-                      void moveToWorktree(active.session_id);
-                    }}
-                    disabled={movingToWorktree !== null || active.running || active.workspace.length === 0}
-                  >
-                    <strong>{movingToWorktree ?? "Continue in a worktree"}</strong>
-                    <small>New thread in a git worktree of this folder; this one stays here.</small>
-                  </button>
-                </div>
-              </details>
-            )}
             {active && page === "task" && !settingsOpen && (
               <button
                 className="icon"

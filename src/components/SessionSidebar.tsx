@@ -28,6 +28,12 @@ interface Props {
   onMove: (id: string, direction: -1 | 1) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
+  /** Branch this conversation: a new thread from its latest completed turn. */
+  onFork?: (id: string) => void;
+  /** Branch the folder too: a new thread in a git worktree of the workspace. */
+  onMoveToWorktree?: (id: string) => void;
+  /** The step a worktree start is on, or null. Disables the action while set. */
+  movingToWorktree?: string | null;
   canStart: boolean;
   /** US-3: project grouping (absent/empty = flat list, as before). */
   projects?: Project[];
@@ -66,6 +72,9 @@ export function SessionSidebar({
   onMove,
   onArchive,
   onRestore,
+  onFork,
+  onMoveToWorktree,
+  movingToWorktree = null,
   canStart,
   projects,
   threadProjects,
@@ -459,6 +468,32 @@ export function SessionSidebar({
                   Move down
                 </button>
               </div>
+            )}
+            {/* Branching belongs with the conversation's own actions, not in a
+                floating icon in the top bar: both answer "start again from
+                here", one keeping the folder, one copying it. */}
+            {selected && !selected.archived && onFork && (
+              <button
+                onClick={() => {
+                  onFork(selected.session_id);
+                  closeActions();
+                }}
+              >
+                <Icon name="branch" />
+                Fork conversation
+              </button>
+            )}
+            {selected && !selected.archived && onMoveToWorktree && (
+              <button
+                disabled={movingToWorktree !== null || selected.running}
+                onClick={() => {
+                  onMoveToWorktree(selected.session_id);
+                  closeActions();
+                }}
+              >
+                <Icon name="branch" />
+                {movingToWorktree ?? "Continue in a worktree"}
+              </button>
             )}
             <button
               onClick={() => {

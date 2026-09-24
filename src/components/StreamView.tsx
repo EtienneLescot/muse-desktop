@@ -1386,9 +1386,10 @@ export function StreamView({
                   type="button"
                   className="msg-fork"
                   onClick={() => onForkFromEntry(e.turnId!)}
-                  title="Fork conversation from this completed turn"
+                  title="Fork the conversation from this turn"
+                  aria-label="Fork the conversation from this turn"
                 >
-                  Fork from here
+                  <Icon name="branch" />
                 </button>
               )}
             </div>
