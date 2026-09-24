@@ -1,92 +1,92 @@
-# M1-10 — Course de file : aucun tour supprimé ne démarre (27 septembre 2026)
+# M1-10 — Queue race: no removed turn starts (27 September 2026)
 
-**Critère clé de M1-10 prouvé en webview :** lors d'une course de suppression pendant qu'un
-premier tour tourne, **aucun tour retiré de la file n'a jamais démarré** — ni accusé, ni sortie,
-ni réponse.
+**M1-10's key criterion proved in the webview:** during a removal race while a
+first turn runs, **no turn removed from the queue ever started** — no acknowledgement, no output,
+no answer.
 
-## Protocole
+## Protocol
 
 ```powershell
 node scripts/cdp-queue-race.mjs
 ```
 
-Le scénario enfile deux tours (`RACE-QUEUED-A-3311 say ALPHA`, `RACE-QUEUED-B-7722 say BETA`)
-pendant qu'un premier tour long tourne, puis déclenche les suppressions **depuis le contexte de
-page** (une seule évaluation — les allers-retours CDP ajoutent des dizaines de millisecondes et
-rendent une vraie course impossible à viser).
+The scenario queues two turns (`RACE-QUEUED-A-3311 say ALPHA`, `RACE-QUEUED-B-7722 say BETA`)
+while a long first turn runs, then triggers the removals **from the page
+context** (a single evaluation — CDP round trips add tens of milliseconds and
+make a real race impossible to aim at).
 
-Deux corrections de méthode ont été nécessaires avant de pouvoir jouer la course (run1 nulle :
-le script visait une conversation « Enumerate the three Musketeers » inexistante et soumettait
-par événements `Enter` synthétiques) :
-1. conversation cible configurable (`MUSE_RACE_SESSION`, repli sur le titre par préfixe) ;
-2. repli d'envoi sur le vrai bouton `button.send` quand le `Enter` synthétique n'a pas vidé le
+Two method fixes were needed before the race could be played (run1 was void:
+the script targeted a non-existent "Enumerate the three Musketeers" conversation and submitted
+through synthetic `Enter` events):
+1. a configurable target conversation (`MUSE_RACE_SESSION`, falling back to the title by prefix);
+2. a send fallback on the real `button.send` button when the synthetic `Enter` had not cleared the
    composer.
 
-## Résultats (run2)
+## Results (run2)
 
-| Étape | Mesure |
+| Step | Measurement |
 |---|---|
-| Premier tour en cours | ✓ (`working: true`) |
-| Tours en file | ✓ file visible (panneau + boutons « Remove from queue ») |
-| Après les suppressions en rafale | **file vidée** (`queuedRows: 0`, panneau fermé) |
-| Tour A supprimé a-t-il démarré ? | **non** — `alphaAnswer: false`, aucun accusé |
-| Tour B supprimé a-t-il démarré ? | **non** — `betaAnswer: false`, aucun accusé |
-| Après la course | premier tour poursuivi normalement jusqu'à son terminal |
+| First turn in progress | ✓ (`working: true`) |
+| Turns in the queue | ✓ queue visible (panel + "Remove from queue" buttons) |
+| After the burst of removals | **queue emptied** (`queuedRows: 0`, panel closed) |
+| Did removed turn A start? | **no** — `alphaAnswer: false`, no acknowledgement |
+| Did removed turn B start? | **no** — `betaAnswer: false`, no acknowledgement |
+| After the race | the first turn carried on normally to its terminal |
 
-Le journal local de la conversation (`muse-desktop.log.v1.<active>`) conserve les entrées
-utilisateur enfilées puis retirées — l'interface annonce honnêtement « …message was not sent. »
-au lieu de faire semblant.
+The conversation's local log (`muse-desktop.log.v1.<active>`) keeps the user entries
+queued then removed — the interface honestly announces "…message was not sent."
+instead of pretending.
 
-## Limites de la mesure (honnêteté)
+## Limits of the measurement (honesty)
 
-- La mise en place du run2 était imparfaite : le second envoi n'est **pas** entré en file (texte
-  resté dans le composer) et la première entrée s'est retrouvée **en double** dans la file. La
-  course porte donc sur les suppressions effectives observées, pas sur deux tours distincts.
-- **Cause trouvée le 27/09 au soir (harnais, pas l'app) :** `submit()` du script envoyait un Enter
-  synthétique par `keydown`+`keyup` — deux soumissions quand les deux sont pris par les handlers
-  React, zéro quand aucun n'est pris (d'où A dupliqué / B coincé). Corrigé : **clic du seul vrai
-  bouton d'envoi** (`button.send`), sans clavier synthétique.
+- Run2's set-up was imperfect: the second send did **not** enter the queue (text
+  left in the composer) and the first entry ended up **duplicated** in the queue. The
+  race therefore bears on the removals actually observed, not on two distinct turns.
+- **Cause found on the evening of 27/09 (the harness, not the app):** the script's `submit()` sent a
+  synthetic Enter through `keydown`+`keyup` — two submissions when both are caught by the React
+  handlers, zero when neither is (hence A duplicated / B stuck). Fixed: **clicking the one real
+  send button** (`button.send`), with no synthetic keyboard.
 
-## Run4 — course propre, deux tours correctement enfilés (27 septembre 2026, harnais corrigé)
+## Run4 — a clean race, two turns queued correctly (27 September 2026, harness fixed)
 
 ```
-pre: premier tour en cours ok=True          (tour long « Count slowly… » réellement lancé)
+pre: first turn running ok=True          (long turn "Count slowly…" really started)
 step two-queued : queued=2  texts=["RACE-QUEUED-A-3311 say ALPHA","RACE-QUEUED-B-7722 say BETA"]
-                  removeButtons=2  composer=0   (aucun doublon, composeur vidé)
-step after-race : queued=0  removeButtons=0    (retrait en rafale pendant l'exécution)
-step later      : queued=0  working=true       (+20 s : le premier tour tourne TOUJOURS)
-                  raceAInLog=true raceBInLog=true   (trace « non envoyé » au journal, honnête)
+                  removeButtons=2  composer=0   (no duplicate, composer cleared)
+step after-race : queued=0  removeButtons=0    (burst removal during execution)
+step later      : queued=0  working=true       (+20 s: the first turn is STILL running)
+                  raceAInLog=true raceBInLog=true   ("not sent" trace in the log, honest)
 ```
 
-**La course propre est jouée et le résultat est net :** deux tours distincts correctement enfilés,
-retirés pendant l'exécution du premier — **aucun des deux n'a jamais démarré** (file vide dès le
-retrait, premier tour seul jusqu'à +20 s et au-delà), et les deux textes retirés restent traçables
-au journal local sans effet de bord. Le verdict `race` du rapport reste vide à cause du wrapper
-`JSON.stringify` de `evaluate()` (les clics ont bien eu lieu — les états le prouvent) ; le
-correctif de persistance du verdict est dans le script mais son retour n'était pas nécessaire à la
+**The clean race is played and the result is clear:** two distinct turns queued correctly,
+removed while the first ran — **neither ever started** (queue empty from the
+removal, the first turn alone to +20 s and beyond), and both removed texts stay traceable
+in the local log with no side effect. The report's `race` verdict stays empty because of
+`evaluate()`'s `JSON.stringify` wrapper (the clicks did happen — the states prove it); the
+fix persisting the verdict is in the script but its return was not needed for the
 conclusion.
 
-**Reste pour fermer M1-10 :** restauration native de la file après redémarrage
-(`muse-desktop.queued-turns.v1`), et exécution en webview **empaquetée** (le run est en build dev).
+**Remaining to close M1-10:** native restoration of the queue after a restart
+(`muse-desktop.queued-turns.v1`), and execution in the **packaged** webview (the run is a dev build).
 
-## Restauration de la file après redémarrage — prouvée (27 septembre 2026, kill + relance)
+## Restoring the queue after a restart — proved (27 September 2026, kill + relaunch)
 
-Protocole : tour long lancé (« Count slowly … six hundred ») + **deux tours enfilés**
-(`QUEUE-RESTORE-A` → ALPHA, `QUEUE-RESTORE-B` → BETA) → **`taskkill /F` de l'app en plein tour** →
-relance du binaire `target\debug\muse-desktop.exe` avec `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`.
+Protocol: a long turn started ("Count slowly … six hundred") + **two turns queued**
+(`QUEUE-RESTORE-A` → ALPHA, `QUEUE-RESTORE-B` → BETA) → **`taskkill /F` on the app mid-turn** →
+relaunching the `target\debug\muse-desktop.exe` binary with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`.
 
-- Avant kill : `muse-desktop.queued-turns.v1` contient les 2 tours (« Turn queued — it will start
-  automatically » au journal) ; le tour long tourne.
-- Après relance (PID 44844) : stockage **intact (2 tours)**.
-- **Puis la file se vide d'elle-même, dans l'ordre** : `QUEUE-RESTORE-A` exécuté à 17:14:01 →
-  réponse **ALPHA** 17:14:04 ; `QUEUE-RESTORE-B` exécuté ensuite → réponse **BETA** 17:14:49.
+- Before the kill: `muse-desktop.queued-turns.v1` holds the 2 turns ("Turn queued — it will start
+  automatically" in the log); the long turn is running.
+- After the relaunch (PID 44844): storage **intact (2 turns)**.
+- **Then the queue empties by itself, in order**: `QUEUE-RESTORE-A` executed at 17:14:01 →
+  answer **ALPHA** 17:14:04; `QUEUE-RESTORE-B` executed next → answer **BETA** 17:14:49.
 
-La file n'est pas seulement restaurée : elle **reprend et s'exécute correctement après la mort
-totale du processus** (aucun doublon, aucun ordre inversé). Ne reste que l'exécution en webview
-**empaquetée** (build dev ici).
+The queue is not merely restored: it **resumes and executes correctly after the total death
+of the process** (no duplicate, no reversed order). Only execution in the **packaged**
+webview remains (a dev build here).
 
-## Reproductibilité
+## Reproducibility
 
-- Commit : scripts à inclure dans la série de qualification ; app `362c8bb`+ ; Windows 11 26200, WebView2.
-- Commande : `node scripts/cdp-queue-race.mjs` ; sortie brute `cdp-queue-race-run2.json` (limite
-  ci-dessus) et `cdp-queue-race-run4.json` (course propre).
+- Commit: scripts to include in the qualification series; app `362c8bb`+; Windows 11 26200, WebView2.
+- Command: `node scripts/cdp-queue-race.mjs`; raw output `cdp-queue-race-run2.json` (limit
+  above) and `cdp-queue-race-run4.json` (the clean race).

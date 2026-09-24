@@ -1,96 +1,96 @@
-# Débordement du panneau de travail — défauts réels et instrument réparé (21 septembre 2026)
+# Work panel overflow — real defects and a repaired instrument (21 September 2026)
 
-Remplace la version précédente de ce document, dont **tous les chiffres étaient faux** : ils venaient d'un détecteur qui comptait la troncature volontaire comme un défaut. Ce qui suit a été mesuré avec un instrument dont l'auto-test passe, et vérifié sur 13 largeurs de fenêtre réelles.
+Replaces the previous version of this document, in which **every figure was wrong**: they came from a detector that counted deliberate truncation as a defect. What follows was measured with an instrument whose self-test passes, and verified across 13 real window widths.
 
-## Pourquoi les chiffres précédents étaient inutilisables
+## Why the previous figures were unusable
 
-Le détecteur comptait tout élément dont `scrollWidth > clientWidth`. Il signalait donc comme défauts :
+The detector counted any element with `scrollWidth > clientWidth`. It therefore flagged as defects:
 
-- `.sr-only` — une boîte de **1×1 px** avec `overflow: hidden`. Son « débordement » de **753 px** était la longueur du texte caché, invisible par conception ;
-- les **51 règles `text-overflow: ellipsis`** de la feuille de style — c'est-à-dire des éléments qui faisaient exactement leur travail.
+- `.sr-only` — a **1×1 px** box with `overflow: hidden`. Its **753 px** "overflow" was the length of the hidden text, invisible by design;
+- the stylesheet's **51 `text-overflow: ellipsis` rules** — that is, elements doing exactly their job.
 
-Il souffrait en outre de trois bugs qui se compensaient en produisant des rapports plausibles :
+It also suffered from three bugs that compensated for each other and produced plausible reports:
 
-| Bug | Effet |
+| Bug | Effect |
 |---|---|
-| `offsetParent !== null` comme test de visibilité | `null` pour `<body>` **et tout élément `position: fixed`** → la sonde de contrôle s'auto-déclarait invisible |
-| `getComputedStyle().paddingRight` renvoie la **chaîne** `"0px"` | `"0px" * 1` → `NaN` → `NaN > worst` toujours faux → **tous** les éléments silencieusement écartés |
-| Les lignes étaient nommées d'après l'**enfant** qui dépassait | le conteneur fautif était annoncé sous le nom de son descendant → **chaque rapport désignait le mauvais élément** |
+| `offsetParent !== null` as a visibility test | `null` for `<body>` **and every `position: fixed` element** → the control probe declared itself invisible |
+| `getComputedStyle().paddingRight` returns the **string** `"0px"` | `"0px" * 1` → `NaN` → `NaN > worst` always false → **every** element silently discarded |
+| Rows were named after the **child** that overflowed | the faulty container was announced under its descendant's name → **every report pointed at the wrong element** |
 
-Le détecteur porte désormais un **auto-test bloquant** : une sonde de 300 px dans une boîte de 100 px doit être signalée à **+200 px**, et la même sonde avec `overflow-x: hidden` doit être **ignorée**. Aucun chiffre n'est imprimé si l'un des deux cas échoue.
+The detector now carries a **blocking self-test**: a 300 px probe inside a 100 px box must be reported at **+200 px**, and the same probe with `overflow-x: hidden` must be **ignored**. No figure is printed if either case fails.
 
-## Défauts réels, et corrigés
+## Real defects, fixed
 
-Trois causes distinctes, toutes des **planchers intrinsèques** que la grille ne pouvait pas franchir.
+Three distinct causes, all **intrinsic floors** the grid could not get past.
 
-### 1. Files — planchers fixes trop hauts
+### 1. Files — fixed floors set too high
 
-`grid-template-columns: minmax(180px, .85fr) minmax(250px, 1.4fr)` + `gap: 12px` impose **442 px** pour **411 px** disponibles. Les deux colonnes étaient à leur largeur `min-content` (172 et 248 px) : elles ne pouvaient pas rétrécir.
+`grid-template-columns: minmax(180px, .85fr) minmax(250px, 1.4fr)` + `gap: 12px` imposes **442 px** for **411 px** available. Both columns were at their `min-content` width (172 and 248 px): they could not shrink.
 
-**Corrigé** : planchers abaissés à 140 / 190 px, `min-width: 0` sur les deux colonnes.
+**Fixed**: floors lowered to 140 / 190 px, `min-width: 0` on both columns.
 
-### 2. Desktop — plancher intrinsèque supérieur à la largeur du panneau
+### 2. Desktop — an intrinsic floor wider than the panel
 
-La grille réclamait **434 px** pour **405 px**. Cause mesurée : les titres de fenêtres sont des jetons insécables — `Cua.AgentCursorOverlay.default` a une largeur `min-content` de **223 px**, et sa ligne secondaire 207 px. Comme `min-width: auto` sur un élément de grille interdit de descendre sous cette valeur, la colonne imposait son plancher.
+The grid demanded **434 px** for **405 px**. Measured cause: window titles are unbreakable tokens — `Cua.AgentCursorOverlay.default` has a `min-content` width of **223 px**, and its secondary line 207 px. Since `min-width: auto` on a grid item forbids going below that value, the column imposed its floor.
 
-**Corrigé** : `min-width: 0` sur les deux colonnes **et**, surtout, un vrai correctif d'usage — ces boutons font 152 px pour un contenu de 223 px, donc le texte était **rogné net sans aucun repère**. Ils portent maintenant `text-overflow: ellipsis`.
+**Fixed**: `min-width: 0` on both columns **and**, above all, a real usability fix — those buttons are 152 px for 223 px of content, so the text was **clipped clean with no marker at all**. They now carry `text-overflow: ellipsis`.
 
-### 3. `.desktop-control-click` — quatre pistes pour 218 px
+### 3. `.desktop-control-click` — four tracks for 218 px
 
-`auto 68px 68px auto` demande **265 px** dans une colonne de 218 px. `auto` a un plancher `min-content`, donc le libellé « Click inside window » imposait la largeur et le bouton sortait du panneau.
+`auto 68px 68px auto` asks for **265 px** in a 218 px column. `auto` has a `min-content` floor, so the "Click inside window" label imposed the width and the button left the panel.
 
-**Corrigé** : le libellé occupe sa propre ligne pleine largeur, les deux champs et le bouton se partagent la suivante.
+**Fixed**: the label takes its own full-width line, the two fields and the button share the next.
 
-## Deux pièges de méthode, qui ont coûté le plus de temps
+## Two method traps, which cost the most time
 
-### Le piège de cascade
+### The cascade trap
 
-`main.tsx` importe `App.css` **puis** `Desktop.css`. À spécificité égale, le **fichier importé en dernier gagne** — donc ma media query dans `App.css` perdait contre la règle de base de `Desktop.css`, et la grille Files restait à deux colonnes jusqu'à une fenêtre de 720 px, avec jusqu'à **104 px** de débordement.
+`main.tsx` imports `App.css` **then** `Desktop.css`. At equal specificity, the **file imported last wins** — so my media query in `App.css` lost to `Desktop.css`'s base rule, and the Files grid stayed at two columns down to a 720 px window, with up to **104 px** of overflow.
 
-**Règle retenue** : une règle de base et sa media query de repli vivent **dans le même fichier**. `App.css` importé en premier ne peut pas surcharger `Desktop.css` de façon fiable.
+**Rule kept**: a base rule and its fallback media query live **in the same file**. `App.css`, imported first, cannot reliably override `Desktop.css`.
 
-### Le piège du seuil proportionnel
+### The proportional threshold trap
 
-La largeur du panneau **ne suit pas proportionnellement la fenêtre**. Mesurée sur ce build :
+The panel's width **does not follow the window proportionally**. Measured on this build:
 
-| Fenêtre | Panneau |
+| Window | Panel |
 |---|---|
 | 1440 | 478 |
 | 1080 | 340 |
 | 900 | **369** |
 | 760 | 305 |
 
-La valeur **remonte** entre 1080 et 900 px : la colonne de conversation atteint son propre minimum et le panneau récupère la différence. Un raisonnement en « 40 % de la fenêtre » est donc faux **aux deux extrémités**. Les seuils retenus viennent d'un balayage de largeurs réelles, pas d'un calcul.
+The value **rises again** between 1080 and 900 px: the conversation column reaches its own minimum and the panel recovers the difference. Reasoning in terms of "40% of the window" is therefore wrong **at both ends**. The thresholds kept come from a sweep of real widths, not from a calculation.
 
-### Et un troisième, sur mes propres captures
+### And a third, on my own screenshots
 
-`ux-review-captures.mjs` force la largeur du panneau **sans** changer celle de la fenêtre. Comme les règles responsives réagissent à la fenêtre, cela produit un état **qu'aucune fenêtre réelle ne peut atteindre** : un panneau étroit dans une fenêtre large, où la grille reste légitimement à deux colonnes. Les captures correspondantes ont été supprimées et le script porte désormais l'avertissement.
+`ux-review-captures.mjs` forces the panel's width **without** changing the window's. Since the responsive rules react to the window, that produces a state **no real window can reach**: a narrow panel inside a wide window, where the grid legitimately stays at two columns. The matching screenshots were deleted and the script now carries the warning.
 
-## Vérification
+## Verification
 
 ```
-7 onglets · auto-test OK · 0 débordement
+7 tabs · self-test OK · 0 overflow
 ```
 
-| Largeur | Files (pistes) | Desktop (pistes) | Fuites profondes |
+| Width | Files (tracks) | Desktop (tracks) | Deep leaks |
 |---|---|---|---|
 | 1440 | 2 | 2 | 0 |
 | 1366 | 2 | 2 | 0 |
 | 1280 | 2 | 1 | 0 |
 | 1200 → 720 | 1 | 1 | 0 |
 
-**13 largeurs testées, 0 débordement**, mesures superficielles **et imbriquées**. Le balayage mesure tous les descendants du panneau, pas seulement les trois grilles — c'est précisément la restriction qui avait laissé passer une fuite de 8 px dans le bloc d'observation.
+**13 widths tested, 0 overflow**, shallow **and nested** measurements. The sweep measures every descendant of the panel, not only the three grids — precisely the restriction that had let an 8 px leak through in the observation block.
 
-Le côte-à-côte d'origine du panneau Desktop est **conservé dès 1366 px** ; l'empilement est réservé aux largeurs où deux colonnes ne tiennent réellement pas.
+The Desktop panel's original side-by-side layout is **kept from 1366 px up**; stacking is reserved for widths where two columns genuinely do not fit.
 
-## Outils
+## Tools
 
-| Script | Rôle |
+| Script | Role |
 |---|---|
-| `scripts/ux-panel-overflow.mjs` | débordements par onglet, auto-test bloquant, préconditions assertées |
-| `scripts/ux-breakpoint-sweep.mjs` | balayage de 13 largeurs, superficiel et imbriqué |
-| `scripts/ux-review-captures.mjs` | captures + assertions structurelles |
+| `scripts/ux-panel-overflow.mjs` | overflows per tab, blocking self-test, preconditions asserted |
+| `scripts/ux-breakpoint-sweep.mjs` | a sweep of 13 widths, shallow and nested |
+| `scripts/ux-review-captures.mjs` | screenshots + structural assertions |
 
-## Ce qui aurait dû se passer
+## What should have happened
 
-Le défaut initial de 31 px sur Files était réel et **la correction tenait en une ligne**, mais elle était noyée sous 700 px de faux positifs : `.sr-only` à 753 px, `.terminal-meta` qui tronquait proprement, `.file-name` avec son ellipse. **Un instrument qui signale la troncature volontaire comme un défaut rend le vrai défaut invisible** — et m'a fait écrire puis retirer deux correctifs qui traitaient du néant.
+The initial 31 px defect on Files was real and **the fix fitted on one line**, but it was drowned under 700 px of false positives: `.sr-only` at 753 px, `.terminal-meta` truncating cleanly, `.file-name` with its ellipsis. **An instrument that reports deliberate truncation as a defect makes the real defect invisible** — and made me write and then withdraw two fixes that treated nothing.
