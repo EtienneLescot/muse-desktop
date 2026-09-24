@@ -112,6 +112,36 @@ export function withUnreadFlag<T extends ThreadLike>(
   );
 }
 
+/** The tier a thread is ranked in; order is only manual inside one tier. */
+function tierOf(thread: ThreadLike): string {
+  return `${thread.pinned === true ? "pinned" : "normal"}:${thread.running === true ? "running" : "idle"}`;
+}
+
+/**
+ * Drop `movedId` on `targetId`: the moved thread takes the target's slot and
+ * the rest closes up behind it. Dropping on itself, on an unknown thread, or
+ * across tiers changes nothing — pinned and running threads are ranked above
+ * the manual order, so a cross-tier drop would silently snap back.
+ */
+export function reorderThread<T extends ThreadLike>(
+  sessions: T[],
+  movedId: string,
+  targetId: string,
+): T[] {
+  if (movedId === targetId) return sessions;
+  const active = selectActiveThreads(sessions);
+  const from = active.findIndex((s) => s.session_id === movedId);
+  const to = active.findIndex((s) => s.session_id === targetId);
+  if (from < 0 || to < 0) return sessions;
+  if (tierOf(active[from]) !== tierOf(active[to])) return sessions;
+  const ordered = active.map((s) => s.session_id);
+  ordered.splice(to, 0, ...ordered.splice(from, 1));
+  const ranks = new Map(ordered.map((id, rank) => [id, rank]));
+  return sessions.map((s) =>
+    ranks.has(s.session_id) ? { ...s, sortOrder: ranks.get(s.session_id) } : s,
+  );
+}
+
 /** Move an active conversation one slot in the manual order. */
 export function moveThread<T extends ThreadLike>(
   sessions: T[],
@@ -123,9 +153,7 @@ export function moveThread<T extends ThreadLike>(
   if (index < 0) return sessions;
   const target = index + direction;
   if (target < 0 || target >= active.length) return sessions;
-  const tier = (thread: ThreadLike) =>
-    `${thread.pinned === true ? "pinned" : "normal"}:${thread.running === true ? "running" : "idle"}`;
-  if (tier(active[index]) !== tier(active[target])) return sessions;
+  if (tierOf(active[index]) !== tierOf(active[target])) return sessions;
   const ordered = active.map((s) => s.session_id);
   [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
   const ranks = new Map(ordered.map((id, rank) => [id, rank]));

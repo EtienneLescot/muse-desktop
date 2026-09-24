@@ -12,6 +12,7 @@ import {
   cycleThreadId,
   isArchived,
   moveThread,
+  reorderThread,
   selectActiveThreads,
   selectArchivedThreads,
   withArchivedFlag,
@@ -113,6 +114,30 @@ describe("US-5 unread and manual order", () => {
     const moved = moveThread(list, "b", -1);
     assert.deepEqual(selectActiveThreads(moved).map((s) => s.session_id), ["b", "a", "c"]);
     assert.equal(moved.find((s) => s.session_id === "b")?.sortOrder, 0);
+  });
+
+  it("drops a conversation on another and closes the gap behind it", () => {
+    const list = [thread("a"), thread("b"), thread("c"), thread("d")];
+    const dropped = reorderThread(list, "d", "b");
+    assert.deepEqual(
+      selectActiveThreads(dropped).map((s) => s.session_id),
+      ["a", "d", "b", "c"],
+    );
+  });
+
+  it("drops downwards as well", () => {
+    const list = [thread("a"), thread("b"), thread("c")];
+    assert.deepEqual(
+      selectActiveThreads(reorderThread(list, "a", "c")).map((s) => s.session_id),
+      ["b", "c", "a"],
+    );
+  });
+
+  it("ignores a drop on itself, on an unknown thread, or across tiers", () => {
+    const list = [thread("a"), thread("b", { pinned: true }), thread("c")];
+    assert.equal(reorderThread(list, "a", "a"), list);
+    assert.equal(reorderThread(list, "a", "gone"), list);
+    assert.equal(reorderThread(list, "a", "b"), list);
   });
 });
 

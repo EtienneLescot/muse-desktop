@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { classifySidecarError, extractTriedPaths } from "./lib/sidecarError";
 import { THEME_KEY, nextTheme, resolveTheme, type Theme } from "./lib/theme";
@@ -60,7 +60,7 @@ import { MemoryPanel } from "./components/MemoryPanel";
 import { Icon } from "./components/Icon";
 import { searchConversations } from "./lib/conversationSearch";
 import { WindowControls, dragWindow, usesNativeTrafficLights } from "./components/WindowControls";
-import { readStorageString, writeStorageString } from "./lib/storage.ts";
+import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "./lib/storage.ts";
 import {
   NOTIFICATION_ACTION_EVENT,
   resolveNotificationRoute,
@@ -69,6 +69,11 @@ import {
 } from "./lib/notifications";
 import "./App.css";
 import "./Desktop.css";
+
+const SIDEBAR_WIDTH_KEY = "muse-desktop.sidebar-width.v1";
+const DEFAULT_SIDEBAR_WIDTH = 246;
+const MIN_SIDEBAR_WIDTH = 180;
+const MAX_SIDEBAR_WIDTH = 460;
 
 function initialTheme(): Theme {
   let stored: string | null = null;
@@ -149,6 +154,7 @@ export default function App() {
     archiveSession,
     togglePinned,
     moveConversation,
+    reorderConversation,
     restoreSession,
     projects,
     threadProjects,
@@ -298,6 +304,11 @@ export default function App() {
     "task" | "projects" | "automations" | "extensions" | "library" | "archives"
   >("task");
   const [collapsed, setCollapsed] = useState(false);
+  // The sidebar's width belongs to the user: dragged on its edge, kept across
+  // runs. Bounded so it can never swallow the conversation or vanish.
+  const [sidebarWidth, setSidebarWidth] = useState(() =>
+    readStorageJson(SIDEBAR_WIDTH_KEY, DEFAULT_SIDEBAR_WIDTH),
+  );
   const [museInstalledSignal, setMuseInstalledSignal] = useState(0);
   // A turn failed with `authRequired`: sign in, then replay that turn.
   const [signInFor, setSignInFor] = useState<{ sessionId: string; entryId: string } | null>(null);
@@ -709,7 +720,10 @@ export default function App() {
   }
 
   return (
-    <div className={`app desktop-app ${collapsed ? "nav-collapsed" : ""} ${usesNativeTrafficLights() ? "platform-macos" : ""}`}>
+    <div
+      className={`app desktop-app ${collapsed ? "nav-collapsed" : ""} ${usesNativeTrafficLights() ? "platform-macos" : ""}`}
+      style={{ "--sidebar-w": `${sidebarWidth}px` } as CSSProperties}
+    >
       {signInFor !== null && (
         <div className="muse-setup-overlay" role="dialog" aria-modal="true" aria-label="Sign in to Muse">
           <MuseSetupScreen
@@ -820,6 +834,7 @@ export default function App() {
             onKill={killSession}
             onRename={renameSession}
             onTogglePin={togglePinned}
+            onReorder={reorderConversation}
             onMove={moveConversation}
             onArchive={archiveSession}
             onRestore={restoreSession}
@@ -860,6 +875,33 @@ export default function App() {
             <span className="account-name">My profile</span>
           </button>
         </div>
+        <div
+          className="sidebar-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the sidebar"
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            event.currentTarget.dataset.dragging = "true";
+          }}
+          onPointerMove={(event) => {
+            if (event.currentTarget.dataset.dragging !== "true") return;
+            const bounded = Math.min(
+              MAX_SIDEBAR_WIDTH,
+              Math.max(MIN_SIDEBAR_WIDTH, Math.round(event.clientX)),
+            );
+            setSidebarWidth(bounded);
+          }}
+          onPointerUp={(event) => {
+            delete event.currentTarget.dataset.dragging;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+            writeStorageJson(SIDEBAR_WIDTH_KEY, sidebarWidth);
+          }}
+          onDoubleClick={() => {
+            setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+            writeStorageJson(SIDEBAR_WIDTH_KEY, DEFAULT_SIDEBAR_WIDTH);
+          }}
+        />
       </aside>
       <main className="conversation" aria-label="Conversation">
         <header className="desktop-topbar" onMouseDown={dragWindow}>

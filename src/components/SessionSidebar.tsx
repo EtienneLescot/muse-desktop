@@ -25,6 +25,9 @@ interface Props {
   onKill: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onTogglePin: (id: string) => void;
+  /** Drag and drop: `movedId` takes `targetId`'s slot in the manual order. */
+  onReorder: (movedId: string, targetId: string) => void;
+  /** Alt+arrow on a focused row: the keyboard path to the same reordering. */
   onMove: (id: string, direction: -1 | 1) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
@@ -69,6 +72,7 @@ export function SessionSidebar({
   onKill,
   onRename,
   onTogglePin,
+  onReorder,
   onMove,
   onArchive,
   onRestore,
@@ -92,15 +96,12 @@ export function SessionSidebar({
    * the id here means one dialog serves both entry points.
    */
   const [pendingKill, setPendingKill] = useState<string | null>(null);
-  /** "Delete all…": the same dialog, confirming every conversation at once. */
-  const [confirmAll, setConfirmAll] = useState(false);
-  const deleting = confirmDelete || pendingKill !== null || confirmAll;
+  const deleting = confirmDelete || pendingKill !== null;
   function closeActions() {
     dialog.current?.close();
     setSelected(null);
     setConfirmDelete(false);
     setPendingKill(null);
-    setConfirmAll(false);
     actionTrigger.current?.focus();
     actionTrigger.current = null;
   }
@@ -131,6 +132,8 @@ export function SessionSidebar({
       ungrouped: active.filter((s) => !groupedIds.has(s.session_id)),
     };
   }, [projects, threadProjects, active]);
+  const dragged = useRef<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   function onListKeyDown(e: React.KeyboardEvent): void {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const rows = Array.from(
@@ -139,12 +142,24 @@ export function SessionSidebar({
     const i = rows.indexOf(document.activeElement as HTMLButtonElement);
     if (i < 0) return;
     e.preventDefault();
+    // Reordering is a drag, which a keyboard cannot perform: Alt+arrow is the
+    // same move without a pointer, and keeps focus on the row it moved.
+    if (e.altKey) {
+      const id = rows[i].closest("li")?.dataset.sessionId;
+      if (id !== undefined) {
+        onMove(id, e.key === "ArrowDown" ? 1 : -1);
+        requestAnimationFrame(() => rows[i].focus());
+      }
+      return;
+    }
     rows[
       (i + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length
     ]?.focus();
   }
 
   // One active-thread row (shared by the flat list and project groups).
+  // Reordering is a drag, the gesture the list already suggests; the row is the
+  // drop target, and the dragged thread takes its slot.
   function renderThread(s: MuseSession) {
     const pending = pendingCounts[s.session_id] ?? 0;
     const isActive = s.session_id === activeId;
@@ -152,6 +167,33 @@ export function SessionSidebar({
       <li
         key={s.session_id}
         className={isActive ? "session-item active" : "session-item"}
+        data-session-id={s.session_id}
+        draggable
+        data-drop={dropTarget === s.session_id ? "true" : undefined}
+        onDragStart={(event) => {
+          dragged.current = s.session_id;
+          event.dataTransfer.effectAllowed = "move";
+          // Some targets refuse a drag with an empty payload.
+          event.dataTransfer.setData("text/plain", s.session_id);
+        }}
+        onDragEnd={() => {
+          dragged.current = null;
+          setDropTarget(null);
+        }}
+        onDragOver={(event) => {
+          if (dragged.current === null || dragged.current === s.session_id) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          setDropTarget(s.session_id);
+        }}
+        onDragLeave={() => setDropTarget((cur) => (cur === s.session_id ? null : cur))}
+        onDrop={(event) => {
+          event.preventDefault();
+          const moved = dragged.current ?? event.dataTransfer.getData("text/plain");
+          dragged.current = null;
+          setDropTarget(null);
+          if (moved) onReorder(moved, s.session_id);
+        }}
       >
         <button
           className="session-select"
@@ -209,26 +251,11 @@ export function SessionSidebar({
         title={`↑↓ to navigate · ${primaryModifier()}+Tab to switch conversations`}
       >
         <span>
-          Conversations ({active.length}
+          Conversations
           <span aria-live="polite" title={`${runningCount} working`}>
-            {runningCount > 0 ? `, ${runningCount} working` : ""}
+            {runningCount > 0 ? ` · ${runningCount} working` : ""}
           </span>
-          )
         </span>
-        {sessions.length > 0 && (
-          <button
-            type="button"
-            className="link"
-            onClick={(event) => {
-              actionTrigger.current = event.currentTarget;
-              setConfirmAll(true);
-              dialog.current?.showModal();
-            }}
-            title="Delete every conversation, archived ones included"
-          >
-            Delete all…
-          </button>
-        )}
         <button
           type="button"
           className="icon"
@@ -268,7 +295,7 @@ export function SessionSidebar({
           {groups.per.map((g) => (
             <details key={g.project.id} className="project-group" open>
               <summary className="project-group-header">
-                {g.project.name} ({g.items.length})
+                {g.project.name}
               </summary>
               <ul
                 className="session-items"
@@ -281,7 +308,7 @@ export function SessionSidebar({
           {groups.ungrouped.length > 0 && (
             <div className="project-group">
               <div className="project-group-header muted">
-                Ungrouped ({groups.ungrouped.length})
+                Ungrouped
               </div>
               <ul
                 className="session-items"
@@ -355,11 +382,7 @@ export function SessionSidebar({
       >
         <header>
           <h2>
-            {confirmAll
-              ? `Delete all ${sessions.length} conversations?`
-              : deleting
-                ? "Delete this conversation?"
-                : selected?.title}
+            {deleting ? "Delete this conversation?" : selected?.title}
           </h2>
           <button className="icon" aria-label="Close" onClick={closeActions}>
             <Icon name="close" />
@@ -368,9 +391,9 @@ export function SessionSidebar({
         {deleting ? (
           <>
             <p>
-              {confirmAll ? "They" : "It"} will disappear from Muse and will not
-              come back. The conversation files themselves stay on disk, under
-              the Muse data folder, until they are removed there.
+              It will disappear from Muse and will not come back. The
+              conversation files themselves stay on disk, under the Muse data
+              folder, until they are removed there.
             </p>
             <div className="dialog-buttons">
               <button
@@ -390,16 +413,12 @@ export function SessionSidebar({
               <button
                 className="danger"
                 onClick={() => {
-                  if (confirmAll) {
-                    for (const s of sessions) onKill(s.session_id);
-                  } else {
-                    const target = pendingKill ?? selected?.session_id ?? null;
-                    if (target !== null) onKill(target);
-                  }
+                  const target = pendingKill ?? selected?.session_id ?? null;
+                  if (target !== null) onKill(target);
                   closeActions();
                 }}
               >
-                {confirmAll ? "Delete all" : "Delete conversation"}
+                Delete conversation
               </button>
             </div>
           </>
@@ -415,7 +434,7 @@ export function SessionSidebar({
                 }
               }}
             >
-              <label htmlFor="conversation-name">Conversation name</label>
+              <label htmlFor="conversation-name">Name</label>
               <div>
                 <input
                   id="conversation-name"
@@ -436,6 +455,7 @@ export function SessionSidebar({
                   closeActions();
                 }}
               >
+                <Icon name="stop" />
                 Stop response
               </button>
             )}
@@ -446,28 +466,9 @@ export function SessionSidebar({
                   closeActions();
                 }}
               >
+                <Icon name="pin" />
                 {selected.pinned === true ? "Unpin conversation" : "Pin conversation"}
               </button>
-            )}
-            {selected && !selected.archived && (
-              <div className="conversation-order-actions" aria-label="Conversation order">
-                <button
-                  onClick={() => {
-                    onMove(selected.session_id, -1);
-                    closeActions();
-                  }}
-                >
-                  Move up
-                </button>
-                <button
-                  onClick={() => {
-                    onMove(selected.session_id, 1);
-                    closeActions();
-                  }}
-                >
-                  Move down
-                </button>
-              </div>
             )}
             {/* Branching belongs with the conversation's own actions, not in a
                 floating icon in the top bar: both answer "start again from
@@ -505,6 +506,7 @@ export function SessionSidebar({
               Archive conversation
             </button>
             <button className="danger" onClick={() => setConfirmDelete(true)}>
+              <Icon name="trash" />
               Delete…
             </button>
           </div>

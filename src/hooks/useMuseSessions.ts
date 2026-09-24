@@ -194,6 +194,7 @@ import {
 // US-5 thread archiving flag helper (pure, unit-tested).
 import {
   moveThread as moveThreadRow,
+  reorderThread as reorderThreadRow,
   withArchivedFlag,
   withPinnedFlag,
   withUnreadFlag,
@@ -1050,6 +1051,7 @@ interface UseMuseSessions {
   archiveSession: (sessionId: string) => void;
   togglePinned: (sessionId: string) => void;
   moveConversation: (sessionId: string, direction: -1 | 1) => void;
+  reorderConversation: (movedId: string, targetId: string) => void;
   /** US-5: move a thread back to the active list (persisted flag). */
   restoreSession: (sessionId: string) => void;
   /** US-3: project list (creation refused past 5, see projectError). */
@@ -6174,6 +6176,10 @@ export function useMuseSessions(): UseMuseSessions {
     setSessions((cur) => moveThreadRow(cur, sessionId, direction));
   }, []);
 
+  const reorderConversation = useCallback((movedId: string, targetId: string) => {
+    setSessions((cur) => reorderThreadRow(cur, movedId, targetId));
+  }, []);
+
   // US-3 + US-30 project actions. Creation past MAX_PROJECTS is refused
   // client-side with the explicit quota message in projectError.
   const createProject = useCallback(
@@ -7908,6 +7914,7 @@ export function useMuseSessions(): UseMuseSessions {
     archiveSession,
     togglePinned,
     moveConversation,
+  reorderConversation,
     restoreSession,
     projects,
     threadProjects,

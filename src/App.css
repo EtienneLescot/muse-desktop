@@ -146,12 +146,13 @@ small {
 .app {
   height: 100vh;
   display: grid;
-  grid-template-columns: 246px 1fr;
+  grid-template-columns: var(--sidebar-w, 246px) 1fr;
   overflow: hidden;
   background: var(--side);
 }
 
 .sidebar {
+  position: relative;
   background: var(--side);
   padding: 24px 14px 0;
   display: flex;
