@@ -1550,7 +1550,7 @@
   gap: 6px;
 }
 .conversation-rename input {
-  width: 100%;
+  flex: 1;
   min-width: 0;
   background: var(--bg);
   border: 1px solid var(--line);
@@ -1663,7 +1663,7 @@
   gap: 2px;
   margin-top: 14px;
 }
-.conversation-action-list button {
+.conversation-action-list > button {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
@@ -1677,13 +1677,13 @@
   font-size: 13px;
   text-align: left;
 }
-.conversation-action-list button:hover:not(:disabled) {
+.conversation-action-list > button:hover:not(:disabled) {
   background: var(--pale);
 }
-.conversation-action-list button:disabled {
+.conversation-action-list > button:disabled {
   opacity: 0.5;
 }
-.conversation-action-list button svg {
+.conversation-action-list > button svg {
   width: 15px;
   height: 15px;
   stroke: currentColor;
@@ -1691,22 +1691,22 @@
   fill: none;
   color: var(--muted);
 }
-.conversation-action-list button:hover:not(:disabled) svg {
+.conversation-action-list > button:hover:not(:disabled) svg {
   color: inherit;
 }
 /* The destructive row sits apart, after a rule, so it is never the next click. */
-.conversation-action-list button.danger {
+.conversation-action-list > button.danger {
   margin-top: 8px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
   border-radius: 0 0 8px 8px;
   color: var(--danger);
 }
-.conversation-action-list button.danger svg,
-.conversation-action-list button.danger:hover svg {
+.conversation-action-list > button.danger svg,
+.conversation-action-list > button.danger:hover svg {
   color: currentColor;
 }
-.conversation-action-list button.danger:hover {
+.conversation-action-list > button.danger:hover {
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 .dialog-buttons {
