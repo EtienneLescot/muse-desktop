@@ -1,53 +1,53 @@
-# Plafonds de troncature — couverts (M1-13 / M0-12, 20 septembre 2026)
+# Truncation ceilings — covered (M1-13 / M0-12, 20 September 2026)
 
-`src/lib/persist.ts` borne deux collections qui, par nature, ne le sont pas :
+`src/lib/persist.ts` bounds two collections that are, by nature, unbounded:
 
-| Constante | Valeur | Points d'application |
+| Constant | Value | Application points |
 |---|---|---|
 | `MAX_LOG_ENTRIES` | **2000** | `loadLog`, `appendLog`, `saveLog` |
 | `MAX_ALLOWLIST_RULES` | **200** | `loadAllowlist`, `saveAllowlist` |
 
-**Aucune des deux n'avait de test.** Le risque est silencieux : un plafond cassé ne lève aucune erreur, il laisse l'historique croître sans limite.
+**Neither had a test.** The risk is silent: a broken ceiling raises no error, it simply lets the history grow without limit.
 
-## Pourquoi ces plafonds comptent, mesuré
+## Why these ceilings matter, measured
 
-Mon propre travail de performance (round 22, `M1-13.md`) a chiffré ce que coûte un journal non borné : sur **2 001 entrées**, la fenêtre du transcript monte **160 articles**, le DOM passe de 1 942 à 2 938 nœuds, `ScriptDuration` atteint **2,02 s** et le tas gagne 160 KiB. La borne `MAX_LOG_ENTRIES` est ce qui empêche la lenteur constatée de devenir non bornée.
+My own performance work (round 22, `M1-13.md`) quantified what an unbounded log costs: at **2,001 entries**, the transcript window mounts **160 articles**, the DOM goes from 1,942 to 2,938 nodes, `ScriptDuration` reaches **2.02 s** and the heap gains 160 KiB. The `MAX_LOG_ENTRIES` bound is what stops the observed slowness from becoming unbounded.
 
-Un plafond qui garderait les **anciennes** entrées au lieu des récentes serait tout aussi grave, et **invisible** : l'utilisateur verrait sa conversation récente disparaître en croyant à une troncature normale.
+A ceiling that kept the **oldest** entries instead of the recent ones would be just as serious, and **invisible**: the user would watch their recent conversation disappear, believing it was normal truncation.
 
-## Couverture
+## Coverage
 
 ```powershell
 node --experimental-strip-types --test test/persistCaps.test.ts
 ```
 
-**Journal** — plafond respecté à l'ajout · **les plus anciennes sont retirées, pas les plus récentes** · pas de troncature à exactement 2000 · plafond tenu sur **ajouts successifs** (pas seulement dans un lot) · `loadLog` borné même quand le stockage contient déjà plus que le plafond (journal écrit par une version antérieure) · `saveLog` borné de la même façon.
+**Log** — ceiling respected on append · **the oldest are dropped, not the newest** · no truncation at exactly 2000 · ceiling held across **successive appends** (not just within one batch) · `loadLog` bounded even when storage already holds more than the ceiling (a log written by an earlier version) · `saveLog` bounded the same way.
 
-**Allowlist** — plafond respecté à l'enregistrement · **les règles les plus récentes conservées** · `loadAllowlist` borné sur un stockage surchargé · liste sous le plafond **inchangée**.
+**Allowlist** — ceiling respected on save · **the most recent rules kept** · `loadAllowlist` bounded on overloaded storage · a list under the ceiling **unchanged**.
 
-## Efficacité vérifiée par mutation
+## Effectiveness verified by mutation
 
-| Mutation posée dans `src/lib/persist.ts` | Résultat |
+| Mutation introduced into `src/lib/persist.ts` | Result |
 |---|---|
-| Troncature supprimée aux **3** points | **5 échecs** / 10 |
-| `.slice(-MAX_LOG_ENTRIES)` → `.slice(0, MAX_LOG_ENTRIES)` | **3 échecs**, dont *« drops the OLDEST entries, not the newest »* avec `actual: 'entry-1999'` au lieu de `'expected: entry-2004'` |
-| restauré | **10/10** |
+| Truncation removed at all **3** points | **5 failures** / 10 |
+| `.slice(-MAX_LOG_ENTRIES)` → `.slice(0, MAX_LOG_ENTRIES)` | **3 failures**, including *"drops the OLDEST entries, not the newest"* with `actual: 'entry-1999'` instead of `'expected: entry-2004'` |
+| restored | **10/10** |
 
-La seconde mutation est celle qui compte : elle simule une troncature qui **fonctionne en apparence** mais conserve le mauvais côté de l'historique. Le test la nomme et affiche l'écart exact.
+The second mutation is the one that matters: it simulates a truncation that **appears to work** but keeps the wrong side of the history. The test names it and shows the exact difference.
 
-## Une erreur de ma part, corrigée
+## An error of mine, corrected
 
-Ma première fixture d'entrée de journal n'avait que `role`, `text` et `ts` — **tous les tests de journal échouaient** (`0 !== 2000`). Cause : `isValidEntry` exige un **`id` de chaîne** en plus, et **filtre en silence** les entrées qui ne le satisfont pas. Les tests d'allowlist passaient, leurs règles étant complètes.
+My first log-entry fixture had only `role`, `text` and `ts` — **every log test failed** (`0 !== 2000`). Cause: `isValidEntry` also requires a **string `id`**, and **silently filters out** entries that do not satisfy it. The allowlist tests passed, their rules being complete.
 
-J'ai corrigé la fixture et documenté l'exigence dans le fichier de test, pour que la prochaine personne n'écrive pas la même chose. **C'est aussi une observation utile** : la validation à la lecture est stricte et silencieuse — une entrée sans `id` disparaît sans trace, ce qui mérite d'être connu.
+I fixed the fixture and documented the requirement in the test file, so the next person does not write the same thing. **It is also a useful observation**: validation on read is strict and silent — an entry with no `id` disappears without trace, which is worth knowing.
 
-## Suite complète
+## Full suite
 
-**958 tests, 219 suites, 958 passés, 0 échec** — contre 948 avant ce commit.
+**958 tests, 219 suites, 958 passed, 0 failures** — against 948 before this commit.
 
-## Limites
+## Limits
 
-- Tests **unitaires** : le comportement réel de `localStorage` dans WebView2 — quota, éviction, écriture partielle — n'est pas éprouvé.
-- **Aucun test de performance** du plafond : je n'ai pas mesuré le coût d'écriture d'un journal de 2000 entrées à chaque ajout. Avec `appendLog` qui relit puis réécrit tout le journal, une entrée ajoutée à 2000 coûte une sérialisation complète — **ce coût n'est pas mesuré ici**, et c'est un candidat sérieux à une mesure future.
-- Les plafonds sont vérifiés **tels que codés** : je n'ai pas évalué si 2000 et 200 sont les bonnes valeurs.
-- Aucun test du comportement quand `localStorage.setItem` échoue (quota dépassé).
+- **Unit** tests: `localStorage`'s real behaviour in WebView2 — quota, eviction, partial write — is not exercised.
+- **No performance test** of the ceiling: I did not measure the cost of writing a 2000-entry log on every append. With `appendLog` re-reading then rewriting the whole log, one entry appended at 2000 costs a full serialisation — **that cost is not measured here**, and it is a serious candidate for a future measurement.
+- The ceilings are checked **as coded**: I did not assess whether 2000 and 200 are the right values.
+- No test of the behaviour when `localStorage.setItem` fails (quota exceeded).
