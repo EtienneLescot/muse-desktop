@@ -1,28 +1,28 @@
-# Muse-Desktop — maquette desktop
+# Muse-Desktop — desktop mockup
 
-Ouvrir `index.html` directement, ou lancer `node ../serve.cjs`, puis consulter http://127.0.0.1:4174/prototype/.
+Open `index.html` directly, or run `node ../serve.cjs`, then browse to http://127.0.0.1:4174/prototype/.
 
-Prototype autonome HTML/CSS/JavaScript, en français. Aucune compilation ou clé API. La police DM Sans est chargée depuis Google Fonts ; une police système prend le relais hors ligne.
+A standalone HTML/CSS/JavaScript prototype, in French. No build step and no API key. The DM Sans font loads from Google Fonts; a system font takes over offline.
 
-## Parcours interactifs
+## Interactive flows
 
-- Tâche initiale complète : conversation, étapes, fichiers modifiés, diff, terminal et aperçu.
-- Nouvelle tâche : suggestions, saisie, choix du modèle, mode Agent/Plan/Discussion et environnement Local/Worktree/Cloud.
-- Réponse et autorisation simulées, arrêt, relance, pièce jointe (nom uniquement).
-- Recherche Ctrl+K, nouvelle tâche Ctrl+N, variante de conversation, archivage et restauration.
-- Commit simulé, sélection des fichiers, commandes terminal de démonstration.
-- Création et modification d’automatisations, activation et désactivation.
-- Catalogue d’extensions filtrable ; ajout et retrait locaux.
-- Thèmes clair et sombre, navigation repliable.
+- A complete initial task: conversation, steps, changed files, diff, terminal and preview.
+- A new task: suggestions, typing, model choice, Agent/Plan/Discussion mode and Local/Worktree/Cloud environment.
+- A simulated answer and authorization, stopping, relaunching, an attachment (name only).
+- Search with Ctrl+K, a new task with Ctrl+N, a conversation variant, archiving and restoring.
+- A simulated commit, file selection, demonstration terminal commands.
+- Creating and editing automations, enabling and disabling them.
+- A filterable extension catalogue; adding and removing locally.
+- Light and dark themes, collapsible navigation.
 
-Les tâches, automatisations, extensions et le thème sont conservés dans localStorage. Les conversations de suivi sont temporaires. Aucun moteur IA, Git, cloud, terminal réel ou planificateur n’est connecté. Les contrôles de permissions et de notifications illustrent l’UX. Cette maquette reprend les principaux parcours de Codex ; elle ne constitue pas une implémentation de sa totalité fonctionnelle.
+Tasks, automations, extensions and the theme are kept in localStorage. Follow-up conversations are temporary. No AI engine, Git, cloud, real terminal or scheduler is connected. The permission and notification controls illustrate the UX. This mockup follows the main Codex flows; it is not an implementation of its full functionality.
 
-## Direction visuelle et références
+## Visual direction and references
 
-Bleu d’action Meta, blancs froids, gris ardoise, surfaces arrondies et typographie sans empattement. Variante sombre inspirée du site développeur. Logo fourni par l’utilisateur, conservé dans assets/muse-logo.png.
+Meta action blue, cool whites, slate grey, rounded surfaces and sans-serif typography. A dark variant inspired by the developer site. The logo was supplied by the user and is kept in assets/muse-logo.png.
 
 - https://ai.meta.com/muse/
 - https://developer.meta.com/ai/products/muse-code/
-- https://developers.openai.com/codex/app/features (redirige vers https://learn.chatgpt.com/docs/features)
+- https://developers.openai.com/codex/app/features (redirects to https://learn.chatgpt.com/docs/features)
 
-Références consultées le 13 septembre 2026. Les contenus du projet Atelier, résultats des tests et diffs sont des exemples fictifs pour rendre les parcours explorables.
+References consulted on 13 September 2026. The Atelier project's content, test results and diffs are fictitious examples, there to make the flows explorable.
