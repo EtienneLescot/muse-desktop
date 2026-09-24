@@ -1,67 +1,67 @@
-# Nettoyage des conversations de test — méthode et pièges (20 septembre 2026)
+# Cleaning up test conversations — method and traps (20 September 2026)
 
-Cette campagne a créé des dizaines de conversations de test dans l'application. Les supprimer a demandé **quatre tentatives**, dont trois ont échoué pour des raisons différentes. Ce document conserve ce qui marche et pourquoi le reste ne marchait pas.
+This campaign created dozens of test conversations in the application. Deleting them took **four attempts**, three of which failed for different reasons. This document keeps what works and why the rest did not.
 
-## Résultat
+## Result
 
-| Mesure | Avant | Après |
+| Measurement | Before | After |
 |---|---|---|
-| Conversations dans la barre latérale | **41** | **1** |
-| Compteur affiché | 10 (après résurrections) | **1** |
-| Clés de journal | 13 | **1** |
+| Conversations in the sidebar | **41** | **1** |
+| Displayed counter | 10 (after resurrections) | **1** |
+| Log keys | 13 | **1** |
 
-Il reste exactement la conversation réelle de l'utilisateur : *« Explain the project structure and its main… »*, 15 entrées, intacte à chaque étape.
+Exactly the user's real conversation is left: *"Explain the project structure and its main…"*, 15 entries, intact at every step.
 
-**La suppression survit à un rechargement de page** — c'est le contrôle qui distingue la bonne méthode des mauvaises.
+**The deletion survives a page reload** — that is the check that separates the right method from the wrong ones.
 
-## Les trois échecs, et ce qu'ils ont appris
+## The three failures, and what they taught
 
-### 1. Réécrire `localStorage` app ouvert : l'application réécrit par-dessus
+### 1. Rewriting `localStorage` with the app open: the application writes back over it
 
-Première passe : 41 → 6 sessions, 15 clés de journal supprimées. **Sembe concluant.**
+First pass: 41 → 6 sessions, 15 log keys deleted. **Looked conclusive.**
 
-Puis l'application a **réécrit sa propre copie** — elle gardait la liste en mémoire — et 5 conversations supprimées sont **revenues en coquilles vides**, avec le titre générique `Session <id>` et zéro entrée.
+Then the application **rewrote its own copy** — it kept the list in memory — and 5 deleted conversations **came back as empty shells**, with the generic title `Session <id>` and zero entries.
 
-**Leçon :** pour un objet géré par l'application, modifier son stockage pendant qu'elle tourne ne tient pas.
+**Lesson:** for an object the application manages, changing its storage while it is running does not stick.
 
-### 2. Réécrire `localStorage` app fermée : le côté natif réintroduit
+### 2. Rewriting `localStorage` with the app closed: the native side reintroduces them
 
-Deuxième passe, application arrêtée : 10 → 1. **Stable sur 12 secondes**, vérifié par sondage.
+Second pass, application stopped: 10 → 1. **Stable over 12 seconds**, verified by polling.
 
-Puis un **rechargement de page** a fait revenir **les mêmes 9 sessions**, avec les mêmes identifiants. Elles ne venaient donc pas de `localStorage` mais d'un **registre côté natif** (Tauri). Recherche sur disque (`.config\muse`, `.muse`, `%LOCALAPPDATA%\muse`, `%APPDATA%\muse`) : **aucune trace** des identifiants.
+Then a **page reload** brought back **the same 9 sessions**, with the same identifiers. They did not come from `localStorage` then, but from a **native-side registry** (Tauri). Search on disk (`.config\muse`, `.muse`, `%LOCALAPPDATA%\muse`, `%APPDATA%\muse`): **no trace** of the identifiers.
 
-**Leçon :** supprimer du stockage web ne tue pas la session. L'infobulle du bouton le dit pourtant explicitement : *« Kill session and delete its local history »*.
+**Lesson:** deleting from web storage does not kill the session. The button's tooltip says so explicitly: *"Kill session and delete its local history"*.
 
-### 3. Piloter le bouton par CDP : trois obstacles en un
+### 3. Driving the button over CDP: three obstacles in one
 
-- Le bouton **« Delete… »** n'est pas dans la barre latérale : il vit dans une **boîte de dialogue modale** ouverte par un bouton **`aria-label="Actions for …"`** (`dialog.current?.showModal()`). Une version antérieure cherchait un menu contextuel et un double-clic, qui n'existent pas.
-- Une évaluation de page **asynchrone** revenait avec un objet vide — limitation CDP déjà rencontrée sur le test de course de file.
-- Un appel `Runtime.evaluate` **sans `returnByValue`** renvoie une référence d'objet distant : l'appelant lit `undefined` et ne peut pas le distinguer d'un échec.
+- The **"Delete…"** button is not in the sidebar: it lives in a **modal dialog** opened by a button with **`aria-label="Actions for …"`** (`dialog.current?.showModal()`). An earlier version looked for a context menu and a double-click, neither of which exists.
+- An **asynchronous** page evaluation came back with an empty object — a CDP limitation already met on the queue race test.
+- A `Runtime.evaluate` call **without `returnByValue`** returns a remote object reference: the caller reads `undefined` and cannot distinguish it from a failure.
 
-**Leçon :** le bon chemin est `Actions for …` → `Delete…` → `Delete conversation`, en **appels synchrones séparés**.
+**Lesson:** the right path is `Actions for …` → `Delete…` → `Delete conversation`, in **separate synchronous calls**.
 
-## La méthode qui marche
+## The method that works
 
 ```powershell
-# Essai à blanc : prouve le chemin en supprimant UNE ligne
+# Dry run: proves the path by deleting ONE row
 node scripts/cdp-delete-conversations.mjs
 
-# Supprime toutes les coquilles restantes
+# Delete all remaining shells
 node scripts/cdp-delete-conversations.mjs --apply
 ```
 
-**Règle de sécurité :** seules les lignes dont le libellé est `Actions for New conversation` ou `Actions for Session <id>` sont touchées. Une session qui a produit un vrai tour porte un **titre descriptif** et n'est jamais sélectionnée — vérifié à chaque étape, le titre réel apparaît intact dans tous les relevés.
+**Safety rule:** only rows whose label is `Actions for New conversation` or `Actions for Session <id>` are touched. A session that produced a real turn carries a **descriptive title** and is never selected — verified at every step, the real title appears intact in every reading.
 
-**Garde-fou :** si le nombre de coquilles ne diminue pas après une suppression, le script **s'arrête** au lieu de continuer à l'aveugle.
+**Guard rail:** if the number of shells does not decrease after a deletion, the script **stops** instead of carrying on blind.
 
-## Sauvegarde
+## Backup
 
-`%USERPROFILE%\muse-localstorage-backup-2026-09-20.json` — 215 Ko, 61 clés, l'état complet **d'avant** toute suppression. Elle contient les conversations supprimées et permet un retour arrière.
+`%USERPROFILE%\muse-localstorage-backup-2026-09-20.json` — 215 KB, 61 keys, the complete state **before** any deletion. It contains the deleted conversations and allows a rollback.
 
-## Ce que ce nettoyage a révélé sur le produit
+## What this cleanup revealed about the product
 
-- **Une conversation sans tour abouti garde un titre générique** et se présente comme « New conversation » dans la barre latérale, tandis que son titre stocké est `Session <id>`. C'est ce qui rend la distinction fiable… et c'est aussi une incohérence d'affichage entre le stockage et l'interface.
-- **Les sessions sont réintroduites par le côté natif au rechargement** alors qu'elles n'existent plus dans le stockage web. Après une suppression par `localStorage`, l'application et son registre natif divergent silencieusement — l'interface a continué d'afficher 10 entrées pour un stockage à 1.
-- **L'observabilité est faible** : la conversation est supprimée, mais rien dans l'interface ne indique qu'une session native lui survit.
+- **A conversation with no completed turn keeps a generic title** and presents itself as "New conversation" in the sidebar, while its stored title is `Session <id>`. That is what makes the distinction reliable… and it is also a display inconsistency between storage and interface.
+- **Sessions are reintroduced by the native side on reload** although they no longer exist in web storage. After a `localStorage` deletion, the application and its native registry diverge silently — the interface kept showing 10 entries for a storage holding 1.
+- **Observability is weak**: the conversation is deleted, but nothing in the interface indicates that a native session outlives it.
 
-Ces trois points ne sont pas des défauts du ticket en cours, mais ils mériteraient une entrée dans la roadmap si le sujet revient.
+These three points are not defects of the current ticket, but they would deserve a roadmap entry if the subject comes back.
