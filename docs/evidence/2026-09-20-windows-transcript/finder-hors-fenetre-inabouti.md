@@ -1,47 +1,47 @@
-# Finder vers un résultat hors fenêtre — test inabouti (M1-13, 20 septembre 2026)
+# Finder jumping to a result outside the window — inconclusive test (M1-13, 20 September 2026)
 
-Tentative de couvrir le dernier critère de mesure de M1-13 : **le saut du finder vers un résultat situé hors de la fenêtre DOM**.
+An attempt to cover M1-13's last measurement criterion: **the finder jumping to a result outside the DOM window**.
 
-**Le test n'a pas abouti, et l'échec vient de mon script, pas de l'application.** Je le consigne pour ne pas laisser croire que le critère est couvert.
+**The test did not succeed, and the failure comes from my script, not the application.** I record it so the criterion is not assumed covered.
 
-## Protocole prévu
+## Intended protocol
 
-1. écrire 2 000 entrées dont un marqueur unique à l'index **137** — donc très au-dessus de la fenêtre initiale ;
-2. recharger, remonter en haut pour déclencher un chargement, et vérifier que la fenêtre est loin de 137 ;
-3. ouvrir `Find in conversation`, saisir `FINDER-NEEDLE-137`, sélectionner le résultat, valider ;
-4. vérifier que la fenêtre s'est **déplacée jusqu'à inclure l'index 137**.
+1. write 2,000 entries with a unique marker at index **137** — well above the initial window;
+2. reload, scroll to the top to trigger a load, and check the window is far from 137;
+3. open `Find in conversation`, type `FINDER-NEEDLE-137`, select the result, confirm;
+4. check that the window **moved to include index 137**.
 
-## Ce qui s'est passé
+## What happened
 
-| Étape | Fenêtre DOM | Articles | `posinset` | Finder ouvert |
+| Step | DOM window | Articles | `posinset` | Finder open |
 |---|---|---|---|---|
-| initial | 1720 – 1880 | 160 | 1721 | oui |
-| après scroll en haut | 1600 – 1760 | 160 | 1601 | **non** |
-| requête envoyée | 1600 – 1760 | 160 | 1601 | **non** |
-| sélection | 1600 – 1760 | 160 | 1601 | non |
-| validation | 1600 – 1760 | 160 | 1601 | non |
+| initial | 1720 – 1880 | 160 | 1721 | yes |
+| after scrolling to the top | 1600 – 1760 | 160 | 1601 | **no** |
+| query sent | 1600 – 1760 | 160 | 1601 | **no** |
+| selection | 1600 – 1760 | 160 | 1601 | no |
+| confirmation | 1600 – 1760 | 160 | 1601 | no |
 
-La fenêtre **n'a jamais bougé** après l'étape 2, et le finder s'est retrouvé **fermé** avant même la saisie.
+The window **never moved** after step 2, and the finder was found **closed** before the typing even began.
 
-## Cause identifiée
+## Cause identified
 
-Mon sélecteur cherchait un bouton dont le texte contient « Find in conversation ». Or ce texte appartient au **conteneur du finder** (`.stream-find`, `aria-label="Find in conversation"`), pas à un bouton d'ouverture. Le clic a donc **refermé** un finder déjà ouvert au lieu de l'ouvrir, et la recherche de champ qui suivait a échoué — faute de champ monté. La requête n'a jamais été saisie, et aucune sélection n'a pu être cliquée.
+My selector looked for a button whose text contains "Find in conversation". But that text belongs to the **finder's container** (`.stream-find`, `aria-label="Find in conversation"`), not to an opening button. The click therefore **closed** an already-open finder instead of opening it, and the field lookup that followed failed — no field being mounted. The query was never typed, and no selection could be clicked.
 
-**Enseignement de méthode :** cibler un libellé par sous-chaîne sans vérifier la **balise** de l'élément est fragile. Le conteneur portait le même texte que l'action recherchée.
+**Method lesson:** targeting a label by substring without checking the element's **tag** is fragile. The container carried the same text as the action sought.
 
-## Ce que le test établit quand même
+## What the test establishes anyway
 
-Rien sur le finder. En revanche, deux mesures **valides** ont été obtenues au passage, et elles corroborent #166/#167 :
+Nothing about the finder. On the other hand, two **valid** measurements were obtained along the way, and they corroborate #166/#167:
 
-- fenêtre initiale **1720 – 1880** avec **160 articles** montés ;
-- après un scroll en haut, fenêtre **1600 – 1760** : recul de **120 entrées**, DOM stable.
+- initial window **1720 – 1880** with **160 articles** mounted;
+- after scrolling to the top, window **1600 – 1760**: a step back of **120 entries**, DOM stable.
 
-## Restauration
+## Restoration
 
-Le journal d'origine a été réécrit et **vérifié** : 21 205 octets, 25 entrées, ni entrée `long-`, ni marqueur `FINDER-NEEDLE`. Aucun état de profil n'est laissé modifié.
+The original log was rewritten and **verified**: 21,205 bytes, 25 entries, no `long-` entry and no `FINDER-NEEDLE` marker. No profile state is left modified.
 
-## Ce qu'il faudrait pour reprendre
+## What it would take to pick this up
 
-Cibler le vrai point d'ouverture du finder — le raccourci `Ctrl+F` est déjà **prouvé câblé** (mesuré dans `docs/evidence/2026-09-20-windows-a11y/M0-12.md`), donc l'ouvrir par le clavier plutôt que par un clic est la voie la plus sûre. Ensuite localiser le champ par `aria-label="Search messages"` plutôt que par sous-chaîne sur un conteneur.
+Target the finder's real opening point — the `Ctrl+F` shortcut is already **proved wired** (measured in `docs/evidence/2026-09-20-windows-a11y/M0-12.md`), so opening it by keyboard rather than by click is the safest route. Then locate the field by `aria-label="Search messages"` rather than by substring on a container.
 
-**M1-13 reste ouvert** sur ce point : le finder hors fenêtre n'est **pas** qualifié.
+**M1-13 stays open** on this point: the finder outside the window is **not** qualified.
