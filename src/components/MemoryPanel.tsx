@@ -19,8 +19,6 @@ interface Props {
   onMention: (query: string) => void;
 }
 
-const SOURCES = ["user", "slack", "notion", "docs", "codebase"];
-
 /**
  * US-20 memory panel: dated/sourced entries with age badges, stale
  * warnings (never a silent override), add/remove, and the periodic SCAN
@@ -36,12 +34,11 @@ export function MemoryPanel({
   onMention,
 }: Props) {
   const [text, setText] = useState("");
-  const [source, setSource] = useState("user");
   const [open, setOpen] = useState(true);
 
   function submit(): void {
     if (text.trim().length === 0) return;
-    onAdd(text, source);
+    onAdd(text, "user");
     setText("");
   }
 
@@ -94,7 +91,9 @@ export function MemoryPanel({
                       @{memoryMentionQuery(m)}
                     </button>
                     <span className="memory-item-text">{memoryChipLabel(m)}</span>
-                    <span className="memory-item-source">{m.source}</span>
+                    {m.source !== "user" && (
+                      <span className="memory-item-source">{m.source}</span>
+                    )}
                     <span
                       className={
                         stale ? "memory-age memory-age-stale" : "memory-age"
@@ -127,17 +126,6 @@ export function MemoryPanel({
               aria-label="New memory text"
               maxLength={1000}
             />
-            <select
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              aria-label="Memory source"
-            >
-              {SOURCES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
             <button
               type="button"
               onClick={submit}

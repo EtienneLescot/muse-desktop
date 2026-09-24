@@ -13,12 +13,12 @@ import { describeAuth, canOfferSignIn, type AuthStatusPayload } from "../lib/mus
 import { isTauriRuntime } from "../lib/env";
 import {
   startupCheckStatusLabel,
+  startupProbeNeedsAttention,
   startupProbeRows,
   sanitizeStartupText,
   type StartupProbe,
 } from "../lib/startupProbe";
 import {
-  canSelectMode,
   effectiveSandboxMode,
   type SandboxMode,
   type SandboxSettings,
@@ -78,6 +78,30 @@ interface Props {
    */
   onSignIn: () => void | Promise<unknown>;
 }
+
+/**
+ * Isolation is what the engine's process may reach; authorization, above, is
+ * who approves each action. Picking a level here is the permission — the
+ * separate "saved permission" checkboxes said the same thing twice, and the
+ * select fell back to workspace when they disagreed.
+ */
+const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }[] = [
+  {
+    mode: "workspace",
+    label: "Workspace only",
+    detail: "Muse reads and writes inside the conversation's folder, and nowhere else.",
+  },
+  {
+    mode: "network",
+    label: "Workspace and network",
+    detail: "Adds outbound network access: package installs, API calls, downloads.",
+  },
+  {
+    mode: "elevated",
+    label: "Elevated access",
+    detail: "Adds files and commands outside the folder. Grant it to a workspace you trust.",
+  },
+];
 
 export function SettingsPanel({
   workspace,
@@ -143,7 +167,12 @@ export function SettingsPanel({
   const effective = effectiveSandboxMode(sandbox);
 
   function pickMode(mode: SandboxMode): void {
-    onSandboxChange({ ...sandbox, mode });
+    onSandboxChange({
+      ...sandbox,
+      mode,
+      networkAllowed: mode === "network" || mode === "elevated",
+      elevatedAllowed: mode === "elevated",
+    });
     setRestartStatus(null);
   }
 
@@ -299,13 +328,21 @@ export function SettingsPanel({
             No environment check has run in this window yet.
           </p>
         ) : (
-          <div className="startup-probe settings-runtime-probe">
-            <header>
-              <h3>Environment check</h3>
+          <details
+            className="startup-probe settings-runtime-probe"
+            open={startupProbeNeedsAttention(startupProbe)}
+          >
+            <summary data-attention={startupProbeNeedsAttention(startupProbe) ? "true" : undefined}>
+              <span className="startup-probe-dot" aria-hidden="true" />
+              <span className="startup-probe-verdict">
+                {startupProbeNeedsAttention(startupProbe)
+                  ? "Something needs your attention"
+                  : "Everything Muse needs is ready"}
+              </span>
               <span className="muted">
                 {sanitizeStartupText(startupProbe.platform, 40)} · {new Date(startupProbe.checkedAt).toLocaleTimeString()}
               </span>
-            </header>
+            </summary>
             <ul>
               {startupProbeRows(startupProbe).map(({ label, check }) => (
                 <li key={label} data-status={check.status}>
@@ -318,7 +355,7 @@ export function SettingsPanel({
                 </li>
               ))}
             </ul>
-          </div>
+          </details>
         )}
       </div>
 
@@ -390,59 +427,34 @@ export function SettingsPanel({
       </div>
 
       <div className="settings-group">
-        <h3>Isolation preferences</h3>
+        <h3>Isolation</h3>
         <p className="settings-note">
-          Applied when a new Muse host starts for a workspace. Project
-          overrides can tighten this posture; an existing host keeps its
-          current posture until it is restarted.
+          How far Muse's engine can reach — separate from Authorization above,
+          which decides who approves each action. Applied when a new engine
+          starts: a running conversation keeps its own until it is restarted.
         </p>
-        <label className="settings-label" htmlFor="settings-sandbox-mode">
-          Isolation (workspace by default)
-        </label>
-        <select
-          id="settings-sandbox-mode"
-          value={sandbox.mode}
-          onChange={(e) => pickMode(e.target.value as SandboxMode)}
-          aria-label="Isolation preference"
-        >
-          <option value="workspace">Workspace only</option>
-          <option value="network" disabled={!sandbox.networkAllowed}>
-            Network
-            {!sandbox.networkAllowed
-              ? " (permission required below)"
-              : ""}
-          </option>
-          <option value="elevated" disabled={!sandbox.elevatedAllowed}>
-            Elevated access
-            {!sandbox.elevatedAllowed
-              ? " (permission required below)"
-              : ""}
-          </option>
-        </select>
-        <label className="settings-check">
-          <input
-            type="checkbox"
-            checked={sandbox.networkAllowed}
-            onChange={(e) =>
-              onSandboxChange({ ...sandbox, networkAllowed: e.target.checked })
-            }
-          />
-          Allow network access (saved permission)
-        </label>
-        <label className="settings-check">
-          <input
-            type="checkbox"
-            checked={sandbox.elevatedAllowed}
-            onChange={(e) =>
-              onSandboxChange({ ...sandbox, elevatedAllowed: e.target.checked })
-            }
-          />
-          Allow elevated access (saved permission)
-        </label>
-        <p className="settings-note">
-          Saved preference : <strong>{effective}</strong>
-          {!canSelectMode(sandbox, sandbox.mode) &&
-            " — permission required for this preference."}
+        <div className="authorization-mode-list" role="radiogroup" aria-label="Isolation">
+          {SANDBOX_MODES.map(({ mode, label, detail }) => (
+            <label
+              key={mode}
+              className={`authorization-mode ${sandbox.mode === mode ? "selected" : ""}`}
+            >
+              <input
+                type="radio"
+                name="sandbox-mode"
+                value={mode}
+                checked={sandbox.mode === mode}
+                onChange={() => pickMode(mode)}
+              />
+              <span className="authorization-mode-copy">
+                <strong>{label}</strong>
+                <span>{detail}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <p className="settings-note authorization-status" role="status">
+          Current isolation: <strong>{effective}</strong>
         </p>
         {onRestartHost !== undefined && workspace !== null && (
           <div className="settings-host-restart">

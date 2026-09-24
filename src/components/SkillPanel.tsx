@@ -20,6 +20,8 @@ interface Props {
   onToggle: (name: string, enabled: boolean) => void;
   /** Invoke `/name` with no args (slash in the composer passes args). */
   onInvoke: (name: string) => void;
+  /** False with no open conversation: a skill is a message, it needs a thread. */
+  canInvoke?: boolean;
   /**
    * Compute suggestions for a draft AND trace them into the active
    * session log; returns the list for inline display.
@@ -31,7 +33,7 @@ interface Props {
  * US-25 skills panel: slash-invokable skills, auto-suggest traced to the
  * log, progressive disclosure (view-only shows description only).
  */
-export function SkillPanel({ skills, hostSkills, skillProgress, workspace, onRefreshHost, onScan, onToggle, onInvoke, onTraceSuggest }: Props) {
+export function SkillPanel({ skills, hostSkills, skillProgress, workspace, onRefreshHost, onScan, onToggle, onInvoke, canInvoke = true, onTraceSuggest }: Props) {
   const [draft, setDraft] = useState("");
   const [suggestions, setSuggestions] = useState<SkillSuggestion[]>([]);
   const [scanBusy, setScanBusy] = useState(false);
@@ -113,7 +115,14 @@ export function SkillPanel({ skills, hostSkills, skillProgress, workspace, onRef
                 <small>{skill.description || skill.displayName}</small>
                 {skill.argumentHint && <small className="muted">{skill.argumentHint}</small>}
               </span>
-              <button type="button" onClick={() => onInvoke(skill.selector)}>Run</button>
+              <button
+                type="button"
+                onClick={() => onInvoke(skill.selector)}
+                disabled={!canInvoke}
+                title={canInvoke ? `Send /${skill.selector} to the open conversation` : "Open a conversation first"}
+              >
+                Run
+              </button>
             </li>
           ))}
         </ul>
@@ -141,7 +150,12 @@ export function SkillPanel({ skills, hostSkills, skillProgress, workspace, onRef
                   onChange={(ev) => onToggle(s.name, ev.target.checked)}
                 />
               </label>
-              <button type="button" onClick={() => onInvoke(s.name)} disabled={!s.enabled}>
+              <button
+                type="button"
+                onClick={() => onInvoke(s.name)}
+                disabled={!s.enabled || !canInvoke}
+                title={canInvoke ? `Send /${s.name} to the open conversation` : "Open a conversation first"}
+              >
                 Run
               </button>
             </li>
@@ -173,7 +187,12 @@ export function SkillPanel({ skills, hostSkills, skillProgress, workspace, onRef
                 <strong>/{s.skillName}</strong>
                 <small className="muted">{s.reason}</small>
               </span>
-              <button type="button" onClick={() => onInvoke(s.skillName)}>
+              <button
+                type="button"
+                onClick={() => onInvoke(s.skillName)}
+                disabled={!canInvoke}
+                title={canInvoke ? `Send /${s.skillName} to the open conversation` : "Open a conversation first"}
+              >
                 Run
               </button>
             </li>

@@ -10,6 +10,12 @@ import {
   type MentionToken,
   type ResolvedMention,
 } from "../lib/mentions";
+import {
+  activeSlashToken,
+  applySlashCommand,
+  matchSlashCommands,
+  type SlashCommand,
+} from "../lib/slashCommands";
 // US-20 memory @-mention chips: `@mem/<id>` tokens expand to quoted,
 // source+age flagged context (stale flagged, never silent).
 import {
@@ -90,6 +96,12 @@ interface Props {
   /** Host-backed reasoning effort shown beside authorization and model. */
   reasoningEffort: ReasoningEffort;
   onReasoningEffortChange: (value: ReasoningEffort) => void;
+  /**
+   * Skills offered while typing `/`. Without them the user has to know every
+   * command by heart, which is what the Extensions page's Run buttons were
+   * standing in for.
+   */
+  slashCommands?: SlashCommand[];
 }
 
 interface RecentMention {
@@ -164,6 +176,7 @@ export function Composer({
   onAuthorizationModeChange,
   reasoningEffort,
   onReasoningEffortChange,
+  slashCommands = [],
 }: Props) {
   const draftStorageKey = `muse-desktop.draft.${draftKey}`;
   const [text, setText] = useState(() => readSessionStorageString(draftStorageKey));
@@ -393,6 +406,31 @@ export function Composer({
       if (el !== null) {
         el.focus();
         el.setSelectionRange(nextCaret, nextCaret);
+      }
+    });
+  }
+
+  // `/` completion: the same shape as the mention list, on the command token
+  // that opens the message.
+  const slashToken = useMemo(() => activeSlashToken(text, caret), [text, caret]);
+  const slashCandidates = useMemo(
+    () => (slashToken === null ? [] : matchSlashCommands(slashCommands, slashToken.query)),
+    [slashCommands, slashToken],
+  );
+  const slashKey = slashToken === null ? null : `slash-${slashToken.query}`;
+  const slashOpen = slashCandidates.length > 0 && !disabled && dismissedKey !== slashKey;
+
+  function applySlash(command: SlashCommand): void {
+    if (slashToken === null) return;
+    const next = applySlashCommand(text, slashToken, command);
+    setText(next.text);
+    setCaret(next.caret);
+    setBlocked(null);
+    requestAnimationFrame(() => {
+      const el = areaRef.current;
+      if (el !== null) {
+        el.focus();
+        el.setSelectionRange(next.caret, next.caret);
       }
     });
   }
@@ -647,6 +685,22 @@ export function Composer({
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.nativeEvent.isComposing) return;
+    if (slashOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      const d = e.key === "ArrowDown" ? 1 : -1;
+      setSelIndex((i) => (i + d + slashCandidates.length) % slashCandidates.length);
+      return;
+    }
+    if (slashOpen && (e.key === "Enter" || e.key === "Tab") && !e.shiftKey) {
+      e.preventDefault();
+      applySlash(slashCandidates[selIndex] ?? slashCandidates[0]);
+      return;
+    }
+    if (e.key === "Escape" && slashToken !== null) {
+      e.preventDefault();
+      setDismissedKey(slashKey);
+      return;
+    }
     if (dropdownOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
       e.preventDefault();
       const d = e.key === "ArrowDown" ? 1 : -1;
@@ -760,6 +814,29 @@ export function Composer({
                   </li>
                 );
               })}
+            </ul>
+          )}
+          {slashOpen && (
+            <ul className="mention-list" role="listbox" aria-label="Skill completions">
+              {slashCandidates.map((c, i) => (
+                <li
+                  key={`${c.origin}:${c.name}`}
+                  role="option"
+                  aria-selected={i === selIndex}
+                  className={i === selIndex ? "mention-item mention-item-active" : "mention-item"}
+                  onMouseDown={(e) => {
+                    // Select before the textarea loses focus/caret.
+                    e.preventDefault();
+                    applySlash(c);
+                  }}
+                >
+                  <span className="mention-item-path">/{c.name}</span>
+                  <span className="mention-item-scope">{c.origin}</span>
+                  {c.description !== "" && (
+                    <span className="mention-item-detail">{c.description}</span>
+                  )}
+                </li>
+              ))}
             </ul>
           )}
           {dropdownOpen && (
@@ -914,7 +991,7 @@ export function Composer({
                 : "Ask Muse to continue…"
             }
             aria-label="Message Muse"
-            aria-expanded={dropdownOpen || memDropdownOpen}
+            aria-expanded={dropdownOpen || memDropdownOpen || slashOpen}
             aria-autocomplete="list"
             title={COMPOSER_SHORTCUT_TITLES.textarea}
           />

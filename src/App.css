@@ -2365,6 +2365,25 @@ body.dark .composer textarea::placeholder {
   color: var(--danger);
 }
 
+/* A skill row carries its description on a second line: the name alone does
+   not say what `/create-plugin` will do. */
+.mention-list[aria-label="Skill completions"] .mention-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-items: center;
+}
+
+.mention-item-detail {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
 .mention-error {
   color: var(--danger);
   border: 1px solid var(--danger);
@@ -2585,12 +2604,40 @@ body.dark .composer textarea::placeholder {
   padding: 9px 10px;
 }
 
-.startup-probe header {
+.startup-probe > summary {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 7px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.startup-probe > summary::-webkit-details-marker {
+  display: none;
+}
+
+.startup-probe > summary .startup-probe-dot {
+  background: var(--green);
+}
+
+.startup-probe > summary[data-attention] .startup-probe-dot {
+  background: var(--danger);
+}
+
+.startup-probe-verdict {
+  font-weight: 600;
+}
+
+.startup-probe > summary .muted {
+  margin-left: auto;
+  font-size: 0.74rem;
+}
+
+.startup-probe[open] > summary {
+  margin-bottom: 9px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
 }
 
 .startup-probe h3 {

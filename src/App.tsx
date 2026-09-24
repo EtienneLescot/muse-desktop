@@ -1206,8 +1206,11 @@ export default function App() {
                     setSkillEnabledByName(name, enabled)
                   }
                   onInvoke={(name) => {
-                    if (activeId !== null) invokeSkill(activeId, name, "");
+                    if (activeId === null) return;
+                    invokeSkill(activeId, name, "");
+                    openPage("task");
                   }}
+                  canInvoke={activeId !== null}
                   onTraceSuggest={(text) =>
                     activeId !== null
                       ? traceSkillSuggestions(activeId, text)
@@ -1611,6 +1614,22 @@ export default function App() {
                     key={active.session_id}
                     draftKey={active.session_id}
                     sessionId={active.session_id}
+                    /* Host skills first: when both sides expose one name, the
+                       host entry is the one the engine actually runs. */
+                    slashCommands={[
+                      ...(hostSkillsBySession[active.session_id] ?? []).map((skill) => ({
+                        name: skill.selector,
+                        description: skill.description || skill.displayName,
+                        origin: "host",
+                      })),
+                      ...skills
+                        .filter((skill) => skill.enabled)
+                        .map((skill) => ({
+                          name: skill.name,
+                          description: skill.description,
+                          origin: "workspace",
+                        })),
+                    ]}
                     disabled={backendMissing || active.archived === true || !connectedIds.includes(active.session_id)}
                     modelControl={
                       <>
