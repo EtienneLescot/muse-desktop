@@ -83,11 +83,15 @@ export function SessionSidebar({
    * the id here means one dialog serves both entry points.
    */
   const [pendingKill, setPendingKill] = useState<string | null>(null);
+  /** "Delete all…": the same dialog, confirming every conversation at once. */
+  const [confirmAll, setConfirmAll] = useState(false);
+  const deleting = confirmDelete || pendingKill !== null || confirmAll;
   function closeActions() {
     dialog.current?.close();
     setSelected(null);
     setConfirmDelete(false);
     setPendingKill(null);
+    setConfirmAll(false);
     actionTrigger.current?.focus();
     actionTrigger.current = null;
   }
@@ -202,6 +206,20 @@ export function SessionSidebar({
           </span>
           )
         </span>
+        {sessions.length > 0 && (
+          <button
+            type="button"
+            className="link"
+            onClick={(event) => {
+              actionTrigger.current = event.currentTarget;
+              setConfirmAll(true);
+              dialog.current?.showModal();
+            }}
+            title="Delete every conversation, archived ones included"
+          >
+            Delete all…
+          </button>
+        )}
         <button
           type="button"
           className="icon"
@@ -328,18 +346,22 @@ export function SessionSidebar({
       >
         <header>
           <h2>
-            {confirmDelete || pendingKill !== null ? "Delete this conversation?" : selected?.title}
+            {confirmAll
+              ? `Delete all ${sessions.length} conversations?`
+              : deleting
+                ? "Delete this conversation?"
+                : selected?.title}
           </h2>
           <button className="icon" aria-label="Close" onClick={closeActions}>
             <Icon name="close" />
           </button>
         </header>
-        {confirmDelete || pendingKill !== null ? (
+        {deleting ? (
           <>
             <p>
-              It will disappear from Muse and will not come back. The
-              conversation file itself stays on disk, under the Muse data folder,
-              until it is removed there.
+              {confirmAll ? "They" : "It"} will disappear from Muse and will not
+              come back. The conversation files themselves stay on disk, under
+              the Muse data folder, until they are removed there.
             </p>
             <div className="dialog-buttons">
               <button
@@ -347,9 +369,10 @@ export function SessionSidebar({
                 onClick={() => {
                   setConfirmDelete(false);
                   setPendingKill(null);
-                  // The archived row opens this dialog with no selected session,
-                  // so there is no action list to fall back to. Without this the
-                  // dialog stays open with a rename field bound to nothing.
+                  // The archived row and "Delete all…" open this dialog with no
+                  // selected session, so there is no action list to fall back to.
+                  // Without this the dialog stays open with a rename field bound
+                  // to nothing.
                   if (selected === null) closeActions();
                 }}
               >
@@ -358,12 +381,16 @@ export function SessionSidebar({
               <button
                 className="danger"
                 onClick={() => {
-                  const target = pendingKill ?? selected?.session_id ?? null;
-                  if (target !== null) onKill(target);
+                  if (confirmAll) {
+                    for (const s of sessions) onKill(s.session_id);
+                  } else {
+                    const target = pendingKill ?? selected?.session_id ?? null;
+                    if (target !== null) onKill(target);
+                  }
                   closeActions();
                 }}
               >
-                Delete conversation
+                {confirmAll ? "Delete all" : "Delete conversation"}
               </button>
             </div>
           </>
