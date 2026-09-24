@@ -1,48 +1,48 @@
-# Pourquoi le composeur affiche « Model » — diagnostic (21 septembre 2026)
+# Why the composer shows "Model" — diagnosis (21 September 2026)
 
-Passe UX n° 1. Le composeur affiche le mot générique **« Model »** au lieu du nom du modèle en cours. Ce document établit la chaîne complète, de l'effet visible à la cause.
+UX pass no. 1. The composer shows the generic word **"Model"** instead of the name of the model in use. This document establishes the complete chain, from the visible effect to the cause.
 
-## L'effet, mesuré
+## The effect, measured
 
-| État du panneau | Largeur du composeur | Texte du bouton | Lignes | Bouton |
+| Panel state | Composer width | Button text | Lines | Button |
 |---|---|---|---|---|
-| ouvert | 656 px | **`Model`** | **1** | 64×32 |
-| fermé | 760 px | **`Model`** | **1** | 64×32 |
+| open | 656 px | **`Model`** | **1** | 64×32 |
+| closed | 760 px | **`Model`** | **1** | 64×32 |
 
-**Deux choses à en tirer :**
+**Two things follow:**
 
-1. **Le correctif d'habillage tient** : `white-space: nowrap`, une seule ligne, dans les deux états. La revue visuelle a jugé une capture **antérieure** au correctif, et je le comprends — le libellé court ne permet pas de distinguer « tronqué » de « nom absent ». **La revue se trompait sur ce point, et ma vérification initiale était juste, mais pour une raison que je n'avais pas identifiée.**
+1. **The wrapping fix holds**: `white-space: nowrap`, a single line, in both states. The visual review judged a screenshot taken **before** the fix, and I understand why — the short label makes "truncated" indistinguishable from "name absent". **The review was wrong on that point, and my initial check was right, but for a reason I had not identified.**
 
-2. **Le vrai défaut est le repli générique.** L'utilisateur ne sait pas quel modèle il utilise.
+2. **The real defect is the generic fallback.** The user does not know which model they are using.
 
-## La chaîne, du visible à la cause
+## The chain, from the visible to the cause
 
-`App.tsx`, le contrôle du composeur :
+`App.tsx`, the composer's control:
 
 ```tsx
-{liveModels?.find((model) => model.isActive)?.displayLabel   // 1er choix
-  || active.model_id                                          // 2e choix
-  || "Model"}                                                 // repli
+{liveModels?.find((model) => model.isActive)?.displayLabel   // 1st choice
+  || active.model_id                                          // 2nd choice
+  || "Model"}                                                 // fallback
 ```
 
-Trois causes possibles pour retomber sur `"Model"` : `liveModels` vide, ou `model_id` absent, ou les deux. **Mesure : les deux.** `0 / 3` sessions stockées portent un `model_id`, et `liveModels` ne fournit pas d'entrée active.
+Three possible causes for falling back to `"Model"`: `liveModels` empty, or `model_id` absent, or both. **Measured: both.** `0 / 3` stored sessions carry a `model_id`, and `liveModels` provides no active entry.
 
-**Pourquoi `model_id` est absent** — recherche dans le code :
+**Why `model_id` is absent** — searching the code:
 
-| Emplacement | Écrit `model_id` ? |
+| Location | Writes `model_id`? |
 |---|---|
-| `useMuseSessions.ts:4059` | oui, dans `setSessionModel` — **uniquement quand l'utilisateur change explicitement de modèle** |
-| `:4282`, `:4659` | oui, à la création, si un modèle a été demandé |
-| `:4732`, `:4751` | oui, par héritage lors d'un fork |
-| **Restauration d'une session existante** | **non** |
+| `useMuseSessions.ts:4059` | yes, in `setSessionModel` — **only when the user explicitly changes model** |
+| `:4282`, `:4659` | yes, at creation, if a model was requested |
+| `:4732`, `:4751` | yes, by inheritance on a fork |
+| **Restoring an existing session** | **no** |
 
-**Rien ne renseigne `model_id` quand une session est restaurée.** Une session créée avant l'introduction du champ, ou restaurée sans changement de modèle, n'en a donc jamais.
+**Nothing fills `model_id` when a session is restored.** A session created before the field was introduced, or restored with no model change, therefore never has one.
 
-## La cause structurelle
+## The structural cause
 
-`session/list` **expose `modelId` pour chaque session** — je l'ai mesuré : `modelId`, `providerId`, `turnCount`, `title`, `status`, `branch`, `workspaceRoot`…
+`session/list` **exposes `modelId` for every session** — I measured it: `modelId`, `providerId`, `turnCount`, `title`, `status`, `branch`, `workspaceRoot`…
 
-Et le Rust **lit déjà cette réponse** pour en extraire d'autres champs :
+And the Rust side **already reads that response** to extract other fields:
 
 ```rust
 fn session_meta_from_list_row(root: &Path, session: &Value, …) -> Option<SessionMeta> {
@@ -50,23 +50,23 @@ fn session_meta_from_list_row(root: &Path, session: &Value, …) -> Option<Sessi
         session_id,
         workspace,
         running,
-        session_durability,                          // ← remonte jusqu'à l'interface
-        approval_mode: session_approval_mode(session), // ← remonte, avec un commentaire
-        granted_capabilities,                        // ← remonte
+        session_durability,                          // ← reaches the interface
+        approval_mode: session_approval_mode(session), // ← reaches it, with a comment
+        granted_capabilities,                        // ← reaches it
     })
 }
 ```
 
-**`modelId` est ignoré.** L'asymétrie est nette : le mode d'approbation et la durabilité sont transmis au renderer, le modèle est jeté — alors que **le code Rust sait déjà extraire un champ d'une ligne de `session/list`**, comme le prouve `session_approval_mode(session)`.
+**`modelId` is ignored.** The asymmetry is clear: the approval mode and the durability are passed to the renderer, the model is thrown away — although **the Rust code already knows how to extract a field from a `session/list` row**, as `session_approval_mode(session)` proves.
 
-## Ce que le correctif demanderait
+## What the fix would require
 
-1. `session_meta_from_list_row` lit `session.get("modelId")` et le place dans `SessionMeta` (même motif que `approval_mode`).
-2. `SessionMeta` (Rust) et son type TypeScript reçoivent `model_id`, sérialisé quand présent.
-3. Le renderer applique `meta.model_id` aux sessions restaurées, comme il applique déjà `meta.approval_mode`.
+1. `session_meta_from_list_row` reads `session.get("modelId")` and puts it into `SessionMeta` (the same pattern as `approval_mode`).
+2. `SessionMeta` (Rust) and its TypeScript type gain `model_id`, serialised when present.
+3. The renderer applies `meta.model_id` to restored sessions, as it already applies `meta.approval_mode`.
 
-**Je n'applique pas ce correctif dans cette passe.** Il touche la structure de données partagée entre les trois couches — Rust, pont TypeScript, renderer — pour une amélioration d'affichage. Il mérite sa propre modification, avec les tests Rust qui existent déjà autour de `session_meta_from_list_row` (`main.rs:7225`), plutôt qu'un ajout en fin de passe UX où je ne pourrais pas le vérifier sur les trois couches.
+**I am not applying that fix in this pass.** It touches the data structure shared across all three layers — Rust, TypeScript bridge, renderer — for a display improvement. It deserves its own change, with the Rust tests that already exist around `session_meta_from_list_row` (`main.rs:7225`), rather than an addition at the end of a UX pass where I could not verify it across the three layers.
 
-## Ce que ce diagnostic corrige dans la passe
+## What this diagnosis corrects in the pass
 
-La revue visuelle avait signalé « le libellé du modèle se coupe encore panneau déplié ». **C'est faux** — mais son observation était fondée sur une capture antérieure au correctif, et le libellé `Model` court ne permettait pas de trancher. **Deux fois dans cette passe, une observation juste s'est révélée mal attribuée** : ici par antériorité de la capture, et pour le panneau Desktop par confusion entre structure et contenu. La mesure tranche, l'œil seul ne suffit pas.
+The visual review had flagged "the model label is still cut off with the panel unfolded". **That is false** — but its observation rested on a screenshot predating the fix, and the short `Model` label made it impossible to settle. **Twice in this pass, a valid observation turned out to be misattributed**: here through the screenshot's age, and for the Desktop panel through confusing structure with content. Measurement settles it, the eye alone does not.

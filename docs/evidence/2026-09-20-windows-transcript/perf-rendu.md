@@ -1,77 +1,77 @@
-# Coût de rendu d'un long transcript — mesures (M1-13, 20 septembre 2026)
+# Rendering cost of a long transcript — measurements (M1-13, 20 September 2026)
 
-Mesures relevées par le protocole `Performance` de CDP dans la webview, sur le sidecar Muse Windows natif 1.3.0.
-Elles répondent au critère que la roadmap pose comme condition de la virtualisation complète : « une mesure réelle de mémoire et de temps de rendu ».
+Measurements taken through CDP's `Performance` protocol in the webview, on the native Windows Muse sidecar 1.3.0.
+They answer the criterion the roadmap sets as the condition for full virtualisation: "a real measurement of memory and rendering time".
 
-## Protocole
+## Protocol
 
 ```powershell
 node scripts/cdp-perf.mjs --entries 2000
 ```
 
-Le script relève d'abord une **référence** sur le profil réel, écrit 2 000 entrées au format persisté, recharge, relève les métriques, puis déclenche **une page incrémentale de 120 entrées** et relève le delta. Le journal d'origine est restauré dans un `finally`.
+The script first takes a **reference** on the real profile, writes 2,000 entries in the persisted format, reloads, takes the metrics, then triggers **one incremental page of 120 entries** and takes the delta. The original log is restored in a `finally`.
 
-## Résultat
+## Result
 
-### Chargement avec 2 000 entrées
+### Loading with 2,000 entries
 
-| Mesure | Valeur |
+| Measurement | Value |
 |---|---|
 | `firstContentfulPaint` | **20 ms** |
 | `domInteractive` | 17 ms |
 | `domContentLoaded` | 160 ms |
 | `loadEvent` | 162 ms |
-| Nœuds DOM totaux | 1 942 → **2 938** |
-| **`JSHeapUsedSize`** | 12 233 → **12 392 KiB** |
-| `LayoutDuration` (cumulé depuis l'activation) | **0,012 s** |
-| `ScriptDuration` (cumulé) | **2,022 s** |
+| Total DOM nodes | 1,942 → **2,938** |
+| **`JSHeapUsedSize`** | 12,233 → **12,392 KiB** |
+| `LayoutDuration` (cumulative since activation) | **0.012 s** |
+| `ScriptDuration` (cumulative) | **2.022 s** |
 | `LayoutCount` | 15 |
-| Articles montés dans le journal | **160** sur 2 000 |
-| Nœuds DOM du journal | **967** |
-| `scrollHeight` du journal | **173 252 px** |
-| Nœuds DOM totaux de la page | 1 954 |
+| Articles mounted in the log | **160** out of 2,000 |
+| Log DOM nodes | **967** |
+| Log `scrollHeight` | **173,252 px** |
+| Total page DOM nodes | 1,954 |
 
-### Coût d'une page incrémentale (120 entrées)
+### Cost of one incremental page (120 entries)
 
-| Mesure | Delta |
+| Measurement | Delta |
 |---|---|
-| `LayoutDuration` | **+0,001 s** |
-| `RecalcStyleDuration` | **+0,001 s** |
-| `ScriptDuration` | **+0,071 s** |
-| Nœuds DOM du journal | **967 → 967 (inchangé)** |
-| Articles montés | 160 → **160 (inchangé)** |
+| `LayoutDuration` | **+0.001 s** |
+| `RecalcStyleDuration` | **+0.001 s** |
+| `ScriptDuration` | **+0.071 s** |
+| Log DOM nodes | **967 → 967 (unchanged)** |
+| Articles mounted | 160 → **160 (unchanged)** |
 
-## Lecture
+## Reading
 
-**Trois constats :**
+**Three findings:**
 
-1. **Le coût de rendu de la fenêtre est négligeable.** `LayoutDuration` cumulé reste à **12 ms** pour 2 000 entrées, et une page incrémentale coûte **1 ms de layout**. La fenêtre bornée fait son travail : ni le nombre d'articles (160) ni le nombre de nœuds du journal (967) ne bougent quand on charge 120 entrées de plus.
-2. **Le temps est passé dans le script, pas dans le layout** : `ScriptDuration` cumulé atteint **2,022 s** contre 12 ms de layout. Si optimisation il y a, elle est côté JavaScript — hydratation, recherche, calcul de fenêtre — pas côté DOM ou CSS.
-3. **La mémoire est contenue** : environ **+160 KiB** de tas JS pour passer de la référence à un journal de 2 000 entrées. Le journal lui-même pèse 373 671 octets en `localStorage`.
+1. **The window's rendering cost is negligible.** Cumulative `LayoutDuration` stays at **12 ms** for 2,000 entries, and an incremental page costs **1 ms of layout**. The bounded window does its job: neither the article count (160) nor the log's node count (967) moves when 120 more entries are loaded.
+2. **The time goes into the script, not the layout**: cumulative `ScriptDuration` reaches **2.022 s** against 12 ms of layout. If there is optimising to do, it is on the JavaScript side — hydration, search, window computation — not on the DOM or CSS.
+3. **Memory is contained**: about **+160 KiB** of JS heap to go from the reference to a 2,000-entry log. The log itself weighs 373,671 bytes in `localStorage`.
 
-## Réserves — importantes
+## Reservations — important
 
-- **Ces chiffres ne sont pas une mesure de performance au sens strict.** La mesure a été prise sur un **build de développement** (Vite, non minifié) avec le **debug distant actif**, ce qui ajoute une surcharge non quantifiée. Un build de release donnerait d'autres valeurs.
-- **`wallClockToSettledMs` (14 014 ms) n'est pas exploitable** : il inclut ma propre attente fixe de 14 s après le rechargement, pas un temps de rendu.
-- **Aucune mesure d'image ni de fréquence.** Je n'ai pas mesuré le temps de rendu par image, ni la réactivité au défilement continu, ni le comportement à 10 000 entrées.
-- **Une seule machine, un seul profil.** Pas de variance, pas de répétition, pas de comparaison entre configurations.
-- La **virtualisation de la sidebar** évoquée par la roadmap comme conditionnée à ces mesures n'a **pas** été examinée ici : ces chiffres portent sur le journal de conversation.
+- **These figures are not a performance measurement in the strict sense.** The measurement was taken on a **development build** (Vite, unminified) with **remote debugging active**, which adds unquantified overhead. A release build would give different values.
+- **`wallClockToSettledMs` (14,014 ms) is unusable**: it includes my own fixed 14 s wait after the reload, not a rendering time.
+- **No frame or frequency measurement.** I did not measure per-frame rendering time, responsiveness to continuous scrolling, or behaviour at 10,000 entries.
+- **One machine, one profile.** No variance, no repetition, no comparison between configurations.
+- The **sidebar virtualisation** the roadmap mentions as conditioned on these measurements was **not** examined here: these figures concern the conversation log.
 
-**Je ne présente donc pas ces mesures comme la preuve qui débloque la virtualisation complète.** Elles donnent un ordre de grandeur et déplacent la question : le goulot observé est le script, pas le layout.
+**I therefore do not present these measurements as the proof that unblocks full virtualisation.** They give an order of magnitude and move the question: the bottleneck observed is the script, not the layout.
 
-## Restauration
+## Restoration
 
-Journal d'origine réécrit et **vérifié** : 21 205 octets, `hasSynthetic: false`. Aucun état de profil laissé modifié.
+Original log rewritten and **verified**: 21,205 bytes, `hasSynthetic: false`. No profile state left modified.
 
-## État de M1-13
+## State of M1-13
 
-| Critère | État |
+| Criterion | State |
 |---|---|
-| Fenêtre DOM bornée sur 2 000 entrées | mesuré |
-| Chargement incrémental (scroll + bouton) | mesuré |
-| Finder hors fenêtre | mesuré |
-| Coût de rendu et mémoire | **ordre de grandeur obtenu**, sur build de développement |
-| Qualification assistive native | **non exercée** |
-| macOS / Linux | hors périmètre |
+| DOM window bounded over 2,000 entries | measured |
+| Incremental loading (scroll + button) | measured |
+| Finder outside the window | measured |
+| Rendering cost and memory | **order of magnitude obtained**, on a development build |
+| Native assistive qualification | **not exercised** |
+| macOS / Linux | out of scope |
 
-**M1-13 reste ouvert** : la qualification assistive n'est pas faite, et ces mesures de performance ne valent que pour un build de développement sur une machine.
+**M1-13 stays open**: assistive qualification is not done, and these performance measurements hold only for a development build on one machine.
