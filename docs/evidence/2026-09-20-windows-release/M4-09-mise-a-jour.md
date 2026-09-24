@@ -1,79 +1,79 @@
-# Mise à jour depuis une version antérieure — M4-09 (20 septembre 2026)
+# Update from an earlier version — M4-09 (20 September 2026)
 
-Complète `M4-09-cycle-installation.md` : le critère « mettre à jour depuis une version précédente » n'avait **aucune preuve**, faute de version antérieure à installer. Une version `0.0.9` a donc été construite pour l'exercer.
+Completes `M4-09-cycle-installation.md`: the "update from a previous version" criterion had **no proof**, for want of an earlier version to install. A `0.0.9` version was therefore built to exercise it.
 
-Test **destructif sur la machine de l'utilisateur**, avec son autorisation explicite. État final restauré et vérifié.
+A test **destructive on the user's machine**, with their explicit authorization. Final state restored and verified.
 
-## Un préalable vérifié
+## A prerequisite verified
 
-L'installeur NSIS **accepte de s'installer par-dessus une installation existante** : deux exécutions successives du même `.exe` sortent en code **0** et laissent l'application en place. Sans cela, un test de version montante aurait été impossible sans désinstallation manuelle — ce qui n'aurait plus été une mise à jour.
+The NSIS installer **accepts installing over an existing installation**: two successive runs of the same `.exe` exit with code **0** and leave the application in place. Without that, an upward-version test would have been impossible without a manual uninstall — which would no longer have been an update.
 
-## Construction de la version antérieure
+## Building the earlier version
 
-`0.0.9` a été produite en abaissant `version` dans `package.json` **et** `src-tauri/tauri.conf.json`, puis `npm run tauri -- build --bundles nsis`.
+`0.0.9` was produced by lowering `version` in `package.json` **and** `src-tauri/tauri.conf.json`, then `npm run tauri -- build --bundles nsis`.
 
-**Piège rencontré, et c'est une erreur de ma part :** `Set-Content -Encoding UTF8` en **Windows PowerShell 5.1 écrit un BOM**. Le `package.json` ainsi réécrit a fait échouer le build avec
+**A trap met, and an error of mine:** `Set-Content -Encoding UTF8` in **Windows PowerShell 5.1 writes a BOM**. The `package.json` rewritten that way made the build fail with
 
 ```
 [vite:css] Failed to load PostCSS config: [SyntaxError] Unexpected token '', " { "nam"... is not valid JSON
 ```
 
-Le BOM a été retiré via Node (qui n'en ajoute pas), et le JSON validé par `JSON.parse` avant de relancer. C'est le **même piège que celui rencontré avec les shebangs** en écrivant les scripts de campagne : PowerShell 5.1 et l'encodage UTF-8 ne font pas bon ménage.
+The BOM was removed through Node (which does not add one), and the JSON validated with `JSON.parse` before relaunching. It is the **same trap as the one met with shebangs** while writing the campaign scripts: PowerShell 5.1 and UTF-8 encoding do not get along.
 
-| Artefact produit | Taille |
+| Artefact produced | Size |
 |---|---|
-| `Muse-Desktop_0.0.9_x64-setup.exe` | 75,70 Mo |
-| `Muse-Desktop_0.1.0_x64-setup.exe` | 75,62 Mo |
+| `Muse-Desktop_0.0.9_x64-setup.exe` | 75.70 MB |
+| `Muse-Desktop_0.1.0_x64-setup.exe` | 75.62 MB |
 
-## Protocole et résultats
+## Protocol and results
 
-Point de départ : aucune installation présente (désinstallée au préalable).
+Starting point: no installation present (uninstalled beforehand).
 
-### 1. Installation de la version antérieure
+### 1. Installing the earlier version
 
-| Mesure | Résultat |
+| Measurement | Result |
 |---|---|
-| Code de sortie | **0** |
+| Exit code | **0** |
 | `FileVersion` / `ProductVersion` | **0.0.9** / 0.0.9 |
-| `DisplayVersion` au registre | **0.0.9** |
-| L'application démarre | **oui** — vivante, `Responding: True` |
+| `DisplayVersion` in the registry | **0.0.9** |
+| The application starts | **yes** — alive, `Responding: True` |
 
-### 2. Mise à jour vers 0.1.0 par-dessus 0.0.9
+### 2. Updating to 0.1.0 over 0.0.9
 
-| Mesure | Avant | Après |
+| Measurement | Before | After |
 |---|---|---|
-| Code de sortie | — | **0** |
+| Exit code | — | **0** |
 | `FileVersion` / `ProductVersion` | 0.0.9 | **0.1.0** / 0.1.0 |
-| `DisplayVersion` au registre | 0.0.9 | **0.1.0** |
-| L'application démarre | oui | **oui** — vivante, `Responding: True` |
+| `DisplayVersion` in the registry | 0.0.9 | **0.1.0** |
+| The application starts | yes | **yes** — alive, `Responding: True` |
 
-### 3. Les projets survivent-ils à la mise à jour ? — oui, à l'identique
+### 3. Do the projects survive the update? — yes, identically
 
-| Mesure | Ligne de base | Après 0.0.9 → 0.1.0 |
+| Measurement | Baseline | After 0.0.9 → 0.1.0 |
 |---|---|---|
 | Conversations | 64 | **64** |
-| Projets | `openscreen`, `muse-desktop` | **`openscreen`, `muse-desktop`** |
-| Journaux | 13 | **13** |
-| Clés totales | 61 | **61** |
+| Projects | `openscreen`, `muse-desktop` | **`openscreen`, `muse-desktop`** |
+| Logs | 13 | **13** |
+| Total keys | 61 | **61** |
 
-**Établi :** une mise à jour de version montante s'installe, met à jour le binaire **et** l'entrée de registre, laisse l'application fonctionnelle, et **ne touche pas aux données utilisateur**. C'est le critère de M4-09 qui manquait.
+**Established:** an upward-version update installs, updates the binary **and** the registry entry, leaves the application working, and **does not touch user data**. That is the M4-09 criterion that was missing.
 
-## Restauration finale
+## Final restoration
 
-| Élément | État |
+| Element | State |
 |---|---|
-| Application installée | **désinstallée** — répertoire absent, **0 entrée** de registre |
-| Données applicatives | **intactes** — 64 conversations, 2 projets |
-| `package.json` / `tauri.conf.json` | **revenus à `0.1.0`** (restauration git, `git status` propre) |
-| Installeur `0.0.9` | conservé dans `src-tauri/target/release/bundle/nsis/` — **artefact non versionné**, couvert par `src-tauri/target/` dans `.gitignore` |
+| Installed application | **uninstalled** — directory gone, **0** registry entries |
+| Application data | **intact** — 64 conversations, 2 projects |
+| `package.json` / `tauri.conf.json` | **back to `0.1.0`** (git restore, `git status` clean) |
+| The `0.0.9` installer | kept in `src-tauri/target/release/bundle/nsis/` — an **unversioned artefact**, covered by `src-tauri/target/` in `.gitignore` |
 
-## Ce qui reste ouvert pour M4-09
+## What stays open for M4-09
 
-- **Machine propre** : la machine a déjà WSL, Muse et un profil à 64 conversations. Ce n'est pas un premier lancement sur machine vierge.
-- **Signature** : les deux installeurs sont `NotSigned`, donc un avertissement SmartScreen est attendu sur une machine tierce. La signature Ed25519 optionnelle du manifeste n'a pas non plus été exercée ici.
-- **MSI** : seul le NSIS a été installé, mis à jour et désinstallé.
-- **Bascule de canal** (`release:orchestrate sync`) : testée en local au round 13, jamais exercée contre un hébergement réel — qui n'existe pas encore.
-- **Retour arrière** : `release:update rollback` n'a pas été exercé sur une installation réelle.
-- **macOS / Linux** : aucun bundle construit pour ces cibles.
+- **Clean machine**: the machine already has WSL, Muse and a profile with 64 conversations. It is not a first launch on a blank machine.
+- **Signing**: both installers are `NotSigned`, so a SmartScreen warning is expected on a third-party machine. The manifest's optional Ed25519 signature was not exercised here either.
+- **MSI**: only the NSIS package was installed, updated and uninstalled.
+- **Channel switch** (`release:orchestrate sync`): tested locally at round 13, never exercised against real hosting — which does not exist yet.
+- **Rollback**: `release:update rollback` was not exercised on a real installation.
+- **macOS / Linux**: no bundle built for those targets.
 
-**M4-09 n'est pas clos** sur la machine propre et la signature, mais ses deux critères fonctionnels — installation/désinstallation sans perte, et mise à jour de version montante sans perte — sont désormais **exécutés et mesurés**.
+**M4-09 is not closed** on the clean machine and signing, but its two functional criteria — install/uninstall with no loss, and an upward-version update with no loss — are now **executed and measured**.
