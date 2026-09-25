@@ -57,7 +57,7 @@ export function signReleaseManifest(manifest, { privateKey, keyId = "default" })
 }
 
 export function buildReleaseManifest({ artifactPath, sidecarPath, version, target, signingKey, keyId }) {
-  if (!artifactPath || !sidecarPath) throw new Error("artifactPath and sidecarPath are required");
+  if (!artifactPath) throw new Error("artifactPath is required");
   const checkedVersion = String(version ?? "").trim();
   const checkedTarget = String(target ?? "").trim();
   if (!checkedVersion || !checkedTarget) throw new Error("version and target are required");
@@ -67,7 +67,12 @@ export function buildReleaseManifest({ artifactPath, sidecarPath, version, targe
     version: checkedVersion,
     target: checkedTarget,
     installer: fileDigest(artifactPath),
-    sidecar: fileDigest(sidecarPath),
+    // Schema decision of 25/09/2026: macOS does not bundle the Muse engine
+    // (the app offers the official CLI installer on first launch), so a
+    // release without a sidecar carries `sidecar: null` and the whole update
+    // chain treats that as "no sidecar file". Windows manifests keep a
+    // digest here and stay byte-identical to the previous schema.
+    sidecar: sidecarPath ? fileDigest(sidecarPath) : null,
   };
   return signingKey ? signReleaseManifest(manifest, { privateKey: signingKey, keyId }) : manifest;
 }
@@ -84,19 +89,24 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const version = argument("--version") ?? "0.0.0";
   const target = argument("--target") ?? "x86_64-pc-windows-msvc";
   const signingKeyPath = argument("--signing-key");
-  try {
-    const manifest = buildReleaseManifest({
-      artifactPath,
-      sidecarPath,
-      version,
-      target,
-      ...(signingKeyPath ? { signingKey: readFileSync(resolve(signingKeyPath), "utf8") } : {}),
-      ...(argument("--key-id") ? { keyId: argument("--key-id") } : {}),
-    });
-    writeFileSync(resolve(outputPath), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-    process.stdout.write(`${resolve(outputPath)}\n`);
-  } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
+  if (!artifactPath) {
+    process.stderr.write("Usage: release-manifest.mjs --artifact FILE [--sidecar FILE] [--version VERSION] [--target TARGET] [--output FILE] [--signing-key FILE] [--key-id ID]\n");
+    process.exitCode = 2;
+  } else {
+    try {
+      const manifest = buildReleaseManifest({
+        artifactPath,
+        sidecarPath,
+        version,
+        target,
+        ...(signingKeyPath ? { signingKey: readFileSync(resolve(signingKeyPath), "utf8") } : {}),
+        ...(argument("--key-id") ? { keyId: argument("--key-id") } : {}),
+      });
+      writeFileSync(resolve(outputPath), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      process.stdout.write(`${resolve(outputPath)}\n`);
+    } catch (error) {
+      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      process.exitCode = 1;
+    }
   }
 }

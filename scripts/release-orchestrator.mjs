@@ -178,9 +178,12 @@ export async function orchestrateReleaseUpdate({
   const targetPart = safeCachePart(target, "release target");
   const cache = await mkdtemp(join(root, `muse-release-${versionPart}-${targetPart}-`));
   const installer = assetFor(release, "installer");
-  const sidecar = assetFor(release, "sidecar");
+  // `sidecar: null` releases (engine-not-bundled platforms such as macOS)
+  // carry no sidecar asset: nothing is downloaded and the update plan is
+  // built and staged without a sidecar file.
+  const sidecar = release.manifest.sidecar === null ? null : assetFor(release, "sidecar");
   const installerPath = join(cache, installer.file);
-  const sidecarPath = join(cache, sidecar.file);
+  const sidecarPath = sidecar === null ? null : join(cache, sidecar.file);
   const manifestPath = join(cache, "release.manifest.json");
   await writeFile(manifestPath, `${JSON.stringify(release.manifest, null, 2)}\n`, "utf8");
   await fetchReleaseAsset({
@@ -191,18 +194,20 @@ export async function orchestrateReleaseUpdate({
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
     fetchImpl,
   });
-  await fetchReleaseAsset({
-    url: sidecar.url,
-    expectedBytes: sidecar.bytes,
-    expectedSha256: sidecar.sha256,
-    outputPath: sidecarPath,
-    ...(timeoutMs === undefined ? {} : { timeoutMs }),
-    fetchImpl,
-  });
+  if (sidecar !== null) {
+    await fetchReleaseAsset({
+      url: sidecar.url,
+      expectedBytes: sidecar.bytes,
+      expectedSha256: sidecar.sha256,
+      outputPath: sidecarPath,
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+      fetchImpl,
+    });
+  }
   const plan = buildReleaseUpdatePlan({
     manifestPath,
     artifactPath: installerPath,
-    sidecarPath,
+    ...(sidecar === null ? {} : { sidecarPath }),
     currentVersion,
     target,
     channel: checkedIndex.channel,
@@ -214,7 +219,7 @@ export async function orchestrateReleaseUpdate({
   const staged = await stageReleaseUpdate({
     plan,
     artifactPath: installerPath,
-    sidecarPath,
+    ...(sidecar === null ? {} : { sidecarPath }),
     stagingRoot: slots,
     publicKey,
     requireSignature,

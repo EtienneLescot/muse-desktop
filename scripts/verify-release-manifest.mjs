@@ -67,7 +67,17 @@ export function verifyReleaseManifest({
   if (version !== undefined && manifest.version !== String(version).trim()) errors.push("release version mismatch");
   if (target !== undefined && manifest.target !== String(target).trim()) errors.push("release target mismatch");
   errors.push(...verifyReleaseManifestSignature(manifest, { publicKey, requireSignature }));
-  for (const [label, filePath] of [["installer", artifactPath], ["sidecar", sidecarPath]]) {
+  // A `sidecar: null` manifest describes a platform that bundles no engine
+  // (macOS); it must not be verified against a sidecar file, and a sidecar
+  // digest manifest must still be verified against one.
+  const sidecarOptional = manifest.sidecar === null;
+  const sidecarChecks = sidecarOptional
+    ? []
+    : [["sidecar", sidecarPath]];
+  if (sidecarOptional && sidecarPath) {
+    errors.push("manifest declares no sidecar; a sidecar file must not be supplied");
+  }
+  for (const [label, filePath] of [["installer", artifactPath], ...sidecarChecks]) {
     if (!filePath) {
       errors.push(`${label} path is required`);
       continue;
@@ -123,8 +133,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const sidecarPath = argument("--sidecar");
   const publicKeyPath = argument("--public-key");
   const requireSignature = process.argv.includes("--require-signature");
-  if (!manifestPath || !artifactPath || !sidecarPath) {
-    process.stderr.write("Usage: verify-release-manifest.mjs --manifest FILE --artifact FILE --sidecar FILE [--version VERSION] [--target TARGET] [--public-key FILE] [--require-signature]\n");
+  if (!manifestPath || !artifactPath) {
+    process.stderr.write("Usage: verify-release-manifest.mjs --manifest FILE --artifact FILE [--sidecar FILE] [--version VERSION] [--target TARGET] [--public-key FILE] [--require-signature]\n");
     process.exitCode = 2;
   } else {
     const result = verifyReleaseManifest({
