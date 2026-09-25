@@ -1,0 +1,34 @@
+{
+ "schema": "muse-desktop.m0-09-recovery-roundtrip.v1",
+ "date": "2026-09-26",
+ "build": "packaged NSIS 0.1.0, WebView2 CDP 9222",
+ "flow": [
+  {
+   "step": "export",
+   "result": "'Export recovery snapshot' wrote muse-desktop-recovery-2026-09-25.json (461651 B, 107 entries, format muse-desktop-storage v1, checksum fnv1a-dadf88ac...) to Downloads \u2014 plain blob download, no native dialog"
+  },
+  {
+   "step": "damage",
+   "result": "current settings.v1 marked mode='workspace' (snapshot holds mode='elevated') to make the restore observable"
+  },
+  {
+   "step": "import",
+   "result": "snapshot re-injected into the hidden <input type=file> via CDP setFileInputFiles; the recovery preview rendered with per-entry classification (Durable data / Replace existing) and selective checkboxes"
+  },
+  {
+   "step": "selective restore",
+   "result": "only muse-desktop.settings.v1 selected -> 'Restore selected' -> 'Recovery restored' + auto-reload"
+  },
+  {
+   "step": "verify",
+   "result": "settings.v1 mode back to 'elevated' \u2014 the checksum-verified snapshot value replaced the current value"
+  }
+ ],
+ "verdict": {
+  "exportNative": true,
+  "checksumVerifiedRestore": true,
+  "selectiveRestoreWithPreview": true,
+  "recoveryAfterDamage": true
+ },
+ "remaining": "external (CLI/IDE) formats qualification; macOS/Linux"
+}
