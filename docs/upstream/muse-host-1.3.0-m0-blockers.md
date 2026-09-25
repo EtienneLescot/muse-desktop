@@ -38,10 +38,14 @@ in `ask` mode, and `promptUnmatched` is the effective ceiling.
 approval (visible through `approval/listPending` or an event) *before* the tool
 runs, so a client can render approve/deny.
 
-**Impact on the desktop:** the approval card flow, the approval stale-race
-recovery (M0-05) and the "stop during a parent-turn tool" variant (M0-04) cannot
-be qualified against a real host; the ask posture silently auto-runs tools, which
-is a safety-relevant gap for the product.
+**Impact on the desktop:** the approval card flow and the approval stale-race
+recovery (M0-05) cannot be qualified against a real host; the ask posture
+silently auto-runs tools, which is a safety-relevant gap for the product.
+**Strengthened on 26/09:** with the sandbox defect worked around (`elevated`
+posture, tools executing), the host **still raises no approval prompt** — the
+ceiling is independent of the sandbox. (The M0-04 stop-during-tool variant was
+closed in the meantime via that workaround: see
+[`m0-04-strict-tool-stop.json`](../evidence/2026-09-25-m0-completion/m0-04-strict-tool-stop.json).)
 
 ## Draft 2 — the model's `powershell` tool never returns under the Windows sandbox
 

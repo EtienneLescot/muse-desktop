@@ -1,0 +1,31 @@
+{
+ "schema": "muse-desktop.m0-04-strict-tool-stop.v1",
+ "date": "2026-09-26",
+ "build": "packaged NSIS 0.1.0 (installed app), global sandbox posture elevated (--disable-sandbox per the M2-02 projection)",
+ "scenario": "live turn instructed to reply TOOLRUN then run 'ping -n 90 127.0.0.1' with its own shell tool, then LOOPDONE; Stop pressed during the tool phase (TOOLRUN already streamed, tool lane up)",
+ "wire": {
+  "cancel_session": {
+   "atMs": 54511,
+   "payload": {
+    "sessionId": "01a0dacc-cf33-72d1-860b-defacf905209",
+    "turnId": "01a0daf3-b18f-71b6-8915-fd78d0496a89"
+   }
+  }
+ },
+ "resolution": {
+  "stoppingGone": true,
+  "workingGone": true,
+  "transcriptMarkedStopped": true
+ },
+ "finding_context": [
+  "the earlier no-text-first variant (stop at +56 s) sent cancel_session WITHOUT turnId: the client only scopes the interrupt to a turn identity it has actually observed (turnIdsRef fills from streamed chunks) \u2014 by-design bounded fallback, resolved honestly",
+  "the sandbox-posture refusal was exercised on the way: starting a conversation requesting elevated against a host running 'workspace' produced 'workspace host already uses sandbox posture workspace; request a restart' and the Restart workspace host action respawned it (M2-02 projection, adjacent evidence for M0-06 refusal handling)",
+  "under elevated the model's shell tool executes to completion (PINGDONE observed) \u2014 confirming the 23/09 finding that the sandbox, not the tool path, was the blocker"
+ ],
+ "verdict": {
+  "stopDuringParentTurnTool": true,
+  "turnIdTransmitted": true,
+  "toolCancelledAndResolved": true
+ },
+ "remaining": "macOS/Linux"
+}
