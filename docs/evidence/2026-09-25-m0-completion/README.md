@@ -82,6 +82,18 @@ honestly in ~1 s, the designed bounded fallback).
 closed on Windows. M0-01's and M0-11's Windows columns are raised to ☑ in the
 roadmap.**
 
+## Decision state (26/09/2026)
+
+The four remaining paths (macOS machine, clean VM for M0-10, NVDA session for
+M0-12, upstream filing of the two host 1.3.0 reports) were **proposed to
+Étienne on 26/09/2026 and are pending his choice**. Until a resource is
+committed: the upstream drafts stay internal in
+[`docs/upstream/`](../../upstream/muse-host-1.3.0-m0-blockers.md), the runbook
+in [`docs/upstream/m0-remaining-qualification-runbook.md`](../../upstream/m0-remaining-qualification-runbook.md)
+is the execution plan for whichever path is chosen, and **no further M0
+criterion is reproducible from this Windows machine**. Default applied without
+a decision: keep everything documented, statuses unchanged.
+
 ## What still blocks full M0 closure (honest list)
 
 1. **macOS / Linux native proofs for every M0 ticket** — no machine here runs WKWebView/WebKitGTK; those columns cannot move from this repository alone.
