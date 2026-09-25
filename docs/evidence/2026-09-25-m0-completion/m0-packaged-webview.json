@@ -1,0 +1,29 @@
+{
+ "schema": "muse-desktop.m0-packaged-webview.v1",
+ "date": "2026-09-26",
+ "packagedArtifact": {
+  "installer": "src-tauri/target/release/bundle/nsis/Muse-Desktop_0.1.0_x64-setup.exe (75.6 MB)",
+  "sha256": "cf047c05da55ae77d804f80a2d9eb6a7cd3690b430216280ae0be20b7cd43240",
+  "manifestVerified": true,
+  "installPath": "C:/Users/etien/AppData/Local/Muse-Desktop/ (muse-desktop.exe 21142528 B linked 26/09 00:29 + muse.exe 415378168 B, NSIS /S silent)",
+  "identityMarker": "Stop button title 'Stop the current turn' (the 97f9eb1 fix) observed in the packaged UI"
+ },
+ "methodologicalTrap": "the first silent install attempt left a stuck installer process and the tests then ran against the OLD 0.0.9 install (exe mtime 20/09 15:51) - detected because the packaged Stop run still showed the old 'Stop the running sidecar' title; those runs were discarded and everything re-run on the verified 0.1.0 install",
+ "scenarios": {
+  "M0-04 stop": {
+   "file": "cdp-stop-terminal-packaged-run5.json",
+   "verdict": "single cancel_session at +3.6 s carrying turnId 01a0dacb-fd58-... (non-empty, correct), Stopping resolved in 1009 ms, immediate follow-up accepted, title 'Stop the current turn'"
+  },
+  "M0-01/M0-14 A/B": {
+   "file": "cdp-ab-projects-packaged-run3.json + this record",
+   "verdict": "turn A started in project muse-desktop via the reworked project picker (second host, workspace C:/Users/etien/Documents/repos/muse-desktop), turn B started concurrently in openscreen; A completed ISOLATED while B ran, B completed BETA, both Connected, transcripts intact"
+  },
+  "M0-11 labels": {
+   "file": "cdp-language-audit-packaged-run2.json",
+   "verdict": "UI chrome English across 7 surfaces; flagged candidates are the user-typed French conversation title (content) and the heuristic's false positives on the English word 'plus'"
+  }
+ },
+ "verdict": {
+  "packagedWebviewCriterionClosed_M0_01_M0_11_M0_14": true
+ }
+}

@@ -162,17 +162,39 @@ async function main() {
       return;
     }
 
-    // Start a conversation rooted in the second project root.
+    // Start a conversation rooted in the second project root. Two picker
+    // implementations exist: with a declared project the welcome screen uses
+    // a start-in `<select>`; without one it uses the reworked project picker
+    // (`details` + option buttons). Try both.
     report.steps.pickSecond = await evaluate(client, `(() => {
       ${HELPERS}
       const sel = nodes("select")[0];
-      if (!sel) return { picked: false, reason: "no start-in select" };
-      const target = [...sel.options].find((o) => /muse-desktop/i.test(o.textContent));
-      if (!target) return { picked: false, options: [...sel.options].map((o) => o.textContent.trim()) };
-      const P = HTMLSelectElement.prototype;
-      Object.getOwnPropertyDescriptor(P, "value").set.call(sel, target.value);
-      sel.dispatchEvent(new Event("change", { bubbles: true }));
-      return { picked: true, label: target.textContent.trim(), value: target.value };
+      if (sel) {
+        const target = [...sel.options].find((o) => /muse-desktop/i.test(o.textContent));
+        if (target) {
+          const P = HTMLSelectElement.prototype;
+          Object.getOwnPropertyDescriptor(P, "value").set.call(sel, target.value);
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+          return { picked: true, via: "select", label: target.textContent.trim(), value: target.value };
+        }
+      }
+      const openWelcome = () => {
+        const nav = [...document.querySelectorAll('button')].find((b) =>
+          (b.getAttribute('aria-label') || '') === 'New conversation' &&
+          !b.closest('[class*="session"]'));
+        if (nav) nav.click();
+        return !!nav;
+      };
+      let picker = document.querySelector('details.project-picker-control');
+      if (!picker) { openWelcome(); }
+      picker = document.querySelector('details.project-picker-control');
+      if (!picker) return { picked: false, reason: "no project picker control" };
+      picker.setAttribute('open', '');
+      const options = [...document.querySelectorAll('.project-picker-control button, .project-picker-control [role="option"]')];
+      const target = options.find((o) => /muse-desktop/i.test(o.textContent));
+      if (!target) return { picked: false, reason: "project option missing", options: options.map((o) => o.textContent.trim().slice(0, 40)) };
+      target.click();
+      return { picked: true, via: "details-picker", label: target.textContent.trim().slice(0, 60) };
     })()`);
     await sleep(1_500);
     report.steps.fill = await evaluate(client, `(() => {
@@ -183,7 +205,12 @@ async function main() {
       setField(f, "Reply with just the word ISOLATED and nothing else.");
       return { filled: true, value: f.value };
     })()`);
-    report.steps.submit = await evaluate(client, `(() => { ${HELPERS} return { clicked: clickText("Start conversation") }; })()`);
+    report.steps.submit = await evaluate(client, `(() => { ${HELPERS}
+      if (clickText("Start conversation")) return { clicked: true, via: "text" };
+      const icon = document.querySelector('button.welcome-send, [aria-label="Start conversation"]');
+      if (icon) { icon.click(); return { clicked: true, via: "aria-label" }; }
+      return { clicked: false };
+    })()`);
     await sleep(4_000);
     report.steps.afterStart = await evaluate(client, `(() => { ${HELPERS} return state(); })()`);
   } catch (error) {

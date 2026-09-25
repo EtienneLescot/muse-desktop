@@ -1,0 +1,62 @@
+{
+  "schema": "muse-desktop.cdp-ab-projects.v1",
+  "live": true,
+  "declared": false,
+  "steps": {
+    "initial": {
+      "composerDisabled": false,
+      "connected": false,
+      "disconnected": false,
+      "connectionError": false,
+      "working": false,
+      "projectCount": 1,
+      "projectNames": [
+        "muse-desktop"
+      ],
+      "sessionCount": 28,
+      "workspaces": [
+        "\\\\?\\G:\\repos\\openscreen",
+        "n\\Documents\\repos\\muse-desktop"
+      ],
+      "tail": "plore, and ship with Muse. Project muse-desktop Worktree Runs in muse-desktop. The agent reads the rules of that folder. Build an interface Explore the project Review code ＋ Attach Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑"
+    },
+    "newConversation": {
+      "clicked": true
+    },
+    "picker": {
+      "startInOptions": null,
+      "startInCount": 0,
+      "bodyTail": "n / New conversation Your ideas. A little further. Build, explore, and ship with Muse. Project muse-desktop Worktree Runs in muse-desktop. The agent reads the rules of that folder. Build an interface Explore the project Review code ＋ Attach Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑"
+    },
+    "pickSecond": {
+      "picked": true,
+      "via": "details-picker",
+      "label": "✓muse-desktopC:\\Users\\etien\\Documents\\repos\\muse-desktop"
+    },
+    "fill": {
+      "filled": true,
+      "value": "Reply with just the word ISOLATED and nothing else."
+    },
+    "submit": {
+      "clicked": true,
+      "via": "aria-label"
+    },
+    "afterStart": {
+      "composerDisabled": false,
+      "connected": true,
+      "disconnected": false,
+      "connectionError": false,
+      "working": true,
+      "projectCount": 1,
+      "projectNames": [
+        "muse-desktop"
+      ],
+      "sessionCount": 29,
+      "workspaces": [
+        "\\\\?\\G:\\repos\\openscreen",
+        "n\\Documents\\repos\\muse-desktop"
+      ],
+      "tail": "SOLATED and nothing else. 01:00:51 Muse is working Last update 1s ago. · work item completed. ＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor Stop Guide ↑ Enter to send · Shift + Enter for a new line · @ for context"
+    }
+  }
+}

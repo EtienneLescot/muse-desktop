@@ -46,6 +46,42 @@ of `src-tauri/binaries/` had no effect on the running debug app (it launches the
 copy) and one restore mishap deleted the 415 MB real binary from `binaries/` — restored
 byte-identical from `target/debug/muse.exe` (same sha256 `e0a7cfef…`) before anything else ran.
 
+## Packaged (NSIS) webview — the last Windows-reachable criterion (26/09/2026)
+
+`npm run build:windows` produced `Muse-Desktop_0.1.0_x64-setup.exe`
+(sha256 `cf047c05…`, release manifest generated **and verified**). Silent install
+(`/S`) into `C:\Users\etien\AppData\Local\Muse-Desktop\`, then the three proven
+scenarios were re-driven through CDP in the **installed** app:
+
+| Scenario | Result |
+|---|---|
+| **M0-04 stop** (`cdp-stop-terminal-packaged-run5.json`) | PASS — single `cancel_session` carrying the correct `turnId`, `Stopping…` resolved in **1 009 ms**, immediate follow-up accepted, Stop title "Stop the current turn". |
+| **M0-01 / M0-14 A/B** (`cdp-ab-projects-packaged-run3.json`) | PASS — turn A started in project `muse-desktop` (second host), turn B concurrently in openscreen; A completed "ISOLATED" while B ran; B completed "BETA"; isolation intact. |
+| **M0-11 labels** (`cdp-language-audit-packaged-run2.json`) | PASS — chrome English on 7 surfaces; French hits are user content / heuristic false positives ("plus" in English copy). |
+
+Two methodological traps recorded so they are not repeated:
+
+1. **The first silent install got stuck** and the tests then ran against the
+   **old 0.0.9 install** (exe mtime 20/09). Detected because the packaged Stop
+   run still showed the old "Stop the running sidecar" title — a stale-build
+   smell in a *packaged* artifact. Discard and re-install before measuring;
+   verify the installed exe's size/mtime against `target/release`.
+2. **The IPC trace hook accumulates** across harness runs on a living page:
+   a fresh `location.reload()` before a measured run keeps `cancelCalls`
+   pointing at *this* run's clicks only.
+
+Also fixed here: the A/B harness now handles both picker implementations
+(start-in `<select>` when a project exists; `details.project-picker-control`
+otherwise) and clicks Start via the aria-label fallback; the stop harness
+settles 1.5 s after observing the turn so the click cannot outrun the
+renderer's turnId storage (a +2.09 s click measurably sent `cancel_session`
+without a turnId; at +3.6 s it carries — the no-turnId path still resolved
+honestly in ~1 s, the designed bounded fallback).
+
+**With this pass, the packaged-webview criterion of M0-01, M0-11 and M0-14 is
+closed on Windows. M0-01's and M0-11's Windows columns are raised to ☑ in the
+roadmap.**
+
 ## What still blocks full M0 closure (honest list)
 
 1. **macOS / Linux native proofs for every M0 ticket** — no machine here runs WKWebView/WebKitGTK; those columns cannot move from this repository alone.

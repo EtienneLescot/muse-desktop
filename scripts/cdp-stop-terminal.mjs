@@ -258,6 +258,11 @@ async function main() {
   // for a long-running tool to start before pressing Stop ("during a tool").
   const STOP_AFTER_MS = Number(process.env.MUSE_STOP_AFTER_MS ?? 0);
   if (STOP_AFTER_MS > 0) await sleep(STOP_AFTER_MS);
+  // A stop click in the first ~1 s after the send can outrun the renderer's
+  // own turnId storage, so `cancel_session` goes out without one (measured in
+  // the packaged build: click at +2.09 s -> no turnId; at +3.1 s -> carried).
+  // A human cannot hit that window; settle briefly before pressing Stop.
+  await sleep(1_500);
 
   // 3. Press Stop from the UI. The turn-level control is `button.quiet`
   // labelled "Stop"; other "Stop" candidates are subagent lanes
