@@ -67,7 +67,8 @@ function checkedManifest(manifest, version, target) {
     version,
     target,
     installer: checkedDigest(manifest.installer, "installer"),
-    sidecar: checkedDigest(manifest.sidecar, "sidecar"),
+    // `sidecar: null` is the schema for engine-not-bundled platforms (macOS).
+    sidecar: manifest.sidecar === null ? null : checkedDigest(manifest.sidecar, "sidecar"),
   };
   if (manifest.signature !== undefined) {
     if (!manifest.signature || manifest.signature.algorithm !== "ed25519" ||

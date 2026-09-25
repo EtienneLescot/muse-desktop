@@ -153,7 +153,8 @@ function validatePlan(plan, { publicKey, requireSignature = false } = {}) {
   }
   checkedText(plan.target, "target", MAX_TARGET_CHARS);
   safeName(plan.installer?.file, "installer file");
-  safeName(plan.sidecar?.file, "sidecar file");
+  // `sidecar: null` is the schema for engine-not-bundled platforms (macOS).
+  if (plan.sidecar !== null) safeName(plan.sidecar?.file, "sidecar file");
   const signatureErrors = verifyReleaseManifestSignature({
     schema: "muse-desktop.release-manifest.v1",
     product: "Muse-Desktop",
@@ -171,9 +172,12 @@ function validatePlan(plan, { publicKey, requireSignature = false } = {}) {
 export function verifyReleaseUpdatePlan({ plan, artifactPath, sidecarPath, publicKey, requireSignature = false }) {
   const checked = validatePlan(plan, { publicKey, requireSignature });
   const artifact = fileDigest(artifactPath);
-  const sidecar = fileDigest(sidecarPath);
   assertDigest("installer", checked.installer, artifact);
-  assertDigest("sidecar", checked.sidecar, sidecar);
+  if (checked.sidecar === null) {
+    if (sidecarPath) throw new Error("plan declares no sidecar; a sidecar file must not be supplied");
+    return checked;
+  }
+  assertDigest("sidecar", checked.sidecar, fileDigest(sidecarPath));
   return checked;
 }
 
@@ -193,9 +197,11 @@ export async function stageReleaseUpdate({ plan, artifactPath, sidecarPath, stag
   await mkdir(temporary, { recursive: true });
   try {
     const installerName = safeName(checked.installer.file, "installer file");
-    const sidecarName = safeName(checked.sidecar.file, "sidecar file");
     await copyFile(resolve(artifactPath), join(temporary, installerName));
-    await copyFile(resolve(sidecarPath), join(temporary, sidecarName));
+    if (checked.sidecar !== null) {
+      const sidecarName = safeName(checked.sidecar.file, "sidecar file");
+      await copyFile(resolve(sidecarPath), join(temporary, sidecarName));
+    }
     await writeFile(join(temporary, "update-plan.json"), `${JSON.stringify(checked, null, 2)}\n`, "utf8");
     await writeFile(join(temporary, "READY"), "Muse release candidate is verified and ready.\n", "utf8");
     await rename(temporary, published);
@@ -213,8 +219,11 @@ async function readCandidate(candidatePath, { publicKey, requireSignature = fals
     requireSignature,
   });
   const installerPath = join(candidate, safeName(plan.installer.file, "installer file"));
-  const sidecarPath = join(candidate, safeName(plan.sidecar.file, "sidecar file"));
   assertDigest("installer", plan.installer, fileDigest(installerPath));
+  if (plan.sidecar === null) {
+    return { path: candidate, plan, installerPath, sidecarPath: null };
+  }
+  const sidecarPath = join(candidate, safeName(plan.sidecar.file, "sidecar file"));
   assertDigest("sidecar", plan.sidecar, fileDigest(sidecarPath));
   return { path: candidate, plan, installerPath, sidecarPath };
 }
@@ -327,7 +336,7 @@ async function cli() {
     const plan = buildReleaseUpdatePlan({
       manifestPath: requireArgument("--manifest"),
       artifactPath: requireArgument("--artifact"),
-      sidecarPath: requireArgument("--sidecar"),
+      sidecarPath: argument("--sidecar"),
       currentVersion: requireArgument("--current-version"),
       target: requireArgument("--target"),
       channel: argument("--channel") ?? "stable",
@@ -345,7 +354,7 @@ async function cli() {
     const result = await stageReleaseUpdate({
       plan,
       artifactPath: requireArgument("--artifact"),
-      sidecarPath: requireArgument("--sidecar"),
+      sidecarPath: argument("--sidecar"),
       stagingRoot: requireArgument("--staging-root"),
       publicKey: await optionalPublicKey(),
       requireSignature: process.argv.includes("--require-signature"),

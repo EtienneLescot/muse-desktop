@@ -19,6 +19,17 @@ function manifest(version: string, target = "x86_64-pc-windows-msvc") {
   };
 }
 
+function manifestWithoutSidecar(version: string, target: string) {
+  return {
+    schema: "muse-desktop.release-manifest.v1",
+    product: "Muse-Desktop",
+    version,
+    target,
+    installer: { file: `Muse-${version}.dmg`, bytes: 100, sha256: "a".repeat(64) },
+    sidecar: null,
+  };
+}
+
 describe("release channel index", () => {
   it("sorts releases deterministically and selects the newest compatible target", () => {
     const index = buildReleaseChannelIndex({
@@ -36,8 +47,31 @@ describe("release channel index", () => {
     assert.equal(selectRelease(index, { target: "x86_64-pc-windows-msvc", currentVersion: "1.3.0" }), null);
   });
 
-  it("signs and verifies a path-free channel index", () => {
-    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  it("accepts engine-not-bundled manifests whose sidecar is null (macOS)", () => {
+    const index = buildReleaseChannelIndex({
+      channel: "stable",
+      releases: [
+        { version: "1.2.0", target: "aarch64-apple-darwin", manifest: manifestWithoutSidecar("1.2.0", "aarch64-apple-darwin") },
+      ],
+    });
+    const entry = index.releases[0].manifest;
+    assert.equal(entry.sidecar, null);
+    assert.equal(selectRelease(index, { target: "aarch64-apple-darwin", currentVersion: "1.1.0" })?.version, "1.2.0");
+    // A malformed sidecar (neither null nor a digest) stays rejected.
+    assert.throws(
+      () => buildReleaseChannelIndex({
+        channel: "stable",
+        releases: [{
+          version: "1.3.0",
+          target: "aarch64-apple-darwin",
+          manifest: { ...manifestWithoutSidecar("1.3.0", "aarch64-apple-darwin"), sidecar: "broken" },
+        }],
+      }),
+      /sidecar digest is invalid/,
+    );
+  });
+
+  it("signs and verifies a path-free channel index", () => {    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
     const index = buildReleaseChannelIndex({
       channel: "stable",
       releases: [{ version: "1.2.0", target: "x86_64-pc-windows-msvc", manifest: manifest("1.2.0") }],

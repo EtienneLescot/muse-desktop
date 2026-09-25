@@ -36,8 +36,58 @@ test("release manifest records deterministic hashes without machine paths", asyn
 test("release manifest rejects missing metadata", () => {
   assert.throws(
     () => buildReleaseManifest({ artifactPath: "", sidecarPath: "x", version: "1", target: "t" }),
-    /artifactPath and sidecarPath are required/,
+    /artifactPath is required/,
   );
+});
+
+test("release manifest without a bundled engine carries a null sidecar (macOS)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "muse-release-macos-"));
+  const installer = join(root, "Muse-Desktop_0.1.0_aarch64.dmg");
+  await writeFile(installer, Buffer.from("dmg-bytes"));
+  const manifest = buildReleaseManifest({
+    artifactPath: installer,
+    version: "0.1.0",
+    target: "aarch64-apple-darwin",
+  });
+  assert.equal(manifest.sidecar, null);
+  assert.doesNotMatch(JSON.stringify(manifest), new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+  const manifestPath = join(root, "release.manifest.json");
+  await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
+  const valid = verifyReleaseManifest({
+    manifestPath,
+    artifactPath: installer,
+    version: "0.1.0",
+    target: "aarch64-apple-darwin",
+  });
+  assert.equal(valid.valid, true);
+  // Supplying a sidecar file against a `sidecar: null` manifest is an error,
+  // not a silent pass.
+  const withSidecar = verifyReleaseManifest({
+    manifestPath,
+    artifactPath: installer,
+    sidecarPath: installer,
+  });
+  assert.equal(withSidecar.valid, false);
+  assert.match(withSidecar.errors.join(" "), /declares no sidecar/);
+
+  // The signature covers the null sidecar deterministically.
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const signed = buildReleaseManifest({
+    artifactPath: installer,
+    version: "0.1.0",
+    target: "aarch64-apple-darwin",
+    signingKey: privateKey,
+    keyId: "release-test",
+  });
+  await writeFile(manifestPath, `${JSON.stringify(signed)}\n`, "utf8");
+  const verified = verifyReleaseManifest({
+    manifestPath,
+    artifactPath: installer,
+    publicKey,
+    requireSignature: true,
+  });
+  assert.equal(verified.valid, true);
 });
 
 test("release manifest verification detects tampering and validates explicit files", async () => {

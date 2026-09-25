@@ -92,6 +92,8 @@ if [ "$bundle" != app ]; then
   fi
   shasum -a 256 "$dmg"
 fi
-# The release manifest (scripts/release-manifest.mjs) pins a bundled sidecar
-# digest; macOS ships none, so manifests for macOS need a schema decision
-# before the update channel covers this platform.
+# Manifest schema (25/09/2026): a release without a bundled engine builds its
+# manifest without --sidecar; the manifest then carries `sidecar: null` and
+# the whole update chain (verify, plan, stage, channel, orchestrator) treats
+# that as "no sidecar file". Build the macOS manifest with:
+#   node scripts/release-manifest.mjs --artifact <dmg> --target aarch64-apple-darwin ...

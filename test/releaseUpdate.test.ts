@@ -11,6 +11,7 @@ import {
   compareReleaseVersions,
   rollbackRelease,
   stageReleaseUpdate,
+  verifyReleaseUpdatePlan,
 } from "../scripts/release-update.mjs";
 
 async function fixture(version = "1.2.0", root = undefined as string | undefined) {
@@ -127,6 +128,48 @@ describe("release update transaction", () => {
 
     const rollback = await rollbackRelease({ slotsRoot: slots });
     assert.deepEqual(rollback, { currentVersion: "1.1.0", previousVersion: "1.2.0" });
+  });
+
+  it("stages an engine-not-bundled release with no sidecar file (macOS)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "muse-release-update-macos-"));
+    const artifact = join(root, "Muse-Desktop_1.2.0_aarch64.dmg");
+    const manifest = join(root, "release-1.2.0.manifest.json");
+    await writeFile(artifact, "dmg-v1.2.0", "utf8");
+    const value = buildReleaseManifest({
+      artifactPath: artifact,
+      version: "1.2.0",
+      target: "aarch64-apple-darwin",
+    });
+    assert.equal(value.sidecar, null);
+    await writeFile(manifest, `${JSON.stringify(value)}
+`, "utf8");
+    const plan = buildReleaseUpdatePlan({
+      manifestPath: manifest,
+      artifactPath: artifact,
+      currentVersion: "1.1.0",
+      target: "aarch64-apple-darwin",
+    });
+    assert.equal(plan.sidecar, null);
+    const slotsRoot = join(root, "slots");
+    const staged = await stageReleaseUpdate({
+      plan,
+      artifactPath: artifact,
+      stagingRoot: slotsRoot,
+    });
+    const promoted = await applyStagedRelease({
+      stagedPath: staged.path,
+      slotsRoot,
+    });
+    assert.equal(promoted.currentVersion, "1.2.0");
+    // The staged slot holds the installer and the plan only — no sidecar file.
+    const { readdir } = await import("node:fs/promises");
+    const files = await readdir(join(root, "slots", "current"));
+    assert.deepEqual(files.sort(), ["READY", "Muse-Desktop_1.2.0_aarch64.dmg", "update-plan.json"].sort());
+    // Feeding a sidecar file to a null-sidecar plan is rejected, not ignored.
+    assert.throws(
+      () => verifyReleaseUpdatePlan({ plan, artifactPath: artifact, sidecarPath: artifact }),
+      /declares no sidecar/,
+    );
   });
 
   it("carries and rechecks a signed plan through staging and promotion", async () => {

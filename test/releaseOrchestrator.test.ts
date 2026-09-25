@@ -103,6 +103,54 @@ describe("release orchestrator", () => {
     });
   });
 
+  it("stages an engine-not-bundled release without fetching any sidecar (macOS)", async () => {
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const installerBytes = Buffer.from("dmg-v2");
+    const installerUrl = "https://cdn.example.test/Muse-Desktop-2.0.0.dmg";
+    const manifest = signReleaseManifest({
+      schema: "muse-desktop.release-manifest.v1",
+      product: "Muse-Desktop",
+      version: "2.0.0",
+      target: "aarch64-apple-darwin",
+      installer: { file: "Muse-Desktop-2.0.0.dmg", bytes: installerBytes.length, sha256: digest(installerBytes) },
+      sidecar: null,
+    }, { privateKey, keyId: "release-test" });
+    const index = buildReleaseChannelIndex({
+      channel: "stable",
+      releases: [{
+        version: "2.0.0",
+        target: "aarch64-apple-darwin",
+        manifest,
+        assets: {
+          installer: { url: installerUrl, bytes: installerBytes.length, sha256: digest(installerBytes) },
+        },
+      }],
+      signingKey: privateKey,
+      keyId: "release-test",
+    });
+    const root = await mkdtemp(join(tmpdir(), "muse-release-orchestrator-macos-"));
+    const seen: string[] = [];
+    const result = await orchestrateReleaseUpdate({
+      index,
+      target: "aarch64-apple-darwin",
+      currentVersion: "1.0.0",
+      cacheDir: join(root, "cache"),
+      stagingRoot: join(root, "slots"),
+      publicKey,
+      requireSignature: true,
+      fetchImpl: async (url) => {
+        seen.push(url);
+        return responseFor(installerBytes);
+      },
+    });
+    assert.equal(result.status, "staged");
+    assert.equal(result.version, "2.0.0");
+    // Only the installer is fetched; no sidecar asset exists for this release.
+    assert.deepEqual(seen, [installerUrl]);
+    assert.equal(await readFile(join(result.stagedPath, "Muse-Desktop-2.0.0.dmg"), "utf8"), "dmg-v2");
+    assert.equal(JSON.parse(await readFile(join(result.stagedPath, "update-plan.json"), "utf8")).sidecar, null);
+  });
+
   it("loads a channel over HTTPS with a bounded body and rejects redirects", async () => {
     const payload = Buffer.from('{"schema":"muse-desktop.release-channel.v1"}');
     const result = await fetchReleaseChannel({
