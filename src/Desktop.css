@@ -1368,6 +1368,11 @@
   gap: 16px;
   color: var(--muted);
 }
+.destination-page .sched-dst-warning {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .destination-page .sched-policy select {
   max-width: 360px;
 }

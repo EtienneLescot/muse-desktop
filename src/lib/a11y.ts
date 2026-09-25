@@ -118,7 +118,9 @@ export const COMPOSER_SHORTCUT_TITLES = {
   textarea:
     "Prompt input — Enter to send, Shift+Enter for a new line, Up/Down navigate completions, Tab accepts, Escape dismisses",
   send: "Send (Enter)",
-  stop: "Stop the running sidecar",
+  // M0-04: the button stops the running turn; "sidecar" is internal
+  // architecture vocabulary that misdescribed the action to the user.
+  stop: "Stop the current turn",
 } as const;
 
 /** Window zoom shortcuts (rendered as a title attribute on the main landmark). */

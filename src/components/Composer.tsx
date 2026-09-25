@@ -48,10 +48,10 @@ import {
 } from "../lib/attachments";
 import { loadAttachmentDraft, saveAttachmentDraft } from "../lib/attachmentDraft";
 import {
-  readSessionStorageString,
   readStorageJson,
-  writeSessionStorageString,
+  readStorageString,
   writeStorageJson,
+  writeStorageString,
 } from "../lib/storage.ts";
 import {
   appendVoiceTranscript,
@@ -179,9 +179,13 @@ export function Composer({
   slashCommands = [],
 }: Props) {
   const draftStorageKey = `muse-desktop.draft.${draftKey}`;
-  const [text, setText] = useState(() => readSessionStorageString(draftStorageKey));
+  // M0-02: the draft is unsent work, so it survives in durable storage —
+  // sessionStorage died with the webview and a `taskkill /F` wiped a draft
+  // typed without sending. Writes stay per keystroke (no debounce): the kill
+  // can come at any moment and small strings are cheap to persist.
+  const [text, setText] = useState(() => readStorageString(draftStorageKey) ?? "");
   useEffect(() => {
-    writeSessionStorageString(draftStorageKey, text);
+    writeStorageString(draftStorageKey, text);
   }, [draftStorageKey, text]);
   const [caret, setCaret] = useState(0);
   const [selIndex, setSelIndex] = useState(0);

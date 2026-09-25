@@ -3,6 +3,12 @@ import type { TerminalInfo, TerminalState } from "../hooks/useMuseSessions";
 import { parseAnsi } from "../lib/ansi";
 import { terminalControlSequence } from "../lib/terminalShortcuts";
 
+/** Mirrors the supervisor's clamps in `terminal.rs`. */
+const MIN_COLS = 20;
+const MAX_COLS = 400;
+const MIN_ROWS = 4;
+const MAX_ROWS = 200;
+
 interface Props {
   sessionId: string;
   terminal: TerminalState | null;
@@ -79,6 +85,55 @@ export function TerminalPanel({
   useEffect(() => {
     outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight });
   }, [terminal?.output]);
+
+  // Keep the PTY geometry in step with the pane. Measured on Windows (M1-05):
+  // the pane followed the window while `mode con` stayed 28×100 — nothing ever
+  // called `terminal_resize`, so the shell kept the size it was opened with.
+  // The cell is measured in the rendered font rather than assumed, and the
+  // last applied geometry is kept in a ref so observer bursts do not resend
+  // the same size.
+  const appliedGeometry = useRef<{ cols: number; rows: number } | null>(null);
+  useEffect(() => {
+    const output = outputRef.current;
+    if (!terminal || !output) return;
+    appliedGeometry.current = { cols: terminal.info.cols, rows: terminal.info.rows };
+    const style = window.getComputedStyle(output);
+    const probe = document.createElement("span");
+    probe.textContent = "0".repeat(100);
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    probe.style.whiteSpace = "pre";
+    probe.style.font = style.font;
+    document.body.appendChild(probe);
+    const measured = probe.getBoundingClientRect().width / 100;
+    probe.remove();
+    const cellWidth = measured > 0 ? measured : parseFloat(style.fontSize) * 0.6;
+    const lineHeight =
+      parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2 || 16;
+    let raf: number | null = null;
+    const observer = new ResizeObserver((entries) => {
+      if (raf !== null) return;
+      const entry = entries[entries.length - 1];
+      if (!entry) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = null;
+        const width = entry.contentRect.width;
+        const height = entry.contentRect.height;
+        if (width <= 0 || height <= 0) return;
+        const cols = Math.max(MIN_COLS, Math.min(MAX_COLS, Math.floor(width / cellWidth)));
+        const rows = Math.max(MIN_ROWS, Math.min(MAX_ROWS, Math.floor(height / lineHeight)));
+        const applied = appliedGeometry.current;
+        if (applied !== null && applied.cols === cols && applied.rows === rows) return;
+        appliedGeometry.current = { cols, rows };
+        void onResize(terminal.info.terminalId, cols, rows);
+      });
+    });
+    observer.observe(output);
+    return () => {
+      observer.disconnect();
+      if (raf !== null) window.cancelAnimationFrame(raf);
+    };
+  }, [onResize, terminal?.info.terminalId, terminal?.info.cols, terminal?.info.rows]);
 
   const outputChunks = useMemo(
     () => parseAnsi(terminal?.output ?? ""),

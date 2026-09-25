@@ -345,6 +345,89 @@ export function cronNextRunInTimeZone(cron: string, fromTs: number, timeZone: st
   return null;
 }
 
+function describeWallClock(parts: ZonedParts | null): string {
+  if (parts === null) return "the next valid time";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(parts.day)}/${pad(parts.month)}/${parts.year} ${pad(parts.hour)}:${pad(parts.minute)}`;
+}
+
+export interface OnceTriggerResolution {
+  /** Epoch milliseconds the automation should fire at; NaN when unparseable. */
+  at: number;
+  /** Set when a DST transition moved the requested wall clock (M3-07). */
+  warning?: string;
+}
+
+/**
+ * Resolve a `datetime-local` wall-clock value in the schedule's time zone.
+ * The browser's implicit `new Date()` applied DST adjustments silently: a
+ * spring-forward gap moved the run an hour ahead and a fall-back duplicate
+ * kept one of two possible instants with nothing on screen. Both adjustments
+ * stay deterministic here — jump forward on a gap, keep the first instant on
+ * a duplicate — and are reported so the user can confirm them.
+ */
+export function resolveOnceTrigger(wallClock: string, timeZone: string): OnceTriggerResolution {
+  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(wallClock.trim());
+  if (match === null) return { at: new Date(wallClock).getTime() };
+  const [, year, month, day, hour, minute, second] = match;
+  const wallTs = Date.UTC(
+    Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second ?? 0),
+  );
+  const formatter = formatterForTimeZone(timeZone);
+  if (formatter === null || !Number.isFinite(wallTs)) return { at: new Date(wallClock).getTime() };
+  const requested = `${day}/${month}/${year} ${hour}:${minute}`;
+  const candidates = wallClockCandidates(formatter, wallTs);
+  if (candidates.length > 1) {
+    return {
+      at: candidates[0],
+      warning: `${requested} happens twice that day in ${timeZone} (clocks go back); the first occurrence (${describeWallClock(formatZonedParts(formatter, candidates[0]))}) was kept.`,
+    };
+  }
+  if (candidates.length === 1) {
+    const exact = formatZonedParts(formatter, candidates[0]);
+    if (
+      exact !== null &&
+      (exact.hour !== Number(hour) || exact.minute !== Number(minute) || exact.day !== Number(day))
+    ) {
+      return {
+        at: candidates[0],
+        warning: `${requested} does not exist in ${timeZone} (clocks jump forward); scheduled at ${describeWallClock(exact)} instead.`,
+      };
+    }
+    return { at: candidates[0] };
+  }
+  // The wall minute maps to no instant (a spring-forward gap). Interpret the
+  // wall clock with the offset in force before the transition — the same
+  // resolution the measured build applied on 27/09/2026 — so the run lands
+  // just after the clocks jump, and say so on the form.
+  const dayBefore = wallTs - 24 * 3_600_000;
+  const before = formatZonedParts(formatter, dayBefore);
+  if (before !== null) {
+    const offsetBefore =
+      Date.UTC(before.year, before.month - 1, before.day, before.hour, before.minute) - dayBefore;
+    const at = wallTs - offsetBefore;
+    const shown = formatZonedParts(formatter, at);
+    if (shown !== null) {
+      return {
+        at,
+        warning: `${requested} does not exist in ${timeZone} (clocks jump forward); scheduled at ${describeWallClock(shown)} instead.`,
+      };
+    }
+  }
+  // Bounded fallback for exotic transitions: scan forward until a valid
+  // minute appears.
+  for (let probe = wallTs + 60_000, guard = 0; guard < 240; probe += 60_000, guard += 1) {
+    const next = wallClockCandidates(formatter, probe);
+    if (next.length > 0) {
+      return {
+        at: next[0],
+        warning: `${requested} does not exist in ${timeZone} (clocks jump forward); scheduled at ${describeWallClock(formatZonedParts(formatter, next[0]))} instead.`,
+      };
+    }
+  }
+  return { at: new Date(wallClock).getTime() };
+}
+
 /* ---------------- schedules: CRUD ---------------- */
 
 /** Build a new (enabled) schedule; caller must validate first. */

@@ -23,8 +23,8 @@ interface Props {
  */
 export function ModelControl({ models, value, onSelect, fallbackLabel = "Model", compact = false }: Props) {
   // The label falls back through what is actually known, most specific first:
-  // the catalog's active row, the session's own id, the catalog's declared
-  // default, and only then a bare "Model".
+  // the conversation's own id (its truth, see below), the catalog's active row,
+  // the catalog's declared default, and only then a bare "Model".
   //
   // The last step matters. Measured on this build: the renderer receives
   // `value: null` (the session carries no `modelId`) *and* the catalog marks no
@@ -32,16 +32,24 @@ export function ModelControl({ models, value, onSelect, fallbackLabel = "Model",
   // `isDefault`. Without this fallback the trigger read "Model" next to a picker
   // listing four real models — a label that tells the user nothing when the
   // effective model is in fact known.
-  const activeRow = models?.find((model) => model.isActive);
+  //
+  // The first step matters just as much. `models` is one shared catalog, and
+  // its `isActive` row belongs to whichever conversation was refreshed last —
+  // reading it first made the trigger announce the model of the *previous*
+  // conversation on a switch (M1-11). The session's own `value` is updated by
+  // every successful `set_model` and by `resume_session` hydration, so it is
+  // the per-conversation truth and wins; `isActive` only breaks ties for a
+  // conversation that never named a model (the host default).
   const selectedRow = models?.find((model) => model.modelId === value);
+  const activeRow = models?.find((model) => model.isActive);
   const defaultRow = models?.find((model) => model.isDefault);
   const activeLabel =
-    activeRow?.displayLabel ?? selectedRow?.displayLabel ?? value ?? defaultRow?.displayLabel ?? fallbackLabel;
+    selectedRow?.displayLabel ?? value ?? activeRow?.displayLabel ?? defaultRow?.displayLabel ?? fallbackLabel;
 
-  // Which row the picker marks as chosen. `isActive` is authoritative, then the
-  // session value, then the declared default so the list never shows a choice
-  // neither confirmed nor defaulted.
-  const chosenId = activeRow?.modelId ?? selectedRow?.modelId ?? defaultRow?.modelId ?? null;
+  // Which row the picker marks as chosen. The conversation value is
+  // authoritative, then the catalog's active row, then the declared default so
+  // the list never shows a choice neither confirmed nor defaulted.
+  const chosenId = selectedRow?.modelId ?? activeRow?.modelId ?? defaultRow?.modelId ?? null;
 
   // An unread or empty catalog cannot offer choices. The trigger stays visible
   // and says so rather than silently doing nothing when clicked.
