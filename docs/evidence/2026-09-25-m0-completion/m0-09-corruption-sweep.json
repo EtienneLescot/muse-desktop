@@ -1,0 +1,56 @@
+{
+ "schema": "muse-desktop.m0-09-corruption-sweep.v1",
+ "date": "2026-09-25",
+ "build": "97f9eb1 (embedded frontend, debug exe, WebView2 CDP 9222)",
+ "protocol": "each key set to 'not-json-M09' then location.reload(), sample at +6s; nine keys",
+ "results": [
+  {
+   "key": "projects.v1",
+   "outcome": "corrupted value intact (never persisted over) - fix holds; app alive, 42 sidebar rows"
+  },
+  {
+   "key": "sessions.v1",
+   "outcome": "replaced by valid JSON (2379 B) rebuilt from the host's durable history - the redemption behaviour measured 27/09; app alive"
+  },
+  {
+   "key": "schedule-runs.v1",
+   "outcome": "replaced by valid JSON (2818 B) merged back from the native app-data ledger; app alive"
+  },
+  {
+   "key": "review-queue.v1",
+   "outcome": "reset to [] by first boot mutation (empty is truthful: queue was empty)"
+  },
+  {
+   "key": "queued-turns.v1",
+   "outcome": "reset to [] (queue empty pre-corruption)"
+  },
+  {
+   "key": "connectors.v1",
+   "outcome": "reset to [] - localStorage-only join table, no authoritative mirror"
+  },
+  {
+   "key": "memory.v1",
+   "outcome": "reset to [] - same class"
+  },
+  {
+   "key": "thread-projects.v1",
+   "outcome": "reset to [] - the thread->project join was the one real (small) loss; project itself survived in projects.v1"
+  },
+  {
+   "key": "settings.v1",
+   "outcome": "replaced by valid JSON (67 B) on first settings write"
+  }
+ ],
+ "reporting": {
+  "settingsWarning": "Local data needs attention ... Corrupted data (muse-desktop.memory.v1) / Corrupted data (muse-desktop.projects.v1) \u2014 rendered natively in Settings",
+  "note": "the sweep left projects.v1 corrupted; the panel reported it for the rest of the session \u2014 corruption is never silent"
+ },
+ "recovery": "projects.v1 restored from the declared schema (project muse-desktop, root C:/Users/etien/Documents/repos/muse-desktop); warning cleared after reload",
+ "verdict": {
+  "noCrash": true,
+  "noSilentCorruption": true,
+  "reportingWorks": true,
+  "authoritativeMirrorsRebuild": true
+ },
+ "limits": "localStorage-only join tables (thread-projects, connectors, memory) reset on corruption once the first post-boot mutation persists the hydrated fallback; host/native-backed stores rebuild instead"
+}

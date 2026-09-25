@@ -1,0 +1,33 @@
+{
+ "schema": "muse-desktop.cdp-ab-projects.v1",
+ "date": "2026-09-25",
+ "build": "97f9eb1 (frontend embedded, target/debug/muse-desktop.exe)",
+ "scenario": "two fresh sessions, two workspaces, concurrent live turns",
+ "steps": [
+  {
+   "step": "turn A started in project muse-desktop (workspace C:/Users/etien/Documents/repos/muse-desktop)",
+   "prompt": "Reply with just the word ISOLATED and nothing else.",
+   "at": "23:54:48"
+  },
+  {
+   "step": "turn B started while A was running, in the default openscreen workspace (G:/repos/openscreen)",
+   "prompt": "Reply with just the word BETA and nothing else.",
+   "at": "23:55:28"
+  },
+  {
+   "step": "A checked while B ran",
+   "result": "A completed with ISOLATED at 23:54:54, transcript intact, no stale"
+  },
+  {
+   "step": "B checked after",
+   "result": "B completed with BETA, transcript intact"
+  }
+ ],
+ "verdict": {
+  "twoSimultaneousHosts": true,
+  "freshSessions": true,
+  "concurrentTurnsBothCompleted": true,
+  "noCrossTalk": true
+ },
+ "remaining": "packaged (release) webview repetition; macOS/Linux"
+}

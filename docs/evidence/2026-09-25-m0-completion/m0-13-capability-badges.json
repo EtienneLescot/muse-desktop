@@ -1,0 +1,15 @@
+{
+ "schema": "muse-desktop.m0-13-capability-badges.v1",
+ "date": "2026-09-25",
+ "build": "97f9eb1 (embedded frontend, debug exe, WebView2 CDP 9222)",
+ "observed": {
+  "computerUse": "Settings > Computer use renders the consent copy ('Granted \u2014 Muse can use this computer, only through the granted tools, until you turn it off'), the bounded levels ('Observe only ... 19 tools', 'Observe and act ...'), and the granted state",
+  "memory": "'Local' badge on the memory surface",
+  "sharedVocabulary": "Granted/Local rendered natively; Available/Manual/Not connected belong to connector surfaces whose connectors are not configured on this machine"
+ },
+ "verdict": {
+  "capabilityVocabularyRendersNatively": true,
+  "consentCopyExplicit": true
+ },
+ "remaining": "host-announced capability consent replay; macOS/Linux"
+}

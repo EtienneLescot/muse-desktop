@@ -834,6 +834,8 @@ interface UseMuseSessions {
   /** M0-02: connection lifecycle, separate from turn execution state. */
   connectionBySession: Record<string, SessionConnectionState>;
   activeConnectionState: SessionConnectionState;
+  /** M0-08: bounded failure reason from the last failed (re)connect, per session. */
+  connectionNoticeBySession: Record<string, string | undefined>;
   /** M1-10: queued turns that can still be reclaimed before launch. */
   queuedTurns: QueuedTurn[];
   /** Remove a restored queue reminder locally without claiming host state. */
@@ -1855,6 +1857,9 @@ export function useMuseSessions(): UseMuseSessions {
   >({});
   const [connectionBySession, setConnectionBySession] = useState<
     Record<string, SessionConnectionState>
+  >({});
+  const [connectionNoticeBySession, setConnectionNoticeBySession] = useState<
+    Record<string, string | undefined>
   >({});
   const [backendMissing, setBackendMissing] = useState<boolean>(!isTauriRuntime());
   const [startupProbe, setStartupProbe] = useState<StartupProbe | null>(null);
@@ -2942,6 +2947,33 @@ export function useMuseSessions(): UseMuseSessions {
     (sessionId: string, state: SessionConnectionState): void => {
       setConnectionBySession((cur) =>
         cur[sessionId] === state ? cur : { ...cur, [sessionId]: state },
+      );
+      // The failure reason describes the *previous* failed attempt; a
+      // successful connection supersedes it. Error/disconnected keep it so
+      // the pill can explain itself (M0-08).
+      if (state === "connected") {
+        setConnectionNoticeBySession((cur) =>
+          cur[sessionId] === undefined ? cur : { ...cur, [sessionId]: undefined },
+        );
+      }
+    },
+    [],
+  );
+
+  /**
+   * M0-08: bounded per-conversation failure reason from the last failed
+   * (re)connect. Measured with an incompatible sidecar: the boot resume runs
+   * silently, so without this the UI only offered a generic "Disconnected"
+   * while the supervisor's actionable error ("incompatible Muse host: …",
+   * spawn failure, immediate exit) went to the console. The reason is stored
+   * on the session, not in a banner, so a silent boot resume stays silent.
+   */
+  const recordConnectionFailure = useCallback(
+    (sessionId: string, error: unknown): void => {
+      const raw = error instanceof Error ? error.message : String(error);
+      const reason = raw.length > 220 ? `${raw.slice(0, 217)}…` : raw;
+      setConnectionNoticeBySession((cur) =>
+        cur[sessionId] === reason ? cur : { ...cur, [sessionId]: reason },
       );
     },
     [],
@@ -4526,6 +4558,7 @@ export function useMuseSessions(): UseMuseSessions {
         }
       }
     } catch (e) {
+      recordConnectionFailure(id, e);
       if (silent) {
         console.warn("boot resume failed, staying disconnected", id, e);
         setConnectionState(id, "disconnected");
@@ -4536,7 +4569,7 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, globalSettings, projects, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, sandbox]);
+  }, [authorizationMode, globalSettings, projects, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, recordConnectionFailure, sandbox]);
 
   // Resume on open: `restore_sessions` only admits sessions for
   // already-connected hosts, and hosts do not survive an app restart. Once
@@ -7876,6 +7909,7 @@ export function useMuseSessions(): UseMuseSessions {
     activeRetryScheduled,
     stoppingBySession,
     connectionBySession,
+    connectionNoticeBySession,
     activeConnectionState,
     queuedTurns: activeQueuedTurns,
     inputRequests,
