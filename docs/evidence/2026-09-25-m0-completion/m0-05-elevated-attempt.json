@@ -1,0 +1,13 @@
+{
+ "schema": "muse-desktop.m0-05-approval-elevated-attempt.v1",
+ "date": "2026-09-26",
+ "attempt": "ask posture + elevated sandbox (tools actually execute) + turns demanding self-run shell commands",
+ "observed": [
+  "tool lanes render and complete (PINGDONE observed) \u2014 the 23/09 sandbox hang is gone under elevated",
+  "still NO approval card or event raised by the host in ask posture over the whole turn"
+ ],
+ "verdict": {
+  "approvalRequestProvoquable": false
+ },
+ "conclusion": "M0-05 stays host-blocked even with working tools: host 1.3.0 raises no approval prompts at all (promptUnmatched ceiling) \u2014 strengthens the upstream Draft 1"
+}
