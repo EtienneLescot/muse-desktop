@@ -1,0 +1,1154 @@
+{
+  "schema": "muse-desktop.cdp-stop-terminal.v1",
+  "steps": [
+    {
+      "step": "conversation started",
+      "filled": {
+        "filled": true
+      },
+      "clicked": true,
+      "label": "Start conversation"
+    },
+    {
+      "step": "turn observed",
+      "turnId": "01a0dacb-fd58-7daa-89fb-8b88d9429528",
+      "wireCalls": [
+        {
+          "atMs": 1019,
+          "cmd": "start_session",
+          "url": "http://ipc.localhost/start_session",
+          "payload": {
+            "workspacePath": "G:\\repos\\openscreen",
+            "authorizationMode": "ask",
+            "sandboxMode": "workspace",
+            "sandboxDisableWrite": false,
+            "sandboxDisableShell": false,
+            "mcpServers": [
+              {
+                "args": [
+                  "--computer-use-mcp"
+                ],
+                "command": "C:\\Users\\etien\\AppData\\Local\\Muse-Desktop\\muse-desktop.exe",
+                "mode": "optional",
+                "name": "computer-use",
+                "transport": "stdio"
+              }
+            ]
+          },
+          "raw": null,
+          "result": "{\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"workspace\":\"\\\\\\\\?\\\\G:\\\\repos\\\\openscreen\",\"running\":false,\"session_durability\":\"durable\",\"approval_mode\":\"onRequest\",\"granted_capabilities\":[\"userShell\",\"sessionMcp\"],\"model_id\":\"muse-spark-1.3-contributor\",\"loaded\":true}"
+        },
+        {
+          "atMs": 1909,
+          "cmd": "send_input",
+          "url": "http://ipc.localhost/send_input",
+          "payload": {
+            "sessionId": "01a0dacb-fae4-73e0-862b-710213840b0c",
+            "commandId": "01a0dacb-fd58-7daa-89fb-8b88d9429528",
+            "text": "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+            "inputParts": [
+              {
+                "type": "text",
+                "text": "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length."
+              }
+            ]
+          },
+          "raw": null,
+          "result": "{\"commandId\":\"01a0dacb-fd58-7daa-89fb-8b88d9429528\",\"disposition\":\"started\",\"startedNewTurn\":true,\"status\":\"accepted\",\"turnId\":\"01a0dacb-fd58-7daa-89fb-8b88d9429528\"}"
+        }
+      ]
+    },
+    {
+      "step": "stop clicked",
+      "clicked": true,
+      "label": "Stop",
+      "title": "Stop the current turn",
+      "cls": ""
+    },
+    {
+      "step": "stop resolution",
+      "resolvedAtMs": 1009,
+      "observeMs": 60000
+    },
+    {
+      "step": "follow-up sent",
+      "clicked": true,
+      "label": "Send message"
+    }
+  ],
+  "install": {
+    "installed": true
+  },
+  "uiBeforeStop": {
+    "stopping": false,
+    "stoppingBanner": false,
+    "stale": false,
+    "working": true,
+    "healthClass": "stream-health stream-health-working",
+    "healthText": "Muse is working Last update 0s ago. · branch changed.",
+    "ready": false,
+    "composerDisabled": false,
+    "buttons": [
+      "New conversation",
+      "Search",
+      "Automations",
+      "Extensions",
+      "Library",
+      "+",
+      "Reply with just the word ISOLATED and noth…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Reply with just the word BETA and nothing …",
+      "Reply with just the word ISOLATED and noth…",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+      "Reply with just the word BETA and nothing else.",
+      "coucou",
+      "open the form and test email validation e2E with computer-use"
+    ],
+    "labelled": [
+      "Collapse sidebar",
+      "New conversation",
+      "Search",
+      "Automations",
+      "Extensions",
+      "Library",
+      "New conversation",
+      "Actions for Reply with just the word ISOLATED and noth…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Reply with just the word BETA and nothing …",
+      "Actions for Reply with just the word ISOLATED and noth…",
+      "Actions for Session 01a0da90",
+      "Actions for Session 01a0d3c8",
+      "Actions for Session 01a0d37b",
+      "Actions for Session 01a0d3bb",
+      "Actions for Session 01a0d362",
+      "Actions for Session 01a0d349",
+      "Actions for Session 01a0d294",
+      "Actions for Session 01a0d285",
+      "Actions for Session 01a0cf11",
+      "Actions for Session 01a0bb03",
+      "Actions for Session 01a0bb00",
+      "Actions for Session 01a0bafe",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+      "Actions for Reply with just the word BETA and nothing else.",
+      "Actions for coucou"
+    ]
+  },
+  "shotBeforeStop": "docs/evidence/2026-09-27-qualif-native/shots/m0-04-1-before-stop.png",
+  "uiAtStop": {
+    "stopping": true,
+    "stoppingBanner": true,
+    "stale": false,
+    "working": false,
+    "healthClass": "stream-health stream-health-stopping",
+    "healthText": "Stopping Muse The stop request was accepted; waiting for the desktop host to confirm it.",
+    "ready": false,
+    "composerDisabled": false,
+    "buttons": [
+      "New conversation",
+      "Search",
+      "Automations",
+      "Extensions",
+      "Library",
+      "+",
+      "Reply with just the word ISOLATED and noth…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Reply with just the word BETA and nothing …",
+      "Reply with just the word ISOLATED and noth…",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+      "Reply with just the word BETA and nothing else.",
+      "coucou",
+      "open the form and test email validation e2E with computer-use"
+    ],
+    "labelled": [
+      "Collapse sidebar",
+      "New conversation",
+      "Search",
+      "Automations",
+      "Extensions",
+      "Library",
+      "New conversation",
+      "Actions for Reply with just the word ISOLATED and noth…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Reply with just the word BETA and nothing …",
+      "Actions for Reply with just the word ISOLATED and noth…",
+      "Actions for Session 01a0da90",
+      "Actions for Session 01a0d3c8",
+      "Actions for Session 01a0d37b",
+      "Actions for Session 01a0d3bb",
+      "Actions for Session 01a0d362",
+      "Actions for Session 01a0d349",
+      "Actions for Session 01a0d294",
+      "Actions for Session 01a0d285",
+      "Actions for Session 01a0cf11",
+      "Actions for Session 01a0bb03",
+      "Actions for Session 01a0bb00",
+      "Actions for Session 01a0bafe",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+      "Actions for Reply with just the word BETA and nothing else.",
+      "Actions for coucou"
+    ]
+  },
+  "uiAfterStop": {
+    "atMs": 1009,
+    "stopping": false,
+    "stoppingBanner": false,
+    "stale": false,
+    "working": false,
+    "healthClass": null,
+    "healthText": null,
+    "ready": true,
+    "composerDisabled": false,
+    "buttons": [
+      "New conversation",
+      "Search",
+      "Automations",
+      "Extensions",
+      "Library",
+      "+",
+      "Reply with just the word ISOLATED and noth…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Reply with just the word BETA and nothing …",
+      "Reply with just the word ISOLATED and noth…",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+      "Reply with just the word BETA and nothing else.",
+      "coucou",
+      "open the form and test email validation e2E with computer-use"
+    ],
+    "labelled": [
+      "Collapse sidebar",
+      "New conversation",
+      "Search",
+      "Automations",
+      "Extensions",
+      "Library",
+      "New conversation",
+      "Actions for Reply with just the word ISOLATED and noth…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Reply with just the word BETA and nothing …",
+      "Actions for Reply with just the word ISOLATED and noth…",
+      "Actions for Session 01a0da90",
+      "Actions for Session 01a0d3c8",
+      "Actions for Session 01a0d37b",
+      "Actions for Session 01a0d3bb",
+      "Actions for Session 01a0d362",
+      "Actions for Session 01a0d349",
+      "Actions for Session 01a0d294",
+      "Actions for Session 01a0d285",
+      "Actions for Session 01a0cf11",
+      "Actions for Session 01a0bb03",
+      "Actions for Session 01a0bb00",
+      "Actions for Session 01a0bafe",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+      "Actions for Reply with just the word BETA and nothing else.",
+      "Actions for coucou"
+    ]
+  },
+  "uiObservations": [
+    {
+      "atMs": 2,
+      "stopping": true,
+      "stoppingBanner": true,
+      "stale": false,
+      "working": false,
+      "healthClass": "stream-health stream-health-stopping",
+      "healthText": "Stopping Muse The stop request was accepted; waiting for the desktop host to confirm it.",
+      "ready": false,
+      "composerDisabled": false,
+      "buttons": [
+        "New conversation",
+        "Search",
+        "Automations",
+        "Extensions",
+        "Library",
+        "+",
+        "Reply with just the word ISOLATED and noth…",
+        "Write a very long, detailed 3000-word scie…",
+        "Write a very long, detailed 3000-word scie…",
+        "Write a very long, detailed 3000-word scie…",
+        "Write a very long, detailed 3000-word scie…",
+        "Reply with just the word BETA and nothing …",
+        "Reply with just the word ISOLATED and noth…",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "Write a very long, detailed 3000-word scie…",
+        "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+        "Reply with just the word BETA and nothing else.",
+        "coucou",
+        "open the form and test email validation e2E with computer-use"
+      ],
+      "labelled": [
+        "Collapse sidebar",
+        "New conversation",
+        "Search",
+        "Automations",
+        "Extensions",
+        "Library",
+        "New conversation",
+        "Actions for Reply with just the word ISOLATED and noth…",
+        "Actions for Write a very long, detailed 3000-word scie…",
+        "Actions for Write a very long, detailed 3000-word scie…",
+        "Actions for Write a very long, detailed 3000-word scie…",
+        "Actions for Write a very long, detailed 3000-word scie…",
+        "Actions for Reply with just the word BETA and nothing …",
+        "Actions for Reply with just the word ISOLATED and noth…",
+        "Actions for Session 01a0da90",
+        "Actions for Session 01a0d3c8",
+        "Actions for Session 01a0d37b",
+        "Actions for Session 01a0d3bb",
+        "Actions for Session 01a0d362",
+        "Actions for Session 01a0d349",
+        "Actions for Session 01a0d294",
+        "Actions for Session 01a0d285",
+        "Actions for Session 01a0cf11",
+        "Actions for Session 01a0bb03",
+        "Actions for Session 01a0bb00",
+        "Actions for Session 01a0bafe",
+        "Actions for Write a very long, detailed 3000-word scie…",
+        "Actions for Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+        "Actions for Reply with just the word BETA and nothing else.",
+        "Actions for coucou"
+      ]
+    },
+    {
+      "atMs": 1009,
+      "stopping": false,
+      "stoppingBanner": false,
+      "stale": false,
+      "working": false,
+      "healthClass": null,
+      "healthText": null,
+      "ready": true,
+      "composerDisabled": false,
+      "buttons": [
+        "New conversation",
+        "Search",
+        "Automations",
+        "Extensions",
+        "Library",
+        "+",
+        "Reply with just the word ISOLATED and noth…",
+        "Write a very long, detailed 3000-word scie…",
+        "Write a very long, detailed 3000-word scie…",
+        "Write a very long, detailed 3000-word scie…",
+        "Write a very long, detailed 3000-word scie…",
+        "Reply with just the word BETA and nothing …",
+        "Reply with just the word ISOLATED and noth…",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "New conversation",
+        "Write a very long, detailed 3000-word scie…",
+        "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+        "Reply with just the word BETA and nothing else.",
+        "coucou",
+        "open the form and test email validation e2E with computer-use"
+      ],
+      "labelled": [
+        "Collapse sidebar",
+        "New conversation",
+        "Search",
+        "Automations",
+        "Extensions",
+        "Library",
+        "New conversation",
+        "Actions for Reply with just the word ISOLATED and noth…",
+        "Actions for Write a very long, detailed 3000-word scie…",
+        "Actions for Write a very long, detailed 3000-word scie…",
+        "Actions for Write a very long, detailed 3000-word scie…",
+        "Actions for Write a very long, detailed 3000-word scie…",
+        "Actions for Reply with just the word BETA and nothing …",
+        "Actions for Reply with just the word ISOLATED and noth…",
+        "Actions for Session 01a0da90",
+        "Actions for Session 01a0d3c8",
+        "Actions for Session 01a0d37b",
+        "Actions for Session 01a0d3bb",
+        "Actions for Session 01a0d362",
+        "Actions for Session 01a0d349",
+        "Actions for Session 01a0d294",
+        "Actions for Session 01a0d285",
+        "Actions for Session 01a0cf11",
+        "Actions for Session 01a0bb03",
+        "Actions for Session 01a0bb00",
+        "Actions for Session 01a0bafe",
+        "Actions for Write a very long, detailed 3000-word scie…",
+        "Actions for Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+        "Actions for Reply with just the word BETA and nothing else.",
+        "Actions for coucou"
+      ]
+    }
+  ],
+  "shotAfterStop": "docs/evidence/2026-09-27-qualif-native/shots/m0-04-2-after-stop.png",
+  "uiAfterFollowup": {
+    "stopping": false,
+    "stoppingBanner": false,
+    "stale": false,
+    "working": true,
+    "healthClass": "stream-health stream-health-working",
+    "healthText": "Muse is working Last update 2s ago. · work item started.",
+    "ready": true,
+    "composerDisabled": false,
+    "buttons": [
+      "New conversation",
+      "Search",
+      "Automations",
+      "Extensions",
+      "Library",
+      "+",
+      "Reply with just the word ISOLATED and noth…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word scie…",
+      "Reply with just the word BETA and nothing …",
+      "Reply with just the word ISOLATED and noth…",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "New conversation",
+      "Write a very long, detailed 3000-word scie…",
+      "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+      "Reply with just the word BETA and nothing else.",
+      "coucou",
+      "open the form and test email validation e2E with computer-use"
+    ],
+    "labelled": [
+      "Collapse sidebar",
+      "New conversation",
+      "Search",
+      "Automations",
+      "Extensions",
+      "Library",
+      "New conversation",
+      "Actions for Reply with just the word ISOLATED and noth…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Reply with just the word BETA and nothing …",
+      "Actions for Reply with just the word ISOLATED and noth…",
+      "Actions for Session 01a0da90",
+      "Actions for Session 01a0d3c8",
+      "Actions for Session 01a0d37b",
+      "Actions for Session 01a0d3bb",
+      "Actions for Session 01a0d362",
+      "Actions for Session 01a0d349",
+      "Actions for Session 01a0d294",
+      "Actions for Session 01a0d285",
+      "Actions for Session 01a0cf11",
+      "Actions for Session 01a0bb03",
+      "Actions for Session 01a0bb00",
+      "Actions for Session 01a0bafe",
+      "Actions for Write a very long, detailed 3000-word scie…",
+      "Actions for Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+      "Actions for Reply with just the word BETA and nothing else.",
+      "Actions for coucou"
+    ]
+  },
+  "traceOut": [
+    {
+      "atMs": 406,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":79,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 1019,
+      "cmd": "start_session",
+      "url": "http://ipc.localhost/start_session",
+      "payload": {
+        "workspacePath": "G:\\repos\\openscreen",
+        "authorizationMode": "ask",
+        "sandboxMode": "workspace",
+        "sandboxDisableWrite": false,
+        "sandboxDisableShell": false,
+        "mcpServers": [
+          {
+            "args": [
+              "--computer-use-mcp"
+            ],
+            "command": "C:\\Users\\etien\\AppData\\Local\\Muse-Desktop\\muse-desktop.exe",
+            "mode": "optional",
+            "name": "computer-use",
+            "transport": "stdio"
+          }
+        ]
+      },
+      "raw": null,
+      "result": "{\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"workspace\":\"\\\\\\\\?\\\\G:\\\\repos\\\\openscreen\",\"running\":false,\"session_durability\":\"durable\",\"approval_mode\":\"onRequest\",\"granted_capabilities\":[\"userShell\",\"sessionMcp\"],\"model_id\":\"muse-spark-1.3-contributor\",\"loaded\":true}"
+    },
+    {
+      "atMs": 1408,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":79,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 1735,
+      "cmd": "set_reasoning_effort",
+      "url": "http://ipc.localhost/set_reasoning_effort",
+      "payload": {
+        "sessionId": "01a0dacb-fae4-73e0-862b-710213840b0c",
+        "reasoningEffort": "high"
+      },
+      "raw": null,
+      "result": "null"
+    },
+    {
+      "atMs": 1797,
+      "cmd": "list_skills",
+      "url": "http://ipc.localhost/list_skills",
+      "payload": {
+        "sessionId": "01a0dacb-fae4-73e0-862b-710213840b0c"
+      },
+      "raw": null,
+      "result": "{\"skills\":[{\"description\":\"Create and validate a new native Muse plugin package in the current workspace. Use ONLY when the user explicitly asks to create a Muse plugin or invokes the create-plugin skill. Do NOT use for application/library plugin classes, third-party plugin systems, or ordinary code changes.\",\"displayName\":\"create-plugin\",\"selector\":\"create-plugin\",\"source\":\"bundled\"},{\"descriptio"
+    },
+    {
+      "atMs": 1798,
+      "cmd": "git_status",
+      "url": "http://ipc.localhost/git_status",
+      "payload": {
+        "sessionId": "01a0dacb-fae4-73e0-862b-710213840b0c"
+      },
+      "raw": null,
+      "result": "{\"repoRoot\":\"\\\\\\\\?\\\\G:\\\\repos\\\\openscreen\",\"branch\":\"pr620\",\"head\":\"e13b36f5a9e6a40e7a3395f82c1e17b99ec25a14\",\"upstream\":null,\"ahead\":0,\"behind\":0,\"fingerprint\":\"fa87d7d8a44d2613\",\"remotes\":[{\"name\":\"abduznik\",\"url\":\"https://github.com/abduznik/openscreen.git\"},{\"name\":\"cybersparkx\",\"url\":\"git@github.com:CyberSparkx/openscreen.git\"},{\"name\":\"denia\",\"url\":\"git@github.com:My-Denia/openscreen.git\"},{"
+    },
+    {
+      "atMs": 1909,
+      "cmd": "send_input",
+      "url": "http://ipc.localhost/send_input",
+      "payload": {
+        "sessionId": "01a0dacb-fae4-73e0-862b-710213840b0c",
+        "commandId": "01a0dacb-fd58-7daa-89fb-8b88d9429528",
+        "text": "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+        "inputParts": [
+          {
+            "type": "text",
+            "text": "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length."
+          }
+        ]
+      },
+      "raw": null,
+      "result": "{\"commandId\":\"01a0dacb-fd58-7daa-89fb-8b88d9429528\",\"disposition\":\"started\",\"startedNewTurn\":true,\"status\":\"accepted\",\"turnId\":\"01a0dacb-fd58-7daa-89fb-8b88d9429528\"}"
+    },
+    {
+      "atMs": 1914,
+      "cmd": "outbox_write",
+      "url": "http://ipc.localhost/outbox_write",
+      "payload": {
+        "payload": "{\"schema\":\"muse-desktop.native-outbox.v1\",\"sessions\":{\"01a0dacb-fae4-73e0-862b-710213840b0c\":[{\"clientMessageId\":\"af19f64c-a346-4daa-99fb-8b88d9429528\",\"serverCommandId\":\"01a0dacb-fd58-7daa-89fb-8b88d9429528\",\"sessionId\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"text\":\"Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.\",\"outgoingText\":\"Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.\",\"inputParts\":[{\"type\":\"text\",\"text\":\"Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.\"}],\"state\":\"sending\",\"error\":null,\"ambiguous\":false,\"createdAt\":1790377196999,\"updatedAt\":1790377196999,\"attempts\":1}]}}"
+      },
+      "raw": null,
+      "result": "null"
+    },
+    {
+      "atMs": 1993,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":81,\"oldest\":1,\"truncated\":false,\"events\":[{\"seq\":80,\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"kind\":\"approval_mode_changed\",\"payload\":\"{\\\"mode\\\":\\\"onRequest\\\"}\"},{\"seq\":81,\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"kind\":\"branch_changed\",\"payload\":\"{\\\"branch\\\":\\\"pr620\\\",\\\"vcs\\\":\\\"git\\\",\\\"workspaceRoot\\\":\\\"G:\\\\\\\\repos\\\\\\\\openscreen\\\"}\"}]}"
+    },
+    {
+      "atMs": 1995,
+      "cmd": "outbox_write",
+      "url": "http://ipc.localhost/outbox_write",
+      "payload": {
+        "payload": "{\"schema\":\"muse-desktop.native-outbox.v1\",\"sessions\":{}}"
+      },
+      "raw": null,
+      "result": "null"
+    },
+    {
+      "atMs": 2415,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":84,\"oldest\":1,\"truncated\":false,\"events\":[{\"seq\":82,\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"kind\":\"started\",\"payload\":\"{\\\"commandId\\\":\\\"01a0dacb-fd58-7daa-89fb-8b88d9429528\\\",\\\"turnId\\\":\\\"01a0dacb-fd58-7daa-89fb-8b88d9429528\\\"}\"},{\"seq\":83,\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"kind\":\"item_started\",\"payload\":\"{\\\"commandText\\\":null,\\\"itemId\\\":\\\"e15ebf95-72d2-43ea-"
+    },
+    {
+      "atMs": 2567,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":84,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 2721,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":84,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 2875,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":84,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 3028,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":84,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 3182,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":84,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 3337,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":84,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 3492,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":84,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 3609,
+      "cmd": "cancel_session",
+      "url": "http://ipc.localhost/cancel_session",
+      "payload": {
+        "sessionId": "01a0dacb-fae4-73e0-862b-710213840b0c",
+        "turnId": "01a0dacb-fd58-7daa-89fb-8b88d9429528"
+      },
+      "raw": null,
+      "result": "null"
+    },
+    {
+      "atMs": 3613,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":84,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 3654,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":84,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 3810,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":85,\"oldest\":1,\"truncated\":false,\"events\":[{\"seq\":85,\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"kind\":\"cancelled\",\"payload\":\"{\\\"durationMs\\\":1741,\\\"error\\\":null,\\\"reason\\\":\\\"cancelled before model step\\\",\\\"terminal\\\":\\\"cancelled\\\",\\\"turnId\\\":\\\"01a0dacb-fd58-7daa-89fb-8b88d9429528\\\"}\"}]}"
+    },
+    {
+      "atMs": 3965,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":85,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 4664,
+      "cmd": "git_status",
+      "url": "http://ipc.localhost/git_status",
+      "payload": {
+        "sessionId": "01a0dacb-fae4-73e0-862b-710213840b0c"
+      },
+      "raw": null,
+      "result": "{\"repoRoot\":\"\\\\\\\\?\\\\G:\\\\repos\\\\openscreen\",\"branch\":\"pr620\",\"head\":\"e13b36f5a9e6a40e7a3395f82c1e17b99ec25a14\",\"upstream\":null,\"ahead\":0,\"behind\":0,\"fingerprint\":\"fa87d7d8a44d2613\",\"remotes\":[{\"name\":\"abduznik\",\"url\":\"https://github.com/abduznik/openscreen.git\"},{\"name\":\"cybersparkx\",\"url\":\"git@github.com:CyberSparkx/openscreen.git\"},{\"name\":\"denia\",\"url\":\"git@github.com:My-Denia/openscreen.git\"},{"
+    },
+    {
+      "atMs": 4771,
+      "cmd": "send_input",
+      "url": "http://ipc.localhost/send_input",
+      "payload": {
+        "sessionId": "01a0dacb-fae4-73e0-862b-710213840b0c",
+        "commandId": "01a0dacc-088a-7eb4-8833-1f493afcbce5",
+        "text": "Reply with exactly the word: READY",
+        "inputParts": [
+          {
+            "type": "text",
+            "text": "Reply with exactly the word: READY"
+          }
+        ]
+      },
+      "raw": null,
+      "result": "{\"commandId\":\"01a0dacc-088a-7eb4-8833-1f493afcbce5\",\"disposition\":\"started\",\"startedNewTurn\":true,\"status\":\"accepted\",\"turnId\":\"01a0dacc-088a-7eb4-8833-1f493afcbce5\"}"
+    },
+    {
+      "atMs": 4774,
+      "cmd": "outbox_write",
+      "url": "http://ipc.localhost/outbox_write",
+      "payload": {
+        "payload": "{\"schema\":\"muse-desktop.native-outbox.v1\",\"sessions\":{\"01a0dacb-fae4-73e0-862b-710213840b0c\":[{\"clientMessageId\":\"39b121b6-0ff5-4eb4-9833-1f493afcbce5\",\"serverCommandId\":\"01a0dacc-088a-7eb4-8833-1f493afcbce5\",\"sessionId\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"text\":\"Reply with exactly the word: READY\",\"outgoingText\":\"Reply with exactly the word: READY\",\"inputParts\":[{\"type\":\"text\",\"text\":\"Reply with exactly the word: READY\"}],\"state\":\"sending\",\"error\":null,\"ambiguous\":false,\"createdAt\":1790377199861,\"updatedAt\":1790377199861,\"attempts\":1}]}}"
+      },
+      "raw": null,
+      "result": "null"
+    },
+    {
+      "atMs": 4858,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":86,\"oldest\":1,\"truncated\":false,\"events\":[{\"seq\":86,\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"kind\":\"started\",\"payload\":\"{\\\"commandId\\\":\\\"01a0dacc-088a-7eb4-8833-1f493afcbce5\\\",\\\"turnId\\\":\\\"01a0dacc-088a-7eb4-8833-1f493afcbce5\\\"}\"}]}"
+    },
+    {
+      "atMs": 4860,
+      "cmd": "outbox_write",
+      "url": "http://ipc.localhost/outbox_write",
+      "payload": {
+        "payload": "{\"schema\":\"muse-desktop.native-outbox.v1\",\"sessions\":{}}"
+      },
+      "raw": null,
+      "result": "null"
+    },
+    {
+      "atMs": 4971,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[{\"seq\":87,\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"kind\":\"item_started\",\"payload\":\"{\\\"commandText\\\":null,\\\"itemId\\\":\\\"c27e4454-a9cd-4f84-aa7e-8782e7327b62\\\",\\\"itemKind\\\":\\\"userMessage\\\",\\\"outputRef\\\":null,\\\"richContent\\\":null,\\\"toolSummary\\\":null,\\\"turnId\\\":\\\"01a0dacc-088a-7eb4-8833-1f493afcbce5\\\"}\"},{\"seq\":88,\"session_id\":\"01a0dacb-fae"
+    },
+    {
+      "atMs": 5123,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 5277,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 5430,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 5583,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 5739,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 5891,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 6046,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 6202,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 6355,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 6509,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":90,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 6664,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":93,\"oldest\":1,\"truncated\":false,\"events\":[{\"seq\":91,\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"kind\":\"item_started\",\"payload\":\"{\\\"commandText\\\":null,\\\"itemId\\\":\\\"4c897017-b254-4dff-8157-9d16840a0f38\\\",\\\"itemKind\\\":\\\"agentMessage\\\",\\\"outputRef\\\":null,\\\"richContent\\\":null,\\\"toolSummary\\\":null,\\\"turnId\\\":\\\"01a0dacc-088a-7eb4-8833-1f493afcbce5\\\"}\"},{\"seq\":92,\"session_id\":\"01a0dacb-fa"
+    },
+    {
+      "atMs": 6818,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":93,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 6975,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":93,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 7128,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[{\"seq\":94,\"session_id\":\"01a0dacb-fae4-73e0-862b-710213840b0c\",\"kind\":\"token_usage\",\"payload\":\"{\\\"cumulative\\\":{\\\"outputTokens\\\":18,\\\"promptTokens\\\":31363,\\\"totalTokens\\\":31381},\\\"durationMs\\\":2039,\\\"modelId\\\":\\\"muse-spark-1.3-contributor\\\",\\\"promptTokens\\\":31363,\\\"sessionId\\\":\\\"01a0dacb-fae4-73e0-862b-710213840b0c\\\",\\\"sourceRange\\\":{\\\"first\\\":{\\\"id"
+    },
+    {
+      "atMs": 7284,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 7439,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 7591,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 7746,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 7899,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 7973,
+      "cmd": "scheduler_claim",
+      "url": "http://ipc.localhost/scheduler_claim",
+      "payload": {
+        "ownerId": "scheduler-3d7145c1-046f-40b7-b62f-631372b23c46",
+        "leaseTtlMs": 30000
+      },
+      "raw": null,
+      "result": "{\"schema\":\"muse-desktop.native-scheduler-lease.v1\",\"acquired\":false,\"ownerId\":\"scheduler-0e263bda-de45-435d-802f-9bf3aa128c45\",\"expiresAt\":1790377209863,\"native\":true}"
+    },
+    {
+      "atMs": 8051,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 8203,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 8356,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 8509,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 8662,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 8814,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 8966,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 9118,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 9273,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 9428,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 9581,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 9736,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 9892,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 10048,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 10203,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 10359,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 10513,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null,
+      "result": "{\"head\":97,\"oldest\":1,\"truncated\":false,\"events\":[]}"
+    },
+    {
+      "atMs": 10666,
+      "cmd": "poll_events",
+      "url": "http://ipc.localhost/poll_events",
+      "payload": null,
+      "raw": null
+    }
+  ],
+  "traceTerminal": [],
+  "cancelCalls": [
+    {
+      "atMs": 3609,
+      "cmd": "cancel_session",
+      "url": "http://ipc.localhost/cancel_session",
+      "payload": {
+        "sessionId": "01a0dacb-fae4-73e0-862b-710213840b0c",
+        "turnId": "01a0dacb-fd58-7daa-89fb-8b88d9429528"
+      },
+      "raw": null,
+      "result": "null"
+    }
+  ],
+  "verdict": {
+    "turnIdObservedOnWire": true,
+    "stopClicked": true,
+    "cancelSessionCalls": 1,
+    "cancelCarriedTurnId": [
+      true
+    ],
+    "stoppingResolved": true,
+    "resolvedAtMs": 1009
+  }
+}

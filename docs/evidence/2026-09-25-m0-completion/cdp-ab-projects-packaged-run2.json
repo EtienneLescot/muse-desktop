@@ -1,0 +1,61 @@
+{
+  "schema": "muse-desktop.cdp-ab-projects.v1",
+  "live": true,
+  "declared": false,
+  "steps": {
+    "initial": {
+      "composerDisabled": false,
+      "connected": true,
+      "disconnected": false,
+      "connectionError": false,
+      "working": false,
+      "projectCount": 1,
+      "projectNames": [
+        "muse-desktop"
+      ],
+      "sessionCount": 28,
+      "workspaces": [
+        "\\\\?\\G:\\repos\\openscreen",
+        "n\\Documents\\repos\\muse-desktop"
+      ],
+      "tail": "ull length. 00:59:56 Stopped 00:59:58 Reply with exactly the word: READY 00:59:59 Muse READY 01:00:01 ＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor 3% ↑ Enter to send · Shift + Enter for a new line · @ for context"
+    },
+    "newConversation": {
+      "clicked": true
+    },
+    "picker": {
+      "startInOptions": null,
+      "startInCount": 0,
+      "bodyTail": "our ideas. A little further. Build, explore, and ship with Muse. Project Choose a project Worktree Runs in openscreen with the global settings. The agent reads that folder's rules. Build an interface Explore the project Review code ＋ Attach Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑"
+    },
+    "pickSecond": {
+      "picked": true,
+      "via": "details-picker",
+      "label": "muse-desktopC:\\Users\\etien\\Documents\\repos\\muse-desktop"
+    },
+    "fill": {
+      "filled": true,
+      "value": "Reply with just the word ISOLATED and nothing else."
+    },
+    "submit": {
+      "clicked": false
+    },
+    "afterStart": {
+      "composerDisabled": false,
+      "connected": false,
+      "disconnected": false,
+      "connectionError": false,
+      "working": false,
+      "projectCount": 1,
+      "projectNames": [
+        "muse-desktop"
+      ],
+      "sessionCount": 28,
+      "workspaces": [
+        "\\\\?\\G:\\repos\\openscreen",
+        "n\\Documents\\repos\\muse-desktop"
+      ],
+      "tail": "plore, and ship with Muse. Project muse-desktop Worktree Runs in muse-desktop. The agent reads the rules of that folder. Build an interface Explore the project Review code ＋ Attach Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑"
+    }
+  }
+}

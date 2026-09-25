@@ -1,0 +1,273 @@
+{
+  "schema": "muse-desktop.cdp-language-audit.v1",
+  "surfaces": [
+    {
+      "name": "home",
+      "candidateCount": 5,
+      "candidates": [
+        {
+          "text": "Extensions",
+          "marker": "Exten",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Est ce que tu peux ouvrir la calculatrice Windows Faire 4*4 et me donner le résultat",
+          "marker": "Ouvrir",
+          "functionWord": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Archived conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Max depth plus proactive workflow and delegation guidance; can raise token usage quickly",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SMALL"
+        }
+      ],
+      "sample": "Skip to message input Agent stopped. Muse-Desktop New conversation Search Automations Extensions Library CONVERSATIONS + muse-desktop Reply with just the word ISOLATED and noth… Reply with just the word ISOLATED and noth… Ungrouped Reply with just the word BETA and nothing … Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-wor"
+    },
+    {
+      "name": "new-conversation",
+      "candidateCount": 5,
+      "candidates": [
+        {
+          "text": "Extensions",
+          "marker": "Exten",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Est ce que tu peux ouvrir la calculatrice Windows Faire 4*4 et me donner le résultat",
+          "marker": "Ouvrir",
+          "functionWord": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Archived conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Max depth plus proactive workflow and delegation guidance; can raise token usage quickly",
+          "marker": null,
+          "functionWord": true,
+          "tag": "SMALL"
+        }
+      ],
+      "sample": "Skip to message input Agent stopped. Muse-Desktop New conversation Search Automations Extensions Library CONVERSATIONS + muse-desktop Reply with just the word ISOLATED and noth… Reply with just the word ISOLATED and noth… Ungrouped Reply with just the word BETA and nothing … Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-wor"
+    },
+    {
+      "name": "automations",
+      "candidateCount": 4,
+      "candidates": [
+        {
+          "text": "Extensions",
+          "marker": "Exten",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Est ce que tu peux ouvrir la calculatrice Windows Faire 4*4 et me donner le résultat",
+          "marker": "Ouvrir",
+          "functionWord": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Archived conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "sample": "Skip to message input Agent stopped. Muse-Desktop New conversation Search Automations Extensions Library CONVERSATIONS + muse-desktop Reply with just the word ISOLATED and noth… Reply with just the word ISOLATED and noth… Ungrouped Reply with just the word BETA and nothing … Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-wor"
+    },
+    {
+      "name": "extensions",
+      "candidateCount": 5,
+      "candidates": [
+        {
+          "text": "Extensions",
+          "marker": "Exten",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Est ce que tu peux ouvrir la calculatrice Windows Faire 4*4 et me donner le résultat",
+          "marker": "Ouvrir",
+          "functionWord": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Archived conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Curated catalog plus an explicit local MCP probe.",
+          "marker": null,
+          "functionWord": true,
+          "tag": "P"
+        }
+      ],
+      "sample": "Skip to message input Agent stopped. Muse-Desktop New conversation Search Automations Extensions Library CONVERSATIONS + muse-desktop Reply with just the word ISOLATED and noth… Reply with just the word ISOLATED and noth… Ungrouped Reply with just the word BETA and nothing … Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-wor"
+    },
+    {
+      "name": "library",
+      "candidateCount": 5,
+      "candidates": [
+        {
+          "text": "Extensions",
+          "marker": "Exten",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Est ce que tu peux ouvrir la calculatrice Windows Faire 4*4 et me donner le résultat",
+          "marker": "Ouvrir",
+          "functionWord": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Archived conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "No imported conversations yet.",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "P"
+        }
+      ],
+      "sample": "Skip to message input Agent stopped. Muse-Desktop New conversation Search Automations Extensions Library CONVERSATIONS + muse-desktop Reply with just the word ISOLATED and noth… Reply with just the word ISOLATED and noth… Ungrouped Reply with just the word BETA and nothing … Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-wor"
+    },
+    {
+      "name": "search",
+      "candidateCount": 6,
+      "candidates": [
+        {
+          "text": "Extensions",
+          "marker": "Exten",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Est ce que tu peux ouvrir la calculatrice Windows Faire 4*4 et me donner le résultat",
+          "marker": "Ouvrir",
+          "functionWord": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Archived conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "No imported conversations yet.",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "P"
+        },
+        {
+          "text": "Search conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "H2"
+        }
+      ],
+      "sample": "Skip to message input Agent stopped. Muse-Desktop New conversation Search Automations Extensions Library CONVERSATIONS + muse-desktop Reply with just the word ISOLATED and noth… Reply with just the word ISOLATED and noth… Ungrouped Reply with just the word BETA and nothing … Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-wor"
+    },
+    {
+      "name": "conversation-NOT-OPENED",
+      "candidateCount": 6,
+      "candidates": [
+        {
+          "text": "Extensions",
+          "marker": "Exten",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Est ce que tu peux ouvrir la calculatrice Windows Faire 4*4 et me donner le résultat",
+          "marker": "Ouvrir",
+          "functionWord": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Archived conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "No imported conversations yet.",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "P"
+        },
+        {
+          "text": "Search conversations",
+          "marker": "Conversations",
+          "functionWord": false,
+          "tag": "H2"
+        }
+      ],
+      "sample": "Skip to message input Agent stopped. Muse-Desktop New conversation Search Automations Extensions Library CONVERSATIONS + muse-desktop Reply with just the word ISOLATED and noth… Reply with just the word ISOLATED and noth… Ungrouped Reply with just the word BETA and nothing … Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-word scie… Write a very long, detailed 3000-wor"
+    }
+  ],
+  "back": {
+    "opened": false
+  }
+}
