@@ -229,6 +229,21 @@ describe("M3-06 schedule run ledger", () => {
     assert.equal(normalizeScheduleRuns({ nope: true }).length, 0);
   });
 
+  it("re-applies the restart hold after a native merge outranks it (M3-07)", () => {
+    // Boot order in the hook: recover the web ledger, then merge the native
+    // mirror. The mirror row has no marker and wins the merge, so the merged
+    // ledger must be recovered again or the run shows "Running" forever.
+    const seed = run(1000);
+    const running = markRunStarted([seed], seed.id, 2000, "session-1")[0];
+    const recovered = recoverScheduleRuns([running], 5000);
+    const nativeMirror = [{ ...running, recovery: undefined, recoveryDetectedAt: undefined }];
+    const merged = mergeScheduleRuns(recovered, nativeMirror);
+    assert.equal(merged[0].recovery, undefined);
+    const reheld = recoverScheduleRuns(merged, 6000);
+    assert.equal(reheld[0].recovery, "after-restart");
+    assert.equal(reheld[0].recoveryDetectedAt, 6000);
+  });
+
   it("requires an explicit reconciliation before a recovered run can be retried", () => {
     const initial = recoverScheduleRuns([run()], 5000)[0];
     const untouched = markRecoveredRunFailed([initial], "missing", 6000);

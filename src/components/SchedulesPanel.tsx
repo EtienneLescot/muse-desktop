@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   validateScheduleInput,
+  resolveOnceTrigger,
   type Schedule,
   type ScheduleInput,
   type ScheduleAuthorizationMode,
@@ -167,6 +168,13 @@ export function SchedulesPanel({
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     [],
   );
+  // M3-07: resolve the picked wall clock in the captured time zone and surface
+  // DST adjustments (a skipped hour, a duplicated hour) before creation
+  // instead of letting `new Date()` apply them silently.
+  const onceResolution = useMemo(
+    () => (triggerKind === "once" && at.length > 0 ? resolveOnceTrigger(at, localTimeZone) : null),
+    [at, localTimeZone, triggerKind],
+  );
 
   const visibleRuns = useMemo(() => runs
     .filter((run) => {
@@ -192,7 +200,7 @@ export function SchedulesPanel({
       instructions,
       trigger:
         triggerKind === "once"
-          ? { kind: "once", at: at.length > 0 ? new Date(at).getTime() : NaN }
+          ? { kind: "once", at: at.length > 0 ? onceResolution?.at ?? NaN : NaN }
           : { kind: "cron", cron: cron.trim() },
       threadReuse:
         reuseKind === "session"
@@ -298,6 +306,11 @@ export function SchedulesPanel({
             />
           )}
         </div>
+        {onceResolution?.warning && (
+          <small className="sched-dst-warning" role="note">
+            {onceResolution.warning}
+          </small>
+        )}
         {triggerKind === "cron" && (
           <label className="sched-policy">
             <span>When the app wakes late</span>

@@ -115,6 +115,7 @@ export default function App() {
     authorizationMode,
     setAuthorizationMode,
     liveModels,
+    liveModelsSessionId,
     setSessionModel,
     setSessionReasoningEffort,
     usageBySession,
@@ -1397,8 +1398,16 @@ export default function App() {
                         ? "Starting a Muse host…"
                         : `Starting Muse in ${folderName(startFolder)}…`,
                     });
-                    const id = project !== null && startFolder !== null
-                      ? await startSessionInWorkspace(startFolder, settingsFor(project.id), project.id)
+                    // M2-03 "Create & open": once a worktree exists the session
+                    // must start in it, project or not — falling back to
+                    // startSession() here launched the conversation in the main
+                    // repository while the copy sat unused in .muse/worktrees.
+                    const id = startFolder !== null
+                      ? await startSessionInWorkspace(
+                          startFolder,
+                          project !== null ? settingsFor(project.id) : undefined,
+                          project?.id,
+                        )
                       : await startSession();
                     if (id === null || (draft.trim() === "" && (inputParts?.length ?? 0) === 0)) return id !== null;
                     setPreparation({ draft, step: "Sending your first message…" });
@@ -1634,7 +1643,17 @@ export default function App() {
                     modelControl={
                       <>
                         <ModelControl
-                          models={liveModels}
+                          /* M1-11: the catalog's `isActive` row describes the
+                             conversation it was read for. On a stale catalog
+                             (an unloaded conversation refuses the per-session
+                             refresh) only the per-conversation choices keep
+                             meaning, so the active flag is dropped and the
+                             picker falls back to this session's own model. */
+                          models={
+                            liveModelsSessionId === active.session_id || liveModelsSessionId === null
+                              ? liveModels
+                              : liveModels?.map((model) => ({ ...model, isActive: false })) ?? null
+                          }
                           value={active.model_id ?? null}
                           onSelect={(modelId) => void setSessionModel(active.session_id, modelId)}
                           /* The composer sits at the bottom of the window, so the

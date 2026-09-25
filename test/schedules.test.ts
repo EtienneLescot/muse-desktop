@@ -27,6 +27,7 @@ import {
   loadSchedules,
   parseCron,
   pendingReviews,
+  resolveOnceTrigger,
   resolveReviewTarget,
   scheduleOccurrenceKey,
   saveReviewQueue,
@@ -385,5 +386,43 @@ describe("US-9 persistence round-trip", () => {
     (globalThis as Record<string, unknown>).localStorage = undefined;
     assert.deepEqual(loadSchedules(), []);
     assert.deepEqual(loadReviewQueue(), []);
+  });
+});
+
+describe("M3-07 once-trigger DST resolution", () => {
+  // The expected epochs are the measurements of 27/09/2026 recorded in
+  // docs/evidence/2026-09-27-qualif-native/m3-automations-reveil.md.
+  it("warns and jumps forward on a spring-forward gap", () => {
+    const resolved = resolveOnceTrigger("2027-03-28T02:30", "Europe/Paris");
+    assert.equal(resolved.at, 1806197400000);
+    assert.match(resolved.warning ?? "", /does not exist/);
+    assert.match(resolved.warning ?? "", /03:30/);
+  });
+
+  it("warns and keeps the first instant on a fall-back duplicate", () => {
+    const resolved = resolveOnceTrigger("2027-10-31T02:30", "Europe/Paris");
+    assert.equal(resolved.at, 1824942600000);
+    assert.match(resolved.warning ?? "", /twice/);
+  });
+
+  it("resolves an ordinary wall clock with no warning", () => {
+    const resolved = resolveOnceTrigger("2027-06-15T09:30", "Europe/Paris");
+    assert.equal(resolved.warning, undefined);
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Paris",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(new Date(resolved.at));
+    const value = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+    assert.equal(`${value("day")}/${value("month")}/${value("year")}`, "15/6/2027");
+    assert.equal(value("hour"), 9);
+    assert.equal(value("minute"), 30);
+  });
+
+  it("falls back to the browser parse for unrecognised input", () => {
+    assert.ok(Number.isNaN(resolveOnceTrigger("not-a-date", "Europe/Paris").at));
+    // An unresolvable zone keeps the legacy `new Date()` behaviour (local
+    // parse) instead of failing the whole creation.
+    assert.ok(Number.isFinite(resolveOnceTrigger("2027-06-15T09:30", "No/Such_Zone").at));
   });
 });

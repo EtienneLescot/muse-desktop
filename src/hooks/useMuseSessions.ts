@@ -856,6 +856,12 @@ interface UseMuseSessions {
   /** w-settings: persist the provider selection for the current project. */
   /** US-31: live host catalog (`model/list` snapshot), null when unloaded. */
   liveModels: LiveModel[] | null;
+  /**
+   * US-31 / M1-11: which conversation the catalog was read for (`model/list`'s
+   * `isActive` row is per session). Null when the catalog is not bound to one
+   * conversation — the workspace-level read the welcome screen uses.
+   */
+  liveModelsSessionId: string | null;
   /** US-31: last catalog load failure (panel shows it, picker falls back). */
   /** US-31: (re)load the catalog, optionally flagging one session active. */
   refreshModels: (sessionId?: string) => Promise<void>;
@@ -2411,7 +2417,12 @@ export function useMuseSessions(): UseMuseSessions {
     void loadNativeScheduleRuns().then((nativeRuns) => {
       if (cancelled) return;
       if (nativeRuns !== null) {
-        setScheduleRuns((current) => mergeScheduleRuns(current, nativeRuns));
+        // M3-07: the merge can bring in non-terminal rows the boot-time
+        // recovery never saw (mirrored just before the crash), and a native
+        // snapshot outranks a recovered row, so the safety hold is re-applied
+        // after the merge — without it the run stays displayed "Running"
+        // although its process died with the previous session.
+        setScheduleRuns((current) => recoverScheduleRuns(mergeScheduleRuns(current, nativeRuns)));
       } else {
         nativeScheduleRunsWriterRef.current?.(scheduleRunsRef.current);
       }
@@ -4077,6 +4088,10 @@ export function useMuseSessions(): UseMuseSessions {
   // panel falls back to the sample registry); failures record modelsError
   // instead of clobbering the banner — a picker must degrade, not shout.
   const [liveModels, setLiveModels] = useState<LiveModel[] | null>(null);
+  // M1-11: the conversation the shared catalog was read for. `model/list`'s
+  // `isActive` row is per session, so the picker must know whether the catalog
+  // describes *this* conversation before trusting its active row.
+  const [liveModelsSessionId, setLiveModelsSessionId] = useState<string | null>(null);
   const [, setModelsError] = useState<string | null>(null);
   const refreshModels = useCallback(async (sessionId?: string) => {
     try {
@@ -4084,9 +4099,13 @@ export function useMuseSessions(): UseMuseSessions {
         sessionId: sessionId ?? null,
       });
       setLiveModels(parseModelList(raw));
+      setLiveModelsSessionId(sessionId ?? null);
       setModelsError(null);
     } catch (e) {
-      setLiveModels(null);
+      // A per-session refresh runs on every conversation switch, including to
+      // saved conversations the host has not loaded. Wiping the catalog there
+      // used to blank the picker for every other conversation too; the last
+      // known choices stay usable instead, and the failure is recorded.
       setModelsError(
         `model catalog unavailable: ${e instanceof Error ? e.message : String(e)}`,
       );
@@ -4179,7 +4198,13 @@ export function useMuseSessions(): UseMuseSessions {
   const setActive = useCallback((id: string | null) => {
     if (id !== null) setSessions((cur) => withUnreadFlag(cur, id, false));
     setActiveId(id);
-  }, []);
+    // M1-11: the model catalog's `isActive` row belongs to whichever
+    // conversation was refreshed last, so a switch must re-read it for the
+    // conversation being opened — otherwise the picker announced the previous
+    // conversation's model. Unloaded conversations leave the previous catalog
+    // in place (refreshModels keeps it on failure).
+    if (id !== null) void refreshModels(id);
+  }, [refreshModels]);
 
   // Shared session creation (US-4 `newFromSummary` reuses it so the fresh
   // thread goes through the exact same backend + state path as `+ New`).
@@ -7866,6 +7891,7 @@ export function useMuseSessions(): UseMuseSessions {
     setAuthorizationMode,
     providerId,
     liveModels,
+    liveModelsSessionId,
     refreshModels,
     setSessionModel,
     setSessionReasoningEffort,

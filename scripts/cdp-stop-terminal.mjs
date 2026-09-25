@@ -273,11 +273,12 @@ async function main() {
       const candidates = [...document.querySelectorAll('button')]
         .filter((b) => /^stop/i.test((b.innerText || '').trim()) && b.disabled !== true);
       // Measured DOM: the turn-level control is the enabled "Stop" of the
-      // composer working row — whose title reads "Stop the running sidecar"
-      // (a misleading title, not a sidecar panel button). Subagent lanes carry
-      // title "subagent/stop" and are excluded. A previous selector rejected
-      // the real button BECAUSE of its "sidecar" title — do not repeat.
-      const node = candidates.find((b) => /stop the running sidecar/i.test(b.getAttribute('title') || ''))
+      // composer working row — title "Stop the current turn" (it used to read
+      // the misleading "Stop the running sidecar", kept here as a fallback so
+      // older builds stay replayable). Subagent lanes carry title
+      // "subagent/stop" and are excluded. A previous selector rejected the
+      // real button BECAUSE of its "sidecar" title — do not repeat.
+      const node = candidates.find((b) => /stop the (current turn|running sidecar)/i.test(b.getAttribute('title') || ''))
         || candidates.find((b) => b.classList.contains('quiet'))
         || candidates.find((b) => !/subagent\\/stop/i.test(b.getAttribute('title') || ''));
       if (!node) return { clicked: false, candidates: candidates.map((b) => (b.getAttribute('title') || b.innerText || '').trim()) };
