@@ -1,0 +1,30 @@
+{
+ "schema": "muse-desktop.cdp-approval-posture.v1",
+ "date": "2026-09-25",
+ "build": "97f9eb1 (embedded frontend, debug exe, WebView2 CDP 9222)",
+ "steps": [
+  {
+   "step": "initial posture",
+   "stored": "yolo",
+   "picker": "YOLO"
+  },
+  {
+   "step": "picker -> Ask for approval",
+   "result": "stored=ask, trigger text 'Ask for approval'"
+  },
+  {
+   "step": "fetch-hook wire trace on a second change",
+   "result": "set_approval_mode:ask x10 (one per connected session), no app restart"
+  },
+  {
+   "step": "taskkill /F app + muse.exe, relaunch",
+   "result": "stored=ask, trigger 'Ask for approval' \u2014 persisted"
+  }
+ ],
+ "verdict": {
+  "changeWithoutRestart": true,
+  "appliedToConnectedHosts": true,
+  "preservedAfterKill": true
+ },
+ "remaining": "refused/stale posture decision replay (host ceiling promptUnmatched already probed 20/09); macOS/Linux"
+}

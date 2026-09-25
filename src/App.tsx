@@ -103,6 +103,7 @@ export default function App() {
     activeRetryScheduled,
     stoppingBySession,
     activeConnectionState,
+    connectionNoticeBySession,
     queuedTurns,
     dismissQueuedTurn,
     inputRequests,
@@ -1459,7 +1460,14 @@ export default function App() {
                           <span title="Host-reported Git branch">{active.branch}</span>
                         </>
                       )}
-                      <span className={`connection-state connection-${activeConnectionState}`}>
+                      <span
+                        className={`connection-state connection-${activeConnectionState}`}
+                        /* M0-08: the supervisor's actionable failure reason
+                           (incompatible engine, spawn failure, immediate exit)
+                           was previously dropped to the console on the silent
+                           boot resume; the pill now explains itself. */
+                        title={connectionNoticeBySession[active.session_id]}
+                      >
                         <span className="connection-state-dot" aria-hidden="true" />
                         {activeConnectionState === "connected"
                           ? "Connected"

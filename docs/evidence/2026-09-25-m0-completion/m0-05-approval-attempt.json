@@ -1,0 +1,15 @@
+{
+ "schema": "muse-desktop.m0-05-approval-stale-attempt.v1",
+ "date": "2026-09-25",
+ "build": "97f9eb1 (embedded frontend, debug exe, WebView2 CDP 9222)",
+ "attempt": "ask posture (persisted, verified) + live turn instructing the model to run 'echo m05-approval-stamp' via its own shell tool",
+ "observed": [
+  "tool lane rendered: 'powershell - Print approval stamp token'",
+  "no approval/decision card ever raised over 90s (host ceiling promptUnmatched; the shell tool also hits the sandbox block measured 23/09 - outil-shell-bloque-sandbox.md)",
+  "Stop resolved the turn cleanly (no Stopping residue)"
+ ],
+ "verdict": {
+  "approvalRequestProvoquable": false
+ },
+ "conclusion": "the stale-race approval criterion stays host-blocked exactly as recorded on 20/09 (M0-05 line): the status is not raised while the host does not emit the approval prompts; nothing to fix on the app side"
+}

@@ -207,7 +207,8 @@ async function main() {
   })()`);
   const startClick = await evaluate(client, `(() => {
     ${PAGE}
-    const start = byText('start conversation')[0];
+    const start = byText('start conversation')[0]
+      || document.querySelector('button.welcome-send, [aria-label="Start conversation"]');
     const send = document.querySelector('button.send');
     const node = start || send;
     if (!node) return { clicked: false, buttons: uiState().buttons };

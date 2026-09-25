@@ -1,0 +1,177 @@
+{
+  "schema": "muse-desktop.cdp-unknown-skill-reject.v1",
+  "skill": "definitelynotaskill",
+  "steps": [
+    {
+      "label": "opened",
+      "activeId": "01a0da90-f296-77f2-a72d-825c8796d7d3",
+      "title": "Reply with just the word BETA and nothing …",
+      "composerValue": "",
+      "composerDisabled": false,
+      "outbox": [
+        {
+          "key": "e2c974b3ebec",
+          "rows": []
+        },
+        {
+          "key": "eccd1081f03e",
+          "rows": []
+        },
+        {
+          "key": "825c8796d7d3",
+          "rows": []
+        },
+        {
+          "key": "c05b5c1f9801",
+          "rows": []
+        },
+        {
+          "key": "ce63bd8399d3",
+          "rows": []
+        },
+        {
+          "key": "4c6238b36ec0",
+          "rows": []
+        },
+        {
+          "key": "a98d2f994e78",
+          "rows": []
+        }
+      ],
+      "outboxRows": 0,
+      "retryAffordance": [],
+      "failureCopy": false,
+      "bodyTail": "just the word BETA and nothing else. 23:55:28 Muse BETA 23:55:36 ＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context"
+    },
+    {
+      "label": "typed",
+      "activeId": "01a0da90-f296-77f2-a72d-825c8796d7d3",
+      "title": "Reply with just the word BETA and nothing …",
+      "composerValue": "/definitelynotaskill this command names a skill that does not exist",
+      "composerDisabled": false,
+      "outbox": [
+        {
+          "key": "e2c974b3ebec",
+          "rows": []
+        },
+        {
+          "key": "eccd1081f03e",
+          "rows": []
+        },
+        {
+          "key": "825c8796d7d3",
+          "rows": []
+        },
+        {
+          "key": "c05b5c1f9801",
+          "rows": []
+        },
+        {
+          "key": "ce63bd8399d3",
+          "rows": []
+        },
+        {
+          "key": "4c6238b36ec0",
+          "rows": []
+        },
+        {
+          "key": "a98d2f994e78",
+          "rows": []
+        }
+      ],
+      "outboxRows": 0,
+      "retryAffordance": [],
+      "failureCopy": false,
+      "bodyTail": "just the word BETA and nothing else. 23:55:28 Muse BETA 23:55:36 ＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context"
+    },
+    {
+      "label": "submitted",
+      "activeId": "01a0da90-f296-77f2-a72d-825c8796d7d3",
+      "title": "Reply with just the word BETA and nothing …",
+      "composerValue": "/definitelynotaskill this command names a skill that does not exist",
+      "composerDisabled": false,
+      "outbox": [
+        {
+          "key": "e2c974b3ebec",
+          "rows": []
+        },
+        {
+          "key": "eccd1081f03e",
+          "rows": []
+        },
+        {
+          "key": "825c8796d7d3",
+          "rows": []
+        },
+        {
+          "key": "c05b5c1f9801",
+          "rows": []
+        },
+        {
+          "key": "ce63bd8399d3",
+          "rows": []
+        },
+        {
+          "key": "4c6238b36ec0",
+          "rows": []
+        },
+        {
+          "key": "a98d2f994e78",
+          "rows": []
+        }
+      ],
+      "outboxRows": 0,
+      "retryAffordance": [],
+      "failureCopy": true,
+      "bodyTail": " or enable it first. 23:59:17 unknown skill /definitelynotaskill ＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context"
+    },
+    {
+      "label": "after-10s",
+      "activeId": "01a0da90-f296-77f2-a72d-825c8796d7d3",
+      "title": "Reply with just the word BETA and nothing …",
+      "composerValue": "/definitelynotaskill this command names a skill that does not exist",
+      "composerDisabled": false,
+      "outbox": [
+        {
+          "key": "e2c974b3ebec",
+          "rows": []
+        },
+        {
+          "key": "eccd1081f03e",
+          "rows": []
+        },
+        {
+          "key": "825c8796d7d3",
+          "rows": []
+        },
+        {
+          "key": "c05b5c1f9801",
+          "rows": []
+        },
+        {
+          "key": "ce63bd8399d3",
+          "rows": []
+        },
+        {
+          "key": "4c6238b36ec0",
+          "rows": []
+        },
+        {
+          "key": "a98d2f994e78",
+          "rows": []
+        }
+      ],
+      "outboxRows": 0,
+      "retryAffordance": [],
+      "failureCopy": true,
+      "bodyTail": " or enable it first. 23:59:17 unknown skill /definitelynotaskill ＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context"
+    }
+  ],
+  "open": {
+    "opened": false
+  },
+  "typed": {
+    "typed": true,
+    "len": 67
+  }
+}

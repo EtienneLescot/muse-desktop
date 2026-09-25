@@ -1,0 +1,30 @@
+{
+ "schema": "muse-desktop.m0-08-incompatible-engine.v1",
+ "date": "2026-09-25/26",
+ "build": "pre-fix 97f9eb1 for the measurement; fix validated on the same session",
+ "protocol": "swap the sidecar the debug app actually launches (target/debug/muse.exe - NOTE: cargo build re-copies binaries/muse-* over it, the fake must be placed after the last build) with engines that do not speak MSP, then open a conversation (forces the host spawn)",
+ "variants": [
+  {
+   "engine": "cmd.exe (never answers the handshake)",
+   "beforeFix": "stuck 'Connecting' ~90s, then 'Disconnected' + Reconnect; reason only in console",
+   "afterFix": "pill carries the bounded reason on hover"
+  },
+  {
+   "engine": "hostname.exe (exits immediately)",
+   "beforeFix": "fast 'Disconnected', generic; explicit Reconnect surfaced 'Reconnect failed: MSP handshake failed (sidecar dropped the response). Host stderr:' in a banner",
+   "afterFix": "silent boot resume now records the same reason: pill title = 'MSP handshake failed (sidecar dropped the response). Host stderr: '"
+  },
+  {
+   "engine": "real muse 1.3.0 restored",
+   "result": "'Connected', notice cleared - recovery path healthy"
+  }
+ ],
+ "fix": "connectionNoticeBySession in useMuseSessions: the silent boot-resume catch records a bounded (220 chars) supervisor error per conversation; the connection pill exposes it as its title; a successful connection clears it. No global banner on silent boot resume (design intent preserved).",
+ "verdict": {
+  "noCrashOnIncompatibleEngine": true,
+  "boundedDetection": true,
+  "recoveryActionPresent": true,
+  "actionableReasonSurfaced": true
+ },
+ "remaining": "matrix of older engine versions; macOS/Linux"
+}

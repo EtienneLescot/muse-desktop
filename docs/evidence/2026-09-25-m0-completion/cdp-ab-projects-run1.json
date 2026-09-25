@@ -1,0 +1,77 @@
+{
+  "schema": "muse-desktop.cdp-ab-projects.v1",
+  "live": true,
+  "declared": true,
+  "steps": {
+    "initial": {
+      "composerDisabled": false,
+      "connected": true,
+      "disconnected": false,
+      "connectionError": false,
+      "working": true,
+      "projectCount": 0,
+      "projectNames": [],
+      "sessionCount": 40,
+      "workspaces": [
+        "\\\\?\\G:\\repos\\openscreen"
+      ],
+      "tail": "DY 23:53:28 Muse · Thinking Thinking 23:53:32 Muse READY 23:53:32 Muse is working Last update 13s ago. · work item started. ＋ Attach Voice YOLO ✦ Effort High Model 3% Stop Guide ↑ Enter to send · Shift + Enter for a new line · @ for context"
+    },
+    "declare": {
+      "added": true,
+      "count": 1,
+      "workspace": "C:\\Users\\etien\\Documents\\repos\\muse-desktop"
+    },
+    "afterReload": {
+      "composerDisabled": false,
+      "connected": true,
+      "disconnected": false,
+      "connectionError": false,
+      "working": false,
+      "projectCount": 1,
+      "projectNames": [
+        "muse-desktop"
+      ],
+      "sessionCount": 40,
+      "workspaces": [
+        "\\\\?\\G:\\repos\\openscreen"
+      ],
+      "tail": "6 Stopped 23:53:27 Reply with exactly the word: READY 23:53:28 Muse · Thinking Thinking 23:53:32 Muse READY 23:53:32 ＋ Attach Voice YOLO ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context"
+    },
+    "newConversation": {
+      "clicked": true
+    },
+    "picker": {
+      "startInOptions": null,
+      "startInCount": 0,
+      "bodyTail": "nversation Your ideas. A little further. Build, explore, and ship with Muse. Project Choose a project Worktree Runs in openscreen with the global settings. The agent reads that folder's rules. Build an interface Explore the project Review code ＋ Attach YOLO ✦ Effort High muse-spark-1.3-contributor ↑"
+    },
+    "pickSecond": {
+      "picked": false,
+      "reason": "no start-in select"
+    },
+    "fill": {
+      "filled": true,
+      "value": "Reply with just the word ISOLATED and nothing else."
+    },
+    "submit": {
+      "clicked": false
+    },
+    "afterStart": {
+      "composerDisabled": false,
+      "connected": false,
+      "disconnected": false,
+      "connectionError": false,
+      "working": false,
+      "projectCount": 1,
+      "projectNames": [
+        "muse-desktop"
+      ],
+      "sessionCount": 40,
+      "workspaces": [
+        "\\\\?\\G:\\repos\\openscreen"
+      ],
+      "tail": " ship with Muse. Project Choose a project Worktree Runs in openscreen with the global settings. The agent reads that folder's rules. Build an interface Explore the project Review code ＋ Attach YOLO ✦ Effort High muse-spark-1.3-contributor ↑"
+    }
+  }
+}
