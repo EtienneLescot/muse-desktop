@@ -58,6 +58,7 @@ scenarios were re-driven through CDP in the **installed** app:
 | **M0-04 stop** (`cdp-stop-terminal-packaged-run5.json`) | PASS — single `cancel_session` carrying the correct `turnId`, `Stopping…` resolved in **1 009 ms**, immediate follow-up accepted, Stop title "Stop the current turn". |
 | **M0-01 / M0-14 A/B** (`cdp-ab-projects-packaged-run3.json`) | PASS — turn A started in project `muse-desktop` (second host), turn B concurrently in openscreen; A completed "ISOLATED" while B ran; B completed "BETA"; isolation intact. |
 | **M0-11 labels** (`cdp-language-audit-packaged-run2.json`) | PASS — chrome English on 7 surfaces; French hits are user content / heuristic false positives ("plus" in English copy). |
+| **M0-07 engine error** (`cdp-unknown-skill-reject-packaged-run1.json`) | PASS — `/definitelynotaskill` rejected with the structured, actionable copy; composer text preserved; no outbox residue. |
 
 Two methodological traps recorded so they are not repeated:
 
