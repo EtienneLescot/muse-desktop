@@ -82,20 +82,19 @@ clients can only show a recovery message.
 
 ## Filing checklist (Étienne)
 
-- [ ] **Designate the channel.** Update 26/09 (on review): a **public Muse Code
-      SDK tracker exists** — [meta-models/muse-code-sdk](https://github.com/meta-models/muse-code-sdk/issues)
-      (MIT, README "Support": *bugs in the SDK, in the protocol declarations and
-      in the documentation all belong here, as do questions about how to use any
-      of it*; issues are triaged internally and fixes are published in the next
-      SDK release). There is no separate public tracker dedicated to the muse
-      host binary itself, and this repo's README scope does not name host
-      reports explicitly — so either file the two drafts below there as the
-      de-facto public Muse Code surface (they are host reports: 1.3.0 approval
-      ceiling, model shell tool under the Windows sandbox), or route them
-      through the internal/support channel you use with the Muse team. Both
-      drafts assume GitHub-flavoured Markdown.
-- [ ] Paste each file as one issue; keep the repro tables.
+- [x] **Designate the channel.** Done 26/09 (evening): the **public Muse Code
+      SDK tracker** ([meta-models/muse-code-sdk/issues](https://github.com/meta-models/muse-code-sdk/issues))
+      is the designated public surface — its tracker already carries
+      host-runtime reports, and its README "Support" section welcomes SDK,
+      protocol and documentation bugs plus usage questions. **File 3 is filed:
+      [muse-code-sdk#55](https://github.com/meta-models/muse-code-sdk/issues/55).**
+      Files 1 and 2 remain ready to paste there the same way (both are
+      host-runtime reports of the same kind). GitHub-flavoured Markdown
+      assumed — confirmed in use on that tracker.
+- [ ] Paste files 1 and 2 as one issue each; keep the repro tables.
 - [ ] Link the fix observation once available so the desktop client can re-run
-      the blocked qualification variants: the M0-05 stale race, and a
+      the blocked qualification variants: the M0-05 stale race, a
       **sandboxed-posture** re-proof of M0-04's stop-during-tool (proved on
-      26/09 only under `--disable-sandbox`).
+      26/09 only under `--disable-sandbox`), and **M1-09's fork creation**
+      (watch the tracker for the fix, then re-run
+      `scripts/cdp-m1-files-fork.mjs` and the direct `fork_session` probe).
