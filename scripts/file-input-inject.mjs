@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Attach a real file to the Settings import <input type=file> over CDP. */
+/** Attach a real file to a page <input type=file> over CDP, with retries. */
 import { readFileSync } from "node:fs";
 
 const [, , filePath, selector = 'input[type="file"]'] = process.argv;
@@ -7,6 +7,8 @@ if (!filePath) {
   console.error("usage: node file-input-inject.mjs FILE [SELECTOR]");
   process.exit(2);
 }
+const absolute = filePath.replace(/\//g, "\\");
+
 const list = await (await fetch("http://127.0.0.1:9222/json/list")).json();
 const page = list.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
 if (!page) throw new Error("no CDP page target");
@@ -34,16 +36,31 @@ await new Promise((resolve, reject) => {
 });
 
 await send("DOM.enable");
-const doc = await send("DOM.getDocument", { depth: -1, pierce: true });
-const node = await send("DOM.querySelector", {
-  nodeId: doc.root.nodeId,
-  selector,
-});
-if (!node.nodeId) throw new Error(`no element matches ${selector}`);
-await send("DOM.setFileInputFiles", {
-  files: [filePath],
-  nodeId: node.nodeId,
-});
-console.log(`attached ${filePath} to ${selector}`);
+
+const evalJs = async (expression) => {
+  const r = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+  return r.result?.value;
+};
+
+let ok = false;
+for (let attempt = 1; attempt <= 6 && !ok; attempt++) {
+  const doc = await send("DOM.getDocument", { depth: -1, pierce: true });
+  const node = await send("DOM.querySelector", {
+    nodeId: doc.root.nodeId,
+    selector,
+  });
+  if (!node.nodeId) throw new Error(`no element matches ${selector}`);
+  await send("DOM.setFileInputFiles", { files: [absolute], nodeId: node.nodeId });
+  const count = await evalJs(
+    `(document.querySelector(${JSON.stringify(selector)}) || {files:{length:0}}).files.length`,
+  );
+  if (Number(count) > 0) {
+    ok = true;
+    break;
+  }
+  await new Promise((r) => setTimeout(r, 400));
+}
+if (!ok) throw new Error("file did not attach after 6 attempts");
+console.log(`attached ${absolute} to ${selector}`);
 socket.close();
 process.exit(0);

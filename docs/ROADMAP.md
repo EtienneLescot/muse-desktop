@@ -150,8 +150,8 @@ The remaining criteria and their precise limits are listed in each document unde
 | State | Total | Breakdown |
 |---|---|---|
 | ☐ Not started | **1** | M4-06 |
-| ◐ Started | **47** | everything else |
-| ☑ Done | **5** | M1-12, **M0-02**, **M0-03** (20-27/09), **M0-11** (25-26/09, incl. packaged webview) and **M0-04** (Windows closed 26/09 with the strict tool-during-tool variant) |
+| ◐ Started | **46** | everything else |
+| ☑ Done | **6** | M1-12, **M0-02**, **M0-03** (20-27/09), **M0-11** (25-26/09), **M0-04** (26/09, strict tool variant) and **M0-09** (26/09, full native persistence qualification) |
 | **Total** | **53** | |
 
 This summary is deliberately severe: 49 tickets have shipped code, but do not yet meet all their exit criteria on a platform. The three closed tickets: M1-12 with **no** OS or native dependency; M0-02 and M0-03, whose criteria are entirely proved in the Windows webview ([evidence](evidence/2026-09-27-qualif-native/)) — the macOS/Linux columns of those two stay ◐, for lack of native proof on those platforms.
@@ -162,7 +162,7 @@ The 53 tickets fall into three groups, counted from the tables below.
 
 | Group | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
-| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 30 | 3 |
+| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 29 | 4 |
 | **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 16 | 2 |
 | **C** — M1-12, closed and identical on all three OSes | 1 | 0 | 0 | 1 |
 | **Total** | **53** | **1** | **49** | **3** |
@@ -201,7 +201,7 @@ Among the group A tickets, **three** stay ☐ on macOS and Linux instead of ◐:
 | M0-06 | Show the permission policy that is really in force | — | ◐ | ☐ | ☐ |
 | M0-07 | Protect diagnostics and avoid a crash on Unicode | — | ◐ | ◐ | ◐ |
 | M0-08 | Detect an engine incompatibility | — | ◐ | ☐ | ☐ |
-| M0-09 | Keep data with no silent failure | ◐ | ◐ | ◐ | ◐ |
+| M0-09 | Keep data with no silent failure | ☑ | ☑ | ◐ | ◐ |
 | M0-10 | Succeed on first launch | — | ◐ | ☐ | ☐ |
 | M0-11 | Finish the English and the navigation details | ☑ | ☑ | ◐ | ◐ |
 | M0-12 | Use what exists by keyboard and screen reader | — | ◐ | ◐ | ◐ |
@@ -256,9 +256,9 @@ Among the group A tickets, **three** stay ☐ on macOS and Linux instead of ◐:
   - Windows ◐ — handshake requiring `serverInfo`, version, `schema.version=1` and a `sha256:*` fingerprint; compile-time registry of the RPCs emitted; actionable error at startup. Windows/WSL 1.3.0 binary validated.
   - **Incompatible-engine campaign 25–26/09/2026** ([m0-08-incompatible-engine.json](evidence/2026-09-25-m0-completion/m0-08-incompatible-engine.json)): with engines that do not speak MSP (`cmd.exe`, `hostname.exe`), the app never crashed, detection was bounded ("Connecting" → "Disconnected" ≤ ~90 s) and Reconnect was offered — but the supervisor's actionable reason reached only the console. **Fix shipped:** `connectionNoticeBySession` — the silent boot resume now records a bounded per-conversation reason and the connection pill carries it as a tooltip (validated natively: pill title = `"MSP handshake failed (sidecar dropped the response). Host stderr: "`; real engine restored → "Connected", notice cleared). **Remaining:** engine-version matrix; macOS/Linux.
 
-- ◐ **M0-09 — Keep data with no silent failure** *(no OS dimension)*
+- ☑ **M0-09 — Keep data with no silent failure** *(no OS dimension)* — **Windows closed on 26/09/2026.**
   - Defensive facade over every known persistence module, corruption/quota reporting, selective export/import with a preview, durable/UI classification, FNV-1a checksum verified before restore, migration of the `muse.*` aliases, defensive `sessionStorage` drafts.
-  - **Native corruption sweep PASSED on 25/09/2026** ([m0-09-corruption-sweep.json](evidence/2026-09-25-m0-completion/m0-09-corruption-sweep.json)): 9 persistence keys corrupted then reloaded — no crash; `projects.v1` corrupted value never overwritten; `sessions.v1` rebuilt from the host's durable history; `schedule-runs.v1` from the native ledger; Settings rendered the "Local data needs attention / Corrupted data (…)" report natively. **Documented limit:** localStorage-only join tables (`thread-projects.v1`, `connectors.v1`, `memory.v1`) reset to `[]` on the first post-boot mutation. **Recovery round-trip PASSED on 26/09/2026** ([m0-09-recovery-roundtrip.json](evidence/2026-09-25-m0-completion/m0-09-recovery-roundtrip.json)): native export (107 entries, FNV-1a checksum) -> selective import through the recovery preview -> checksum-verified restore over a damaged value. **Remaining:** external (CLI/IDE) formats; macOS/Linux.
+  - **Native corruption sweep PASSED on 25/09/2026** ([m0-09-corruption-sweep.json](evidence/2026-09-25-m0-completion/m0-09-corruption-sweep.json)): 9 persistence keys corrupted then reloaded — no crash; `projects.v1` corrupted value never overwritten; `sessions.v1` rebuilt from the host's durable history; `schedule-runs.v1` from the native ledger; Settings rendered the "Local data needs attention / Corrupted data (…)" report natively. **Documented limit:** localStorage-only join tables (`thread-projects.v1`, `connectors.v1`, `memory.v1`) reset to `[]` on the first post-boot mutation. **Recovery round-trip PASSED on 26/09/2026** ([m0-09-recovery-roundtrip.json](evidence/2026-09-25-m0-completion/m0-09-recovery-roundtrip.json)): native export (107 entries, FNV-1a checksum) -> selective import through the recovery preview -> checksum-verified restore over a damaged value. **External formats and alias migration PROVED on 26/09/2026** ([m0-09-external-import-migration.json](evidence/2026-09-25-m0-completion/m0-09-external-import-migration.json)): a CLI-style JSON config imported through the Library panel (both sessions stored), the legacy `muse.workspace` alias migrated into the current namespace without overwrite, and a hand-built snapshot with a wrong FNV-1a checksum rejected natively ("checksum mismatch; the file may be damaged"). **Every Windows criterion of this ticket is proved; remaining: macOS/Linux.**
 
 - ◐ **M0-10 — Succeed on first launch**
   - Windows ◐ — contextual guidance (sidecar, WSL, Muse CLI, authentication, folder), bounded `probe_startup` probe shown in recovery and in Settings, states readable without colour, UTF-16 output decoded, `dev:clean:windows` bounded to the checkout.
