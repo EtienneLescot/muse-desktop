@@ -408,6 +408,10 @@ struct AppState {
     hosts: Mutex<Hosts<MspClient>>,
     workspace: Mutex<Option<PathBuf>>,
     sessions: Mutex<HashMap<String, SessionMeta>>,
+    /// M2-04: live worktree setup runs, keyed by the token the renderer holds.
+    /// The flag ends a run cooperatively; the pid lets cancel kill a child that
+    /// stopped checking the flag.
+    worktree_setups: Mutex<HashMap<String, (std::sync::Arc<std::sync::atomic::AtomicBool>, Option<u32>)>>,
     /// Host-level initialize facts, keyed by canonical workspace root.
     host_durability: Mutex<HashMap<PathBuf, String>>,
     /// Sandbox posture used to spawn each workspace-owned host. This is a
@@ -3235,6 +3239,135 @@ async fn git_worktree_create_for_workspace(
     Ok(result)
 }
 
+/// M2-04: run the worktree's user setup command inside its confined checkout.
+/// The command is bounded (2,000 characters, ten minutes), cancellable through
+/// the token it returns, and reports ready/failed/timedOut/cancelled.
+#[tauri::command]
+async fn git_worktree_setup_run(
+    state: State<'_, AppState>,
+    workspace: String,
+    path: String,
+    command: String,
+    token: String,
+) -> Result<git::WorktreeSetupOutcome, String> {
+    let root = PathBuf::from(workspace.trim());
+    if !root.is_dir() {
+        return Err(format!("repository is not a directory: {workspace}"));
+    }
+    let token = token.trim().to_string();
+    if token.is_empty() {
+        return Err("setup token is required for cancellation".to_string());
+    }
+    let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let pid_slot: std::sync::Arc<std::sync::Mutex<Option<u32>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(None));
+    state
+        .worktree_setups
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .insert(token.clone(), (flag.clone(), None));
+    let spawn_result = {
+        let token = token.clone();
+        let pid_slot = pid_slot.clone();
+        tokio::task::spawn_blocking(move || {
+            git::run_worktree_setup(
+                &root,
+                &path,
+                &command,
+                &token,
+                git::WORKTREE_SETUP_TIMEOUT_SECS,
+                flag,
+                pid_slot,
+            )
+        })
+        .await
+        .map_err(|e| format!("worktree setup task failed: {e}"))?
+    };
+    // remember the pid while the entry still exists, then drop the run
+    if let Some(pid) = *pid_slot.lock().expect("setup pid slot poisoned") {
+        if let Some(entry) = state
+            .worktree_setups
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get_mut(&token)
+        {
+            entry.1 = Some(pid);
+        }
+    }
+    state
+        .worktree_setups
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .remove(&token);
+    spawn_result
+}
+
+/// M2-04: cancel one running setup by token — cooperative flag first, then a
+/// hard kill of the recorded child pid.
+#[tauri::command]
+fn git_worktree_setup_cancel(state: State<'_, AppState>, token: String) -> Result<bool, String> {
+    let map = state
+        .worktree_setups
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?;
+    if let Some((flag, pid)) = map.get(&token) {
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(pid) = pid {
+            #[cfg(target_os = "windows")]
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/T", "/PID", &pid.to_string()])
+                .output();
+            #[cfg(not(target_os = "windows"))]
+            let _ = std::process::Command::new("kill").arg(pid.to_string()).output();
+        }
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+/// M2-04: detect the worktree's project files and whether their toolchains
+/// are on PATH.
+#[tauri::command]
+async fn git_worktree_readiness(
+    workspace: String,
+    path: String,
+) -> Result<git::WorktreeReadiness, String> {
+    let root = PathBuf::from(workspace.trim());
+    if !root.is_dir() {
+        return Err(format!("repository is not a directory: {workspace}"));
+    }
+    tokio::task::spawn_blocking(move || git::check_worktree_readiness(&root, &path))
+        .await
+        .map_err(|e| format!("worktree readiness task failed: {e}"))?
+}
+
+/// M2-06: inspect every worktree of the repository (branch, HEAD, cleanliness,
+/// conflicts, last modification) straight from Git and the filesystem.
+#[tauri::command]
+async fn git_worktree_inspect(workspace: String) -> Result<Vec<git::WorktreeInspection>, String> {
+    let root = PathBuf::from(workspace.trim());
+    if !root.is_dir() {
+        return Err(format!("repository is not a directory: {workspace}"));
+    }
+    tokio::task::spawn_blocking(move || git::inspect_worktrees(&root))
+        .await
+        .map_err(|e| format!("worktree inspect task failed: {e}"))?
+}
+
+/// M2-06: remove one worktree. Dirty or conflicted checkouts are refused
+/// unless the caller explicitly confirms; Git keeps the final word when a
+/// checkout is locked.
+#[tauri::command]
+async fn git_worktree_remove(workspace: String, path: String, force: bool) -> Result<(), String> {
+    let root = PathBuf::from(workspace.trim());
+    if !root.is_dir() {
+        return Err(format!("repository is not a directory: {workspace}"));
+    }
+    tokio::task::spawn_blocking(move || git::remove_worktree(&root, &path, force))
+        .await
+        .map_err(|e| format!("worktree remove task failed: {e}"))?
+}
+
 
 
 
@@ -5843,6 +5976,7 @@ mod tests {
             hosts: Mutex::new(Hosts::default()),
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
+            worktree_setups: Mutex::new(HashMap::new()),
             host_durability: Mutex::new(HashMap::new()),
             host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
@@ -8726,6 +8860,7 @@ fn main() {
             hosts: Mutex::new(Hosts::default()),
             workspace: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
+            worktree_setups: Mutex::new(HashMap::new()),
             host_durability: Mutex::new(HashMap::new()),
             host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
@@ -8788,6 +8923,11 @@ fn main() {
             git_pull,
             git_create_pr,
             git_worktree_create_for_workspace,
+            git_worktree_setup_run,
+            git_worktree_setup_cancel,
+            git_worktree_readiness,
+            git_worktree_inspect,
+            git_worktree_remove,
             mcp_local_probe,
             mcp_local_call,
             mcp_package_install,

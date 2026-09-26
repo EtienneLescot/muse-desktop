@@ -1,0 +1,79 @@
+{
+  "schema": "muse-desktop.m2-04-06-setup-cleanup.v1",
+  "date": "2026-09-26",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "steps": {
+    "worktree-conversation-open": {
+      "worktreePath": "G:\\repos\\m1-qualification\\.muse\\worktrees\\m1-qualification-xcgyr"
+    },
+    "setup-surface-visible": {
+      "group": true,
+      "setupTextarea": true,
+      "readiness": true
+    },
+    "setup-ready": {
+      "proofFile": true,
+      "content": "M2-04-SETUP-PROOF \r\n"
+    },
+    "setup-failed": {
+      "ok": true
+    },
+    "readiness": {
+      "ok": true,
+      "text": "Readiness: ready · package.json · git available · node availableInspect every worktree of \\\\?\\G:\\repos\\m1-qualification — real Git status, per-worktree age, and cleanup of the checkouts that are clean"
+    },
+    "setup-cancelled": {
+      "cancelBtn": {
+        "ok": true
+      },
+      "cancelled": {
+        "ok": true
+      }
+    },
+    "setup-refuses-main-checkout": {
+      "ok": true,
+      "error": "the command runs only inside a checkout under .muse/worktrees"
+    },
+    "m2-06-inspect-all": {
+      "ok": true,
+      "rows": [
+        "G:/repos/m1-qualificationmain checkout",
+        "G:/repos/m1-qualification/.muse/worktrees/m1-qualification-xcgyrmuse/m1-qualification-xcgyr · dirty · todayFor",
+        "G:/repos/m1-qualification/.muse/worktrees/wt-dirtymuse/qualif-dirty · dirty · todayForce remove"
+      ]
+    },
+    "m2-06-dirty-detected": {
+      "ok": true,
+      "text": "G:/repos/m1-qualification/.muse/worktrees/wt-dirtymuse/qualif-dirty · dirty · todayForce remove"
+    },
+    "m2-06-dirty-refused": {
+      "ok": true,
+      "error": "worktree has uncommitted changes; inspect it and confirm the forced removal"
+    },
+    "m2-06-clean-removed": {
+      "clicked": true,
+      "rows": 3
+    },
+    "m2-06-retention-persisted": [
+      [
+        "\\\\?\\G:\\repos\\m1-qualification",
+        14
+      ]
+    ]
+  },
+  "verdict": {
+    "setupSurfaceInWorktree": true,
+    "setupRunsInWorktree": true,
+    "setupReportsFailure": true,
+    "readinessDetects": true,
+    "setupCancellable": true,
+    "setupRefusesOutsideWorktrees": true,
+    "inspectAllLists": true,
+    "dirtyRemovalRefused": true,
+    "cleanRemovalWorks": true,
+    "retentionPersisted": true,
+    "m2_04_all": true,
+    "m2_06_all": true,
+    "all": true
+  }
+}

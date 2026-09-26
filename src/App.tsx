@@ -36,6 +36,7 @@ import { signInCommand, type AuthStatusPayload } from "./lib/museAuth";
 import { ModelControl } from "./components/ModelControl";
 import { ContextMeter } from "./components/ContextMeter";
 import { ComputerUsePanel } from "./components/ComputerUsePanel";
+import { WorktreeTools } from "./components/WorktreeTools";
 import { isTauriRuntime } from "./lib/env";
 import { formatWorktreeContinuationNote } from "./lib/handoff";
 import {
@@ -999,6 +1000,7 @@ export default function App() {
             {/* Global capabilities, not work on the current conversation: they
                 used to be side-panel tabs next to Changes and Terminal. */}
             <div className="settings-extra">
+              <WorktreeTools workspace={active?.workspace ?? workspace} />
               <ComputerUsePanel
                 status={computerUse}
                 busy={computerBusy}

@@ -446,6 +446,54 @@
   font-size: 11px;
   color: var(--warning, #d89024);
 }
+/* M2-04/M2-06: worktree setup + cleanup surfaces (Settings panel). */
+.worktree-setup textarea,
+.worktree-setup-actions {
+  width: 100%;
+}
+.worktree-setup textarea {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+.worktree-setup-actions,
+.worktree-cleanup-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.worktree-setup-output {
+  max-height: 120px;
+  overflow: auto;
+  font-size: 11px;
+  white-space: pre-wrap;
+  margin: 6px 0 0;
+}
+.worktree-inspections {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.worktree-inspections li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.worktree-inspections li code {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worktree-inspections li.worktree-main {
+  color: var(--muted);
+}
+/* M2-04/M2-06 end */
+
 .work-panel {
   width: 40%;
   min-width: 320px;
