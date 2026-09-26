@@ -53,6 +53,23 @@ those columns.
   key path cannot reproduce the ConPTY interrupt behaviour — the harness
   records the attempt honestly instead of claiming a pass.
 
+## Resolution follow-ups (26/09 evening)
+
+1. **Fork defect reported upstream:** filed as
+   [muse-code-sdk#55](https://github.com/meta-models/muse-code-sdk/issues/55)
+   (public SDK tracker, host-runtime reports accepted there). When a fixed host
+   ships, re-run the fork qualification (`scripts/cdp-m1-files-fork.mjs` + the
+   direct `fork_session` probe) to close M1-09's creation piece.
+2. **Bundle-vs-tree identity guard** added to `scripts/build-windows.ps1`: the
+   exe carried by the installer is extracted with 7z and compared with
+   `target\release`; on divergence it rebundles once and regenerates the
+   manifest, and warns loudly if the two still differ.
+3. **`scripts/install-packaged.ps1`** encapsulates the reliable install path —
+   kill processes, clean `%LOCALAPPDATA%\Muse-Desktop`, foreground `/S` install,
+   then verify the installed exe by hash against the **bundle's** exe (not
+   `target\release`, which is the side that lies). Validated end-to-end on
+   26/09: `Installed and verified … (21142528 bytes, sha256 D0C5F019)`.
+
 ## Reproducibility
 
 ```
