@@ -1,0 +1,24 @@
+{
+ "schema": "muse-desktop.m0-09-external-import-migration.v1",
+ "date": "2026-09-26",
+ "build": "packaged NSIS 0.1.0, WebView2 CDP 9222",
+ "external_format_import": {
+  "input": "CLI-style JSON config ({sessions:[{session_id,title,workspace,lastActive},{id,title}]}) pasted into the Library import panel",
+  "result": "both sessions stored in muse-desktop.import.v1 (m09-cli-import-01, m09-cli-import-02), notes surfaced",
+  "note": "the panel also scans non-JSON formats for session ids (unit-tested); the JSON path proves the native flow"
+ },
+ "legacy_alias_migration": {
+  "input": "legacy muse.workspace planted, muse-desktop.workspace.v1 removed",
+  "result": "'Migrate legacy data' copied the alias into the current namespace without overwrite, legacy key kept"
+ },
+ "checksum_rejection": {
+  "input": "hand-built snapshot with a deliberately wrong fnv1a checksum",
+  "result": "status rendered 'Recovery snapshot checksum mismatch; the file may be damaged.' \u2014 preview withheld, nothing restored"
+ },
+ "verdict": {
+  "externalFormatImportNative": true,
+  "aliasMigrationNative": true,
+  "checksumVerifiedNatively": true
+ },
+ "windows_column": "every exit criterion of M0-09 is now proved natively on Windows (defensive facade + corruption sweep 25/09, reporting panel 25/09, recovery round-trip 26/09, external formats + alias migration + checksum rejection 26/09)"
+}
