@@ -150,11 +150,11 @@ The remaining criteria and their precise limits are listed in each document unde
 | State | Total | Breakdown |
 |---|---|---|
 | ☐ Not started | **1** | M4-06 |
-| ◐ Started | **46** | everything else |
-| ☑ Done | **6** | M1-12, **M0-02**, **M0-03** (20-27/09), **M0-11** (25-26/09), **M0-04** (26/09, strict tool variant) and **M0-09** (26/09, full native persistence qualification) |
+| ◐ Started | **45** | everything else |
+| ☑ Done | **7** | M1-12, **M0-02**, **M0-03** (20-27/09), **M0-11** (25-26/09), **M0-04** (26/09, strict tool variant), **M0-09** (26/09, full native persistence qualification) and **M0-01** (26/09, incl. the packaged NSIS webview) |
 | **Total** | **53** | |
 
-This summary is deliberately severe: 49 tickets have shipped code, but do not yet meet all their exit criteria on a platform. The three closed tickets: M1-12 with **no** OS or native dependency; M0-02 and M0-03, whose criteria are entirely proved in the Windows webview ([evidence](evidence/2026-09-27-qualif-native/)) — the macOS/Linux columns of those two stay ◐, for lack of native proof on those platforms.
+Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). This summary is deliberately severe: 46 tickets have shipped code, but do not yet meet all their exit criteria on a platform. The seven closed tickets: M1-12 with **no** OS or native dependency; M0-02, M0-03, M0-09 and M0-11, whose criteria are entirely proved in the Windows webview ([evidence](evidence/2026-09-27-qualif-native/), [campaign 25-26/09](evidence/2026-09-25-m0-completion/README.md)) — their macOS/Linux columns stay ◐, for lack of native proof on those platforms; and M0-01 and M0-04, closed on Windows on 26/09/2026 with macOS/Linux still ☐.
 
 ### By platform
 
@@ -162,14 +162,14 @@ The 53 tickets fall into three groups, counted from the tables below.
 
 | Group | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
-| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 29 | 4 |
-| **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 16 | 2 |
+| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 28 | 5 |
+| **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 17 | 1 |
 | **C** — M1-12, closed and identical on all three OSes | 1 | 0 | 0 | 1 |
-| **Total** | **53** | **1** | **49** | **3** |
+| **Total** | **53** | **1** | **45** | **7** |
 
 Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer. (Since 26/09/2026, M0-01 and M0-04 are ☑ on Windows: every Windows-reachable criterion of those tickets is proved, macOS/Linux stay ☐.)
 
-Exact breakdown of the 18 group B tickets (◐ on Windows, ☐ on macOS and Linux):
+Exact breakdown of the 18 group B tickets (since 26/09/2026: M0-01 ☑ on Windows, the other 17 ◐; all ☐ on macOS and Linux):
 
 - **M0** (5): M0-01, M0-05, M0-06, M0-08, M0-10
 - **M1** (4): M1-06, M1-09, M1-10, M1-11
@@ -183,7 +183,7 @@ Conversely, **15 group A tickets show ◐ on macOS and Linux although the code i
 
 Among the group A tickets, **three** stay ☐ on macOS and Linux instead of ◐: **M0-04**, **M3-02** and **M4-06**. The first two carry a real OS dependency despite a favourable `Global` column — the terminal proof depends on host behaviour for M0-04, the macOS keychain and Linux Secret Service have never been exercised for M3-02 — while M4-06 is postponed for lack of a product specification. Every other group A ticket is simply waiting for native proof on code that is already shared.
 
-> **Convention for the `Global` column:** it carries the ticket's state considered independently of the OS, that is, **the best state reached**. It does not claim the three platforms are level — only the per-OS columns do that.
+> **Convention for the `Global` column:** it carries the ticket's state considered independently of the OS, that is, **the best state reached**. It does not claim the three platforms are level — only the per-OS columns do that. For the summary counts above, a ticket whose `Global` cell reads `—` (a per-OS ticket) is counted at its best per-OS column.
 
 ---
 
@@ -196,7 +196,7 @@ Among the group A tickets, **three** stay ☐ on macOS and Linux instead of ◐:
 | M0-01 | A keeps working when project B is opened | — | ☑ | ☐ | ☐ |
 | M0-02 | Resume a conversation after the engine closes or crashes | ☑ | ☑ | ◐ | ◐ |
 | M0-03 | Lose no text on a rejected send | ☑ | ☑ | ◐ | ◐ |
-| M0-04 | Stop and resume with reliable states | ◐ | ◐ | ☐ | ☐ |
+| M0-04 | Stop and resume with reliable states | ☑ | ☑ | ☐ | ☐ |
 | M0-05 | Answer permissions and questions even after an incident | — | ◐ | ☐ | ☐ |
 | M0-06 | Show the permission policy that is really in force | — | ◐ | ☐ | ☐ |
 | M0-07 | Protect diagnostics and avoid a crash on Unicode | — | ◐ | ◐ | ◐ |
@@ -213,8 +213,8 @@ Among the group A tickets, **three** stay ☐ on macOS and Linux instead of ◐:
 - ☑ **M0-01 — A keeps working when project B is opened** *(Global: —)* — **Windows closed on 26/09/2026.**
   - Windows ☑ — routing isolated by canonical path, explicit session ownership, approval isolation; proved with two real child processes (Rust + Node) with a sudden death of B and completion of A (20/09, 27/09); fresh-session concurrent turns (25/09, [m0-01-ab-fresh-sessions.json](evidence/2026-09-25-m0-completion/m0-01-ab-fresh-sessions.json)); and the **packaged NSIS webview** repetition ([m0-packaged-webview.json](evidence/2026-09-25-m0-completion/m0-packaged-webview.json), 26/09: turn A in project `muse-desktop`, turn B concurrently in openscreen, both completed, isolation intact). No Windows criterion of this ticket remains open.
   - **Native progress (20/09/2026, CUA then CDP):** two simultaneous hosts observed; host B's death **with no effect** on the application, the conversation served by A, the 58 sessions or the queue (no respawn, application still `Responding`). Then, on the surviving host: **new session created (58 → 59), real turn admitted, conversation still connected, sub-agents moved from 1 to 3 `Completed`**.
-- **Fresh-session repetition PASSED on 25/09/2026** ([campaign 2026-09-25](evidence/2026-09-25-m0-completion/README.md)): two fresh sessions in two workspaces (project `muse-desktop` + openscreen) ran **concurrent live turns** — A completed its answer while B was still running, B then completed; transcripts intact, no cross-talk. **Remaining:** packaged (release) webview repetition; macOS/Linux.
-  - **Missing criterion of 20/09 PROVED on 27/09/2026** ([`m0-01-deux-projets.md`](evidence/2026-09-27-qualif-native/m0-01-deux-projets.md)): concurrent long turns in both projects → B's host killed at 15:37:24 mid-turn → **turn A finished at 15:38:10 with no error**, honest status for B to the second. **Remaining:** packaged WebView2 E2E (the scenario above runs in a dev build) and repetition on fresh sessions.
+- **Fresh-session repetition PASSED on 25/09/2026** ([campaign 2026-09-25](evidence/2026-09-25-m0-completion/README.md)): two fresh sessions in two workspaces (project `muse-desktop` + openscreen) each completed a live turn with transcripts intact and no cross-talk (correction on review, 26/09: in this dev run A completed at 23:54:54, **before** B started at 23:55:28 — the two turns did not overlap here; the concurrent-completion proof is the packaged repetition below, and the record's verdict was corrected accordingly). **Remaining:** macOS/Linux.
+  - **Missing criterion of 20/09 PROVED on 27/09/2026** ([`m0-01-deux-projets.md`](evidence/2026-09-27-qualif-native/m0-01-deux-projets.md)): concurrent long turns in both projects → B's host killed at 15:37:24 mid-turn → **turn A finished at 15:38:10 with no error**, honest status for B to the second. Both repetitions proved on 25–26/09/2026: fresh sessions (25/09) and the packaged NSIS webview (26/09).
   - macOS ☐ / Linux ☐ — multi-OS qualification not started. The webview is not WebView2 outside Windows.
   - *Exit criterion:* isolation proved from the packaged Tauri interface, on every announced OS. **✓ Windows (26/09); macOS/Linux remain ☐.**
 
@@ -235,7 +235,7 @@ Among the group A tickets, **three** stay ☐ on macOS and Linux instead of ◐:
   - Windows ◐ — distinction between an accepted request (`Stopping Muse`) and a confirmed terminal, `turnId` transmitted, `turn/completed|retracted|stopped` aliases, bounded recovery after an acknowledgement with no terminal, double-click ignored.
   - **Decisive progress (27/09/2026, native proof):** [`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md) — Stop clicked from the webview → `cancel_session` with a **non-empty, correct `turnId`** → state resolved in **1 s** (server terminal) → **immediate relaunch**. The sentence "host 1.3.x emits no terminal after `turn/interrupt`" is **false** (`turn/completed` at +36 ms, proved) and the old frozen "Stopping…" does not reproduce at HEAD.
   - **Strict variant CLOSED on 26/09/2026** ([m0-04-strict-tool-stop.json](evidence/2026-09-25-m0-completion/m0-04-strict-tool-stop.json)): under the product's `elevated` sandbox posture the model's shell tool executes, and Stop pressed mid-tool (at +54.5 s of a 90 s ping) sent `cancel_session` carrying **sessionId + turnId**, the tool was cancelled and the UI resolved cleanly (the no-text-first degenerate case sends the by-design turnId-less fallback and also resolves honestly). **No Windows criterion of this ticket remains open.** **Variant measured on 27/09/2026:** stopping during a **"Running" sub-agent lane** (tool work in flight in the child session) — `cancel_session`+`turnId`, turn resolved, lanes closed. **Phases closed** ([`m0-04-stop-terminal.md`](evidence/2026-09-27-qualif-native/m0-04-stop-terminal.md)): **before the first token** (stop at +1.5 s pre-output, `turnId` transmitted, resolution 1.0 s, immediate relaunch), **late answer** (stop at +45 s on a live turn, same), **after the end** (no Stop button left, UI at rest, next turn immediate). The "accepted request / confirmed terminal" distinction is proved with its exact label (`Stopping Muse…` captured live, resolution in 1.0 s). **Remaining label defect:** the turn's Stop button carries the title `Stop the running sidecar`. **→ FIXED on 25/09/2026** (`97f9eb1`): the title now reads `Stop the current turn`; the `cdp-stop-terminal` harness keeps the old title as a fallback selector. **→ Full stop scenario re-PASSED on 25/09/2026** on the fixed build: `turnId` on the wire, `cancel_session` 2/2 with turnId, resolution **1 023 ms**, immediate follow-up.
-  - **Packaged webview re-PASS on 26/09/2026** ([cdp-stop-terminal-packaged-run5.json](evidence/2026-09-25-m0-completion/cdp-stop-terminal-packaged-run5.json)): NSIS-installed 0.1.0 app — single `cancel_session` at +3.6 s **carrying the correct `turnId`**, `Stopping…` resolved in **1 009 ms**, immediate follow-up accepted, Stop title "Stop the current turn". Windows stays ◐ only for the strict tool-during-tool variant (host-blocked).
+  - **Packaged webview re-PASS on 26/09/2026** ([cdp-stop-terminal-packaged-run5.json](evidence/2026-09-25-m0-completion/cdp-stop-terminal-packaged-run5.json)): NSIS-installed 0.1.0 app — single `cancel_session` at +3.6 s **carrying the correct `turnId`**, `Stopping…` resolved in **1 009 ms**, immediate follow-up accepted, Stop title "Stop the current turn". With the strict tool-during-tool variant proved the same day under the elevated posture ([m0-04-strict-tool-stop.json](evidence/2026-09-25-m0-completion/m0-04-strict-tool-stop.json), correction on review: it is **not** host-blocked — the sandbox was the blocker, and the elevated posture removes it), **no Windows criterion of this ticket remains open — Windows ☑ (26/09)**. The underlying host defect (the model's shell tool hangs under the sandbox — Draft 2 in [docs/upstream](upstream/muse-host-1.3.0-m0-blockers.md)) is worked around, not fixed, and stays tracked upstream.
   - macOS ☐ / Linux ☐ — not started.
 
 - ◐ **M0-05 — Answer permissions and questions even after an incident**
@@ -267,7 +267,7 @@ Among the group A tickets, **three** stay ☐ on macOS and Linux instead of ◐:
 
 - ☑ **M0-11 — Finish the English and the navigation details** *(no OS dimension)* — **closed 26/09/2026.**
   - Residual labels harmonised, search independent of the French locale, `Ctrl`/`Cmd` tooltips through `primaryModifier()`, centralised error copy `userFacingError`, readable native path `displayPath`, zoom tooltip documented and verified in dogfood on 20/09.
-  - **Native audit run on 25/09/2026** ([cdp-language-audit-run1.json](evidence/2026-09-25-m0-completion/cdp-language-audit-run1.json)): UI chrome English on the live app; the French hits are user-typed conversation titles (content, not labels). **Packaged checklist PASSED on 26/09/2026** ([cdp-language-audit-packaged-run2.json](evidence/2026-09-25-m0-completion/cdp-language-audit-packaged-run2.json)): the same audit in the NSIS-installed webview across 7 surfaces — chrome English, French hits are user content only. Every criterion of this ticket is proved natively; the Stop-button label defect was fixed and re-proved the same campaign.
+  - **Native audit run on 25/09/2026** ([cdp-language-audit-run1.json](evidence/2026-09-25-m0-completion/cdp-language-audit-run1.json)): UI chrome English on the live app; the French hits are user-typed conversation titles (content, not labels). **Packaged checklist PASSED on 26/09/2026** ([cdp-language-audit-packaged-run2.json](evidence/2026-09-25-m0-completion/cdp-language-audit-packaged-run2.json)): the same audit in the NSIS-installed webview on the 6 surfaces it reached (home, new conversation, automations, extensions, library, search) — chrome English, French hits are user content only. Correction on review: the audit harness did not open a conversation (`conversation-NOT-OPENED`, `back.opened: false` in both runs), so that surface's systematic audit stays open as coverage follow-up; packaged conversation chrome is nevertheless evidenced English by the stop and A/B runs on the same install (Stop title "Stop the current turn", "Muse is working", "Enter to send"). Every status criterion of this ticket is proved natively; the Stop-button label defect was fixed and re-proved the same campaign.
 
 - ◐ **M0-12 — Use what exists by keyboard and screen reader**
   - Windows ◐ — Tab path validated in dogfood (logical order, focus ring, Enter activation Summary→Content), typing delivered, Ctrl+F correctly ignored inside an input, native zoom verified through `zoomHotkeysEnabled`, forced contrast `Highlight`/`ButtonText`/`LinkText`.
@@ -305,7 +305,7 @@ Among the group A tickets, **three** stay ☐ on macOS and Linux instead of ◐:
 | M1-09 | Create a faithful conversation branch | — | ◐ | ☐ | ☐ |
 | M1-10 | Redirect an execution or queue it | — | ◐ | ☐ | ☐ |
 | M1-11 | Pick an available model and follow the context | — | ◐ | ☐ | ☐ |
-| M1-12 | Find and organise conversations | ◐ | ☑ | ☑ | ☑ |
+| M1-12 | Find and organise conversations | ☑ | ☑ | ☑ | ☑ |
 | M1-13 | Read a long conversation comfortably | ◐ | ◐ | ◐ | ◐ |
 
 ### Detail

@@ -20,7 +20,7 @@
   },
   "M0-11 labels": {
    "file": "cdp-language-audit-packaged-run2.json",
-   "verdict": "UI chrome English across 7 surfaces; flagged candidates are the user-typed French conversation title (content) and the heuristic's false positives on the English word 'plus'"
+   "verdict": "UI chrome English on the 6 surfaces the audit reached (home, new conversation, automations, extensions, library, search); flagged candidates are the user-typed French conversation title (content) and the heuristic's false positives on the English word 'plus'. Correction (review, 26/09): the audit's 7th surface (an OPENED conversation) was NOT reached - the harness recorded conversation-NOT-OPENED with back.opened=false - so systematic packaged conversation-audit coverage stays open; conversation chrome in the packaged app is nevertheless evidenced English by the stop and A/B runs on the same install (cdp-stop-terminal-packaged-run5.json, cdp-ab-projects-packaged-run3.json: 'Muse is working', 'Enter to send', Stop title 'Stop the current turn')"
   }
  },
  "verdict": {

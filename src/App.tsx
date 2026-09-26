@@ -1479,6 +1479,15 @@ export default function App() {
                       </span>
                     </div>
                   </header>
+                  {activeConnectionState !== "connected" &&
+                    connectionNoticeBySession[active.session_id] !== undefined && (
+                    /* M0-08: the pill's `title` is hover-only — keyboard and
+                       screen-reader users never reach the reason. It is also
+                       rendered here as persistent, accessible text. */
+                    <p className="connection-notice" role="status">
+                      {connectionNoticeBySession[active.session_id]}
+                    </p>
+                  )}
                   {active.archived && (
                     <div className="preview-notice">
                       Archived conversation{" "}

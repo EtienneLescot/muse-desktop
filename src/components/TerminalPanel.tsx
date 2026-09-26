@@ -93,6 +93,12 @@ export function TerminalPanel({
   // last applied geometry is kept in a ref so observer bursts do not resend
   // the same size.
   const appliedGeometry = useRef<{ cols: number; rows: number } | null>(null);
+  // Width explicitly chosen with the −/+ buttons. The pane itself does not
+  // move on such a click, so the observer's (initial) notification for that
+  // unchanged width must not overwrite the choice; the override lifts as soon
+  // as the pane changes size again.
+  const manualCols = useRef<{ cols: number; paneWidth: number } | null>(null);
+  const paneWidth = useRef(0);
   useEffect(() => {
     const output = outputRef.current;
     if (!terminal || !output) return;
@@ -111,22 +117,40 @@ export function TerminalPanel({
     const lineHeight =
       parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2 || 16;
     let raf: number | null = null;
+    // Kept current on every observer delivery so a pending frame applies the
+    // latest pane size, not the one captured by the first notification.
+    let latest = { width: 0, height: 0 };
+    const apply = () => {
+      raf = null;
+      const { width, height } = latest;
+      if (width <= 0 || height <= 0) return;
+      const terminalId = terminal.info.terminalId;
+      const rows = Math.max(MIN_ROWS, Math.min(MAX_ROWS, Math.floor(height / lineHeight)));
+      const applied = appliedGeometry.current;
+      const manual = manualCols.current;
+      if (manual !== null) {
+        if (Math.abs(width - manual.paneWidth) <= 0.5) {
+          // Pane unmoved: the explicit width stands; only the row count
+          // follows the (independently changed) height.
+          if (applied !== null && applied.cols === manual.cols && applied.rows === rows) return;
+          appliedGeometry.current = { cols: manual.cols, rows };
+          void onResize(terminalId, manual.cols, rows);
+          return;
+        }
+        manualCols.current = null;
+      }
+      const cols = Math.max(MIN_COLS, Math.min(MAX_COLS, Math.floor(width / cellWidth)));
+      if (applied !== null && applied.cols === cols && applied.rows === rows) return;
+      appliedGeometry.current = { cols, rows };
+      void onResize(terminalId, cols, rows);
+    };
     const observer = new ResizeObserver((entries) => {
-      if (raf !== null) return;
       const entry = entries[entries.length - 1];
       if (!entry) return;
-      raf = window.requestAnimationFrame(() => {
-        raf = null;
-        const width = entry.contentRect.width;
-        const height = entry.contentRect.height;
-        if (width <= 0 || height <= 0) return;
-        const cols = Math.max(MIN_COLS, Math.min(MAX_COLS, Math.floor(width / cellWidth)));
-        const rows = Math.max(MIN_ROWS, Math.min(MAX_ROWS, Math.floor(height / lineHeight)));
-        const applied = appliedGeometry.current;
-        if (applied !== null && applied.cols === cols && applied.rows === rows) return;
-        appliedGeometry.current = { cols, rows };
-        void onResize(terminal.info.terminalId, cols, rows);
-      });
+      latest = { width: entry.contentRect.width, height: entry.contentRect.height };
+      paneWidth.current = latest.width;
+      if (raf !== null) return;
+      raf = window.requestAnimationFrame(apply);
     });
     observer.observe(output);
     return () => {
@@ -176,8 +200,13 @@ export function TerminalPanel({
     );
   }
 
-  const adjust = (delta: number) =>
-    void onResize(terminal.info.terminalId, terminal.info.cols + delta, terminal.info.rows);
+  const adjust = (delta: number) => {
+    const cols = Math.max(MIN_COLS, Math.min(MAX_COLS, terminal.info.cols + delta));
+    // The pane did not move, so the width is an explicit choice: record it
+    // (against the pane width the observer last saw) until the pane resizes.
+    manualCols.current = { cols, paneWidth: paneWidth.current };
+    void onResize(terminal.info.terminalId, cols, terminal.info.rows);
+  };
 
   return (
     <section className="terminal-panel" aria-label="Workspace terminal">

@@ -9,11 +9,11 @@
    "prompt": "Reply with just the word ISOLATED and nothing else.",
    "at": "23:54:48"
   },
-  {
-   "step": "turn B started while A was running, in the default openscreen workspace (G:/repos/openscreen)",
-   "prompt": "Reply with just the word BETA and nothing else.",
-   "at": "23:55:28"
-  },
+ {
+  "step": "turn B started in the default openscreen workspace (G:/repos/openscreen)",
+  "prompt": "Reply with just the word BETA and nothing else.",
+  "at": "23:55:28"
+ },
   {
    "step": "A checked while B ran",
    "result": "A completed with ISOLATED at 23:54:54, transcript intact, no stale"
@@ -26,8 +26,9 @@
  "verdict": {
   "twoSimultaneousHosts": true,
   "freshSessions": true,
-  "concurrentTurnsBothCompleted": true,
+  "concurrentTurnsBothCompleted": false,
   "noCrossTalk": true
  },
- "remaining": "packaged (release) webview repetition; macOS/Linux"
+ "correction": "review correction (26/09): in THIS dev run the turns did not overlap - A completed at 23:54:54, B only started at 23:55:28 - so concurrentTurnsBothCompleted is false here; the two hosts were alive simultaneously and both fresh sessions completed with no cross-talk, but the concurrent-completion proof is the packaged repetition (cdp-ab-projects-packaged-run3.json + m0-packaged-webview.json: A completed ISOLATED while B was running)",
+ "remaining": "macOS/Linux"
 }

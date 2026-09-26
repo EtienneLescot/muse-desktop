@@ -61,6 +61,12 @@ export function buildReleaseManifest({ artifactPath, sidecarPath, version, targe
   const checkedVersion = String(version ?? "").trim();
   const checkedTarget = String(target ?? "").trim();
   if (!checkedVersion || !checkedTarget) throw new Error("version and target are required");
+  // Windows releases bundle the Muse engine: a digest-less manifest would let
+  // the update chain stage a Windows install that can never start. Only the
+  // engine-not-bundled targets (macOS) may omit the sidecar.
+  if (/windows/.test(checkedTarget) && !sidecarPath) {
+    throw new Error(`sidecarPath is required for Windows target ${checkedTarget}`);
+  }
   const manifest = {
     schema: RELEASE_MANIFEST_SCHEMA,
     product: "Muse-Desktop",

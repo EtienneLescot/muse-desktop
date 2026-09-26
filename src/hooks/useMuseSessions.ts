@@ -4125,15 +4125,22 @@ export function useMuseSessions(): UseMuseSessions {
   // describes *this* conversation before trusting its active row.
   const [liveModelsSessionId, setLiveModelsSessionId] = useState<string | null>(null);
   const [, setModelsError] = useState<string | null>(null);
+  // Only the most recent refresh may apply its result: switching from
+  // conversation A to B can let A's slower `list_models` finish after B's,
+  // and an unordered write would replace B's catalog with A's.
+  const refreshModelsSeq = useRef(0);
   const refreshModels = useCallback(async (sessionId?: string) => {
+    const seq = ++refreshModelsSeq.current;
     try {
       const raw = await invoke("list_models", {
         sessionId: sessionId ?? null,
       });
+      if (seq !== refreshModelsSeq.current) return;
       setLiveModels(parseModelList(raw));
       setLiveModelsSessionId(sessionId ?? null);
       setModelsError(null);
     } catch (e) {
+      if (seq !== refreshModelsSeq.current) return;
       // A per-session refresh runs on every conversation switch, including to
       // saved conversations the host has not loaded. Wiping the catalog there
       // used to blank the picker for every other conversation too; the last

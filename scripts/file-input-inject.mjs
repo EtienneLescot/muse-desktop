@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 /** Attach a real file to a page <input type=file> over CDP, with retries. */
-import { readFileSync } from "node:fs";
+import { statSync } from "node:fs";
+import { basename, resolve } from "node:path";
 
 const [, , filePath, selector = 'input[type="file"]'] = process.argv;
 if (!filePath) {
   console.error("usage: node file-input-inject.mjs FILE [SELECTOR]");
   process.exit(2);
 }
-const absolute = filePath.replace(/\//g, "\\");
+// Resolve relative paths against the harness cwd and keep platform-native
+// separators: CDP's DOM.setFileInputFiles expects a real filesystem path.
+const absolute = resolve(filePath);
+const fileName = basename(absolute);
+statSync(absolute);
 
 const list = await (await fetch("http://127.0.0.1:9222/json/list")).json();
 const page = list.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
@@ -49,18 +54,29 @@ for (let attempt = 1; attempt <= 6 && !ok; attempt++) {
     nodeId: doc.root.nodeId,
     selector,
   });
-  if (!node.nodeId) throw new Error(`no element matches ${selector}`);
-  await send("DOM.setFileInputFiles", { files: [absolute], nodeId: node.nodeId });
-  const count = await evalJs(
-    `(document.querySelector(${JSON.stringify(selector)}) || {files:{length:0}}).files.length`,
-  );
-  if (Number(count) > 0) {
-    ok = true;
-    break;
+  if (node.nodeId) {
+    await send("DOM.setFileInputFiles", { files: [absolute], nodeId: node.nodeId });
+    // Confirm the attachment in the rendered application state first: the
+    // welcome-screen change handler clears input.value right after consuming
+    // the files, so `input.files.length` drops back to 0 even on success and
+    // an input-only check would re-attach until it (wrongly) reports failure.
+    const state = await evalJs(
+      `(() => {
+        const name = ${JSON.stringify(fileName)};
+        const chips = Array.from(document.querySelectorAll(".attachment-chips .attachment-name"));
+        if (chips.some((el) => (el.textContent || "").trim() === name)) return "chip";
+        const input = document.querySelector(${JSON.stringify(selector)});
+        if (input && input.files && input.files.length > 0) return "files";
+        return "none";
+      })()`,
+    );
+    if (state === "chip" || state === "files") ok = true;
   }
-  await new Promise((r) => setTimeout(r, 400));
+  // A missing input (still rendering) or an unconfirmed attachment retries;
+  // failure is only reported once every attempt is exhausted.
+  if (!ok) await new Promise((r) => setTimeout(r, 400));
 }
-if (!ok) throw new Error("file did not attach after 6 attempts");
+if (!ok) throw new Error(`file did not attach after 6 attempts (selector ${selector})`);
 console.log(`attached ${absolute} to ${selector}`);
 socket.close();
 process.exit(0);

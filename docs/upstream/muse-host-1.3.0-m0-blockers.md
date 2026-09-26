@@ -84,7 +84,7 @@ host-side execution). Today's client-side workaround is to document
 | No macOS / Linux machine | macOS/Linux columns of every M0 ticket (mostly ☐/◐) | A Mac for one qualification session per campaign (WKWebView + Keychain + launchd); a Linux box for the same | Hardware + a session each |
 | Clean machine | M0-10 (first launch), part of M4-09 | A Windows VM or fresh user profile with no Muse/WSL history, plus a real sign-in path | A VM + credentials |
 | Screen reader | M0-12 (the decisive half) | One NVDA (Windows) session driven through the a11y scenarios; contrast/forced-colors are already proved | A session + NVDA (free) |
-| Host 1.3.0 behaviours | M0-04 (strict variant), M0-05 (stale race), M0-06 (refused decision) | Filing Drafts 1 and 2 upstream; until fixed, those criteria stay host-blocked and statuses stay ◐ | Filing + waiting for a host release |
+| Host 1.3.0 behaviours | M0-05 (stale race), M0-06 (refused decision) | Filing Drafts 1 and 2 upstream; until fixed, those criteria stay host-blocked and statuses stay ◐. M0-04 is **no longer held**: its strict stop-during-tool variant was proved on 26/09 under the elevated (`--disable-sandbox`) posture ([m0-04-strict-tool-stop.json](../evidence/2026-09-25-m0-completion/m0-04-strict-tool-stop.json), Windows ☑) — but the Draft-2 sandbox defect itself stands: under a sandboxed posture model shell work still hangs, so a sandboxed-posture re-proof of M0-04 and the M0-05 flows wait on the upstream fix | Filing + waiting for a host release |
 | Older engine builds | M0-08 (version matrix) | Access to previous Muse CLI builds (1.2.x, …) | Archive access |
 
 Everything else in M0 is proved on Windows, dev and packaged
