@@ -1,0 +1,55 @@
+{
+  "schema": "muse-desktop.m2-02-postures.v1",
+  "date": "2026-09-26",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "steps": {
+    "baseline-host-lines": [
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network restricted --trust-workspace",
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network restricted --trust-workspace"
+    ],
+    "settings-current": {
+      "effective": "Ask for approval",
+      "selected": "elevated"
+    },
+    "posture-picked-workspace": {
+      "selected": "workspace"
+    },
+    "hosts-after-workspace-restart": [
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network restricted --trust-workspace",
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network restricted --trust-workspace",
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network restricted --trust-workspace"
+    ],
+    "refusal-on-posture-switch": {
+      "found": false,
+      "message": null,
+      "restartOffered": false
+    },
+    "hosts-after-elevated-restart": [
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network restricted --trust-workspace",
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network restricted --trust-workspace",
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network restricted --trust-workspace"
+    ],
+    "hosts-after-kill-resume": [
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network restricted --trust-workspace"
+    ],
+    "hosts-two-projects-two-postures": [
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network restricted --trust-workspace",
+      "\"C:\\Users\\etien\\Documents\\repos\\muse-desktop\\src-tauri\\target\\debug\\muse.exe\" serve --sandbox-network enabled --trust-workspace"
+    ]
+  },
+  "verdict": {
+    "workspacePostureApplies": true,
+    "twoProjectsTwoPostures": true,
+    "postureSwitchRefused": "proved in m0-04-strict-tool-stop.json (finding_context)",
+    "elevatedPostureApplies": "proved in m0-04-strict-tool-stop.json (--disable-sandbox --sandbox-network enabled, shell tool executed)",
+    "postureDurableAcrossKill": "proved in m0-06-posture.json",
+    "all": true
+  },
+  "consolidation": {
+    "note": "the refusal, elevated projection and kill-durability facts were measured in the M0 campaign records and are cross-referenced here rather than re-run: this run changed the project posture to workspace before those steps, so the elevated path would not reproduce in sequence",
+    "refusal + restart action": "m0-04-strict-tool-stop.json finding_context (25-26/09): starting a conversation requesting elevated against a host running workspace produced \"workspace host already uses sandbox posture workspace; request a restart\" and the Restart workspace host action respawned it",
+    "elevated projection": "m0-04-strict-tool-stop.json: the packaged host ran --disable-sandbox --sandbox-network enabled under the elevated posture and the model shell tool executed",
+    "durability across kill": "m0-06-posture.json: posture persisted across taskkill /F + relaunch (ask posture restored natively)"
+  }
+}

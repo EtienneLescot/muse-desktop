@@ -1,0 +1,32 @@
+{
+  "schema": "muse-desktop.m2-07-subagent-fanout.v1",
+  "date": "2026-09-26",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "scenario": "the full fan-out scenario with parent resume, consolidating the 27/09 concurrency proof with live 26/09 measurements",
+  "steps": {
+    "delegation-turn-26-09": {
+      "prompt": "Start a subagent that counts from 1 to 20. While it runs, reply with just the word SPAWNED.",
+      "observed": [
+        "a controllable sub-agent lane rendered with a live `subagent/stop` control (title exactly 'subagent/stop'); the control was clicked and the lane transitioned to Stopped",
+        "the host also spawned 8 host-internal child lanes ('Reminder child session', subagentInternal) with running→completed transitions each, all persisted in the log"
+      ],
+      "source": "live CDP session, 26/09 evening (probe logs + localStorage log inspection of session 01a0da8f)"
+    },
+    "parent-resume-26-09": {
+      "procedure": "switch to another conversation and back (sidebar)",
+      "observed": "the conversation resumes with its lane history intact: every child entry keeps its terminal status (completed / stopped); no lane is lost and nothing re-runs"
+    },
+    "concurrency-27-09": {
+      "source": "evidence/2026-09-27-qualif-native/m2-worktrees.md run2",
+      "observed": "3 simultaneous running lanes within one thread + 2 running lanes in a second thread at the same time — rendered, followed and controlled across threads and within a thread"
+    },
+    "distinction-recorded": "muse-spark currently delegates through host-internal reminder children (subagentInternal, no subagent/* identity, no controls by design) for most prompts; controllable lanes appear for explicit delegation orders (27/09 run2, 26/09 stop). The app renders, follows and controls both kinds correctly — the split is host/model behaviour, documented here for the upstream conversation."
+  },
+  "verdict": {
+    "lanesRenderedWithChildSessionLinks": true,
+    "stopControlExercisedLive": true,
+    "laneHistoryPersistsAfterParentResume": true,
+    "concurrentFanOut": "proved 27/09 (run2, m2-worktrees.md)",
+    "all": true
+  }
+}
