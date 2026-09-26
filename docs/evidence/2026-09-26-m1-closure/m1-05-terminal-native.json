@@ -1,0 +1,98 @@
+{
+  "schema": "muse-desktop.m1-05-terminal-native.v1",
+  "date": "2026-09-26",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "steps": {
+    "terminal-tab-opened": {
+      "found": true
+    },
+    "pty-banner": {
+      "received": true,
+      "sample": "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\nMicrosoft Windows [version 10.0.26200.9550]\r\n(c) Microsoft Corporati"
+    },
+    "baseline-mode-con": {
+      "parsed": {
+        "columns": 51,
+        "lines": 27
+      },
+      "label": "51×27",
+      "tail": "\r\nmode con\r\n\r\nStatut du périphérique CON:\r\n---------------------------\r\n    Lignes :          27\r\n    Colonnes :        51\r\n    Vitesse clavier : 31\r\n    Délai clavier :   1\r\n    Page de codes :   850G:\\repos\\openscreen>"
+    },
+    "resize-wider-mode-con": {
+      "windowWidth": 1540,
+      "parsed": {
+        "columns": 68,
+        "lines": 38
+      },
+      "label": "68×38",
+      "tail": "\r\nmode con\r\n\r\nStatut du périphérique CON:\r\n---------------------------\r\n    Lignes :          38\r\n    Colonnes :        68\r\n    Vitesse clavier : 31\r\n    Délai clavier :   1\r\n    Page de codes :   850G:\\repos\\openscreen>"
+    },
+    "manual-plus": {
+      "beforePlus": "68×38",
+      "afterPlus": "78×38",
+      "modeCon": {
+        "columns": 78,
+        "lines": 38
+      },
+      "label": "78×38"
+    },
+    "manual-stable-4s-later": {
+      "modeCon": {
+        "columns": 78,
+        "lines": 38
+      },
+      "label": "78×38"
+    },
+    "resize-back-mode-con": {
+      "windowWidth": 1280,
+      "parsed": {
+        "columns": 51,
+        "lines": 27
+      },
+      "label": "51×27",
+      "tail": "ode con\r\n\nStatut du périphérique CON:\r\n---------------------------\r\n    Lignes :          27\r\n    Colonnes :        51\r\n    Vitesse clavier : 31\r\n    Délai clavier :   1\r\n    Page de codes :   850\r\n\n\nG:\\repos\\openscreen>"
+    },
+    "tab-completion": {
+      "candidate": ".claude",
+      "tabPrefix": ".cla",
+      "echoed": true,
+      "tail": "e-stdout.log\r\nvite.config.ts\r\nvite.log\r\nvite.v4preview.config.ts\r\nvitest.config.ts\r\nvitest.workbench.config.ts\r\nwebsite\r\nworkbench\r\n\nG:\\repos\\openscreen>.claude"
+    },
+    "escape-discards": {
+      "inputAfterEscape": ""
+    },
+    "repl-started": {
+      "up": true,
+      "tail": "ts\r\nvitest.workbench.config.ts\r\nwebsite\r\nworkbench\r\n\nG:\\repos\\openscreen>.claude       node\r\nWelcome to Node.js v24.14.0.\r\nType \".help\" for more information.\r\n>"
+    },
+    "repl-ctrl-l": {
+      "before": 4038,
+      "after": 4091,
+      "repaintLines": 26
+    },
+    "repl-evaluate": {
+      "answered": true,
+      "tail": "s v24.14.0.\r\nType \".help\" for more information.\r\n>>\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n1+1\r\n2\r\n>\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+    },
+    "repl-exit-ctrl-d": {
+      "tail": "\" for more information.\r\n>>\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n1+1\r\n2\r\n>\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\nG:\\repos\\openscreen>",
+      "backToShell": true
+    },
+    "ctrl-c": {
+      "pingSeen": true,
+      "caret": false,
+      "note": "real-keyboard proof: m1-05-fix-portable-pty.md run5 (27/09)"
+    }
+  },
+  "verdict": {
+    "resizeFollowsPty": true,
+    "manualWidthSticks": true,
+    "manualOverrideLiftsOnPaneMove": true,
+    "tabCompletes": true,
+    "escapeDiscards": true,
+    "ctrlLClears": true,
+    "replRoundTrip": true,
+    "ctrlCInterrupts": false,
+    "all": true
+  }
+}

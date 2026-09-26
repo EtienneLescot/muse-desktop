@@ -1,0 +1,33 @@
+{
+  "schema": "muse-desktop.m1-06-add-output-prompt.v1",
+  "date": "2026-09-26",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "steps": {
+    "terminal-ready": {
+      "banner": true
+    },
+    "marker-in-composer": {
+      "marker": "M1-06-OUTPUT-VERSE-LE-PROMPT-1790408137345",
+      "found": true,
+      "provenance": true,
+      "wrapped": true,
+      "composerLength": 7078
+    },
+    "big-output-generated": {
+      "generated": true,
+      "ptyOutputChars": 43966,
+      "lastLineVisible": true
+    },
+    "bounded-context-in-composer": {
+      "composerLength": 12151,
+      "contextBlockChars": 12001,
+      "clippedTailKept": true,
+      "ellipsisPrefix": false
+    }
+  },
+  "verdict": {
+    "markerFlowsToComposer": true,
+    "boundedTo12000": true,
+    "all": true
+  }
+}

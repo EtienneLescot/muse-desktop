@@ -75,6 +75,35 @@ surface that prerequisite (recorded in
 host-side execution). Today's client-side workaround is to document
 `--disable-sandbox` postures, which weakens the safety story.
 
+## Draft 3 — `session/fork` fails on every session that carries sub-agent lanes
+
+**Title:** `session/fork` answers `forkBoundaryInvalid WriteFailed` on sessions
+with sub-agent ("child session") lanes, including fresh ones.
+
+**Environment:** Windows 11 (26200), host 1.3.0
+(`muse-bin-1.3.0-R3401.1.exe`), measured 26/09/2026 both through a desktop
+client and via a direct `session/fork` request.
+
+**Steps to reproduce:**
+1. Run any turn that spawned a `Reminder child session` lane (most turns now do).
+2. Call `session/fork` on the session — with a `cutPoint.lastTurnId` anchor or
+   without one.
+
+**Actual:** the host answers `MSP error -32023: invalid fork boundary …
+WriteFailed [forkBoundaryInvalid] [retryable=false]` for **every** anchor —
+including the latest completed turn and anchorless requests. A fresh two-turn
+session with a reminder lane refuses exactly the same way; a fresh one-turn
+session **without** a lane forked fine on 20/09. The client's per-anchor and
+anchorless requests are well-formed (the same shapes forked on 20/09).
+
+**Expected:** `session/fork` should either branch at the requested boundary
+ignoring lane items (they are excluded via `excludeItems: true`), or return an
+explicit, typed "anchor includes lane material" error — not a write failure.
+
+**Impact on the desktop:** the conversation-branch feature cannot create
+branches on current sessions; the client shows the recovery copy and stays
+alive, but the MSP capability is unusable (M1-09's creation piece).
+
 ---
 
 ## Decision memo — what each remaining blocker needs
@@ -84,7 +113,7 @@ host-side execution). Today's client-side workaround is to document
 | No macOS / Linux machine | macOS/Linux columns of every M0 ticket (mostly ☐/◐) | A Mac for one qualification session per campaign (WKWebView + Keychain + launchd); a Linux box for the same | Hardware + a session each |
 | Clean machine | M0-10 (first launch), part of M4-09 | A Windows VM or fresh user profile with no Muse/WSL history, plus a real sign-in path | A VM + credentials |
 | Screen reader | M0-12 (the decisive half) | One NVDA (Windows) session driven through the a11y scenarios; contrast/forced-colors are already proved | A session + NVDA (free) |
-| Host 1.3.0 behaviours | M0-05 (stale race), M0-06 (refused decision) | Filing Drafts 1 and 2 upstream; until fixed, those criteria stay host-blocked and statuses stay ◐. M0-04 is **no longer held**: its strict stop-during-tool variant was proved on 26/09 under the elevated (`--disable-sandbox`) posture ([m0-04-strict-tool-stop.json](../evidence/2026-09-25-m0-completion/m0-04-strict-tool-stop.json), Windows ☑) — but the Draft-2 sandbox defect itself stands: under a sandboxed posture model shell work still hangs, so a sandboxed-posture re-proof of M0-04 and the M0-05 flows wait on the upstream fix | Filing + waiting for a host release |
+| Host 1.3.0 behaviours | M0-05 (stale race), M0-06 (refused decision), M1-09 (fork creation) | Filing Drafts 1, 2 and 3 upstream; until fixed, those criteria stay host-blocked and statuses stay ◐. M0-04 is **no longer held**: its strict stop-during-tool variant was proved on 26/09 under the elevated (`--disable-sandbox`) posture ([m0-04-strict-tool-stop.json](../evidence/2026-09-25-m0-completion/m0-04-strict-tool-stop.json), Windows ☑) — but the Draft-2 sandbox defect itself stands: under a sandboxed posture model shell work still hangs, so a sandboxed-posture re-proof of M0-04 and the M0-05 flows wait on the upstream fix | Filing + waiting for a host release |
 | Older engine builds | M0-08 (version matrix) | Access to previous Muse CLI builds (1.2.x, …) | Archive access |
 
 Everything else in M0 is proved on Windows, dev and packaged

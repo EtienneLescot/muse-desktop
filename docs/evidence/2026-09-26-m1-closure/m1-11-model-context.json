@@ -1,0 +1,129 @@
+{
+  "schema": "muse-desktop.m1-11-model-context.v1",
+  "date": "2026-09-26",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "steps": {
+    "conversation-A-initial": {
+      "present": true,
+      "label": "muse-spark-1.3-contributor",
+      "options": [
+        {
+          "label": "muse-spark-1.3",
+          "id": "",
+          "selected": false
+        },
+        {
+          "label": "muse-spark-1.3-contributor",
+          "id": "default",
+          "selected": true
+        },
+        {
+          "label": "muse-spark-1.2",
+          "id": "",
+          "selected": false
+        },
+        {
+          "label": "muse-spark-1.2-contributor",
+          "id": "",
+          "selected": false
+        }
+      ]
+    },
+    "conversation-B-initial": {
+      "present": true,
+      "label": "muse-spark-1.3-contributor",
+      "options": [
+        {
+          "label": "muse-spark-1.3",
+          "id": "",
+          "selected": false
+        },
+        {
+          "label": "muse-spark-1.3-contributor",
+          "id": "default",
+          "selected": true
+        },
+        {
+          "label": "muse-spark-1.2",
+          "id": "",
+          "selected": false
+        },
+        {
+          "label": "muse-spark-1.2-contributor",
+          "id": "",
+          "selected": false
+        }
+      ]
+    },
+    "conversation-B-after-switch": {
+      "expected": "muse-spark-1.3",
+      "picker": {
+        "present": true,
+        "label": "muse-spark-1.3",
+        "options": [
+          {
+            "label": "muse-spark-1.3",
+            "id": "",
+            "selected": true
+          },
+          {
+            "label": "muse-spark-1.3-contributor",
+            "id": "default",
+            "selected": false
+          },
+          {
+            "label": "muse-spark-1.2",
+            "id": "",
+            "selected": false
+          },
+          {
+            "label": "muse-spark-1.2-contributor",
+            "id": "",
+            "selected": false
+          }
+        ]
+      }
+    },
+    "conversation-A-revisited": {
+      "expected": "muse-spark-1.3-contributor",
+      "picker": {
+        "label": "muse-spark-1.3-contributor",
+        "options": [
+          {
+            "label": "muse-spark-1.3",
+            "id": "",
+            "selected": false
+          },
+          {
+            "label": "muse-spark-1.3-contributor",
+            "id": "default",
+            "selected": true
+          },
+          {
+            "label": "muse-spark-1.2",
+            "id": "",
+            "selected": false
+          },
+          {
+            "label": "muse-spark-1.2-contributor",
+            "id": "",
+            "selected": false
+          }
+        ]
+      }
+    },
+    "conversation-B-revisited": {
+      "expected": "muse-spark-1.3",
+      "label": "muse-spark-1.3"
+    },
+    "context-meter": {
+      "present": false
+    }
+  },
+  "verdict": {
+    "labelFollowsConversation": true,
+    "switchPersistsAcrossSwitches": true,
+    "contextUsageRendered": false,
+    "all": false
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "schema": "muse-desktop.m1-git-native.v1",
+  "date": "2026-09-26",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "scratchRepo": "G:/repos/m1-qualification",
+  "steps": {
+    "project-declared": {
+      "added": false
+    },
+    "project-picked": {
+      "picked": true,
+      "via": "details-picker"
+    },
+    "files-modified-during-turn": {
+      "modified": [
+        "config.properties",
+        "fake.docx"
+      ]
+    },
+    "m1-01-office-binary": {
+      "ok": true,
+      "badge": false
+    },
+    "m1-01-large-status": {
+      "domRows": 802,
+      "countText": "802 changed files"
+    },
+    "m1-01-last-turn-snapshot": {
+      "files": [
+        "config.properties",
+        "notes.txt"
+      ]
+    },
+    "m1-03-stage-file": {
+      "line": "M  config.properties"
+    },
+    "m1-03-unstage-file": {
+      "line": " M config.properties"
+    },
+    "m1-03-hunks": {
+      "hunks": []
+    },
+    "m1-03-hunk-partial": {
+      "stagedHunks": 1,
+      "unstagedHunks": 1
+    },
+    "m1-03-discard-file": {
+      "reverted": true,
+      "content": "alpha=1\r\nbeta=2\r\n"
+    },
+    "m1-03-untracked-protected": {
+      "untrackedAlive": true
+    },
+    "m1-02-comment-form": {
+      "passes": [
+        {
+          "clicked": "clicked-3",
+          "form": false,
+          "head": null,
+          "selectedLines": 0,
+          "diffFile": "config.properties"
+        },
+        {
+          "clicked": "clicked-3",
+          "form": true,
+          "head": "Comment on config.properties:2",
+          "selectedLines": 1,
+          "diffFile": "config.properties"
+        }
+      ]
+    },
+    "m1-02-comment-sent": {
+      "ok": true,
+      "sent": false,
+      "error": null
+    },
+    "m1-02-comment-queue": {
+      "items": [
+        {
+          "status": "ready",
+          "body": "Queued: also rename this key for consistency."
+        },
+        {
+          "status": "sent",
+          "body": "Please explain the gamma value and propose a fix."
+        }
+      ]
+    },
+    "m1-04-commit": {
+      "lastCommit": "qualif: gamma clarifier change"
+    },
+    "m1-04-push": {
+      "remoteHeads": "60406fc4a3debfeba52831a7abc36d8c17dee741\trefs/heads/master"
+    },
+    "m1-04-pull-ffonly": {
+      "headBefore": "60406fc4",
+      "headAfter": "8a15aaa8",
+      "advanced": true
+    },
+    "m1-04-remote-rejection": {
+      "ok": true,
+      "detail": "Git review unavailable: remote: Repository not found. fatal: repository 'https://github.com/EtienneLescot/m1-qualif-nonexistent.git/' not found"
+    }
+  },
+  "verdict": {
+    "officeFilesFlaggedBinary": true,
+    "largeStatusHandled": true,
+    "turnSnapshotListsChangedFiles": true,
+    "stageFile": true,
+    "unstageFile": true,
+    "stageByHunk": true,
+    "discardFile": true,
+    "untrackedNeverDeleted": true,
+    "commentReachesLiveEngine": true,
+    "commentQueuePersists": true,
+    "commitStaged": true,
+    "pushExplicitRefspec": true,
+    "pullLatestFfOnly": true,
+    "remoteRejectionClean": true,
+    "all": true
+  }
+}
