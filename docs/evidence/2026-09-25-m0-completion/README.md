@@ -83,17 +83,26 @@ honestly in ~1 s, the designed bounded fallback).
 closed on Windows. M0-01's and M0-11's Windows columns are raised to ☑ in the
 roadmap.**
 
-## Decision state (26/09/2026)
+## Decision state — CLOSED (26/09/2026)
 
 The four remaining paths (macOS machine, clean VM for M0-10, NVDA session for
-M0-12, upstream filing of the two host 1.3.0 reports) were **proposed to
-Étienne on 26/09/2026 and are pending his choice**. Until a resource is
-committed: the upstream drafts stay internal in
-[`docs/upstream/`](../../upstream/muse-host-1.3.0-m0-blockers.md), the runbook
-in [`docs/upstream/m0-remaining-qualification-runbook.md`](../../upstream/m0-remaining-qualification-runbook.md)
-is the execution plan for whichever path is chosen, and **no further M0
-criterion is reproducible from this Windows machine**. Default applied without
-a decision: keep everything documented, statuses unchanged.
+M0-12, upstream filing of the two host 1.3.0 reports) were proposed to Étienne
+**four times on 26/09/2026** through structured consultations; **no answer was
+received**. Per the agreed fallback, the documented state of M0 is therefore
+**enacted as final for this campaign**:
+
+- the upstream drafts stay internal in [`docs/upstream/`](../../upstream/muse-host-1.3.0-m0-blockers.md);
+- the runbook in [`docs/upstream/m0-remaining-qualification-runbook.md`](../../upstream/m0-remaining-qualification-runbook.md)
+  remains the ready-to-execute plan for whichever path is chosen later;
+- the roadmap statuses stand as they are: 6 tickets ☑ (all Windows), every
+  Windows ◐ line carrying only host-blocked or resource-blocked criteria;
+- **no further M0 criterion is reproducible from this Windows machine** — this
+  was verified line by line, including a disk and WSL search for older engine
+  builds (M0-08) and an elevated-posture attempt to reach the approval flows
+  (M0-05).
+
+If a resource appears later, pick the matching runbook section and execute it;
+the status rules in the roadmap apply unchanged.
 
 ## What still blocks full M0 closure (honest list)
 
