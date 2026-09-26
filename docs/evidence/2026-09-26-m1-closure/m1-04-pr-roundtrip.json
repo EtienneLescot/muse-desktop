@@ -1,0 +1,38 @@
+{
+  "schema": "muse-desktop.m1-04-pr-roundtrip.v1",
+  "date": "2026-09-26",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "disposableRepo": "https://github.com/EtienneLescot/m1-qualif-pr (private; manual deletion — token lacks delete_repo)",
+  "steps": {
+    "branch-pushed": {
+      "ref": "refs/heads/qualif-pr"
+    },
+    "pr-opened": {
+      "ok": true,
+      "url": "https://github.com/EtienneLescot/m1-qualif-pr/pull/1",
+      "text": "Open pull request · qualif-pr → master"
+    },
+    "gh-verification": {
+      "baseRefName": "master",
+      "headRefName": "qualif-pr",
+      "title": "Qualif PR round trip",
+      "url": "https://github.com/EtienneLescot/m1-qualif-pr/pull/1"
+    },
+    "pr-idempotent": {
+      "ok": true,
+      "text": "Existing pull request · qualif-pr → master",
+      "url": "https://github.com/EtienneLescot/m1-qualif-pr/pull/1"
+    },
+    "cleanup": {
+      "prClosed": true,
+      "note": "repo deletion is manual (token lacks delete_repo scope)"
+    }
+  },
+  "verdict": {
+    "branchPushed": true,
+    "prCreated": true,
+    "ghConfirmsPr": true,
+    "prIdempotent": true,
+    "all": true
+  }
+}

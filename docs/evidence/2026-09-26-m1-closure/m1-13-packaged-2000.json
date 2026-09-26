@@ -1,0 +1,41 @@
+{
+  "schema": "muse-desktop.cdp-long-transcript.v1",
+  "requestedEntries": 2000,
+  "steps": {},
+  "target": {
+    "key": "muse-desktop.log.v1.01a0dd29-517c-7fc0-9f10-81a7df951fdb",
+    "sessionId": "01a0dd29-517c-7fc0-9f10-81a7df951fdb",
+    "logKeys": 58
+  },
+  "original": {
+    "bytes": 5915,
+    "entries": 14
+  },
+  "written": {
+    "entries": 2000,
+    "bytes": 347671,
+    "seedUsed": true
+  },
+  "open": {
+    "found": true
+  },
+  "afterReload": {
+    "transcriptFound": true,
+    "dataEntryCount": "2000",
+    "dataWindowStart": "1720",
+    "dataWindowEnd": "1880",
+    "ariaLabel": "Conversation messages",
+    "ariaKeyshortcuts": "Home End PageUp PageDown",
+    "mountedArticles": 160,
+    "mountedNodes": 1368,
+    "setsizeSample": "2000",
+    "posinsetSample": "1721",
+    "hasLoadOlder": true,
+    "hasLatest": true,
+    "hasFinder": false
+  },
+  "restored": {
+    "key": "muse-desktop.log.v1.01a0dd29-517c-7fc0-9f10-81a7df951fdb",
+    "bytes": 5915
+  }
+}
