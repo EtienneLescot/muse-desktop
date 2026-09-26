@@ -56,7 +56,11 @@ safety model.
 
 ## Filing checklist (Étienne)
 
-- [ ] Pick the tracker (internal Muse tracker / GitHub — both drafts assume GitHub-flavoured Markdown).
+- [ ] **Designate the channel.** Verified 26/09/2026: there is **no public
+      official Muse Code / muse-spark issue tracker** — Meta's developer
+      surface is [dev.meta.ai](https://dev.meta.ai/resources/blog/build-with-muse-code)
+      (blog + resources), so filing goes through the internal/support channel
+      you use with the Muse team. The drafts assume GitHub-flavoured Markdown.
 - [ ] Paste each file as one issue; keep the repro tables.
 - [ ] Link the fix observation once available so the desktop client can re-run
       the two blocked qualification variants (M0-04 strict, M0-05 stale race).
