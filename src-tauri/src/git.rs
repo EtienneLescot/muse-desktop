@@ -1149,6 +1149,351 @@ pub fn create_pr(
     })
 }
 
+// ---------------------------------------------------------------------------
+// M2-04 / M2-06: per-worktree environment setup, readiness and cleanup.
+// ---------------------------------------------------------------------------
+
+pub const WORKTREE_SETUP_MAX_CHARS: usize = 2000;
+pub const WORKTREE_SETUP_TIMEOUT_SECS: u64 = 600;
+pub const WORKTREE_OUTPUT_MAX_CHARS: usize = 8000;
+
+/// The setup runner, readiness check and cleanup only ever touch checkouts
+/// under `<repo>/.muse/worktrees`. The canonical-prefix compare is the single
+/// gate every command goes through.
+fn ensure_confined_worktree(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    let worktrees_root = canonical_root.join(".muse").join("worktrees");
+    let candidate = PathBuf::from(path);
+    let canonical_candidate = candidate
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve worktree path {path}: {e}"))?;
+    if !canonical_candidate.starts_with(&worktrees_root) {
+        return Err(
+            "the command runs only inside a checkout under .muse/worktrees".to_string(),
+        );
+    }
+    if !canonical_candidate.is_dir() {
+        return Err(format!("worktree path is not a directory: {path}"));
+    }
+    Ok(canonical_candidate)
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeSetupOutcome {
+    /// `ready` (exit 0), `failed` (non-zero exit), `timedOut` (past the
+    /// ten-minute bound) or `cancelled` (user cancellation).
+    pub status: String,
+    pub output: String,
+    pub exit_code: Option<i32>,
+    pub duration_ms: u64,
+    /// Sorted keys of the environment the command actually received, so the
+    /// user can see what leaked in without printing values.
+    pub environment_keys: Vec<String>,
+    /// Opaque handle the renderer passes to `git_worktree_setup_cancel`.
+    pub token: String,
+}
+
+/// Run one user setup command inside a confined worktree.
+///
+/// The command is executed through the platform shell and polled so a
+/// cancellation flag or the ten-minute bound both end it with a kill; output
+/// is bounded to its tail. `cancelled_flag` is owned by the caller (the Tauri
+/// state) so a second command can cancel a running one by token.
+pub fn run_worktree_setup(
+    root: &Path,
+    path: &str,
+    command: &str,
+    token: &str,
+    timeout_secs: u64,
+    cancelled_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pid_slot: std::sync::Arc<std::sync::Mutex<Option<u32>>>,
+) -> Result<WorktreeSetupOutcome, String> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return Err("setup command is empty".to_string());
+    }
+    if trimmed.chars().count() > WORKTREE_SETUP_MAX_CHARS {
+        return Err(format!(
+            "setup command exceeds the {} character limit",
+            WORKTREE_SETUP_MAX_CHARS
+        ));
+    }
+    let dir = ensure_confined_worktree(root, path)?;
+    let started = std::time::Instant::now();
+    #[cfg(target_os = "windows")]
+    let mut child = {
+        use std::os::windows::process::CommandExt;
+        Command::new("cmd")
+            .args(["/C", trimmed])
+            .current_dir(&dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+            .spawn()
+            .map_err(|e| format!("setup command could not start: {e}"))?
+    };
+    #[cfg(not(target_os = "windows"))]
+    let mut child = {
+        Command::new("sh")
+            .args(["-c", trimmed])
+            .current_dir(&dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("setup command could not start: {e}"))?
+    };
+    *pid_slot.lock().expect("setup pid slot poisoned") = Some(child.id());
+    // Drain both pipes on threads: a full pipe would stall the child.
+    let stdout_pipe = child.stdout.take();
+    let stderr_pipe = child.stderr.take();
+    let mut readers: Vec<std::thread::JoinHandle<Vec<u8>>> = Vec::new();
+    if let Some(mut pipe) = stdout_pipe {
+        readers.push(std::thread::spawn(move || {
+            let mut buffer = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut pipe, &mut buffer);
+            buffer
+        }));
+    }
+    if let Some(mut pipe) = stderr_pipe {
+        readers.push(std::thread::spawn(move || {
+            let mut buffer = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut pipe, &mut buffer);
+            buffer
+        }));
+    }
+    let environment_keys: Vec<String> = {
+        let mut keys: Vec<String> = std::env::vars().map(|(key, _)| key).collect();
+        keys.sort();
+        keys.dedup();
+        keys
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+    let mut status;
+    let mut exit_code: Option<i32> = None;
+    loop {
+        if cancelled_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            let _ = child.kill();
+            let _ = child.wait();
+            status = "cancelled";
+            break;
+        }
+        match child.try_wait() {
+            Ok(Some(exit)) => {
+                exit_code = exit.code();
+                status = if exit.success() { "ready" } else { "failed" };
+                break;
+            }
+            Ok(None) => {}
+            Err(e) => return Err(format!("setup wait failed: {e}")),
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            status = "timedOut";
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    let mut output = String::new();
+    for reader in readers {
+        if let Ok(bytes) = reader.join() {
+            output.push_str(&decode(&bytes));
+        }
+    }
+    if output.chars().count() > WORKTREE_OUTPUT_MAX_CHARS {
+        let tail: String = output.chars().skip(output.chars().count() - WORKTREE_OUTPUT_MAX_CHARS).collect();
+        output = format!("…{tail}");
+    }
+    Ok(WorktreeSetupOutcome {
+        status: status.to_string(),
+        output,
+        exit_code,
+        duration_ms: started.elapsed().as_millis() as u64,
+        environment_keys,
+        token: token.to_string(),
+    })
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeReadiness {
+    pub path: String,
+    pub status: String,
+    pub project_files: Vec<String>,
+    pub tools: Vec<WorktreeToolAvailability>,
+    pub checked_at: u64,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeToolAvailability {
+    pub name: String,
+    pub required: bool,
+    pub available: bool,
+}
+
+fn tool_available(name: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    let probe = Command::new("where").arg(name).output();
+    #[cfg(not(target_os = "windows"))]
+    let probe = Command::new("which").arg(name).output();
+    matches!(probe, Ok(output) if output.status.success())
+}
+
+/// Detect the project files the worktree carries and whether the matching
+/// toolchain is on PATH. `git` is always required; the others are required
+/// only when their project file exists.
+pub fn check_worktree_readiness(root: &Path, path: &str) -> Result<WorktreeReadiness, String> {
+    let dir = ensure_confined_worktree(root, path)?;
+    let candidates = [
+        ("package.json", "node"),
+        ("Cargo.toml", "cargo"),
+        ("pyproject.toml", "python"),
+        ("go.mod", "go"),
+    ];
+    let mut project_files = Vec::new();
+    let mut tools = vec![WorktreeToolAvailability {
+        name: "git".to_string(),
+        required: true,
+        available: tool_available("git"),
+    }];
+    for (file, tool) in candidates {
+        if dir.join(file).is_file() {
+            project_files.push(file.to_string());
+            tools.push(WorktreeToolAvailability {
+                name: tool.to_string(),
+                required: true,
+                available: tool_available(tool),
+            });
+        }
+    }
+    let status = if tools.iter().all(|tool| tool.available) {
+        "ready"
+    } else {
+        "blocked"
+    };
+    let checked_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    Ok(WorktreeReadiness {
+        path: dir.display().to_string(),
+        status: status.to_string(),
+        project_files,
+        tools,
+        checked_at,
+    })
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeInspection {
+    pub path: String,
+    pub branch: Option<String>,
+    pub head: Option<String>,
+    pub is_main: bool,
+    pub clean: bool,
+    pub conflicted: bool,
+    pub modified_at_ms: u64,
+}
+
+/// Inspect every worktree of the repository: real branch, HEAD, cleanliness
+/// and last-modified time, straight from Git and the filesystem.
+pub fn inspect_worktrees(root: &Path) -> Result<Vec<WorktreeInspection>, String> {
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve repository {}: {e}", root.display()))?;
+    let listing = decode(&git_command(
+        &canonical_root,
+        &["worktree", "list", "--porcelain"],
+    )?);
+    let mut inspections = Vec::new();
+    let mut current: Option<(PathBuf, Option<String>, Option<String>)> = None;
+    for line in listing.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            if let Some((path, branch, head)) = current.take() {
+                inspections.push(finalize_inspection(&canonical_root, path, branch, head)?);
+            }
+            current = Some((PathBuf::from(path), None, None));
+        } else if let Some(head) = line.strip_prefix("HEAD ") {
+            if let Some(entry) = current.as_mut() {
+                entry.2 = Some(head.trim().to_string());
+            }
+        } else if let Some(branch) = line.strip_prefix("branch ") {
+            if let Some(entry) = current.as_mut() {
+                entry.1 = Some(branch.trim().trim_start_matches("refs/heads/").to_string());
+            }
+        }
+    }
+    if let Some((path, branch, head)) = current.take() {
+        inspections.push(finalize_inspection(&canonical_root, path, branch, head)?);
+    }
+    Ok(inspections)
+}
+
+fn finalize_inspection(
+    canonical_root: &Path,
+    path: PathBuf,
+    branch: Option<String>,
+    head: Option<String>,
+) -> Result<WorktreeInspection, String> {
+    // git prints the main worktree path with its own separators; canonicalise
+    // both sides before comparing.
+    let is_main = path
+        .canonicalize()
+        .map(|candidate| candidate == canonical_root)
+        .unwrap_or(false);
+    let status = decode(&git_command(&path, &["status", "--porcelain"])?);
+    let clean = status.trim().is_empty();
+    let conflicted = status
+        .lines()
+        .any(|line| line.starts_with("UU") || line.starts_with("AA") || line.starts_with("DD"));
+    let modified_at_ms = fs_modified_ms(&path);
+    Ok(WorktreeInspection {
+        path: path.display().to_string(),
+        branch,
+        head,
+        is_main,
+        clean,
+        conflicted,
+        modified_at_ms,
+    })
+}
+
+fn fs_modified_ms(path: &Path) -> u64 {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Remove one worktree. A dirty or conflicted checkout is refused unless the
+/// caller explicitly acknowledges it; Git keeps the final word when a
+/// checkout is locked.
+pub fn remove_worktree(root: &Path, path: &str, force: bool) -> Result<(), String> {
+    let dir = ensure_confined_worktree(root, path)?;
+    let status = decode(&git_command(&dir, &["status", "--porcelain"])?);
+    if !force && !status.trim().is_empty() {
+        return Err("worktree has uncommitted changes; inspect it and confirm the forced removal".to_string());
+    }
+    let mut args = vec!["worktree", "remove"];
+    if force {
+        args.push("--force");
+    }
+    let dir_display = dir.display().to_string();
+    args.push(&dir_display);
+    git_command(
+        &root.canonicalize().map_err(|e| format!("cannot resolve repository: {e}"))?,
+        &args,
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1778,5 +2123,153 @@ mod tests {
         assert_eq!(parse_existing_pr_url("[]").unwrap(), None);
         assert_eq!(parse_existing_pr_url(r#"[{"url":"file:///tmp/pr"}]"#).unwrap(), None);
         assert!(parse_existing_pr_url("not json").is_err());
+    }
+
+    // --- M2-04 / M2-06: worktree setup runner, readiness, inspect, removal
+
+    fn worktree_fixture() -> (PathBuf, PathBuf) {
+        let root = fixture_repo();
+        fs::write(root.join("package.json"), "{}").unwrap();
+        // real repos ignore the worktree root: without it the main checkout
+        // would always read dirty (`?? .muse/`)
+        fs::write(root.join(".gitignore"), ".muse/\n").unwrap();
+        let run = |args: &[&str]| {
+            let output = Command::new("git").args(args).current_dir(&root).output().unwrap();
+            assert!(output.status.success(), "git {:?}: {}", args, decode(&output.stderr));
+        };
+        run(&["add", "-A"]);
+        run(&["commit", "--quiet", "-m", "initial"]);
+        run(&[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            "muse/qualif-wt",
+            ".muse/worktrees/wt-a",
+        ]);
+        (root.clone(), root.join(".muse/worktrees/wt-a"))
+    }
+
+    #[test]
+    fn setup_refuses_paths_outside_worktrees() {
+        let (root, _) = worktree_fixture();
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let error = run_worktree_setup(&root, &root.display().to_string(), "echo hi", "t1", 10, flag, std::sync::Arc::new(std::sync::Mutex::new(None)))
+            .unwrap_err();
+        assert!(error.contains(".muse/worktrees"), "{error}");
+    }
+
+    #[test]
+    fn setup_refuses_overlong_commands() {
+        let (root, wt) = worktree_fixture();
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let long = "x".repeat(WORKTREE_SETUP_MAX_CHARS + 1);
+        let error =
+            run_worktree_setup(&root, &wt.display().to_string(), &long, "t2", 10, flag, std::sync::Arc::new(std::sync::Mutex::new(None))).unwrap_err();
+        assert!(error.contains("character limit"), "{error}");
+    }
+
+    #[test]
+    fn setup_reports_ready_and_runs_in_the_worktree() {
+        let (root, wt) = worktree_fixture();
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let outcome = run_worktree_setup(
+            &root,
+            &wt.display().to_string(),
+            "echo setup-proof > setup-proof.txt",
+            "t3",
+            30,
+            flag,
+            std::sync::Arc::new(std::sync::Mutex::new(None)),
+        )
+        .unwrap();
+        assert_eq!(outcome.status, "ready");
+        assert!(!outcome.environment_keys.is_empty());
+        assert!(wt.join("setup-proof.txt").is_file(), "command must run in the worktree");
+    }
+
+    #[test]
+    fn setup_reports_failed_on_nonzero_exit() {
+        let (root, wt) = worktree_fixture();
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let outcome = run_worktree_setup(
+            &root,
+            &wt.display().to_string(),
+            "cmd /C exit /b 3",
+            "t4",
+            30,
+            flag,
+            std::sync::Arc::new(std::sync::Mutex::new(None)),
+        )
+        .unwrap();
+        assert_eq!(outcome.status, "failed");
+        assert_eq!(outcome.exit_code, Some(3));
+    }
+
+    #[test]
+    fn setup_reports_cancelled_through_the_flag() {
+        let (root, wt) = worktree_fixture();
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let outcome = run_worktree_setup(
+            &root,
+            &wt.display().to_string(),
+            "ping -n 30 127.0.0.1",
+            "t5",
+            120,
+            flag,
+            std::sync::Arc::new(std::sync::Mutex::new(None)),
+        )
+        .unwrap();
+        assert_eq!(outcome.status, "cancelled");
+    }
+
+    #[test]
+    fn readiness_detects_project_files_and_missing_tools() {
+        let (root, wt) = worktree_fixture();
+        let readiness = check_worktree_readiness(&root, &wt.display().to_string()).unwrap();
+        assert!(readiness.project_files.contains(&"package.json".to_string()));
+        let node = readiness.tools.iter().find(|t| t.name == "node").unwrap();
+        assert!(node.required);
+        let git_tool = readiness.tools.iter().find(|t| t.name == "git").unwrap();
+        assert!(git_tool.available, "git is on PATH in the test environment");
+    }
+
+    #[test]
+    fn readiness_refuses_paths_outside_worktrees() {
+        let (root, _) = worktree_fixture();
+        assert!(check_worktree_readiness(&root, &root.display().to_string()).is_err());
+    }
+
+    #[test]
+    fn inspect_reports_dirty_and_clean_worktrees() {
+        let (root, wt) = worktree_fixture();
+        fs::write(wt.join("dirty.txt"), "change").unwrap();
+        let inspections = inspect_worktrees(&root).unwrap();
+        let main = inspections.iter().find(|i| i.is_main).unwrap();
+        let agent = inspections.iter().find(|i| !i.is_main).unwrap();
+        assert!(main.clean);
+        assert!(!agent.clean);
+        assert!(!agent.conflicted);
+        assert_eq!(agent.branch.as_deref(), Some("muse/qualif-wt"));
+        assert!(agent.modified_at_ms > 0);
+    }
+
+    #[test]
+    fn remove_refuses_dirty_then_removes_clean() {
+        let (root, wt) = worktree_fixture();
+        fs::write(wt.join("dirty.txt"), "change").unwrap();
+        let error = remove_worktree(&root, &wt.display().to_string(), false).unwrap_err();
+        assert!(error.contains("uncommitted changes"), "{error}");
+        let force = remove_worktree(&root, &wt.display().to_string(), true);
+        assert!(force.is_ok(), "{:?}", force.err());
+        assert!(!wt.exists());
+        // a second clean worktree goes out without force
+        let run = |args: &[&str]| {
+            Command::new("git").args(args).current_dir(&root).output().unwrap();
+        };
+        run(&["worktree", "add", "--quiet", "-b", "muse/qualif-wt2", ".muse/worktrees/wt-b"]);
+        remove_worktree(&root, &root.join(".muse/worktrees/wt-b").display().to_string(), false)
+            .unwrap();
+        assert!(!root.join(".muse/worktrees/wt-b").exists());
     }
 }

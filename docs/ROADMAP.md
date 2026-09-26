@@ -150,11 +150,11 @@ The remaining criteria and their precise limits are listed in each document unde
 | State | Total | Breakdown |
 |---|---|---|
 | ☐ Not started | **1** | M4-06 |
-| ◐ Started | **32** | everything else |
-| ☑ Done | **20** | **M0**: M0-01, M0-02, M0-03, M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02, M2-03, M2-07 |
+| ◐ Started | **30** | everything else |
+| ☑ Done | **22** | **M0**: M0-01, M0-02, M0-03, M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02, M2-03, M2-04, M2-06, M2-07 |
 | **Total** | **53** | |
 
-Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Twenty tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign), 26/09 (M1 campaign, including the whole git delivery chain M1-01→04, and the first M2 tickets: postures, worktree create & open, sub-agent fan-out with parent resume); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13).
+Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Twenty-two tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign), 26/09 (M1 campaign, including the whole git delivery chain M1-01→04) and 26/09 again for the first M2 tickets (postures, worktree create & open, environment setup, cleanup, sub-agent fan-out with parent resume); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13).
 
 ### By platform
 
@@ -162,10 +162,10 @@ The 53 tickets fall into three groups, counted from the tables below.
 
 | Group | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
-| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 20 | 13 |
+| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 18 | 15 |
 | **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 12 | 6 |
 | **C** — M1-12, closed and identical on all three OSes | 1 | 0 | 0 | 1 |
-| **Total** | **53** | **1** | **32** | **20** |
+| **Total** | **53** | **1** | **30** | **22** |
 
 Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer. (Since 26/09/2026: M0-01, M1-06, M1-10, M1-11, M2-02 and M2-07 are ☑ on Windows — every Windows-reachable criterion of those tickets is proved; the other 12 stay ◐ on Windows.)
 
@@ -375,9 +375,9 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 | M2-01 | A project represents persistent folders | — | ◐ | ☐ | ◐ |
 | M2-02 | Project settings really apply | ☑ | ☑ | ☐ | ☐ |
 | M2-03 | Create a worktree automatically | ☑ | ☑ | ◐ | ◐ |
-| M2-04 | Prepare the worktree's environment | — | ◐ | ☐ | ◐ |
+| M2-04 | Prepare the worktree's environment | ☑ | ☑ | ☐ | ◐ |
 | M2-05 | Move from Local to Worktree and back | — | ◐ | ☐ | ☐ |
-| M2-06 | Clean up worktrees without deleting work | — | ◐ | ◐ | ◐ |
+| M2-06 | Clean up worktrees without deleting work | ☑ | ☑ | ◐ | ◐ |
 | M2-07 | Drive the real sub-agents | ☑ | ☑ | ☐ | ☐ |
 | M2-08 | Run several writers without collision | — | ◐ | ☐ | ◐ |
 
@@ -401,20 +401,20 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
   - **Qualification 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)): the mechanism is a **full PASS** (`ux-start-worktree.mjs`: creation, `muse/…` branch, `HEAD` base, refusal "worktree path must be relative and stay inside .muse/worktrees", rollback). **Wiring defect measured on the thread:** the "Create a new worktree" checkbox creates the worktree (`git_worktree_create_for_workspace` → `…\.muse\worktrees\openscreen-rn3d0`) but **the conversation starts in the main repository** — `start_session` receives `workspacePath: G:\repos\openscreen` and `git_status` announces `branch: "pr620"`, never `muse/openscreen-rn3d0`. The `path` returned is not passed to `start_session`: "Create & open" does not open. **→ FIX implemented on 25/09/2026** (`97f9eb1`): root cause was the welcome-screen flow calling the no-argument `startSession()` when no project was selected, discarding the worktree path; the flow now always starts in `startFolder` when a worktree exists (project settings attached only when a project is chosen). The in-app replay (`git_status` must announce `muse/…`) remains.
   - **Remaining:** native qualification and failures after admission. **→ Windows ☑ on 26/09/2026** ([`m2-03-worktree-create-open.json`](evidence/2026-09-26-m2-closure/m2-03-worktree-create-open.json)): the in-app replay passes — with the Worktree switch on, the conversation **starts inside the fresh worktree** (header workspace `.muse\worktrees\m1-qualification-xcgyr`), git announces the `muse/m1-qualification-xcgyr` branch (`git worktree list` confirms the attachment), and the first live turn answers in it. The refusals and rollback were proved on 27/09 (`ux-start-worktree.mjs`). Every Windows-reachable criterion is closed; macOS/Linux stay ◐ (git is identical, proof missing there).
 
-- ◐ **M2-04 — Prepare the worktree's environment** *(Global: —)*
-  - Windows ◐ / Linux ◐ — persistent per-workspace profiles, a user command bounded to 2,000 characters run only after **Run setup**, states `ready`/`failed`/`timedOut`/`cancelled`, targeted native cancellation, a runner refusing folders outside `.muse/worktrees` and killing past ten minutes, **Check readiness** detecting `package.json`/`Cargo.toml`/`pyproject.toml`/`go.mod`.
+- ☑ **M2-04 — Prepare the worktree's environment** *(Global: —)*
+  - Windows ☑ / Linux ◐ — persistent per-workspace profiles, a user command bounded to 2,000 characters run only after **Run setup**, states `ready`/`failed`/`timedOut`/`cancelled`, targeted native cancellation, a runner refusing folders outside `.muse/worktrees` and killing past ten minutes, **Check readiness** detecting `package.json`/`Cargo.toml`/`pyproject.toml`/`go.mod`.
   - Linux ◐ — the runner purges the inherited environment and keeps `PATH`, temporary folders, home and locale, plus Windows variables (`PATHEXT`, `ComSpec`) neutralised elsewhere: the Linux path is plausible and tested in Rust, not exercised natively.
   - macOS ☐ — not started.
-  - **Remaining:** native qualification of atomic creation and of setup on each platform.
+  - **Implemented and Windows ☑ on 26/09/2026** ([`m2-04-06-setup-cleanup.json`](evidence/2026-09-26-m2-closure/m2-04-06-setup-cleanup.json)). Honest note: an audit this day found the setup runner **never wired** (design types only in `worktrees.ts`) — the feature was built during the campaign: Rust runner (`git_worktree_setup_run/cancel`, command ≤ 2,000 chars, confined to `.muse/worktrees`, ten-minute kill, ready/failed/timedOut/cancelled) + readiness (`git_worktree_readiness`: package.json/Cargo.toml/pyproject.toml/go.mod + toolchain availability) + the Settings surface. Native proof: setup runs in the worktree (proof file written there), failure carries the exit code, cancellation ends a 30 s command, readiness detects `package.json` and `git`/`node`, and the main checkout is refused (outside the confinement). 31 Rust tests cover the guards. **Remaining:** macOS/Linux.
 
 - ◐ **M2-05 — Move from Local to Worktree and back** *(Global: —)*
   - Windows ◐ — **Prepare handoff** produces a read-only local plan (source workspace, target worktree, conflicts, uncommitted changes, target state, branch availability), `pass`/`warn`/`blocked` checks, invalidation as **refresh required**, **Open with handoff context** placing a bounded editable note in the composer.
   - **Blocker:** the actual transfer (atomic host stop/resume, moving the context, rollback) stays **blocked by the absence of a multi-workspace MSP contract**. No implicit switch is triggered.
   - macOS ☐ / Linux ☐ — not started.
 
-- ◐ **M2-06 — Clean up worktrees without deleting work** *(Global: —)*
-  - Windows ◐ / macOS ◐ / Linux ◐ — **Inspect** reading the real Git status, refusal to delete a dirty checkout or one attached to Muse conversations, `.muse/worktrees/` confinement, per-repository retention policy (7/14/30/90 days or indefinite) computed **only after a clean inspection**, **Inspect all** in parallel, a persistent cleanup intent resumed after an interruption. Git keeps the final decision if a checkout is locked.
-  - **Remaining:** qualification of external processes — inspection cannot know about every process outside Muse.
+- ☑ **M2-06 — Clean up worktrees without deleting work** *(Global: —)*
+  - Windows ☑ / macOS ◐ / Linux ◐ — **Inspect** reading the real Git status, refusal to delete a dirty checkout or one attached to Muse conversations, `.muse/worktrees/` confinement, per-repository retention policy (7/14/30/90 days or indefinite) computed **only after a clean inspection**, **Inspect all** in parallel, a persistent cleanup intent resumed after an interruption. Git keeps the final decision if a checkout is locked.
+  - **Implemented and Windows ☑ on 26/09/2026** (same evidence file): the audit found only the cleanup-intent persistence wired — the inspect/cleanup surfaces were built during the campaign (`git_worktree_inspect`, `git_worktree_remove` + the Settings list). Native proof: **Inspect all** lists the main checkout and the worktrees with real branch/dirty/conflicted/age (read from Git and the filesystem); a **dirty worktree is flagged and its removal refused** ("worktree has uncommitted changes…"); a **clean unattached worktree is removed** from the panel; the retention select persists per repository. "Attached to a conversation" is checked against the persisted session workspaces, and the active conversation's own worktree is always spared. **Remaining:** the external-process limit (inspection cannot know about every process outside Muse) stays documented; macOS/Linux (same surfaces).
 
 - ◐ **M2-07 — Drive the real sub-agents** *(Global: —)*
   - **Qualification 27/09/2026 (concurrency):** two **simultaneous** `subagent-running` lanes observed live (`e8af2a61` + `47a01e3d`), but **controlled reproduction out of the model's reach** — muse-spark serialises its delegation despite an order to overlap (20 samples / 30 s: `maxConcurrentRunning=1`); clean multi-thread reproduction remains ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)). **→ CONCURRENCY PROVED afterwards (run2):** 3 simultaneous `running` lanes in one thread + 2 `running` lanes in a second thread at the same time — the app renders, follows and controls several children in parallel, across threads and within a thread.
