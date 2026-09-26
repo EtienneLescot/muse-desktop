@@ -86,15 +86,18 @@ clients can only show a recovery message.
       SDK tracker** ([meta-models/muse-code-sdk/issues](https://github.com/meta-models/muse-code-sdk/issues))
       is the designated public surface — its tracker already carries
       host-runtime reports, and its README "Support" section welcomes SDK,
-      protocol and documentation bugs plus usage questions. **File 3 is filed:
-      [muse-code-sdk#55](https://github.com/meta-models/muse-code-sdk/issues/55).**
-      Files 1 and 2 remain ready to paste there the same way (both are
-      host-runtime reports of the same kind). GitHub-flavoured Markdown
-      assumed — confirmed in use on that tracker.
-- [ ] Paste files 1 and 2 as one issue each; keep the repro tables.
-- [ ] Link the fix observation once available so the desktop client can re-run
-      the blocked qualification variants: the M0-05 stale race, a
-      **sandboxed-posture** re-proof of M0-04's stop-during-tool (proved on
-      26/09 only under `--disable-sandbox`), and **M1-09's fork creation**
-      (watch the tracker for the fix, then re-run
+      protocol and documentation bugs plus usage questions. **All three drafts
+      are filed there**: File 3 →
+      [#55](https://github.com/meta-models/muse-code-sdk/issues/55) (fork),
+      File 1 →
+      [#56](https://github.com/meta-models/muse-code-sdk/issues/56) (approval
+      ceiling), File 2 →
+      [#57](https://github.com/meta-models/muse-code-sdk/issues/57) (powershell
+      under the sandbox).
+- [x] ~~Paste each file as one issue; keep the repro tables.~~ (done 26/09)
+- [ ] Link the fix observations once available so the desktop client can re-run
+      the blocked qualification variants: the M0-05 stale race and M0-06
+      refused decision (#56), a **sandboxed-posture** re-proof of M0-04's
+      stop-during-tool and the M1-06 "Run in Muse" flows (#57), and
+      **M1-09's fork creation** (#55 — re-run
       `scripts/cdp-m1-files-fork.mjs` and the direct `fork_session` probe).

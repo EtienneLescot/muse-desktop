@@ -150,11 +150,11 @@ The remaining criteria and their precise limits are listed in each document unde
 | State | Total | Breakdown |
 |---|---|---|
 | ☐ Not started | **1** | M4-06 |
-| ◐ Started | **36** | everything else |
-| ☑ Done | **16** | **M0**: M0-01, M0-02, M0-03, M0-04, M0-09, M0-11 · **M1**: M1-01, M1-02, M1-03, M1-05, M1-06, M1-07, M1-08, M1-10, M1-11 · M1-12 |
+| ◐ Started | **35** | everything else |
+| ☑ Done | **17** | **M0**: M0-01, M0-02, M0-03, M0-04, M0-09, M0-11 · **M1**: M1-01, M1-02, M1-03, M1-04, M1-05, M1-06, M1-07, M1-08, M1-10, M1-11 · M1-12 |
 | **Total** | **53** | |
 
-Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Sixteen tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign) and 26/09 (M1 campaign); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-04, M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a live PR round trip needing a disposable GitHub remote; a host-blocked fork creation; the assistive half of M1-13).
+Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Seventeen tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign) and 26/09 (M1 campaign, including the whole git delivery chain M1-01→04); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13).
 
 ### By platform
 
@@ -162,10 +162,10 @@ The 53 tickets fall into three groups, counted from the tables below.
 
 | Group | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
-| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 22 | 11 |
+| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 21 | 12 |
 | **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 14 | 4 |
 | **C** — M1-12, closed and identical on all three OSes | 1 | 0 | 0 | 1 |
-| **Total** | **53** | **1** | **36** | **16** |
+| **Total** | **53** | **1** | **35** | **17** |
 
 Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer. (Since 26/09/2026: M0-01, M1-06, M1-10 and M1-11 are ☑ on Windows — every Windows-reachable criterion of those tickets is proved; the other 14 stay ◐ on Windows.)
 
@@ -297,7 +297,7 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 | M1-01 | See the files actually changed | ☑ | ☑ | ◐ | ◐ |
 | M1-02 | Comment a diff line and ask for a fix | ☑ | ☑ | ◐ | ◐ |
 | M1-03 | Stage or discard a change | ☑ | ☑ | ◐ | ◐ |
-| M1-04 | Sync, commit, push and create a PR | ◐ | ◐ | ◐ | ◐ |
+| M1-04 | Sync, commit, push and create a PR | ☑ | ☑ | ◐ | ◐ |
 | M1-05 | Open and use a terminal in the project | ☑ | ☑ | ◐ | ◐ |
 | M1-06 | Have the engine read the terminal output | ☑ | ☑ | ☐ | ☐ |
 | M1-07 | Browse the project's real files | ☑ | ☑ | ◐ | ◐ |
@@ -314,7 +314,7 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
   - ◐ M1-01 — Git baseline captured before each turn with a bounded delay, HEAD/fingerprint/path comparison without reading Muse's text; lazy listing, bounded reading, native watcher, text handoff into the prompt, CSV/TSV/JSON tables. **Windows ☑ (26/09/2026, [campaign](evidence/2026-09-26-m1-closure/README.md)):** the last-turn snapshot lists the files changed during a controlled live turn, the office file shows git's binary marker in the diff view, and an 802-row status renders with the true count. **Remaining:** macOS/Linux only.
   - ◐ M1-02 — bounded persistent multi-comment queue (40 entries, 8,000 characters), a freshness guard refusing a moved anchor, `stale` anchors never moved silently. **Windows ☑ (26/09/2026):** a diff-line comment reaches the live engine (turn starts, answer streams); a queued comment persists with `ready`/`sent` states. **Remaining:** macOS/Linux only.
   - ◐ M1-03 — stage/unstage/discard by file and by hunk, multiple selection, HEAD/status/patch guard before writing, untracked files never deleted. **Windows ☑ (26/09/2026):** stage/unstage verified in porcelain (`M `/` M`), partial hunk staging leaves 1+1 hunks, discard reverts after the inline confirm, untracked files survive. **Remaining:** macOS/Linux only.
-  - ◐ M1-04 — commit, push with an explicit refspec, idempotent PR through `gh`, **Fetch** and **Pull latest** as `--ff-only`. **Windows progress (26/09/2026):** commit, push (`refs/heads/master` on a bare remote), Fetch of a remote advance and **Pull latest fast-forwarding HEAD** (`60406fc4 → 8a15aaa8`) all proved in the real webview with git-verified outcomes; a forbidden remote surfaces a clean actionable error (`Repository not found`) — the live remote-rejection piece. **Remaining (Windows):** the live PR round trip through `gh` needs a disposable GitHub remote; plus macOS/Linux.
+  - ◐ M1-04 — commit, push with an explicit refspec, idempotent PR through `gh`, **Fetch** and **Pull latest** as `--ff-only`. **Windows ☑ on 26/09/2026** ([campaign](evidence/2026-09-26-m1-closure/README.md)): commit, push (`refs/heads/master` on a bare remote), Fetch of a remote advance and **Pull latest fast-forwarding HEAD** (`60406fc4 → 8a15aaa8`) proved in the real webview with git-verified outcomes; a forbidden remote surfaces a clean actionable error (`Repository not found`); and the **live PR round trip** ([`m1-04-pr-roundtrip.json`](evidence/2026-09-26-m1-closure/m1-04-pr-roundtrip.json)) — the Ship panel pushed a branch to a disposable private GitHub repo, opened the PR through the real form ([m1-qualif-pr#1](https://github.com/EtienneLescot/m1-qualif-pr/pull/1), closed after the run), `gh` confirmed it independently, and a second click reported **"Existing pull request"** (the idempotent path). **Remaining:** macOS/Linux only.
   - *Note:* these four tickets are **Git/OS-agnostic** in their logic, but no native proof exists outside Windows — the macOS/Linux column reflects that absence, not a code defect.
 
 - ◐ **M1-05 — Open and use a terminal in the project** *(Global: —)*
