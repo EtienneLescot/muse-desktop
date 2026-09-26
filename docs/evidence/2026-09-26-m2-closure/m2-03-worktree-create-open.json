@@ -1,0 +1,33 @@
+{
+  "schema": "muse-desktop.m2-03-worktree-create-open.v1",
+  "date": "2026-09-26",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "steps": {
+    "project-picked": {
+      "picked": true,
+      "via": "details-picker"
+    },
+    "worktree-checked": {
+      "checked": true
+    },
+    "workspace-path": {
+      "workspaceShown": "G:\\repos\\m1-qualification\\.muse\\worktrees\\m1-qualification-xcgyr"
+    },
+    "first-turn-done": {
+      "done": true
+    },
+    "git-acceptance": {
+      "branchInWorktree": "muse/m1-qualification-xcgyr",
+      "worktreeList": [
+        "G:/repos/m1-qualification                                         86b4795 [master]",
+        "G:/repos/m1-qualification/.muse/worktrees/m1-qualification-xcgyr  86b4795 [muse/m1-qualifi"
+      ]
+    }
+  },
+  "verdict": {
+    "conversationStartedInWorktree": true,
+    "gitAnnouncesMuseBranch": true,
+    "turnRanInWorktree": true,
+    "all": true
+  }
+}
