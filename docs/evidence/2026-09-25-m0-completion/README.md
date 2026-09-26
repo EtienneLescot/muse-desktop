@@ -1,7 +1,7 @@
 # M0 completion campaign — native Windows replay (25–26 September 2026)
 
 **Platform:** Windows 11 (build 26200) · native Tauri app (`http://tauri.localhost/`, WebView2,
-CDP 9222) · frontend embedded in `src-tauri	arget\debug\muse-desktop.exe` (`npm run build` +
+CDP 9222) · frontend embedded in `src-tauri\target\debug\muse-desktop.exe` (`npm run build` +
 `cargo build` at commit `97f9eb1` + the M0-08 fix below) · real Muse sidecar 1.3.0
 (`muse-x86_64-pc-windows-msvc.exe`, 415 MB) · live model turns on every scenario that needed one.
 
@@ -15,8 +15,7 @@ screen reader, no clean machine) — nothing was raised on those columns.
 |---|---|---|
 | **M0-02** | draft typed without sending → `taskkill /F /PID` → relaunch → reopen conversation | **PASS** — `muse-desktop.draft.<id>` survived in **localStorage** (the sessionStorage key died with the webview); the composer restored the exact draft `M0-02-DRAFT-DOIT-SURVIVRE-AU-KILL-25SEP`. The last open Windows piece of M0-02 is closed. |
 | **M0-04** | live turn → Stop → follow-up turn (`cdp-stop-terminal-run1.json`) | **PASS** — `turnId` observed on the wire, `cancel_session` carried it (2/2 calls), `Stopping…` resolved in **1 023 ms**, immediate follow-up accepted. Stop-button title now reads "Stop the current turn" (label defect closed; harness keeps the old title as fallback). |
-| **M0-01 / M0-14** | two **fresh** sessions, two workspaces, concurrent live turns (`m0-01-ab-fresh-sessions.json`) | **PASS** — A (project `muse-desktop`, `C:\…\muse-desktop`) completed "ISOLATED" at 23:54:54 while B (`G:
-epos\openscreen`) was still running; B completed "BETA"; transcripts intact, no stale, no cross-talk. The interface-side remaining criterion is met; the **packaged** webview repetition is still open. |
+| **M0-01 / M0-14** | two **fresh** sessions, two workspaces, live turns in each (`m0-01-ab-fresh-sessions.json`) | **PASS, one corrected claim** — A (project `muse-desktop`, `C:\…\muse-desktop`) completed "ISOLATED" at 23:54:54; B (`G:\repos\openscreen`) started at 23:55:28 and completed "BETA"; transcripts intact, no stale, no cross-talk. Correction (review): in this dev run A completed **before** B started, so the two turns did not overlap here — the concurrent-completion proof is the **packaged** repetition below; the record's verdict was corrected accordingly. |
 | **M0-06** | posture YOLO → Ask → on-my-behalf via the picker; fetch-hook wire trace; `taskkill /F` + relaunch (`m0-06-posture.json`) | **PASS** (both first criteria natively) — `set_approval_mode:ask` propagated to **all 10 connected sessions without restart**; posture persisted across the kill (`ask` + "Ask for approval"). The refused/stale decision replay stays open (host ceiling `promptUnmatched`, see M0-05). |
 | **M0-07** | `/definitelynotaskill …` sent to a live host (`cdp-unknown-skill-reject-run1.json`) | **PASS** — structured, actionable engine error in the transcript ("unknown skill /definitelynotaskill … install or enable it first"), composer text preserved, no crash, no raw wire dump. |
 | **M0-09** | corruption sweep over **9 persistence keys** (`m0-09-corruption-sweep.json`) | **PASS with one documented limit** — app never crashed; `projects.v1` corrupted value **never overwritten** (fix holds); `sessions.v1` rebuilt from the host's durable history; `schedule-runs.v1` rebuilt from the native ledger; Settings rendered "Local data needs attention / Corrupted data (…)" natively. Limit: localStorage-only join tables (`thread-projects.v1`, `connectors.v1`, `memory.v1`) reset to `[]` on the first post-boot mutation — the one real (small) loss, now documented. |
@@ -57,7 +56,7 @@ scenarios were re-driven through CDP in the **installed** app:
 |---|---|
 | **M0-04 stop** (`cdp-stop-terminal-packaged-run5.json`) | PASS — single `cancel_session` carrying the correct `turnId`, `Stopping…` resolved in **1 009 ms**, immediate follow-up accepted, Stop title "Stop the current turn". |
 | **M0-01 / M0-14 A/B** (`cdp-ab-projects-packaged-run3.json`) | PASS — turn A started in project `muse-desktop` (second host), turn B concurrently in openscreen; A completed "ISOLATED" while B ran; B completed "BETA"; isolation intact. |
-| **M0-11 labels** (`cdp-language-audit-packaged-run2.json`) | PASS — chrome English on 7 surfaces; French hits are user content / heuristic false positives ("plus" in English copy). |
+| **M0-11 labels** (`cdp-language-audit-packaged-run2.json`) | PASS on 6 of 7 surfaces — chrome English on home, new conversation, automations, extensions, library, search; French hits are user content / heuristic false positives ("plus" in English copy). The 7th surface (an **opened conversation**) was not reached: the harness recorded `conversation-NOT-OPENED` (`back.opened: false`), so systematic packaged conversation-audit coverage stays open — packaged conversation chrome is nevertheless evidenced English by the stop and A/B runs on the same install ("Muse is working", "Enter to send", Stop title "Stop the current turn"). |
 | **M0-07 engine error** (`cdp-unknown-skill-reject-packaged-run1.json`) | PASS — `/definitelynotaskill` rejected with the structured, actionable copy; composer text preserved; no outbox residue. |
 
 Two methodological traps recorded so they are not repeated:
@@ -107,13 +106,17 @@ the status rules in the roadmap apply unchanged.
 ## What still blocks full M0 closure (honest list)
 
 1. **macOS / Linux native proofs for every M0 ticket** — no machine here runs WKWebView/WebKitGTK; those columns cannot move from this repository alone.
-2. **M0-01**: the packaged (release/NSIS) webview repetition of the A/B scenario — dev build only today.
-3. **M0-04**: the strict "stop during a parent-turn tool" variant — unreachable on host 1.3.0 (tool work offloaded to sub-agents; shell tool sandbox-blocked), unchanged from 27/09.
-4. **M0-05**: the approval stale-race — host-blocked (no approval card provokable), unchanged.
-5. **M0-06**: the refused/stale posture decision — same host ceiling.
-6. **M0-08**: the engine-version matrix (older hosts) — only 1.3.0 exists here.
-7. **M0-10**: a genuinely clean machine and a real first-launch authentication path.
-8. **M0-12**: a real screen reader (NVDA/JAWS), plus macOS/Linux contrast and keyboard passes.
+2. **M0-05**: the approval stale-race — host-blocked (no approval card provokable), unchanged.
+3. **M0-06**: the refused/stale posture decision — same host ceiling.
+4. **M0-08**: the engine-version matrix (older hosts) — only 1.3.0 exists here.
+5. **M0-10**: a genuinely clean machine and a real first-launch authentication path.
+6. **M0-12**: a real screen reader (NVDA/JAWS), plus macOS/Linux contrast and keyboard passes.
+
+(Removed on review, 26/09: the M0-01 packaged A/B repetition and the M0-04 strict
+tool-during-tool variant previously listed here — both were in fact proved on
+26/09, the latter via the elevated sandbox posture
+([m0-04-strict-tool-stop.json](m0-04-strict-tool-stop.json)); the entries were
+stale.)
 
 ## Reproducibility
 

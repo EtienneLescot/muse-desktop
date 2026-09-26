@@ -56,11 +56,20 @@ safety model.
 
 ## Filing checklist (Étienne)
 
-- [ ] **Designate the channel.** Verified 26/09/2026: there is **no public
-      official Muse Code / muse-spark issue tracker** — Meta's developer
-      surface is [dev.meta.ai](https://dev.meta.ai/resources/blog/build-with-muse-code)
-      (blog + resources), so filing goes through the internal/support channel
-      you use with the Muse team. The drafts assume GitHub-flavoured Markdown.
+- [ ] **Designate the channel.** Update 26/09 (on review): a **public Muse Code
+      SDK tracker exists** — [meta-models/muse-code-sdk](https://github.com/meta-models/muse-code-sdk/issues)
+      (MIT, README "Support": *bugs in the SDK, in the protocol declarations and
+      in the documentation all belong here, as do questions about how to use any
+      of it*; issues are triaged internally and fixes are published in the next
+      SDK release). There is no separate public tracker dedicated to the muse
+      host binary itself, and this repo's README scope does not name host
+      reports explicitly — so either file the two drafts below there as the
+      de-facto public Muse Code surface (they are host reports: 1.3.0 approval
+      ceiling, model shell tool under the Windows sandbox), or route them
+      through the internal/support channel you use with the Muse team. Both
+      drafts assume GitHub-flavoured Markdown.
 - [ ] Paste each file as one issue; keep the repro tables.
 - [ ] Link the fix observation once available so the desktop client can re-run
-      the two blocked qualification variants (M0-04 strict, M0-05 stale race).
+      the blocked qualification variants: the M0-05 stale race, and a
+      **sandboxed-posture** re-proof of M0-04's stop-during-tool (proved on
+      26/09 only under `--disable-sandbox`).

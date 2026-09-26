@@ -136,6 +136,16 @@
   background: var(--surface);
   flex: none;
 }
+/* M0-08: the connection failure reason, rendered as persistent text (the
+   connection pill's title attribute is hover-only). */
+.connection-notice {
+  padding: 9px 26px;
+  font-size: 11px;
+  color: var(--danger);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  flex: none;
+}
 /* M0-03: retryable outgoing message (durable outbox entry). */
 .pending-send {
   display: flex;
@@ -429,6 +439,12 @@
   font-size: 11px;
   border: 0;
   background: var(--bg);
+}
+/* M0-02: shown when the durable draft write fails (quota, storage down) —
+   editing stays available but the draft is no longer crash-safe. */
+.composer-draft-warning {
+  font-size: 11px;
+  color: var(--warning, #d89024);
 }
 .work-panel {
   width: 40%;

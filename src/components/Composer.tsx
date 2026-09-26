@@ -184,8 +184,13 @@ export function Composer({
   // typed without sending. Writes stay per keystroke (no debounce): the kill
   // can come at any moment and small strings are cheap to persist.
   const [text, setText] = useState(() => readStorageString(draftStorageKey) ?? "");
+  const [draftNotDurable, setDraftNotDurable] = useState(false);
   useEffect(() => {
-    writeStorageString(draftStorageKey, text);
+    // M0-02: per-keystroke durable writes. A failed write (quota, storage
+    // unavailable) must be visible — the draft would silently stop surviving
+    // a restart while editing keeps working.
+    const saved = writeStorageString(draftStorageKey, text);
+    setDraftNotDurable(!saved && text.length > 0);
   }, [draftStorageKey, text]);
   const [caret, setCaret] = useState(0);
   const [selIndex, setSelIndex] = useState(0);
@@ -964,6 +969,11 @@ export function Composer({
           )}
           {attachmentError !== null && (
             <div className="attachment-error" role="alert">{attachmentError}</div>
+          )}
+          {draftNotDurable && (
+            <div className="composer-draft-warning" role="status">
+              This draft could not be saved to local storage and will be lost if the app closes.
+            </div>
           )}
           {attachmentRecovery && attachments.some((attachment) => attachment.missing === true) && attachmentError === null && (
             <div className="attachment-recovery" role="status">

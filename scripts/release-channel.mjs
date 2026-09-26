@@ -61,6 +61,11 @@ function checkedManifest(manifest, version, target) {
   if (checkedVersion(manifest.version) !== version || checkedText(manifest.target, "target") !== target) {
     throw new Error("release manifest does not match its channel entry");
   }
+  // Same rule as the builder: a Windows release bundles the engine, so a
+  // channel cannot hand out a digest-less (engine-less) Windows manifest.
+  if (/windows/.test(target) && manifest.sidecar === null) {
+    throw new Error("a Windows release manifest must carry a sidecar digest");
+  }
   const checked = {
     schema: manifest.schema,
     product: manifest.product,
