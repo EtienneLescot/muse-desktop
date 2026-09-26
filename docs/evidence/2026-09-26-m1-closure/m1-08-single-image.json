@@ -1,0 +1,22 @@
+{
+  "schema": "muse-desktop.m1-08-single-image.v1",
+  "date": "2026-09-26",
+  "steps": {
+    "chip": {
+      "chips": 1,
+      "name": "one-red-pixel.png"
+    },
+    "turn": {
+      "done": true,
+      "tail": "026 11:54:17\r\nmuse-shell-sandbox-ddbe7f87-a3d6-491e-a797-58e43d18ea5e 26/09/2026 11:47:58\n\n12:01:44\nMuse\n\ngrey\n\n12:01:48\n＋\nAttach\nVoice\nAsk for approval\n✦\nEffort\nHigh\nmuse-spark-1.3-contributor\n5%\n↑\n\nEnter to send · Shift + Enter for a new line · @ for context"
+    },
+    "rendered": {
+      "imgElements": 0
+    },
+    "answer": "Muse grey 12:01:48"
+  },
+  "verdict": {
+    "imageRodeLiveTurn": true,
+    "modelAnswered": true
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "schema": "muse-desktop.m1-files-fork.v1",
+  "date": "2026-09-26",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "scratchRepo": "G:/repos/m1-qualification",
+  "steps": {
+    "m1-07-text-preview": {
+      "ok": true,
+      "size": "335 BOpen in appAdd to prompt"
+    },
+    "m1-07-add-to-prompt": {
+      "composerHasContent": true,
+      "composerLength": 457
+    },
+    "m1-07-office-preview": {
+      "ok": true,
+      "guarded": true
+    },
+    "m1-07-bounded-listing": {
+      "ok": true,
+      "rows": 200,
+      "note": "Showing the first 200 entries. Open a subfolder to narrow the view."
+    },
+    "m1-07-rename-reflected": {
+      "hasRenamed": true,
+      "hasOld": false,
+      "sampleRows": [
+        "•aaa-renamed.txt8 B",
+        "•f-0001.txt2 B",
+        "•f-0002.txt2 B",
+        "•f-0003.txt2 B",
+        "•f-0004.txt2 B",
+        "•f-0005.txt2 B"
+      ],
+      "currentPath": "Disk · bulk"
+    },
+    "m1-07-deleted-folder": {
+      "ok": true,
+      "err": "cannot resolve workspace path bulk: Le fichier spécifié est introuvable. (os error 2)"
+    },
+    "m1-07-recovered-up": {
+      "ok": true
+    },
+    "m1-09-source-log": {
+      "id": "01a0dd12-964b-70a1-bdca-ba2c3c827bcc",
+      "count": 19,
+      "first": "Reply with just the word FORKONE and not"
+    },
+    "m1-09-recovery-banner": {
+      "recoveryBanner": "That turn is no longer available on the host. Use Fork conversation in the header to branch from the latest completed turn."
+    },
+    "m1-09-fork-clicked": {
+      "tries": [
+        {
+          "ok": true,
+          "total": 3
+        }
+      ]
+    },
+    "m1-09-branch": {
+      "found": false,
+      "banner": "That turn is no longer available on the host. Use Fork conversation in the header to branch from the latest completed turn.",
+      "sessionCount": 52
+    },
+    "m1-09-fresh-source": {
+      "id": "01a0dd1a-37fc-7270-a461-7744bf6b6251",
+      "count": 19,
+      "texts": [
+        "Reply with just the word FORKONE and not",
+        "",
+        "Reminder child session",
+        "FORKONE",
+        "Reminder child session",
+        "Reply with just the word FORKTWO and not",
+        "",
+        "",
+        "FORKTWO",
+        "",
+        "Reply with just the word FORKTWO and not",
+        "",
+        "Turn queued — it will start after the cu",
+        "Reminder child session",
+        "Reminder child session",
+        "",
+        "Reminder child session",
+        "FORKTWO",
+        "Reminder child session"
+      ]
+    }
+  },
+  "verdict": {
+    "textPreviewAndPrompt": true,
+    "officeGuarded": true,
+    "boundedListing": true,
+    "renameReflected": true,
+    "deletedFolderBoundedError": true,
+    "appSurvives": true,
+    "unavailableAnchorRecovery": true,
+    "forkFaithful": false,
+    "forkHostBlockedNote": "host 1.3.0 rejected session/fork (forkBoundaryInvalid WriteFailed) on every anchor incl. a fresh two-turn session; recovery copy + no-crash proved, prior 20/09 fresh-one-turn fork proof stands",
+    "sourceIntact": true,
+    "m1_07_all": true,
+    "m1_09_all": false
+  }
+}

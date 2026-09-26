@@ -1,0 +1,15 @@
+{
+  "schema": "muse-desktop.m1-11-context-trigger.v1",
+  "date": "2026-09-26",
+  "steps": {
+    "typedChars": 28757,
+    "turnSettled": true,
+    "contextMeter": {
+      "present": true,
+      "trigger": "Context 6% used. Open context details"
+    }
+  },
+  "verdict": {
+    "contextUsageEmitted": true
+  }
+}

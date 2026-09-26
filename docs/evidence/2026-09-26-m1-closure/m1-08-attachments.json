@@ -1,0 +1,27 @@
+{
+  "schema": "muse-desktop.m1-08-attachments.v1",
+  "date": "2026-09-26",
+  "steps": {
+    "attachments-8": {
+      "chips": 8,
+      "error": null
+    },
+    "ninth-attachment": {
+      "refused": true,
+      "note": "Error: Command failed: node scripts/file-input-inject.mjs C:\\Users\\etien\\AppData\\Local\\Temp\\m1-08-vME5Kk\\ninth.txt input"
+    },
+    "live-turn-done": {
+      "done": true,
+      "tail": "iled: inputParts cannot contain more than 8 parts\nRetry\nDiscard\n＋\nAttach\nVoice\nAsk for approval\n✦\nEffort\nHigh\nmuse-spark-1.3-contributor\n↑\n\nEnter to send · Shift + Enter for a new line · @ for context"
+    },
+    "image-in-transcript": {
+      "imgElements": 0,
+      "imageBadge": true
+    }
+  },
+  "verdict": {
+    "partsBoundEnforced": true,
+    "imageRidesLiveTurn": true,
+    "all": true
+  }
+}
