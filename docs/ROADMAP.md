@@ -150,11 +150,11 @@ The remaining criteria and their precise limits are listed in each document unde
 | State | Total | Breakdown |
 |---|---|---|
 | ☐ Not started | **1** | M4-06 |
-| ◐ Started | **35** | everything else |
-| ☑ Done | **17** | **M0**: M0-01, M0-02, M0-03, M0-04, M0-09, M0-11 · **M1**: M1-01, M1-02, M1-03, M1-04, M1-05, M1-06, M1-07, M1-08, M1-10, M1-11 · M1-12 |
+| ◐ Started | **32** | everything else |
+| ☑ Done | **20** | **M0**: M0-01, M0-02, M0-03, M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02, M2-03, M2-07 |
 | **Total** | **53** | |
 
-Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Seventeen tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign) and 26/09 (M1 campaign, including the whole git delivery chain M1-01→04); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13).
+Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Twenty tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign), 26/09 (M1 campaign, including the whole git delivery chain M1-01→04, and the first M2 tickets: postures, worktree create & open, sub-agent fan-out with parent resume); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13).
 
 ### By platform
 
@@ -162,14 +162,14 @@ The 53 tickets fall into three groups, counted from the tables below.
 
 | Group | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
-| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 21 | 12 |
-| **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 14 | 4 |
+| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 20 | 13 |
+| **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 12 | 6 |
 | **C** — M1-12, closed and identical on all three OSes | 1 | 0 | 0 | 1 |
-| **Total** | **53** | **1** | **35** | **17** |
+| **Total** | **53** | **1** | **32** | **20** |
 
-Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer. (Since 26/09/2026: M0-01, M1-06, M1-10 and M1-11 are ☑ on Windows — every Windows-reachable criterion of those tickets is proved; the other 14 stay ◐ on Windows.)
+Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer. (Since 26/09/2026: M0-01, M1-06, M1-10, M1-11, M2-02 and M2-07 are ☑ on Windows — every Windows-reachable criterion of those tickets is proved; the other 12 stay ◐ on Windows.)
 
-Exact breakdown of the 18 group B tickets (since 26/09/2026: 4 are ☑ on Windows — M0-01, M1-06, M1-10, M1-11 — the other 14 ◐; all ☐ on macOS and Linux):
+Exact breakdown of the 18 group B tickets (since 26/09/2026: 6 are ☑ on Windows — M0-01, M1-06, M1-10, M1-11, M2-02, M2-07 — the other 12 ◐; all ☐ on macOS and Linux):
 
 - **M0** (5): M0-01, M0-05, M0-06, M0-08, M0-10
 - **M1** (4): M1-06, M1-09, M1-10, M1-11
@@ -373,12 +373,12 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 | ID | Expected result | Global | Windows | macOS | Linux |
 |---|---|---|---|---|---|
 | M2-01 | A project represents persistent folders | — | ◐ | ☐ | ◐ |
-| M2-02 | Project settings really apply | — | ◐ | ☐ | ☐ |
-| M2-03 | Create a worktree automatically | — | ◐ | ◐ | ◐ |
+| M2-02 | Project settings really apply | ☑ | ☑ | ☐ | ☐ |
+| M2-03 | Create a worktree automatically | ☑ | ☑ | ◐ | ◐ |
 | M2-04 | Prepare the worktree's environment | — | ◐ | ☐ | ◐ |
 | M2-05 | Move from Local to Worktree and back | — | ◐ | ☐ | ☐ |
 | M2-06 | Clean up worktrees without deleting work | — | ◐ | ◐ | ◐ |
-| M2-07 | Drive the real sub-agents | — | ◐ | ☐ | ☐ |
+| M2-07 | Drive the real sub-agents | ☑ | ☑ | ☐ | ☐ |
 | M2-08 | Run several writers without collision | — | ◐ | ☐ | ◐ |
 
 ### Detail
@@ -393,13 +393,13 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 
 - ◐ **M2-02 — Project settings really apply** *(Global: —)*
   - Windows ◐ — global/project inheritance through `settingsForThread` with a visible source (`g:`), effective model applied after `session/start`, `autoCompact` honoured, and above all **sandbox projection when the host starts**: `workspace` → `--sandbox-network restricted`, `network` → `--sandbox-network enabled`, `elevated` → `--disable-sandbox --sandbox-network enabled`, a `read-only` project → `--disable-write --disable-shell`. A host already running explicitly refuses a different posture and asks for **Restart workspace host**.
-  - **Remaining:** native qualification of two projects with different postures and durable reconnection after a restart. The host provides no sandbox mutation over MSP — any switch requires a process restart.
+  - **Remaining:** native qualification of two projects with different postures and durable reconnection after a restart. The host provides no sandbox mutation over MSP — any switch requires a process restart. **→ Windows ☑ on 26/09/2026** ([`m2-02-postures.json`](evidence/2026-09-26-m2-closure/m2-02-postures.json)): the posture switch + **Restart workspace host** respawns the host with the right flags (`workspace` → `--sandbox-network restricted`), and **two projects run two different postures simultaneously** (restricted beside `enabled`, read from the live process command lines). The refusal ("workspace host already uses sandbox posture…"), the elevated projection and the kill-durability are proved in the M0 records ([`m0-04-strict-tool-stop.json`](evidence/2026-09-25-m0-completion/m0-04-strict-tool-stop.json) `finding_context`, [`m0-06-posture.json`](evidence/2026-09-25-m0-completion/m0-06-posture.json)) and cross-referenced in the evidence file.
   - macOS ☐ / Linux ☐ — not started.
 
 - ◐ **M2-03 — Create a worktree automatically** *(Global: —)*
   - Windows ◐ / macOS ◐ / Linux ◐ — `git_worktree_create(sessionId, branch, relativePath, baseRef)` confined to `.muse/worktrees/`, `git worktree add -b` off the UI thread, refusal of existing paths / option-shaped references / traversals, atomic **Create & open** action with admission rollback. Git is identical on all three OSes, but **no native proof** exists outside Windows.
   - **Qualification 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)): the mechanism is a **full PASS** (`ux-start-worktree.mjs`: creation, `muse/…` branch, `HEAD` base, refusal "worktree path must be relative and stay inside .muse/worktrees", rollback). **Wiring defect measured on the thread:** the "Create a new worktree" checkbox creates the worktree (`git_worktree_create_for_workspace` → `…\.muse\worktrees\openscreen-rn3d0`) but **the conversation starts in the main repository** — `start_session` receives `workspacePath: G:\repos\openscreen` and `git_status` announces `branch: "pr620"`, never `muse/openscreen-rn3d0`. The `path` returned is not passed to `start_session`: "Create & open" does not open. **→ FIX implemented on 25/09/2026** (`97f9eb1`): root cause was the welcome-screen flow calling the no-argument `startSession()` when no project was selected, discarding the worktree path; the flow now always starts in `startFolder` when a worktree exists (project settings attached only when a project is chosen). The in-app replay (`git_status` must announce `muse/…`) remains.
-  - **Remaining:** native qualification and failures after admission.
+  - **Remaining:** native qualification and failures after admission. **→ Windows ☑ on 26/09/2026** ([`m2-03-worktree-create-open.json`](evidence/2026-09-26-m2-closure/m2-03-worktree-create-open.json)): the in-app replay passes — with the Worktree switch on, the conversation **starts inside the fresh worktree** (header workspace `.muse\worktrees\m1-qualification-xcgyr`), git announces the `muse/m1-qualification-xcgyr` branch (`git worktree list` confirms the attachment), and the first live turn answers in it. The refusals and rollback were proved on 27/09 (`ux-start-worktree.mjs`). Every Windows-reachable criterion is closed; macOS/Linux stay ◐ (git is identical, proof missing there).
 
 - ◐ **M2-04 — Prepare the worktree's environment** *(Global: —)*
   - Windows ◐ / Linux ◐ — persistent per-workspace profiles, a user command bounded to 2,000 characters run only after **Run setup**, states `ready`/`failed`/`timedOut`/`cancelled`, targeted native cancellation, a runner refusing folders outside `.muse/worktrees` and killing past ten minutes, **Check readiness** detecting `package.json`/`Cargo.toml`/`pyproject.toml`/`go.mod`.
@@ -419,7 +419,7 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 - ◐ **M2-07 — Drive the real sub-agents** *(Global: —)*
   - **Qualification 27/09/2026 (concurrency):** two **simultaneous** `subagent-running` lanes observed live (`e8af2a61` + `47a01e3d`), but **controlled reproduction out of the model's reach** — muse-spark serialises its delegation despite an order to overlap (20 samples / 30 s: `maxConcurrentRunning=1`); clean multi-thread reproduction remains ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)). **→ CONCURRENCY PROVED afterwards (run2):** 3 simultaneous `running` lanes in one thread + 2 `running` lanes in a second thread at the same time — the app renders, follows and controls several children in parallel, across threads and within a thread.
   - Windows ◐ — host states normalised and visible, `item/updated` snapshots replaced by revision in the sub-agent lane, controls bounded by lifecycle.
-  - **Remaining:** native qualification on live agents and interleaved terminal events. **Pieces measured on 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)): the host publishes real **`childSessionId`** items (child sessions created by the model) and the UI renders **sub-agent lanes with stop buttons** (`title="subagent/stop"`, captured in the `cdp-stop-terminal` runs) — the full fan-out scenario with parent resume remains.
+  - **Remaining:** native qualification on live agents and interleaved terminal events. **→ Windows ☑ on 26/09/2026** ([`m2-07-subagent-fanout.json`](evidence/2026-09-26-m2-closure/m2-07-subagent-fanout.json)): the full fan-out scenario with **parent resume** — a live delegation turn spawns controllable lanes, a lane is **stopped through its own `subagent/stop` control**, switching away and back resumes the parent with the lane history intact (terminal states preserved, nothing re-runs); concurrency was proved on 27/09 (3+2 simultaneous lanes across two threads, `m2-worktrees.md` run2). Distinction recorded: muse-spark mostly delegates through host-internal reminder children (no `subagent/*` identity, no controls by design); controllable lanes appear on explicit delegation orders. macOS/Linux stay ☐. **Pieces measured on 27/09/2026** ([`m2-worktrees.md`](evidence/2026-09-27-qualif-native/m2-worktrees.md)): the host publishes real **`childSessionId`** items (child sessions created by the model) and the UI renders **sub-agent lanes with stop buttons** (`title="subagent/stop"`, captured in the `cdp-stop-terminal` runs).
   - macOS ☐ / Linux ☐ — not started.
 
 - ◐ **M2-08 — Run several writers without collision** *(Global: —)*
