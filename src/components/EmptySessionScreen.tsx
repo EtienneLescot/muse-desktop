@@ -15,6 +15,7 @@ import { userFacingError } from "../lib/errorCopy";
 import { displayPath } from "../lib/paths";
 import {
   buildTurnInputParts,
+  maxAttachmentsFor,
   MAX_ATTACHMENTS,
   readAttachment,
   type ComposerAttachment,
@@ -149,9 +150,13 @@ export function EmptySessionScreen({
     const incoming = Array.from(files);
     if (incoming.length === 0) return;
     setAttachmentError(null);
-    const room = Math.max(0, MAX_ATTACHMENTS - attachments.length);
+    // The wire counts the draft text as one part: the file cap shrinks while
+    // the first message is non-empty so an accepted send always clears the
+    // Rust parts validation (measured 26/09: 8 files + text was refused).
+    const limit = maxAttachmentsFor(draft.trim().length > 0);
+    const room = Math.max(0, limit - attachments.length);
     if (room === 0) {
-      setAttachmentError(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+      setAttachmentError(`You can attach up to ${limit} files with a written message (${MAX_ATTACHMENTS} without).`);
       return;
     }
     const next: ComposerAttachment[] = [];
@@ -164,7 +169,7 @@ export function EmptySessionScreen({
         failures.push(`${file.name}: ${userFacingError(error, "This attachment could not be read.")}`);
       }
     }
-    if (next.length > 0) setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
+    if (next.length > 0) setAttachments((current) => [...current, ...next].slice(0, limit));
     if (failures.length > 0) setAttachmentError(failures.join(" · "));
   }
 
@@ -363,7 +368,7 @@ export function EmptySessionScreen({
               type="file"
               accept="image/*,text/*,.md,.mdx,.ts,.tsx,.js,.jsx,.json,.css,.html,.rs,.py,.go,.java,.sh,.yaml,.yml,.toml"
               multiple
-              disabled={backendMissing || starting || attachments.length >= MAX_ATTACHMENTS}
+              disabled={backendMissing || starting || attachments.length >= maxAttachmentsFor(draft.trim().length > 0)}
               onChange={(event) => {
                 const files = event.currentTarget.files ?? [];
                 const replacementId = replaceAttachmentId.current;

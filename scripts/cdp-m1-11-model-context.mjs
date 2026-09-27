@@ -134,15 +134,16 @@ const ensureTurnDone = async () => {
   await sleep(150);
   await evaluate(`document.querySelector('button[aria-label="Send message"]')?.click()`);
   const deadline = Date.now() + 120_000;
+  let sawRunning = false;
   while (Date.now() < deadline) {
     await sleep(3000);
-    const done = await evaluate(`(() => {
-      const dot = document.querySelector(".session-view .task-metadata .dot");
-      return dot?.getAttribute("data-running") !== "true";
-    })()`);
-    if (done) return;
+    const running = await evaluate(`(() =>
+      document.querySelector(".session-view .task-metadata .dot")?.getAttribute("data-running") === "true")()`);
+    if (running) sawRunning = true;
+    // a run that never started must not read as settled
+    if (sawRunning && !running) return;
   }
-  throw new Error("turn did not settle in 120s");
+  throw new Error("turn did not run and settle in 120s");
 };
 
 // --- conversation B: load it, then switch its model

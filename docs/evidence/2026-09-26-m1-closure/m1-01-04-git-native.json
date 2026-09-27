@@ -118,5 +118,8 @@
     "pullLatestFfOnly": true,
     "remoteRejectionClean": true,
     "all": true
+  },
+  "correction": {
+    "note": "review correction (CodeRabbit, 27/09): the m1-02-comment-sent wait accepted three signals (sent flag, error element, dot running). The recorded sent:false + ok:true means the DOT TURNED RUNNING — the comment turn genuinely started and settled (the subsequent turn-done wait passed); an error element alone would now END the wait without counting as success (harness fixed to record turnStarted explicitly)."
   }
 }

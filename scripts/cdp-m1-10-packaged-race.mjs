@@ -87,14 +87,14 @@ while (Date.now() < settleDeadline) {
   report.steps.settled = await state();
   if (!report.steps.settled.working) break;
 }
-report.steps.settledTranscriptTail = (
+report.steps.settledTranscript = (
   await ev(`(() => (document.querySelector(".session-center")?.innerText ?? "").slice(-400))()`)
 ).replace(/\n/g, "|");
 // verdicts: the queue emptied while the first turn still ran; the removed
 // turns' replies (ALPHA/BETA answers) never appear even after settling
 report.verdict.queueEmptiedWhileFirstStillRunning =
   report.steps.afterRace.queueRows === 0 && report.steps.afterRace.working === true;
-const tail = report.steps.settledTranscriptTail;
+const tail = report.steps.settledTranscript;
 report.verdict.removedTurnsNeverAnswered = !/ALPHA(?!-)/.test(tail) && !/BETA(?!-)/.test(tail);
 report.verdict.firstTurnCarriedOn = report.steps.settled.working === false && report.steps.settled.queueRows === 0;
 report.verdict.all =

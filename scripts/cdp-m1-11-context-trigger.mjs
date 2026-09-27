@@ -74,7 +74,9 @@ while (Date.now() < deadline) {
 }
 report.steps.turnSettled = done;
 report.steps.contextMeter = ctx;
-report.verdict.contextUsageEmitted = !!ctx?.present;
+// a NEW report for this turn: the meter must appear when it was absent, or
+// carry a different/refreshed reading than the pre-turn baseline
+report.verdict.contextUsageEmitted = !!ctx?.present && ctx.trigger !== report.steps.baseline;
 if (OUT) {
   mkdirSync(dirname(OUT), { recursive: true });
   writeFileSync(OUT, `${JSON.stringify(report, null, 2)}\n`);

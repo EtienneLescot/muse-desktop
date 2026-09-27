@@ -127,8 +127,13 @@ try {
   ninthRefused = after.error !== null || after.chips === 8;
   step("ninth-attachment", after);
 } catch (error) {
-  ninthRefused = true;
-  step("ninth-attachment", { refused: true, note: String(error).slice(0, 120) });
+  const after = await evaluate(`(() => ({
+    chips: document.querySelectorAll(".attachment-chips .attachment-chip").length,
+    error: document.querySelector(".attachment-error")?.textContent ?? null,
+    disabled: document.querySelector('input[type=file]')?.disabled ?? false,
+  }))()`);
+  ninthRefused = after.chips === 8 && after.disabled === true;
+  step("ninth-attachment", { ...after, refused: ninthRefused, note: String(error).slice(0, 120) });
 }
 report.verdict.partsBoundEnforced = chipState.chips === 8 && ninthRefused;
 
@@ -153,8 +158,12 @@ const imageShown = await evaluate(`(() => ({
   imageBadge: /image/i.test(document.querySelector(".session-center")?.innerText ?? ""),
 }))()`);
 step("image-in-transcript", imageShown);
+// an honest verdict for THIS record: the 8-image send is refused at the wire
+// (the parts bound), so no model answer can exist here — the true positive is
+// the single-image record (m3.. m1-08-single-image.json: model answered
+// "grey"). Done alone, or transcript-wide /image/i text, must not qualify.
 report.verdict.imageRidesLiveTurn =
-  done && (imageShown.imgElements > 0 || imageShown.imageBadge);
+  done && imageShown.imgElements > 0 && !/failed|retry/i.test(bigTranscriptTail ?? "");
 
 rmSync(root, { recursive: true, force: true });
 socket.close();
