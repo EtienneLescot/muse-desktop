@@ -234,7 +234,7 @@ pub fn task_xml(executable: &Path, wake_at: u64) -> Result<String, String> {
         .ok_or_else(|| "scheduler wake-up time cannot be represented".to_string())?
         .to_rfc3339_opts(SecondsFormat::Secs, true);
     Ok(format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
+        r#"<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Description>Wake Muse-Desktop for a scheduled automation.</Description></RegistrationInfo>
   <Triggers><TimeTrigger><StartBoundary>{timestamp}</StartBoundary><Enabled>true</Enabled></TimeTrigger></Triggers>
@@ -293,7 +293,16 @@ pub fn sync(
         }
         let xml_path: PathBuf = data_dir.join("scheduler-wakeup.xml");
         let xml = task_xml(executable, wake_at.unwrap())?;
-        fs::write(&xml_path, xml).map_err(|error| {
+        // Task Scheduler requires the declared encoding to match the bytes.
+        // Written as plain UTF-8 on an ANSI-locale Windows (no BOM), schtasks
+        // refuses the file ("impossible de changer d'encodage") and the wake
+        // task can never register — measured 27/09 (French Windows 26200).
+        // UTF-16LE with a BOM is what Windows tooling produces.
+        let mut bytes = vec![0xFF, 0xFE];
+        for unit in xml.encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        fs::write(&xml_path, bytes).map_err(|error| {
             format!("scheduler wake-up definition could not be written: {error}")
         })?;
         let path_text = xml_path

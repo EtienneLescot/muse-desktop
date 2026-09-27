@@ -1,0 +1,24 @@
+{
+  "schema": "muse-desktop.m3-06-thread-reuse.v1",
+  "date": "2026-09-27",
+  "steps": {
+    "targetOpened": {
+      "title": "Write a very long, detailed 3000-word science fiction story. Do not stop early; write the full length.",
+      "id": "01a0da8f"
+    },
+    "targetLoaded": true,
+    "targetSelected": {
+      "ok": true,
+      "title": "Write a very long, detailed 3000-word sc"
+    },
+    "captured": {
+      "workspace": "G:\\repos\\openscreen",
+      "projectId": null
+    },
+    "runNowClicked": true,
+    "ledgerRow": null
+  },
+  "verdict": {
+    "threadReuseFreeSucceeds": false
+  }
+}
