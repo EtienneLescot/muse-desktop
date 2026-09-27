@@ -6379,7 +6379,15 @@ export function useMuseSessions(): UseMuseSessions {
       if (run) setScheduleRuns((cur) => markRunStarted(cur, run.id, Date.now(), sessionId));
       try {
         await applyCapturedContext(sessionId);
-        const result = await sendInput(sessionId, item.instructions);
+        let result = await sendInput(sessionId, item.instructions);
+        // M3-06/07: a persisted conversation the host has not loaded answers
+        // `sessionNotLoaded` ("start or restore the conversation first") — the
+        // same recovery the composer's Reconnect uses. Resume silently and
+        // retry the dispatch once before failing the run.
+        if (!result.ok && /restore the conversation|notLoaded|sessionNotLoaded/i.test(result.error ?? "")) {
+          await reconnectSession(sessionId, { silent: true });
+          result = await sendInput(sessionId, item.instructions);
+        }
         if (result.ok) {
           // `send_input` only acknowledges admission. The run remains
           // running until the host emits a stopped turn status, where the
@@ -6399,7 +6407,7 @@ export function useMuseSessions(): UseMuseSessions {
         return false;
       }
     },
-    [activeId, authorizationMode, globalSettings, projects, sendInput, sessions, setSessionModel, startSessionRow, threadProjects],
+    [activeId, authorizationMode, globalSettings, reconnectSession, projects, sendInput, sessions, setSessionModel, startSessionRow, threadProjects],
   );
 
   const prepareBrowserContext = useCallback(

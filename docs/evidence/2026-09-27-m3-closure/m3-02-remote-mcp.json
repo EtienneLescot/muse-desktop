@@ -1,0 +1,17 @@
+{
+  "schema": "muse-desktop.m3-02-remote-mcp.v1",
+  "date": "2026-09-27",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP)",
+  "steps": {
+    "connectClicked": "Reconnect with current connectors",
+    "result": {
+      "resultText": null,
+      "hasDeepwiki": true,
+      "error": null
+    }
+  },
+  "verdict": {
+    "remoteConnectedAndListed": true,
+    "all": true
+  }
+}

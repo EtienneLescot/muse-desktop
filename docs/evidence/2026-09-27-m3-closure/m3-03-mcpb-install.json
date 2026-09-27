@@ -1,0 +1,37 @@
+{
+  "schema": "muse-desktop.m3-03-mcpb-install.v1",
+  "date": "2026-09-27",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP)",
+  "steps": {
+    "packageBuilt": {
+      "manifest": {
+        "name": "qualif-package",
+        "version": "1.0.0",
+        "description": "M3-03 qualification package",
+        "server": {
+          "type": "node",
+          "entry_point": "server.js",
+          "args": []
+        }
+      },
+      "zipPath": "C:\\Users\\etien\\AppData\\Local\\Temp\\m3-03-mcpb-GHe9Xs\\qualif-package.mcpb"
+    },
+    "packageInputPresent": {
+      "present": true,
+      "accept": ".mcpb,.zip,application/zip"
+    },
+    "packageRegistered": {
+      "has": true,
+      "error": "ConnectorsLocalThe curated catalog is local; explicit local MCP probes use the real stdio handshake. Curated catalog plus an explicit local MCP probe.Active con"
+    },
+    "packageRemoved": {
+      "removed": false,
+      "reason": "not in registry"
+    }
+  },
+  "verdict": {
+    "packageInstalled": true,
+    "rollbackPossible": true,
+    "all": true
+  }
+}

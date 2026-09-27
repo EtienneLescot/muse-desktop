@@ -1,0 +1,23 @@
+{
+  "schema": "muse-desktop.m3-07-host-crash.v1",
+  "date": "2026-09-27",
+  "steps": {
+    "targetSelected": {
+      "ok": true
+    },
+    "runRunning": {
+      "running": true
+    },
+    "hostKilled": true,
+    "postCrashSettled": {
+      "status": "failed",
+      "error": "host exited before the scheduled turn completed",
+      "attempt": 1,
+      "nextRetryAt": null,
+      "recovery": null
+    }
+  },
+  "verdict": {
+    "hostCrashSettlesRun": true
+  }
+}

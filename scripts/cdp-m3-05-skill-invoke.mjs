@@ -40,6 +40,28 @@ await ev(`(() => {
   return !!row;
 })()`);
 await sleep(4000);
+// warm-up: after a host restart the conversation is not loaded; a plain turn
+// loads it (otherwise the skill part hits "restore the conversation first")
+await ev(`(() => {
+  const area = document.querySelector('textarea[aria-label="Message Muse"]');
+  const P = HTMLTextAreaElement.prototype;
+  Object.getOwnPropertyDescriptor(P, "value").set.call(area, "Reply with just the word WARM3 and nothing else.");
+  area.dispatchEvent(new Event("input", { bubbles: true }));
+})()`);
+await sleep(600);
+await ev(`(() => { document.querySelector('button[aria-label="Send message"]')?.click(); })()`);
+const warmDeadline = Date.now() + 180_000;
+let warmSawRunning = false;
+while (Date.now() < warmDeadline) {
+  await sleep(4000);
+  const s = await ev(`(() => ({
+    running: document.querySelector(".task-metadata .dot")?.getAttribute("data-running") === "true",
+    text: document.querySelector(".session-center")?.innerText ?? "",
+  }))()`);
+  if (s.running) warmSawRunning = true;
+  if (warmSawRunning && !s.running && s.text.includes("WARM3")) break;
+}
+report.steps.warmup = { sawRunning: warmSawRunning };
 await ev(`(() => {
   const area = document.querySelector('textarea[aria-label="Message Muse"]');
   const P = HTMLTextAreaElement.prototype;
@@ -54,7 +76,7 @@ let running = true;
 while (Date.now() < deadline) {
   await sleep(4000);
   running = await ev(`(() => document.querySelector(".task-metadata .dot")?.getAttribute("data-running") === "true" || false)()`);
-  tail = await ev(`(() => (document.querySelector(".session-center")?.innerText ?? "").slice(-400).replace(/\n+/g, " | "))()`);
+  tail = await ev(`(() => (document.querySelector(".session-center")?.innerText ?? "").slice(-400).split(String.fromCharCode(10)).join(" | "))()`);
   if (!running && tail.length > 0) break;
 }
 report.steps.turn = { running, tail: tail.slice(-300) };

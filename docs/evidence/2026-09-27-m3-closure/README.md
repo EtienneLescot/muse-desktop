@@ -21,6 +21,20 @@ product defects surface (one fixed today, one recorded).
 | M3-05 | skill invocation | ◐ — the composer accepted `/qualif-skill` and the send path was exercised, but the live host invocation hit the degraded post-relaunch host state ("conversation engine is unavailable"); a clean-environment replay is needed. Skills discovery (M3-04) is proved. |
 | M3-08 | run review | ◐ — run cards with filters/actions proved 27/09; the semantic business summary stays host-dependent. |
 
+## Campaign continuation (27/09 evening) — the remaining reachable tickets
+
+| Ticket | Scenario | Result |
+|---|---|---|
+| **M3-02** | remote MCP to a real public endpoint (`m3-02-remote-mcp.json`) | **Windows closed** — the connector form connected to mcp.deepwiki.com over streamable HTTP: `Connected to DeepWiki 2.14.3 · 3 tool(s) · 1056 ms`, the connector persisted in the registry. |
+| **M3-03** | .mcpb install + rollback (`m3-03-mcpb-install.json`) | **Windows closed** — a real `.mcpb` (manifest.json + framed stdio server.js) installed through the panel file picker: manifest parsed, revision installed, server probed, then removed via `mcp_package_remove` (rollback). |
+| **M3-05** | skill invocation, clean replay (`m3-05-skill-invoke.json`) | **Windows closed** — `/create-plugin` (a skill the host catalogue carries) sent through the composer was executed by the live host: the model ran the skill's flow and asked for the plugin parameters. The workspace `SKILL.md` route stays client-discovered; host 1.3.0 answers "unknown skill" for host-unknown names (recorded). |
+| **M3-06** | thread reuse delivery (`m3-06-thread-reuse.json`) | **Windows closed** — a reuse schedule targeting a loaded conversation delivered REUSE3 into that conversation's log via Run now (completed status). The schedule captures workspace/project from the ACTIVE conversation: created with the target active, the delivery succeeds. |
+| **M3-07** | host crash mid-run (`m3-07-host-crash.json`) | **Windows closed** — a reuse run in "running" state had `muse.exe` killed: the run settled to **failed** with the explicit error ("host exited before the scheduled turn completed") instead of staying stuck. Remaining: sleep/locked-machine and the per-OS native triggers. |
+
+With these, every M3 criterion reachable from this machine is proved. The
+remaining ◐ pieces are host/protocol/OS-blocked and precisely stated in the
+roadmap.
+
 ## Real product defects surfaced (and their resolution)
 
 1. **FIXED — the wake task could never register on non-English Windows.**

@@ -16,9 +16,13 @@
       "projectId": null
     },
     "runNowClicked": true,
-    "ledgerRow": null
+    "ledgerRow": {
+      "status": "completed",
+      "sessionId": "01a0da8f",
+      "error": ""
+    }
   },
   "verdict": {
-    "threadReuseFreeSucceeds": false
+    "threadReuseFreeSucceeds": true
   }
 }
