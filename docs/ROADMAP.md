@@ -150,11 +150,11 @@ The remaining criteria and their precise limits are listed in each document unde
 | State | Total | Breakdown |
 |---|---|---|
 | ☐ Not started | **1** | M4-06 |
-| ◐ Started | **30** | everything else |
-| ☑ Done | **22** | **M0**: M0-01, M0-02, M0-03, M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02, M2-03, M2-04, M2-06, M2-07 |
+| ◐ Started | **27** | everything else |
+| ☑ Done | **25** | **M0**: M0-01, M0-02, M0-03, M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02, M2-03, M2-04, M2-06, M2-07 · **M3**: M3-01, M3-04, M3-09 |
 | **Total** | **53** | |
 
-Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Twenty-two tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign), 26/09 (M1 campaign, including the whole git delivery chain M1-01→04) and 26/09 again for the first M2 tickets (postures, worktree create & open, environment setup, cleanup, sub-agent fan-out with parent resume); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13).
+Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Twenty-five tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign), 26/09 (M1 campaign, including the whole git delivery chain M1-01→04) and 26/09 again for the first M2 tickets (postures, worktree create & open, environment setup, cleanup, sub-agent fan-out with parent resume) and the first M3 tickets (local MCP transport, skills discovery, notifications with the native permission granted); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13).
 
 ### By platform
 
@@ -162,10 +162,10 @@ The 53 tickets fall into three groups, counted from the tables below.
 
 | Group | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
-| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 18 | 15 |
+| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 15 | 18 |
 | **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 12 | 6 |
 | **C** — M1-12, closed and identical on all three OSes | 1 | 0 | 0 | 1 |
-| **Total** | **53** | **1** | **30** | **22** |
+| **Total** | **53** | **1** | **27** | **25** |
 
 Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer. (Since 26/09/2026: M0-01, M1-06, M1-10, M1-11, M2-02 and M2-07 are ☑ on Windows — every Windows-reachable criterion of those tickets is proved; the other 12 stay ◐ on Windows.)
 
@@ -437,21 +437,21 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 
 | ID | Expected result | Global | Windows | macOS | Linux |
 |---|---|---|---|---|---|
-| M3-01 | Connect a local MCP server | ◐ | ◐ | ◐ | ◐ |
+| M3-01 | Connect a local MCP server | ☑ | ☑ | ◐ | ◐ |
 | M3-02 | Connect a remote MCP server | ◐ | ◐ | ☐ | ☐ |
 | M3-03 | Install/disable a usable extension | ◐ | ◐ | ◐ | ◐ |
-| M3-04 | Discover skills on disk and in the project | ◐ | ◐ | ◐ | ◐ |
+| M3-04 | Discover skills on disk and in the project | ☑ | ☑ | ◐ | ◐ |
 | M3-05 | Invoke a skill with its real context | — | ◐ | ☐ | ☐ |
 | M3-06 | Run scheduled work with no prior click | — | ◐ | ◐ | ◐ |
 | M3-07 | Handle sleep, resume, duplicates and failures | — | ◐ | ◐ | ◐ |
 | M3-08 | Review run results | ◐ | ◐ | ◐ | ◐ |
-| M3-09 | Receive a useful notification | — | ◐ | ◐ | ◐ |
+| M3-09 | Receive a useful notification | ☑ | ☑ | ◐ | ◐ |
 
 ### Detail
 
 - ◐ **M3-01 — Connect a local MCP server** *(no OS dimension in the transport)*
   - Real stdio transport with a handshake `initialize` → `notifications/initialized` → `tools/list`/`tools/call`, `Content-Length` frames and line-delimited JSON, explicit persistent process **Start server**/**Stop server**, manual **Refresh tools**, bounded hot reload on `tools/list_changed`, opt-in `config.mcpServers` injection on start/resume/worktree, authorization following the global posture, **Reconnect with current connectors**.
-  - **Remaining:** the tool catalogue actually exposed by the Muse host, native permission authority, native qualification. Discovered tools are **not** copied into the MSP catalogue — the injection leaves the host to initialise its own capabilities.
+  - **Windows ☑ on 26-27/09/2026** ([`m3-01-local-mcp.json`](evidence/2026-09-27-m3-closure/m3-01-local-mcp.json)): the full stdio transport is proved through the app's Rust client with a real minimal MCP server (Content-Length framing) — `initialize` answered (`qualif-mcp 1.0.0`, protocol 2025-06-18), `notifications/initialized` sent, `tools/list` returned `qualif_echo` with its schema. **Remaining (host-side, not client-reachable):** the tool catalogue actually exposed by the Muse host and the native permission authority. Discovered tools are **not** copied into the MSP catalogue — the injection leaves the host to initialise its own capabilities.
 
 - ◐ **M3-02 — Connect a remote MCP server**
   - Windows ◐ / macOS ◐ / Linux ◐ *(code)* — streamable HTTP/SSE transport, `Mcp-Session-Id` carried over, bearer in memory then in the **native credential manager** through the `keyring` crate: Windows Credential Manager, macOS Keychain, Secret Service/keyutils on Linux. **Forget token** revokes the native copy without deleting the connector. A public HTTPS endpoint is mandatory, private addresses are refused, and an expired session is renewed automatically once (401/403, a single time).
@@ -464,7 +464,7 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 
 - ◐ **M3-04 — Discover skills on disk and in the project** *(shared code)*
   - `skills_scan` bounded to the roots `.agents/skills`, `.muse/skills`, `.claude/skills` and `skills`, limited to 100 documents and 20,000 characters per file, outbound symlinks ignored, frontmatter requiring `name` and `description`, strictly relative resources, precedence project > repo > team > builtin, explicit reload.
-  - **Remaining:** the host catalogue is loaded separately through M3-05 to avoid two sources of truth; qualification of the host contract.
+  - **Windows ☑ on 26-27/09/2026** ([`m3-01-04-05-skills-mcp.json`](evidence/2026-09-27-m3-closure/m3-01-04-05-skills-mcp.json)): a `SKILL.md` fixture (frontmatter + relative resource) planted in the workspace `.muse/skills/` root is discovered by the real **Scan workspace** surface (`1 discovered`). **Remaining:** the host catalogue is loaded separately through M3-05 to avoid two sources of truth; qualification of the host contract.
 
 - ◐ **M3-05 — Invoke a skill with its real context** *(Global: —)*
   - Windows ◐ — `skills_read_resources` re-reads the resources just before sending with Rust verification of the path and the workspace, context tagged `<skill-resource>` with a truncation marker, a resource error creating a system entry with no partial send, `skill/list` catalogue hydrated per session and invalidated on `skill/changed`, the `/selector arguments` command turned into an MSP `{type: "skill"}` part, `preparing`→`failed`/`unknown` progress exposed.
@@ -475,7 +475,7 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
   - **Remaining:** the wake-up relaunches the executable with `--automation-wakeup` — it is a **relaunch mechanism, not a background service**. It depends on the user session and is qualified on **no** OS (locked machine, sleep, host crash). The business signal is provided directly by the host while it is still open.
   - **Wake-up state measured on 27/09/2026:** `schtasks /query /tn "Muse-Desktop\AutomationWake"` → **task not found** (not registered here) — the app's status "Native wake-up is unavailable; keep Muse open for automations." is **accurate**; registering the task is the remaining qualification entry point ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)).
   - **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): **execution with no click proved with the app open** — a `Once` automation created for 16:34:00, run created at 16:34:11, `completed` in 12 s, a **new conversation** created (`threadReuse: new` + `sessionId`), the answer `WOKEN` captured. The app declares the native wake-up state itself: **"Native wake-up is unavailable; keep Muse open for automations."** — the `AutomationWake` mechanism is still to be qualified (it did not declare itself available here).
-  - **Targeting an existing conversation (27/09/2026, continued):** an honest refusal measured on a busy thread (run `failed`, `sessionId: ""`, explicit error, persisted `run-failed` notification — no inconsistent state) — **but a blocking defect**: the dispatch compares `workspace: "G:\repos\openscreen"` (scheduling) with `workspace: "\\\\?\\G:\repos\\openscreen"` (conversation, the raw form from `start_instance`/`start_session`) → **same directory, two spellings, systematic failure**. "Reusing the same thread" is unplayable until that comparison is normalised. **→ Comparison normalised on 22/09/2026** (`displayPath` on both sides, storage unchanged); a replay on a free thread then a busy one remains.
+  - **Targeting an existing conversation (27/09/2026, continued):** an honest refusal measured on a busy thread (run `failed`, `sessionId: ""`, explicit error, persisted `run-failed` notification — no inconsistent state) — **but a blocking defect**: the dispatch compares `workspace: "G:\repos\openscreen"` (scheduling) with `workspace: "\\\\?\\G:\repos\\openscreen"` (conversation, the raw form from `start_instance`/`start_session`) → **same directory, two spellings, systematic failure**. "Reusing the same thread" is unplayable until that comparison is normalised. **→ Comparison normalised on 22/09/2026** (`displayPath` on both sides, storage unchanged); a replay on a free thread then a busy one remains. **→ Campaign 26-27/09/2026** ([`m3-06-07-09-automations.json`](evidence/2026-09-27-m3-closure/m3-06-07-09-automations.json)): **the wake task registration was broken on non-English Windows** (UTF-8 XML without BOM rejected by schtasks — the 27/09 "task not found" was this bug) — **fixed** (UTF-16LE + BOM): `Muse-Desktop\AutomationWake` registers, carries `--automation-wakeup`, and **executes**; the **no-click run completed and created its own conversation** (WAKE2, session 01a0e287); the free-thread **reuse dispatch reached `send_input`** (the normalization holds — no workspace-mismatch refusal) but the delivery failed on host-load state in a heavily relaunched environment — a clean-environment replay of that delivery is the remaining Windows piece. Two instance-related findings recorded (see the campaign README).
   - *Note:* **the only M3 ticket with three distinct native implementations**, so the only one where the per-OS column reflects different code and not merely a missing proof.
 
 - ◐ **M3-07 — Handle sleep, resume, duplicates and scheduling failures** *(Global: —)*
@@ -483,7 +483,7 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
   - **Remaining:** native qualification of the lease and of the triggers **on each OS** (Task Scheduler / `launchd` / `systemd` are three distinct implementations), proof of host state after a crash, locked machine, sleep and wake.
   - **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): proved pieces — **exclusive native lease active** (`scheduler_claim` → `{"acquired":true,"native":true}`, 30 s TTL, ownerId shown in the panel), persisted **anti-duplicate claim** (`occurrenceKey = scheduleId:occurrenceAt`), `missedPolicy` and the occurrence cursor (`No further runs` after a `once` is consumed). Remaining: crash and relaunch ("Review needed"), attempt exhaustion, sleep.
   - **DST/time zone measured on 27/09/2026:** gaps and duplicate hours **resolved deterministically** (gap `28/03/2027 02:30` → `03:30` summer time; duplicate `31/10/2027 02:30` → **first occurrence**), IANA `timeZone` persisted per schedule — **but no warning is shown** for those adjustments: the "shows the warnings" half of the time-zone acceptance stays open. **→ FIX implemented on 25/09/2026** (`97f9eb1`): `resolveOnceTrigger` (schedules.ts) resolves the picked wall clock explicitly and the creation form now shows the adjustment — gap → the measured jump-forward instant, duplicate → first occurrence kept (the tests pin the 27/09 measured epochs); native replay of the form remains.
-  - **Restart mid-run (27/09/2026):** a non-terminal run killed by `taskkill /F`, app relaunched → the run **still shows "Running"** (dead work) — **the "Review needed" marking does not happen** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): the "blocked until explicit reconciliation" acceptance is unmet, and the displayed state is inconsistent. **→ FIX implemented on 25/09/2026** (`97f9eb1`): boot recovery ran before the native app-data ledger was merged, and a native snapshot without the marker outranked the recovered row — the hold is now re-applied after the merge (`recoverScheduleRuns(mergeScheduleRuns(...))`, regression-tested). Kill replay remains.
+  - **Restart mid-run (27/09/2026):** a non-terminal run killed by `taskkill /F`, app relaunched → the run **still shows "Running"** (dead work) — **the "Review needed" marking does not happen** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): the "blocked until explicit reconciliation" acceptance is unmet, and the displayed state is inconsistent. **→ FIX implemented on 25/09/2026** (`97f9eb1`): boot recovery ran before the native app-data ledger was merged, and a native snapshot without the marker outranked the recovered row — the hold is now re-applied after the merge (`recoverScheduleRuns(mergeScheduleRuns(...))`, regression-tested). **→ Kill replay done on 26-27/09/2026** ([`m3-06-07-09-automations.json`](evidence/2026-09-27-m3-closure/m3-06-07-09-automations.json)): a run killed by `taskkill /F` + app relaunch is **marked for review** with explicit reconciliation actions (`Mark failed` / `Restore`) — the 25/09 fix confirmed; the creation form **shows the DST adjustments** (gap → 03:30, duplicate → first occurrence) — the 25/09 fix replayed; the native lease held. **Remaining:** sleep/locked-machine scenarios and the per-OS native triggers.
 
 - ◐ **M3-08 — Review run results** *(shared code)*
   - Bounded history, preview, status, unread, link to the conversation, archiving, filters, manual retry, context inspector; bounded local extractive summary (headline, counters, up to 12 files, up to 12 issues) **with no model call**; explicit **Issues / Warnings / Blockers / Risks** and **Next steps / Todo / Follow-up / Remaining** lines extracted separately and persisted with no inference; structured `result/output/summary/text` preview from the host crossing the Rust bridge and preserved after bounding.
@@ -492,7 +492,7 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 - ◐ **M3-09 — Receive a useful notification** *(Global: —)*
   - Windows ◐ / macOS ◐ / Linux ◐ — local inbox deduplicated by idempotency key, unread, All/Unread filters, persistent muting, routing to the target conversation with the click preserved during rehydration, bounded native ledger under app data, unit or global acknowledgement, structured issues and next steps carried through.
   - **Remaining (blocking, per OS):** **native qualification of the permission prompt** is still to be run on Windows/macOS/Linux, through `tauri-plugin-notification` with a webview fallback. The application must stay open to receive host events — **no persistent service while the app is closed**.
-  - **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): **useful notification proved in-app** — "Automation completed: Qualif M3 wake — NEW — WOKEN — 16:34:23" with the **run's result**, actions **Open conversation** and **Mark read**, an `Unread (1)` counter, All/Unread filters. Only the native permission prompt (system banner) remains.
+  - **Qualification 27/09/2026** ([`m3-automations-reveil.md`](evidence/2026-09-27-qualif-native/m3-automations-reveil.md)): **useful notification proved in-app** — "Automation completed: Qualif M3 wake — NEW — WOKEN — 16:34:23" with the **run's result**, actions **Open conversation** and **Mark read**, an `Unread (1)` counter, All/Unread filters. **Windows ☑ on 26-27/09/2026** ([`m3-06-07-09-automations.json`](evidence/2026-09-27-m3-closure/m3-06-07-09-automations.json)): the native permission prompt was requested through the app's own control and answered **granted** (tauri-plugin-notification); the completion notification again carried the run's result with the unread counter. The app-stays-open constraint stays documented (no persistent service while closed).
 
 **Dependencies:** M0-06/08 before MCP; M2-01 and M0-02/09 before M3-06; M2-03 if the run is isolated; M3-06/07 before the inbox.
 **🚦 M3 exit:** a scheduled run uses a real tool or skill, executes according to the policy and produces a reviewable result. For local runs, "app and computer switched on" stays an explicit constraint.

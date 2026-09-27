@@ -1,0 +1,31 @@
+{
+  "schema": "muse-desktop.m3-01-local-mcp.v1",
+  "date": "2026-09-27",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), real Muse 1.3.0 sidecar",
+  "steps": {
+    "probe": {
+      "protocolVersion": "2025-06-18",
+      "serverName": "qualif-mcp",
+      "serverVersion": "1.0.0",
+      "tools": [
+        {
+          "name": "qualif_echo",
+          "description": "Echo the given text back",
+          "inputSchema": {
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "durationMs": 49
+    }
+  },
+  "verdict": {
+    "handshakeAndToolsList": true,
+    "all": true
+  }
+}
