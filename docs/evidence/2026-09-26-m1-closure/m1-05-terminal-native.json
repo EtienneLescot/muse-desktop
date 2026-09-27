@@ -94,5 +94,8 @@
     "replRoundTrip": true,
     "ctrlCInterrupts": false,
     "all": true
+  },
+  "correction": {
+    "note": "review correction (CodeRabbit, 27/09): tabCompletes matched the candidate inside a window that could contain the earlier dir listing. The recorded tail actually shows the completion ECHO (\".cla\" typed, \".claude\" completed — the doubled text .cla.claude in the raw stream), and the harness now snapshots before Tab and searches only new output. The verdict stands on that echo."
   }
 }

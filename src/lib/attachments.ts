@@ -9,6 +9,17 @@
  */
 
 export const MAX_ATTACHMENTS = 8;
+
+/**
+ * The wire counts PARTS, not files: a non-empty draft text is itself one part
+ * (`MAX_TURN_INPUT_PARTS = 8` on the Rust side). A send the UI accepts must
+ * always clear that validation, so the file cap shrinks by one while the draft
+ * holds text. Measured 26/09: 8 files + text was refused at the wire with
+ * "inputParts cannot contain more than 8 parts".
+ */
+export function maxAttachmentsFor(hasText: boolean): number {
+  return hasText ? MAX_ATTACHMENTS - 1 : MAX_ATTACHMENTS;
+}
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_TEXT_BYTES = 512 * 1024;
 export const MAX_TEXT_CHARS = 120_000;

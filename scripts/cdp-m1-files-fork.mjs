@@ -305,22 +305,27 @@ for (let attempt = 0; attempt < 3 && !turnTwoStarted; attempt++) {
   await send("Input.insertText", { text: "Reply with just the word FORKTWO and nothing else." });
   await sleep(200);
   await evaluate(`document.querySelector('button[aria-label="Send message"]')?.click()`);
-  const started = await evaluate(`(() => ({
-    ok: document.querySelector(".session-view .task-metadata .dot")?.getAttribute("data-running") === "true",
-  }))()`);
-  turnTwoStarted = started.ok;
-  if (!turnTwoStarted) await sleep(3000);
+  // admission = the running indicator turning true OR the composer clearing
+  // (a still-full composer means the send is still being processed)
+  const admitted = await waitFor("turn two admitted", () => evaluate(`(() => ({
+    ok: document.querySelector(".session-view .task-metadata .dot")?.getAttribute("data-running") === "true"
+      || (document.querySelector('textarea[aria-label="Message Muse"]')?.value ?? "x") === "",
+  }))()`), 45_000, 1000);
+  turnTwoStarted = admitted.ok;
 }
 if (!turnTwoStarted) throw new Error("turn two never started after 3 send attempts");
 await waitFor("fresh turn two done", turnDone, 180_000, 3000);
 await sleep(1500);
 // fork from the FIRST entry of the fresh session
+const knownIds = await evaluate(`(() =>
+  JSON.parse(localStorage.getItem("muse-desktop.sessions.v1") || "[]").map((s) => s.session_id))()`);
 forkTries.push(await evaluate(`(() => {
   const btn = document.querySelector("button.msg-fork");
   if (!btn) return { ok: false, reason: "no-button" };
   btn.click();
   return { ok: true, total: document.querySelectorAll("button.msg-fork").length };
 })()`));
+report.steps.knownSessionCount = knownIds.length;
 step("m1-09-fork-clicked", { tries: forkTries });
 // the fork becomes a new conversation; poll for it (the host fork + record
 // write take a moment), capturing any error banner meanwhile
@@ -330,7 +335,8 @@ while (Date.now() < forkDeadline && !branch.found) {
   await sleep(2000);
   branch = await evaluate(`(() => {
     const sessions = JSON.parse(localStorage.getItem("muse-desktop.sessions.v1") || "[]");
-    const branchSession = sessions.find((s) => (s.title || "").startsWith("Branch of "));
+    const known = ${JSON.stringify(knownIds)};
+    const branchSession = sessions.find((s) => (s.title || "").startsWith("Branch of ") && !known.includes(s.session_id));
     const banner = document.querySelector(".window-error, [role=alert]")?.textContent?.slice(0, 160) ?? null;
     if (!branchSession) return { found: false, banner, sessionCount: sessions.length };
     const log = JSON.parse(localStorage.getItem("muse-desktop.log.v1." + branchSession.session_id) || "[]");

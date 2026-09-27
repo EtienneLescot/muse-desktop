@@ -135,22 +135,26 @@ step("big-output-generated", {
 await evaluate(`document.querySelector("button.terminal-context").click()`);
 await sleep(1000);
 const composedBig = await composerText();
-const block = composedBig.split("<terminal-output>").pop()?.split("</terminal-output>")[0] ?? "";
+const rawBlock = composedBig.split("<terminal-output>").pop()?.split("</terminal-output>")[0] ?? "";
+// strip only the boundary separator newlines (the block is otherwise intact)
+const block = rawBlock.split(String.fromCharCode(10)).filter((line, index, all) => !(index === 0 && line === "") && !(index === all.length - 1 && line === "")).join(String.fromCharCode(10));
 step("bounded-context-in-composer", {
   composerLength: composedBig.length,
   contextBlockChars: block.length,
   clippedTailKept: block.includes("LIGNE-2500-M1-06"),
-  ellipsisPrefix: block.startsWith("…"),
+  ellipsisPrefix: block.startsWith(String.fromCharCode(8230)),
 });
 report.verdict.boundedTo12000 =
-  block.length <= 12_100 && block.length > 1_000 && block.includes("LIGNE-2500-M1-06");
+  block.length <= 12_000 && block.length > 1_000 && block.startsWith(String.fromCharCode(8230)) && block.includes("LIGNE-2500-M1-06");
 
 socket.close();
 report.verdict.all =
   !!report.verdict.markerFlowsToComposer && !!report.verdict.boundedTo12000;
 if (OUT) {
   mkdirSync(dirname(OUT), { recursive: true });
-  writeFileSync(OUT, `${JSON.stringify(report, null, 2)}\n`);
+  writeFileSync(OUT, `${JSON.stringify(report, null, 2)}
+`);
   console.log(`written ${OUT}`);
 }
 console.log(JSON.stringify(report.verdict));
+process.exit(0);

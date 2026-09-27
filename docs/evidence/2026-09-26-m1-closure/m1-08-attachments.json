@@ -21,7 +21,12 @@
   },
   "verdict": {
     "partsBoundEnforced": true,
-    "imageRidesLiveTurn": true,
-    "all": true
+    "imageRidesLiveTurn": false,
+    "all": false
+  },
+  "correction": {
+    "note": "review correction (CodeRabbit, 27/09): imageRidesLiveTurn was a false pass — the 8-image + text send was REFUSED at the wire (parts bound), so no model answer exists in this record; the /image/i text check matched the failure text. The true positive for a live image turn is m1-08-single-image.json (model answered \"grey\"). partsBoundEnforced stands: the UI refused the 9th file and the wire refused the 9th part.",
+    "imageRidesLiveTurn": false,
+    "all": false
   }
 }

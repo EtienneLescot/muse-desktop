@@ -41,6 +41,7 @@ import type { ReasoningEffort } from "../lib/reasoning";
 import {
   attachmentKey,
   buildTurnInputParts,
+  maxAttachmentsFor,
   MAX_ATTACHMENTS,
   readAttachment,
   type ComposerAttachment,
@@ -269,14 +270,15 @@ export function Composer({
 
   useEffect(() => {
     if (prefillAttachment === null || prefillAttachment === undefined) return;
-    if (attachments.length >= MAX_ATTACHMENTS) {
+    const limit = maxAttachmentsFor(text.trim().length > 0);
+    if (attachments.length >= limit) {
       setAttachmentError(`Remove an attachment before adding ${prefillAttachment.name}.`);
       return;
     }
     setAttachments((current) =>
       current.some((attachment) => attachment.id === prefillAttachment.id)
         ? current
-        : [...current, prefillAttachment].slice(0, MAX_ATTACHMENTS),
+        : [...current, prefillAttachment].slice(0, limit),
     );
     setAttachmentError(null);
     onPrefillAttachmentConsumed?.();
@@ -609,9 +611,10 @@ export function Composer({
     const incoming = Array.from(files);
     if (incoming.length === 0) return;
     setAttachmentError(null);
-    const room = Math.max(0, MAX_ATTACHMENTS - attachmentsRef.current.length);
+    const limit = maxAttachmentsFor(text.trim().length > 0);
+    const room = Math.max(0, limit - attachmentsRef.current.length);
     if (room === 0) {
-      setAttachmentError(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+      setAttachmentError(`You can attach up to ${limit} files with a written message (${MAX_ATTACHMENTS} without).`);
       return;
     }
     const next: ComposerAttachment[] = [];
@@ -627,7 +630,7 @@ export function Composer({
       }
     }
     if (next.length > 0) {
-      setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
+      setAttachments((current) => [...current, ...next].slice(0, limit));
     }
     if (failures.length > 0) setAttachmentError(failures.join(" · "));
   }
