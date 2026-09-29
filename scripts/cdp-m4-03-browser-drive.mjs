@@ -6,7 +6,9 @@
  * driver serves on the private channel with the capability manifest.
  */
 const list = await (await fetch("http://127.0.0.1:9222/json/list")).json();
-const page = list.find((t) => t.type === "page" && t.url.includes("tauri.localhost") && t.webSocketDebuggerUrl);
+// the muse-browser native window is a second tauri.localhost target; pick
+// the MAIN app page (root URL, not /index.html)
+const page = list.find((t) => t.type === "page" && t.url.replace(/\/$/, "").endsWith("tauri.localhost") && t.webSocketDebuggerUrl);
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 let nextId = 1;
 const pending = new Map();

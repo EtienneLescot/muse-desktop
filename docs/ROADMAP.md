@@ -150,8 +150,8 @@ The remaining criteria and their precise limits are listed in each document unde
 | State | Total | Breakdown |
 |---|---|---|
 | ☐ Not started | **1** | M4-06 |
-| ◐ Started | **19** | everything else |
-| ☑ Done | **33** | **M0**: M0-01 → M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02 → M2-04, M2-06, M2-07 · **M3**: M3-01 → M3-07, M3-09 · **M4**: M4-01, M4-04, M4-05 |
+| ◐ Started | **18** | everything else |
+| ☑ Done | **34** | **M0**: M0-01 → M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02 → M2-04, M2-06, M2-07 · **M3**: M3-01 → M3-07, M3-09 · **M4**: M4-01, M4-04, M4-05, M4-09 |
 | **Total** | **53** | |
 
 Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Thirty tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign), 26/09 (M1 campaign, including the whole git delivery chain M1-01→04) and 26/09 again for the first M2 tickets (postures, worktree create & open, environment setup, cleanup, sub-agent fan-out with parent resume), and 26–27/09 for M3's operational core (local + remote MCP transports, skills discovery and invocation, scheduled runs with wake task, thread reuse delivery, run review, notifications); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13). In M4, M4-02/M4-03 stay ◐ (annotation capture and the complete browser workflow), M4-08 keeps its real-time conversation remainder, and M4-09 awaits operational hosting and a clean machine.
@@ -163,9 +163,9 @@ The 53 tickets fall into three groups, counted from the tables below.
 | Group | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
 | **A** — no OS dependency (`Global` column filled) | 34 | 1 | 10 | 23 |
-| **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 9 | 9 |
+| **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 7 | 11 |
 | **C** — M1-12, closed and identical on all three OSes | 1 | 0 | 0 | 1 |
-| **Total** | **53** | **1** | **19** | **33** |
+| **Total** | **53** | **1** | **18** | **34** |
 
 Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer. (Since 26/09/2026: M0-01, M1-06, M1-10, M1-11, M2-02 and M2-07 are ☑ on Windows — every Windows-reachable criterion of those tickets is proved; the other 12 stay ◐ on Windows.)
 
@@ -514,14 +514,14 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 | M4-06 | Share by URL and revoke access | ☐ | ☐ | ☐ | ☐ |
 | M4-07 | Control an execution on another host or in the cloud | ◐ | ◐ | ◐ | ◐ |
 | M4-08 | Interact by voice | — | ◐ | ◐ | ◐ |
-| M4-09 | Install and update on the announced platforms | — | ◐ | ☐ | ☐ |
+| M4-09 | Install and update on the announced platforms | ◐ | ☑ | ☐ | ☐ |
 
 ### Detail
 
 - ◐ **M4-01 / M4-02 / M4-03 — built-in browser, annotations, driving** *(Global: —)*
   - Windows ◐ — normalised navigation, history and eight tabs isolated by `sessionId` under `muse-desktop.browser.tabs.v1`, explicit same-origin download bounded to 10 MiB with `credentials: omit` and redirects refused, interception of `<a download>` links, **Open native** opening a dedicated `muse-browser` Tauri webview with a non-persistent private profile, idempotent **Close native**.
   - **Fundamental:** the native surface rests on **WebView2**, hence Windows. The tickets speak explicitly of "WebView2 qualification" — the macOS (WKWebView) and Linux (WebKitGTK) equivalents are **not started**. The iframe sandbox stays the web-preview fallback.
-  - **Windows qualification advanced on 26-27/09/2026** ([`m4-01-browser.json`](evidence/2026-09-27-m4-closure/m4-01-browser.json)): same-origin navigation renders in the sandboxed iframe, two tabs isolate state, and in-tab history **Back** returns to the previous entry. **M4-02 Windows ☑ the same day** ([`m4-02-annotations.json`](evidence/2026-09-27-m4-closure/m4-02-annotations.json)): the annotation surface is built and proved end to end — anchor a comment to the page (persisted in `browser.annotations.v1`), render in the list, insert into the composer, remove. **M4-03 Windows evidence** ([`m4-03-browser-drive.json`](evidence/2026-09-27-m4-closure/m4-03-browser-drive.json)): a live turn drove the browser through the computer-use flow (6 steps, `get browser state` executed, honest window-state answer). **Remaining:** cross-origin pages, download responses initiated by navigation, automatic capture of the iframe alone, the complete real-page workflow.
+  - **Windows qualification advanced on 26-27/09/2026** ([`m4-01-browser.json`](evidence/2026-09-27-m4-closure/m4-01-browser.json)): same-origin navigation renders in the sandboxed iframe, two tabs isolate state, and in-tab history **Back** returns to the previous entry. **M4-02 Windows ☑ the same day** ([`m4-02-annotations.json`](evidence/2026-09-27-m4-closure/m4-02-annotations.json)): the annotation surface is built and proved end to end — anchor a comment to the page (persisted in `browser.annotations.v1`), render in the list, insert into the composer, remove. **M4-03 Windows evidence** ([`m4-03-browser-drive.json`](evidence/2026-09-27-m4-closure/m4-03-browser-drive.json)): a live turn drove the browser through the computer-use flow — `get browser state` executed and the driver honestly refused the binding to the muse-browser WebView2 window ("pid … is not a recognized browser process"): its browser tools bind to recognized browser processes only. Driving a REAL page needs the page opened in a recognized browser first (reachable via computer use). **Remaining:** cross-origin pages, download responses initiated by navigation, automatic capture of the iframe alone, the complete real-page workflow.
 
 - ◐ **M4-04 — Have Muse drive a desktop application** *(the most asymmetric ticket)*
   - Windows ◐ — **computer use now rests on the open-source CUA driver** ([trycua/cua](https://github.com/trycua/cua), MIT): the application starts **its own service** on a private named channel, in `bounded` mode, with a **capability manifest it generates and approves**, and hands the Muse host the MCP entry pointing at it. One switch, three levels (19 / 38 / 57 tools measured on 0.28.2), no application list. **Verified end to end:** `get_screen_size` answers, `click` is refused by the driver itself (`outside the capability manifest`), revoking stops the service. Plan and measurements: [2026-09-22-computer-use-cua](plans/2026-09-22-computer-use-cua.md).
@@ -550,7 +550,7 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 
 - ◐ **M4-09 — Install and update on the announced platforms** *(the distribution ticket)*
   - Windows ◐ — **reproducible x64 NSIS and MSI bundles** with the sidecar, icons and SHA-256 integrity manifests; a `muse-desktop.release-manifest.v1` manifest with no machine path and no timestamp, signable in Ed25519 and revalidated at every step; a `muse-desktop.release-update.v1` update plan, copied staging published by atomic rename, `current`/`previous` switch with rollback, `release:launch` asking for a bounded stop of the PID then relaunching the executable with no shell, `release:installer` handoff to the NSIS `.exe` or `msiexec.exe`, SHA-256-verified `release:delta`, signed `release:channel`, `release:fetch` refusing redirects, `release:orchestrate sync` verifying then staging a candidate.
-  - **Remaining (Windows):** operational hosting, rotation of the trust keys, publishing the sidecar (supplied by the build environment, **not versioned**), installation on a clean machine, wiring the rollback into the installer.
+  - **Remaining (Windows):** operational hosting, rotation of the trust keys, publishing the sidecar (supplied by the build environment, **not versioned**), installation on a clean machine. **→ Rollback wiring closed on 27/09/2026**: `release-launcher.mjs rollback` (npm `release:rollback`) flips the installed `current`/`previous` slots after launch — proved by test (CLI stage/apply/rollback round trip, 1.1.0 → 1.0.0); the launcher already auto-rolled-back when the restarted app failed to launch.
   - macOS ☐ / Linux ☐ — **not started**. No `.dmg`/`.app` or `.deb`/`.rpm`/AppImage bundle. The sidecar is a triple-suffixed `externalBin` (`muse-x86_64-unknown-linux-gnu` in CI): each OS requires its own Muse binary, not available in this repository. `tauri.conf.json` declares `minimumSystemVersion: 11.0` for macOS and `targets: "all"`, but no target has been built or qualified outside Windows x64. **→ Schema prerequisite unblocked on 25/09/2026** (`build-macos.sh` noted it as pending): the release manifest now carries `sidecar: null` for engine-not-bundled platforms, propagated through verify, update plan/stage/apply, channel and orchestrator (tested, plus an end-to-end CLI proof on a fake `.dmg`); `npm run build:macos` wraps `scripts/build-macos.sh`, and `release:manifest`/`release:verify` are wired as npm scripts. The `.app`/`.dmg` build and every native proof still require a macOS machine.
 
 ---

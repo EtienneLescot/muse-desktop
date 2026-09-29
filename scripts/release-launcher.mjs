@@ -294,8 +294,24 @@ async function cli() {
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return;
   }
+  if (command === "rollback") {
+    // M4-09: standalone post-launch rollback — flips current/previous when a
+    // startup health check failed after a successful launch.
+    const publicKeyPath = argument("--public-key");
+    const publicKey = publicKeyPath
+      ? await import("node:fs/promises").then(({ readFile }) => readFile(publicKeyPath, "utf8"))
+      : undefined;
+    const result = await rollbackRelease({
+      slotsRoot: requireArgument("--slots-root"),
+      publicKey,
+      requireSignature: process.argv.includes("--require-signature"),
+    });
+    process.stdout.write(`${JSON.stringify(result)}
+`);
+    return;
+  }
   if (command !== "run") {
-    throw new Error("usage: release-launcher.mjs run --staged DIR --slots-root DIR --executable FILE [--pid PID] [--arg VALUE] … | installer --installer FILE [--pid PID]");
+    throw new Error("usage: release-launcher.mjs run --staged DIR --slots-root DIR --executable FILE [--pid PID] [--arg VALUE] … | rollback --slots-root DIR … | installer --installer FILE [--pid PID]");
   }
   const pid = argument("--pid");
   if (pid === undefined && !process.argv.includes("--allow-stopped")) {

@@ -15,6 +15,17 @@ Muse sidecar 1.3.0) · CUA driver 0.28.2 (installed, grant active).
 | **M4-08** | voice probe (`m4-08-voice-probe.json`) | **Windows evidence** — WebView2 **exposes `SpeechRecognition`** (typeof function); the composer Voice control answers ("Start voice input" → "Requesting microphone access…") with calm handling and no crash. The permission dialog appeared as an `edge://permission-request-dialog` target. |
 | **single-instance** | wake-task relaunch guard (`single-instance-wake.json`) | Second instance with `--automation-wakeup` exits after forwarding its argv; the primary instance receives the `automation-wakeup` event (1 event recorded) and re-checks the scheduler. The two-instance ledger clobbering is closed. |
 
+## M4-09 follow-up (27/09 evening) — rollback wiring
+
+| Piece | Result |
+|---|---|
+| Standalone rollback CLI (`scripts/release-launcher.mjs rollback`) | **Added and proved** — `releaseLauncher.test.ts` "release-launcher CLI rollback flips the installed slots": two versions staged/applied through the update CLI, then the launcher's `rollback` subcommand flips `current`/`previous` (1.1.0 → 1.0.0). The rollback machinery existed (`rollbackRelease` in release-update.mjs) but had no post-launch CLI entry — now wired and tested. |
+| npm script | `release:rollback` added. |
+
+This closes the "wiring the rollback into the installer" remainder: the
+operator path is `release:launch` (apply+start, auto-rollback on launch
+failure) and now `release:rollback` for post-launch health-check failures.
+
 ## Notes
 
 - The Files-panel office preview keeps its safety guards: a malformed office

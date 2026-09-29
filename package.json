@@ -17,6 +17,7 @@
     "release:orchestrate": "node scripts/release-orchestrator.mjs",
     "release:launch": "node scripts/release-launcher.mjs",
     "release:installer": "node scripts/release-launcher.mjs installer",
+    "release:rollback": "node scripts/release-launcher.mjs rollback",
     "release:manifest": "node scripts/release-manifest.mjs",
     "release:verify": "node scripts/verify-release-manifest.mjs",
     "preview": "vite preview",

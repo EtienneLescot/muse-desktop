@@ -1,19 +1,22 @@
 {
   "schema": "muse-desktop.m4-03-browser-drive.v1",
-  "date": "2026-09-27",
-  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), CUA driver 0.28.2 (grant active, 57 act tools)",
+  "date": "2026-09-29",
   "steps": {
+    "projectPicked": {
+      "ok": true
+    },
     "turn": {
       "prompt": "Use the browser tool get_browser_state on the muse-browser window and tell me what page it shows.",
-      "observed": "the model ran a 6-step computer-use flow (55 s) including Computer use · get browser state; the tool executed and honestly reported 'No muse-browser window exists to inspect' because the native muse-browser window was not open at that moment",
+      "observed": "the model ran a computer-use flow and called get_browser_state; the driver executed it and refused the binding: 'get_browser_state refused: pid 37332 is not a recognized browser process' — the CUA driver's browser tools bind to recognized browser processes (Edge/Chrome), not the muse-browser WebView2 window",
       "running": false,
       "sawBrowserTool": true
     }
   },
   "verdict": {
     "modelDroveBrowserTools": true,
-    "toolExecutedWithHonestState": true,
-    "completeWorkflowWithRealPage": false,
-    "all": "partial — driving proved, real-page workflow remains"
+    "toolExecuted": true,
+    "honestRefusalSurfaced": true,
+    "completeWorkflowOnRecognizedBrowser": false,
+    "all": "partial — tool execution and honest refusal proved; real-page workflow on a RECOGNIZED browser remains (open the page in Edge via computer use, then get_browser_state)"
   }
 }
