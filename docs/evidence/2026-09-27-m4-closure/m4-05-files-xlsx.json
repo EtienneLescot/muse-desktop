@@ -1,0 +1,18 @@
+{
+  "schema": "muse-desktop.m4-05-files-xlsx.v1",
+  "date": "2026-09-29",
+  "steps": {
+    "fixture": {
+      "xlsxPath": "G:\\repos\\openscreen\\.muse-qualif\\m4-05-qualif.xlsx"
+    },
+    "xlsxPreview": {
+      "head": ".muse-qualif/m4-05-qualif.xlsx",
+      "table": true,
+      "tableRows": 1,
+      "sample": ".muse-qualif/m4-05-qualif.xlsx\nXLSX preview · 1 KB\nOpen in app\nXLSX · 0 rows\nStructured preview of .muse-qualif/m4-05-qualif.xlsx\nM4-05\tQUALIF-OK"
+    }
+  },
+  "verdict": {
+    "xlsxStructuredPreview": true
+  }
+}

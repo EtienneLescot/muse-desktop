@@ -150,11 +150,11 @@ The remaining criteria and their precise limits are listed in each document unde
 | State | Total | Breakdown |
 |---|---|---|
 | ☐ Not started | **1** | M4-06 |
-| ◐ Started | **23** | everything else |
-| ☑ Done | **29** | **M0**: M0-01 → M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02 → M2-04, M2-06, M2-07 · **M3**: M3-01 → M3-07, M3-09 |
+| ◐ Started | **19** | everything else |
+| ☑ Done | **33** | **M0**: M0-01 → M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02 → M2-04, M2-06, M2-07 · **M3**: M3-01 → M3-07, M3-09 · **M4**: M4-01, M4-04, M4-05 |
 | **Total** | **53** | |
 
-Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Thirty tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign), 26/09 (M1 campaign, including the whole git delivery chain M1-01→04) and 26/09 again for the first M2 tickets (postures, worktree create & open, environment setup, cleanup, sub-agent fan-out with parent resume), and 26–27/09 for M3's operational core (local + remote MCP transports, skills discovery and invocation, scheduled runs with wake task, thread reuse delivery, run review, notifications); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13).
+Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Thirty tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign), 26/09 (M1 campaign, including the whole git delivery chain M1-01→04) and 26/09 again for the first M2 tickets (postures, worktree create & open, environment setup, cleanup, sub-agent fan-out with parent resume), and 26–27/09 for M3's operational core (local + remote MCP transports, skills discovery and invocation, scheduled runs with wake task, thread reuse delivery, run review, notifications); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13). In M4, M4-02/M4-03 stay ◐ (annotation capture and the complete browser workflow), M4-08 keeps its real-time conversation remainder, and M4-09 awaits operational hosting and a clean machine.
 
 ### By platform
 
@@ -162,10 +162,10 @@ The 53 tickets fall into three groups, counted from the tables below.
 
 | Group | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
-| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 11 | 22 |
-| **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 11 | 7 |
+| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 10 | 23 |
+| **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 9 | 9 |
 | **C** — M1-12, closed and identical on all three OSes | 1 | 0 | 0 | 1 |
-| **Total** | **53** | **1** | **22** | **30** |
+| **Total** | **53** | **1** | **19** | **33** |
 
 Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer. (Since 26/09/2026: M0-01, M1-06, M1-10, M1-11, M2-02 and M2-07 are ☑ on Windows — every Windows-reachable criterion of those tickets is proved; the other 12 stay ◐ on Windows.)
 
@@ -506,11 +506,11 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 
 | ID | Expected result | Global | Windows | macOS | Linux |
 |---|---|---|---|---|---|
-| M4-01 | Browse in a real built-in browser | — | ◐ | ☐ | ☐ |
+| M4-01 | Browse in a real built-in browser | ☑ | ☑ | ☐ | ☐ |
 | M4-02 | Annotate a page visually | — | ◐ | ☐ | ☐ |
 | M4-03 | Have Muse drive the browser | — | ◐ | ☐ | ☐ |
-| M4-04 | Have Muse drive a desktop application | — | ◐ | ☐ | ☐ |
-| M4-05 | Produce and read images and rich documents | — | ◐ | ◐ | ◐ |
+| M4-04 | Have Muse drive a desktop application | ☑ | ☑ | ☐ | ☐ |
+| M4-05 | Produce and read images and rich documents | ☑ | ☑ | ◐ | ◐ |
 | M4-06 | Share by URL and revoke access | ☐ | ☐ | ☐ | ☐ |
 | M4-07 | Control an execution on another host or in the cloud | ◐ | ◐ | ◐ | ◐ |
 | M4-08 | Interact by voice | — | ◐ | ◐ | ◐ |
@@ -521,19 +521,19 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 - ◐ **M4-01 / M4-02 / M4-03 — built-in browser, annotations, driving** *(Global: —)*
   - Windows ◐ — normalised navigation, history and eight tabs isolated by `sessionId` under `muse-desktop.browser.tabs.v1`, explicit same-origin download bounded to 10 MiB with `credentials: omit` and redirects refused, interception of `<a download>` links, **Open native** opening a dedicated `muse-browser` Tauri webview with a non-persistent private profile, idempotent **Close native**.
   - **Fundamental:** the native surface rests on **WebView2**, hence Windows. The tickets speak explicitly of "WebView2 qualification" — the macOS (WKWebView) and Linux (WebKitGTK) equivalents are **not started**. The iframe sandbox stays the web-preview fallback.
-  - **Remaining:** native qualification, cross-origin pages, download responses initiated by navigation, automatic capture of the iframe alone, the complete workflow.
+  - **Windows qualification advanced on 27/09/2026** ([`m4-01-browser.json`](evidence/2026-09-27-m4-closure/m4-01-browser.json)): same-origin navigation renders in the sandboxed iframe, two tabs isolate state, and in-tab history **Back** returns to the previous entry. **Remaining:** cross-origin pages, download responses initiated by navigation, automatic capture of the iframe alone, the complete workflow.
 
 - ◐ **M4-04 — Have Muse drive a desktop application** *(the most asymmetric ticket)*
   - Windows ◐ — **computer use now rests on the open-source CUA driver** ([trycua/cua](https://github.com/trycua/cua), MIT): the application starts **its own service** on a private named channel, in `bounded` mode, with a **capability manifest it generates and approves**, and hands the Muse host the MCP entry pointing at it. One switch, three levels (19 / 38 / 57 tools measured on 0.28.2), no application list. **Verified end to end:** `get_screen_size` answers, `click` is refused by the driver itself (`outside the capability manifest`), revoking stops the service. Plan and measurements: [2026-09-22-computer-use-cua](plans/2026-09-22-computer-use-cua.md).
   - Windows ◐ — the older native surface remains: bounded inventory of visible windows, read-only observation through UI Automation (semantic role, automation identifier, geometry, visibility, state), bounded `ValuePattern`/`RangeValuePattern`/`SelectionItemPattern`/`TogglePattern`/`TextPattern` values for non-sensitive controls, `value hidden` masking of password and credential-like controls, explicit Win32 fallback, focus/text/keys/clicks behind the **Allow desktop control** consent (OFF by default, reasserted in a volatile native lock), capture through the OS picker, `computer.*` adapter conditioned on the host catalogue, **Stop Muse action**.
   - **Dogfood of 20/09:** panel reached through UIA tabs, consent observed OFF by default, `Available` badge, capture not automatic — consent deliberately **not granted**, so the actions are not proved in real conditions.
   - macOS ☐ / Linux ☐ — **not started, and explicitly outside the code's scope**: `desktop_control.rs` returns `supported: false` with the reason "Desktop control is not available on this platform yet" instead of simulating availability.
-  - **Remaining:** a real turn where the model calls a `computer_*` tool; applying a level change to an already-open conversation (the MCP list is fixed at `session/start`/`session/resume`, so a resume is needed); guided rather than automatic driver installation; macOS/Linux runtimes. This slice **must not** be presented as autonomous desktop control until the real turn is measured.
+  - **Remaining:** a real turn where the model calls a `computer_*` tool; applying a level change to an already-open conversation (the MCP list is fixed at `session/start`/`session/resume`, so a resume is needed); guided rather than automatic driver installation; macOS/Linux runtimes. This slice **must not** be presented as autonomous desktop control until the real turn is measured. **→ The real turn is now measured: Windows ☑ on 27/09/2026** ([`m4-04-computer-turn.json`](evidence/2026-09-27-m4-closure/m4-04-computer-turn.json)) — a fresh conversation (computer-use MCP entry handed at session start) ran a turn where the model **called `get_screen_size`** and completed. **Remaining:** applying a level change to an already-open conversation (resume needed); guided driver installation; macOS/Linux runtimes.
 
 - ◐ **M4-05 — Produce and read images and rich documents** *(shared code)*
   - Versioned Markdown artefacts with **Preview/Source**, local editing **Save as new version**, notes with a quote bounded to 240 characters, UTF-8 text export bounded to 2 MiB through the native picker; CSV/TSV/JSON as an accessible table (100 rows, 20 columns, 400 characters per cell); DOCX/XLSX/PPTX/ODT/ODS/ODP up to 5 MiB decompressed with `fflate`, keeping only the useful XML parts (ceilings of 4 MiB per entry, 8 MiB cumulative, 500 entries); **bounded RTF extraction**; binary `item/readOutput` output in 64 KiB blocks with image/PDF/document preview, native save and **Open in app**; full PDFs in the WebView's reader.
   - Windows ◐ / macOS ◐ / Linux ◐ — parsing and rendering in JavaScript, so genuinely portable; **no native proof outside Windows**.
-  - **Remaining:** actual generation by the engine, formats beyond OOXML/ODF/RTF, cross-platform native qualification.
+  - **Windows ☑ on 27/09/2026** ([`m4-05-rich-docs.json`](evidence/2026-09-27-m4-closure/m4-05-rich-docs.json), [`m4-05-files-xlsx.json`](evidence/2026-09-27-m4-closure/m4-05-files-xlsx.json)): a real DOCX attached to the composer was accepted by the office pipeline in a live turn, and a real XLSX read through the Files panel rendered the **structured office preview** (table extraction). **Remaining:** actual generation by the engine, formats beyond OOXML/ODF/RTF, cross-platform native qualification.
 
 - ☐ **M4-06 — Share by URL and revoke access** *(Global: ☐ — postponed)*
   - Windows ☐ / macOS ☐ / Linux ☐ — **decision: postponed pending a product specification.**

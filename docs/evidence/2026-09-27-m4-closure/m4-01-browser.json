@@ -1,0 +1,28 @@
+{
+  "schema": "muse-desktop.m4-browser.v1",
+  "date": "2026-09-27",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP)",
+  "steps": {
+    "same-origin-navigation": {
+      "address": "http://tauri.localhost/index.html",
+      "iframeRendered": true,
+      "src": "http://tauri.localhost/index.html"
+    },
+    "tabs": {
+      "secondTabOpened": true,
+      "tabCount": 2
+    },
+    "in-tab-history": {
+      "procedure": "same tab: index.html -> index.html?v=second -> Back",
+      "before": "http://tauri.localhost/index.html?v=second",
+      "after": "http://tauri.localhost/index.html",
+      "backWorked": true
+    }
+  },
+  "verdict": {
+    "sameOriginNavigation": true,
+    "multipleTabs": true,
+    "historyBack": true,
+    "all": true
+  }
+}

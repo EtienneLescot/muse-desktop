@@ -1,0 +1,30 @@
+{
+  "schema": "muse-desktop.m4-08-voice.v1",
+  "date": "2026-09-29",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP)",
+  "steps": {
+    "apiPresence": {
+      "speechRecognition": "function",
+      "webkitSpeechRecognition": "function",
+      "mediaDevices": true
+    },
+    "voiceControl": {
+      "present": true,
+      "label": "Start voice input",
+      "title": "Transcribe speech into the draft; audio is not stored",
+      "disabled": false
+    },
+    "afterVoiceClick": {
+      "anyError": [
+        "Voice",
+        "Requesting microphone access…"
+      ],
+      "composerAlive": true
+    }
+  },
+  "verdict": {
+    "calmHandling": true,
+    "speechApiExposed": true,
+    "all": true
+  }
+}
