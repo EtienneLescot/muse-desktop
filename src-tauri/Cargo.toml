@@ -27,6 +27,7 @@ reqwest = { version = "0.13.4", default-features = false, features = ["rustls", 
 # Remote MCP credentials use the platform-native secure store (Windows
 # Credential Manager, macOS Keychain, Secret Service/keyutils on Linux).
 keyring = { version = "3.6.3", default-features = false, features = ["apple-native", "windows-native", "linux-native-sync-persistent", "crypto-rust", "vendored"] }
+tauri-plugin-single-instance = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

@@ -1,0 +1,19 @@
+{
+  "schema": "muse-desktop.single-instance-wake.v1",
+  "date": "2026-09-29",
+  "steps": {
+    "instancesBefore": 1,
+    "spawnedB": true,
+    "bExited": {
+      "exited": true
+    },
+    "wakeEvents": 1,
+    "instancesAfter": 1
+  },
+  "verdict": {
+    "secondInstanceExits": true,
+    "wakeForwardedToPrimary": true,
+    "singleInstanceHolds": true,
+    "all": true
+  }
+}

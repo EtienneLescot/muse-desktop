@@ -8852,6 +8852,25 @@ fn main() {
     #[cfg(target_os = "macos")]
     login_env::adopt_login_shell_path();
     tauri::Builder::default()
+        // M2/M3 follow-up (measured 27/09): the automation wake task relaunches
+        // this executable while the user's instance may still run — two
+        // instances then clobber the shared WebView2 profile and their durable
+        // ledgers. The first-registered plugin must stay first: the second
+        // instance exits after forwarding its argv to this callback, which
+        // focuses the primary window (the scheduler re-checks on focus) and
+        // re-emits the wake so a due automation dispatches at once.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let is_wake = args.iter().any(|arg| arg == "--automation-wakeup");
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+            if is_wake {
+                use tauri::Emitter;
+                let _ = app.emit("automation-wakeup", ());
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())

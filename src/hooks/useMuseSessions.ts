@@ -2698,12 +2698,25 @@ export function useMuseSessions(): UseMuseSessions {
     window.addEventListener("focus", wake);
     window.addEventListener("pageshow", wake);
     document.addEventListener("visibilitychange", wake);
+    // M2/M3 follow-up: the OS wake task relaunches the exe; the single-instance
+    // plugin forwards `--automation-wakeup` to THIS instance, which re-emits it
+    // here so a due automation dispatches without waiting for the next tick.
+    let disposeWakeEvent: (() => void) | undefined;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen("automation-wakeup", () => {
+        if (document.visibilityState === "visible") check();
+      }),
+    ).then((dispose) => {
+      if (stopped) dispose();
+      else disposeWakeEvent = dispose;
+    });
     return () => {
       stopped = true;
       if (timer !== null) clearTimeout(timer);
       window.removeEventListener("focus", wake);
       window.removeEventListener("pageshow", wake);
       document.removeEventListener("visibilitychange", wake);
+      disposeWakeEvent?.();
       releaseSchedulerLease(schedulerLeaseOwner.current);
       if (schedulerLeaseMode.current === "native") {
         void releaseNativeSchedulerLease(schedulerLeaseOwner.current);
