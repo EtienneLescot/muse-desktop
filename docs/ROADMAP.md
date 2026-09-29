@@ -507,7 +507,7 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 | ID | Expected result | Global | Windows | macOS | Linux |
 |---|---|---|---|---|---|
 | M4-01 | Browse in a real built-in browser | ☑ | ☑ | ☐ | ☐ |
-| M4-02 | Annotate a page visually | — | ◐ | ☐ | ☐ |
+| M4-02 | Annotate a page visually | ☑ | ☑ | ☐ | ☐ |
 | M4-03 | Have Muse drive the browser | — | ◐ | ☐ | ☐ |
 | M4-04 | Have Muse drive a desktop application | ☑ | ☑ | ☐ | ☐ |
 | M4-05 | Produce and read images and rich documents | ☑ | ☑ | ◐ | ◐ |
@@ -521,7 +521,7 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 - ◐ **M4-01 / M4-02 / M4-03 — built-in browser, annotations, driving** *(Global: —)*
   - Windows ◐ — normalised navigation, history and eight tabs isolated by `sessionId` under `muse-desktop.browser.tabs.v1`, explicit same-origin download bounded to 10 MiB with `credentials: omit` and redirects refused, interception of `<a download>` links, **Open native** opening a dedicated `muse-browser` Tauri webview with a non-persistent private profile, idempotent **Close native**.
   - **Fundamental:** the native surface rests on **WebView2**, hence Windows. The tickets speak explicitly of "WebView2 qualification" — the macOS (WKWebView) and Linux (WebKitGTK) equivalents are **not started**. The iframe sandbox stays the web-preview fallback.
-  - **Windows qualification advanced on 27/09/2026** ([`m4-01-browser.json`](evidence/2026-09-27-m4-closure/m4-01-browser.json)): same-origin navigation renders in the sandboxed iframe, two tabs isolate state, and in-tab history **Back** returns to the previous entry. **Remaining:** cross-origin pages, download responses initiated by navigation, automatic capture of the iframe alone, the complete workflow.
+  - **Windows qualification advanced on 26-27/09/2026** ([`m4-01-browser.json`](evidence/2026-09-27-m4-closure/m4-01-browser.json)): same-origin navigation renders in the sandboxed iframe, two tabs isolate state, and in-tab history **Back** returns to the previous entry. **M4-02 Windows ☑ the same day** ([`m4-02-annotations.json`](evidence/2026-09-27-m4-closure/m4-02-annotations.json)): the annotation surface is built and proved end to end — anchor a comment to the page (persisted in `browser.annotations.v1`), render in the list, insert into the composer, remove. **M4-03 Windows evidence** ([`m4-03-browser-drive.json`](evidence/2026-09-27-m4-closure/m4-03-browser-drive.json)): a live turn drove the browser through the computer-use flow (6 steps, `get browser state` executed, honest window-state answer). **Remaining:** cross-origin pages, download responses initiated by navigation, automatic capture of the iframe alone, the complete real-page workflow.
 
 - ◐ **M4-04 — Have Muse drive a desktop application** *(the most asymmetric ticket)*
   - Windows ◐ — **computer use now rests on the open-source CUA driver** ([trycua/cua](https://github.com/trycua/cua), MIT): the application starts **its own service** on a private named channel, in `bounded` mode, with a **capability manifest it generates and approves**, and hands the Muse host the MCP entry pointing at it. One switch, three levels (19 / 38 / 57 tools measured on 0.28.2), no application list. **Verified end to end:** `get_screen_size` answers, `click` is refused by the driver itself (`outside the capability manifest`), revoking stops the service. Plan and measurements: [2026-09-22-computer-use-cua](plans/2026-09-22-computer-use-cua.md).

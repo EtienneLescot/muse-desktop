@@ -1,0 +1,19 @@
+{
+  "schema": "muse-desktop.m4-03-browser-drive.v1",
+  "date": "2026-09-27",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), CUA driver 0.28.2 (grant active, 57 act tools)",
+  "steps": {
+    "turn": {
+      "prompt": "Use the browser tool get_browser_state on the muse-browser window and tell me what page it shows.",
+      "observed": "the model ran a 6-step computer-use flow (55 s) including Computer use · get browser state; the tool executed and honestly reported 'No muse-browser window exists to inspect' because the native muse-browser window was not open at that moment",
+      "running": false,
+      "sawBrowserTool": true
+    }
+  },
+  "verdict": {
+    "modelDroveBrowserTools": true,
+    "toolExecutedWithHonestState": true,
+    "completeWorkflowWithRealPage": false,
+    "all": "partial — driving proved, real-page workflow remains"
+  }
+}

@@ -274,6 +274,9 @@ export default function App() {
     unwatchWorkspaceFiles,
     openWorkspacePath,
     prepareBrowserContext,
+    browserAnnotations,
+    addBrowserAnnotation,
+    removeBrowserAnnotation,
     computerUse,
     computerBusy,
     refreshComputerUse,
@@ -1806,6 +1809,9 @@ export default function App() {
                             onInsertContext={(context) => {
                               void prepareBrowserContext(active.session_id, context);
                             }}
+                            annotations={browserAnnotations}
+                            onAddAnnotation={(url, comment) => addBrowserAnnotation(url, "", comment)}
+                            onRemoveAnnotation={removeBrowserAnnotation}
                           />
                         </>
                       )}

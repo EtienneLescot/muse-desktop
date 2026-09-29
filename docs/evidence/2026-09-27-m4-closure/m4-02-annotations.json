@@ -1,0 +1,26 @@
+{
+  "schema": "muse-desktop.m4-02-annotations.v1",
+  "date": "2026-09-29",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP)",
+  "steps": {
+    "annotation": {
+      "storedCount": 2,
+      "storedComment": "M4-02 anchored comment",
+      "listRendered": 2
+    },
+    "composerInsertion": {
+      "has": true,
+      "value": "M4-02 anchored comment (http://tauri.localhost/index.html)"
+    },
+    "removal": {
+      "storedCount": 1,
+      "list": 1
+    }
+  },
+  "verdict": {
+    "annotationPersistedAndRendered": true,
+    "annotationInsertsToPrompt": true,
+    "annotationRemovable": true,
+    "all": true
+  }
+}

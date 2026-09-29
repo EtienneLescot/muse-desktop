@@ -6,6 +6,7 @@ import {
   MAX_BROWSER_TABS,
   normalizeBrowserUrl,
   saveBrowserTabs,
+  type BrowserAnnotation,
   type BrowserTab,
 } from "../lib/browserAnnotate";
 import { isTauriRuntime } from "../lib/env";
@@ -16,6 +17,14 @@ interface Props {
   sessionId: string;
   /** Insert the current page, labelled with its URL, into the composer. */
   onInsertContext: (context: string) => void;
+  /** M4-02: annotations anchored to pages, newest last. */
+  annotations?: BrowserAnnotation[];
+  /** M4-02: anchor a comment to the active page's URL. */
+  onAddAnnotation?: (url: string, comment: string) => void;
+  /** M4-02: remove one anchored comment. */
+  onRemoveAnnotation?: (id: string) => void;
+  /** M4-02: insert one anchored comment into the composer. */
+  onInsertAnnotation?: (annotation: BrowserAnnotation) => void;
 }
 
 function tabTitle(url: string): string {
@@ -34,7 +43,7 @@ function tabTitle(url: string): string {
  * previewing the project (a local dev server); most public sites refuse to be
  * framed, so "Open in window" hands the page to Muse's own browser window.
  */
-export function BrowserPanel({ sessionId, onInsertContext }: Props) {
+export function BrowserPanel({ sessionId, onInsertContext, annotations = [], onAddAnnotation, onRemoveAnnotation }: Props) {
   const [tabs, setTabs] = useState<BrowserTab[]>(() => {
     const stored = loadBrowserTabs(sessionId);
     return stored.length > 0 ? stored : [createBrowserTab()];
@@ -45,12 +54,20 @@ export function BrowserPanel({ sessionId, onInsertContext }: Props) {
   const [frameKey, setFrameKey] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const addressRef = useRef<HTMLInputElement>(null);
+  const [annotationDraft, setAnnotationDraft] = useState("");
 
   useEffect(() => {
     saveBrowserTabs(tabs, sessionId);
   }, [sessionId, tabs]);
 
   const page = normalizeBrowserUrl(active.url);
+  const pageAnnotations = (annotations ?? []).filter(
+    (annotation) => page !== null && annotation.url === page,
+  ).slice(-20).reverse();
+  const insertAnnotation = (annotation: BrowserAnnotation) => {
+    const quoted = annotation.selection ? `"${annotation.selection}" — ` : "";
+    onInsertContext(`${quoted}${annotation.comment} (${annotation.url})`);
+  };
 
   const showTab = (tab: BrowserTab) => {
     setActiveTabId(tab.id);
@@ -220,6 +237,53 @@ export function BrowserPanel({ sessionId, onInsertContext }: Props) {
           </div>
         )}
       </div>
+      {onAddAnnotation && page !== null && (
+        <div className="browser-annotations" aria-label="Page annotations">
+          <h4>Annotations</h4>
+          {pageAnnotations.length > 0 && (
+            <ul className="browser-annotation-list">
+              {pageAnnotations.map((annotation) => (
+                <li key={annotation.id}>
+                  <span className="browser-annotation-comment">{annotation.comment}</span>
+                  <button
+                    type="button"
+                    onClick={() => insertAnnotation(annotation)}
+                    title="Insert this annotation into the composer"
+                  >
+                    To prompt
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove annotation ${annotation.comment}`}
+                    onClick={() => onRemoveAnnotation?.(annotation.id)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="browser-annotation-add">
+            <input
+              type="text"
+              value={annotationDraft}
+              onChange={(event) => setAnnotationDraft(event.target.value.slice(0, 500))}
+              placeholder="Anchor a comment to this page…"
+              aria-label="Annotation comment"
+            />
+            <button
+              type="button"
+              disabled={annotationDraft.trim().length === 0}
+              onClick={() => {
+                onAddAnnotation?.(page, annotationDraft.trim());
+                setAnnotationDraft("");
+              }}
+            >
+              Anchor
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
