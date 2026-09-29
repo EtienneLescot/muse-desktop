@@ -1,0 +1,31 @@
+{
+  "schema": "muse-desktop.m4-03-edge-browser-state.v2",
+  "date": "2026-09-29",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), CUA driver 0.28.2",
+  "steps": {
+    "edgeReopened": {
+      "path": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+      "url": "file:///C:/Users/etien/AppData/Local/Temp/m4-03-edge-target.html"
+    },
+    "turn": {
+      "running": false,
+      "computerUseSteps": [
+        "Computer use · get window state",
+        "Computer use · get browser state"
+      ],
+      "getBrowserStateOutcome": "refused (browser_consent_required): this standalone browser profile requires explicit existing-profile approval before Cua can inspect its DevTools endpoint",
+      "tail": "e the refusal verbatim. | 01:52:23 | 2 steps · 10s | Computer use · get browser state | Muse |  | refused (browser_consent_required): this standalone browser profile requires explicit existing-profile approval before Cua can inspect its DevTools endpoint |  | 01:52:37"
+    }
+  },
+  "verdict": {
+    "turnCompleted": true,
+    "getBrowserStateExecuted": true,
+    "getBrowserStateRefusedConsentRequired": true,
+    "refusalQuotedVerbatimByModel": true,
+    "note": "The driver executed get_browser_state and refused the DevTools attachment with browser_consent_required — attaching to the user's logged-in Edge profile requires the explicit `--grant existing-profile` authorization, which the app does not pass when starting the daemon (computer.rs enable(): bounded manifest for 'observe', --dangerously-bypass-approvals for 'act', never --grant). The model quoted the refusal verbatim as instructed. This is a consent gate by design, one explicit product surface away, not a malfunction.",
+    "companionEvidence": {
+      "realPageWorkflow": "m4-03-edge-drive.json — the model DID drive and read the real Edge page (title 'M4-03 Drive Target') via the driver's get_window_state (UIA walk): the complete observe-real-page workflow on a recognized browser passes without any refusal.",
+      "unrecognizedWindowCase": "m4-03-browser-drive.json — get_browser_state on the muse-browser WebView2 window is refused ('pid … is not a recognized browser process'): the driver's browser tools bind to recognized browser processes only."
+    }
+  }
+}

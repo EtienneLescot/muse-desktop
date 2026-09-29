@@ -15,6 +15,19 @@ Muse sidecar 1.3.0) · CUA driver 0.28.2 (installed, grant active).
 | **M4-08** | voice probe (`m4-08-voice-probe.json`) | **Windows evidence** — WebView2 **exposes `SpeechRecognition`** (typeof function); the composer Voice control answers ("Start voice input" → "Requesting microphone access…") with calm handling and no crash. The permission dialog appeared as an `edge://permission-request-dialog` target. |
 | **single-instance** | wake-task relaunch guard (`single-instance-wake.json`) | Second instance with `--automation-wakeup` exits after forwarding its argv; the primary instance receives the `automation-wakeup` event (1 event recorded) and re-checks the scheduler. The two-instance ledger clobbering is closed. |
 
+## M4-03 follow-up (29/09) — the real-page workflow
+
+| Piece | Result |
+|---|---|
+| Real page in a recognized browser (`m4-03-edge-drive.json`) | **The complete observe-real-page workflow passes without refusal** — the test page opened in Edge (a process the CUA driver recognizes), a live turn drove the computer-use flow (`get window state`, UIA walk) and the model read the real page title (`M4-03 Drive Target`) back. The open question from 27/09 ("does driving a REAL page work once it lives in a recognized browser?") is answered: yes. |
+| Driver browser tools on that page (`m4-03-edge-browser-state.json`) | `get_browser_state` **executes but the driver refuses the DevTools attachment** with `browser_consent_required` — attaching to the user's logged-in profile needs the explicit `existing-profile` grant, which the app never passes (`computer.rs` enable(): bounded manifest for "observe", `--dangerously-bypass-approvals` for "act", no `--grant`). The model quoted the refusal verbatim. A consent gate by design, one product surface away. |
+| Earlier refusal, kept for the record (`m4-03-browser-drive.json`) | `get_browser_state` on the muse-browser WebView2 window: "pid … is not a recognized browser process" — the driver's browser tools bind to recognized browser processes only. |
+
+M4-03 therefore **stays ◐ on Windows**: the real-page computer-use workflow is
+proven, but the ticket's browser-tools path awaits the existing-profile consent
+surface, and the acceptance set (complete web workflow, unexpected navigation,
+stop) is not fully measured through those tools.
+
 ## M4-09 follow-up (27/09 evening) — rollback wiring
 
 | Piece | Result |
@@ -44,4 +57,6 @@ node scripts/cdp-m4-08-voice.mjs
 node scripts/cdp-m4-04-computer-turn.mjs
 node scripts/cdp-m4-05-files-xlsx.mjs
 node scripts/cdp-single-instance-wake.mjs
+node scripts/cdp-m4-03-edge-drive.mjs
+node scripts/cdp-m4-03-edge-browser-state.mjs
 ```
