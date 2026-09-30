@@ -18,7 +18,7 @@ goes with it: the kind of client Claude Code and Codex users take for granted, b
 Muse. Projects, git worktrees, subagents, MCP, a diff review panel. And an agent that can
 see your screen and use your applications.
 
-> **0.1.0 · macOS (Apple Silicon) and Windows x64.**
+> **0.2.0 · macOS (Apple Silicon) and Windows x64.**
 > [Download the latest release](https://github.com/EtienneLescot/muse-desktop/releases/latest).
 > The macOS DMG is signed and notarised. The Windows installer is not signed yet.
 
