@@ -61,6 +61,12 @@ export interface ComputerStatus {
   /** Tools the driver offers that no level covers: reported, never granted. */
   unclassified: string[];
   grantState: GrantState;
+  /**
+   * M4-03: may the driver attach to the user's already-signed-in browser
+   * profiles (`--grant existing-profile`)? `null` when the user never answered
+   * — never a silent true.
+   */
+  attach: boolean | null;
   manifest: unknown;
   manifestDigest: string | null;
   doctor: { ok?: boolean; probes?: ComputerProbe[] } | null;
@@ -149,6 +155,7 @@ export function parseComputerStatus(raw: unknown): ComputerStatus | null {
     levelCounts: counts,
     unclassified,
     grantState: value.grantState,
+    attach: typeof value.attach === "boolean" ? value.attach : null,
     manifest: value.manifest ?? null,
     manifestDigest: typeof value.manifestDigest === "string" ? value.manifestDigest : null,
     doctor,

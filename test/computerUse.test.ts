@@ -68,6 +68,15 @@ describe("computer use", () => {
     assert.equal(levelToolCount(null, "act"), 0);
   });
 
+  it("reads the browser-attach consent as null until answered", () => {
+    // M4-03: no answer is not consent — the toggle must never read as on.
+    assert.equal(parseComputerStatus(payload())?.attach, null);
+    assert.equal(parseComputerStatus(payload({ attach: true }))?.attach, true);
+    assert.equal(parseComputerStatus(payload({ attach: false }))?.attach, false);
+    assert.equal(parseComputerStatus(payload({ attach: "yes" }))?.attach, null);
+    assert.equal(parseComputerStatus(payload({ attach: 1 }))?.attach, null);
+  });
+
   it("tells the truth when the driver is missing", () => {
     const missing = parseComputerStatus(
       payload({ available: false, driverPath: null, driverVersion: null, levelCounts: {} }),

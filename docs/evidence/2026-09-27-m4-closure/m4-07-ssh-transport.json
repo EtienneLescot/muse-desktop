@@ -1,0 +1,33 @@
+{
+  "schema": "muse-desktop.m4-07-ssh-transport.v1",
+  "date": "2026-09-30",
+  "platform": "Windows 11 (26200), OpenSSH OpenSSH_9.9p1, OpenSSL 3.2.4 11 Feb 2025",
+  "targetValidated": true,
+  "argv": [
+    "ssh",
+    "-p",
+    "9",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "probe@127.0.0.1",
+    "--",
+    "echo remote-exec-ok"
+  ],
+  "argvEndsWithSeparator": true,
+  "realBinary": {
+    "file": "C:\\Program Files\\Git\\usr\\bin\\ssh.exe",
+    "exitCode": 255,
+    "signal": null,
+    "elapsedMs": 2118,
+    "stderrTail": "ssh: connect to host 127.0.0.1 port 9: Connection refused\r"
+  },
+  "verdict": {
+    "binaryDriven": true,
+    "fastBoundedFailure": true,
+    "transportLevelRefusal": true,
+    "argvNeverRejected": true
+  },
+  "summary": "ssh exited 255. ssh: connect to host 127.0.0.1 port 9: Connection refused"
+}

@@ -20,6 +20,8 @@ interface Props {
   busy: boolean;
   onRefresh: () => Promise<ComputerStatus | null>;
   onSetLevel: (level: ComputerLevel) => Promise<void>;
+  /** M4-03: record (or withdraw) the browser-attach consent. */
+  onSetAttach: (attach: boolean) => Promise<void>;
   onDisable: () => Promise<void>;
 }
 
@@ -37,7 +39,7 @@ interface Props {
  * this panel shows is therefore the truth about the current grant, including the
  * case where the grant has lapsed while the service is still up.
  */
-export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisable }: Props) {
+export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onSetAttach, onDisable }: Props) {
   const [copied, setCopied] = useState(false);
   const [install, setInstall] = useState<InstallStatus | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
@@ -189,6 +191,38 @@ export function ComputerUsePanel({ status, busy, onRefresh, onSetLevel, onDisabl
           </label>
         ))}
       </fieldset>
+
+      {/* M4-03: a separate consent — driving the desktop is not driving the
+          browser the user is already signed into. Off until answered. */}
+      <label className="computer-use-attach">
+        <input
+          type="checkbox"
+          checked={status?.attach === true}
+          disabled={busy || status === null || !status.available}
+          onChange={(e) => void onSetAttach(e.target.checked)}
+        />
+        <span>
+          <strong>Attach the user&rsquo;s browser</strong>
+          <small>
+            Lets Muse inspect and drive the Edge/Chrome windows you already have open,
+            including a signed-in profile. Unchecked, the driver refuses to touch them
+            and stays out of your browser.
+          </small>
+          {/* Measured on 0.28.2: the grant only exists in standard permission
+              mode, where a capability manifest cannot be served — the driver's
+              own policy then refuses process termination, and the manifest's
+              time bounds no longer apply. */}
+          {status?.attach === true && (
+            <small className="computer-use-count">
+              While attached, the driver runs in its standard mode: the granted
+              tool list still applies, and the grant lasts until you turn it off.
+            </small>
+          )}
+          {status?.attach === null && (
+            <small className="computer-use-count">Not answered yet</small>
+          )}
+        </span>
+      </label>
 
       {active && (
         <div className="computer-use-actions">

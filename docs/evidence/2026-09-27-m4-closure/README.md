@@ -28,6 +28,22 @@ proven, but the ticket's browser-tools path awaits the existing-profile consent
 surface, and the acceptance set (complete web workflow, unexpected navigation,
 stop) is not fully measured through those tools.
 
+## M4-03 follow-up (30/09) — the existing-profile consent surface delivered
+
+| Piece | Result |
+|---|---|
+| Dedicated toggle (`m4-03-attach-proof.json`) | **The consent surface works end to end** — Settings → Computer use → "Attach the user's browser" records `computer-attach.json` (`attachChecked: true`, state "Granted"), and the daemon restarts with a **measured** command line: `serve … --permission-mode standard --grant existing-profile` (`grantFlagOnProcess: true`). |
+| Serve matrix, measured | `--grant existing-profile` is **only valid in standard permission mode**; every capability manifest (v1 and v2) makes the user's live windows invisible unless each pid is named (`bounded_resource_outside_manifest`), and the browser resource class accepts exact pids only — so a manifest and the user's live browser cannot coexist. With the toggle on, the driver therefore runs manifest-less in standard mode (whose own policy refuses foreign process termination), and the observe/act tool ceiling moved to the app's MCP relay (`relay_filter`: `tools/list` filtered, out-of-level calls answered before the driver). Unit-tested (the `serve_argv` matrix and the relay filter). |
+| The live browser turn | A fresh conversation ran the full chain — `list windows`, `browser_prepare` (`attached_existing_profile`), `get_browser_state` — and the driver **bound the real Edge window exactly** (`binding_quality: "exact"`, `endpoint_access_class: "existing_profile_approved"`), with no `browser_consent_required` (`bindingRefused: false`). The model reported the page identity from the bound window (`M4-03 Drive Target`, `modelReportedPage: true`). Verdict: **`completeWorkflowOnRecognizedBrowser: true`**. |
+| Consent prompt mechanics | Edge's native remote-debugging consent ("Voulez-vous autoriser le débogage à distance ?") is a **one-time per-install approval**: after Étienne approved it once (29/09), later daemons attach through the persisted `DevToolsActivePort` endpoint with no new prompt — the setting survives Edge and daemon restarts. Stacked prompts (one per prepare attempt while the setting is off) make the driver refuse with `browser_wrong_target_refused` — it requires exactly one prompt with exactly three buttons. |
+| Environment notes | The proof ran against a single-window Edge (`--hide-crash-restore-bubble`); the crash-restore bar's buttons otherwise pollute the driver's prompt-button count. The evidence's final tail shows the model reading the bound window's title ("bind output did not expose a tab title string. Window title is M4-03 Drive Target…") — the tab-level snapshot needs an exact `tab_id`, recorded verbatim. |
+
+M4-03 **stays ◐ on Windows with a narrowed remainder**: the consent surface and
+the browser-tools bind are now delivered and proved (the 29/09 "one consent
+step away" question is closed). Still unmeasured: the unexpected-navigation and
+stop-without-acting-on-another-tab acceptance behaviors, cross-origin pages,
+navigation-initiated download responses, and iframe auto-capture.
+
 ## M4-09 follow-up (27/09 evening) — rollback wiring
 
 | Piece | Result |
@@ -44,8 +60,14 @@ failure) and now `release:rollback` for post-launch health-check failures.
 - The Files-panel office preview keeps its safety guards: a malformed office
   archive degrades to the bounded notice instead of a crash (verified during
   fixture iterations).
-- M4-06 stays ☐ (product spec missing); M4-07's real transport (SSH/cloud)
-  does not exist yet — the pure model is tested in Rust.
+
+## M4-06 / M4-07 follow-up (30/09) — self-hosted sharing, SSH transport
+
+| Ticket | Result |
+|---|---|
+| **M4-06** (`m4-06-share-server.json`) | **Client + reference server delivered and proved over real loopback HTTP** — `src/lib/sharePublish.ts` (endpoint validation, bounded publish requests, deny-only revoke, no URL announced before the server's real 201) and `scripts/share-server.mjs` (the single-file zero-dependency service the user runs on their own LAN/VPS/NAS: token-gated publish/revoke, token-free read, expiry on every read, revocation observable from any client as the same 404). The tests spawn the real server on an ephemeral port: publish with token / read without any / wrong token 403 / incomplete export 400 / oversized 413 / revoke → 404 for everyone / expiry → 404. |
+| **M4-07** (`m4-07-ssh-transport.json`) | **The SSH transport is the system binary, delivered and drive-proven** — `src/lib/remoteSsh.ts` (pure validation + canonical argv) and `src-tauri/src/remote_ssh.rs` (binary resolution, argv rebuilt Rust-side, 64 KiB/stream output bound, 1–120 s timeout). The renderer never builds argv: fields are charset-checked and the remote command travels after a literal `--`. The real `ssh.exe` (OpenSSH 9.9p1) driven with the canonical argv against a local discard port fails fast with a transport-level refusal ("Connection refused"), never an argv rejection — the remote-host half stays unmeasured (no SSH server on this machine; installing one was out of scope). |
+| **M4-08** | Product decision of 29/09: the voice path is the **WebView speech API only** — no audio ever leaves the machine; real-time dialogue with a provider is out. The dictation flow already shipped (`voice.ts`); it waits for a microphone to be qualified — nothing further to code today. |
 
 ## Reproducibility
 

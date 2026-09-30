@@ -28,6 +28,15 @@
 //!     intersecting our levels with the driver's own `list-tools`, so a tool it
 //!     removed cannot be named, a tool it added is not silently granted, and
 //!     anything we fail to classify is reported rather than granted.
+//!
+//! One measured exception (M4-03): when the user's browser is attached
+//! (`--grant existing-profile`, only valid in standard mode) a capability
+//! manifest cannot be served at all — every manifest makes the user's live
+//! windows invisible unless each pid is named, and the browser resource class
+//! accepts exact pids only. There the driver runs manifest-less in standard
+//! mode (whose own policy still refuses process termination), and the level
+//! ceiling moves to the relay: `tools/list` is filtered and out-of-level calls
+//! are refused before the driver ever sees them.
 
 use serde_json::{json, Value};
 use std::io::Read;
@@ -70,6 +79,14 @@ const IDLE_TIMEOUT: &str = "30m";
 const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 const START_TIMEOUT: Duration = Duration::from_secs(15);
 const MANIFEST_FILE: &str = "computer-manifest.json";
+
+/// Whether the user let the driver attach to their **existing** browser
+/// profiles (signed-in Edge/Chrome windows), the `existing-profile` grant.
+/// A separate consent file: the capability manifest is handed to the driver and
+/// validated against its schema, this record is only ours. It is a distinct
+/// consent from the level — driving the desktop is not driving the browser the
+/// user is logged into — and `disable` removes it with the rest of the grant.
+const ATTACH_FILE: &str = "computer-attach.json";
 
 /// What the user is granting. Two levels, not fifty-seven checkboxes.
 ///
@@ -352,16 +369,92 @@ pub fn run_relay() -> i32 {
     thread::spawn(move || {
         let _ = std::io::copy(&mut std::io::stdin().lock(), &mut to_driver);
     });
+    // The level ceiling, read once: with the browser attached the driver runs
+    // without a capability manifest, so the relay is what keeps the granted
+    // vocabulary narrow (`relay_filter`).
+    let level = relay_level();
     let mut out = std::io::stdout().lock();
     for line in BufReader::new(from_driver).lines() {
         let Ok(line) = line else { break };
         let line = surface_snapshot(&line).unwrap_or(line);
+        let line = relay_filter(level, &line).unwrap_or(line);
         if writeln!(out, "{line}").and_then(|()| out.flush()).is_err() {
             break;
         }
     }
     let _ = child.kill();
     child.wait().ok().and_then(|status| status.code()).unwrap_or(0)
+}
+
+/// Where the relay finds the recorded level: the same directory the app uses
+/// (`app_data_dir/computer-use`), reconstructed from the environment because
+/// the relay runs without a Tauri app handle. The identifier mirrors
+/// `tauri.conf.json`; a miss means no ceiling, and the driver's own policy
+/// still applies.
+fn relay_level() -> Option<&'static str> {
+    #[cfg(windows)]
+    let base = std::env::var_os("APPDATA").map(PathBuf::from)?;
+    #[cfg(target_os = "macos")]
+    let base = std::env::var_os("HOME")
+        .map(|home| PathBuf::from(home).join("Library").join("Application Support"))?;
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let base = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))?;
+    let dir = base.join("com.muse.desktop").join("computer-use");
+    recorded_level(&read_manifest(&dir)?)
+}
+
+/// The relay's level ceiling (M4-03). With the browser attached the driver
+/// runs in standard mode with no capability manifest — `serve_argv` explains
+/// why the manifest cannot coexist with the user's live browser — so the
+/// observe/act vocabulary is enforced here, on the only path the model has.
+/// Two rewrites, everything else forwarded unchanged:
+///
+/// * a `tools/list` result keeps only the tools the level grants, so the model
+///   never sees a tool it may not call;
+/// * a `tools/call` for a tool outside the level is answered here with a
+///   JSON-RPC error and never reaches the driver.
+///
+/// The gate uses this app's own level classification, never a widening: a tool
+/// the driver removed simply never appears in `tools/list`, and a call to an
+/// unknown tool is refused by the driver itself.
+fn relay_filter(level: Option<&str>, line: &str) -> Option<String> {
+    let level = level?;
+    let mut message: Value = serde_json::from_str(line).ok()?;
+    let granted = level_tools(level)?;
+    if let Some(tools) = message
+        .get_mut("result")
+        .and_then(|result| result.get_mut("tools"))
+        .and_then(|tools| tools.as_array_mut())
+    {
+        tools.retain(|tool| {
+            tool.get("name")
+                .and_then(|name| name.as_str())
+                .is_some_and(|name| granted.iter().any(|known| known == &name))
+        });
+        return serde_json::to_string(&message).ok();
+    }
+    if message.get("method").and_then(|method| method.as_str()) == Some("tools/call") {
+        let name = message
+            .pointer("/params/name")
+            .and_then(|name| name.as_str())?;
+        if granted.iter().any(|known| known == &name) {
+            return None;
+        }
+        let refusal = json!({
+            "jsonrpc": "2.0",
+            "id": message.get("id").cloned()?,
+            "error": {
+                "code": -32000,
+                "message": format!(
+                    "the tool '{name}' is not part of the granted computer-use level ({level}); change the level or turn off the browser attachment in Settings"
+                ),
+            },
+        });
+        return Some(refusal.to_string());
+    }
+    None
 }
 
 /// The one rewrite: a tool result with `structuredContent.snapshot_id` gets that
@@ -599,6 +692,33 @@ fn read_manifest(dir: &Path) -> Option<Value> {
     serde_json::from_str(&text).ok()
 }
 
+/// The `existing-profile` consent on record. `None` when the user never
+/// answered, `Some(false)` when they turned it off explicitly: a fresh install
+/// must not silently attach to a signed-in browser.
+fn read_attach(dir: &Path) -> Option<bool> {
+    let text = std::fs::read_to_string(dir.join(ATTACH_FILE)).ok()?;
+    serde_json::from_str::<Value>(&text).ok()?.as_bool()
+}
+
+/// Record the `existing-profile` consent and restart the service with it: the
+/// grant is fixed for the daemon's lifetime (the driver's own rule), so changing
+/// consent is a stop + start, never a patch. A consent on record with no service
+/// up is restarted too — the same repair `resume` does at mount.
+pub fn set_attach(dir: &Path, attach: bool) -> Result<Value, String> {
+    let text = serde_json::to_string(&Value::Bool(attach))
+        .map_err(|error| format!("cannot serialize the attach consent: {error}"))?;
+    std::fs::create_dir_all(dir)
+        .map_err(|error| format!("cannot create {}: {error}", dir.display()))?;
+    std::fs::write(dir.join(ATTACH_FILE), text)
+        .map_err(|error| format!("cannot write the attach consent: {error}"))?;
+    match read_manifest(dir).and_then(|manifest| recorded_level(&manifest).map(str::to_string)) {
+        // `enable` stops whatever is running and starts one daemon whose
+        // command line carries the new consent — or its withdrawal.
+        Some(level_on_record) => enable(&level_on_record, dir),
+        None => Ok(status_json(dir)),
+    }
+}
+
 /// A stable, short identifier for a manifest, so the UI can show the user the
 /// exact bytes they approved. This mirrors the sha256 the driver reports, but is
 /// computed here so it exists even when the service is down.
@@ -617,6 +737,7 @@ fn manifest_digest(manifest: &Value) -> String {
 /// Everything the UI needs to describe the feature honestly.
 pub fn status_json(dir: &Path) -> Value {
     let manifest = read_manifest(dir);
+    let attach = read_attach(dir);
     let Some(driver) = binary() else {
         return json!({
             "driverPath": null,
@@ -625,6 +746,7 @@ pub fn status_json(dir: &Path) -> Value {
             "levelCounts": level_counts(&[]),
             "unclassified": [],
             "grantState": "stopped",
+            "attach": attach,
             "permissions": null,
             "manifest": manifest,
             "manifestDigest": manifest.as_ref().map(manifest_digest),
@@ -653,6 +775,7 @@ pub fn status_json(dir: &Path) -> Value {
         "levelCounts": level_counts(&tools),
         "unclassified": unclassified(&tools),
         "grantState": grant,
+        "attach": attach,
         "manifest": manifest,
         "manifestDigest": read_manifest(dir).as_ref().map(manifest_digest),
         "doctor": doctor,
@@ -668,8 +791,54 @@ fn level_counts(available: &[String]) -> Value {
     Value::Object(counts)
 }
 
-/// Start the app's own service in bounded mode with a manifest built from the
-/// level, and wait until it answers.
+/// The exact `serve` command line for one consent state. Pure, so the matrix
+/// has a test rather than a comment. Measured on 0.28.2:
+///
+/// * `attach=false` — the manifest carries the level: `bounded` + capability
+///   manifest for "observe", `--dangerously-bypass-approvals` for "act"
+///   (LEVELS explains why act cannot be bounded). The manifest's time bounds
+///   hold.
+/// * `attach=true` — `standard --grant existing-profile` and **no manifest**.
+///   The driver refuses `--grant` outside standard ("--grant is valid only in
+///   standard permission mode"), and every capability manifest makes windows
+///   invisible unless each pid is named (`bounded_resource_outside_manifest`)
+///   while the browser resource class only accepts exact pids even in schema
+///   v2 — so a manifest and the user's live browser cannot coexist. Standard
+///   mode keeps its own driver-side ceiling (measured: `kill_app` refused,
+///   `foreign_process_termination_denied`); the observe/act tool ceiling moves
+///   to the relay, which reads the recorded level.
+pub fn serve_argv(endpoint: &str, manifest_path: Option<&str>, attach: bool) -> Vec<String> {
+    let mut args: Vec<String> = vec![
+        "serve".to_string(),
+        "--socket".to_string(),
+        endpoint.to_string(),
+    ];
+    if attach {
+        args.extend([
+            "--permission-mode".to_string(),
+            "standard".to_string(),
+            "--grant".to_string(),
+            "existing-profile".to_string(),
+        ]);
+        return args;
+    }
+    match manifest_path {
+        Some(path) => args.extend([
+            "--permission-mode".to_string(),
+            "bounded".to_string(),
+            "--capability-manifest".to_string(),
+            path.to_string(),
+            "--approve-capability-manifest".to_string(),
+        ]),
+        // The user consented to "act" in Settings; LEVELS says why it cannot
+        // be bounded.
+        None => args.extend(["--dangerously-bypass-approvals".to_string()]),
+    }
+    args
+}
+
+/// Start the app's own service for the level and the attach consent on record,
+/// and wait until it answers.
 pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
     let driver = binary().ok_or_else(|| {
         "cua-driver is not installed; install it from https://cua.ai before enabling computer use"
@@ -689,24 +858,14 @@ pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
         thread::sleep(Duration::from_millis(400));
     }
 
-    let manifest_path = path.display().to_string();
     let endpoint = endpoint();
-    let args: Vec<&str> = if manifest["mode"] == "bounded" {
-        vec![
-            "serve",
-            "--socket",
-            &endpoint,
-            "--permission-mode",
-            "bounded",
-            "--capability-manifest",
-            &manifest_path,
-            "--approve-capability-manifest",
-        ]
-    } else {
-        // The user consented to "act" in Settings; LEVELS says why it cannot
-        // be bounded.
-        vec!["serve", "--socket", &endpoint, "--dangerously-bypass-approvals"]
-    };
+    let attach = read_attach(dir).unwrap_or(false);
+    let manifest_path = (!attach).then(|| path.display().to_string());
+    // With the browser attached the manifest is still written — it is the
+    // level record the relay and `resume` read — but it is not handed to the
+    // driver (`serve_argv` explains why it cannot be).
+    let args = serve_argv(&endpoint, manifest_path.as_deref(), attach);
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let mut command = service_command(&driver, &args);
     command
         .stdin(Stdio::null())
@@ -761,13 +920,16 @@ fn service_command(driver: &Path, args: &[&str]) -> Command {
 }
 
 /// Revoke first, then stop: revocation is deny-only and never needs a token,
-/// which is what makes "turn it off" trustworthy even if the stop fails.
+/// which is what makes "turn it off" trustworthy even if the stop fails. The
+/// `existing-profile` consent goes with the rest of the grant — a revoked
+/// grant must not leave a recorded permission to inspect signed-in browsers.
 pub fn disable(dir: &Path) -> Result<Value, String> {
     if let Some(driver) = binary() {
         let _ = run(&driver, &["revoke", "--all", "--socket", &endpoint()], PROBE_TIMEOUT);
         let _ = run(&driver, &["stop", "--socket", &endpoint()], PROBE_TIMEOUT);
     }
     let _ = std::fs::remove_file(dir.join(MANIFEST_FILE));
+    let _ = std::fs::remove_file(dir.join(ATTACH_FILE));
     Ok(status_json(dir))
 }
 
@@ -953,6 +1115,46 @@ mod tests {
         assert_eq!(recorded_level(&json!({})), None);
     }
 
+    /// The `existing-profile` consent (M4-03): absent by default, recorded when
+    /// answered, and never part of the manifest handed to the driver.
+    #[test]
+    fn the_attach_consent_round_trips_and_is_off_by_default() {
+        let dir = std::env::temp_dir().join(format!("muse-computer-attach-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(read_attach(&dir), None, "no answer is not consent");
+        set_attach(&dir, true).unwrap();
+        assert_eq!(read_attach(&dir), Some(true));
+        set_attach(&dir, false).unwrap();
+        assert_eq!(read_attach(&dir), Some(false));
+        std::fs::remove_file(dir.join(ATTACH_FILE)).unwrap();
+        std::fs::remove_dir(&dir).ok();
+    }
+
+    #[test]
+    fn revoking_the_grant_takes_the_attach_consent_with_it() {
+        let dir = std::env::temp_dir().join(format!("muse-computer-revoke-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        set_attach(&dir, true).unwrap();
+        write_manifest(&dir, &manifest("observe", &fixture()).unwrap()).unwrap();
+        assert_eq!(read_attach(&dir), Some(true));
+        // `disable` also probes the driver (absent in CI): only the files matter here.
+        let _ = disable(&dir);
+        assert_eq!(read_attach(&dir), None, "a revoked grant must not leave browser consent on record");
+        assert!(read_manifest(&dir).is_none());
+        std::fs::remove_dir(&dir).ok();
+    }
+
+    #[test]
+    fn attach_is_exposed_in_the_status_without_path_control() {
+        let dir = std::env::temp_dir().join(format!("muse-computer-status-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let status = status_json(&dir);
+        assert_eq!(status["attach"], Value::Null, "no answer is null, never a silent true");
+        set_attach(&dir, true).unwrap();
+        assert_eq!(status_json(&dir)["attach"], json!(true));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn the_manifest_digest_is_stable_and_short() {
         let available = fixture();
@@ -977,6 +1179,7 @@ mod tests {
         assert_eq!(
             keys,
             [
+                "attach",
                 "available",
                 "doctor",
                 "driverPath",
@@ -1097,5 +1300,103 @@ mod tests {
         assert!(mcp_server_for(driver, "stopped").is_none());
         assert!(mcp_server_for(driver, "expired").is_none());
         assert!(mcp_server_for(driver, "active").is_some());
+    }
+
+    /// The serve matrix, as measured on 0.28.2 (see `serve_argv`): the browser
+    /// grant only exists in standard mode, and a capability manifest cannot
+    /// coexist with the user's live browser.
+    #[test]
+    fn the_serve_argv_matrix_matches_the_measured_driver_rules() {
+        let endpoint = "\\\\.\\pipe\\muse-test";
+        let manifest = Some("C:\\data\\computer-manifest.json");
+
+        // observe, browser detached: the bounded manifest carries the level.
+        let observe = serve_argv(endpoint, manifest, false);
+        assert_eq!(
+            observe,
+            [
+                "serve", "--socket", endpoint, "--permission-mode", "bounded",
+                "--capability-manifest", manifest.unwrap(), "--approve-capability-manifest",
+            ]
+        );
+
+        // act, browser detached: unrestricted, no manifest handed over.
+        let act = serve_argv(endpoint, None, false);
+        assert!(act.contains(&"--dangerously-bypass-approvals".to_string()));
+        assert!(!act.iter().any(|arg| arg == "--permission-mode"));
+
+        // Browser attached, either level: standard + grant, and no manifest —
+        // the driver refuses `--grant` outside standard, and every manifest
+        // makes the user's live windows invisible unless each pid is named.
+        for level in LEVELS {
+            let attached = serve_argv(endpoint, manifest, true);
+            assert_eq!(
+                attached,
+                [
+                    "serve", "--socket", endpoint,
+                    "--permission-mode", "standard", "--grant", "existing-profile",
+                ],
+                "level {level}"
+            );
+        }
+    }
+
+    /// With the browser attached there is no capability manifest, so the relay
+    /// is the level ceiling: tools/list keeps the level's tools, a call outside
+    /// the level is answered here and never reaches the driver.
+    #[test]
+    fn the_relay_enforces_the_level_when_no_manifest_is_served() {
+        let tools_list = json!({"jsonrpc": "2.0", "id": 3, "result": {"tools": [
+            {"name": "get_screen_size"}, {"name": "click"}, {"name": "brand_new_tool"},
+        ]}})
+        .to_string();
+
+        // observe: `click` vanishes from the advertised list; an unknown tool
+        // is dropped too — the vocabulary stays the level's.
+        let observe_list = relay_filter(Some("observe"), &tools_list).unwrap();
+        let names: Vec<String> = serde_json::from_str::<Value>(&observe_list).unwrap()["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|tool| tool["name"].as_str().map(str::to_string))
+            .collect();
+        assert_eq!(names, vec!["get_screen_size".to_string()]);
+
+        // act: the same list keeps the driver's known tools, still drops the
+        // unknown one.
+        let act_list = relay_filter(Some("act"), &tools_list).unwrap();
+        let names: Vec<String> = serde_json::from_str::<Value>(&act_list).unwrap()["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|tool| tool["name"].as_str().map(str::to_string))
+            .collect();
+        assert_eq!(names, vec!["get_screen_size".to_string(), "click".to_string()]);
+
+        // observe calling `click`: refused here, id echoed, driver untouched.
+        let call = json!({"jsonrpc": "2.0", "id": 9, "method": "tools/call",
+            "params": {"name": "click", "arguments": {"pid": 1, "x": 2, "y": 3}}})
+            .to_string();
+        let refused = relay_filter(Some("observe"), &call).unwrap();
+        let refused: Value = serde_json::from_str(&refused).unwrap();
+        assert_eq!(refused["id"], json!(9));
+        assert!(refused["error"]["message"].as_str().unwrap().contains("'click'"));
+        assert!(refused["error"]["message"].as_str().unwrap().contains("observe"));
+
+        // observe calling an observe tool: forwarded untouched.
+        let observe_call = json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+            "params": {"name": "get_browser_state", "arguments": {}}})
+            .to_string();
+        assert_eq!(relay_filter(Some("observe"), &observe_call), None);
+
+        // no recorded level (or unparseable line): everything is forwarded —
+        // the driver's own policy still applies.
+        assert_eq!(relay_filter(None, &call), None);
+        assert_eq!(relay_filter(Some("observe"), "not json"), None);
+        // results without a tools array and requests without a gateable shape.
+        let state = json!({"jsonrpc": "2.0", "id": 7, "result": {"content": [
+            {"type": "text", "text": "ok"}]}})
+            .to_string();
+        assert_eq!(relay_filter(Some("observe"), &state), None);
     }
 }

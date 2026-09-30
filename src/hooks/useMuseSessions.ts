@@ -1156,6 +1156,8 @@ interface UseMuseSessions {
   computerBusy: boolean;
   refreshComputerUse: () => Promise<ComputerStatus | null>;
   setComputerLevel: (level: ComputerLevel) => Promise<void>;
+  /** M4-03: record (or withdraw) the browser-attach consent. */
+  setComputerAttach: (attach: boolean) => Promise<void>;
   disableComputerUse: () => Promise<void>;
   /** US-20: dated/sourced memory entries (persisted, global to the app). */
   memories: MemoryEntry[];
@@ -5922,6 +5924,23 @@ export function useMuseSessions(): UseMuseSessions {
     [refreshComputerUse],
   );
 
+  const setComputerAttach = useCallback(
+    async (attach: boolean) => {
+      if (!isTauriRuntime()) return;
+      setComputerBusy(true);
+      try {
+        const raw = await invoke<unknown>("computer_set_attach", { attach });
+        setComputerUse(parseComputerStatus(raw));
+        await refreshComputerUse();
+      } catch (error) {
+        setError(userFacingError(error, "The browser consent could not be changed."));
+      } finally {
+        setComputerBusy(false);
+      }
+    },
+    [refreshComputerUse],
+  );
+
   const disableComputerUse = useCallback(async () => {
     if (!isTauriRuntime()) return;
     setComputerBusy(true);
@@ -7993,6 +8012,7 @@ export function useMuseSessions(): UseMuseSessions {
     computerBusy,
     refreshComputerUse,
     setComputerLevel,
+    setComputerAttach,
     disableComputerUse,
     answerInput,
     cancelInput,

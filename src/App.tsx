@@ -281,6 +281,7 @@ export default function App() {
     computerBusy,
     refreshComputerUse,
     setComputerLevel,
+    setComputerAttach,
     disableComputerUse,
     memories,
     scanNudge,
@@ -1009,6 +1010,7 @@ export default function App() {
                 busy={computerBusy}
                 onRefresh={refreshComputerUse}
                 onSetLevel={setComputerLevel}
+                onSetAttach={setComputerAttach}
                 onDisable={disableComputerUse}
               />
               <MemoryPanel

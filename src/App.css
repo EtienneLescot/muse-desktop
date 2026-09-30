@@ -6847,6 +6847,33 @@ body.dark .composer textarea::placeholder {
   font-variant-numeric: tabular-nums;
 }
 
+.computer-use-attach {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+.computer-use-attach input {
+  margin-top: 3px;
+}
+
+.computer-use-attach span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+}
+
+.computer-use-attach small {
+  color: var(--muted);
+}
+
 .computer-use-actions {
   display: flex;
   gap: 6px;

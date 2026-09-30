@@ -1,0 +1,24 @@
+{
+  "schema": "muse-desktop.m4-06-share-server.v1",
+  "date": "2026-09-30",
+  "platform": "Windows 11 (26200), Node 22 test runner, reference server on loopback HTTP",
+  "what": "Client publish/revoke for the self-hosted mini-server (product decision of 29/09/2026) plus the reference server itself, exercised end to end over real loopback HTTP",
+  "pieces": {
+    "client": "src/lib/sharePublish.ts — endpoint validation (http/https only, no credentials/query in the URL), publish request (PUT + Bearer + bounded duration 1 h–30 d + 240 KiB body), revoke request (deny-only DELETE), response parsing that refuses to announce a URL before the server's real 201",
+    "server": "scripts/share-server.mjs — single-file zero-dependency Node service: token-gated publish/revoke, token-free read, expiry enforced on every read, revocation observable from any client (the same 404), optional JSON state file for restart survival",
+    "tests": "test/sharePublish.test.ts — 9 tests, the last four spawn the real reference server on an ephemeral port"
+  },
+  "measured": {
+    "publishWithTokenReadWithoutAny": "PUT with 'Bearer test-token-123' → 201 {url}; a wrong token → 403; a second client GETs the bundle with no token at all → 200",
+    "incompleteExportRefused": "a bundle without a body → 400 'incomplete export'; an oversized body → 413; nothing was published (GET → 404)",
+    "revocationObservable": "DELETE with the token → 204; subsequent GET → 404 with and without the token; an unknown id → 404",
+    "expiryHonored": "a bundle published with an already-past expiresAt → 201 but GET → 404"
+  },
+  "verdict": {
+    "secondClientReads": true,
+    "revokedLinkIs404": true,
+    "incompleteExportRefused": true,
+    "noUrlBeforeRealCreation": true
+  },
+  "remaining": "No UI wiring yet (the retired SharePanel surface returns later); the service itself was exercised on loopback only — a real LAN/VPS host, a real second device and token management on the user's side stay unmeasured."
+}
