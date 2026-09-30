@@ -44,6 +44,21 @@ step away" question is closed). Still unmeasured: the unexpected-navigation and
 stop-without-acting-on-another-tab acceptance behaviors, cross-origin pages,
 navigation-initiated download responses, and iframe auto-capture.
 
+## M4-03 follow-up (30/09 later) — the acceptance set proved, Windows ☑
+
+| Piece | Result |
+|---|---|
+| Two-tab scenario, non-destructive (`m4-03-acceptance.json`) | **`completeAcceptanceSet: true`** — the plan's acceptance set (a complete web workflow, an unexpected navigation, a stop without acting on another tab) is proved in a live turn. The scenario runs in an **isolated Edge process** (a dedicated temp profile — the driver binds windows to CDP targets process-wide, so the user's multi-window Edge makes the tie-break ambiguous on 0.28.2; the user's own windows are never touched). A decoy tab rides the scenario window. |
+| The turn | The model prepared (`attached_existing_profile`), read the bound tabs, brought the window to front, clicked the target tab's viewport button **with the verbatim ids** (`clicked (400, 300)`), re-read the state and reported the navigation ("Le tab a donc navigué de m4-03-edge-target.html vers m4-03-unexpected.html"). The harness verified with the driver afterwards: the target tab is on `m4-03-unexpected.html` (`unexpectedNavigationHappened`), the decoy tab is byte-identical (`decoyUntouched`), and no other click happened. |
+| Relay fix that made it possible | `get_browser_state` returns `target_id`/`tab_id` **only in `structuredContent`**, which a text-only host drops — the model saw "bound target … with 2 tab(s)" and could never aim `browser_click`. The relay now surfaces the binding ids into the text (`surface_browser_ids`, snapshot_id-style, unit-tested). With them, the model used the ids verbatim on the first try. |
+| Measured driver limits, recorded | Typed element refs (`p<snapshot>:<index>`) never materialize from `get_browser_state` on 0.28.2, so the click rides viewport coordinates; legacy `page` mutations require unrestricted mode and are therefore unavailable under the attach consent (standard mode); the native consent prompt is a one-time per-install approval, and stacked prompts (one per prepare attempt while the setting is off) make the driver refuse with `browser_wrong_target_refused`. |
+
+M4-03 is **Windows ☑** (the acceptance set is measured end to end through the
+typed browser tools under the attach consent). Remaining, beyond the
+acceptance set: cross-origin pages, navigation-initiated download responses,
+automatic capture of the iframe alone; macOS/Linux stay ☐ (WebView2-bound
+ticket family).
+
 ## M4-09 follow-up (27/09 evening) — rollback wiring
 
 | Piece | Result |

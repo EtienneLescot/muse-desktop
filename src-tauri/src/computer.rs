@@ -376,7 +376,9 @@ pub fn run_relay() -> i32 {
     let mut out = std::io::stdout().lock();
     for line in BufReader::new(from_driver).lines() {
         let Ok(line) = line else { break };
-        let line = surface_snapshot(&line).unwrap_or(line);
+        let line = surface_snapshot(&line)
+            .or_else(|| surface_browser_ids(&line))
+            .unwrap_or(line);
         let line = relay_filter(level, &line).unwrap_or(line);
         if writeln!(out, "{line}").and_then(|()| out.flush()).is_err() {
             break;
@@ -470,6 +472,36 @@ fn surface_snapshot(line: &str) -> Option<String> {
     let note = format!(
         "snapshot_id: {snapshot} (pass it with element_index, for example click {{pid, window_id, element_index, snapshot_id}})"
     );
+    let content = result.get_mut("content")?.as_array_mut()?;
+    match content.iter_mut().find(|part| part["type"] == "text") {
+        Some(part) => {
+            let text = part["text"].as_str().unwrap_or_default();
+            part["text"] = Value::String(format!("{text}\n\n{note}"));
+        }
+        None => content.insert(0, json!({ "type": "text", "text": note })),
+    }
+    serde_json::to_string(&message).ok()
+}
+
+/// The second rewrite, same failure class as `surface_snapshot`:
+/// `get_browser_state` returns the binding ids (`target_id`, each tab's
+/// `tab_id`) only in `structuredContent`, which a text-only host drops — the
+/// model would see "bound target … (exact) with 2 tab(s)" and never the ids
+/// the typed browser tools require next. Append them to the text, verbatim.
+/// `None` means "forward the line unchanged".
+fn surface_browser_ids(line: &str) -> Option<String> {
+    let mut message: Value = serde_json::from_str(line).ok()?;
+    let result = message.get_mut("result")?;
+    let sc = result.get("structuredContent")?;
+    let target_id = sc.get("target_id")?.as_str()?;
+    let tabs = sc.get("tabs")?.as_array()?;
+    let mut note = format!("target_id: {target_id}\nbrowser tabs:");
+    for tab in tabs {
+        let title = tab.get("title").and_then(|value| value.as_str()).unwrap_or("");
+        let tab_id = tab.get("tab_id").and_then(|value| value.as_str()).unwrap_or("");
+        let url = tab.get("url").and_then(|value| value.as_str()).unwrap_or("");
+        note.push_str(&format!("\n- {title} | tab_id: {tab_id} | {url}"));
+    }
     let content = result.get_mut("content")?.as_array_mut()?;
     match content.iter_mut().find(|part| part["type"] == "text") {
         Some(part) => {
@@ -1281,6 +1313,33 @@ mod tests {
         ] {
             assert_eq!(surface_snapshot(line), None, "{line}");
         }
+    }
+
+    /// get_browser_state carries the binding ids only in structuredContent,
+    /// which a text-only host drops: the relay must append them to the text,
+    /// verbatim, or the model can never aim browser_click.
+    #[test]
+    fn the_relay_surfaces_the_browser_binding_ids() {
+        let state = json!({"jsonrpc": "2.0", "id": 5, "result": {
+            "content": [{"type": "text", "text": "bound target bt-1 (exact) with 2 tab(s)"}],
+            "structuredContent": {"target_id": "bt-1", "tabs": [
+                {"title": "M4-03 Drive Target 1", "tab_id": "tab-a", "url": "file:///t.html"},
+                {"title": "M4-03 Decoy 1", "tab_id": "tab-b", "url": "file:///d.html"},
+            ]},
+        }})
+        .to_string();
+        let out: Value = serde_json::from_str(&surface_browser_ids(&state).unwrap()).unwrap();
+        let text = out["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.starts_with("bound target bt-1 (exact) with 2 tab(s)"));
+        assert!(text.contains("target_id: bt-1"));
+        assert!(text.contains("- M4-03 Drive Target 1 | tab_id: tab-a | file:///t.html"));
+        assert!(text.contains("- M4-03 Decoy 1 | tab_id: tab-b | file:///d.html"));
+
+        // results without a browser binding are forwarded unchanged
+        let bare = json!({"id": 1, "result": {"content": [{"type": "text"}], "structuredContent": {"snapshot_id": "s1"}}});
+        assert_eq!(surface_browser_ids(&bare.to_string()), None);
+        let plain = json!({"id": 2, "result": {"content": [{"type": "text", "text": "ok"}]}});
+        assert_eq!(surface_browser_ids(&plain.to_string()), None);
     }
 
     #[cfg(not(windows))]

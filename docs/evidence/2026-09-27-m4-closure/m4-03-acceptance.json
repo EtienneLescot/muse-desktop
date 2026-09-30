@@ -1,0 +1,49 @@
+{
+  "schema": "muse-desktop.m4-03-acceptance.v1",
+  "date": "2026-09-30",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), CUA driver 0.28.2, attach consent on",
+  "steps": {
+    "tempProfileConsent": "already-approved",
+    "edgeSetup": {
+      "decoy": "M4-03 Decoy 471304",
+      "target": "M4-03 Drive Target 471304",
+      "targetTabActive": true,
+      "isolatedProcess": true,
+      "userWindowsUntouched": true
+    },
+    "daemonCommandLine": [
+      "\"C:\\Users\\etien\\AppData\\Local\\Programs\\Cua\\cua-driver\\bin\\cua-driver.exe\" serve --socket \\\\.\\pipe\\muse-desktop-computer --permission-mode standard --grant existing-profile"
+    ],
+    "hostReady": true,
+    "turn": {
+      "running": false,
+      "computerUseSteps": [
+        "Computer use · list windows",
+        "Computer use · browser prepare",
+        "Computer use · get browser state",
+        "Computer use · browser click · at (400, 300)"
+      ],
+      "tail": "d3a9-fbba-4973-a58a-6912359fa01c / tab-81a38e92-6101-4867-99e5-9999b45e4f2b à 400,300 → clicked (400, 300) | Re-lecture : snapshot p2 of file:///C:/Users/etien/AppData/Local/Temp/m4-03-unexpected.html: 0 interactive element(s) | Le tab a donc navigué de m4-03-edge-target.html vers m4-03-unexpected.html. |  | Stop : aucun autre clic. |  | 01:06:04 | ＋ | Attach | Voice | YOLO | ✦ | Effort | High | muse-spark-1.3-contributor | 6% | ↑ |  | Enter to send · Shift + Enter for a new line · @ for context"
+    },
+    "afterTabs": [
+      {
+        "title": "Unexpected Landing 471304",
+        "url": "file:///C:/Users/etien/AppData/Local/Temp/m4-03-unexpected.html"
+      },
+      {
+        "title": "M4-03 Decoy 471304",
+        "url": "file:///C:/Users/etien/AppData/Local/Temp/m4-03-decoy.html"
+      }
+    ]
+  },
+  "verdict": {
+    "turnCompleted": true,
+    "browserPrepareExecuted": true,
+    "browserStateExecuted": true,
+    "browserClickExecuted": true,
+    "modelReportedNavigation": true,
+    "unexpectedNavigationHappened": true,
+    "decoyUntouched": true,
+    "completeAcceptanceSet": true
+  }
+}
