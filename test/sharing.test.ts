@@ -28,6 +28,7 @@ import {
   emptyShareState,
   listSessionBundles,
   loadShareState,
+  markBundlePublished,
   resolveBundle,
   revokeBundle,
   saveShareState,
@@ -256,5 +257,22 @@ describe("config import (US-34)", () => {
     fakeStorage();
     saveImportedSessions([{ id: "z1", title: "Z", source: "cli" }]);
     assert.equal(loadImportedSessions().length, 1);
+  });
+
+  it("records the published URL only as a marker, and clears it on revoke", () => {
+    const shared = shareThread(emptyShareState(), "s1", "T", LOG, "markdown", { now: 7, rand: () => 0.5 });
+    assert.ok(shared);
+    const id = shared.bundle.bundleId;
+    const published = markBundlePublished(shared.state, id, { url: `http://lan:8787/muse-share/${id}`, expiresAt: 999 });
+    const bundle = published.bundles[id];
+    assert.equal(bundle.publishedUrl, `http://lan:8787/muse-share/${id}`);
+    assert.equal(bundle.publishedExpiresAt, 999);
+    // unknown ids are a no-op, like the rest of the SSOT surface
+    assert.equal(markBundlePublished(published, "share-nope", { url: "x", expiresAt: 1 }), published);
+    // a successful revoke clears the markers and revokes the bundle
+    const cleared = markBundlePublished(published, id, null);
+    assert.equal(cleared.bundles[id].publishedUrl, undefined);
+    const revoked = revokeBundle(cleared, id);
+    assert.equal(revoked.bundles[id].revoked, true);
   });
 });

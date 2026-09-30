@@ -18,6 +18,7 @@
  */
 
 import type { ShareBundle } from "./sharing.ts";
+import { readStorageJson, writeStorageJson } from "./storage.ts";
 
 /** The published bundle, as the wire carries it. */
 export interface PublishedBundle {
@@ -123,4 +124,60 @@ export function parsePublishResponse(status: number, body: string): { url: strin
   } catch {
     return null;
   }
+}
+
+/** Where the configured endpoint persists (Settings writes, the panel reads). */
+export const SHARE_ENDPOINT_KEY = "muse-desktop.share-endpoint.v1";
+
+/** Read the configured endpoint, re-validating what was stored. */
+export function loadShareEndpoint(): ShareEndpoint | null {
+  return validateShareEndpoint(readStorageJson<unknown>(SHARE_ENDPOINT_KEY, null));
+}
+
+/** Persist the endpoint (already validated) or clear it with `null`. */
+export function saveShareEndpoint(endpoint: ShareEndpoint | null): void {
+  writeStorageJson(SHARE_ENDPOINT_KEY, endpoint);
+}
+
+/** The publish call as the panel needs it: network errors surface as strings,
+ *  a refused status is a value. Returns the server-minted URL and the local
+ *  expiry the UI shows. */
+export async function publishToServer(
+  endpoint: ShareEndpoint,
+  bundle: ShareBundle,
+  durationHours: number,
+): Promise<{ ok: true; url: string; expiresAt: number } | { ok: false; error: string }> {
+  const request = buildPublishRequest(endpoint, bundle, durationHours, Date.now());
+  if (!request) return { ok: false, error: "this bundle cannot be published (duration, size or id out of bounds)" };
+  let response: Response;
+  try {
+    response = await fetch(request.url, { method: request.method, headers: request.headers, body: request.body });
+  } catch (error) {
+    return { ok: false, error: `the share service did not answer: ${String(error).slice(0, 160)}` };
+  }
+  const body = await response.text().catch(() => "");
+  if (response.status === 403) return { ok: false, error: "the service refused the token (403)" };
+  if (response.status === 413) return { ok: false, error: "the service refused the bundle as too large (413)" };
+  const parsed = parsePublishResponse(response.status, body);
+  if (!parsed) return { ok: false, error: `the service did not create a URL (status ${response.status})` };
+  return { ok: true, url: parsed.url, expiresAt: Date.now() + durationHours * 3_600_000 };
+}
+
+/** The revoke call. Revocation is deny-only: 204 on the server, 404 already
+ *  gone — both leave the link dead for every client. */
+export async function revokeOnServer(
+  endpoint: ShareEndpoint,
+  bundleId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const request = buildRevokeRequest(endpoint, bundleId);
+  if (!request) return { ok: false, error: "invalid bundle id" };
+  let response: Response;
+  try {
+    response = await fetch(request.url, { method: request.method, headers: request.headers });
+  } catch (error) {
+    return { ok: false, error: `the share service did not answer: ${String(error).slice(0, 160)}` };
+  }
+  if (response.status === 204 || response.status === 404) return { ok: true };
+  if (response.status === 403) return { ok: false, error: "the service refused the token (403)" };
+  return { ok: false, error: `the service refused the revocation (status ${response.status})` };
 }

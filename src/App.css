@@ -7865,6 +7865,156 @@ body.dark .composer textarea::placeholder {
   font-size: 0.8rem;
 }
 
+
+/* M4-06: share panel — self-hosted endpoint + bundle publish/revoke. */
+.share-panel {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  background: var(--bg);
+}
+
+.share-panel h3 {
+  margin: 0;
+}
+
+.share-endpoint {
+  display: grid;
+  gap: 8px;
+}
+
+.share-endpoint-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.share-endpoint-row input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.share-endpoint-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.share-endpoint-actions button {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.share-endpoint-actions button.share-quiet {
+  opacity: 0.75;
+}
+
+.share-endpoint-ok {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.share-snapshot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.share-snapshot button {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.share-bundles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.share-bundle {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.share-bundle-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.share-bundle-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.share-bundle-published {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.share-url {
+  font-size: 12px;
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.share-bundle-published button,
+.share-bundle-actions button {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+.share-bundle-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.share-bundle-actions select {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 5px 8px;
+}
+
 @media (prefers-contrast: more) {
   .muted {
     color: var(--text);

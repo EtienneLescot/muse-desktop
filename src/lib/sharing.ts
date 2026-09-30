@@ -47,6 +47,10 @@ export interface ShareBundle {
   truncated?: boolean;
   /** Number of log entries omitted by the export bound. */
   omittedEntries?: number;
+  /** M4-06: the URL the self-hosted mini-server minted on its real 201. */
+  publishedUrl?: string;
+  /** M4-06: epoch ms after which the server serves 404 for the bundle. */
+  publishedExpiresAt?: number;
 }
 
 export interface ShareState {
@@ -102,8 +106,34 @@ function isValidBundle(b: unknown): b is ShareBundle {
     typeof r.body === "string" &&
     (r.redacted === undefined || typeof r.redacted === "boolean") &&
     (r.truncated === undefined || typeof r.truncated === "boolean") &&
-    (r.omittedEntries === undefined || (typeof r.omittedEntries === "number" && Number.isInteger(r.omittedEntries) && r.omittedEntries >= 0))
+    (r.omittedEntries === undefined || (typeof r.omittedEntries === "number" && Number.isInteger(r.omittedEntries) && r.omittedEntries >= 0)) &&
+    (r.publishedUrl === undefined || (typeof r.publishedUrl === "string" && r.publishedUrl.startsWith("http"))) &&
+    (r.publishedExpiresAt === undefined || (typeof r.publishedExpiresAt === "number" && Number.isFinite(r.publishedExpiresAt)))
   );
+}
+
+/**
+ * M4-06: record the URL the self-hosted mini-server minted on its real 201.
+ * No-op for unknown or revoked bundles, and never before the server answered:
+ * the caller only gets here through `parsePublishResponse`. Passing
+ * `url: null` clears the markers (a successful revoke or expiry).
+ */
+export function markBundlePublished(
+  state: ShareState,
+  bundleId: string,
+  update: { url: string; expiresAt: number } | null,
+): ShareState {
+  const cur = state.bundles[bundleId];
+  if (!cur) return state;
+  const next: ShareBundle = { ...cur };
+  if (update === null) {
+    delete next.publishedUrl;
+    delete next.publishedExpiresAt;
+  } else {
+    next.publishedUrl = update.url;
+    next.publishedExpiresAt = update.expiresAt;
+  }
+  return { ...state, bundles: boundShareBundles({ ...state.bundles, [bundleId]: next }) };
 }
 
 function readKey(key: string): unknown {

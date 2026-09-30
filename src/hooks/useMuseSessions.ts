@@ -449,14 +449,26 @@ import {
 import {
   emptyShareState,
   loadShareState,
+  markBundlePublished,
   revokeBundle,
   saveShareState,
   setShareMode as setShareModePure,
   shareThread as createShareBundle,
   shouldAutoShare,
+  type ShareBundle,
   type ShareMode,
   type ShareState,
 } from "../lib/sharing";
+// M4-06: publish/revoke against the self-hosted mini-server (pure client,
+// proved against the reference server over real loopback HTTP).
+import {
+  loadShareEndpoint,
+  publishToServer,
+  revokeOnServer,
+  saveShareEndpoint,
+  validateShareEndpoint,
+  type ShareEndpoint,
+} from "../lib/sharePublish.ts";
 // w-collab (US-34): CLI/IDE config import (pure, unit-tested). Import-only:
 // merges never overwrite live sessions or existing imported rows.
 import {
@@ -1128,6 +1140,18 @@ interface UseMuseSessions {
   discardReview: (id: string) => void;
   /** w-collab US-27: share mode + bundles for one session (newest first). */
   setShareMode: (mode: ShareMode) => void;
+  /** M4-06: the whole share state (bundles across sessions, for the panel). */
+  shareState: ShareState;
+  /** M4-06: snapshot one session's log into a bundle (false when disabled/empty). */
+  shareSession: (sessionId: string, format: "markdown" | "json") => boolean;
+  /** M4-06: the configured self-hosted endpoint, and its setter (null clears). */
+  shareEndpoint: ShareEndpoint | null;
+  setShareEndpoint: (input: { baseUrl: string; token: string } | null) => void;
+  /** M4-06: publish one bundle (server's real 201 URL, or null + error). */
+  publishBundle: (bundleId: string, durationHours: number) => Promise<string | null>;
+  /** M4-06: revoke one published bundle (204 or already-404 both count). */
+  revokePublished: (bundleId: string) => Promise<boolean>;
+  sharePublishError: string | null;
   /** Snapshot the thread log into a bundle (null when disabled/empty). */
   /** Un-share: revoke the bundle locally (its link then 404s). */
   /** w-collab US-28: channel stub flag (off) — never connected. */
@@ -6830,6 +6854,70 @@ export function useMuseSessions(): UseMuseSessions {
     setShareState((cur) => setShareModePure(cur, mode));
   }, []);
 
+  // M4-06: snapshot one session's log into a bundle (the panel publishes it).
+  const shareSession = useCallback((sessionId: string, format: "markdown" | "json"): boolean => {
+    const log = logsRef.current[sessionId] ?? [];
+    const title = sessions.find((s) => s.session_id === sessionId)?.title ?? sessionId;
+    const created = createShareBundle(shareState, sessionId, title, log, format);
+    if (created === null) return false;
+    setShareState(created.state);
+    return true;
+  }, [shareState, sessions]);
+
+  // M4-06: the self-hosted endpoint (validated + persisted) and the publish /
+  // revoke calls. A publish records the URL only after the server's real 201;
+  // a revoke clears it once the service acknowledged (204 or already 404).
+  const [shareEndpoint, setShareEndpointState] = useState<ShareEndpoint | null>(() => loadShareEndpoint());
+  const [sharePublishError, setSharePublishError] = useState<string | null>(null);
+  const setShareEndpoint = useCallback((input: { baseUrl: string; token: string } | null) => {
+    if (input === null) {
+      saveShareEndpoint(null);
+      setShareEndpointState(null);
+      return;
+    }
+    const candidate = validateShareEndpoint(input);
+    if (!candidate) return;
+    saveShareEndpoint(candidate);
+    setShareEndpointState(candidate);
+  }, []);
+
+  const publishBundle = useCallback(async (bundleId: string, durationHours: number): Promise<string | null> => {
+    const endpoint = loadShareEndpoint();
+    const bundle: ShareBundle | undefined = shareState.bundles[bundleId];
+    if (!endpoint) {
+      setSharePublishError("Configure a self-hosted share service first.");
+      return null;
+    }
+    if (!bundle || bundle.revoked) {
+      setSharePublishError("This bundle no longer exists.");
+      return null;
+    }
+    const result = await publishToServer(endpoint, bundle, durationHours);
+    if (!result.ok) {
+      setSharePublishError(result.error);
+      return null;
+    }
+    setSharePublishError(null);
+    setShareState((cur) => markBundlePublished(cur, bundleId, { url: result.url, expiresAt: result.expiresAt }));
+    return result.url;
+  }, [shareState]);
+
+  const revokePublished = useCallback(async (bundleId: string): Promise<boolean> => {
+    const endpoint = loadShareEndpoint();
+    if (!endpoint) {
+      setSharePublishError("Configure a self-hosted share service first.");
+      return false;
+    }
+    const result = await revokeOnServer(endpoint, bundleId);
+    if (!result.ok) {
+      setSharePublishError(result.error);
+      return false;
+    }
+    setSharePublishError(null);
+    setShareState((cur) => revokeBundle(markBundlePublished(cur, bundleId, null), bundleId));
+    return true;
+  }, []);
+
 
 
 
@@ -8061,6 +8149,13 @@ export function useMuseSessions(): UseMuseSessions {
     approveReview: approveReviewCb,
     discardReview: discardReviewCb,
     setShareMode,
+    shareState,
+    shareSession,
+    shareEndpoint,
+    setShareEndpoint,
+    publishBundle,
+    revokePublished,
+    sharePublishError,
     importedSessions,
     importNotes,
     importConfigText,

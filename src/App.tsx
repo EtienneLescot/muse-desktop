@@ -36,6 +36,7 @@ import { signInCommand, type AuthStatusPayload } from "./lib/museAuth";
 import { ModelControl } from "./components/ModelControl";
 import { ContextMeter } from "./components/ContextMeter";
 import { ComputerUsePanel } from "./components/ComputerUsePanel";
+import { SharePanel } from "./components/SharePanel";
 import { WorktreeTools } from "./components/WorktreeTools";
 import { isTauriRuntime } from "./lib/env";
 import { formatWorktreeContinuationNote } from "./lib/handoff";
@@ -283,6 +284,11 @@ export default function App() {
     setComputerLevel,
     setComputerAttach,
     disableComputerUse,
+    shareState,
+    shareSession,
+    publishBundle,
+    revokePublished,
+    sharePublishError,
     memories,
     scanNudge,
     addMemoryEntry,
@@ -1021,6 +1027,14 @@ export default function App() {
                 onRemove={removeMemoryEntry}
                 onAckScan={ackScanNudge}
                 onMention={(query) => setMemoryInsert(query)}
+              />
+              <SharePanel
+                shareState={shareState}
+                activeSessionId={activeId}
+                onShareSession={shareSession}
+                onPublish={publishBundle}
+                onRevokePublished={revokePublished}
+                publishError={sharePublishError}
               />
             </div>
           </section>
