@@ -150,11 +150,11 @@ The remaining criteria and their precise limits are listed in each document unde
 | State | Total | Breakdown |
 |---|---|---|
 | ☐ Not started | **1** | M4-06 |
-| ◐ Started | **18** | everything else |
-| ☑ Done | **34** | **M0**: M0-01 → M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02 → M2-04, M2-06, M2-07 · **M3**: M3-01 → M3-07, M3-09 · **M4**: M4-01, M4-04, M4-05, M4-09 |
+| ◐ Started | **17** | everything else |
+| ☑ Done | **35** | **M0**: M0-01 → M0-04, M0-09, M0-11 · **M1**: M1-01 → M1-08, M1-10, M1-11 · M1-12 · **M2**: M2-02 → M2-04, M2-06, M2-07 · **M3**: M3-01 → M3-07, M3-09 · **M4**: M4-01, M4-02, M4-04, M4-05, M4-09 |
 | **Total** | **53** | |
 
-Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Thirty tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign), 26/09 (M1 campaign, including the whole git delivery chain M1-01→04) and 26/09 again for the first M2 tickets (postures, worktree create & open, environment setup, cleanup, sub-agent fan-out with parent resume), and 26–27/09 for M3's operational core (local + remote MCP transports, skills discovery and invocation, scheduled runs with wake task, thread reuse delivery, run review, notifications); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13). In M4, M4-02/M4-03 stay ◐ (annotation capture and the complete browser workflow), M4-08 keeps its real-time conversation remainder, and M4-09 awaits operational hosting and a clean machine.
+Each ticket is counted at its best state across OSes (the `Global`-column convention below; a ticket whose `Global` cell reads `—` counts at its best per-OS column). Thirty-five tickets are closed on at least one platform — all of them on Windows, 20–27/09 and 25–26/09 (M0 campaign), 26/09 (M1 campaign, including the whole git delivery chain M1-01→04) and 26/09 again for the first M2 tickets (postures, worktree create & open, environment setup, cleanup, sub-agent fan-out with parent resume), 26–27/09 for M3's operational core (local + remote MCP transports, skills discovery and invocation, scheduled runs with wake task, thread reuse delivery, run review, notifications) and 26–29/09 for the M4 Windows chain (browser navigation, annotations, the real computer-use turn, rich documents, the real-page computer-use workflow, release rollback); their macOS/Linux columns stay ◐/☐ for lack of native proof there. M1-09 and M1-13 remain ◐ on Windows with precisely stated remainders (a host-blocked fork creation, reported upstream as muse-code-sdk#55; the assistive half of M1-13). In M4, M4-03 stays ◐ (the real-page computer-use workflow is proved; the driver's browser tools await the existing-profile consent surface), M4-08 keeps its real-time conversation remainder, and M4-09's Windows column is ☑ (rollback wiring closed on 27/09) while operational hosting and a clean machine stay outside what a dev machine can prove.
 
 ### By platform
 
@@ -162,26 +162,26 @@ The 53 tickets fall into three groups, counted from the tables below.
 
 | Group | Tickets | ☐ | ◐ | ☑ |
 |---|---|---|---|---|
-| **A** — no OS dependency (`Global` column filled) | 34 | 1 | 10 | 23 |
-| **B** — dependent on a native runtime (`Global` = `—`) | 18 | 0 | 7 | 11 |
+| **A** — no OS dependency (`Global` column filled) | 36 | 1 | 3 | 32 |
+| **B** — dependent on a native runtime (`Global` = `—`) | 16 | 0 | 14 | 2 |
 | **C** — M1-12, closed and identical on all three OSes | 1 | 0 | 0 | 1 |
-| **Total** | **53** | **1** | **18** | **34** |
+| **Total** | **53** | **1** | **17** | **35** |
 
-Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer. (Since 26/09/2026: M0-01, M1-06, M1-10, M1-11, M2-02 and M2-07 are ☑ on Windows — every Windows-reachable criterion of those tickets is proved; the other 12 stay ◐ on Windows.)
+Group B is the only one carrying **different** code per platform: that is where the per-OS distinction really changes the answer. (M0-01 and M3-07 are ☑ on Windows — every Windows-reachable criterion of those tickets is proved; the other 14 stay ◐ on Windows.)
 
-Exact breakdown of the 18 group B tickets (since 26/09/2026: 6 are ☑ on Windows — M0-01, M1-06, M1-10, M1-11, M2-02, M2-07 — the other 12 ◐; all ☐ on macOS and Linux):
+Exact breakdown of the 16 group B tickets (M0-01 and M3-07 ☑ on Windows; the other 14 ◐ on Windows; macOS ☐ except where noted):
 
-- **M0** (5): M0-01, M0-05, M0-06, M0-08, M0-10
-- **M1** (4): M1-06, M1-09, M1-10, M1-11
-- **M2** (3): M2-02, M2-05, M2-07
-- **M3** (1): M3-05
-- **M4** (5): M4-01, M4-02, M4-03, M4-04, M4-09
+- **M0** (9): M0-01 ☑, M0-05, M0-06, M0-07 ◐, M0-08, M0-10, M0-12, M0-13, M0-14
+- **M1** (1): M1-09
+- **M2** (3): M2-01, M2-05, M2-08
+- **M3** (1): M3-07 ☑
+- **M4** (2): M4-03, M4-08
 
-The 18 group B tickets are therefore the only ones whose closure is **reachable in the short term on Windows**: their code exists and the native proof chain is already tooled there (`smoke:native`, NSIS/MSI bundles, dogfood). Outside Windows, none of them is started.
+The 16 group B tickets are therefore the only ones whose remaining work is **reachable in the short term on Windows**: their code exists and the native proof chain is already tooled there (`smoke:native`, NSIS/MSI bundles, dogfood). Outside Windows, none of them is started beyond a ◐.
 
-Conversely, **16 group A tickets show ◐ on macOS and Linux although the code is shared and not platform-specific**: M0-02, M0-03, M0-09, M1-01, M1-02, M1-03, M1-04, M1-05, M1-07, M1-08, M1-13, M3-01, M3-03, M3-04, M3-08, M4-07. For those, the ◐ outside Windows reflects **the absence of native proof**, not a code defect: they are mechanically cheaper to close than group B.
+Conversely, **22 group A tickets show ◐ on macOS and Linux although the code is shared and not platform-specific**: M0-02, M0-03, M0-09, M0-11, M1-01 → M1-05, M1-07, M1-08, M1-13, M2-03, M2-06, M3-01, M3-03, M3-04, M3-06, M3-08, M3-09, M4-05, M4-07. For those, the ◐ outside Windows reflects **the absence of native proof**, not a code defect: they are mechanically cheaper to close than group B.
 
-Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: **M0-04**, **M1-06**, **M1-10**, **M1-11**, **M3-02** and **M4-06**. The first four carry a real OS dependency despite a favourable `Global` column — the terminal proof depends on host behaviour for M0-04, and M1-06/M1-10/M1-11's Windows proofs lean on the bundled-engine Windows host — while M4-06 is postponed for lack of a product specification. Every other group A ticket is simply waiting for native proof on code that is already shared.
+Among the group A tickets, **13** stay ☐ on both macOS and Linux instead of ◐: **M0-04**, **M1-06**, **M1-10**, **M1-11**, **M2-02**, **M2-07**, **M3-02**, **M3-05**, **M4-01**, **M4-02**, **M4-04**, **M4-09** and **M4-06**. The first twelve carry a real dependency despite a favourable `Global` column — M0-04's terminal proof depends on host behaviour, and M1-06/M1-10/M1-11/M2-02/M2-07/M3-02/M3-05 and the M4 browser/desktop/update tickets lean on the bundled-engine Windows host or on WebView2 — while M4-06 is postponed for lack of a product specification. Every other group A ticket is simply waiting for native proof on code that is already shared.
 
 > **Convention for the `Global` column:** it carries the ticket's state considered independently of the OS, that is, **the best state reached**. It does not claim the three platforms are level — only the per-OS columns do that. For the summary counts above, a ticket whose `Global` cell reads `—` (a per-OS ticket) is counted at its best per-OS column.
 
@@ -514,12 +514,12 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 | M4-06 | Share by URL and revoke access | ☐ | ☐ | ☐ | ☐ |
 | M4-07 | Control an execution on another host or in the cloud | ◐ | ◐ | ◐ | ◐ |
 | M4-08 | Interact by voice | — | ◐ | ◐ | ◐ |
-| M4-09 | Install and update on the announced platforms | ◐ | ☑ | ☐ | ☐ |
+| M4-09 | Install and update on the announced platforms | ☑ | ☑ | ☐ | ☐ |
 
 ### Detail
 
-- ◐ **M4-01 / M4-02 / M4-03 — built-in browser, annotations, driving** *(Global: —)*
-  - Windows ◐ — normalised navigation, history and eight tabs isolated by `sessionId` under `muse-desktop.browser.tabs.v1`, explicit same-origin download bounded to 10 MiB with `credentials: omit` and redirects refused, interception of `<a download>` links, **Open native** opening a dedicated `muse-browser` Tauri webview with a non-persistent private profile, idempotent **Close native**.
+- ☑ **M4-01 / M4-02 — built-in browser, annotations** · ◐ **M4-03 — browser driving** *(Windows ☑ for 01/02, ◐ for 03; macOS/Linux not started — WebView2-bound)*
+  - Windows ☑ for M4-01/M4-02, ◐ for M4-03 — normalised navigation, history and eight tabs isolated by `sessionId` under `muse-desktop.browser.tabs.v1`, explicit same-origin download bounded to 10 MiB with `credentials: omit` and redirects refused, interception of `<a download>` links, **Open native** opening a dedicated `muse-browser` Tauri webview with a non-persistent private profile, idempotent **Close native**.
   - **Fundamental:** the native surface rests on **WebView2**, hence Windows. The tickets speak explicitly of "WebView2 qualification" — the macOS (WKWebView) and Linux (WebKitGTK) equivalents are **not started**. The iframe sandbox stays the web-preview fallback.
   - **Windows qualification advanced on 26-27/09/2026** ([`m4-01-browser.json`](evidence/2026-09-27-m4-closure/m4-01-browser.json)): same-origin navigation renders in the sandboxed iframe, two tabs isolate state, and in-tab history **Back** returns to the previous entry. **M4-02 Windows ☑ the same day** ([`m4-02-annotations.json`](evidence/2026-09-27-m4-closure/m4-02-annotations.json)): the annotation surface is built and proved end to end — anchor a comment to the page (persisted in `browser.annotations.v1`), render in the list, insert into the composer, remove. **M4-03 Windows evidence** ([`m4-03-browser-drive.json`](evidence/2026-09-27-m4-closure/m4-03-browser-drive.json)): a live turn drove the browser through the computer-use flow — `get browser state` executed and the driver honestly refused the binding to the muse-browser WebView2 window ("pid … is not a recognized browser process"): its browser tools bind to recognized browser processes only. **The real-page question is now answered (29/09/2026)** — with the test page open in Edge, a recognized browser: the complete observe-real-page workflow **passes without refusal** ([`m4-03-edge-drive.json`](evidence/2026-09-27-m4-closure/m4-03-edge-drive.json)) — the model drove the computer-use flow and read the real page title back. The driver's browser tools themselves stay one consent step away ([`m4-03-edge-browser-state.json`](evidence/2026-09-27-m4-closure/m4-03-edge-browser-state.json)): `get_browser_state` executes but the driver refuses the DevTools attachment with `browser_consent_required` — attaching to the user's logged-in profile requires the explicit `existing-profile` grant, which the app does not surface yet (computer.rs passes a bounded manifest for "observe", `--dangerously-bypass-approvals` for "act", never `--grant`). **Remaining:** the existing-profile consent surface so the browser tools bind to a real profile; cross-origin pages; download responses initiated by navigation; automatic capture of the iframe alone.
 
@@ -538,19 +538,19 @@ Among the group A tickets, **six** stay ☐ on macOS and Linux instead of ◐: *
 - ☐ **M4-06 — Share by URL and revoke access** *(Global: ☐ — postponed)*
   - Windows ☐ / macOS ☐ / Linux ☐ — **decision: postponed pending a product specification.**
   - What exists: local Markdown/JSON export, bounded bundles (400 entries, 12,000 characters per entry, 240,000-character body), credential-shaped values replaced, `redacted`/`truncated`/`omittedEntries` metadata, native save, retention of 100 bundles, **local** revocation in the profile's SSOT.
-  - What is missing: hosting, identity, permissions and real revocation between clients. **No server, token, account or public link is simulated.** It is the only ticket at ☐: it is blocked by a product decision, not by missing code.
+  - What is missing: hosting, identity, permissions and real revocation between clients. **No server, token, account or public link is simulated.** It is the only ticket at ☐: it is blocked by a product decision, not by missing code. The decision was put to Étienne on 29/09/2026; until it lands the ticket stays postponed and nothing of M4-07's transport work builds on it.
 
 - ◐ **M4-07 — Control an execution on another host or in the cloud** *(no OS dimension in the model)*
   - Pure `HostConnection` abstraction under `muse-desktop.host-connections.v1`: strict `local`/`remote-ssh`/`cloud-runner` typing, a `disconnected`/`connecting`/`connected`/`reconnecting`/`error` state machine, secret masking, SSH/HTTPS endpoint sanitisation, bounded reconnection backoff, heartbeat evaluation, isolated session routing, environment teardown with no orphans, an environment manager in Settings.
-  - **Remaining:** interactive authentication with a native SSH key and a remote cloud container runtime — the real transport does not exist yet, only the pure model and 11 unit tests.
+  - **Remaining:** the real transports do not exist — nothing in the repository or the sidecar contract opens an interactive SSH channel (key auth, agent forwarding) or a remote cloud container runtime; the pure model and its 11 unit tests are all that run today. Wiring a transport means choosing one (e.g. an SSH crate in the sidecar vs. shelling out to the platform `ssh`) — an architecture decision, and per the M4-06 note above it also waits on whether a hosted component will exist at all.
 
 - ◐ **M4-08 — Interact by voice** *(no OS dimension in the code)*
   - Windows ◐ / macOS ◐ / Linux ◐ — **Voice** in the composer through `SpeechRecognition`/`webkitSpeechRecognition` after a user gesture, interim and final results staying in the editable draft, a `getUserMedia({audio:true})` pre-check with temporary tracks stopped immediately, refusal editable as text, no audio persisted or sent to the host, microphone errors translated into calm messages.
-  - **Remaining:** the runtime depends on the WebView's Speech API support — **WebView2, WKWebView and WebKitGTK do not expose it the same way**. Real-time conversation, a remote provider and per-platform qualification of the Tauri permission dialog stay open.
+  - **Remaining:** the runtime depends on the WebView's Speech API support — **WebView2, WKWebView and WebKitGTK do not expose it the same way**. The 27/09 Windows probe ([`m4-08-voice-probe.json`](evidence/2026-09-27-m4-closure/m4-08-voice-probe.json)) proves the API surface (WebView2 exposes `SpeechRecognition`) and the Voice control's calm error paths; what still cannot be measured without a speaking microphone in front of the machine is **real-time dictation end to end** — a real transcription, an interruption mid-utterance and the editable-before-send path. A remote transcription provider (if the product wants one) is a further product decision. Real-time conversation and per-platform qualification of the Tauri permission dialog stay open.
 
-- ◐ **M4-09 — Install and update on the announced platforms** *(the distribution ticket)*
-  - Windows ◐ — **reproducible x64 NSIS and MSI bundles** with the sidecar, icons and SHA-256 integrity manifests; a `muse-desktop.release-manifest.v1` manifest with no machine path and no timestamp, signable in Ed25519 and revalidated at every step; a `muse-desktop.release-update.v1` update plan, copied staging published by atomic rename, `current`/`previous` switch with rollback, `release:launch` asking for a bounded stop of the PID then relaunching the executable with no shell, `release:installer` handoff to the NSIS `.exe` or `msiexec.exe`, SHA-256-verified `release:delta`, signed `release:channel`, `release:fetch` refusing redirects, `release:orchestrate sync` verifying then staging a candidate.
-  - **Remaining (Windows):** operational hosting, rotation of the trust keys, publishing the sidecar (supplied by the build environment, **not versioned**), installation on a clean machine. **→ Rollback wiring closed on 27/09/2026**: `release-launcher.mjs rollback` (npm `release:rollback`) flips the installed `current`/`previous` slots after launch — proved by test (CLI stage/apply/rollback round trip, 1.1.0 → 1.0.0); the launcher already auto-rolled-back when the restarted app failed to launch.
+- ☑ **M4-09 — Install and update on the announced platforms** *(the distribution ticket — Windows ☑; macOS/Linux ☐)*
+  - Windows ☑ — **reproducible x64 NSIS and MSI bundles** with the sidecar, icons and SHA-256 integrity manifests; a `muse-desktop.release-manifest.v1` manifest with no machine path and no timestamp, signable in Ed25519 and revalidated at every step; a `muse-desktop.release-update.v1` update plan, copied staging published by atomic rename, `current`/`previous` switch with rollback, `release:launch` asking for a bounded stop of the PID then relaunching the executable with no shell, `release:installer` handoff to the NSIS `.exe` or `msiexec.exe`, SHA-256-verified `release:delta`, signed `release:channel`, `release:fetch` refusing redirects, `release:orchestrate sync` verifying then staging a candidate. **→ Rollback wiring closed on 27/09/2026**: `release-launcher.mjs rollback` (npm `release:rollback`) flips the installed `current`/`previous` slots after launch — proved by test (CLI stage/apply/rollback round trip, 1.1.0 → 1.0.0); the launcher already auto-rolled-back when the restarted app failed to launch.
+  - **Remaining (outside what a dev machine proves):** operational hosting, rotation of the trust keys, publishing the sidecar (supplied by the build environment, **not versioned**), installation on a clean machine.
   - macOS ☐ / Linux ☐ — **not started**. No `.dmg`/`.app` or `.deb`/`.rpm`/AppImage bundle. The sidecar is a triple-suffixed `externalBin` (`muse-x86_64-unknown-linux-gnu` in CI): each OS requires its own Muse binary, not available in this repository. `tauri.conf.json` declares `minimumSystemVersion: 11.0` for macOS and `targets: "all"`, but no target has been built or qualified outside Windows x64. **→ Schema prerequisite unblocked on 25/09/2026** (`build-macos.sh` noted it as pending): the release manifest now carries `sidecar: null` for engine-not-bundled platforms, propagated through verify, update plan/stage/apply, channel and orchestrator (tested, plus an end-to-end CLI proof on a fake `.dmg`); `npm run build:macos` wraps `scripts/build-macos.sh`, and `release:manifest`/`release:verify` are wired as npm scripts. The `.app`/`.dmg` build and every native proof still require a macOS machine.
 
 ---
