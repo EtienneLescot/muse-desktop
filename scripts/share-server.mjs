@@ -16,6 +16,8 @@
  * No account, no identity layer: the token is the publish/revoke credential,
  * a reader needs nothing. State is in-memory with an optional JSON file so a
  * restart keeps the published set; expiry is checked on every read.
+ * CORS is open on purpose: a share link is read from any origin, and Muse's
+ * webview publishes from its own origin (the authorized PUT is preflighted).
  */
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, renameSync } from "node:fs";
@@ -51,25 +53,49 @@ function authorized(req) {
   return req.headers.authorization === `Bearer ${TOKEN}`;
 }
 
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, PUT, DELETE, OPTIONS",
+  "access-control-allow-headers": "authorization, content-type",
+  "access-control-max-age": "86400",
+};
+
+function json(res, status, payload) {
+  res.writeHead(status, { ...CORS, "content-type": "application/json" });
+  res.end(JSON.stringify(payload));
+}
+
+function publicBase(req) {
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const host = typeof forwardedHost === "string" ? forwardedHost.split(",")[0].trim() : (req.headers.host ?? `127.0.0.1:${PORT}`);
+  const proto = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+  return `${proto}://${host}`;
+}
+
 function serve(req, res) {
   const url = new URL(req.url ?? "/", "http://local");
-  if (url.pathname === "/health") {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, published: bundles.size }));
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, CORS);
+    res.end();
     return;
   }
+
+  if (url.pathname === "/health") {
+    json(res, 200, { ok: true, published: bundles.size });
+    return;
+  }
+
   const match = PATH_RE.exec(url.pathname);
   if (!match) {
-    res.writeHead(404, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: "not found" }));
+    json(res, 404, { error: "not found" });
     return;
   }
   const id = match[1];
 
   if (req.method === "PUT" || req.method === "POST") {
     if (!authorized(req)) {
-      res.writeHead(403, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "forbidden" }));
+      json(res, 403, { error: "forbidden" });
       return;
     }
     const chunks = [];
@@ -77,8 +103,7 @@ function serve(req, res) {
     req.on("data", (chunk) => {
       size += chunk.length;
       if (size > BODY_LIMIT) {
-        res.writeHead(413, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "bundle too large" }));
+        json(res, 413, { error: "bundle too large" });
         req.destroy();
         return;
       }
@@ -90,40 +115,35 @@ function serve(req, res) {
       try {
         parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       } catch {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid json" }));
+        json(res, 400, { error: "invalid json" });
         return;
       }
       if (typeof parsed?.bundle?.bundleId !== "string" || typeof parsed?.bundle?.body !== "string" || typeof parsed?.expiresAt !== "number") {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "incomplete export" }));
+        json(res, 400, { error: "incomplete export" });
         return;
       }
       bundles.set(id, { bundle: parsed.bundle, expiresAt: parsed.expiresAt, revoked: false });
       stateDirty = true;
       persist();
-      res.writeHead(201, { "content-type": "application/json" });
-      res.end(JSON.stringify({ url: `${publicBase(req)}/muse-share/${id}` }));
+      json(res, 201, { url: `${publicBase(req)}/muse-share/${id}` });
     });
     return;
   }
 
   if (req.method === "DELETE") {
     if (!authorized(req)) {
-      res.writeHead(403, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "forbidden" }));
+      json(res, 403, { error: "forbidden" });
       return;
     }
     const entry = bundles.get(id);
     if (!entry) {
-      res.writeHead(404, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "not found" }));
+      json(res, 404, { error: "not found" });
       return;
     }
     entry.revoked = true;
     stateDirty = true;
     persist();
-    res.writeHead(204);
+    res.writeHead(204, CORS);
     res.end();
     return;
   }
@@ -132,24 +152,14 @@ function serve(req, res) {
     const entry = bundles.get(id);
     if (!entry || entry.revoked || Date.now() > entry.expiresAt) {
       // Revocation and expiry are observable from any client: the same 404.
-      res.writeHead(404, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "not found" }));
+      json(res, 404, { error: "not found" });
       return;
     }
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(entry));
+    json(res, 200, entry);
     return;
   }
 
-  res.writeHead(405, { "content-type": "application/json" });
-  res.end(JSON.stringify({ error: "method not allowed" }));
-}
-
-function publicBase(req) {
-  const forwardedHost = req.headers["x-forwarded-host"];
-  const host = typeof forwardedHost === "string" ? forwardedHost.split(",")[0].trim() : (req.headers.host ?? `127.0.0.1:${PORT}`);
-  const proto = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
-  return `${proto}://${host}`;
+  json(res, 405, { error: "method not allowed" });
 }
 
 const server = createServer(serve);

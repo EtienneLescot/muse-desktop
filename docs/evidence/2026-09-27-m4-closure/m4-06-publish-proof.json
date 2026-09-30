@@ -1,0 +1,32 @@
+{
+  "schema": "muse-desktop.m4-06-publish-proof.v1",
+  "date": "2026-09-30",
+  "platform": "Windows 11 (26200), dev webview (WebView2, CDP), reference share-server on loopback",
+  "steps": {
+    "serverUp": true,
+    "endpoint": {
+      "setUrl": {
+        "found": true
+      },
+      "saved": {
+        "clicked": true
+      },
+      "endpointState": "Configured: http://127.0.0.1:8791 (token set)"
+    },
+    "snapshot": {
+      "clicked": true
+    },
+    "publishedUrl": "http://127.0.0.1:8791/muse-share/share-uznu6m5o",
+    "revoke": {
+      "clicked": true
+    },
+    "uiAfterRevoke": "Revoked — the link returns 404 for every client."
+  },
+  "verdict": {
+    "endpointConfigured": true,
+    "bundleCreated": true,
+    "urlShownOnlyAfterServerAnswered": true,
+    "secondClientReads": true,
+    "revokedLinkIs404": true
+  }
+}
