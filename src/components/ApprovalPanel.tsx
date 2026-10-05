@@ -158,10 +158,12 @@ export function ApprovalPanel({
                   {badgeText(resolved)}
                 </span>
               </div>
-              <details className="approval-details" open>
-                <summary>Review command</summary>
-                <pre>{a.summary}</pre>
-              </details>
+              {a.summary !== "" && (
+                <details className="approval-details" open>
+                  <summary>Review command</summary>
+                  <pre>{a.summary}</pre>
+                </details>
+              )}
               {scopes.length > 0 && (
                 <div className="muted approval-scope" title="Host scope">
                   scope: {scopes.join(" · ")}

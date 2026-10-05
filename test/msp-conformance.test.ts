@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   MSP_ERROR_APPROVAL_REQUIREMENT_STALE,
+  MSP_ERROR_SESSION_NOT_LOADED,
   MSP_ERROR_USER_INPUT_ANSWER_INVALID,
   MSP_METHODS_SENT,
   MSP_NOTIFICATIONS_HANDLED,
@@ -96,5 +97,6 @@ describe("msp conformance surface", () => {
   it("pins the interpreted host error codes", () => {
     assert.equal(MSP_ERROR_APPROVAL_REQUIREMENT_STALE, -32053);
     assert.equal(MSP_ERROR_USER_INPUT_ANSWER_INVALID, -32057);
+    assert.equal(MSP_ERROR_SESSION_NOT_LOADED, -32024);
   });
 });

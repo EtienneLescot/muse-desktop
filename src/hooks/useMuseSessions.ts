@@ -178,7 +178,8 @@ import {
 import { statusLogText } from "../lib/statusLog";
 // Boot auto-resume candidate selection (pure, unit-tested): which stored
 // sessions need a silent `resume_session` after `restore_sessions` settles.
-import { selectResumeOnOpen } from "../lib/bootResume";
+import { connectedRestoredIds, selectResumeOnOpen } from "../lib/bootResume";
+import { MSP_ERROR_SESSION_NOT_LOADED, mspErrorCode } from "../lib/msp";
 import {
   parseRetryScheduled,
   resumeRecoveryDelay,
@@ -368,6 +369,8 @@ import {
   type AuthorizationMode,
 } from "../lib/authorization";
 import {
+  STALE_APPROVAL_NOTICE,
+  isApprovalRequirementStale,
   isSelectedApprovalAccepted,
   parseApprovalResolution,
   shouldCloseApprovalLane,
@@ -1500,7 +1503,7 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
           ? obj.summary
           : (typeof obj.command === "string" && obj.command) ||
             (typeof obj.description === "string" && obj.description) ||
-            trimmed;
+            "";
       const toolName = typeof obj.toolName === "string" ? obj.toolName : "tool";
       const rawChoices = Array.isArray(obj.choices) ? obj.choices : [];
       const choices: ApprovalChoice[] = rawChoices
@@ -2251,7 +2254,10 @@ export function useMuseSessions(): UseMuseSessions {
           const text = statusLogText("approval_cancelled_by_restart");
           if (text !== null) pushLog(id, [{ id: newId(), ts: Date.now(), role: "system", text }]);
         }
-        setConnectedIds(restored.map((s) => s.session_id));
+        // Listed is not loaded: a conversation the host has not loaded stays
+        // disconnected (no posture target) until resume-on-open loads it.
+        const connected = connectedRestoredIds(restored);
+        setConnectedIds(connected);
         setGrantedCapabilitiesBySession((cur) => {
           const next = { ...cur };
           for (const meta of restored) {
@@ -2301,9 +2307,9 @@ export function useMuseSessions(): UseMuseSessions {
         });
         setConnectionBySession((cur) => {
           const next = { ...cur };
-          for (const meta of restored) {
-            if (!tombstoned.current?.has(meta.session_id)) {
-              next[meta.session_id] = "connected";
+          for (const id of connected) {
+            if (!tombstoned.current?.has(id)) {
+              next[id] = "connected";
             }
           }
           return next;
@@ -3771,7 +3777,13 @@ export function useMuseSessions(): UseMuseSessions {
       }
       if (!updated) {
         pushLog(sid, [
-          { id: newId(), ts: Date.now(), role: "tool", text: `Approval requested: ${req.summary}` },
+          {
+            id: newId(),
+            ts: Date.now(),
+            role: "tool",
+            // The summary is the subject alone; the card titles it with the tool.
+            text: `Approval requested: ${[req.toolName === "tool" ? "" : req.toolName, req.summary].filter(Boolean).join(": ") || "Tool action"}`,
+          },
         ]);
         // The first approval pauses the assistant lane. Later stage updates
         // must leave the resumed placeholder open while the next choice is
@@ -4173,18 +4185,30 @@ export function useMuseSessions(): UseMuseSessions {
     void Promise.allSettled(
       targets.map((session) => projectPosture(session.session_id)),
     ).then((results) => {
-      const failed = results.filter((result) => result.status === "rejected").length;
+      // -32024: the host has not loaded that conversation, so it is not
+      // connected. No failure either: resuming it projects the posture.
+      const notLoaded = (result: PromiseSettledResult<void>) =>
+        result.status === "rejected" && mspErrorCode(result.reason) === MSP_ERROR_SESSION_NOT_LOADED;
+      const unloaded = targets.filter((_, i) => notLoaded(results[i])).map((s) => s.session_id);
+      if (unloaded.length > 0) {
+        setConnectedIds((cur) => cur.filter((id) => !unloaded.includes(id)));
+        setSessionLoadedBySession((cur) => ({
+          ...cur,
+          ...Object.fromEntries(unloaded.map((id) => [id, false])),
+        }));
+        for (const id of unloaded) setConnectionState(id, "disconnected");
+      }
+      const rejections = results.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected" && !notLoaded(result),
+      );
+      const failed = rejections.length;
       if (failed > 0) {
-        const firstRejection = results.find((result) => result.status === "rejected");
-        const reason = firstRejection?.status === "rejected"
-          ? ` First reason: ${userFacingError(firstRejection.reason)}`
-          : "";
         setError(
-          `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host.${reason}`,
+          `${authorizationModeLabel(next)} saved locally, but ${failed} conversation${failed === 1 ? "" : "s"} could not update the host. First reason: ${userFacingError(rejections[0].reason)}`,
         );
       }
     });
-  }, [connectedIds, projectPosture, sessions]);
+  }, [connectedIds, projectPosture, sessions, setConnectionState]);
 
 
   // US-31: live host catalog. Null until the first successful load (the
@@ -5835,7 +5859,20 @@ export function useMuseSessions(): UseMuseSessions {
         kickPoll();
         return true;
       } catch (e) {
-        setError(`approve failed: ${String(e)}`);
+        if (!isApprovalRequirementStale(e)) {
+          setError(`approve failed: ${String(e)}`);
+          return false;
+        }
+        // The host moved on before this click landed: nothing was decided.
+        // Re-read its pending fold so the card shows the step it is on now.
+        setError(STALE_APPROVAL_NOTICE);
+        void invoke<unknown>("list_pending_requests", { sessionId }).then(
+          (pending) => {
+            const fresh = parsePendingSnapshot(sessionId, pending).approvals;
+            setApprovals((cur) => [...cur.filter((a) => a.session_id !== sessionId), ...fresh]);
+          },
+          () => kickPoll(),
+        );
         return false;
       }
     },

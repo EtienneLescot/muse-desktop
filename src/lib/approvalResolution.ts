@@ -5,6 +5,7 @@
  * after reconnect). Keeping this parser pure lets the session hook restore
  * the same resume bridge for both paths without trusting raw payload text.
  */
+import { MSP_ERROR_APPROVAL_REQUIREMENT_STALE, mspErrorCode } from "./msp.ts";
 
 export interface ApprovalResolution {
   approvalId: string | null;
@@ -75,6 +76,19 @@ export function isSelectedApprovalAccepted(
  */
 export function shouldCloseApprovalLane(updated: boolean, resumePending: boolean): boolean {
   return !updated && !resumePending;
+}
+
+/** What the banner says when the host refused a decision as stale. */
+export const STALE_APPROVAL_NOTICE =
+  "This approval changed before your answer reached Muse; the card now shows the current step.";
+
+/**
+ * -32053 approvalRequirementStale: the host moved the approval to another
+ * stage before this decision landed, so nothing was decided and the card is
+ * still answerable at its current stage.
+ */
+export function isApprovalRequirementStale(error: unknown): boolean {
+  return mspErrorCode(error) === MSP_ERROR_APPROVAL_REQUIREMENT_STALE;
 }
 
 /** Parse a host approval status without exposing its raw payload to the UI. */

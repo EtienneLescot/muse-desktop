@@ -735,37 +735,20 @@ fn is_subagent_item_kind(kind: &str) -> bool {
 /// replaces the available choices for the next stage. Keep the normalization
 /// in one place so requested and updated payloads reach the same UI lane.
 fn approval_payload(p: &Value, approval_id: &str, updated: bool) -> Value {
+    let subject = p.get("subject");
     let tool = p
         .get("toolName")
         .or_else(|| p.get("tool_name"))
+        .or_else(|| subject.and_then(|s| s.get("toolName")))
         .and_then(Value::as_str)
+        // 1.4.2 sends no toolName with `approval/updated`: "tool" lets the
+        // card keep the name its request gave ("powershell"), where a guess
+        // from the subject renamed it "bash" from stage 1 on.
         .or_else(|| {
-            p.get("subject")
-                .and_then(|s| s.get("kind"))
-                .and_then(Value::as_str)
-                .and_then(|kind| (kind == "shell").then_some("bash"))
+            let shell = subject.and_then(|s| s.get("kind")).and_then(Value::as_str) == Some("shell");
+            (shell && !updated).then_some("bash")
         })
         .unwrap_or("tool");
-    let summary = p
-        .get("rawArgs")
-        .or_else(|| p.get("raw_args"))
-        .and_then(Value::as_str)
-        .or_else(|| {
-            p.get("subject")
-                .and_then(|s| s.get("command").or_else(|| s.get("rawCommand")))
-                .and_then(Value::as_str)
-        })
-        .or_else(|| {
-            p.get("approvalSubject")
-                .and_then(|s| s.get("raw_command"))
-                .and_then(Value::as_str)
-        })
-        .unwrap_or("");
-    let summary = if summary.is_empty() {
-        String::new()
-    } else {
-        format!("{}: {}", tool, truncate(summary, 200))
-    };
     let choices: Vec<Value> = p
         .get("availableChoices")
         .or_else(|| p.get("available_choices"))
@@ -796,12 +779,36 @@ fn approval_payload(p: &Value, approval_id: &str, updated: bool) -> Value {
         "request_id": approval_id,
         "approvalId": approval_id,
         "toolName": tool,
-        "summary": summary,
+        "summary": approval_subject_text(p),
         "choices": choices,
         "itemId": p.get("itemId"),
         "currentRequirementId": p.get("currentRequirementId"),
         "updated": updated,
     })
+}
+
+/// What an approval asks for, as the host words it: the subject's command,
+/// path or target; the card names the tool itself. `rawArgs` is the tool's
+/// JSON input, so only a readable field of it is used, never the JSON (M0-05:
+/// stage 0 read `powershell: {"command":…}`).
+/// ponytail: args with none of these keys leave only the tool name; flatten
+/// scalar args if such a tool ever needs approving.
+fn approval_subject_text(p: &Value) -> String {
+    fn field<'a>(value: Option<&'a Value>, keys: &[&str]) -> Option<&'a str> {
+        let value = value?;
+        keys.iter().find_map(|key| {
+            value.get(*key).and_then(Value::as_str).map(str::trim).filter(|text| !text.is_empty())
+        })
+    }
+    let raw_args = p.get("rawArgs").or_else(|| p.get("raw_args")).and_then(Value::as_str);
+    let args = raw_args.and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+    field(p.get("subject"), &["command", "rawCommand", "path", "target", "host"])
+        .or_else(|| field(p.get("approvalSubject"), &["raw_command"]))
+        .or_else(|| field(args.as_ref(), &["command", "path", "url", "query", "description"]))
+        // Plain-text args (not JSON) are already words.
+        .or_else(|| raw_args.filter(|_| args.is_none()).map(str::trim))
+        .map(|text| truncate(text, 200))
+        .unwrap_or_default()
 }
 
 fn approval_terminal(result: &Value) -> bool {
@@ -4638,6 +4645,24 @@ async fn resume_session_with_client(
     }
 }
 
+/// What this app holds for a conversation already attached to the requested
+/// workspace's live host, or None while it still needs `session/resume`.
+/// restore_sessions routes every conversation a live host lists, loaded or
+/// not (window reload), and one the host has not loaded refuses session
+/// commands (-32024 on setApprovalMode) until it is resumed.
+fn attached_session(state: &AppState, session_id: &str, root: &Path) -> Result<Option<SessionMeta>, String> {
+    if session_client(state, session_id).is_err() {
+        return Ok(None);
+    }
+    let owner_root = state.hosts.lock().map_err(|e| e.to_string())?.session_workspace(session_id)?;
+    if owner_root != root {
+        return Err("conversation belongs to a different workspace".into());
+    }
+    let meta = state.sessions.lock().map_err(|e| e.to_string())?.get(session_id).cloned()
+        .ok_or_else(|| "conversation metadata is unavailable".to_string())?;
+    Ok((meta.loaded != Some(false)).then_some(meta))
+}
+
 async fn resume_session_inner(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -4650,11 +4675,8 @@ async fn resume_session_inner(
 ) -> Result<SessionMeta, String> {
     let _resume = state.resume_mutex.lock().await;
     let root = resolve_workspace(state, Some(workspace_path))?;
-    if session_client(state, &session_id).is_ok() {
-        let owner_root = state.hosts.lock().map_err(|e| e.to_string())?.session_workspace(&session_id)?;
-        if owner_root != root { return Err("conversation belongs to a different workspace".into()); }
-        return state.sessions.lock().map_err(|e| e.to_string())?.get(&session_id).cloned()
-            .ok_or_else(|| "conversation metadata is unavailable".into());
+    if let Some(meta) = attached_session(state, &session_id, &root)? {
+        return Ok(meta);
     }
     let client = ensure_host(
         app,
@@ -4958,6 +4980,9 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
                         .map_err(|e| format!("state lock: {e}"))?;
                     let meta = if let Some(existing) = sessions.get_mut(sid) {
                         existing.running = listed.running;
+                        // The row is the host's word on whether it holds the
+                        // conversation now; a stale `true` hid a -32024.
+                        existing.loaded = listed.loaded.or(existing.loaded);
                         if listed.approval_mode.is_some() {
                             existing.approval_mode = listed.approval_mode.clone();
                         }
@@ -7151,6 +7176,68 @@ mod tests {
     }
 
     #[test]
+    fn a_listed_but_unloaded_conversation_is_not_returned_as_attached() {
+        // M0-06: after a window reload restore_sessions routes every
+        // conversation a live host lists; resume_session returned that route
+        // without `session/resume`, and setApprovalMode met -32024.
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![restore_sessions])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+        let workspace = std::env::current_dir().unwrap().canonicalize().unwrap().display().to_string();
+        let root = PathBuf::from(&workspace);
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-cold", &workspace, client.clone());
+        // Held once: attached, no resume.
+        state.inner().sessions.lock().unwrap().get_mut("session-cold").unwrap().loaded = Some(true);
+        assert!(attached_session(state.inner(), "session-cold", &root).unwrap().is_some());
+
+        let row = json!({"sessionId": "session-cold", "path": "durable.jsonl", "workspaceRoot": workspace, "status": "notLoaded"});
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames).await;
+                assert_eq!(frame["method"], "session/list");
+                client
+                    .ingest(json!({"jsonrpc": "2.0", "id": frame["id"], "result": {"sessions": [row]}}))
+                    .await;
+            });
+        });
+        let restored = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "restore_sessions".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({})),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("restore_sessions invoke should succeed")
+        .deserialize::<Value>()
+        .expect("restore_sessions response should be JSON");
+        responder.join().expect("fixture responder should finish");
+
+        // The list row wins over the stale flag, and resume_session must now
+        // call session/resume instead of returning the route as attached.
+        assert_eq!(restored[0]["loaded"], false);
+        assert!(attached_session(state.inner(), "session-cold", &root).unwrap().is_none());
+        assert!(attached_session(state.inner(), "session-cold", Path::new("elsewhere")).is_err());
+    }
+
+    #[test]
     fn generated_tauri_invoke_approves_only_the_target_session() {
         let app = tauri::test::mock_builder()
             .manage(empty_state())
@@ -8561,13 +8648,35 @@ mod tests {
         });
         let payload = approval_payload(&updated, "approval-1", true);
         assert_eq!(payload["updated"], true);
-        assert_eq!(payload["toolName"], "bash");
-        assert_eq!(payload["summary"], "bash: echo hello");
+        // No toolName on an update: the card keeps the one its request gave.
+        assert_eq!(payload["toolName"], "tool");
+        assert_eq!(payload["summary"], "echo hello");
         assert_eq!(payload["choices"][0]["choiceId"], "allow_once");
         assert_eq!(payload["currentRequirementId"]["sourceIndex"], 1);
         assert!(!approval_terminal(&json!({"terminal": false})));
         assert!(!approval_terminal(&json!({"result": {"terminal": false}})));
         assert!(approval_terminal(&json!({"status": "accepted"})));
+    }
+
+    #[test]
+    fn an_approval_card_reads_the_subject_never_the_raw_json_args() {
+        // M0-05, 1.4.2 stage 0: `rawArgs` is the tool's JSON input and the
+        // card read `powershell: {"command":…}`.
+        let command = "$m = 'm05-allow'; Set-Content -Path probe.txt -Value $m";
+        let requested = json!({
+            "approvalId": "a",
+            "toolName": "powershell",
+            "rawArgs": json!({"command": command, "description": "Write probe marker file"}).to_string(),
+            "subject": {"kind": "shell", "command": command}
+        });
+        let stage0 = approval_payload(&requested, "a", false);
+        assert_eq!(stage0["toolName"], "powershell");
+        assert_eq!(stage0["summary"], command);
+        // Without a subject, a readable field of the args, else nothing.
+        let args_only = json!({"toolName": "write_file", "rawArgs": "{\"path\":\"src/a.ts\",\"content\":\"{}\"}"});
+        assert_eq!(approval_payload(&args_only, "b", false)["summary"], "src/a.ts");
+        let opaque = json!({"toolName": "mcp__x__y", "rawArgs": "{\"n\":1}"});
+        assert_eq!(approval_payload(&opaque, "c", false)["summary"], "");
     }
 
     #[test]
