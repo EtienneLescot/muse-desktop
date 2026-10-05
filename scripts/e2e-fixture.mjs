@@ -166,6 +166,20 @@ async function scenario(app, dirs, report) {
   verdict.isolatedAppData = readdirSync(dirs.data).some((name) => name !== "WebView2");
 }
 
+/** What the runner can tell when the app does not answer: bounded, path-free once redacted. */
+async function diagnose(dirs) {
+  const run = (cmd, args) => {
+    try { return execFileSync(cmd, args, { encoding: "utf8", timeout: 10_000 }).trim().slice(0, 600); } catch (error) { return `failed: ${String(error?.message ?? error).slice(0, 200)}`; }
+  };
+  return {
+    webview2Runtime: run("reg", ["query", "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", "/v", "pv"]),
+    webviewProcesses: run("tasklist", ["/FI", "IMAGENAME eq msedgewebview2.exe", "/FO", "CSV", "/NH"]).split("\n").length,
+    cdpTargets: await fetch(`http://127.0.0.1:${PORT}/json/list`).then((r) => r.json())
+      .then((list) => list.map((t) => `${t.type} ${t.url}`.slice(0, 120))).catch((error) => `unreachable: ${error?.message ?? error}`),
+    dataDir: existsSync(dirs.data) ? readdirSync(dirs.data) : null,
+  };
+}
+
 async function main() {
   if (process.platform !== "win32") throw new Error("this check drives WebView2 over CDP: Windows only (ADR 0003)");
   if (!existsSync(EXE)) throw new Error(`no app at ${EXE}: run cargo build --manifest-path src-tauri/Cargo.toml (or pass --exe)`);
@@ -174,8 +188,7 @@ async function main() {
   }
   const root = mkdtempSync(join(tmpdir(), "muse-e2e-"));
   const dirs = { data: join(root, "data"), A: join(root, "project-a"), B: join(root, "project-b") };
-  mkdirSync(dirs.A);
-  mkdirSync(dirs.B);
+  for (const dir of [dirs.data, dirs.A, dirs.B]) mkdirSync(dir);
   const report = { schema: "muse-desktop.e2e-fixture.v1", verdict: {} };
   const output = [];
   const child = spawn(EXE, [], {
@@ -195,11 +208,13 @@ async function main() {
   child.stderr.on("data", keep);
   let app = null;
   try {
-    app = await waitFor(() => (child.exitCode === null ? openPage().catch(() => null) : "exited"), 60_000, 1_000);
+    // A cold runner creates the WebView2 profile first: give it time.
+    app = await waitFor(() => (child.exitCode === null ? openPage().catch(() => null) : "exited"), 120_000, 1_000);
     if (!app || app === "exited") throw new Error(`the app exposed no page on CDP ${PORT} (exit code ${child.exitCode})`);
     await scenario(app, dirs, report);
   } catch (error) {
     report.failure = String(error?.message ?? error).slice(0, 400);
+    report.diagnostics = await diagnose(dirs);
   } finally {
     report.consoleErrors = app?.errors?.slice(0, 20) ?? [];
     app?.close?.();
