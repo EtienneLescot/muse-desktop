@@ -370,7 +370,7 @@ import {
   shouldCloseApprovalLane,
 } from "../lib/approvalResolution";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
-import { reconnectErrorMessage, userFacingError } from "../lib/errorCopy";
+import { connectionNoticeText, reconnectErrorMessage, userFacingError } from "../lib/errorCopy";
 import { forkFailureMessage, inheritedForkLog } from "../lib/fork";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
@@ -3002,8 +3002,7 @@ export function useMuseSessions(): UseMuseSessions {
    */
   const recordConnectionFailure = useCallback(
     (sessionId: string, error: unknown): void => {
-      const raw = error instanceof Error ? error.message : String(error);
-      const reason = raw.length > 220 ? `${raw.slice(0, 217)}…` : raw;
+      const reason = connectionNoticeText(error);
       setConnectionNoticeBySession((cur) =>
         cur[sessionId] === reason ? cur : { ...cur, [sessionId]: reason },
       );

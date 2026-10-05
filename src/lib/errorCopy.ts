@@ -1,4 +1,4 @@
-import { redactDiagnostic } from "./diagnostics.ts";
+import { redactDiagnostic, safeSlice } from "./diagnostics.ts";
 
 type ErrorPattern = readonly [RegExp, string];
 
@@ -49,6 +49,15 @@ export function reconnectErrorMessage(error: unknown): string {
     return "Reconnect unavailable: this host cannot resume saved conversations. Your saved messages are still available locally.";
   }
   return `Reconnect failed: ${detail || "the host did not respond"}. Your saved messages are still available.`;
+}
+
+/**
+ * M0-08 connection pill and notice: the last (re)connect failure, masked and
+ * bounded without splitting an emoji into a lone surrogate (M0-07).
+ */
+export function connectionNoticeText(error: unknown): string {
+  const text = redactDiagnostic(asText(error)) ?? "";
+  return text.length > 220 ? `${safeSlice(text, 217)}…` : text;
 }
 
 /** Return calm, English, redacted copy for a user-facing error surface. */
