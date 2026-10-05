@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import {
   appendRun,
   archiveRun,
+  attachRunTurn,
   cancelRun,
+  cancelRunsForUnqueuedTurn,
   completeRun,
   createScheduleRun,
   isRetryableScheduleError,
@@ -256,6 +258,61 @@ describe("M3-06 schedule run ledger", () => {
     const retried = retryRunNow([failed], failed.id, 7000)[0];
     assert.equal(retried.status, "queued");
     assert.equal(retried.nextRetryAt, 7000);
+  });
+});
+
+describe("M3-08 run review anchored to its own turn", () => {
+  it("ignores another turn finishing on a reused busy thread", () => {
+    const queued = run();
+    const started = attachRunTurn(markRunStarted([queued], queued.id, 2000, "session-1"), queued.id, "turn-b");
+    const other = settleRunsForSession(started, "session-1", { status: "completed", turnId: "turn-a" }, 3000);
+    assert.equal(other[0].status, "running");
+    const own = settleRunsForSession(other, "session-1", { status: "completed", turnId: "turn-b" }, 4000);
+    assert.equal(own[0].status, "completed");
+    assert.equal(markRunStarted(own, queued.id, 5000)[0].turnId, undefined);
+  });
+
+  it("cancels a run whose queued turn is removed, and only that run", () => {
+    const queued = run();
+    const unanchored = run(1100);
+    const started = markRunStarted(
+      attachRunTurn(markRunStarted([queued, unanchored], queued.id, 2000, "session-1"), queued.id, "turn-b"),
+      unanchored.id, 2000, "session-1",
+    );
+    const other = cancelRunsForUnqueuedTurn(started, "session-1", "turn-c", 3000);
+    assert.deepEqual(other.map((item) => item.status), ["running", "running"]);
+    const own = cancelRunsForUnqueuedTurn(other, "session-1", "turn-b", 3000);
+    assert.deepEqual(own.map((item) => item.status), ["cancelled", "running"]);
+    assert.equal(own[0].finishedAt, 3000);
+  });
+
+  it("records an interrupted turn as cancelled, not completed", () => {
+    const queued = run();
+    const started = markRunStarted([queued], queued.id, 2000, "session-1");
+    const settled = settleRunsForSession(started, "session-1", { status: "cancelled", turnId: "turn-b" }, 3000);
+    assert.equal(settled[0].status, "cancelled");
+    assert.equal(settled[0].finishedAt, 3000);
+    assert.equal(settled[0].unread, true);
+  });
+
+  it("reviews only the run's own rows and lets the host preview win", () => {
+    const queued = run();
+    const started = attachRunTurn(markRunStarted([queued], queued.id, 2000, "session-1"), queued.id, "turn-b");
+    const log = [
+      { id: "old", ts: 1000, role: "assistant", text: "Decision: older answer." },
+      { id: "other", ts: 2500, role: "assistant", text: "Tail of turn A.", turnId: "turn-a" },
+      { id: "own", ts: 2600, role: "assistant", text: "  Scheduled   answer.  ", turnId: "turn-b" },
+    ];
+    const local = settleRunsForSession(started, "session-1", { status: "completed", turnId: "turn-b" }, 3000, log)[0];
+    assert.equal(local.resultPreview, "Scheduled answer.");
+    assert.equal(local.resultSummary?.totalItems, 1);
+    assert.deepEqual(local.resultSummary?.decisions, []);
+    const host = settleRunsForSession(started, "session-1", {
+      status: "completed",
+      turnId: "turn-b",
+      resultPreview: "Host result.",
+    }, 3000, log)[0];
+    assert.equal(host.resultPreview, "Host result.");
   });
 });
 

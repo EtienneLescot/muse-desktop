@@ -40,9 +40,15 @@ export interface DiagnosticsSnapshot {
   native: NativeDiagnosticsSnapshot | null;
 }
 
+/** First `end` UTF-16 units, backing off one rather than splitting a surrogate pair. */
+export function safeSlice(value: string, end: number): string {
+  const last = value.charCodeAt(end - 1);
+  return value.slice(0, last >= 0xd800 && last <= 0xdbff ? end - 1 : end);
+}
+
 function bounded(value: string, max = MAX_ERROR_CHARS): string {
   const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized.length <= max ? normalized : `${normalized.slice(0, max)}…`;
+  return normalized.length <= max ? normalized : `${safeSlice(normalized, max)}…`;
 }
 
 /** Redact common credential-shaped values before a value leaves the app. */

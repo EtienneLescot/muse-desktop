@@ -92,10 +92,12 @@ export interface SendResult {
   clientMessageId: string | null;
   /** Failure reason; null on success. */
   error: string | null;
+  /** Host turn named by the admission ack, when the host reports one. */
+  turnId?: string;
 }
 
-export function sendAccepted(clientMessageId: string): SendResult {
-  return { ok: true, clientMessageId, error: null };
+export function sendAccepted(clientMessageId: string, turnId?: string): SendResult {
+  return { ok: true, clientMessageId, error: null, ...(turnId ? { turnId } : {}) };
 }
 
 export function sendFailed(

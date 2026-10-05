@@ -6,7 +6,14 @@
  */
 import { isValidTimeZone, type ScheduleAuthorizationMode, type ThreadReuse } from "./schedules.ts";
 import { readStorageJson, writeStorageJson } from "./storage.ts";
-import type { ScheduleRunSummary, StructuredRunFacts } from "./runSummary.ts";
+import {
+  buildScheduleRunSummary,
+  mergeScheduleRunSummary,
+  scheduleRunPreview,
+  type RunLogEntry,
+  type ScheduleRunSummary,
+  type StructuredRunFacts,
+} from "./runSummary.ts";
 
 export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 /**
@@ -42,6 +49,8 @@ export interface ScheduleRun {
   startedAt?: number;
   finishedAt?: number;
   sessionId?: string;
+  /** Host turn named by the admission ack; only that turn settles the run. */
+  turnId?: string;
   /** One-based dispatch attempt; legacy rows default to one. */
   attempt?: number;
   /** Retry is not eligible before this timestamp. */
@@ -82,14 +91,22 @@ export function markRunStarted(
   sessionId?: string,
 ): ScheduleRun[] {
   return runs.map((run) => run.id === idValue
-    ? { ...run, status: "running", startedAt: now, nextRetryAt: undefined, ...(sessionId ? { sessionId } : {}) }
+    ? { ...run, status: "running", startedAt: now, nextRetryAt: undefined, turnId: undefined, ...(sessionId ? { sessionId } : {}) }
     : run);
+}
+
+/**
+ * M3-08: anchor a dispatched run to its admitted turn. Separate from
+ * markRunStarted, which must persist the row before send_input answers.
+ */
+export function attachRunTurn(runs: ScheduleRun[], idValue: string, turnId: string): ScheduleRun[] {
+  return runs.map((run) => run.id === idValue ? { ...run, turnId } : run);
 }
 
 export function settleRun(
   runs: ScheduleRun[],
   idValue: string,
-  status: "completed" | "failed",
+  status: "completed" | "failed" | "cancelled",
   now: number,
   error?: string,
 ): ScheduleRun[] {
@@ -98,11 +115,10 @@ export function settleRun(
         ...run,
         status,
         finishedAt: now,
-        ...(status === "completed" || status === "failed" ? { unread: true } : {}),
-        ...(status === "completed" ? { error: undefined, nextRetryAt: undefined } : {}),
-        ...(status === "completed" || status === "failed"
-          ? { recovery: undefined, recoveryDetectedAt: undefined }
-          : {}),
+        unread: true,
+        ...(status === "failed" ? {} : { error: undefined, nextRetryAt: undefined }),
+        recovery: undefined,
+        recoveryDetectedAt: undefined,
         ...(error ? { error } : {}),
       }
     : run);
@@ -131,12 +147,14 @@ export function completeRun(
 }
 
 export interface ScheduledTurnOutcome {
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "cancelled";
+  /** Terminal turn id, when the host names it. */
+  turnId?: string;
   /** Bounded, redacted engine detail when the host rejected the turn. */
   error?: string;
   retryable?: boolean;
+  /** Host-authored result; wins over the local transcript excerpt. */
   resultPreview?: string;
-  resultSummary?: ScheduleRunSummary;
   /** Explicit structured facts from the terminal host result. */
   resultFacts?: StructuredRunFacts;
 }
@@ -151,12 +169,26 @@ export function settleRunsForSession(
   sessionId: string,
   outcome: ScheduledTurnOutcome,
   now: number,
+  log: RunLogEntry[] = [],
 ): ScheduleRun[] {
   let next = runs;
   for (const run of runs) {
     if (run.sessionId !== sessionId || run.status !== "running") continue;
+    // M3-08: a reused busy thread finishes other turns too.
+    if (run.turnId !== undefined && outcome.turnId !== undefined && run.turnId !== outcome.turnId) continue;
+    if (outcome.status === "cancelled") {
+      next = settleRun(next, run.id, "cancelled", now);
+      continue;
+    }
     if (outcome.status === "completed") {
-      next = completeRun(next, run.id, now, outcome.resultPreview, outcome.resultSummary);
+      const anchor = { startedAt: run.startedAt, turnId: run.turnId ?? outcome.turnId };
+      next = completeRun(
+        next,
+        run.id,
+        now,
+        outcome.resultPreview || scheduleRunPreview(log, anchor),
+        mergeScheduleRunSummary(buildScheduleRunSummary(sessionId, log, anchor), outcome.resultFacts),
+      );
       continue;
     }
     const reason = outcome.error?.trim() || "scheduled turn failed";
@@ -166,6 +198,23 @@ export function settleRunsForSession(
       : failed;
   }
   return next;
+}
+
+/**
+ * A queued turn removed before it starts never emits a terminal event, so
+ * its run is cancelled on the unqueue itself. Unlike settleRunsForSession,
+ * a run not yet anchored to a turn is left alone.
+ */
+export function cancelRunsForUnqueuedTurn(
+  runs: ScheduleRun[],
+  sessionId: string,
+  turnId: string,
+  now: number,
+): ScheduleRun[] {
+  return runs.reduce((next, run) =>
+    run.sessionId === sessionId && run.status === "running" && run.turnId === turnId
+      ? settleRun(next, run.id, "cancelled", now)
+      : next, runs);
 }
 
 export function markRunRead(runs: ScheduleRun[], idValue: string): ScheduleRun[] {
@@ -288,6 +337,7 @@ function validRun(value: unknown): value is ScheduleRun {
     (row.startedAt === undefined || typeof row.startedAt === "number") &&
     (row.finishedAt === undefined || typeof row.finishedAt === "number") &&
     (row.sessionId === undefined || typeof row.sessionId === "string") &&
+    (row.turnId === undefined || typeof row.turnId === "string") &&
     (row.attempt === undefined || (typeof row.attempt === "number" && Number.isInteger(row.attempt) && row.attempt >= 1 && row.attempt <= MAX_RUN_ATTEMPTS)) &&
     (row.nextRetryAt === undefined || typeof row.nextRetryAt === "number") &&
     (row.resultPreview === undefined || typeof row.resultPreview === "string") &&

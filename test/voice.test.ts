@@ -1,11 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  abortVoiceRecognition,
   appendVoiceTranscript,
   getVoiceRecognitionFactory,
   requestVoicePermission,
   transcriptFromVoiceEvent,
   voiceErrorMessage,
+  VOICE_SERVICE_NOTE,
+  type VoiceRecognition,
 } from "../src/lib/voice.ts";
 
 describe("voice input boundary", () => {
@@ -59,5 +62,33 @@ describe("voice input boundary", () => {
     assert.equal(await requestVoicePermission({
       navigator: { mediaDevices: { getUserMedia: async () => { throw new Error("denied"); } } },
     }), "denied");
+  });
+
+  it("reports a missing microphone apart from a denial", async () => {
+    for (const name of ["NotFoundError", "OverconstrainedError"]) {
+      assert.equal(await requestVoicePermission({
+        navigator: { mediaDevices: { getUserMedia: async () => { throw new DOMException("none", name); } } },
+      }), "no-microphone");
+    }
+  });
+
+  it("aborts recognition without letting a late result reach the draft", () => {
+    let aborted = 0;
+    const recognition = {
+      onresult: () => assert.fail("late result"),
+      onerror: () => assert.fail("late error"),
+      onend: () => assert.fail("late end"),
+      abort: () => { aborted += 1; },
+    } as unknown as VoiceRecognition;
+    abortVoiceRecognition(recognition);
+    assert.equal(aborted, 1);
+    assert.equal(recognition.onresult, null);
+    assert.equal(recognition.onerror, null);
+    assert.equal(recognition.onend, null);
+    abortVoiceRecognition(null);
+  });
+
+  it("says where dictation audio goes on Windows", () => {
+    assert.match(VOICE_SERVICE_NOTE, /Windows.*Microsoft's online speech recognition/);
   });
 });

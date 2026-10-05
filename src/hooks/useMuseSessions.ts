@@ -263,7 +263,9 @@ export type { ReviewItem, Schedule, ScheduleInput, ThreadReuse } from "../lib/sc
 import {
   archiveRun,
   appendRun,
+  attachRunTurn,
   cancelRun,
+  cancelRunsForUnqueuedTurn,
   completeRun,
   createScheduleRun,
   isRetryableScheduleError,
@@ -291,7 +293,6 @@ import {
   syncNativeSchedulerWakeup,
   type SchedulerWakeupStatus,
 } from "../lib/schedulerWakeup";
-import { buildScheduleRunSummary, mergeScheduleRunSummary } from "../lib/runSummary";
 export type { ScheduleRunSummary } from "../lib/runSummary";
 import {
   INITIAL_SCHEDULER_RUNTIME_STATUS,
@@ -3169,20 +3170,7 @@ export function useMuseSessions(): UseMuseSessions {
     outcome: Parameters<typeof settleRunsForSession>[2],
   ): void {
     const log = logsRef.current[sessionId] ?? [];
-    const lastAssistant = [...log].reverse().find((entry) =>
-      entry.role === "assistant" && entry.text.trim().length > 0,
-    );
-    const preview = lastAssistant?.text.trim().replace(/\s+/g, " ").slice(0, 320);
-    const resultSummary = outcome.status === "completed"
-      ? mergeScheduleRunSummary(buildScheduleRunSummary(sessionId, log), outcome.resultFacts)
-      : undefined;
-    setScheduleRuns((cur) => {
-      return settleRunsForSession(cur, sessionId, {
-        ...outcome,
-        ...(outcome.status === "completed" && preview ? { resultPreview: preview } : {}),
-        ...(resultSummary ? { resultSummary } : {}),
-      }, Date.now());
-    });
+    setScheduleRuns((cur) => settleRunsForSession(cur, sessionId, outcome, Date.now(), log));
   }
 
   /** Update the ephemeral skill progress only when the event can belong to
@@ -3912,6 +3900,7 @@ export function useMuseSessions(): UseMuseSessions {
             if (next[sid].length === 0) delete next[sid];
             return next;
           });
+          setScheduleRuns((cur) => cancelRunsForUnqueuedTurn(cur, sid, queuedTurnId, Date.now()));
         }
       } catch {
         // Keep the queue card until the explicit command result settles.
@@ -3989,22 +3978,26 @@ export function useMuseSessions(): UseMuseSessions {
         payload,
         failure?.message ?? "Muse completed the skill invocation",
       );
+      const terminalTurn = completion?.turnId ? { turnId: completion.turnId } : {};
       settleScheduleRunsForSession(sid, failure
-        ? { status: "failed", error: failure.message, retryable: failure.retryable }
+        ? { ...terminalTurn, status: "failed", error: failure.message, retryable: failure.retryable }
         : kind === "host_exited"
           ? { status: "failed", error: "host exited before the scheduled turn completed", retryable: false }
-          : {
-              status: "completed",
-              ...(completion?.resultPreview ? { resultPreview: completion.resultPreview } : {}),
-              ...(completion?.resultIssues || completion?.resultNextSteps
-                ? {
-                    resultFacts: {
-                      ...(completion.resultIssues ? { issues: completion.resultIssues } : {}),
-                      ...(completion.resultNextSteps ? { nextSteps: completion.resultNextSteps } : {}),
-                    },
-                  }
-                : {}),
-            });
+          : /cancel|interrupt|stop/i.test(completion?.terminal ?? kind)
+            ? { ...terminalTurn, status: "cancelled" }
+            : {
+                ...terminalTurn,
+                status: "completed",
+                ...(completion?.resultPreview ? { resultPreview: completion.resultPreview } : {}),
+                ...(completion?.resultIssues || completion?.resultNextSteps
+                  ? {
+                      resultFacts: {
+                        ...(completion.resultIssues ? { issues: completion.resultIssues } : {}),
+                        ...(completion.resultNextSteps ? { nextSteps: completion.resultNextSteps } : {}),
+                      },
+                    }
+                  : {}),
+              });
     }
     const isApprovalStatus = kind === "approval/resolved" || kind === "approval/updated" || kind === "approval_mode_changed";
     if (kind === "approval/resolved") {
@@ -5425,7 +5418,7 @@ export function useMuseSessions(): UseMuseSessions {
           // Drain immediately: the next slow tick could be ~1s away, which
           // would delay the first tokens and dump them as one catch-up burst.
           kickPoll();
-          return sendAccepted(clientMessageId);
+          return sendAccepted(clientMessageId, admissionTurnId);
         }
         updateOutbox(sessionId, (cur) =>
           upsertOutbox(cur, markFailed(entry, failure, Date.now(), ambiguous)),
@@ -6445,6 +6438,10 @@ export function useMuseSessions(): UseMuseSessions {
           result = await sendInput(sessionId, item.instructions);
         }
         if (result.ok) {
+          if (run && result.turnId) {
+            const turnId = result.turnId;
+            setScheduleRuns((cur) => attachRunTurn(cur, run.id, turnId));
+          }
           // `send_input` only acknowledges admission. The run remains
           // running until the host emits a stopped turn status, where the
           // result preview and unread marker are captured.

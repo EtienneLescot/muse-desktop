@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildScheduleRunSummary, mergeScheduleRunSummary } from "../src/lib/runSummary.ts";
+import { buildScheduleRunSummary, mergeScheduleRunSummary, scheduleRunPreview } from "../src/lib/runSummary.ts";
 
 describe("scheduled run result summaries", () => {
   it("extracts a bounded headline, counts, files and outcomes", () => {
@@ -62,6 +62,22 @@ describe("scheduled run result summaries", () => {
       "provider: rate limit reached",
     ]);
     assert.deepEqual(summary.nextSteps, ["apply the migration."]);
+  });
+
+  it("scopes the summary and preview to the run's start and turn (M3-08)", () => {
+    const log = [
+      { id: "old", ts: 1000, role: "assistant", text: "Issue: stale history in src/old.ts" },
+      { id: "u", ts: 2000, role: "user", text: "Review src/App.tsx" },
+      { id: "other", ts: 2100, role: "assistant", text: "Next steps: finish turn A.", turnId: "turn-a" },
+      { id: "a", ts: 2200, role: "assistant", text: "The patch is ready.", turnId: "turn-b" },
+    ];
+    const summary = buildScheduleRunSummary("session-6", log, { startedAt: 2000, turnId: "turn-b" });
+    assert.equal(summary.totalItems, 2);
+    assert.deepEqual(summary.filesMentioned, ["src/App.tsx"]);
+    assert.equal(summary.issues, undefined);
+    assert.equal(summary.nextSteps, undefined);
+    assert.equal(summary.headline, "The patch is ready.");
+    assert.equal(scheduleRunPreview(log, { startedAt: 2300 }), undefined);
   });
 
   it("merges host facts without replacing the local recap", () => {

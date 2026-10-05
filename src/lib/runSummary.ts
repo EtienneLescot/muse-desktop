@@ -14,6 +14,11 @@ export interface ScheduleRunSummary {
   nextSteps?: string[];
 }
 
+/** A persisted transcript row; `ts` and `turnId` anchor it to one run. */
+export type RunLogEntry = ArtifactLogEntry & { ts?: number; turnId?: string };
+
+type RunAnchor = { startedAt?: number; turnId?: string };
+
 export interface StructuredRunFacts {
   issues?: readonly string[];
   nextSteps?: readonly string[];
@@ -117,18 +122,40 @@ export function mergeScheduleRunSummary(
 }
 
 /**
+ * M3-08: a reused thread keeps older history and may finish other turns; a
+ * run only owns the rows written since it started and, when both ids are
+ * known, by its own admitted turn.
+ */
+function runEntries(log: RunLogEntry[], anchor: RunAnchor = {}): RunLogEntry[] {
+  return log.filter((entry) =>
+    (entry.ts ?? 0) >= (anchor.startedAt ?? 0) &&
+    (entry.turnId === undefined || anchor.turnId === undefined || entry.turnId === anchor.turnId));
+}
+
+function lastAssistant(log: RunLogEntry[]): RunLogEntry | undefined {
+  return [...log].reverse().find((entry) => entry.role === "assistant" && entry.text.trim().length > 0);
+}
+
+/** Local fallback preview: the run's last assistant message, compacted. */
+export function scheduleRunPreview(log: RunLogEntry[], anchor?: RunAnchor): string | undefined {
+  return lastAssistant(runEntries(log, anchor))?.text.trim().replace(/\s+/g, " ").slice(0, 320);
+}
+
+/**
  * Build a result summary from the already persisted conversation log. This
  * never calls a model and only retains the bounded recap facts used by the UI.
  */
 export function buildScheduleRunSummary(
   sessionId: string,
-  log: ArtifactLogEntry[],
+  log: RunLogEntry[],
+  anchor?: RunAnchor,
 ): ScheduleRunSummary {
-  const recap = buildThreadRecap(sessionId, log);
-  const assistant = [...log].reverse().find((entry) => entry.role === "assistant" && entry.text.trim().length > 0);
+  const own = runEntries(log, anchor);
+  const recap = buildThreadRecap(sessionId, own);
+  const assistant = lastAssistant(own);
   const headline = assistant ? clip(assistant.text) : recap.decisions[0] ?? "The scheduled conversation completed.";
-  const issues = extractIssues(log);
-  const nextSteps = extractNextSteps(log);
+  const issues = extractIssues(own);
+  const nextSteps = extractNextSteps(own);
   return {
     headline,
     totalItems: recap.total,

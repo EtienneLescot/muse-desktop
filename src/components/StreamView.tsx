@@ -31,9 +31,10 @@ import {
   type TranscriptHit,
 } from "../lib/transcriptSearch";
 import { streamEntryA11y, streamWindowAnnouncement } from "../lib/streamA11y";
-import { streamNavigationTarget } from "../lib/streamNavigation";
+import { streamNavigationTarget, streamScrollBehavior } from "../lib/streamNavigation";
 import { subagentStatusLabel } from "../lib/subagent";
 import { officePreviewForFile, type OfficePreview } from "../lib/officePreview";
+import { needsWindowsSandboxSetup } from "../lib/sidecarError";
 import { MessageContent } from "./MessageContent";
 import { Icon } from "./Icon";
 import { loadStreamPosition, saveStreamPosition } from "../lib/streamPosition";
@@ -327,6 +328,9 @@ export function StreamView({
   const [findQuery, setFindQuery] = useState("");
   const [findTarget, setFindTarget] = useState<number | null>(null);
   const [findSelection, setFindSelection] = useState<number | null>(null);
+  // Position of the last hit jumped to, announced by the finder's status: focus
+  // stays in the search box so ArrowUp/Down and Enter keep walking the results.
+  const [findRevealed, setFindRevealed] = useState<string | null>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const [now, setNow] = useState(() => Date.now());
   const [windowStart, setWindowStart] = useState(() =>
@@ -594,7 +598,8 @@ export function StreamView({
       if (target === null || target === undefined) return;
       // A search hit inside folded steps must be shown, not scrolled to blind.
       target.closest<HTMLDetailsElement>("details.work-group")?.setAttribute("open", "");
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+      target.scrollIntoView({ block: "center", behavior: streamScrollBehavior(reducedMotion) });
       target.classList.add("stream-find-target");
       window.setTimeout(() => target.classList.remove("stream-find-target"), 1200);
       setFindTarget(null);
@@ -673,6 +678,7 @@ export function StreamView({
       setWindowStart(next);
     }
     setFindTarget(hit.index);
+    setFindRevealed(streamEntryA11y(hit.role, hit.index, entries.length).label);
   }
 
   function onScroll(e: React.UIEvent<HTMLDivElement>): void {
@@ -892,7 +898,10 @@ export function StreamView({
               ref={findInputRef}
               type="search"
               value={findQuery}
-              onChange={(event) => setFindQuery(event.target.value)}
+              onChange={(event) => {
+                setFindQuery(event.target.value);
+                setFindRevealed(null);
+              }}
               placeholder="Search messages…"
               aria-label="Search messages"
               aria-controls="conversation-search-results"
@@ -925,7 +934,7 @@ export function StreamView({
             <span className="stream-find-count" role="status">
               {findQuery.trim() === ""
                 ? "Type to search the full conversation"
-                : `${findHits.length}${findHits.length === 80 ? "+" : ""} match${findHits.length === 1 ? "" : "es"}`}
+                : `${findHits.length}${findHits.length === 80 ? "+" : ""} match${findHits.length === 1 ? "" : "es"}${findRevealed === null ? "" : ` · ${findRevealed}`}`}
             </span>
             <button
               type="button"
@@ -1285,6 +1294,13 @@ export function StreamView({
                   <span className="caret" aria-hidden="true" />
                 )}
               </pre>
+            )}
+            {e.role === "tool" && needsWindowsSandboxSetup(e.text) && (
+              // M0-10: the first-launch prerequisite, shown where the shell failed.
+              <p className="muted">
+                Windows sandbox setup required: open a terminal as administrator, run{" "}
+                <code>muse sandbox windows setup</code> once, then run the command again.
+              </p>
             )}
             {e.richContent && e.richContent.length > 0 && (
               <div className="rich-content-list" aria-label="Rich output">

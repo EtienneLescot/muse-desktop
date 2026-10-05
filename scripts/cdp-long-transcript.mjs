@@ -88,9 +88,16 @@ const WINDOW_SNIPPET = `(() => {
     setsizeSample: entries[0] ? entries[0].getAttribute("aria-setsize") : null,
     posinsetSample: entries[0] ? entries[0].getAttribute("aria-posinset") : null,
     hasLoadOlder: /Load older messages/i.test(body),
-    hasLatest: /Latest messages/i.test(body),
-    hasFinder: /Find in conversation/i.test(body)
+    hasLatest: /Latest messages/i.test(body)
   };
+})()`;
+
+/** Press a key on the focused transcript; the app's shortcut listener sits on window. */
+const pressOnTranscript = (key, ctrlKey = false) => `(() => {
+  const host = document.querySelector('[data-entry-count]');
+  if (!host) return false;
+  host.focus();
+  return host.dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, ctrlKey: ${ctrlKey}, bubbles: true, cancelable: true }));
 })()`;
 
 async function main() {
@@ -147,6 +154,12 @@ async function main() {
       return { found: Boolean(withCount) };
     })()`);
     report.afterReload = await evaluate(client, WINDOW_SNIPPET);
+    // The finder renders only after Ctrl/Cmd+F and its name is an aria-label,
+    // not body text: open it, then look for the element itself.
+    await evaluate(client, pressOnTranscript("f", true));
+    await sleep(500);
+    report.afterReload.hasFinder = await evaluate(client, `Boolean(document.querySelector(".stream-find"))`);
+    await evaluate(client, pressOnTranscript("Escape"));
   } catch (error) {
     report.failure = String((error && error.message) || error).slice(0, 300);
   } finally {

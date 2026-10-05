@@ -2,10 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Merged into the macOS bundle by Tauri. Desktop control drives the
-       Accessibility tree through System Events, which macOS gates behind an
-       Automation prompt that must explain why it is asked. -->
-  <key>NSAppleEventsUsageDescription</key>
-  <string>Muse-Desktop uses System Events to inspect and control the desktop windows you explicitly select in the Desktop panel.</string>
+  <!-- Merged into the macOS bundle by Tauri. Voice input (M4-08) asks for the
+       microphone and for speech recognition only when the user presses Voice;
+       macOS refuses both prompts without these explanations. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Muse-Desktop uses the microphone only while you dictate a message with Voice.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Muse-Desktop uses the system speech service to turn your dictation into editable text in the message box.</string>
 </dict>
 </plist>
