@@ -428,7 +428,6 @@ small {
 
 /* Visible focus on decision controls, reusing the existing blue token. */
 .approval-actions button:focus-visible,
-.allowlist-row button:focus-visible,
 .session-sidebar button:focus-visible,
 .composer-actions button:focus-visible,
 .mention-chip-remove:focus-visible {
@@ -1661,10 +1660,6 @@ body.dark .avatar {
   box-shadow: 0 4px 16px #233f6409;
 }
 
-.approval[data-decision="forbidden"] {
-  border-left-color: var(--danger);
-}
-
 .approval-text {
   min-width: 0;
 }
@@ -1690,13 +1685,11 @@ body.dark .avatar {
   list-style: none;
 }
 
-.approval-details summary::-webkit-details-marker,
-.allowlist-title::-webkit-details-marker {
+.approval-details summary::-webkit-details-marker {
   display: none;
 }
 
-.approval-details summary::before,
-.allowlist-title::before {
+.approval-details summary::before {
   content: "›";
   display: inline-block;
   color: var(--blue);
@@ -1705,8 +1698,7 @@ body.dark .avatar {
   transition: transform 0.15s ease;
 }
 
-.approval-details[open] summary::before,
-.allowlist[open] .allowlist-title::before {
+.approval-details[open] summary::before {
   transform: rotate(90deg);
 }
 
@@ -1871,99 +1863,10 @@ body.dark .approval-actions .deny {
   background: var(--bg);
 }
 
-/* ---- US-15 allowlist badges + rules ---- */
-
-.rule-badge {
-  display: inline-block;
-  font-size: 0.78rem;
-  font-weight: 600;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 6px;
-  white-space: nowrap;
-}
-
-.rule-allow {
-  color: var(--green);
-  border-color: var(--green);
-}
-
-.rule-prompt {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.rule-forbidden {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-
 .approval-scope {
   font-size: 0.78rem;
   margin-top: 2px;
   word-break: break-word;
-}
-
-.approval-actions .remember {
-  border: 1px solid var(--line);
-  color: var(--text);
-  background: transparent;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.allowlist {
-  border-top: 1px solid var(--line);
-  padding-top: 9px;
-}
-
-.allowlist-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.78rem;
-  list-style: none;
-}
-
-.allowlist-rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.allowlist-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.allowlist-pattern {
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 0.85rem;
-  background: var(--code-bg);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 6px;
-}
-
-.allowlist-scope {
-  font-size: 0.78rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-.allowlist-revoke {
-  margin-left: auto;
-  flex-shrink: 0;
 }
 
 /* ---- Composer ---- */

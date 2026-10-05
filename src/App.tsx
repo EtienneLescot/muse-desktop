@@ -156,11 +156,6 @@ export default function App() {
     retryFailedTurn,
     discardSend,
     approve,
-    allowlist,
-    allowDecisionFor,
-    rememberApproval,
-    revokeAllowRule,
-    setAllowRuleDecision,
     answerInput,
     cancelInput,
     cancelSession,
@@ -1574,14 +1569,7 @@ export default function App() {
                     approvals={activeApprovals}
                     authorizationMode={authorizationMode}
                     onAuthorizationModeChange={setAuthorizationMode}
-                    rules={allowlist}
                     onDecision={approve}
-                    onRemember={(a, choiceId) =>
-                      void rememberApproval(a, choiceId)
-                    }
-                    decisionFor={allowDecisionFor}
-                    onRevoke={revokeAllowRule}
-                    onRuleDecision={setAllowRuleDecision}
                   />
                   <InputPanel
                     requests={activeInputRequests}

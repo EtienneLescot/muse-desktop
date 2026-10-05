@@ -76,22 +76,6 @@ import {
   type InputAnswer,
   type InputRequest,
 } from "../lib/input";
-// US-15 persistent approval allowlist: matching + most-restrictive-wins
-// resolution live in ../lib/allowlist (dependency-free, unit-tested);
-// storage + rule types extend ../lib/persist.
-import {
-  addAllowRule,
-  defaultPatternFor,
-  loadAllowlist,
-  removeAllowRule,
-  resolveApproval,
-  saveAllowlist,
-  setAllowRuleDecision,
-  type AllowDecision,
-  type AllowRule,
-  type ResolvedApproval,
-} from "../lib/allowlist";
-export type { AllowDecision, AllowRule, ResolvedApproval } from "../lib/allowlist";
 // US-19 in-app browser + computer-use (scoped): pure helpers, unit-tested;
 // storage keys extend the muse-desktop.* localStorage namespace.
 import {
@@ -175,7 +159,7 @@ import {
   type EngineErrorDetails,
   type TurnCompletionDetails,
 } from "../lib/engineError";
-import { statusLogText } from "../lib/statusLog";
+import { hostExitNotices, statusLogText } from "../lib/statusLog";
 // Boot auto-resume candidate selection (pure, unit-tested): which stored
 // sessions need a silent `resume_session` after `restore_sessions` settles.
 import { connectedRestoredIds, selectResumeOnOpen } from "../lib/bootResume";
@@ -377,7 +361,7 @@ import {
   shouldCloseApprovalLane,
 } from "../lib/approvalResolution";
 import { readStorageJson, readStorageString, writeStorageJson, writeStorageString } from "../lib/storage.ts";
-import { connectionNoticeText, reconnectErrorMessage, userFacingError } from "../lib/errorCopy";
+import { connectionNoticeText, isConnectorError, reconnectErrorMessage, userFacingError } from "../lib/errorCopy";
 import { forkFailureMessage, inheritedForkLog } from "../lib/fork";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
@@ -962,13 +946,6 @@ interface UseMuseSessions {
   /** Give up on a failed entry: drops it and its undelivered user entry. */
   discardSend: (clientMessageId: string) => void;
   approve: (sessionId: string, approvalId: string, choiceId: string) => Promise<boolean>;
-  /** US-15: persisted allowlist rules + effective decision per request. */
-  allowlist: AllowRule[];
-  allowDecisionFor: (approval: ApprovalRequest) => ResolvedApproval;
-  /** Approve, then memorize an allow rule (command pattern + choice scope). */
-  rememberApproval: (approval: ApprovalRequest, choiceId: string) => Promise<void>;
-  revokeAllowRule: (id: string) => void;
-  setAllowRuleDecision: (id: string, decision: AllowDecision) => void;
   answerInput: (sessionId: string, inputId: string, answers: InputAnswer[]) => Promise<void>;
   cancelInput: (sessionId: string, inputId: string) => Promise<void>;
   inputRequests: InputRequest[];
@@ -1677,9 +1654,6 @@ export function useMuseSessions(): UseMuseSessions {
   authorizationModeRef.current = authorizationMode;
   // Sessions a scheduled run moved off the global posture, by scheduled turn.
   const scheduledPostureRef = useRef(new Map<string, string>());
-  // US-15 allowlist: restored once (survives restarts via localStorage),
-  // written through on every change.
-  const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
   // US-9 automations: restored once (survive restarts via localStorage),
   // written through on every change (effect below).
   const [schedules, setSchedules] = useState<Schedule[]>(() => loadSchedules());
@@ -1829,6 +1803,11 @@ export function useMuseSessions(): UseMuseSessions {
   const setError = (message: string | null, host: HostRequest | null = null): void => {
     setErrorMessage(message);
     setErrorHost(host);
+  };
+  // M0-13: called first by every connector action, so a later probe or call
+  // no longer shows the previous one's failure. Connector errors carry no host.
+  const clearConnectorError = (): void => {
+    setErrorMessage((current) => (isConnectorError(current) ? null : current));
   };
   // US-4: local thread summaries (mirror of localStorage) + composer prefill
   // after `newFromSummary`.
@@ -2425,10 +2404,6 @@ export function useMuseSessions(): UseMuseSessions {
     if (!historyReady) return;
     saveActiveId(activeId);
   }, [activeId, historyReady]);
-
-  useEffect(() => {
-    saveAllowlist(allowlist);
-  }, [allowlist]);
 
   // M0-05: which conversations have a card open, for the next boot's notice.
   useEffect(() => {
@@ -3406,6 +3381,18 @@ export function useMuseSessions(): UseMuseSessions {
     }
     if (kind === "host_exited") {
       updateSkillInvocationFromHost(sid, "failed", payload, "Muse stopped before the skill invocation completed");
+      // M0-05: nothing stays pending on a host that is gone, so a card left on
+      // screen could only fail. ponytail: the notices read the last render, so
+      // a card raised in the same poll as the exit (never shown) gets none; a
+      // ref kept by the card handlers would cover it.
+      pushLog(sid, hostExitNotices(sid, approvals, inputRequests).map((text) => ({
+        id: newId(),
+        ts: Date.now(),
+        role: "system",
+        text,
+      })));
+      setApprovals((cur) => cur.filter((a) => a.session_id !== sid));
+      setInputRequests((cur) => cur.filter((r) => r.session_id !== sid));
       setConnectedIds((cur) => cur.filter((id) => id !== sid));
       setGrantedCapabilitiesBySession((cur) => {
         if (!(sid in cur)) return cur;
@@ -4841,6 +4828,7 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const installConnectorById = useCallback((dirId: string): void => {
+    clearConnectorError();
     const r = installConnector(connectorsRef.current, dirId);
     if (r === null) {
       setError(`unknown connector "${dirId}": install from the curated directory.`);
@@ -4876,6 +4864,7 @@ export function useMuseSessions(): UseMuseSessions {
   }, [disconnectRemoteMcp]);
 
   const uninstallConnectorById = useCallback(async (id: string): Promise<void> => {
+    clearConnectorError();
     const entry = findConnector(connectorsRef.current, id);
     if (mcpRunningIds.includes(id)) {
       try {
@@ -4900,6 +4889,7 @@ export function useMuseSessions(): UseMuseSessions {
   }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
 
   const setConnectorEnabledById = useCallback((id: string, enabled: boolean): void => {
+    clearConnectorError();
     setConnectors((cur) => setConnectorEnabled(cur, id, enabled).registry);
     if (!enabled && mcpRunningIds.includes(id)) {
       // Disabling a connector must release its native child as well. The
@@ -4917,6 +4907,7 @@ export function useMuseSessions(): UseMuseSessions {
   }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
 
   const setConnectorUseInMuseById = useCallback((id: string, enabled: boolean): void => {
+    clearConnectorError();
     setConnectors((current) => setConnectorUseInMuse(current, id, enabled));
   }, []);
 
@@ -4926,6 +4917,7 @@ export function useMuseSessions(): UseMuseSessions {
       url: string,
       token = "",
     ): Promise<RemoteMcpProbeResult | null> => {
+      clearConnectorError();
       const trimmedName = name.trim();
       const endpoint = url.trim();
       const id = `remote-${trimmedName.toLowerCase().replace(/[\s_]+/g, "-")}`;
@@ -5011,6 +5003,7 @@ export function useMuseSessions(): UseMuseSessions {
       toolName: string,
       argumentsText: string,
     ): Promise<RemoteMcpCallResult | null> => {
+      clearConnectorError();
       const session = remoteSessionsRef.current[id];
       if (!session) {
         setRemoteNotice("Remote connector is disconnected. Connect it before calling a tool.");
@@ -5921,40 +5914,6 @@ export function useMuseSessions(): UseMuseSessions {
     [approvals, kickPoll, touchStreamActivity],
   );
 
-  // US-15: effective allowlist decision for one pending approval request
-  // (badge in the panel; most-restrictive-wins, network default-deny).
-  const allowDecisionFor = useCallback(
-    (approval: ApprovalRequest): ResolvedApproval =>
-      resolveApproval(allowlist, {
-        toolName: approval.toolName,
-        summary: approval.summary,
-        scopes: approval.choices.map((c) => c.scope),
-      }),
-    [allowlist],
-  );
-
-  // US-15 "toujours autoriser": send the decision, then memorize an allow
-  // rule (command pattern + the chosen scope) for future requests.
-  const rememberApproval = useCallback(
-    async (approval: ApprovalRequest, choiceId: string) => {
-      const approved = await approve(approval.session_id, approval.request_id, choiceId);
-      if (!approved) return;
-      const choice = approval.choices.find((c) => c.choiceId === choiceId);
-      setAllowlist((cur) =>
-        addAllowRule(cur, {
-          pattern: defaultPatternFor(approval.toolName, approval.summary),
-          scope: choice?.scope ?? "",
-          decision: "allow",
-        }),
-      );
-    },
-    [approve],
-  );
-
-  const revokeAllowRule = useCallback((id: string) => {
-    setAllowlist((cur) => removeAllowRule(cur, id));
-  }, []);
-
   // US-19 browser: anchor a comment (invalid URL / empty comment = no-op),
   // remove one by id, toggle one app's computer-use permission.
   const addBrowserAnnotationCb = useCallback(
@@ -6055,10 +6014,6 @@ export function useMuseSessions(): UseMuseSessions {
     if (!isTauriRuntime()) return;
     void refreshComputerUse();
   }, [refreshComputerUse]);
-
-  const setAllowRuleDecisionCb = useCallback((id: string, decision: AllowDecision) => {
-    setAllowlist((cur) => setAllowRuleDecision(cur, id, decision));
-  }, []);
 
   const cancelSession = useCallback(async (sessionId: string) => {
     if (stoppingBySessionRef.current[sessionId]) return;
@@ -6255,6 +6210,7 @@ export function useMuseSessions(): UseMuseSessions {
       command: string,
       workspacePath?: string | null,
     ): Promise<LocalMcpProbeResult | null> => {
+      clearConnectorError();
       try {
         setRemoteNotice(null);
         return await invoke<LocalMcpProbeResult>("mcp_local_probe", {
@@ -6276,6 +6232,7 @@ export function useMuseSessions(): UseMuseSessions {
       argumentsText: string,
       workspacePath?: string | null,
     ): Promise<LocalMcpCallResult | null> => {
+      clearConnectorError();
       let argumentsValue: unknown = {};
       try {
         argumentsValue = argumentsText.trim() ? JSON.parse(argumentsText) : {};
@@ -6339,6 +6296,7 @@ export function useMuseSessions(): UseMuseSessions {
       tools: ConnectorTool[],
       serverVersion?: string,
     ): boolean => {
+      clearConnectorError();
       const id = localConnectorIdForName(name);
       const result = registerLocalConnector(connectorsRef.current, {
         id,
@@ -6611,6 +6569,7 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const rollbackLocalMcp = useCallback((id: string): boolean => {
+    clearConnectorError();
     const result = rollbackLocalConnector(connectorsRef.current, id);
     if (result === null) {
       setError("local MCP rollback is unavailable for this connector");
@@ -6670,6 +6629,7 @@ export function useMuseSessions(): UseMuseSessions {
       id: string,
       workspacePath?: string | null,
     ): Promise<LocalMcpProbeResult | null> => {
+      clearConnectorError();
       const entry = findConnector(connectorsRef.current, id);
       if (entry === null || entry.kind !== "local" || !entry.command) {
         setError("local MCP start requires a configured command");
@@ -6700,6 +6660,7 @@ export function useMuseSessions(): UseMuseSessions {
       id: string,
       workspacePath?: string | null,
     ): Promise<LocalMcpProbeResult | null> => {
+      clearConnectorError();
       const entry = findConnector(connectorsRef.current, id);
       if (entry === null || entry.kind !== "local" || !entry.command) {
         setError("local MCP refresh requires a configured command");
@@ -6726,6 +6687,7 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const stopLocalMcp = useCallback(async (id: string): Promise<boolean> => {
+    clearConnectorError();
     try {
       const stopped = await invoke<boolean>("mcp_local_stop", { connectorId: id });
       if (stopped) {
@@ -6744,6 +6706,7 @@ export function useMuseSessions(): UseMuseSessions {
       toolName: string,
       argumentsText: string,
     ): Promise<LocalMcpCallResult | null> => {
+      clearConnectorError();
       let argumentsValue: unknown = {};
       try {
         argumentsValue = argumentsText.trim() ? JSON.parse(argumentsText) : {};
@@ -6768,6 +6731,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   const installMcpPackage = useCallback(
     async (file: File): Promise<boolean> => {
+      clearConnectorError();
       if (!isTauriRuntime()) {
         setError("MCP bundle installation is available in the desktop app.");
         return false;
@@ -8235,11 +8199,6 @@ export function useMuseSessions(): UseMuseSessions {
     retryFailedTurn,
     discardSend,
     approve,
-    allowlist,
-    allowDecisionFor,
-    rememberApproval,
-    revokeAllowRule,
-    setAllowRuleDecision: setAllowRuleDecisionCb,
     browserAnnotations,
     addBrowserAnnotation: addBrowserAnnotationCb,
     prepareBrowserContext,

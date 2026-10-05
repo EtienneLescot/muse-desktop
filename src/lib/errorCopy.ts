@@ -35,6 +35,16 @@ const FRIENDLY_PATTERNS: ErrorPattern[] = [
   [/^git (?:status|diff|stage|restore|commit|push|create_pr).*failed\b/i, "The Git action could not be completed."],
 ];
 
+/**
+ * M0-13: the failures the Extensions connector actions raise. The banner is
+ * one slot for every surface, so a new connector action clears these and
+ * leaves another surface's failure in place.
+ */
+export function isConnectorError(error: string | null): boolean {
+  return error !== null &&
+    /^(?:local MCP|MCP bundle|unknown connector|cannot remove running MCP connector)\b/.test(error);
+}
+
 function asText(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;

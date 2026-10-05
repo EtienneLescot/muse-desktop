@@ -48,19 +48,21 @@ export function authorizationModeLabel(mode: AuthorizationMode): string {
 }
 
 /**
- * Each sentence matches the 1.4.2 verdict matrix
- * (docs/evidence/2026-10-05-roadmap-closure/m0-06-verdict-matrix-1.4.2.json):
- * `onRequest` asked for every shell action on Windows, and `allowAll` never
- * asked while the Isolation sandbox still blocked out-of-root writes and network.
+ * The engine's own semantic, and no promise beyond the 1.4.2 measurements on
+ * Windows (docs/evidence/2026-10-05-roadmap-closure/m0-06-verdict-matrix-1.4.2.json
+ * and the in-app runs of m0-05-06-approvals.json): `promptUnmatched` and
+ * `onRequest` asked for every shell action measured, none ran unprompted, and
+ * `allowAll` never asked while the Isolation sandbox still blocked out-of-root
+ * writes and network.
  */
 export function authorizationModeDescription(mode: AuthorizationMode): string {
   switch (mode) {
     case "workspace":
-      return "Muse runs what its sandbox allows and asks when a tool needs more access. On Windows it asks for most shell commands.";
+      return "The engine's sandbox decides when Muse asks. On Windows it asks for shell commands.";
     case "yolo":
       return "Muse never asks. Your Isolation setting still limits what an action can reach.";
     default:
-      return "Muse asks before any action its rules do not already allow.";
+      return "Muse asks before any action the engine's own rules do not allow.";
   }
 }
 

@@ -46,7 +46,7 @@
  *                  returned them.
  *   texts          no turn. Settings posture and isolation texts vs the
  *                  measured matrix (m0-06-verdict-matrix-1.4.2.json) and the
- *                  isolation and d1 phases of this record.
+ *                  isolation, d1 and wire phases of this record.
  *
  * The decide calls are counted on window.fetch (Tauri's IPC transport):
  * `__TAURI_INTERNALS__` rejects a monkey-patched `invoke` (cdp-stop-terminal).
@@ -98,7 +98,6 @@ const H = `
   const fiberKey = (el) => { const k = Object.keys(el).find((x) => x.startsWith('__reactFiber$')); return k ? el[k].key : null; };
   const cards = () => q('.approvals .approval').map((g) => ({
     title: g.querySelector('.approval-title-row strong')?.innerText.trim() || null,
-    badge: g.querySelector('.rule-badge')?.innerText.trim() || null,
     command: g.querySelector('.approval-details pre')?.innerText.slice(0, 300) || null,
     scope: g.querySelector('.approval-scope')?.innerText.trim() || null,
     buttons: [...g.querySelectorAll('.approval-actions button')].map((b) => ({ text: b.innerText.trim(), aria: b.getAttribute('aria-label'), cls: b.className })),
@@ -1102,23 +1101,22 @@ async function texts(app) {
   const workspaceCells = [...cells("workspace", "promptUnmatched"), ...cells("workspace", "onRequest"), ...cells("workspace", "allowAll"), ...offProfile];
   const outcomes = (action) => workspaceCells.filter((c) => c.action === action).map((c) => c.outcome);
   const middle = text(ui.postures, POSTURE_LABEL.workspace);
+  const middleWire = (record.phases.wire?.rounds ?? []).filter((r) => r.expected === "onRequest").flatMap((r) => r.setApprovalMode);
+  const shellAsked = [...onRequest.map((c) => c.approvalRequested), net?.asked, netCurl?.asked, elev?.asked].filter((x) => typeof x === "boolean");
   const claims = [
-    { text: text(ui.postures, POSTURE_LABEL.ask), claim: "asks before any action no rule allows",
+    { text: text(ui.postures, POSTURE_LABEL.ask), claim: "asks before any action the engine's own rules do not allow",
       measured: cells("workspace", "promptUnmatched").map((c) => `${c.action}: asked=${c.approvalRequested}`),
       contradiction: !cells("workspace", "promptUnmatched").every((c) => c.approvalRequested) },
-    { text: middle, claim: "asks when a tool needs more access than the sandbox allows",
-      measured: ["writeOutsideRoot", "network"].map((a) => `${a} (workspace isolation, onRequest): asked=${cell("workspace", "onRequest", a)?.approvalRequested}`),
-      contradiction: !["writeOutsideRoot", "network"].every((a) => cell("workspace", "onRequest", a)?.approvalRequested === true) },
-    { text: middle, claim: "on Windows it asks for most shell commands",
+    { text: middle, claim: "the engine's sandbox decides: the posture is the host's onRequest mode",
+      measured: [`wire: ${middleWire.filter((x) => x.ok && x.effectiveMode === "onRequest").length}/${middleWire.length} setApprovalMode confirmed onRequest`],
+      contradiction: middleWire.length === 0 ? null : !middleWire.every((x) => x.ok && x.effectiveMode === "onRequest") },
+    { text: middle, claim: "on Windows it asks for shell commands",
       measured: [`matrix onRequest: ${onRequest.filter((c) => c.approvalRequested).length}/${onRequest.length} asked`,
         `in app, network isolation: asked=${net?.asked}, stages=${net?.stages}; curl variant asked=${netCurl?.asked}, stages=${netCurl?.stages}`,
         `in app, elevated isolation: asked=${elev?.asked}, stages=${elev?.stages}`],
-      contradiction: (() => {
-        const asked = [...onRequest.map((c) => c.approvalRequested), net?.asked, netCurl?.asked, elev?.asked].filter((x) => typeof x === "boolean");
-        return asked.filter(Boolean).length * 2 <= asked.length;
-      })() },
+      contradiction: !shellAsked.every(Boolean) },
     { text: middle, claim: "no promise that anything runs without asking",
-      measured: [`label: ${POSTURE_LABEL.workspace}`], contradiction: /without asking|on my behalf/i.test(`${middle} ${ui.isolationNote}`) },
+      measured: [`label: ${POSTURE_LABEL.workspace}`], contradiction: /without asking|on my behalf|runs what/i.test(`${middle} ${ui.isolationNote}`) },
     { text: text(ui.postures, "YOLO"), claim: "never asks; Isolation still limits what an action reaches",
       measured: allowAll.map((c) => `${c.action}: asked=${c.approvalRequested}, outcome=${c.outcome}`).concat([`d1 (in app): card=${d1run ? !d1run.noCard : "n/a"}`]),
       contradiction: allowAll.some((c) => c.approvalRequested) || d1run?.noCard === false || !allowAll.some((c) => c.outcome === "failed") },

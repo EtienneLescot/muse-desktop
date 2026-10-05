@@ -24,10 +24,15 @@ describe("global authorization posture", () => {
     assert.equal(authorizationModeLabel("yolo"), "YOLO");
     // The app approves nothing itself: the label says what the engine does.
     assert.equal(authorizationModeLabel("workspace"), "Ask only for more access");
-    // Measured on 1.4.2: `onRequest` asked for every shell action on Windows,
-    // and `allowAll` never asked while the sandbox still applied.
-    assert.match(authorizationModeDescription("workspace"), /asks when a tool needs more access/);
-    assert.doesNotMatch(authorizationModeDescription("workspace"), /without asking/i);
+    // Measured on Windows 1.4.2: `promptUnmatched` and `onRequest` asked for
+    // every shell action, none ran unprompted, and `allowAll` never asked
+    // while the sandbox still applied. No text may promise more.
+    const middle = authorizationModeDescription("workspace");
+    assert.equal(middle, "The engine's sandbox decides when Muse asks. On Windows it asks for shell commands.");
+    for (const mode of ["ask", "workspace", "yolo"] as const) {
+      assert.doesNotMatch(authorizationModeDescription(mode), /without asking|runs what|\bmost\b|its rules/i);
+    }
+    assert.match(authorizationModeDescription("ask"), /asks before any action the engine's own rules do not allow/);
     assert.match(authorizationModeDescription("yolo"), /Isolation setting still limits/);
   });
 

@@ -15,12 +15,17 @@
  *   to …" block stayed on screen beside "Disconnected".
  * - M4-07: a remote conversation with its own Muse path
  *   (`ssh://…/folder?muse=/…/muse-bin-1.3.0`) was titled after the binary.
+ * - M0-13: after a refused local MCP probe, a later successful probe or call
+ *   still showed the old failure: no connector action cleared the banner.
+ * - M0-05: when a host died with the app open, its approval and question
+ *   cards stayed answerable, and every answer could only fail.
  *
  * Both are layout/lifecycle facts that the pure-logic tests cannot see.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { isConnectorError } from "../src/lib/errorCopy.ts";
 
 const read = (relative: string): string =>
   readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -64,5 +69,40 @@ describe("visible failures", () => {
     const app = read("../src/App.tsx");
     assert.doesNotMatch(app, /active\.workspace\.split\(/);
     assert.equal(app.match(/folderName\(active\.workspace\)/g)?.length, 2, "breadcrumb and eyebrow");
+  });
+
+  it("clears a connector failure when the next connector action starts", () => {
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    for (const action of [
+      "probeLocalMcp", "callLocalMcp", "registerLocalConnectorByProbe", "installMcpPackage",
+      "startLocalMcp", "refreshLocalMcp", "stopLocalMcp", "callRegisteredLocalMcp", "rollbackLocalMcp",
+      "installConnectorById", "uninstallConnectorById", "setConnectorEnabledById",
+      "setConnectorUseInMuseById", "probeRemoteMcp", "callRemoteMcp",
+    ]) {
+      const head = `const ${action} = useCallback(`;
+      const start = hook.indexOf(head);
+      assert.ok(start > 0, `${action} is declared`);
+      const body = hook.slice(start, hook.indexOf(" = useCallback(", start + head.length));
+      const clear = body.indexOf("clearConnectorError();");
+      const acts = body.search(/setError\(|invoke\b|await /);
+      assert.ok(clear > 0 && (acts === -1 || clear < acts), `${action} clears before it acts`);
+      // Each failure the action raises is one the next action clears.
+      for (const [, message] of body.matchAll(/setError\(\s*[`"]([^`"$]*)/g)) {
+        assert.ok(isConnectorError(message), `${action}: "${message}" is a connector failure`);
+      }
+    }
+    // Another surface's failure stays on screen.
+    for (const other of ["send_input failed: offline", "approve failed: gone", "restore_sessions failed: x", null]) {
+      assert.equal(isConnectorError(other), false, String(other));
+    }
+  });
+
+  it("drops an exited host's approval and question cards and says so", () => {
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const start = hook.indexOf('if (kind === "host_exited") {');
+    const block = hook.slice(start, hook.indexOf('if (kind === "output")', start));
+    assert.match(block, /hostExitNotices\(sid, approvals, inputRequests\)/);
+    assert.match(block, /setApprovals\(\(cur\) => cur\.filter\(\(a\) => a\.session_id !== sid\)\)/);
+    assert.match(block, /setInputRequests\(\(cur\) => cur\.filter\(\(r\) => r\.session_id !== sid\)\)/);
   });
 });
