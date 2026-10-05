@@ -12,20 +12,37 @@
 
 On Windows, CI drives the debug build over CDP with the existing harness: `npm run e2e:fixture` (`scripts/e2e-fixture.mjs`), job `e2e-windows` of `.github/workflows/ci.yml`. No driver to install, no new dependency.
 
-The app starts in an isolated test mode, compiled into debug builds only (`src-tauri/src/test_mode.rs`):
+The app starts in an isolated test mode, compiled into debug builds on Windows only (`src-tauri/src/test_mode.rs`):
 
 - `MUSE_DESKTOP_TEST_DATA_DIR` turns it on. That folder holds the app data (outbox, scheduler, notifications, computer use, MCP packages) and the WebView2 profile: the app sets `WEBVIEW2_USER_DATA_FOLDER` itself, which overrides the folder Tauri passes to WebView2. The elevated runner honours it; the check verifies it on every run.
+- The mode never goes unnoticed: one line on stderr, `testMode: true` in the native diagnostics, and `test-mode.pid` written in the folder at startup.
 - `MUSE_DESKTOP_TEST_SIDECAR`, a JSON argv, replaces every engine, remote ones included. Missing or malformed, the start fails: a test instance never runs a real engine.
 - `MUSE_DESKTOP_TEST_CDP_PORT` opens CDP through the window's `additionalBrowserArgs`, a WebView2 option, so an elevated host keeps it.
-- The single-instance guard and the OS wake-up task are skipped. The test instance runs beside the user's own and never edits the per-account `schtasks` or `launchd` entry.
-- In a release build `test_mode::data_dir()` is `None` by construction: no variable is read, no branch can switch on.
+- The single-instance guard and the OS wake-up task are skipped. The test instance runs beside the user's own and never edits the per-account `schtasks` entry.
+- In a release build, and on macOS and Linux, `test_mode::data_dir()` is `None` by construction: no variable is read, no branch can switch on. There the mode would lift the single-instance guard without moving the WKWebView or WebKitGTK store.
 
-The engine is `scripts/muse-fixture.mjs`, the newline JSON-RPC fixture with a durable in-memory store. Its `initialize` passes the handshake validator (schema 1, `sha256:` fingerprint). Its approvals carry the 1.4.2 host's choices. Its ids are unique per process, one process per workspace. A `turn/start` whose text holds `[fixture:exit]` kills it before it answers.
+The runner starts nothing it cannot trust:
+
+- It refuses an exe that does not contain the string `MUSE_DESKTOP_TEST_DATA_DIR`: a release build, or a debug build without the test mode, would run on the user's own profile and engine.
+- It strips every `WEBVIEW2_*` variable from the app's environment.
+- It kills the app when `test-mode.pid` does not appear within 10 s.
+- Once CDP opens, before driving anything, it reads the WebView2 browser's `--user-data-dir` and stops unless it lies under the test folder. An elevated host ignores the `WEBVIEW2_*` variables but still honours the HKLM WebView2 policies, so a machine policy could move the profile.
+- A watchdog prints the verdict and fails the run at 6 minutes, before the CI step stops at 8; the CDP calls are bounded. The diagnostics are uploaded on failure or cancellation.
+
+The engine is `scripts/muse-fixture.mjs`, the newline JSON-RPC fixture with a durable in-memory store. Its `initialize` passes the handshake validator (schema 1, `sha256:` fingerprint). Its approvals behave as on the 1.4.2 host:
+
+- each stage arrives twice, as the `approval/requested` notification and as the `approval/request` server request;
+- the requirement token is the object `{approvalId, sourceIndex}`, carried as `currentRequirementId`;
+- `approval/decide` refuses a choice not offered (-32052), a stale stage (-32053) and a resolved approval (-32051);
+- `abort` resolves as a denial: the turn ends without running the action;
+- `[fixture:two-stage]` in a turn's text gives a two-stage approval, the first decision answering `terminal: false`.
+
+Its ids are unique per process, one process per workspace. A `turn/start` whose text holds `[fixture:exit]` kills it before it answers.
 
 The check, in a fresh temp folder:
 
 - **A/B:** projects A and B are created from the welcome screen, the folder dialog answered by the harness. A turn and an approval card in each. Allow once on A's card: only `approve(A)` is sent, A's turn ends, B's card stays pending at the same requirement, in the host and on screen. B is then decided on its own.
-- **Lost send:** B's host dies on the next `turn/start` before answering. The text must still be in the transcript, the outbox or the native outbox ledger. A's host still answers.
+- **Lost send:** B's host dies on the next `turn/start` before answering. The text must still be in the transcript, the outbox or the native outbox ledger, and on screen, as a bubble or an unsent row. A's host still answers.
 - **Isolation:** the WebView2 profile and the app data were written in the temp folder.
 
 It catches both faults: on 05/10/2026 a decision sent to the other conversation's card, then a refused send dropped with its bubble, each turned `e2e-windows` red with the matching verdicts false. Both were temporary commits, reverted.
@@ -40,8 +57,9 @@ It catches both faults: on 05/10/2026 a decision sent to the other conversation'
 ## Consequences
 
 - `npm test` stays free of any app or engine. `npm run e2e:fixture` needs a built debug app (`npm run build`, then `cargo build --manifest-path src-tauri/Cargo.toml`) and runs on Windows only. The CI job takes about five minutes, most of it the debug build.
-- **macOS:** no end-to-end check. The way in is `tauri-plugin-wdio-webdriver` in debug builds with `@wdio/tauri-service`, or CrabNebula with a paid key. The test mode isolates the app data there, not the WKWebView store.
-- **Linux:** no end-to-end check in CI. `tauri-driver` with WebKitWebDriver would work, but the test mode does not move the WebKitGTK data folder, which Tauri derives from the app's local data folder.
+- **macOS:** no end-to-end check, and no test mode. The way in is `tauri-plugin-wdio-webdriver` in debug builds with `@wdio/tauri-service`, or CrabNebula with a paid key, once the test mode moves the WKWebView store.
+- **Linux:** no end-to-end check in CI, and no test mode. `tauri-driver` with WebKitWebDriver would work once the test mode moves the WebKitGTK data folder, which Tauri derives from the app's local data folder.
 - The fixture is a protocol double, not a model. It does not replace the native campaigns on the real engine.
 - The test mode isolates writes, not reads: the startup probe, the Muse sign-in status and the skills and rules scans still read the machine's own configuration.
-- A failing run prints its verdict, masked and bounded, in the job log and in a seven-day artifact.
+- The keyring service `com.muse.desktop.mcp` is shared even in test mode. Only a user action writes to it (connecting a remote MCP server with a token), and the check takes none.
+- A failing run prints its verdict, masked and bounded, in the job log and in a seven-day artifact. So does a run that hangs, through the watchdog.
