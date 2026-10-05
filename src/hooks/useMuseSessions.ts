@@ -359,9 +359,9 @@ import {
 import {
   AUTHORIZATION_MODE_KEY,
   authorizationModeLabel,
-  hostApprovalMode,
   parseAuthorizationMode,
   productAuthorizationMode,
+  projectApprovalMode,
   type AuthorizationMode,
 } from "../lib/authorization";
 import {
@@ -1640,6 +1640,12 @@ export function useMuseSessions(): UseMuseSessions {
   const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
     return parseAuthorizationMode(readStorageString(AUTHORIZATION_MODE_KEY));
   });
+  // Read after host calls that outlive a render (start, resume, fork,
+  // scheduled runs): a posture picked meanwhile must still reach the session.
+  const authorizationModeRef = useRef(authorizationMode);
+  authorizationModeRef.current = authorizationMode;
+  // Sessions a scheduled run moved off the global posture, by scheduled turn.
+  const scheduledPostureRef = useRef(new Map<string, string>());
   // US-15 allowlist: restored once (survives restarts via localStorage),
   // written through on every change.
   const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
@@ -3158,6 +3164,17 @@ export function useMuseSessions(): UseMuseSessions {
     setScheduleRuns((cur) => settleRunsForSession(cur, sessionId, outcome, Date.now(), log));
   }
 
+  /** M0-06: a scheduled run's posture lasts for its own turn only. Once that
+   * turn stops or leaves the queue, the conversation follows the selector
+   * again; an unknown turn id settles it too, never leaving it off-posture. */
+  function restoreScheduledPosture(sessionId: string, turnId: string | undefined): void {
+    const scheduled = scheduledPostureRef.current.get(sessionId);
+    if (scheduled === undefined || (turnId !== undefined && turnId !== scheduled)) return;
+    scheduledPostureRef.current.delete(sessionId);
+    void projectPosture(sessionId).catch(() =>
+      setError("Scheduled run finished, but the conversation kept its authorization posture."));
+  }
+
   /** Update the ephemeral skill progress only when the event can belong to
    * the current invocation. A known turn id protects a new invocation from a
    * late completion event from the previous turn. */
@@ -3876,6 +3893,7 @@ export function useMuseSessions(): UseMuseSessions {
             return next;
           });
           setScheduleRuns((cur) => cancelRunsForUnqueuedTurn(cur, sid, queuedTurnId, Date.now()));
+          restoreScheduledPosture(sid, queuedTurnId);
         }
       } catch {
         // Keep the queue card until the explicit command result settles.
@@ -3954,6 +3972,8 @@ export function useMuseSessions(): UseMuseSessions {
         failure?.message ?? "Muse completed the skill invocation",
       );
       const terminalTurn = completion?.turnId ? { turnId: completion.turnId } : {};
+      // A host that exited has no posture to fix: resume re-projects it.
+      if (kind !== "host_exited") restoreScheduledPosture(sid, completion?.turnId);
       settleScheduleRunsForSession(sid, failure
         ? { ...terminalTurn, status: "failed", error: failure.message, retryable: failure.retryable }
         : kind === "host_exited"
@@ -4070,8 +4090,17 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, [sandbox, workspace]);
 
+  // A posture picked before the session joined connectedIds still lands.
+  const projectPosture = useCallback((sessionId: string, effective?: unknown) =>
+    projectApprovalMode(
+      () => authorizationModeRef.current,
+      (mode) => invoke<Record<string, unknown>>("set_approval_mode", { sessionId, mode }),
+      effective,
+    ), []);
+
   const setAuthorizationMode = useCallback((mode: AuthorizationMode) => {
     const next = parseAuthorizationMode(mode);
+    authorizationModeRef.current = next;
     setAuthorizationModeState(next);
     if (!isTauriRuntime()) return;
     const targets = sessions.filter((session) =>
@@ -4081,16 +4110,7 @@ export function useMuseSessions(): UseMuseSessions {
     // The host applies the new posture to subsequent actions. Pending
     // approvals remain race-guarded by their current requirement token.
     void Promise.allSettled(
-      targets.map(async (session) => {
-        const result = await invoke<Record<string, unknown>>("set_approval_mode", {
-          sessionId: session.session_id,
-          mode: next,
-        });
-        const effective = (result.effectiveMode as Record<string, unknown> | undefined)?.mode;
-        if (result.status !== "accepted" || effective !== hostApprovalMode(next)) {
-          throw new Error("host did not confirm the requested approval posture");
-        }
-      }),
+      targets.map((session) => projectPosture(session.session_id)),
     ).then((results) => {
       const failed = results.filter((result) => result.status === "rejected").length;
       if (failed > 0) {
@@ -4103,7 +4123,7 @@ export function useMuseSessions(): UseMuseSessions {
         );
       }
     });
-  }, [connectedIds, sessions]);
+  }, [connectedIds, projectPosture, sessions]);
 
 
   // US-31: live host catalog. Null until the first successful load (the
@@ -4256,7 +4276,7 @@ export function useMuseSessions(): UseMuseSessions {
       const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSandboxSettings);
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
-        authorizationMode,
+        authorizationMode: authorizationModeRef.current,
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
         sandboxDisableShell: sandboxConfig.disableShell,
@@ -4293,10 +4313,10 @@ export function useMuseSessions(): UseMuseSessions {
       if (projectSettings?.reasoningEffort !== undefined) {
         await setSessionReasoningEffort(meta.session_id, projectSettings.reasoningEffort);
       }
-      // A host ceiling makes `session/start` fall back to the host default.
-      if (meta.approval_mode && meta.approval_mode !== hostApprovalMode(authorizationMode)) {
-        setError("Conversation started, but the host kept its default authorization posture.");
-      }
+      // A host ceiling makes `session/start` fall back to the host default,
+      // and the selector may have moved while it was in flight.
+      await projectPosture(meta.session_id, meta.approval_mode).catch(() =>
+        setError("Conversation started, but the host kept its default authorization posture."));
       void refreshHostSkills(meta.session_id);
       return meta.session_id;
     } catch (e) {
@@ -4305,7 +4325,7 @@ export function useMuseSessions(): UseMuseSessions {
     }
     },
     [
-      authorizationMode,
+      projectPosture,
       sandbox,
       refreshHostSkills,
       setConnectionState,
@@ -4477,23 +4497,6 @@ export function useMuseSessions(): UseMuseSessions {
             : session,
         ),
       );
-      // Resume restores the host's persisted posture, which may predate the
-      // current selector or its mapping. Re-project it before enabling the
-      // composer again. A host ceiling must not make the saved conversation
-      // unusable: keep it connected and report the posture it kept.
-      let postureError: unknown = null;
-      try {
-        const posture = await invoke<Record<string, unknown>>("set_approval_mode", {
-          sessionId: id,
-          mode: authorizationMode,
-        });
-        const effective = (posture.effectiveMode as Record<string, unknown> | undefined)?.mode;
-        if (effective !== hostApprovalMode(authorizationMode)) {
-          postureError = new Error("host did not confirm the requested approval posture");
-        }
-      } catch (error) {
-        postureError = error;
-      }
       // Cold reconnects can outlive the renderer's local log (for example
       // after a storage reset or a crash during streaming). Reconcile the
       // folded server history before enabling the composer again. The read is
@@ -4534,6 +4537,12 @@ export function useMuseSessions(): UseMuseSessions {
         console.warn("pending request recovery unavailable", pendingError);
       }
       await reconcileQueueSnapshot(id);
+      // Resume restores the host's persisted posture, which may predate the
+      // current selector or its mapping. Re-project it last before enabling
+      // the composer, so no selector change can slip in between. A host
+      // ceiling must not make the saved conversation unusable: keep it
+      // connected and report the posture it kept.
+      const postureError = await projectPosture(id).then(() => null, (error: unknown) => error);
       setConnectedIds((cur) => [...new Set([...cur, id])]);
       setConnectionState(id, "connected");
       clearStopping(id);
@@ -4560,7 +4569,7 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [authorizationMode, globalSettings, projects, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, recordConnectionFailure, sandbox]);
+  }, [globalSettings, projects, projectPosture, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, recordConnectionFailure, sandbox]);
 
   // Resume on open: `restore_sessions` only admits sessions for
   // already-connected hosts, and hosts do not survive an app restart. Once
@@ -4670,10 +4679,8 @@ export function useMuseSessions(): UseMuseSessions {
           await setSessionModel(meta.session_id, source.model_id);
         }
         // Same for the posture: the branch may start at the host default.
-        if (meta.approval_mode !== hostApprovalMode(authorizationMode)) {
-          await invoke("set_approval_mode", { sessionId: meta.session_id, mode: authorizationMode })
-            .catch(() => setError("Branch created, but the host kept its existing authorization posture."));
-        }
+        await projectPosture(meta.session_id, meta.approval_mode)
+          .catch(() => setError("Branch created, but the host kept its existing authorization posture."));
         void refreshHostSkills(meta.session_id);
         return meta.session_id;
       } catch (error) {
@@ -4683,7 +4690,7 @@ export function useMuseSessions(): UseMuseSessions {
         setForkingId(null);
       }
     },
-    [authorizationMode, forkingId, refreshHostSkills, sessions, setConnectionState, setSessionModel],
+    [forkingId, projectPosture, refreshHostSkills, sessions, setConnectionState, setSessionModel],
   );
 
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
@@ -6310,9 +6317,14 @@ export function useMuseSessions(): UseMuseSessions {
       const capturedSettings = capturedProject
         ? resolveProjectSettings(globalSettings, capturedProject.settings)
         : globalSettings;
+      // The run's own posture must not outlive its turn: the conversation
+      // goes back to the selector's once that turn stops, or right away when
+      // no admitted turn id can anchor the restore (failure, local compact).
+      let offPosture = false;
       const applyCapturedContext = async (sessionId: string): Promise<void> => {
-        if (item.authorizationMode && item.authorizationMode !== authorizationMode) {
+        if (item.authorizationMode && item.authorizationMode !== authorizationModeRef.current) {
           await invoke("set_approval_mode", { sessionId, mode: item.authorizationMode });
+          offPosture = true;
         }
         const model = item.model?.trim() || capturedSettings.model.trim();
         if (model && model !== "default") await setSessionModel(sessionId, model);
@@ -6348,6 +6360,10 @@ export function useMuseSessions(): UseMuseSessions {
           result = await sendInput(sessionId, item.instructions);
         }
         if (result.ok) {
+          if (offPosture && result.turnId) {
+            scheduledPostureRef.current.set(sessionId, result.turnId);
+            offPosture = false;
+          }
           if (run && result.turnId) {
             const turnId = result.turnId;
             setScheduleRuns((cur) => attachRunTurn(cur, run.id, turnId));
@@ -6368,9 +6384,14 @@ export function useMuseSessions(): UseMuseSessions {
         failRun(message, true);
         setError(`schedule run failed: ${message}`);
         return false;
+      } finally {
+        if (offPosture) {
+          void projectPosture(sessionId).catch(() =>
+            setError("Scheduled run ended, but the conversation kept its authorization posture."));
+        }
       }
     },
-    [activeId, authorizationMode, globalSettings, reconnectSession, projects, sendInput, sessions, setSessionModel, startSessionRow, threadProjects],
+    [activeId, globalSettings, reconnectSession, projects, projectPosture, sendInput, sessions, setSessionModel, startSessionRow, threadProjects],
   );
 
   const prepareBrowserContext = useCallback(

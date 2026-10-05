@@ -80,8 +80,9 @@ interface Props {
 }
 
 /**
- * Isolation is what the engine's process may reach; authorization, above, is
- * who approves each action. Picking a level here is the permission — the
+ * Isolation is what the engine's process may reach; under the workspace
+ * posture (`onRequest`) it is also what runs unprompted, since the host only
+ * asks past the sandbox. Picking a level here is the permission — the
  * separate "saved permission" checkboxes said the same thing twice, and the
  * select fell back to workspace when they disagreed.
  */
@@ -429,8 +430,8 @@ export function SettingsPanel({
       <div className="settings-group">
         <h3>Isolation</h3>
         <p className="settings-note">
-          How far Muse's engine can reach — separate from Authorization above,
-          which decides who approves each action. Applied when a new engine
+          How far Muse's engine can reach. Under Approve on my behalf, anything
+          within this reach runs without asking. Applied when a new engine
           starts: a running conversation keeps its own until it is restarted.
         </p>
         <div className="authorization-mode-list" role="radiogroup" aria-label="Isolation">

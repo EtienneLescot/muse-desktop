@@ -49,7 +49,7 @@ export function authorizationModeLabel(mode: AuthorizationMode): string {
 export function authorizationModeDescription(mode: AuthorizationMode): string {
   switch (mode) {
     case "workspace":
-      return "Tools run in the sandbox without asking. Muse asks when one needs more, such as network or elevated access.";
+      return "Tools run without asking within your Isolation setting. Muse asks only when one needs more access than it allows.";
     case "yolo":
       return "Muse never asks. Every action runs.";
     default:
@@ -59,8 +59,8 @@ export function authorizationModeDescription(mode: AuthorizationMode): string {
 
 /**
  * Connector calls are explicit user actions, but they still follow the same
- * global posture as host tools. A remote call is always a network action,
- * which the workspace posture treats as an escalation, so it keeps a review.
+ * global posture as host tools. A remote call is always a network action, so
+ * the workspace posture keeps a review even when Isolation allows network.
  */
 export function connectorCallRequiresApproval(
   mode: AuthorizationMode,
@@ -83,6 +83,28 @@ export function hostApprovalMode(mode: AuthorizationMode): MuseHostApprovalMode 
       return "allowAll";
     default:
       return "promptUnmatched";
+  }
+}
+
+/**
+ * Bring one session to the selector's posture, unless the host already
+ * reports it (`effective`). The selector is re-read after each host answer,
+ * so a change made while a call was in flight still lands instead of being
+ * lost; a host that keeps another mode is an error, never accepted.
+ */
+export async function projectApprovalMode(
+  selector: () => AuthorizationMode,
+  setMode: (mode: AuthorizationMode) => Promise<Record<string, unknown>>,
+  effective?: unknown,
+): Promise<void> {
+  for (;;) {
+    const mode = selector();
+    if (effective === hostApprovalMode(mode)) return;
+    const result = await setMode(mode);
+    effective = (result.effectiveMode as Record<string, unknown> | undefined)?.mode;
+    if (result.status !== "accepted" || effective !== hostApprovalMode(mode)) {
+      throw new Error("host did not confirm the requested approval posture");
+    }
   }
 }
 

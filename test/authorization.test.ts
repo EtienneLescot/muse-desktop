@@ -9,6 +9,8 @@ import {
   hostApprovalMode,
   parseAuthorizationMode,
   productAuthorizationMode,
+  projectApprovalMode,
+  type AuthorizationMode,
 } from "../src/lib/authorization.ts";
 
 describe("global authorization posture", () => {
@@ -20,7 +22,8 @@ describe("global authorization posture", () => {
 
   it("exposes calm, product-facing labels", () => {
     assert.equal(authorizationModeLabel("yolo"), "YOLO");
-    assert.match(authorizationModeDescription("workspace"), /network/i);
+    // `onRequest` only prompts past the sandbox, so its reach is Isolation's.
+    assert.match(authorizationModeDescription("workspace"), /isolation/i);
   });
 
   it("maps product postures to the host's own mode semantics", () => {
@@ -34,6 +37,24 @@ describe("global authorization posture", () => {
     assert.equal(productAuthorizationMode("onRequest"), "workspace");
     assert.equal(productAuthorizationMode("allowAll"), "yolo");
     assert.equal(productAuthorizationMode("denyUnmatched"), null);
+  });
+
+  it("re-projects a posture picked while the host call was in flight", async () => {
+    let selector: AuthorizationMode = "yolo";
+    const sent: AuthorizationMode[] = [];
+    await projectApprovalMode(() => selector, async (mode) => {
+      sent.push(mode);
+      if (sent.length === 1) selector = "ask";
+      return { status: "accepted", effectiveMode: { mode: hostApprovalMode(mode) } };
+    }, "onRequest");
+    assert.deepEqual(sent, ["yolo", "ask"]);
+  });
+
+  it("reports a host that keeps another posture", async () => {
+    await assert.rejects(projectApprovalMode(() => "ask", async () => ({
+      status: "accepted",
+      effectiveMode: { mode: "onRequest" },
+    })));
   });
 
   it("keeps connector calls aligned with the global posture", () => {

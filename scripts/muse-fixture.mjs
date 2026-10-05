@@ -334,7 +334,12 @@ function handle(frame) {
         return;
       }
       session.approvalMode = stringValue(params.mode, session.approvalMode);
-      resultResponse(frame, { session: sessionSnapshot(session) });
+      resultResponse(frame, {
+        status: "accepted",
+        applyOutcome: "completed",
+        commandId: stringValue(params.commandId),
+        effectiveMode: { mode: session.approvalMode, source: "approvalReconfigure" },
+      });
       notify("session/approvalModeChanged", { sessionId: session.sessionId, mode: session.approvalMode });
       return;
     }
