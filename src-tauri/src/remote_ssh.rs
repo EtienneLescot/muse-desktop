@@ -159,9 +159,14 @@ pub fn remote_ssh_exec(host: &str, port: u16, user: &str, identity_file: &str, c
 /// The remote Muse binary when the target does not name one: where the
 /// official installer puts it.
 pub const DEFAULT_REMOTE_MUSE: &str = "~/.local/bin/muse";
-/// Keepalive for the long-lived engine link: a dead network ends ssh, so the
-/// pump reports the host as gone instead of a conversation hanging forever.
+/// Keepalive for the long-lived engine link: after `SERVER_ALIVE_COUNT_MAX`
+/// unanswered probes the *local* ssh exits, so the pump reports the host as
+/// gone instead of a conversation hanging forever. The remote `muse serve`
+/// is sshd's to end: it lives until sshd notices the dead link and closes
+/// its stdin (ADR 0002).
 const SERVER_ALIVE_INTERVAL: u64 = 15;
+/// Pinned on the command line so a `~/.ssh/config` value cannot unbound it.
+const SERVER_ALIVE_COUNT_MAX: u64 = 3;
 
 /// M4-07 remote engine: `muse serve` started on another host through the
 /// system ssh, its stdio carrying MSP exactly like the local sidecar's.
@@ -259,12 +264,29 @@ impl RemoteEngine {
         key
     }
 
-    /// `ssh -T … [user@]host -- <muse> serve <posture>`: no pty (MSP is a
-    /// byte stream), never a prompt, the posture the local spawn would use.
+    /// `ssh -T … [user@]host -- env MUSE_NO_AUTO_UPDATE=1 MUSE_LOGIN=0 <muse>
+    /// serve <posture>`: no pty (MSP is a byte stream), never a prompt, the
+    /// posture the local spawn would use. The local sidecar is a frozen
+    /// binary; the default remote one is the self-updating launcher, which
+    /// must neither update nor ask for a sign-in mid-handshake: the same two
+    /// variables as the startup probe (`startup.rs`).
     fn serve_argv(&self, ssh: &PathBuf, posture: &[&str]) -> Vec<String> {
-        let command = std::iter::once(self.muse.as_str()).chain(posture.iter().copied()).collect::<Vec<_>>().join(" ");
+        let command = ["env", "MUSE_NO_AUTO_UPDATE=1", "MUSE_LOGIN=0", self.muse.as_str()]
+            .into_iter()
+            .chain(posture.iter().copied())
+            .collect::<Vec<_>>()
+            .join(" ");
         let mut argv = ssh_argv(ssh, &self.host, self.port, &self.user, "", &command);
-        argv.splice(1..1, ["-T".to_string(), "-o".to_string(), format!("ServerAliveInterval={SERVER_ALIVE_INTERVAL}")]);
+        argv.splice(
+            1..1,
+            [
+                "-T".to_string(),
+                "-o".to_string(),
+                format!("ServerAliveInterval={SERVER_ALIVE_INTERVAL}"),
+                "-o".to_string(),
+                format!("ServerAliveCountMax={SERVER_ALIVE_COUNT_MAX}"),
+            ],
+        );
         argv
     }
 
@@ -492,9 +514,9 @@ mod tests {
         assert_eq!(
             argv,
             [
-                "/usr/bin/ssh", "-T", "-o", "ServerAliveInterval=15", "-p", "2222", "-o", "BatchMode=yes",
-                "-o", "ConnectTimeout=10", "ops@127.0.0.1", "--",
-                "~/.local/bin/muse serve --sandbox-network restricted --trust-workspace",
+                "/usr/bin/ssh", "-T", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
+                "-p", "2222", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "ops@127.0.0.1", "--",
+                "env MUSE_NO_AUTO_UPDATE=1 MUSE_LOGIN=0 ~/.local/bin/muse serve --sandbox-network restricted --trust-workspace",
             ]
             .map(String::from)
         );
@@ -510,6 +532,11 @@ mod tests {
         assert!(remote.explain_failure(DIED, "ops@127.0.0.1: Permission denied (publickey).").unwrap().contains("ssh agent"));
         assert!(remote.explain_failure(DIED, "ssh: connect to host 127.0.0.1 port 2222: Connection refused").unwrap().contains("refused the connection"));
         assert!(remote.explain_failure(DIED, "sh: 1: /home/ops/.local/bin/muse: not found").unwrap().starts_with("Muse was not found"));
+        // What `env` says when the binary it should run is missing.
+        assert!(remote
+            .explain_failure(DIED, "env: '/home/ops/.local/bin/muse': No such file or directory")
+            .unwrap()
+            .starts_with("Muse was not found"));
         assert_eq!(remote.explain_failure(DIED, "thread 'main' panicked"), None);
     }
 

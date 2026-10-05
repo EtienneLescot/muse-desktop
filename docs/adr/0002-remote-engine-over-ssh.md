@@ -9,15 +9,15 @@
 A remote conversation's host is `muse serve` started on the other machine by the system ssh, in place of the local sidecar (`spawn_sidecar`):
 
 ```
-ssh -T -o ServerAliveInterval=15 [-p <port>] -o BatchMode=yes -o ConnectTimeout=10 [<user>@]<host> -- <muse> serve <posture>
+ssh -T -o ServerAliveInterval=15 -o ServerAliveCountMax=3 [-p <port>] -o BatchMode=yes -o ConnectTimeout=10 [<user>@]<host> -- env MUSE_NO_AUTO_UPDATE=1 MUSE_LOGIN=0 <muse> serve <posture>
 ```
 
-Its stdio is the MSP stream. The stdout pump, `MspClient`, the two-step handshake, session routing and reconnect run unchanged. The posture flags are the ones the local spawn uses (`--sandbox-network …`, `--disable-write`, `--disable-shell`, `--trust-workspace`).
+Its stdio is the MSP stream. The stdout pump, `MspClient`, the two-step handshake, session routing and reconnect run unchanged. The posture flags are the ones the local spawn uses (`--sandbox-network …`, `--disable-write`, `--disable-shell`, `--trust-workspace`). The default remote binary is the self-updating launcher: `env` turns off its update and its sign-in prompt, as the startup probe does, so neither can start mid-handshake.
 
 - **The target is the workspace key.** A remote conversation is started and stored under `ssh://[user@]host:port/abs/path`, plus `?muse=<binary>` when the binary is not the default `~/.local/bin/muse`. A reconnect needs nothing but the conversation record, and the key can never equal a local root, which is a canonical absolute path. Rust parses and rebuilds the key (`RemoteEngine`); the renderer never supplies an argv.
 - **No crypto in the app.** Authentication is the user's OpenSSH: keys, agent, `known_hosts`, `~/.ssh/config`. `BatchMode=yes` means ssh never prompts, so there is no password field anywhere.
 - **No shell string built from user input.** The remote folder travels as the session `workspaceRoot` over MSP, never through a shell. The only field that reaches the remote login shell is the Muse path. Both paths are one plain word: a `/` or `~/` prefix, then `[A-Za-z0-9._/-]` only. User and host keep the existing classes, and neither may start with `-`, so `user@host` can never be read as an ssh option.
-- **Honest errors.** ssh's stderr is mapped to one sentence: host key unknown or changed (with the exact `ssh -p <port> <user>@<host>` command to run once), authentication refused, connection refused, unresolved name, timeout, remote Muse missing. Anything else is reported as a handshake failure with the ssh stderr tail. These reach the existing start and reconnect notices; a link that dies mid-session ends ssh through the keepalive and is reported as the host exiting.
+- **Honest errors.** ssh's stderr is mapped to one sentence: host key unknown or changed (with the exact `ssh -p <port> <user>@<host>` command to run once), authentication refused, connection refused, unresolved name, timeout, remote Muse missing. Anything else is reported as a handshake failure with the ssh stderr tail. These reach the existing start and reconnect notices; a link that dies mid-session ends the local ssh after three unanswered keepalives (45 s) and is reported as the host exiting. The remote `muse serve` is sshd's to end: it lives until sshd notices the dead link and closes its stdin.
 - **Minimal UI.** Settings → *Remote engine* holds one target (user, host, port, Muse path, remote folder) under `muse-desktop.remote-engine.v1`. The new-conversation project picker lists it as `Remote: user@host · folder`.
 
 ## Alternatives rejected
@@ -32,6 +32,7 @@ Its stdio is the MSP stream. The stdout pump, `MspClient`, the two-step handshak
 
 - The local machine needs the OpenSSH client (Windows optional feature, present by default on macOS and Linux). The remote host needs Muse installed and a POSIX login shell, which expands `~` and splits the command words.
 - **First contact is manual.** The host key must be accepted once from a terminal; the app shows the exact command and never accepts a key itself.
+- **The engine version is the remote binary's.** The app does not install, pin or update Muse on the remote host, and the update is off for the session: whatever that binary is, the handshake checks it like any other host.
 - **No agent forwarding.** The remote engine cannot reach other hosts with the user's keys unless this is added explicitly later.
 - **Paths are remote paths.** The folder must be absolute and contain no space or shell character. It is compared with the host's `workspaceRoot` as that host spells it: a path the host canonicalizes differently, through a symlink for instance, makes a reconnect fail closed.
 - **Local-only surfaces stand down.** Changes (git), Terminal (local PTY), Files, the `@`-mention scope check and worktrees read this computer's disk: their panels say "Not available for remote conversations", and the native commands refuse with the same sentence (`workspace_for_inspection`). The Browser panel is not tied to a folder and stays. Connectors and computer use are not passed to a remote session: they run on this machine, and the remote engine would try to launch them on its own host.
