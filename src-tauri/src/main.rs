@@ -1480,8 +1480,8 @@ async fn ensure_host(
             // A remote failure is ssh's, not the local sidecar's: say which
             // step refused, without the wording that opens the sidecar panel.
             return Err(match remote_ssh::remote_engine(root) {
-                Some(remote) => remote.explain_failure(&stderr).unwrap_or_else(|| {
-                    format!("the remote Muse at {} did not answer the MSP handshake ({e}). ssh stderr: {stderr}", remote.key())
+                Some(remote) => remote.explain_failure(&e, &stderr).unwrap_or_else(|| {
+                    format!("the remote Muse at {} failed the MSP handshake ({e}). ssh stderr: {stderr}", remote.key())
                 }),
                 None => format!("MSP handshake failed ({e}). Host stderr: {stderr}"),
             });

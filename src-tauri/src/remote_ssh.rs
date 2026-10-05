@@ -274,8 +274,14 @@ impl RemoteEngine {
     }
 
     /// One actionable sentence for what ssh (or the remote shell) said on
-    /// stderr; `None` when nothing is recognizable and the raw tail must do.
-    pub fn explain_failure(&self, stderr: &str) -> Option<String> {
+    /// stderr when the host ended before replying (`error` is the handshake
+    /// error); `None` when the host did reply, or nothing is recognizable,
+    /// and `error` with the raw tail must do. Stderr also carries noise from
+    /// sessions that worked: a missing `IdentityFile`, a `.bashrc` line.
+    pub fn explain_failure(&self, error: &str, stderr: &str) -> Option<String> {
+        if error != "sidecar dropped the response" && !error.starts_with("sidecar write failed") {
+            return None;
+        }
         let at = format!("{}:{}", self.host, self.port);
         let said = stderr.to_ascii_lowercase();
         if said.contains("host key verification failed") {
@@ -300,7 +306,12 @@ impl RemoteEngine {
         if said.contains("timed out") {
             return Some(format!("{at} did not answer within {CONNECT_TIMEOUT} s."));
         }
-        if said.contains("not found") || said.contains("no such file") {
+        // The remote shell names the binary as it expanded it: `~/x` → `/home/u/x`.
+        let muse = self.muse.strip_prefix('~').unwrap_or(&self.muse).to_ascii_lowercase();
+        if said
+            .lines()
+            .any(|line| line.contains(&muse) && (line.contains("not found") || line.contains("no such file")))
+        {
             return Some(format!(
                 "Muse was not found at {} on {}. Install it there, or change the remote Muse path in Settings.",
                 self.muse, self.host
@@ -360,6 +371,9 @@ fn run_bounded(argv: &[String], timeout: u64) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The handshake error of a host that ended before replying.
+    const DIED: &str = "sidecar dropped the response";
 
     #[test]
     fn the_gate_refuses_what_argv_cannot_carry() {
@@ -490,13 +504,22 @@ mod tests {
     fn ssh_failures_become_one_actionable_sentence() {
         let remote = RemoteEngine::parse("ssh://ops@127.0.0.1:2222/home/ops/proj").unwrap().unwrap();
         let host_key = remote
-            .explain_failure("No ED25519 host key is known for [127.0.0.1]:2222 and you have requested strict checking.\nHost key verification failed.")
+            .explain_failure(DIED, "No ED25519 host key is known for [127.0.0.1]:2222 and you have requested strict checking.\nHost key verification failed.")
             .unwrap();
         assert!(host_key.ends_with("ssh -p 2222 ops@127.0.0.1"), "{host_key}");
-        assert!(remote.explain_failure("ops@127.0.0.1: Permission denied (publickey).").unwrap().contains("ssh agent"));
-        assert!(remote.explain_failure("ssh: connect to host 127.0.0.1 port 2222: Connection refused").unwrap().contains("refused the connection"));
-        assert!(remote.explain_failure("sh: 1: /home/ops/.local/bin/muse: not found").unwrap().starts_with("Muse was not found"));
-        assert_eq!(remote.explain_failure("thread 'main' panicked"), None);
+        assert!(remote.explain_failure(DIED, "ops@127.0.0.1: Permission denied (publickey).").unwrap().contains("ssh agent"));
+        assert!(remote.explain_failure(DIED, "ssh: connect to host 127.0.0.1 port 2222: Connection refused").unwrap().contains("refused the connection"));
+        assert!(remote.explain_failure(DIED, "sh: 1: /home/ops/.local/bin/muse: not found").unwrap().starts_with("Muse was not found"));
+        assert_eq!(remote.explain_failure(DIED, "thread 'main' panicked"), None);
+    }
+
+    #[test]
+    fn stderr_noise_never_hides_the_real_handshake_error() {
+        let remote = RemoteEngine::parse("ssh://ops@127.0.0.1:2222/home/ops/proj").unwrap().unwrap();
+        let noise = "no such identity: /home/me/.ssh/id_x: No such file or directory
+bash: rbenv: command not found";
+        assert_eq!(remote.explain_failure("incompatible Muse host: unsupported MSP schema version", noise), None);
+        assert_eq!(remote.explain_failure(DIED, noise), None);
     }
 
     #[cfg(windows)]
