@@ -24,8 +24,9 @@ pub fn data_dir() -> Option<PathBuf> {
     None
 }
 
-/// Called once, first thing in `main`: moves the WebView2 profile (the
-/// renderer's localStorage) into the test folder. Returns whether test mode is on.
+/// Called once in `main`, before any webview exists: moves the WebView2
+/// profile (the renderer's localStorage) into the test folder. Returns whether
+/// test mode is on.
 pub fn enter() -> bool {
     let Some(dir) = data_dir() else { return false };
     std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", dir.join("WebView2"));
