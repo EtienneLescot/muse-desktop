@@ -13,6 +13,8 @@
  *   otherwise it left "Terminal unavailable" with no way to open a new one.
  * - M3-02: a failed remote call disconnected the session, but the "Connected
  *   to …" block stayed on screen beside "Disconnected".
+ * - M4-07: a remote conversation with its own Muse path
+ *   (`ssh://…/folder?muse=/…/muse-bin-1.3.0`) was titled after the binary.
  *
  * Both are layout/lifecycle facts that the pure-logic tests cannot see.
  */
@@ -56,5 +58,11 @@ describe("visible failures", () => {
     const panel = read("../src/components/ConnectorPanel.tsx");
     assert.match(panel, /\{remoteProbe && remoteConnectedIds\.includes\(remoteId\) && \(/);
     assert.match(panel, /connectorId: remoteId,/, "the call targets the same connector id");
+  });
+
+  it("names a remote conversation after its folder, not its Muse path", () => {
+    const app = read("../src/App.tsx");
+    assert.doesNotMatch(app, /active\.workspace\.split\(/);
+    assert.equal(app.match(/folderName\(active\.workspace\)/g)?.length, 2, "breadcrumb and eyebrow");
   });
 });

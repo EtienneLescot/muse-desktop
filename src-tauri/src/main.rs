@@ -840,13 +840,16 @@ fn host_approval_mode(mode: &str) -> Option<&'static str> {
 }
 
 /// Engine identity announced by a host's `initialize`, kept per workspace for
-/// the diagnostics export (M0-08 version matrix). Version and fingerprint
-/// only: no path or credential leaves through this struct.
+/// the diagnostics export (M0-08 version matrix). Version, fingerprint and
+/// OS only: no path or credential leaves through this struct.
 #[derive(Debug, Serialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub struct HostEngine {
     pub server_version: String,
     pub schema_fingerprint: String,
+    /// `platformOs`: a remote engine (M4-07) runs on another OS than this one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
 }
 
 /// Validate the minimum initialize contract before the host accepts any
@@ -890,6 +893,7 @@ fn validate_initialize_result(result: &Value) -> Result<HostEngine, String> {
     Ok(HostEngine {
         server_version: truncate(version, 64),
         schema_fingerprint: truncate(fingerprint, 80),
+        platform: result.get("platformOs").and_then(Value::as_str).map(|os| truncate(os, 32)),
     })
 }
 
@@ -8517,6 +8521,7 @@ mod tests {
             let engine = validate_initialize_result(&result).unwrap();
             assert_eq!(engine.server_version, version);
             assert!(engine.schema_fingerprint.starts_with("sha256:"));
+            assert_eq!(engine.platform.as_deref(), Some("windows"));
             assert_eq!(
                 initialize_granted_capabilities(&result).unwrap(),
                 vec!["userShell".to_string(), "sessionMcp".to_string()]

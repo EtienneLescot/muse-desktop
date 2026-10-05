@@ -971,7 +971,7 @@ export default function App() {
             <Icon name="folder" />
             <span>
               {(active && page === "task"
-                ? active.workspace.split(/[\\/]/).pop()
+                ? folderName(active.workspace)
                 : workspaceName) || "Muse-Desktop"}
             </span>
             <span className="separator">/</span>
@@ -1503,7 +1503,7 @@ export default function App() {
                 <div className="session-center">
                   <header className="task-heading">
                     <div className="eyebrow">
-                      {active.workspace.split(/[\\/]/).pop()} / CONVERSATION
+                      {folderName(active.workspace)} / CONVERSATION
                     </div>
                     <h1>{active.title || "New conversation"}</h1>
                     <div className="task-metadata">
