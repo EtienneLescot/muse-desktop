@@ -4,6 +4,7 @@
 //! a review can never imply that a file changed merely because a response
 //! mentioned it.
 
+use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -1566,7 +1567,7 @@ fn nul_fields(bytes: &[u8]) -> Vec<String> {
 /// `dir` as the main checkout or one of its `.muse/worktrees` children,
 /// attached to the repository of `repo`: they share the object store the
 /// snapshots and the merge rely on.
-fn attached_checkout(repo: &Path, dir: &Path) -> Result<PathBuf, String> {
+pub fn attached_checkout(repo: &Path, dir: &Path) -> Result<PathBuf, String> {
     let listing = decode(&git_command(repo, &["worktree", "list", "--porcelain"])?);
     let attached: Vec<PathBuf> = listing
         .lines()
@@ -1660,13 +1661,19 @@ fn snapshot(dir: &Path, scratch: &Path, label: &str) -> Result<Side, String> {
     Ok(Side { dir: dir.to_path_buf(), head, index, tree, commit, scratch: private })
 }
 
+/// Paths that differ between two trees, narrowed by a `--diff-filter` (empty
+/// keeps them all).
+fn tree_diff(dir: &Path, from: &str, to: &str, filter: &str) -> Result<Vec<String>, String> {
+    let filter = format!("--diff-filter={filter}");
+    Ok(nul_fields(&git_command(
+        dir,
+        &["diff-tree", "-r", "-z", "--name-only", "--no-renames", &filter, from, to],
+    )?))
+}
+
 fn handoff_counts(side: &Side) -> Result<HandoffPreview, String> {
     let dir = &side.dir;
-    let changed = nul_fields(&git_command(
-        dir,
-        &["diff-tree", "-r", "-z", "--name-only", "--no-renames", &side.head, &side.tree],
-    )?)
-    .len();
+    let changed = tree_diff(dir, &side.head, &side.tree, "")?.len();
     let untracked = nul_fields(&git_command(
         dir,
         &["ls-files", "-z", "--others", "--exclude-standard", "--", ".", EXCLUDE_MUSE],
@@ -1691,21 +1698,28 @@ fn handoff_counts(side: &Side) -> Result<HandoffPreview, String> {
     })
 }
 
-/// Paths that writing `written` over the snapshot would create where a file
-/// already sits. Only an ignored file can, and `read-tree -u` overwrites
-/// those as expendable; a handoff does not.
+/// What already sits where writing `written` over the snapshot would create
+/// a path: at the path itself, or a file where one of its folders goes. Only
+/// an ignored entry can, and `read-tree -u` deletes those as expendable; a
+/// handoff does not.
 fn occupied(side: &Side, written: &str) -> Result<Vec<String>, String> {
-    let added = git_command(
-        &side.dir,
-        &[
-            "diff-tree", "-r", "-z", "--name-only", "--no-renames", "--diff-filter=A",
-            &side.tree, written,
-        ],
-    )?;
-    Ok(nul_fields(&added)
-        .into_iter()
-        .filter(|path| side.dir.join(path).symlink_metadata().is_ok())
-        .collect())
+    // A snapshot file in a new folder's way is one the move itself removes.
+    let removed = tree_diff(&side.dir, &side.tree, written, "D")?;
+    let mut blocked: Vec<String> = Vec::new();
+    for path in tree_diff(&side.dir, &side.tree, written, "A")? {
+        let occupant = path
+            .match_indices('/')
+            .map(|(end, _)| &path[..end])
+            .find(|folder| {
+                !removed.iter().any(|gone| gone == folder)
+                    && side.dir.join(folder).symlink_metadata().is_ok_and(|meta| !meta.is_dir())
+            })
+            .or_else(|| side.dir.join(&path).symlink_metadata().is_ok().then_some(path.as_str()));
+        if let Some(occupant) = occupant.filter(|occupant| !blocked.iter().any(|b| b == occupant)) {
+            blocked.push(occupant.to_string());
+        }
+    }
+    Ok(blocked)
 }
 
 /// Replay the source's uncommitted work onto the target's files with the
@@ -1749,54 +1763,105 @@ fn differing_from(side: &Side, tree: &str, name: &str) -> Result<(PathBuf, Vec<u
     Ok((private, paths))
 }
 
-/// Undo a failed move on one side: files the move added (in `written`, not in
-/// the snapshot) are removed while they still hold what it wrote, so a file it
-/// refused to overwrite stays; files that no longer match the snapshot are
-/// written back from it, untouched files keep their bytes; `index` also
-/// resets the real index.
-fn restore_side(side: &Side, written: &str, index: bool) -> Result<(), String> {
-    let dir = &side.dir;
-    let added = nul_fields(&git_command(
-        dir,
-        &[
-            "diff-tree", "-r", "-z", "--name-only", "--no-renames", "--diff-filter=D",
-            written, &side.tree,
-        ],
-    )?);
-    let not_written = if added.is_empty() {
-        Vec::new()
-    } else {
-        nul_fields(&differing_from(side, written, "written")?.1)
-    };
-    for path in added.iter().filter(|path| !not_written.contains(path)) {
-        let file = dir.join(path);
-        if let Err(error) = std::fs::remove_file(&file) {
-            if error.kind() != std::io::ErrorKind::NotFound {
-                return Err(format!("could not remove {path}: {error}"));
-            }
+/// Raw copies of the regular files writing `written` overwrites or deletes,
+/// next to the side's private index. Git writes through its line-ending
+/// conversion; these keep the exact bytes, for the target and for an undo.
+fn back_up(side: &Side, written: &str) -> Result<PathBuf, String> {
+    let backup = side.scratch.with_extension("files");
+    for path in tree_diff(&side.dir, &side.tree, written, "a")? {
+        let file = side.dir.join(&path);
+        if !file.symlink_metadata().is_ok_and(|meta| meta.is_file()) {
+            continue;
         }
-        // Drop the folders the move created, never the checkout itself.
-        let mut parent = file.parent();
-        while let Some(folder) = parent.filter(|folder| *folder != dir.as_path()) {
-            if std::fs::remove_dir(folder).is_err() {
-                break;
-            }
-            parent = folder.parent();
+        let copy = backup.join(&path);
+        std::fs::create_dir_all(copy.parent().unwrap_or(&backup))
+            .and_then(|_| std::fs::copy(&file, &copy))
+            .map_err(|e| format!("could not back up {path}: {e}"))?;
+    }
+    Ok(backup)
+}
+
+/// Write the merged tree into the target, then give the files that come
+/// unchanged from the source their exact bytes back from its backup.
+fn receive(from: &Side, to: &Side, merged: &str) -> Result<(), String> {
+    git_with_index(&to.dir, &to.scratch, &["read-tree", "-m", "-u", &to.tree, merged], None)?;
+    let combined: HashSet<String> = tree_diff(&from.dir, &from.tree, merged, "")?.into_iter().collect();
+    let source = from.scratch.with_extension("files");
+    for path in tree_diff(&to.dir, &to.tree, merged, "d")? {
+        let copy = source.join(&path);
+        if !combined.contains(&path) && copy.is_file() {
+            std::fs::copy(&copy, to.dir.join(&path)).map_err(|e| format!("could not copy {path}: {e}"))?;
         }
     }
-    let (private, stale) = differing_from(side, &side.tree, "restore")?;
-    if !stale.is_empty() {
-        git_with_index(
-            dir,
-            &private,
-            &["checkout-index", "-f", "-z", "--stdin"],
-            Some(&decode(&stale)),
-        )?;
+    Ok(())
+}
+
+/// Undo a failed step on one side, only for the paths writing `written`
+/// changes and only where the file still holds what the step wrote (or is
+/// gone): an added file is removed, any other gets its bytes back from
+/// `backup` (from the snapshot for a symlink). A path changed since the
+/// snapshot is left as it is and returned, so no later edit is lost. `index`
+/// also resets the real index.
+fn restore_side(side: &Side, written: &str, backup: &Path, index: bool) -> Result<Vec<String>, String> {
+    let dir = &side.dir;
+    let changed = tree_diff(dir, &side.tree, written, "")?;
+    let mut left = Vec::new();
+    if !changed.is_empty() {
+        let set = |paths: Vec<String>| paths.into_iter().collect::<HashSet<_>>();
+        let added = set(tree_diff(dir, &side.tree, written, "A")?);
+        let deleted = set(tree_diff(dir, &side.tree, written, "D")?);
+        let not_written = set(nul_fields(&differing_from(side, written, "written")?.1));
+        let wrote = |path: &String| !deleted.contains(path) && !not_written.contains(path);
+        let exists = |path: &String| dir.join(path).symlink_metadata().is_ok();
+        for path in &added {
+            if !wrote(path) {
+                if exists(path) {
+                    left.push(dir.join(path).display().to_string());
+                }
+                continue;
+            }
+            let file = dir.join(path);
+            if let Err(error) = std::fs::remove_file(&file) {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    return Err(format!("could not remove {path}: {error}"));
+                }
+            }
+            // Drop the folders the move created, never the checkout itself.
+            let mut parent = file.parent();
+            while let Some(folder) = parent.filter(|folder| *folder != dir.as_path()) {
+                if std::fs::remove_dir(folder).is_err() {
+                    break;
+                }
+                parent = folder.parent();
+            }
+        }
+        let (private, stale) = differing_from(side, &side.tree, "restore")?;
+        let stale = set(nul_fields(&stale));
+        let mut from_snapshot = String::new();
+        for path in changed.iter().filter(|path| !added.contains(*path) && stale.contains(*path)) {
+            let file = dir.join(path);
+            if !wrote(path) && exists(path) {
+                left.push(file.display().to_string());
+                continue;
+            }
+            let copy = backup.join(path);
+            if copy.is_file() {
+                std::fs::create_dir_all(file.parent().unwrap_or(dir))
+                    .and_then(|_| std::fs::copy(&copy, &file))
+                    .map_err(|e| format!("could not restore {path}: {e}"))?;
+            } else {
+                from_snapshot.push_str(path);
+                from_snapshot.push('\0');
+            }
+        }
+        if !from_snapshot.is_empty() {
+            git_with_index(dir, &private, &["checkout-index", "-f", "-z", "--stdin"], Some(&from_snapshot))?;
+        }
     }
     if index {
         git_command(dir, &["read-tree", &side.index])?;
     }
-    Ok(())
+    Ok(left)
 }
 
 /// Count what a handoff would move and, for an existing target, which paths
@@ -1822,7 +1887,8 @@ pub fn handoff_preview(source: &Path, target: Option<&Path>) -> Result<HandoffPr
 /// Move the source's uncommitted work (tracked changes, staged or not, and
 /// untracked files; ignored files stay) into the target, then clean the
 /// source. Conflicts are found before anything is written; the source is
-/// cleaned only once the target holds the work; any failure restores both.
+/// cleaned only once the target holds the work; any failure restores both,
+/// byte for byte, except a file edited meanwhile, which is kept and named.
 pub fn handoff_move(source: &Path, target: &Path) -> Result<HandoffPreview, String> {
     handoff_move_with(source, target, || Ok(()))
 }
@@ -1848,36 +1914,43 @@ fn handoff_move_with(
             ))
         }
     };
+    let (from_files, to_files) = back_up(&from, &from.head)
+        .and_then(|source| Ok((source, back_up(&to, &merged)?)))
+        .map_err(|e| format!("nothing was moved: {e}"))?;
     // From here on both sides stay recoverable by hand, whatever happens.
     // ponytail: the refs are kept after a success too; prune them with
     // `git for-each-ref refs/muse/handoff` if they ever weigh.
     let snapshot_ref = format!("refs/muse/handoff/{}", now_ms());
     git_command(&source, &["update-ref", &format!("{snapshot_ref}/source"), &from.commit])?;
     git_command(&source, &["update-ref", &format!("{snapshot_ref}/target"), &to.commit])?;
-    let undo = |sides: &[(&Side, &str, bool)], step: &str, error: String| {
-        let failures: Vec<String> = sides
-            .iter()
-            .filter_map(|(side, written, index)| restore_side(side, written, *index).err())
-            .collect();
-        if failures.is_empty() {
-            format!("{step}; both sides were restored as they were: {error}")
-        } else {
+    let undo = |sides: &[(&Side, &str, &Path, bool)], step: &str, error: String| {
+        let (mut left, mut failures) = (Vec::new(), Vec::new());
+        for (side, written, backup, index) in sides {
+            match restore_side(side, written, backup, *index) {
+                Ok(paths) => left.extend(paths),
+                Err(failure) => failures.push(failure),
+            }
+        }
+        if !failures.is_empty() {
             format!(
                 "{step} ({error}) and restoring failed too ({}); both sides are kept in {snapshot_ref}",
                 failures.join("; ")
             )
+        } else if !left.is_empty() {
+            format!(
+                "{step} ({error}); both sides were restored except {} file(s) changed meanwhile, left as they are: {}; the state before the move is kept in {snapshot_ref}",
+                left.len(),
+                left.join(", ")
+            )
+        } else {
+            format!("{step}; both sides were restored as they were: {error}")
         }
     };
     // The target receives the work first. Its real index is never touched,
     // so the moved changes arrive unstaged.
-    if let Err(error) = git_with_index(
-        &to.dir,
-        &to.scratch,
-        &["read-tree", "-m", "-u", &to.tree, &merged],
-        None,
-    ) {
+    if let Err(error) = receive(&from, &to, &merged) {
         return Err(undo(
-            &[(&to, merged.as_str(), false)],
+            &[(&to, merged.as_str(), &to_files, false)],
             "the target could not receive the changes",
             error,
         ));
@@ -1898,21 +1971,16 @@ fn handoff_move_with(
         .and_then(|_| {
             // Re-stat the rewritten files: a line-ending conversion changes
             // their size, and a stale size reads as "modified" to Git.
-            let rewritten = git_command(
-                &from.dir,
-                &[
-                    "diff-tree", "-r", "-z", "--name-only", "--no-renames", "--diff-filter=d",
-                    &from.tree, &from.head,
-                ],
-            )?;
+            let rewritten = tree_diff(&from.dir, &from.tree, &from.head, "d")?;
             if rewritten.is_empty() {
-                return Ok(rewritten);
+                return Ok(Vec::new());
             }
-            git_command_with_input(&from.dir, &["update-index", "-z", "--stdin"], &decode(&rewritten))
+            let paths: String = rewritten.iter().map(|path| format!("{path}\0")).collect();
+            git_command_with_input(&from.dir, &["update-index", "-z", "--stdin"], &paths)
         });
     if let Err(error) = cleaned {
         return Err(undo(
-            &[(&from, from.head.as_str(), true), (&to, merged.as_str(), false)],
+            &[(&from, from.head.as_str(), &from_files, true), (&to, merged.as_str(), &to_files, false)],
             "the source could not be cleaned",
             error,
         ));
@@ -2703,14 +2771,11 @@ mod tests {
 
     // --- M2-05: handoff between Local and a worktree
 
-    /// Text as Git means it: the machine may check files out with CRLF.
-    fn read_text(path: &Path) -> String {
-        fs::read_to_string(path).unwrap().replace("\r\n", "\n")
-    }
-
     #[test]
     fn handoff_round_trip_moves_tracked_and_untracked_files_and_back() {
         let (root, wt) = worktree_fixture();
+        // Git for Windows' default: a checkout would turn these LF files CRLF.
+        run_git(&root, &["config", "core.autocrlf", "true"]);
         fs::write(root.join(".git/info/exclude"), "*.log\n").unwrap();
         fs::write(root.join("main.txt"), "one\nlocal edit\n").unwrap();
         fs::write(root.join("package.json"), "{\"staged\":true}").unwrap();
@@ -2729,9 +2794,9 @@ mod tests {
 
         let moved = handoff_move(&root, &wt).unwrap();
         assert!(moved.snapshot.unwrap().starts_with("refs/muse/handoff/"));
-        assert_eq!(read_text(&wt.join("main.txt")), "one\nlocal edit\n");
-        assert_eq!(read_text(&wt.join("package.json")), "{\"staged\":true}");
-        assert_eq!(read_text(&wt.join("notes/new.txt")), "draft\n");
+        assert_eq!(fs::read_to_string(wt.join("main.txt")).unwrap(), "one\nlocal edit\n");
+        assert_eq!(fs::read_to_string(wt.join("package.json")).unwrap(), "{\"staged\":true}");
+        assert_eq!(fs::read_to_string(wt.join("notes/new.txt")).unwrap(), "draft\n");
         assert_eq!(fs::read(wt.join("blob.bin")).unwrap(), binary);
         assert!(!wt.join("build.log").exists());
         let left = status(&root).unwrap().files;
@@ -2741,8 +2806,8 @@ mod tests {
 
         handoff_move(&wt, &root).unwrap();
         assert!(status(&wt).unwrap().files.is_empty());
-        assert_eq!(read_text(&root.join("main.txt")), "one\nlocal edit\n");
-        assert_eq!(read_text(&root.join("notes/new.txt")), "draft\n");
+        assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "one\nlocal edit\n");
+        assert_eq!(fs::read_to_string(root.join("notes/new.txt")).unwrap(), "draft\n");
         assert_eq!(fs::read(root.join("blob.bin")).unwrap(), binary);
     }
 
@@ -2767,6 +2832,7 @@ mod tests {
     #[test]
     fn handoff_failure_before_cleanup_restores_both_sides() {
         let (root, wt) = worktree_fixture();
+        run_git(&root, &["config", "core.autocrlf", "true"]);
         fs::write(root.join("main.txt"), "one\nstaged\n").unwrap();
         run_git(&root, &["add", "--", "main.txt"]);
         fs::write(root.join("main.txt"), "one\nstaged\nunstaged\n").unwrap();
@@ -2788,16 +2854,40 @@ mod tests {
     }
 
     #[test]
+    fn handoff_undo_keeps_files_edited_during_the_move() {
+        let (root, wt) = worktree_fixture();
+        fs::write(root.join("main.txt"), "one\nlocal\n").unwrap();
+        let target_main = fs::read(wt.join("main.txt")).unwrap();
+
+        // Edits after the snapshot, then a failure: the undo reverts neither.
+        let error = handoff_move_with(&root, &wt, || {
+            fs::write(root.join("main.txt"), "later edit\n").unwrap();
+            fs::write(root.join("package.json"), "{\"later\":true}").unwrap();
+            Err("injected failure".to_string())
+        })
+        .unwrap_err();
+        assert!(error.contains("changed meanwhile") && error.contains("main.txt"), "{error}");
+        assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "later edit\n");
+        assert_eq!(fs::read_to_string(root.join("package.json")).unwrap(), "{\"later\":true}");
+        assert_eq!(fs::read(wt.join("main.txt")).unwrap(), target_main);
+    }
+
+    #[test]
     fn handoff_refuses_to_land_on_an_ignored_target_file() {
         let (root, wt) = worktree_fixture();
         fs::write(root.join("notes.txt"), "from local\n").unwrap();
-        // Ignored in the worktree only: Git alone would overwrite it.
-        fs::write(wt.join(".gitignore"), ".muse/\nnotes.txt\n").unwrap();
+        fs::create_dir_all(root.join("cache")).unwrap();
+        fs::write(root.join("cache/new.txt"), "from local\n").unwrap();
+        // Ignored in the worktree only: Git alone would overwrite them, the
+        // `cache` file to make room for the folder.
+        fs::write(wt.join(".gitignore"), ".muse/\nnotes.txt\ncache\n").unwrap();
         fs::write(wt.join("notes.txt"), "worktree only\n").unwrap();
-        assert_eq!(handoff_preview(&root, Some(&wt)).unwrap().conflicts, vec!["notes.txt"]);
+        fs::write(wt.join("cache"), "precious\n").unwrap();
+        assert_eq!(handoff_preview(&root, Some(&wt)).unwrap().conflicts, vec!["cache", "notes.txt"]);
         let error = handoff_move(&root, &wt).unwrap_err();
         assert!(error.contains("notes.txt"), "{error}");
         assert_eq!(fs::read_to_string(wt.join("notes.txt")).unwrap(), "worktree only\n");
+        assert_eq!(fs::read_to_string(wt.join("cache")).unwrap(), "precious\n");
         assert_eq!(fs::read_to_string(root.join("notes.txt")).unwrap(), "from local\n");
     }
 }
