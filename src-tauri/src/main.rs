@@ -9123,6 +9123,8 @@ fn main() {
     }
     #[cfg(target_os = "macos")]
     login_env::adopt_login_shell_path();
+    let mut context = tauri::generate_context!();
+    test_mode::open_devtools(&mut context);
     let builder = tauri::Builder::default();
     // M2/M3 follow-up (measured 27/09): the automation wake task relaunches
     // this executable while the user's instance may still run — two
@@ -9294,7 +9296,7 @@ fn main() {
             open_native_browser,
             close_native_browser,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("failed to build muse-desktop app")
         .run(|app, event| {
             // Clean shutdown: kill every workspace sidecar so no `muse`

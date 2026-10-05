@@ -13,7 +13,8 @@
  *
  * Isolation: MUSE_DESKTOP_TEST_DATA_DIR (app data and WebView2 profile) is a
  * fresh temp folder and MUSE_DESKTOP_TEST_SIDECAR runs the fixture, so the
- * user's profile and engine are never touched. Windows only: CDP needs WebView2.
+ * user's profile and engine are never touched; MUSE_DESKTOP_TEST_CDP_PORT
+ * opens CDP. Windows only: CDP needs WebView2.
  *
  * Usage: npm run e2e:fixture [-- --exe <muse-desktop.exe>] [--keep]
  * Prints the verdict as JSON; exit code 1 when any check fails.
@@ -201,7 +202,8 @@ async function main() {
       ...process.env,
       MUSE_DESKTOP_TEST_DATA_DIR: dirs.data,
       MUSE_DESKTOP_TEST_SIDECAR: JSON.stringify([process.execPath, FIXTURE]),
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${PORT}`,
+      // Through the WebView2 options: an elevated runner ignores WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS.
+      MUSE_DESKTOP_TEST_CDP_PORT: String(PORT),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
