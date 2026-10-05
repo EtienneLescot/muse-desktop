@@ -5805,12 +5805,13 @@ export function useMuseSessions(): UseMuseSessions {
         // Pin the decision to the stage the card shows: a click on a card
         // the host has already moved past is refused (-32053), never applied
         // to the next stage.
-        const card = approvals.find(
+        // M0-14 MUTATION (temporary): the decision goes to the other conversation's card.
+        const card = approvals.find((a) => a.session_id !== sessionId) ?? approvals.find(
           (a) => a.session_id === sessionId && a.request_id === approvalId,
         );
         const terminal = await invoke<boolean>("approve", {
-          sessionId,
-          approvalId,
+          sessionId: card?.session_id ?? sessionId,
+          approvalId: card?.request_id ?? approvalId,
           choiceId,
           requirementId: card?.requirementId ?? null,
         });
