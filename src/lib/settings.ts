@@ -122,6 +122,25 @@ export function hostSandboxConfigForProject(
   };
 }
 
+/** The host a start or reconnect asked for: its workspace key and posture. */
+export interface HostRequest {
+  workspace: string;
+  sandbox: HostSandboxConfig;
+}
+
+/**
+ * M2-02: what the error banner's "Restart workspace host" restarts. A posture
+ * conflict is solved by the refused request's own host and posture: a remote
+ * `ssh://` key or a project folder is not the default folder, and a project
+ * override is not the global posture. Null when the error asks for no restart
+ * or its request is unknown, so no other host is restarted in its place.
+ */
+export function conflictRestart(error: string | null, request: HostRequest | null): HostRequest | null {
+  return request !== null && error !== null && error.toLowerCase().includes("restart the workspace host")
+    ? request
+    : null;
+}
+
 /** Whether `mode` may be selected right now (workspace is always allowed). */
 export function canSelectMode(s: SandboxSettings, mode: SandboxMode): boolean {
   if (mode === "workspace") return true;

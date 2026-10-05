@@ -18,6 +18,7 @@ import {
   normalizeReasoningEffort,
   type ReasoningEffort,
 } from "./reasoning.ts";
+import { isRemoteWorkspace } from "./remoteSsh.ts";
 
 /** One project: a named thread group with a shared folder and settings. */
 export interface Project {
@@ -218,7 +219,9 @@ export function projectWorkspaceOptions(
  */
 export function folderName(path: string | null): string {
   if (path === null) return "Choose a folder";
-  const parts = path.split(/[\\/]/).filter((part) => part.length > 0);
+  // A remote key can end with `?muse=<binary>`; its folder comes before.
+  const folder = isRemoteWorkspace(path) ? path.split("?")[0] : path;
+  const parts = folder.split(/[\\/]/).filter((part) => part.length > 0);
   return parts[parts.length - 1] ?? path;
 }
 

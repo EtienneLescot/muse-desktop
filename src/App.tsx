@@ -6,6 +6,7 @@ import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { MuseSetupScreen } from "./components/MuseSetupScreen";
 import { isMacPlatform } from "./lib/platform";
+import { conflictRestart } from "./lib/settings";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -46,6 +47,16 @@ import {
   projectWorkspaceOptions,
   projectWorkspaces,
 } from "./lib/projects";
+import {
+  describeRemoteEngine,
+  isRemoteWorkspace,
+  loadRemoteEngine,
+  remoteSignInHint,
+  remoteWorkspaceUri,
+  saveRemoteEngine,
+  worktreeUnavailableReason,
+  type RemoteEngineTarget,
+} from "./lib/remoteSsh";
 import { parseHarnessRules } from "./lib/harnessRules";
 import { planConversationWorktree } from "./lib/worktrees";
 // US-32: polite live-region announcements for stream/approval/input changes.
@@ -295,6 +306,7 @@ export default function App() {
     removeMemoryEntry,
     ackScanNudge,
     error,
+    errorHost,
     backendMissing,
     startupProbe,
     probeStartup,
@@ -482,6 +494,8 @@ export default function App() {
   }, [theme]);
 
   const active = sessions.find((s) => s.session_id === activeId) ?? null;
+  // M4-07: its folder is on another host, so the local-disk panels stand down.
+  const activeIsRemote = isRemoteWorkspace(active?.workspace);
   const activeProject =
     active === null ? null : projectForSession(active.session_id);
   const activeProjectSettings =
@@ -507,10 +521,18 @@ export default function App() {
     const parts = workspace.split(/[\\/]/).filter((p) => p.length > 0);
     return parts[parts.length - 1] ?? workspace;
   }, [workspace]);
-  const environmentOptions = useMemo(
-    () => projectWorkspaceOptions(projects),
-    [projects],
-  );
+  const [remoteEngine, setRemoteEngine] = useState<RemoteEngineTarget | null>(loadRemoteEngine);
+  const environmentOptions = useMemo(() => {
+    const options = projectWorkspaceOptions(projects);
+    // M4-07: a remote engine is a place a conversation runs, not a project.
+    return remoteEngine === null ? options : [...options, {
+      projectId: "",
+      projectName: describeRemoteEngine(remoteEngine),
+      workspace: remoteWorkspaceUri(remoteEngine),
+      optionId: "remote",
+      rootIndex: 0,
+    }];
+  }, [projects, remoteEngine]);
 
   // US-32: one polite live region announces stream running/stopped
   // transitions plus approval/input arrivals (not every render).
@@ -587,6 +609,8 @@ export default function App() {
   // US-33: sidecar startup failures surface explicitly (message + expected
   // paths + retry/re-pick actions), never as a blank screen.
   const sidecarKind = classifySidecarError(error);
+  // A posture conflict restarts the host that refused, not the default folder's.
+  const hostRestart = conflictRestart(error, errorHost);
   // macOS does not bundle the engine: a missing sidecar there means the Muse
   // CLI is simply not installed yet — a first-run step, not an error.
   const needsMuseSetup = sidecarKind === "missing" && isMacPlatform() && isTauriRuntime();
@@ -619,13 +643,13 @@ export default function App() {
   const errorBanner = !needsMuseSetup && sidecarKind === null && error ? (
     <div className="error-banner" role="alert">
       <span>{userFacingError(error)}</span>
-      {error.toLowerCase().includes("restart the workspace host") && !backendMissing && (
+      {hostRestart !== null && !backendMissing && (
         <button
           type="button"
           className="error-banner-action"
           onClick={() => {
             if (!window.confirm("Restart the workspace host? Active conversations will disconnect and can reconnect when the host supports durable sessions.")) return;
-            void restartHost(workspace);
+            void restartHost(hostRestart.workspace, hostRestart.sandbox);
           }}
         >
           Restart workspace host
@@ -718,6 +742,11 @@ export default function App() {
   async function moveToWorktree(sessionId: string): Promise<void> {
     const session = sessions.find((candidate) => candidate.session_id === sessionId);
     if (session === undefined || movingToWorktree !== null) return;
+    const unavailable = worktreeUnavailableReason(session.workspace);
+    if (unavailable !== null) {
+      setError(unavailable);
+      return;
+    }
     const source = session.workspace;
     try {
       setError(null);
@@ -1027,11 +1056,16 @@ export default function App() {
               startupProbe={startupProbe}
               onProbeStartup={() => probeStartup(workspace)}
               onSignIn={signInWithMuseCli}
+              remoteEngine={remoteEngine}
+              onRemoteEngineChange={(next) => {
+                saveRemoteEngine(next);
+                setRemoteEngine(next);
+              }}
             />
             {/* Global capabilities, not work on the current conversation: they
                 used to be side-panel tabs next to Changes and Terminal. */}
             <div className="settings-extra">
-              <WorktreeTools workspace={active?.workspace ?? workspace} />
+              <WorktreeTools workspace={active !== null && !activeIsRemote ? active.workspace : workspace} />
               <ComputerUsePanel
                 status={computerUse}
                 busy={computerBusy}
@@ -1568,10 +1602,12 @@ export default function App() {
                     onForceStop={() => void killSession(active.session_id)}
                     onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
                     onSignInForFailedTurn={
-                      isMacPlatform() && isTauriRuntime()
+                      // The local sign-in does not reach a remote engine's credentials.
+                      isMacPlatform() && isTauriRuntime() && !activeIsRemote
                         ? (entry) => setSignInFor({ sessionId: active.session_id, entryId: entry.id })
                         : undefined
                     }
+                    signInHint={remoteSignInHint(active.workspace) ?? undefined}
                     onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
                     onOpenWorkspacePath={(path) => openWorkspacePath(active.session_id, path)}
                     controls={{
@@ -1711,7 +1747,7 @@ export default function App() {
                     }
                     running={active.running}
                     stopping={stoppingBySession[active.session_id] === true}
-                    workspace={active.workspace}
+                    workspace={activeIsRemote ? null : active.workspace}
                     onSend={(text, inputParts) => sendInput(active.session_id, text, undefined, inputParts)}
                     onSteer={(text, inputParts) => steerInput(active.session_id, text, inputParts)}
                     onCancel={() => void cancelSession(active.session_id)}
@@ -1767,7 +1803,12 @@ export default function App() {
                       </button>
                     </nav>
                     <div className="work-panel-body">
-                      {workPanel === "review" && (
+                      {activeIsRemote && workPanel !== "browser" && (
+                        <section className="settings-note" role="status">
+                          Not available for remote conversations: this panel works on this computer's files.
+                        </section>
+                      )}
+                      {workPanel === "review" && !activeIsRemote && (
                         <ReviewPanel
                           sessionId={active.session_id}
                           review={gitReview(active.session_id)}
@@ -1791,7 +1832,7 @@ export default function App() {
                           }}
                         />
                       )}
-                      {workPanel === "terminal" && (
+                      {workPanel === "terminal" && !activeIsRemote && (
                         <TerminalPanel
                           sessionId={active.session_id}
                           terminal={terminalForSession(active.session_id)}
@@ -1806,7 +1847,7 @@ export default function App() {
                           onInsertContext={prepareTerminalContext}
                         />
                       )}
-                      {workPanel === "files" && (
+                      {workPanel === "files" && !activeIsRemote && (
                         <FilesPanel
                           sessionId={active.session_id}
                           state={filesForSession(active.session_id)}

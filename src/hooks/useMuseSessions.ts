@@ -348,13 +348,14 @@ import {
 // (dependency-free, unit-tested); scope-guard client for the path probe.
 import {
   hostSandboxConfigForProject,
-  effectiveSandboxMode,
   PROVIDER_MAP_KEY,
   SETTINGS_KEY,
   parseModelList,
   parseProviderMap,
   parseSandboxSettings,
   providerForProject,
+  type HostRequest,
+  type HostSandboxConfig,
   type LiveModel,
   type SandboxSettings,
 } from "../lib/settings";
@@ -403,6 +404,7 @@ import {
   type ParsedMcpPackage,
 } from "../lib/mcpPackage.ts";
 import { buildHostMcpServers, type HostMcpStdioServer } from "../lib/hostMcp";
+import { isRemoteWorkspace } from "../lib/remoteSsh";
 import {
   parseComputerStatus,
   type ComputerLevel,
@@ -864,8 +866,11 @@ interface UseMuseSessions {
   /** w-settings: sandbox settings (persisted) + whole-object setter. */
   sandbox: SandboxSettings;
   setSandbox: (next: SandboxSettings) => void;
-  /** M2-02: explicitly restart the workspace host after a posture change. */
-  restartHost: (workspacePath?: string | null) => Promise<boolean>;
+  /**
+   * M2-02: explicitly restart a workspace host after a posture change; the
+   * default folder and the global posture unless told otherwise.
+   */
+  restartHost: (workspacePath?: string | null, sandbox?: HostSandboxConfig) => Promise<boolean>;
   /** Global tool-authorization posture (persisted locally). */
   authorizationMode: AuthorizationMode;
   setAuthorizationMode: (mode: AuthorizationMode) => void;
@@ -1303,6 +1308,8 @@ interface UseMuseSessions {
   /** M3-04: refresh bounded SKILL.md discovery for the selected workspace. */
   scanSkills: (workspacePath?: string | null) => Promise<SkillScanSummary | null>;
   error: string | null;
+  /** The start, reconnect or restart `error` came from, when one did. */
+  errorHost: HostRequest | null;
   /** Set a bounded user-facing orchestration error from a composite action. */
   setError: (message: string | null) => void;
   /** TEMPORARY dev diagnosis: backend events received by this window. */
@@ -1803,7 +1810,14 @@ export function useMuseSessions(): UseMuseSessions {
   const [providerMap] = useState<Record<string, string>>(() => {
     return parseProviderMap(readStorageJson<unknown>(PROVIDER_MAP_KEY, null));
   });
-  const [error, setError] = useState<string | null>(null);
+  const [error, setErrorMessage] = useState<string | null>(null);
+  // The host request a failure came from, set and cleared with it: a posture
+  // conflict restarts that host, not the default folder's (M4-07 ssh:// keys).
+  const [errorHost, setErrorHost] = useState<HostRequest | null>(null);
+  const setError = (message: string | null, host: HostRequest | null = null): void => {
+    setErrorMessage(message);
+    setErrorHost(host);
+  };
   // US-4: local thread summaries (mirror of localStorage) + composer prefill
   // after `newFromSummary`.
   const [summaries, setSummaries] = useState<Record<string, ThreadSummary>>({});
@@ -4106,7 +4120,10 @@ export function useMuseSessions(): UseMuseSessions {
     setSandboxState(parseSandboxSettings(next));
   }, []);
 
-  const restartHost = useCallback(async (workspacePath?: string | null): Promise<boolean> => {
+  const restartHost = useCallback(async (
+    workspacePath?: string | null,
+    posture: HostSandboxConfig = hostSandboxConfigForProject(sandbox),
+  ): Promise<boolean> => {
     if (!isTauriRuntime()) {
       setError("Restarting a Muse host is available in the desktop app.");
       return false;
@@ -4120,13 +4137,16 @@ export function useMuseSessions(): UseMuseSessions {
       setError(null);
       await invoke("restart_host", {
         workspacePath: target,
-        sandboxMode: effectiveSandboxMode(sandbox),
-        sandboxDisableWrite: false,
-        sandboxDisableShell: false,
+        sandboxMode: posture.mode,
+        sandboxDisableWrite: posture.disableWrite,
+        sandboxDisableShell: posture.disableShell,
       });
       return true;
     } catch (e) {
-      setError(`Host restart failed: ${e instanceof Error ? e.message : String(e)}`);
+      setError(
+        `Host restart failed: ${e instanceof Error ? e.message : String(e)}`,
+        { workspace: target, sandbox: posture },
+      );
       return false;
     }
   }, [sandbox, workspace]);
@@ -4304,6 +4324,7 @@ export function useMuseSessions(): UseMuseSessions {
       projectSettings?: ProjectSettings,
       projectSandboxSettings?: ProjectSettings,
     ): Promise<string | null> => {
+    let host: HostRequest | null = null;
     try {
       setError(null);
       // Live React state first: localStorage writes are best-effort and may
@@ -4315,13 +4336,18 @@ export function useMuseSessions(): UseMuseSessions {
         return null;
       }
       const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSandboxSettings);
+      host = { workspace: ws, sandbox: sandboxConfig };
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
         authorizationMode: authorizationModeRef.current,
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
         sandboxDisableShell: sandboxConfig.disableShell,
-        mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
+        // Connectors and computer use live on this machine: a remote engine
+        // (M4-07) would launch them on its own host, where they do not exist.
+        mcpServers: isRemoteWorkspace(ws)
+          ? undefined
+          : buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
       });
       const requestedModelId = projectSettings?.model.trim();
       const record: MuseSession = {
@@ -4361,7 +4387,7 @@ export function useMuseSessions(): UseMuseSessions {
       void refreshHostSkills(meta.session_id);
       return meta.session_id;
     } catch (e) {
-      setError(`start_session failed: ${String(e)}`);
+      setError(`start_session failed: ${String(e)}`, host);
       return null;
     }
     },
@@ -4502,18 +4528,22 @@ export function useMuseSessions(): UseMuseSessions {
     if (!silent) setReconnectingId(id);
     setConnectionState(id, "connecting");
     if (!silent) setError(null);
+    let host: HostRequest | null = null;
     try {
       const projectSettings = threadProjects[id] !== undefined
         ? settingsForThread(globalSettings, projects, threadProjects, id)
         : undefined;
       const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSettings);
+      host = { workspace: session.workspace, sandbox: sandboxConfig };
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
         workspacePath: session.workspace,
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
         sandboxDisableShell: sandboxConfig.disableShell,
-        mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
+        mcpServers: isRemoteWorkspace(session.workspace)
+          ? undefined
+          : buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
       });
       if (tombstoned.current?.has(id)) return;
       setGrantedCapabilitiesBySession((cur) => ({
@@ -4605,7 +4635,7 @@ export function useMuseSessions(): UseMuseSessions {
         setConnectionState(id, "disconnected");
       } else {
         setConnectionState(id, "error");
-        setError(reconnectErrorMessage(e));
+        setError(reconnectErrorMessage(e), host);
       }
     } finally {
       setReconnectingId(null);
@@ -8225,6 +8255,7 @@ export function useMuseSessions(): UseMuseSessions {
     unwatchWorkspaceFiles,
     openWorkspacePath,
     error,
+    errorHost,
     setError: (message) => setError(message),
     evtCount,
     dismissQueuedTurn,
