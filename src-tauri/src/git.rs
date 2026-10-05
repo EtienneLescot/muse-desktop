@@ -214,14 +214,23 @@ fn git_output(
     let mut child = command
         .spawn()
         .map_err(|e| format!("could not start git: {e}"))?;
-    if let (Some(input), Some(stdin)) = (input, child.stdin.as_mut()) {
-        stdin
-            .write_all(input.as_bytes())
+    // Fed from another thread while this one drains stdout and stderr: Git
+    // can fill stderr (a warning per file) before it reads all its input,
+    // and then both sides would wait on each other forever.
+    let writer = input.zip(child.stdin.take()).map(|(input, mut stdin)| {
+        let input = input.to_owned();
+        std::thread::spawn(move || stdin.write_all(input.as_bytes()))
+    });
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("could not finish git: {e}"))?;
+    if let Some(writer) = writer {
+        writer
+            .join()
+            .unwrap_or_else(|_| Err(std::io::Error::other("the writer panicked")))
             .map_err(|e| format!("could not provide git input: {e}"))?;
     }
-    child
-        .wait_with_output()
-        .map_err(|e| format!("could not finish git: {e}"))
+    Ok(output)
 }
 
 fn git_checked(args: &[&str], output: std::process::Output) -> Result<Vec<u8>, String> {
@@ -3005,6 +3014,24 @@ mod tests {
         assert!(error.contains("lock.json"), "{error}");
         assert_eq!(fs::read_to_string(wt.join("lock.json")).unwrap(), "1\n2\n3 worktree\n");
         assert_eq!(fs::read_to_string(root.join("lock.json")).unwrap(), "1 local\n2\n3\n");
+    }
+
+    #[test]
+    fn handoff_preview_returns_when_git_warns_about_every_file() {
+        let (root, wt) = worktree_fixture();
+        // One "LF will be replaced by CRLF" warning per file fills stderr
+        // long before Git has read the whole list on stdin.
+        run_git(&root, &["config", "core.autocrlf", "true"]);
+        for n in 0..3000 {
+            fs::write(root.join(format!("untracked-file-number-{n:0>20}.txt")), "lf\n").unwrap();
+        }
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || send.send(handoff_preview(&root, Some(&wt))));
+        let preview = receive
+            .recv_timeout(std::time::Duration::from_secs(120))
+            .expect("the preview hung")
+            .unwrap();
+        assert_eq!(preview.untracked, 3000);
     }
 
     #[test]
