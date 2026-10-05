@@ -221,6 +221,7 @@ import {
   type WorktreePlan,
   type WorktreeRecord,
 } from "../lib/worktrees";
+import { describeHandoffResult, describeWorkspaceFallback, type HandoffPreview } from "../lib/handoff";
 import {
   loadWorktreeCleanupIntents,
   saveWorktreeCleanupIntents,
@@ -1066,6 +1067,10 @@ interface UseMuseSessions {
   runUserShell: (sessionId: string, command: string) => Promise<boolean>;
   resizeTerminal: (terminalId: string, cols: number, rows: number) => Promise<void>;
   closeTerminal: (sessionId: string) => Promise<void>;
+  /** M2-05: what moving this conversation's uncommitted work would do; null target = a new worktree. */
+  previewHandoff: (sessionId: string, target: string | null) => Promise<HandoffPreview | null>;
+  /** M2-05: move the work to Local or a worktree; the conversation follows on hosts that allow it. */
+  handoffConversation: (sessionId: string, target: string) => Promise<HandoffPreview | null>;
   /** Add a bounded, attributed terminal snapshot to the next prompt. */
   prepareTerminalContext: (sessionId: string) => boolean;
   /** M1-07: session-scoped real filesystem listing and bounded preview. */
@@ -1344,6 +1349,10 @@ interface BackendSessionMeta {
   loaded?: boolean;
   /** Title the host keeps for this conversation, when it has one. */
   title?: string;
+  /** M2-05: the host's folder once the conversation moved (see StoredSession). */
+  host_workspace?: string;
+  /** M2-05, `resume_session` only: why the conversation left the folder it had moved to. */
+  workspace_notice?: string;
 }
 
 /** A placeholder title ("Session 01a0…" or none) gives way to the host title. */
@@ -2283,7 +2292,13 @@ export function useMuseSessions(): UseMuseSessions {
               next[i] = {
                 ...next[i],
                 title: withHostTitle(next[i].title, meta.title),
-                workspace: meta.workspace,
+                // M2-05: a host listing knows only its own folder; a moved row
+                // keeps its workspace until its resume re-applies the move.
+                ...(meta.host_workspace !== undefined
+                  ? { workspace: meta.workspace, host_workspace: meta.host_workspace }
+                  : next[i].host_workspace === undefined
+                    ? { workspace: meta.workspace }
+                    : {}),
                 running: meta.running,
                 ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
                 // The host owns the model, so its value wins when present; a
@@ -3333,6 +3348,14 @@ export function useMuseSessions(): UseMuseSessions {
       setConnectionState(sid, "connected");
       setSessions((cur) => cur.map((session) => {
         if (session.session_id !== sid) return session;
+        // M2-05: a moved conversation's host still observes its own folder.
+        if (
+          session.host_workspace !== undefined &&
+          observation.workspaceRoot !== null &&
+          displayPath(observation.workspaceRoot) !== displayPath(session.workspace)
+        ) {
+          return session;
+        }
         const next = { ...session };
         if (observation.branch === null) delete next.branch;
         else next.branch = observation.branch;
@@ -4561,7 +4584,10 @@ export function useMuseSessions(): UseMuseSessions {
       host = { workspace: session.workspace, sandbox: sandboxConfig };
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
-        workspacePath: session.workspace,
+        // M2-05: a moved conversation resumes on its host's folder and names
+        // where its turns ran; the supervisor checks that folder again.
+        workspacePath: session.host_workspace ?? session.workspace,
+        effectiveWorkspace: session.host_workspace !== undefined ? session.workspace : undefined,
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
         sandboxDisableShell: sandboxConfig.disableShell,
@@ -4588,6 +4614,10 @@ export function useMuseSessions(): UseMuseSessions {
                 ...session,
                 title: withHostTitle(session.title, meta.title),
                 ...(meta.model_id ? { model_id: meta.model_id } : {}),
+                // The supervisor may have brought a moved conversation back.
+                ...(session.host_workspace !== undefined
+                  ? { workspace: meta.workspace, host_workspace: meta.host_workspace }
+                  : {}),
               }
             : session,
         ),
@@ -4642,6 +4672,17 @@ export function useMuseSessions(): UseMuseSessions {
       setConnectionState(id, "connected");
       clearStopping(id);
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
+      // M2-05: a moved conversation that could not go back to its folder says so.
+      if (meta.workspace_notice !== undefined) {
+        const note: LogEntry = {
+          id: newId(),
+          ts: Date.now(),
+          role: "system",
+          text: describeWorkspaceFallback(session.workspace, meta.workspace, meta.workspace_notice),
+        };
+        setLogs((cur) => ({ ...cur, [id]: [...(cur[id] ?? []), note] }));
+        appendLog(id, [note]);
+      }
       kickPoll();
       await refreshModels(id);
       await refreshHostSkills(id);
@@ -4756,6 +4797,7 @@ export function useMuseSessions(): UseMuseSessions {
           running: meta.running,
           ...(source.model_id ? { model_id: source.model_id } : {}),
           ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
+          ...(meta.host_workspace ? { host_workspace: meta.host_workspace } : {}),
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
         setConnectionState(meta.session_id, "connected");
@@ -7798,6 +7840,67 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, [terminalsBySession]);
 
+  const previewHandoff = useCallback(
+    async (sessionId: string, target: string | null): Promise<HandoffPreview | null> => {
+      try {
+        setError(null);
+        return await invoke<HandoffPreview>("handoff_preview", { sessionId, target });
+      } catch (e) {
+        setError(`The move could not be prepared: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+    },
+    [],
+  );
+
+  /**
+   * M2-05: when the conversation moves too, its folder-bound state starts over
+   * in the target: files listing, terminal (reopened there), branch. The
+   * outcome goes into the transcript either way.
+   */
+  const handoffConversation = useCallback(
+    async (sessionId: string, target: string): Promise<HandoffPreview | null> => {
+      let result: HandoffPreview;
+      try {
+        setError(null);
+        result = await invoke<HandoffPreview>("handoff_move", { sessionId, target });
+      } catch (e) {
+        setError(`The conversation was not moved: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
+      const moved = result.target;
+      if (result.sameSession && moved !== null) {
+        setSessions((cur) => cur.map((session) => {
+          if (session.session_id !== sessionId) return session;
+          const next = {
+            ...session,
+            workspace: moved,
+            host_workspace: session.host_workspace ?? session.workspace,
+          };
+          // The host's last branch observation is about the folder left behind.
+          delete next.branch;
+          return next;
+        }));
+        setFilesBySession((cur) => {
+          const next = { ...cur };
+          delete next[sessionId];
+          return next;
+        });
+        await closeTerminal(sessionId);
+      }
+      const note: LogEntry = {
+        id: newId(),
+        ts: Date.now(),
+        role: "system",
+        text: describeHandoffResult(result),
+      };
+      setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), note] }));
+      appendLog(sessionId, [note]);
+      return result;
+    },
+    [closeTerminal],
+  );
+
   const prepareTerminalContext = useCallback(
     (sessionId: string): boolean => {
       const terminal = terminalsBySession[sessionId];
@@ -8283,6 +8386,8 @@ export function useMuseSessions(): UseMuseSessions {
     runUserShell,
     resizeTerminal,
     closeTerminal,
+    previewHandoff,
+    handoffConversation,
     prepareTerminalContext,
     filesForSession,
     prepareWorkspaceFileContext,

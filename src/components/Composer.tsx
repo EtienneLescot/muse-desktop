@@ -70,6 +70,8 @@ interface Props {
   draftKey: string;
   modelControl?: ReactNode;
   disabled: boolean;
+  /** Why the composer is disabled, shown in place of the generic hint. */
+  disabledReason?: string;
   running: boolean;
   /** A stop request was accepted and the host has not confirmed it yet. */
   stopping?: boolean;
@@ -162,6 +164,7 @@ export function Composer({
   draftKey,
   modelControl,
   disabled,
+  disabledReason,
   running,
   stopping = false,
   workspace,
@@ -1031,7 +1034,7 @@ export function Composer({
             rows={3}
             placeholder={
               disabled
-                ? "Open the desktop app to continue."
+                ? disabledReason ?? "Open the desktop app to continue."
                 : "Ask Muse to continue…"
             }
             aria-label="Message Muse"

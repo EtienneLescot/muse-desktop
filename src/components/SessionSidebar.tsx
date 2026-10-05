@@ -9,6 +9,7 @@ import {
 } from "../lib/threads";
 import type { Project, ThreadProjectMap } from "../lib/projects";
 import { worktreeUnavailableReason } from "../lib/remoteSsh";
+import { insideWorktree } from "../lib/worktrees";
 
 interface Props {
   showArchived?: boolean;
@@ -34,10 +35,10 @@ interface Props {
   onRestore: (id: string) => void;
   /** Branch this conversation: a new thread from its latest completed turn. */
   onFork?: (id: string) => void;
-  /** Branch the folder too: a new thread in a git worktree of the workspace. */
-  onMoveToWorktree?: (id: string) => void;
-  /** The step a worktree start is on, or null. Disables the action while set. */
-  movingToWorktree?: string | null;
+  /** M2-05: move the conversation and its uncommitted work to a worktree, or back to Local. */
+  onMoveFolder?: (id: string) => void;
+  /** The step a move is on, or null. Disables the action while set. */
+  movingFolder?: string | null;
   canStart: boolean;
   /** US-3: project grouping (absent/empty = flat list, as before). */
   projects?: Project[];
@@ -78,8 +79,8 @@ export function SessionSidebar({
   onArchive,
   onRestore,
   onFork,
-  onMoveToWorktree,
-  movingToWorktree = null,
+  onMoveFolder,
+  movingFolder = null,
   canStart,
   projects,
   threadProjects,
@@ -471,9 +472,9 @@ export function SessionSidebar({
                 {selected.pinned === true ? "Unpin conversation" : "Pin conversation"}
               </button>
             )}
-            {/* Branching belongs with the conversation's own actions, not in a
-                floating icon in the top bar: both answer "start again from
-                here", one keeping the folder, one copying it. */}
+            {/* Branching and moving belong with the conversation's own actions,
+                not in a floating icon in the top bar: one starts again from
+                here, the other takes the conversation to another folder. */}
             {selected && !selected.archived && onFork && (
               <button
                 onClick={() => {
@@ -485,17 +486,18 @@ export function SessionSidebar({
                 Fork conversation
               </button>
             )}
-            {selected && !selected.archived && onMoveToWorktree && (
+            {selected && !selected.archived && onMoveFolder && (
               <button
-                disabled={movingToWorktree !== null || selected.running || worktreeUnavailableReason(selected.workspace) !== null}
+                disabled={movingFolder !== null || selected.running || worktreeUnavailableReason(selected.workspace) !== null}
                 title={worktreeUnavailableReason(selected.workspace) ?? undefined}
                 onClick={() => {
-                  onMoveToWorktree(selected.session_id);
+                  onMoveFolder(selected.session_id);
                   closeActions();
                 }}
               >
                 <Icon name="branch" />
-                {movingToWorktree ?? "Continue in a worktree"}
+                {movingFolder ??
+                  (insideWorktree(selected.workspace) ? "Move back to local" : "Move to worktree")}
               </button>
             )}
             <button
