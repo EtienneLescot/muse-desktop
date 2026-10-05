@@ -1711,12 +1711,14 @@ fn handoff_counts(side: &Side) -> Result<HandoffPreview, String> {
     )?)
     .len();
     // A collapsed `.muse/` escapes the exclude pathspec, hence the filter.
+    // Uncollapsed, as `.muse/.gitignore` (`*`) leaves it, Git lists its
+    // entries too: they are the app's, not the user's ignored files.
     let ignored = nul_fields(&git_command(
         dir,
         &["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"],
     )?)
     .into_iter()
-    .filter(|entry| entry.trim_end_matches('/') != ".muse")
+    .filter(|entry| entry.trim_end_matches('/') != ".muse" && !entry.starts_with(".muse/"))
     .count();
     // Staged, then changed again on disk: the file's version is the one that moves.
     let unstaged: HashSet<String> = tree_diff(dir, &side.index, &side.tree, "")?.into_iter().collect();
@@ -2873,6 +2875,19 @@ mod tests {
         assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "one\nlocal edit\n");
         assert_eq!(fs::read_to_string(root.join("notes/new.txt")).unwrap(), "draft\n");
         assert_eq!(fs::read(root.join("blob.bin")).unwrap(), binary);
+    }
+
+    #[test]
+    fn handoff_counts_only_the_users_ignored_files() {
+        // The app's own layout: `.muse/.gitignore` ignores everything in it and
+        // the repository does not mention `.muse`. Git then lists `.muse/`,
+        // `.muse/.gitignore` and `.muse/worktrees/`: the question said
+        // "3 ignored items" for one ignored file (native proof, 06/10/2026).
+        let root = fixture_repo();
+        create_worktree(&root, "muse/count", ".muse/worktrees/count", "HEAD").unwrap();
+        fs::write(root.join(".git/info/exclude"), "*.log\n").unwrap();
+        fs::write(root.join("build.log"), "ignored\n").unwrap();
+        assert_eq!(handoff_preview(&root, None).unwrap().ignored, 1);
     }
 
     #[test]
