@@ -219,9 +219,9 @@ export function SettingsPanel({
 
   async function restartWorkspaceHost(): Promise<void> {
     if (onRestartHost === undefined || restartingHost) return;
-    if (!window.confirm(
+    if (!(await window.confirm(
       "Restart the workspace host now? Active conversations will disconnect and keep their local transcript; reconnect them after the new host starts.",
-    )) return;
+    ))) return;
     setRestartingHost(true);
     setRestartStatus(null);
     try {

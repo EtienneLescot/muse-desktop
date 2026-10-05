@@ -19,12 +19,14 @@
  *   still showed the old failure: no connector action cleared the banner.
  * - M0-05: when a host died with the app open, its approval and question
  *   cards stayed answerable, and every answer could only fail.
+ * - M2-05: every window.confirm question was skipped in the app: the dialog
+ *   plugin's call was not allowed, and its Promise read as a yes.
  *
  * Both are layout/lifecycle facts that the pure-logic tests cannot see.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { isConnectorError } from "../src/lib/errorCopy.ts";
 
 const read = (relative: string): string =>
@@ -95,6 +97,25 @@ describe("visible failures", () => {
     for (const other of ["send_input failed: offline", "approve failed: gone", "restore_sessions failed: x", null]) {
       assert.equal(isConnectorError(other), false, String(other));
     }
+  });
+
+  it("awaits every confirmation, which the dialog plugin answers asynchronously", () => {
+    // M2-05: in the app, window.confirm is the dialog plugin's invoke and
+    // returns a Promise. Read synchronously it is always truthy, and without
+    // dialog:allow-confirm it was refused: the move ran with no question.
+    const capabilities = JSON.parse(read("../src-tauri/capabilities/default.json"));
+    assert.ok(capabilities.permissions.includes("dialog:allow-confirm"));
+    const sources = (dir: string): string[] =>
+      readdirSync(new URL(dir, import.meta.url), { withFileTypes: true }).flatMap((entry) =>
+        entry.isDirectory() ? sources(`${dir}${entry.name}/`) : /\.tsx?$/.test(entry.name) ? [`${dir}${entry.name}`] : []);
+    let calls = 0;
+    for (const file of sources("../src/")) {
+      const text = read(file);
+      const all = text.match(/window\.confirm\(/g)?.length ?? 0;
+      assert.equal(text.match(/await window\.confirm\(/g)?.length ?? 0, all, `${file} awaits window.confirm`);
+      calls += all;
+    }
+    assert.ok(calls >= 4, "the move, archive delete and both host restarts confirm");
   });
 
   it("drops an exited host's approval and question cards and says so", () => {

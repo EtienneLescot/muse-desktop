@@ -647,8 +647,8 @@ export default function App() {
         <button
           type="button"
           className="error-banner-action"
-          onClick={() => {
-            if (!window.confirm("Restart the workspace host? Active conversations will disconnect and can reconnect when the host supports durable sessions.")) return;
+          onClick={async () => {
+            if (!(await window.confirm("Restart the workspace host? Active conversations will disconnect and can reconnect when the host supports durable sessions."))) return;
             void restartHost(hostRestart.workspace, hostRestart.sandbox);
           }}
         >
@@ -756,7 +756,8 @@ export default function App() {
         setError(question.text);
         return;
       }
-      if (!window.confirm(question.text)) return;
+      // In the app, window.confirm is the dialog plugin's call: a Promise.
+      if (!(await window.confirm(question.text))) return;
       let target = local;
       if (target === null) {
         setMovingConversation("Creating a worktree…");
@@ -1372,12 +1373,12 @@ export default function App() {
                       <button
                         className="danger"
                         data-danger="true"
-                        onClick={() => {
+                        onClick={async () => {
                           const title = session.title || session.session_id.slice(0, 8);
                           if (
-                            !window.confirm(
+                            !(await window.confirm(
                               `Delete "${title}" permanently?\n\nIt will disappear from Muse and will not come back. The conversation file itself stays on disk, under the Muse data folder, until it is removed there.`,
-                            )
+                            ))
                           ) {
                             return;
                           }
