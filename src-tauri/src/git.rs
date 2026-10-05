@@ -1613,6 +1613,25 @@ fn scratch_dir() -> Result<Scratch, String> {
 
 fn snapshot(dir: &Path, scratch: &Path, label: &str) -> Result<Side, String> {
     let head = oid(git_command(dir, &["rev-parse", "--verify", "HEAD"])?);
+    // Work moved out of a merge, cherry-pick, revert or rebase in progress
+    // would be missing from what concludes it; moved in, swept into it.
+    let operations = [
+        ("MERGE_HEAD", "merge"),
+        ("CHERRY_PICK_HEAD", "cherry-pick"),
+        ("REVERT_HEAD", "revert"),
+        ("rebase-merge", "rebase"),
+        ("rebase-apply", "rebase"),
+    ];
+    let args: Vec<&str> = ["rev-parse"]
+        .into_iter()
+        .chain(operations.iter().flat_map(|(state, _)| ["--git-path", *state]))
+        .collect();
+    let states = decode(&git_command(dir, &args)?);
+    for ((_, operation), state) in operations.iter().zip(states.lines()) {
+        if dir.join(state).exists() {
+            return Err(format!("the {label} is in the middle of a {operation}; finish or abort it first"));
+        }
+    }
     let index = oid(git_command(dir, &["write-tree"])
         .map_err(|e| format!("the {label} has unresolved conflicts: {e}"))?);
     // Start from a copy of the real index so only what changed is hashed.
@@ -1735,7 +1754,8 @@ fn occupied(side: &Side, written: &str) -> Result<Vec<String>, String> {
 /// Replay the source's uncommitted work onto the target's files with the
 /// source HEAD as base (a cherry-pick of the working tree), entirely in the
 /// object store. `Ok(Err(paths))` lists what stands in the way: merge
-/// conflicts, or ignored files either write would land on.
+/// conflicts, source changes the merge drops, or ignored files either write
+/// would land on.
 fn merge_sides(from: &Side, to: &Side) -> Result<Result<String, Vec<String>>, String> {
     let base = format!("--merge-base={}", from.head);
     let args = [
@@ -1757,7 +1777,21 @@ fn merge_sides(from: &Side, to: &Side) -> Result<Result<String, Vec<String>>, St
             ))
         }
     };
-    let mut blocked = occupied(to, &tree)?;
+    // A merge driver (`merge=ours`, say) can settle a path both sides changed
+    // by keeping the target's version: the source's change would vanish with
+    // no conflict. So a path the source changed that comes out as the target
+    // has it, and not as the source has it, is refused like a conflict.
+    // ponytail: also refuses a target version that already holds the
+    // source's change, or an edit to a file the target renamed, which a merge
+    // would carry; refine if such moves turn up.
+    let set = |paths: Vec<String>| paths.into_iter().collect::<HashSet<_>>();
+    let not_source = set(tree_diff(&from.dir, &from.tree, &tree, "")?);
+    let not_target = set(tree_diff(&from.dir, &to.tree, &tree, "")?);
+    let mut blocked: Vec<String> = tree_diff(&from.dir, &from.head, &from.tree, "")?
+        .into_iter()
+        .filter(|path| not_source.contains(path) && !not_target.contains(path))
+        .collect();
+    blocked.extend(occupied(to, &tree)?);
     blocked.extend(occupied(from, &from.head)?);
     Ok(if blocked.is_empty() { Ok(tree) } else { Err(blocked) })
 }
@@ -2946,5 +2980,51 @@ mod tests {
         assert_eq!(fs::read_to_string(wt.join("notes.txt")).unwrap(), "worktree only\n");
         assert_eq!(fs::read_to_string(wt.join("cache")).unwrap(), "precious\n");
         assert_eq!(fs::read_to_string(root.join("notes.txt")).unwrap(), "from local\n");
+    }
+
+    #[test]
+    fn handoff_refuses_a_merge_driver_that_drops_the_moved_change() {
+        let (root, wt) = worktree_fixture();
+        let commit = |message: &str| {
+            run_git(&root, &["add", "-A"]);
+            run_git(&root, &["commit", "--quiet", "-m", message]);
+        };
+        fs::write(root.join(".gitattributes"), "lock.json merge=ours\n").unwrap();
+        fs::write(root.join("lock.json"), "1\n2\n3\n").unwrap();
+        commit("lock");
+        run_git(&wt, &["reset", "--quiet", "--hard", &oid(git_command(&root, &["rev-parse", "HEAD"]).unwrap())]);
+        fs::write(root.join("lock.json"), "1 local\n2\n3\n").unwrap();
+        commit("local lock");
+        fs::write(wt.join("lock.json"), "1\n2\n3 worktree\n").unwrap();
+        // Without a driver both edits merge (P16b).
+        assert!(handoff_preview(&wt, Some(&root)).unwrap().conflicts.is_empty());
+        // `merge=ours` keeps Local's version: the moved edit would vanish (P16c).
+        run_git(&root, &["config", "merge.ours.driver", "true"]);
+        assert_eq!(handoff_preview(&wt, Some(&root)).unwrap().conflicts, vec!["lock.json"]);
+        let error = handoff_move(&wt, &root).unwrap_err();
+        assert!(error.contains("lock.json"), "{error}");
+        assert_eq!(fs::read_to_string(wt.join("lock.json")).unwrap(), "1\n2\n3 worktree\n");
+        assert_eq!(fs::read_to_string(root.join("lock.json")).unwrap(), "1 local\n2\n3\n");
+    }
+
+    #[test]
+    fn handoff_refuses_a_side_in_the_middle_of_a_merge() {
+        let (root, wt) = worktree_fixture();
+        run_git(&root, &["checkout", "--quiet", "-b", "feature"]);
+        fs::write(root.join("feature.txt"), "feature\n").unwrap();
+        run_git(&root, &["add", "--", "feature.txt"]);
+        run_git(&root, &["commit", "--quiet", "-m", "feature"]);
+        run_git(&root, &["checkout", "--quiet", "-"]);
+        // P8: moved out, the merge's changes would be gone from the merge
+        // commit that `git commit` still records.
+        run_git(&root, &["merge", "--quiet", "--no-ff", "--no-commit", "feature"]);
+        fs::write(wt.join("own.txt"), "worktree work\n").unwrap();
+        for (source, target) in [(&root, &wt), (&wt, &root)] {
+            let error = handoff_move(source, target).unwrap_err();
+            assert!(error.contains("merge") && error.contains("abort"), "{error}");
+        }
+        assert!(root.join("feature.txt").is_file() && !wt.join("feature.txt").exists());
+        assert!(wt.join("own.txt").is_file() && !root.join("own.txt").exists());
+        assert!(git_command(&root, &["for-each-ref", "refs/muse"]).unwrap().is_empty());
     }
 }
