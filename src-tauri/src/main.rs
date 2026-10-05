@@ -8364,8 +8364,8 @@ mod tests {
             .expect("mock Tauri app should build");
         let state = app.state::<AppState>();
         for (root, fixture, version) in [
-            ("a", include_str!("../tests/fixtures/initialize-1.3.0-R3401.1.json"), "1.3.0-R3401.1"),
-            ("b", include_str!("../tests/fixtures/initialize-1.4.2-R4684.1.json"), "1.4.2-R4684.1"),
+            ("a", include_str!("../tests/fixtures/initialize-1.3.0-R3401.1.json"), "1.3.0"),
+            ("b", include_str!("../tests/fixtures/initialize-1.4.2-R4684.1.json"), "1.4.2"),
         ] {
             let result: Value = serde_json::from_str(fixture).unwrap();
             let engine = validate_initialize_result(&result).unwrap();
@@ -8384,7 +8384,7 @@ mod tests {
             .iter()
             .map(|engine| engine["serverVersion"].as_str().unwrap())
             .collect();
-        assert_eq!(versions, vec!["1.3.0-R3401.1", "1.4.2-R4684.1"]);
+        assert_eq!(versions, vec!["1.3.0", "1.4.2"]);
         assert!(snapshot["hostEngines"][1]["schemaFingerprint"].as_str().unwrap().starts_with("sha256:"));
     }
 
