@@ -20,7 +20,8 @@
  * - M0-05: when a host died with the app open, its approval and question
  *   cards stayed answerable, and every answer could only fail.
  * - M2-05: every window.confirm question was skipped in the app: the dialog
- *   plugin's call was not allowed, and its Promise read as a yes.
+ *   plugin's replacement calls a command the plugin no longer has, and its
+ *   Promise read as a yes.
  *
  * Both are layout/lifecycle facts that the pure-logic tests cannot see.
  */
@@ -99,23 +100,36 @@ describe("visible failures", () => {
     }
   });
 
-  it("awaits every confirmation, which the dialog plugin answers asynchronously", () => {
-    // M2-05: in the app, window.confirm is the dialog plugin's invoke and
-    // returns a Promise. Read synchronously it is always truthy, and without
-    // dialog:allow-confirm it was refused: the move ran with no question.
-    const capabilities = JSON.parse(read("../src-tauri/capabilities/default.json"));
-    assert.ok(capabilities.permissions.includes("dialog:allow-confirm"));
+  it("asks every confirmation through the plugin's OK/Cancel box and waits for it", async () => {
+    // M2-05: in the app, window.confirm is the dialog plugin's replacement,
+    // which calls a `confirm` command plugin 2.7 no longer has: it always
+    // failed, and read without await its Promise counted as a yes. The move,
+    // the archive delete and both host restarts ran with no question.
     const sources = (dir: string): string[] =>
       readdirSync(new URL(dir, import.meta.url), { withFileTypes: true }).flatMap((entry) =>
         entry.isDirectory() ? sources(`${dir}${entry.name}/`) : /\.tsx?$/.test(entry.name) ? [`${dir}${entry.name}`] : []);
-    let calls = 0;
-    for (const file of sources("../src/")) {
+    let asked = 0;
+    for (const file of sources("../src/").filter((f) => !f.endsWith("/lib/env.ts"))) {
       const text = read(file);
-      const all = text.match(/window\.confirm\(/g)?.length ?? 0;
-      assert.equal(text.match(/await window\.confirm\(/g)?.length ?? 0, all, `${file} awaits window.confirm`);
-      calls += all;
+      assert.doesNotMatch(text, /window\.confirm\(/, `${file} calls window.confirm`);
+      const calls = text.match(/confirmAction\(/g)?.length ?? 0;
+      assert.equal(text.match(/await confirmAction\(/g)?.length ?? 0, calls, `${file} awaits confirmAction`);
+      asked += calls;
     }
-    assert.ok(calls >= 4, "the move, archive delete and both host restarts confirm");
+    assert.equal(asked, 4, "the move, the archive delete and both host restarts ask");
+
+    const { confirmAction } = await import("../src/lib/env.ts");
+    const calls: unknown[] = [];
+    const answers = ["Ok", "Cancel"];
+    const host = globalThis as { window?: unknown };
+    host.window = { __TAURI_INTERNALS__: { invoke: async (cmd: string, args: unknown) => (calls.push([cmd, args]), answers.shift()) } };
+    try {
+      assert.equal(await confirmAction("Move?"), true);
+      assert.equal(await confirmAction("Move?"), false);
+    } finally {
+      delete host.window;
+    }
+    assert.deepEqual(calls[0], ["plugin:dialog|message", { message: "Move?", title: "Muse-Desktop", kind: "warning", buttons: "OkCancel" }]);
   });
 
   it("drops an exited host's approval and question cards and says so", () => {

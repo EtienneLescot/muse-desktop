@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WorkspacePicker } from "./WorkspacePicker";
 import { describeAuth, canOfferSignIn, type AuthStatusPayload } from "../lib/museAuth";
-import { isTauriRuntime } from "../lib/env";
+import { confirmAction, isTauriRuntime } from "../lib/env";
 import {
   startupCheckStatusLabel,
   startupProbeNeedsAttention,
@@ -219,7 +219,7 @@ export function SettingsPanel({
 
   async function restartWorkspaceHost(): Promise<void> {
     if (onRestartHost === undefined || restartingHost) return;
-    if (!(await window.confirm(
+    if (!(await confirmAction(
       "Restart the workspace host now? Active conversations will disconnect and keep their local transcript; reconnect them after the new host starts.",
     ))) return;
     setRestartingHost(true);
