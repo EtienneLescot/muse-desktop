@@ -271,11 +271,20 @@ impl TerminalRegistry {
 
     pub fn read(&self, terminal_id: &str) -> Result<TerminalRead, String> {
         let terminal = self.get(terminal_id)?;
-        terminal
+        // ConPTY keeps the output pipe open after the shell exits (until the
+        // pseudoconsole closes), so EOF alone never marks a Windows shell done.
+        let exited = terminal
+            .child
+            .lock()
+            .map(|mut child| matches!(child.try_wait(), Ok(Some(_))))
+            .unwrap_or(false);
+        let mut read = terminal
             .output
             .lock()
-            .map_err(|e| format!("terminal output lock: {e}"))
-            .map(|mut output| output.drain(terminal_id))
+            .map_err(|e| format!("terminal output lock: {e}"))?
+            .drain(terminal_id);
+        read.done |= exited;
+        Ok(read)
     }
 
     pub fn close(&self, terminal_id: &str) -> Result<(), String> {
@@ -402,5 +411,26 @@ mod tests {
         registry.close_all();
         let _ = std::fs::remove_dir_all(&root);
         assert!(output.contains(&prompt), "{output}");
+    }
+
+    /// Measured 05/10/2026: after `exit`, the panel kept a dead terminal and never
+    /// showed "[process exited]", because ConPTY keeps the output pipe open.
+    #[cfg(windows)]
+    #[test]
+    fn an_exited_shell_reads_as_done() {
+        let root = std::env::temp_dir().join(format!("muse-terminal-exit-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let registry = TerminalRegistry::default();
+        let info = registry.open("exit-test", &root, None, None).unwrap();
+        registry.write(&info.terminal_id, "exit\r").unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut done = false;
+        while std::time::Instant::now() < deadline && !done {
+            done = registry.read(&info.terminal_id).unwrap().done;
+            thread::sleep(std::time::Duration::from_millis(100));
+        }
+        registry.close_all();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(done, "the shell exited but its terminal never read as done");
     }
 }

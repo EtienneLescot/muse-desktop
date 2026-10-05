@@ -57,11 +57,22 @@ export function TerminalPanel({
   const inputRef = useRef<HTMLInputElement>(null);
   const outputRef = useRef<HTMLPreElement>(null);
 
-  useEffect(() => {
-    if (terminal || opening || attemptedSession.current === sessionId) return;
+  const open = () => {
     attemptedSession.current = sessionId;
     setOpening(true);
     void onOpen(sessionId).finally(() => setOpening(false));
+  };
+
+  useEffect(() => {
+    // Mounting on a live terminal is this panel's attempt too: without it, a
+    // Close after any tab change reopened a shell at once (measured 05/10/2026).
+    if (terminal) {
+      attemptedSession.current = sessionId;
+      return;
+    }
+    if (opening || attemptedSession.current === sessionId) return;
+    open();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onOpen, opening, sessionId, terminal]);
 
   useEffect(() => {
@@ -193,8 +204,11 @@ export function TerminalPanel({
     return (
       <section className="terminal-panel" aria-live="polite">
         <div className="terminal-empty">
-          <strong>{opening ? "Opening terminal…" : "Terminal unavailable"}</strong>
-          <span>{opening ? "Starting a shell in this workspace." : "Try opening the panel again."}</span>
+          <strong>{opening ? "Opening terminal…" : "No terminal running"}</strong>
+          <span>{opening ? "Starting a shell in this workspace." : "Open one to start a shell in this workspace."}</span>
+          {!opening && (
+            <button type="button" onClick={open}>Open terminal</button>
+          )}
         </div>
       </section>
     );

@@ -9,6 +9,10 @@
  * - M2-01: a failed start (a moved project folder) remounts the welcome screen;
  *   the draft survived in session storage but the chosen environment and the
  *   worktree switch fell back to the defaults, so a retry ran elsewhere.
+ * - M1-05: after any tab change, the terminal's Close reopened a shell at once;
+ *   otherwise it left "Terminal unavailable" with no way to open a new one.
+ * - M3-02: a failed remote call disconnected the session, but the "Connected
+ *   to …" block stayed on screen beside "Disconnected".
  *
  * Both are layout/lifecycle facts that the pure-logic tests cannot see.
  */
@@ -39,5 +43,18 @@ describe("visible failures", () => {
       assert.match(screen, new RegExp(`writeSessionStorageString\\(${key},`), `${key} written on change`);
       assert.match(screen, new RegExp(`removeSessionStorageKey\\(${key}\\)`), `${key} cleared after a successful start`);
     }
+  });
+
+  it("keeps a closed terminal closed and offers to open a new one", () => {
+    const panel = read("../src/components/TerminalPanel.tsx");
+    assert.match(panel, /if \(terminal\) \{\s*attemptedSession\.current = sessionId;\s*return;\s*\}/, "a mount on a live terminal counts as the attempt");
+    assert.match(panel, /<button type="button" onClick=\{open\}>Open terminal<\/button>/, "the empty state opens a new terminal");
+    assert.doesNotMatch(panel, /Terminal unavailable/);
+  });
+
+  it("shows the remote connection block only while that connector is connected", () => {
+    const panel = read("../src/components/ConnectorPanel.tsx");
+    assert.match(panel, /\{remoteProbe && remoteConnectedIds\.includes\(remoteId\) && \(/);
+    assert.match(panel, /connectorId: remoteId,/, "the call targets the same connector id");
   });
 });

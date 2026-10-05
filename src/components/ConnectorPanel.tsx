@@ -213,11 +213,12 @@ export function ConnectorPanel({
     void executeLocalCall(call.command, call.connectorId, call.toolName, call.argumentsText);
   }
 
+  const remoteId = `remote-${remoteName.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
+
   function requestRemoteCall(): void {
-    const id = `remote-${remoteName.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
     const call = {
       transport: "remote" as const,
-      connectorId: id,
+      connectorId: remoteId,
       toolName: remoteTool,
       argumentsText: remoteArgs,
     };
@@ -686,7 +687,9 @@ export function ConnectorPanel({
           {remoteBusy === "probe" ? "Connecting…" : "Connect and list tools"}
         </button>
       </form>
-      {remoteProbe && (
+      {/* Only while connected: a failed call disconnects the session, and the
+          old "Connected to …" block stayed beside "Disconnected" (05/10/2026). */}
+      {remoteProbe && remoteConnectedIds.includes(remoteId) && (
         <div className="local-mcp-result" aria-label="Remote MCP connection result">
           <p className="integration-notice" role="status">
             Connected to {remoteProbe.serverName} {remoteProbe.serverVersion} · {remoteProbe.tools.length} tool(s) · {remoteProbe.durationMs} ms

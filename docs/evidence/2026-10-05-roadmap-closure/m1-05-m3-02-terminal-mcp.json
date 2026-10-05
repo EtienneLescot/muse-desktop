@@ -1,0 +1,1827 @@
+{
+  "schema": "muse-desktop.m1-05-m3-02-terminal-mcp.v1",
+  "tickets": [
+    "M1-05",
+    "M3-02"
+  ],
+  "date": "2026-10-05",
+  "commit": "6a5b769",
+  "platform": "Windows 11 (26200), debug build with embedded frontend, WebView2 over CDP",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 0,
+  "harness": "scripts/cdp-m1-05-m3-02-terminal-mcp.mjs (phases terminal and mcp; inspect and verdict launch nothing or change nothing)",
+  "build": "pre-fix = 6a5b769 plus another proof's uncommitted approval changes (main.rs, ApprovalPanel.tsx, useMuseSessions.ts, approvalResolution.ts), outside these paths; fixed = pre-fix plus this commit's terminal.rs, TerminalPanel.tsx, ConnectorPanel.tsx and Desktop.css.",
+  "summary": {
+    "M1-05 long-running server across view changes": "pre-fix: pass; fixed: pass",
+    "M1-05 Unicode output and input": "pre-fix: pass; fixed: pass",
+    "M1-05 close leaves no orphan": "pre-fix: pass; fixed: pass",
+    "M1-05 close/restart": "pre-fix: fail; fixed: pass",
+    "M3-02 network refusal (unreachable endpoint)": "pre-fix: pass; fixed: pass",
+    "M3-02 not an MCP server / invalid TLS": "pre-fix: pass; fixed: pass",
+    "M3-02 real server and disconnection": "pre-fix: fail; fixed: pass",
+    "M3-02 expired token": "pre-fix: blocked; fixed: blocked"
+  },
+  "method": {
+    "terminal": "Real webview, real PTY (portable-pty 0.8.1, ConPTY, cmd.exe), no model turn. A test conversation in <proof>/project (git repo with four fixtures) was started once with its first message refused by the harness IPC guard, so no turn reached the engine. Commands go through the panel's own input (CDP Input.insertText, then Send). Output is read twice: the DOM the user sees and the raw terminal_read stream tapped on the page's fetch. Processes: Win32_Process (PID, parent, creation time) for the app's tree before open, with the server, after Close and after the app exit; a PID only counts as the same process with the same creation stamp. The server is requested from outside by the harness (node fetch to 127.0.0.1).",
+    "mcp": "Extensions > Remote MCP connector form, empty token field, no token entered anywhere. Every https request the page makes is tapped (method, JSON-RPC method, duration, status or error). The settle time runs from the click to the end of the busy state. The disconnection is simulated in the webview network stack (CDP Network.setBlockedURLs on mcp.deepwiki.com), then lifted before Reconnect. A harness guard refuses any request carrying a bearer to a host other than DeepWiki (none occurred)."
+  },
+  "defects": [
+    {
+      "ticket": "M1-05",
+      "surface": "Terminal panel Close",
+      "preFix": "Close depended on the panel's mount history. After any work-tab or page change, Close killed the shell and the panel opened a new one at once (a fresh cmd.exe and conhost.exe within 3 s): Close could not close. Without a remount it left 'Terminal unavailable. Try opening the panel again.' with no control; a restart then needed a tab change.",
+      "cause": "TerminalPanel's open effect recorded its attempt only when it opened a terminal itself, so a panel mounted on a live terminal reopened one as soon as that terminal was closed.",
+      "fix": "src/components/TerminalPanel.tsx: a mount on a live terminal counts as the attempt; the empty state says 'No terminal running' and offers an 'Open terminal' button (styled like the toolbar, src/Desktop.css).",
+      "test": "test/visibleFailures.test.ts (wiring)",
+      "fixedBuild": "Close leaves 'No terminal running' with 'Open terminal'; that button opens generation 2 in the test folder, new shell, command runs."
+    },
+    {
+      "ticket": "M1-05",
+      "surface": "Shell exit (`exit` typed in the terminal)",
+      "preFix": "cmd.exe exited but the panel never showed '[process exited]' and kept a live-looking terminal with an input that wrote into nothing.",
+      "cause": "ConPTY keeps the output pipe open until the pseudoconsole is closed, so the reader thread never sees EOF and `done` stays false on Windows.",
+      "fix": "src-tauri/src/terminal.rs: terminal_read also reports done once the child has exited (try_wait).",
+      "test": "src-tauri/src/terminal.rs an_exited_shell_reads_as_done (Windows; failed before the fix: not done after 10 s)",
+      "fixedBuild": "'[process exited]' 478 ms after `exit`; the ConPTY host stays until Close, then leaves."
+    },
+    {
+      "ticket": "M3-02",
+      "surface": "Remote connector after a disconnection",
+      "preFix": "A failed tools/call dropped the session (status row 'Disconnected', Reconnect offered) but the 'Connected to DeepWiki 2.14.3 · 3 tool(s)' block and its Call tool button stayed on screen beside it.",
+      "cause": "ConnectorPanel rendered the result block from its last probe result, never from the live connected set.",
+      "fix": "src/components/ConnectorPanel.tsx: the block renders only while that connector id is connected; the call uses the same id.",
+      "test": "test/visibleFailures.test.ts (wiring)",
+      "fixedBuild": "After the disconnection only 'Disconnected · server v2.14.3', Reconnect and the error remain; Reconnect brings the block back after a real exchange."
+    }
+  ],
+  "findingsNotFixed": [
+    {
+      "ticket": "M3-02",
+      "severity": "security",
+      "what": "A probe under an existing remote connector's name with an empty token field re-reads that connector's stored bearer from the native credential store and sends it to the URL typed in the form, which need not be the URL the token was stored for; a success then stores it again for the new URL.",
+      "where": "src/hooks/useMuseSessions.ts probeRemoteMcp: the secure_store_get branch tests existing?.kind === 'remote' but never compares the typed endpoint with existing.url.",
+      "proposedFix": "Re-read the stored bearer only when the endpoint equals existing.url (one condition), with a test.",
+      "whyNotFixed": "Not reproduced natively (it needs a stored token, and no credential may be used here); the file also carries another proof's uncommitted changes."
+    }
+  ],
+  "observations": [
+    "Rendering: ConPTY ends some lines with a cursor move (CSI row;1H) instead of CR LF, typically before a prompt, and the panel strips cursor sequences, so the prompt sticks to the previous output line ('é€😀G:\\…>'). Characters are intact; the panel is a log, not a screen emulator (stated in TerminalPanel.tsx). Not changed.",
+    "Code page: cmd.exe starts on OEM code page 850. echo and node print é€😀 correctly whatever the code page (Unicode console API); `type` of a UTF-8 file shows mojibake under 850 and the right text after `chcp 65001` (Windows behaviour, rendered as sent).",
+    "Long output: 57 KB (1,500 lines) and 240 KB (4,000 CJK lines, fixed build) of multibyte output arrived whole, with no U+FFFD or lone surrogate in the bridge's stream or the DOM. terminal.rs decodes each 8 KB PTY read with from_utf8_lossy, so a read ending mid-character would damage one character; ConPTY's frame writes never produced one here (latent, not reproduced, not changed).",
+    "After `exit` the ConPTY host (conhost.exe) stays until the terminal is closed by the user or at app exit; it belongs to the registry, it is not an orphan.",
+    "Opening the terminal before the conversation's host has listed it (right after a relaunch) failed once with 'conversation workspace is unavailable'; once the boot resume reported Connected it opened. The new 'Open terminal' button is now the retry path in the panel.",
+    "Remote failures behind the webview fetch: an unresolvable host (0.2 s), an unroutable address (192.0.2.1, 21.5 s, the OS connect timeout), invalid TLS (expired and self-signed, 0.4 s) and a non-MCP page without CORS (example.com/mcp, 0.2 s) all read 'remote MCP request failed: Failed to fetch'. Honest and bounded, but the page cannot tell which (the fetch API hides the cause).",
+    "A blackholed port (example.com:81) ends on the app's own bound: 'remote MCP request timed out' at 30.1 s. Nothing hangs.",
+    "CORS is a product limit: the transport runs in the webview (page origin http://tauri.localhost), so a healthy MCP server that does not answer the CORS preflight is unreachable from the app. example.com/mcp answers 405 to both OPTIONS and POST with no CORS header (curl, outside the app): the preflight fails before the app can read the 405. DeepWiki answers access-control-allow-origin: *. A Rust-side transport would lift the limit and give precise errors.",
+    "Readable non-MCP answers are named precisely: a CORS-enabled JSON echo (httpbin.org/anything) gives 'remote MCP response did not match request 1'; a CORS-enabled 401 (httpbin.org/status/401) gives 'remote MCP authentication was rejected or expired'.",
+    "Single-remote plan: the registry already held the 27/09 campaign's DeepWiki connector, and a second remote is refused before any transport. The scenarios ran under its name: a failure marks it 'error' without touching its URL; it was left installed with the same URL, tool count, Use-in-Muse flag and creation stamp (borrowedRestored). Under an existing name the private address is refused by the transport ('remote MCP requires a public HTTPS endpoint') before any request; a new name gets the guard's VPN message first.",
+    "Pre-fix run: restart.commandRuns=false came from a harness predicate (the prompt glued to 'restart-ok'), corrected before the fixed run; the reopened shell itself worked.",
+    "Test data: one conversation in <proof>/project (first message refused by the harness, no turn), left in place; the default folder pointed there for its start only and was restored. No connector created; the DeepWiki test connector was borrowed and left as found."
+  ],
+  "limits": [
+    "M3-02 expired token: blocked. It needs a bearer-protected MCP endpoint and a token from Étienne. Measured instead: the client-side 401 mapping (httpbin.org/status/401). The one-time automatic re-handshake on 401/403 runs only with a bearer and was not exercised.",
+    "M3-02 native credential storage (Windows Credential Manager) is still not exercised: it needs a real token.",
+    "M3-02 disconnection was simulated in the webview network stack; a server going down mid-session or expiring its MCP session cannot be produced with a public server.",
+    "M3-02 OAuth/provider refresh and the host-side remote catalogue (ROADMAP remaining) are untouched.",
+    "M1-05 full-screen programs (cursor-addressed UIs) are out of reach of a log-style panel; macOS and Linux are out of scope here."
+  ],
+  "runs": {
+    "pre-fix": {
+      "build": "pre-fix",
+      "at": "2026-10-05T15:42:51.465Z",
+      "phases": {
+        "terminal": {
+          "liveTurns": 0,
+          "conversation": {
+            "reused": true,
+            "connected": "already"
+          },
+          "open": {
+            "prompt": true,
+            "generation": 1,
+            "shell": "cmd.exe",
+            "size": "100x28",
+            "tree": [
+              {
+                "pid": 53352,
+                "ppid": 46792,
+                "name": "conhost.exe"
+              },
+              {
+                "pid": 13148,
+                "ppid": 46792,
+                "name": "cmd.exe"
+              }
+            ]
+          },
+          "unicode": {
+            "initialCodePage": 850,
+            "echo": {
+              "ok": true,
+              "occurrences": 2,
+              "replacementChars": 0,
+              "shown": "echo é€😀\r\né€😀<test project>>",
+              "raw": "echo é€😀\r\n\u001b[?25lé€😀\u001b[10;1H<test project>>\u001b[?25h"
+            },
+            "inputCodePoints": {
+              "ok": true,
+              "read": "e9,20ac,1f600",
+              "expected": "e9,20ac,1f600",
+              "shown": "é€😀\r\nCP:e9,20ac,1f600<test project>>"
+            },
+            "utf8File": {
+              "expected": "UTF8-FILE é€😀 中文 ✓",
+              "underInitialCodePage": "UTF8-FILE ├®Ôé¼­ƒÿÇ õ©¡µûç Ô£ô<test project>>",
+              "switchedTo65001": true,
+              "after65001": "UTF8-FILE é€😀 中文 ✓<test project>>",
+              "shownAfter65001": "type utf8.txt\r\nUTF8-FILE é€😀 中文 ✓<test project>>",
+              "rawAfter65001": "type utf8.txt\r\n\u001b[?25lUTF8-FILE é€😀 中文 ✓\u001b[24;1H<test project>>\u001b[?25h"
+            },
+            "longOutput": {
+              "done": true,
+              "lines": 1500,
+              "linesSeen": 1500,
+              "distinctLineNumbers": 1500,
+              "intactLines": 1500,
+              "domReplacementChars": 0,
+              "domLoneSurrogates": 0,
+              "rawUtf16Units": 33157,
+              "rawUtf8Bytes": 57157,
+              "rawReplacementChars": 0,
+              "rawLoneSurrogates": 0,
+              "terminalReadCalls": 3,
+              "damagedSamples": []
+            },
+            "shot": "not kept: same view as the fixed build"
+          },
+          "server": {
+            "listening": true,
+            "serverIsShellChild": true,
+            "visible1": {
+              "path": "/visible-1",
+              "status": 200,
+              "body": "ok 1 pid 51540",
+              "ms": 6
+            },
+            "lastTickBeforeHide": 3,
+            "panelUnmountedOnTabChange": true,
+            "terminalReadsWhileHidden": 0,
+            "hiddenTabRequests": [
+              {
+                "path": "/hidden-tab-1",
+                "status": 200,
+                "body": "ok 2 pid 51540",
+                "ms": 2
+              },
+              {
+                "path": "/hidden-tab-2",
+                "status": 200,
+                "body": "ok 3 pid 51540",
+                "ms": 1
+              },
+              {
+                "path": "/hidden-tab-3",
+                "status": 200,
+                "body": "ok 4 pid 51540",
+                "ms": 2
+              }
+            ],
+            "panelUnmountedOnPageChange": true,
+            "hiddenPageRequests": [
+              {
+                "path": "/hidden-page-1",
+                "status": 200,
+                "body": "ok 5 pid 51540",
+                "ms": 2
+              },
+              {
+                "path": "/hidden-page-2",
+                "status": 200,
+                "body": "ok 6 pid 51540",
+                "ms": 2
+              }
+            ],
+            "ticksAdvanceWhileShown": 3,
+            "ticksSeen": 18,
+            "tickRange": [
+              1,
+              18
+            ],
+            "missingTicks": [],
+            "duplicatedTicks": 0,
+            "hitsShown": [
+              "1 /visible-1",
+              "2 /hidden-tab-1",
+              "3 /hidden-tab-2",
+              "4 /hidden-tab-3",
+              "5 /hidden-page-1",
+              "6 /hidden-page-2"
+            ],
+            "sameTerminalIdThroughout": true,
+            "opensDuringViewChanges": 0,
+            "serverAliveAfterViewChanges": true,
+            "shot": "not kept: same view as the fixed build"
+          },
+          "close": {
+            "clicked": true,
+            "terminalCloseOk": true,
+            "treeBefore": [
+              {
+                "pid": 53352,
+                "ppid": 46792,
+                "name": "conhost.exe"
+              },
+              {
+                "pid": 13148,
+                "ppid": 46792,
+                "name": "cmd.exe"
+              },
+              {
+                "pid": 51540,
+                "ppid": 13148,
+                "name": "node.exe"
+              }
+            ],
+            "gone": {
+              "shell": true,
+              "host": true,
+              "server": true
+            },
+            "survivors": [],
+            "orphanedChildren": [],
+            "reopenedByItself": 1,
+            "newAfterClose": [
+              {
+                "pid": 39268,
+                "ppid": 46792,
+                "name": "conhost.exe"
+              },
+              {
+                "pid": 54640,
+                "ppid": 46792,
+                "name": "cmd.exe"
+              }
+            ],
+            "panelAfterClose": {
+              "terminalShown": true,
+              "text": "Terminal C:\\WINDOWS\\system32\\cmd.exe · <test project> − 50×27 + Close Add output to prompt Microsoft Windows [version 10.0.26200.9550] (c) Microsoft Corporation. Tous droits réser",
+              "buttons": [
+                "−",
+                "+",
+                "Close",
+                "Add output to prompt",
+                "Send",
+                "Run in Muse"
+              ]
+            },
+            "portAfterClose": {
+              "path": "/after-close",
+              "error": "ECONNREFUSED",
+              "ms": 2
+            },
+            "shot": "shots/m1-05-c-after-close-pre-fix.png"
+          },
+          "restart": {
+            "via": "reopened by itself right after Close",
+            "opened": true,
+            "newTerminalId": true,
+            "generation": 2,
+            "prompt": true,
+            "newShell": true,
+            "commandRuns": false
+          },
+          "shellExit": {
+            "processExitedShownMs": null,
+            "shellGone": true,
+            "hostAliveUntilClose": true,
+            "panel": "27 + Close Add output to prompt Microsoft Windows [version 10.0.26200.9550] (c) Microsoft Corporation. Tous droits réser",
+            "hostGoneAfterClose": true,
+            "reopenedByItself": 0,
+            "panelAfterClose": {
+              "terminalShown": false,
+              "text": "Terminal unavailable Try opening the panel again.",
+              "buttons": []
+            }
+          },
+          "appExit": {
+            "via": "work-tab remount (no control in the panel)",
+            "serverListening": true,
+            "before": {
+              "shell": {
+                "pid": 30896,
+                "ppid": 46792,
+                "name": "cmd.exe"
+              },
+              "host": {
+                "pid": 36632,
+                "ppid": 46792,
+                "name": "conhost.exe"
+              },
+              "server": {
+                "pid": 42180,
+                "ppid": 30896,
+                "name": "node.exe"
+              }
+            },
+            "portBefore": {
+              "path": "/before-exit",
+              "status": 200,
+              "body": "ok 1 pid 42180",
+              "ms": 5
+            },
+            "measured": true,
+            "gone": {
+              "shell": true,
+              "host": true,
+              "server": true
+            },
+            "survivors": [],
+            "orphanedChildren": [],
+            "portAfterExit": {
+              "path": "/after-exit",
+              "error": "ECONNREFUSED",
+              "ms": 2
+            }
+          },
+          "consoleErrors": [],
+          "stop": {
+            "graceful": true,
+            "exited": true,
+            "enginesLeftAndKilled": 0
+          }
+        },
+        "mcp": {
+          "liveTurns": 0,
+          "tokenEntered": false,
+          "scenarios": {
+            "privateAddress": {
+              "label": "privateAddress",
+              "url": "https://127.0.0.1:9/mcp",
+              "settledMs": 220,
+              "bounded": true,
+              "notice": [
+                "remote MCP requires a public HTTPS endpoint"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP requires a public HTTPS endpoint"
+                }
+              ],
+              "requests": []
+            },
+            "unresolvableHost": {
+              "label": "unresolvableHost",
+              "url": "https://muse-proof-unreachable.invalid/mcp",
+              "settledMs": 219,
+              "bounded": true,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request failed: Failed to fetch"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 10,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "blackholeTestNet": {
+              "label": "blackholeTestNet",
+              "url": "https://192.0.2.1/mcp",
+              "settledMs": 21503,
+              "bounded": true,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request failed: Failed to fetch"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 21344,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "blackholePort": {
+              "label": "blackholePort",
+              "url": "https://example.com:81/mcp",
+              "settledMs": 30080,
+              "bounded": true,
+              "notice": [
+                "remote MCP request timed out"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request timed out"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 30012,
+                  "status": null,
+                  "error": "AbortError: signal is aborted without reason"
+                }
+              ]
+            },
+            "notMcpNoCors": {
+              "label": "notMcpNoCors",
+              "url": "https://example.com/mcp",
+              "settledMs": 218,
+              "bounded": true,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request failed: Failed to fetch"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 67,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "notMcpJsonEcho": {
+              "label": "notMcpJsonEcho",
+              "url": "https://httpbin.org/anything",
+              "settledMs": 828,
+              "bounded": true,
+              "notice": [
+                "remote MCP response did not match request 1"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP response did not match request 1"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 634,
+                  "status": 200,
+                  "error": null
+                }
+              ]
+            },
+            "http401": {
+              "label": "http401",
+              "url": "https://httpbin.org/status/401",
+              "settledMs": 420,
+              "bounded": true,
+              "notice": [
+                "remote MCP authentication was rejected or expired"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP authentication was rejected or expired"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 355,
+                  "status": 401,
+                  "error": null
+                }
+              ]
+            },
+            "tlsExpired": {
+              "label": "tlsExpired",
+              "url": "https://expired.badssl.com/mcp",
+              "settledMs": 422,
+              "bounded": true,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request failed: Failed to fetch"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 298,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "tlsSelfSigned": {
+              "label": "tlsSelfSigned",
+              "url": "https://self-signed.badssl.com/mcp",
+              "settledMs": 422,
+              "bounded": true,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request failed: Failed to fetch"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 238,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "realServer": {
+              "label": "realServer",
+              "url": "https://mcp.deepwiki.com/mcp",
+              "settledMs": 1232,
+              "bounded": true,
+              "notice": [],
+              "connectedBlock": "Connected to DeepWiki 2.14.3 · 3 tool(s) · 1150 ms",
+              "statusRows": [
+                {
+                  "text": "Connected · server v2.14.3 Disconnect Forget token",
+                  "buttons": [
+                    "Disconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "installed",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": null
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 765,
+                  "status": 200,
+                  "error": null
+                },
+                {
+                  "rpc": "notifications/initialized",
+                  "ms": 187,
+                  "status": 202,
+                  "error": null
+                },
+                {
+                  "rpc": "tools/list",
+                  "ms": 192,
+                  "status": 200,
+                  "error": null
+                }
+              ]
+            },
+            "realCall": {
+              "tool": "read_wiki_structure",
+              "clicked": true,
+              "label": "Call tool",
+              "approvedOnce": false,
+              "settledMs": 307,
+              "notice": [],
+              "connectedBlock": "Connected to DeepWiki 2.14.3 · 3 tool(s) · 1150 ms",
+              "statusRows": [
+                {
+                  "text": "Connected · server v2.14.3 Disconnect Forget token",
+                  "buttons": [
+                    "Disconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": true,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "installed",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": null
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "tools/call",
+                  "ms": 260,
+                  "status": 200,
+                  "error": null
+                }
+              ]
+            },
+            "disconnection": {
+              "simulatedWith": "Network.setBlockedURLs",
+              "clicked": true,
+              "label": "Call tool",
+              "approvedOnce": false,
+              "settledMs": 313,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": "Connected to DeepWiki 2.14.3 · 3 tool(s) · 1150 ms",
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "Disconnected. Connect again to verify the remote endpoint."
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "tools/call",
+                  "ms": 1,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "reconnect": {
+              "clicked": true,
+              "settledMs": 798,
+              "notice": [],
+              "connectedBlock": "Connected to DeepWiki 2.14.3 · 3 tool(s) · 569 ms",
+              "statusRows": [
+                {
+                  "text": "Connected · server v2.14.3 Disconnect Forget token",
+                  "buttons": [
+                    "Disconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "installed",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": null
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 192,
+                  "status": 200,
+                  "error": null
+                },
+                {
+                  "rpc": "notifications/initialized",
+                  "ms": 191,
+                  "status": 202,
+                  "error": null
+                },
+                {
+                  "rpc": "tools/list",
+                  "ms": 186,
+                  "status": 200,
+                  "error": null
+                }
+              ]
+            }
+          },
+          "remotesBefore": [
+            {
+              "id": "remote-deepwiki",
+              "status": "installed",
+              "url": "https://mcp.deepwiki.com/mcp",
+              "tools": 3,
+              "useInMuse": false
+            }
+          ],
+          "connectorUsed": "the existing DeepWiki test connector (27/09 campaign), under its own name",
+          "posture": null,
+          "shotFailure": "not kept: same view as the fixed build",
+          "shotDisconnected": "shots/m3-02-b-disconnected-pre-fix.png",
+          "consoleErrors": [],
+          "borrowedAfter": [
+            {
+              "id": "remote-deepwiki",
+              "status": "installed",
+              "url": "https://mcp.deepwiki.com/mcp",
+              "tools": 3,
+              "useInMuse": false
+            }
+          ],
+          "borrowedRestored": true,
+          "stop": {
+            "graceful": true,
+            "exited": true,
+            "enginesLeftAndKilled": 0
+          }
+        }
+      },
+      "verdicts": {
+        "M1-05 long-running server across view changes": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M1-05 Unicode output and input": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M1-05 close leaves no orphan": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M1-05 close/restart": {
+          "verdict": "fail",
+          "failed": [
+            "closeStaysClosed",
+            "restartFromThePanel",
+            "freshTerminal",
+            "shellExitShown"
+          ]
+        },
+        "M3-02 network refusal (unreachable endpoint)": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M3-02 not an MCP server / invalid TLS": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M3-02 real server and disconnection": {
+          "verdict": "fail",
+          "failed": [
+            "noStaleConnectedClaim"
+          ]
+        },
+        "M3-02 expired token": {
+          "verdict": "blocked",
+          "reason": "needs a bearer-protected MCP endpoint and a token from the user; only the client-side 401 mapping is measured (http401)"
+        }
+      }
+    },
+    "fixed": {
+      "build": "fixed",
+      "at": "2026-10-05T15:58:29.011Z",
+      "phases": {
+        "terminal": {
+          "liveTurns": 0,
+          "conversation": {
+            "reused": true,
+            "connected": "already"
+          },
+          "open": {
+            "prompt": true,
+            "generation": 1,
+            "shell": "cmd.exe",
+            "size": "100x28",
+            "tree": [
+              {
+                "pid": 45492,
+                "ppid": 19332,
+                "name": "conhost.exe"
+              },
+              {
+                "pid": 19472,
+                "ppid": 19332,
+                "name": "cmd.exe"
+              }
+            ]
+          },
+          "unicode": {
+            "initialCodePage": 850,
+            "echo": {
+              "ok": true,
+              "occurrences": 2,
+              "replacementChars": 0,
+              "shown": "echo é€😀\r\né€😀<test project>>",
+              "raw": "echo é€😀\r\n\u001b[?25lé€😀\u001b[10;1H<test project>>\u001b[?25h"
+            },
+            "inputCodePoints": {
+              "ok": true,
+              "read": "e9,20ac,1f600",
+              "expected": "e9,20ac,1f600",
+              "shown": "é€😀\r\nCP:e9,20ac,1f600<test project>>"
+            },
+            "utf8File": {
+              "expected": "UTF8-FILE é€😀 中文 ✓",
+              "underInitialCodePage": "UTF8-FILE ├®Ôé¼­ƒÿÇ õ©¡µûç Ô£ô<test project>>",
+              "switchedTo65001": true,
+              "after65001": "UTF8-FILE é€😀 中文 ✓<test project>>",
+              "shownAfter65001": "type utf8.txt\r\nUTF8-FILE é€😀 中文 ✓<test project>>",
+              "rawAfter65001": "type utf8.txt\r\n\u001b[?25lUTF8-FILE é€😀 中文 ✓\u001b[24;1H<test project>>\u001b[?25h"
+            },
+            "longOutput": {
+              "done": true,
+              "lines": 1500,
+              "linesSeen": 1500,
+              "distinctLineNumbers": 1500,
+              "intactLines": 1500,
+              "domReplacementChars": 0,
+              "domLoneSurrogates": 0,
+              "rawUtf16Units": 33157,
+              "rawUtf8Bytes": 57157,
+              "rawReplacementChars": 0,
+              "rawLoneSurrogates": 0,
+              "terminalReadCalls": 3,
+              "damagedSamples": []
+            },
+            "wideOutput": {
+              "done": true,
+              "lines": 4000,
+              "linesSeen": 4000,
+              "intactLines": 4000,
+              "domReplacementChars": 0,
+              "domLoneSurrogates": 0,
+              "rawUtf8Bytes": 240178,
+              "rawReplacementChars": 0,
+              "rawLoneSurrogates": 0,
+              "damagedSamples": []
+            },
+            "shot": "shots/m1-05-a-unicode-fixed.png"
+          },
+          "server": {
+            "listening": true,
+            "serverIsShellChild": true,
+            "visible1": {
+              "path": "/visible-1",
+              "status": 200,
+              "body": "ok 1 pid 48472",
+              "ms": 6
+            },
+            "lastTickBeforeHide": 3,
+            "panelUnmountedOnTabChange": true,
+            "terminalReadsWhileHidden": 0,
+            "hiddenTabRequests": [
+              {
+                "path": "/hidden-tab-1",
+                "status": 200,
+                "body": "ok 2 pid 48472",
+                "ms": 3
+              },
+              {
+                "path": "/hidden-tab-2",
+                "status": 200,
+                "body": "ok 3 pid 48472",
+                "ms": 2
+              },
+              {
+                "path": "/hidden-tab-3",
+                "status": 200,
+                "body": "ok 4 pid 48472",
+                "ms": 1
+              }
+            ],
+            "panelUnmountedOnPageChange": true,
+            "hiddenPageRequests": [
+              {
+                "path": "/hidden-page-1",
+                "status": 200,
+                "body": "ok 5 pid 48472",
+                "ms": 2
+              },
+              {
+                "path": "/hidden-page-2",
+                "status": 200,
+                "body": "ok 6 pid 48472",
+                "ms": 1
+              }
+            ],
+            "ticksAdvanceWhileShown": 3,
+            "ticksSeen": 18,
+            "tickRange": [
+              1,
+              18
+            ],
+            "missingTicks": [],
+            "duplicatedTicks": 0,
+            "hitsShown": [
+              "1 /visible-1",
+              "2 /hidden-tab-1",
+              "3 /hidden-tab-2",
+              "4 /hidden-tab-3",
+              "5 /hidden-page-1",
+              "6 /hidden-page-2"
+            ],
+            "sameTerminalIdThroughout": true,
+            "opensDuringViewChanges": 0,
+            "serverAliveAfterViewChanges": true,
+            "shot": "shots/m1-05-b-server-after-view-changes-fixed.png"
+          },
+          "close": {
+            "clicked": true,
+            "terminalCloseOk": true,
+            "treeBefore": [
+              {
+                "pid": 45492,
+                "ppid": 19332,
+                "name": "conhost.exe"
+              },
+              {
+                "pid": 19472,
+                "ppid": 19332,
+                "name": "cmd.exe"
+              },
+              {
+                "pid": 48472,
+                "ppid": 19472,
+                "name": "node.exe"
+              }
+            ],
+            "gone": {
+              "shell": true,
+              "host": true,
+              "server": true
+            },
+            "survivors": [],
+            "orphanedChildren": [],
+            "reopenedByItself": 0,
+            "newAfterClose": [],
+            "panelAfterClose": {
+              "terminalShown": false,
+              "text": "No terminal running Open one to start a shell in this workspace. Open terminal",
+              "buttons": [
+                "Open terminal"
+              ]
+            },
+            "portAfterClose": {
+              "path": "/after-close",
+              "error": "ECONNREFUSED",
+              "ms": 2
+            },
+            "shot": "shots/m1-05-c-after-close-fixed.png"
+          },
+          "restart": {
+            "via": "panel button \"Open terminal\"",
+            "opened": true,
+            "newTerminalId": true,
+            "generation": 2,
+            "prompt": true,
+            "newShell": true,
+            "commandRuns": true
+          },
+          "shellExit": {
+            "processExitedShownMs": 478,
+            "shellGone": true,
+            "hostAliveUntilClose": true,
+            "panel": "27 + Close Add output to prompt Microsoft Windows [version 10.0.26200.9550] (c) Microsoft Corporation. Tous droits réser",
+            "hostGoneAfterClose": true,
+            "reopenedByItself": 0,
+            "panelAfterClose": {
+              "terminalShown": false,
+              "text": "No terminal running Open one to start a shell in this workspace. Open terminal",
+              "buttons": [
+                "Open terminal"
+              ]
+            }
+          },
+          "appExit": {
+            "via": "panel button \"Open terminal\"",
+            "serverListening": true,
+            "before": {
+              "shell": {
+                "pid": 34936,
+                "ppid": 19332,
+                "name": "cmd.exe"
+              },
+              "host": {
+                "pid": 52088,
+                "ppid": 19332,
+                "name": "conhost.exe"
+              },
+              "server": {
+                "pid": 50596,
+                "ppid": 34936,
+                "name": "node.exe"
+              }
+            },
+            "portBefore": {
+              "path": "/before-exit",
+              "status": 200,
+              "body": "ok 1 pid 50596",
+              "ms": 6
+            },
+            "measured": true,
+            "gone": {
+              "shell": true,
+              "host": true,
+              "server": true
+            },
+            "survivors": [],
+            "orphanedChildren": [],
+            "portAfterExit": {
+              "path": "/after-exit",
+              "error": "ECONNREFUSED",
+              "ms": 2
+            }
+          },
+          "consoleErrors": [],
+          "stop": {
+            "graceful": true,
+            "exited": true,
+            "enginesLeftAndKilled": 0
+          }
+        },
+        "mcp": {
+          "liveTurns": 0,
+          "tokenEntered": false,
+          "scenarios": {
+            "privateAddress": {
+              "label": "privateAddress",
+              "url": "https://127.0.0.1:9/mcp",
+              "settledMs": 218,
+              "bounded": true,
+              "notice": [
+                "remote MCP requires a public HTTPS endpoint"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP requires a public HTTPS endpoint"
+                }
+              ],
+              "requests": []
+            },
+            "unresolvableHost": {
+              "label": "unresolvableHost",
+              "url": "https://muse-proof-unreachable.invalid/mcp",
+              "settledMs": 220,
+              "bounded": true,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request failed: Failed to fetch"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 10,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "blackholeTestNet": {
+              "label": "blackholeTestNet",
+              "url": "https://192.0.2.1/mcp",
+              "settledMs": 21521,
+              "bounded": true,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request failed: Failed to fetch"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 21328,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "blackholePort": {
+              "label": "blackholePort",
+              "url": "https://example.com:81/mcp",
+              "settledMs": 30104,
+              "bounded": true,
+              "notice": [
+                "remote MCP request timed out"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request timed out"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 30005,
+                  "status": null,
+                  "error": "AbortError: signal is aborted without reason"
+                }
+              ]
+            },
+            "notMcpNoCors": {
+              "label": "notMcpNoCors",
+              "url": "https://example.com/mcp",
+              "settledMs": 217,
+              "bounded": true,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request failed: Failed to fetch"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 39,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "notMcpJsonEcho": {
+              "label": "notMcpJsonEcho",
+              "url": "https://httpbin.org/anything",
+              "settledMs": 1627,
+              "bounded": true,
+              "notice": [
+                "remote MCP response did not match request 1"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP response did not match request 1"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 1569,
+                  "status": 200,
+                  "error": null
+                }
+              ]
+            },
+            "http401": {
+              "label": "http401",
+              "url": "https://httpbin.org/status/401",
+              "settledMs": 423,
+              "bounded": true,
+              "notice": [
+                "remote MCP authentication was rejected or expired"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP authentication was rejected or expired"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 325,
+                  "status": 401,
+                  "error": null
+                }
+              ]
+            },
+            "tlsExpired": {
+              "label": "tlsExpired",
+              "url": "https://expired.badssl.com/mcp",
+              "settledMs": 421,
+              "bounded": true,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request failed: Failed to fetch"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 240,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "tlsSelfSigned": {
+              "label": "tlsSelfSigned",
+              "url": "https://self-signed.badssl.com/mcp",
+              "settledMs": 423,
+              "bounded": true,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "remote MCP request failed: Failed to fetch"
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 239,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "realServer": {
+              "label": "realServer",
+              "url": "https://mcp.deepwiki.com/mcp",
+              "settledMs": 1842,
+              "bounded": true,
+              "notice": [],
+              "connectedBlock": "Connected to DeepWiki 2.14.3 · 3 tool(s) · 1668 ms",
+              "statusRows": [
+                {
+                  "text": "Connected · server v2.14.3 Disconnect Forget token",
+                  "buttons": [
+                    "Disconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "installed",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": null
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 1291,
+                  "status": 200,
+                  "error": null
+                },
+                {
+                  "rpc": "notifications/initialized",
+                  "ms": 188,
+                  "status": 202,
+                  "error": null
+                },
+                {
+                  "rpc": "tools/list",
+                  "ms": 181,
+                  "status": 200,
+                  "error": null
+                }
+              ]
+            },
+            "realCall": {
+              "tool": "read_wiki_structure",
+              "clicked": true,
+              "label": "Call tool",
+              "approvedOnce": false,
+              "settledMs": 315,
+              "notice": [],
+              "connectedBlock": "Connected to DeepWiki 2.14.3 · 3 tool(s) · 1668 ms",
+              "statusRows": [
+                {
+                  "text": "Connected · server v2.14.3 Disconnect Forget token",
+                  "buttons": [
+                    "Disconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": true,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "installed",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": null
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "tools/call",
+                  "ms": 303,
+                  "status": 200,
+                  "error": null
+                }
+              ]
+            },
+            "disconnection": {
+              "simulatedWith": "Network.setBlockedURLs",
+              "clicked": true,
+              "label": "Call tool",
+              "approvedOnce": false,
+              "settledMs": 313,
+              "notice": [
+                "remote MCP request failed: Failed to fetch"
+              ],
+              "connectedBlock": null,
+              "statusRows": [
+                {
+                  "text": "Disconnected · server v2.14.3 Reconnect Forget token",
+                  "buttons": [
+                    "Reconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "error",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": "Disconnected. Connect again to verify the remote endpoint."
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "tools/call",
+                  "ms": 1,
+                  "status": null,
+                  "error": "TypeError: Failed to fetch"
+                }
+              ]
+            },
+            "reconnect": {
+              "clicked": true,
+              "settledMs": 799,
+              "notice": [],
+              "connectedBlock": "Connected to DeepWiki 2.14.3 · 3 tool(s) · 550 ms",
+              "statusRows": [
+                {
+                  "text": "Connected · server v2.14.3 Disconnect Forget token",
+                  "buttons": [
+                    "Disconnect",
+                    "Forget token"
+                  ]
+                }
+              ],
+              "callOutput": false,
+              "registry": [
+                {
+                  "id": "remote-deepwiki",
+                  "name": "deepwiki",
+                  "status": "installed",
+                  "url": "https://mcp.deepwiki.com/mcp",
+                  "tools": 3,
+                  "useInMuse": false,
+                  "addedAt": 1790530963203,
+                  "guardMessage": null
+                }
+              ],
+              "requests": [
+                {
+                  "rpc": "initialize",
+                  "ms": 184,
+                  "status": 200,
+                  "error": null
+                },
+                {
+                  "rpc": "notifications/initialized",
+                  "ms": 183,
+                  "status": 202,
+                  "error": null
+                },
+                {
+                  "rpc": "tools/list",
+                  "ms": 182,
+                  "status": 200,
+                  "error": null
+                }
+              ]
+            }
+          },
+          "remotesBefore": [
+            {
+              "id": "remote-deepwiki",
+              "status": "installed",
+              "url": "https://mcp.deepwiki.com/mcp",
+              "tools": 3,
+              "useInMuse": false
+            }
+          ],
+          "connectorUsed": "the existing DeepWiki test connector (27/09 campaign), under its own name",
+          "posture": null,
+          "shotFailure": "shots/m3-02-a-failure-fixed.png",
+          "shotDisconnected": "shots/m3-02-b-disconnected-fixed.png",
+          "consoleErrors": [],
+          "borrowedAfter": [
+            {
+              "id": "remote-deepwiki",
+              "status": "installed",
+              "url": "https://mcp.deepwiki.com/mcp",
+              "tools": 3,
+              "useInMuse": false
+            }
+          ],
+          "borrowedRestored": true,
+          "stop": {
+            "graceful": true,
+            "exited": true,
+            "enginesLeftAndKilled": 0
+          }
+        }
+      },
+      "verdicts": {
+        "M1-05 long-running server across view changes": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M1-05 Unicode output and input": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M1-05 close leaves no orphan": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M1-05 close/restart": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M3-02 network refusal (unreachable endpoint)": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M3-02 not an MCP server / invalid TLS": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M3-02 real server and disconnection": {
+          "verdict": "pass",
+          "failed": []
+        },
+        "M3-02 expired token": {
+          "verdict": "blocked",
+          "reason": "needs a bearer-protected MCP endpoint and a token from the user; only the client-side 401 mapping is measured (http401)"
+        }
+      }
+    }
+  }
+}
