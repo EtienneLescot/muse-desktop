@@ -13,6 +13,12 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 const DETAIL_LIMIT: usize = 180;
+const WSL_MUSE_TEST: &str = "test -x \"$HOME/.local/bin/muse\"";
+/// Presence only: `test -s` never reads the file. An exported key counts too,
+/// since the bridge runs Muse through the same login shell.
+const WSL_AUTH_TEST: &str = "test -s \"$HOME/.config/muse/auth.json\" || [ -n \"$META_API_KEY\" ]";
+/// Each probe may boot a stopped distribution: keep the scan short.
+const WSL_DISTRIBUTION_SCAN_LIMIT: usize = 4;
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -200,7 +206,17 @@ fn drain_pipe<R: Read + Send + 'static>(mut reader: R) -> thread::JoinHandle<Vec
     })
 }
 
-fn finish_probe(mut child: Child) -> StartupCheck {
+fn finish_probe(child: Child) -> StartupCheck {
+    let (status, detail) = wait_probe(child);
+    match status {
+        Err(error) => unknown(error),
+        Ok(status) if status.success() => ready(clip_detail(&detail)),
+        Ok(_) => blocked(clip_detail(&detail)),
+    }
+}
+
+/// Wait (bounded) and return the exit status with the full decoded output.
+fn wait_probe(mut child: Child) -> (Result<ExitStatus, String>, String) {
     let started = Instant::now();
     let status: Result<ExitStatus, String> = loop {
         match child.try_wait() {
@@ -232,11 +248,7 @@ fn finish_probe(mut child: Child) -> StartupCheck {
             detail.push_str(&stderr);
         }
     }
-    match status {
-        Err(error) => unknown(error),
-        Ok(status) if status.success() => ready(clip_detail(&detail)),
-        Ok(_) => blocked(clip_detail(&detail)),
-    }
+    (status, detail)
 }
 
 fn probe_command(program: &str, args: &[&str]) -> StartupCheck {
@@ -259,18 +271,74 @@ fn probe_wsl() -> (StartupCheck, StartupCheck) {
             missing("WSL is available, but the Muse CLI was not checked"),
         );
     }
+    // `$WSL_DISTRO_NAME` names the default distribution without parsing the
+    // localized `wsl --status` text; it is the probe's first output line.
     let muse = probe_command(
         "wsl.exe",
-        &["--exec", "sh", "-lc", "test -x \"$HOME/.local/bin/muse\""],
+        &["--exec", "sh", "-lc", &format!("echo \"$WSL_DISTRO_NAME\"; {WSL_MUSE_TEST}")],
     );
-    let muse = if muse.status == "ready" {
-        ready("Muse CLI found in the default WSL distribution")
-    } else if muse.status == "blocked" {
-        missing("Install or make ~/.local/bin/muse executable in WSL")
-    } else {
-        muse
+    let muse = match muse.status.as_str() {
+        "ready" => signed_in_finding(&probe_command("wsl.exe", &["--exec", "sh", "-lc", WSL_AUTH_TEST])),
+        "blocked" => muse_elsewhere_finding(
+            &parse_wsl_distributions(&muse.detail).into_iter().next().unwrap_or_default(),
+        ),
+        _ => muse,
     };
     (wsl, muse)
+}
+
+fn signed_in_finding(auth: &StartupCheck) -> StartupCheck {
+    match auth.status.as_str() {
+        "ready" => ready("Muse CLI found and signed in in the default WSL distribution"),
+        "blocked" => missing("Muse CLI found in WSL but not signed in: run `muse login` inside WSL"),
+        _ => ready("Muse CLI found in the default WSL distribution (sign-in not verified)"),
+    }
+}
+
+/// Distribution names from `wsl.exe -l -q`, already decoded from UTF-16.
+/// Anything that is not a plain name (a localized "no distributions" line)
+/// is dropped.
+fn parse_wsl_distributions(listing: &str) -> Vec<String> {
+    listing
+        .lines()
+        .map(|line| line.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}' || c == '\0'))
+        .filter(|name| {
+            !name.is_empty()
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+/// The default distribution has no `~/.local/bin/muse`: look in the others
+/// so the finding names the one to make default.
+fn muse_elsewhere_finding(default: &str) -> StartupCheck {
+    let mut list = Command::new("wsl.exe");
+    list.args(["-l", "-q"]);
+    let listing = match spawn_probe(list).map(wait_probe) {
+        Ok((Ok(status), text)) if status.success() => text,
+        _ => String::new(),
+    };
+    let found = parse_wsl_distributions(&listing)
+        .into_iter()
+        // Docker Desktop's utility distributions never host Muse; skipping
+        // them keeps real distributions inside the scan limit.
+        .filter(|name| name != default && !name.starts_with("docker-desktop"))
+        .take(WSL_DISTRIBUTION_SCAN_LIMIT)
+        .find(|name| {
+            probe_command("wsl.exe", &["-d", name, "--exec", "sh", "-lc", WSL_MUSE_TEST]).status == "ready"
+        });
+    elsewhere_finding(default, found.as_deref())
+}
+
+fn elsewhere_finding(default: &str, found: Option<&str>) -> StartupCheck {
+    match found {
+        Some(name) => missing(format!(
+            "Muse found in {name}, default is {}: run `wsl --set-default {name}`",
+            if default.is_empty() { "another distribution" } else { default }
+        )),
+        None => missing("Install or make ~/.local/bin/muse executable in WSL"),
+    }
 }
 
 /// On macOS the sidecar *is* the native Muse CLI (no WSL layer). Running its
@@ -476,6 +544,35 @@ mod tests {
         let broken = probe_native_cli(&root.join("absent"));
         assert_eq!(broken.status, "blocked");
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn wsl_listing_keeps_only_distribution_names() {
+        let bytes = "Ubuntu\r\nDebian\r\ndocker-desktop\r\n\r\n"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            parse_wsl_distributions(&decode_probe_bytes(&bytes)),
+            vec!["Ubuntu", "Debian", "docker-desktop"]
+        );
+        assert!(parse_wsl_distributions("Windows Subsystem for Linux has no installed distributions.").is_empty());
+    }
+
+    #[test]
+    fn wsl_findings_name_the_next_step() {
+        let elsewhere = elsewhere_finding("Ubuntu", Some("Debian"));
+        assert_eq!(elsewhere.status, "missing");
+        assert_eq!(
+            elsewhere.detail,
+            "Muse found in Debian, default is Ubuntu: run `wsl --set-default Debian`"
+        );
+        assert!(elsewhere_finding("Ubuntu", None).detail.contains("~/.local/bin/muse"));
+        let signed_out = signed_in_finding(&blocked(""));
+        assert_eq!(signed_out.status, "missing");
+        assert!(signed_out.detail.contains("muse login"));
+        assert_eq!(signed_in_finding(&ready("")).status, "ready");
+        assert_eq!(signed_in_finding(&unknown("probe timed out")).status, "ready");
     }
 
     #[test]

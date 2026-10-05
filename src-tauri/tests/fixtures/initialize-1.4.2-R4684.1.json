@@ -1,0 +1,15 @@
+{
+  "serverInfo": {
+    "name": "muse",
+    "version": "1.4.2-R4684.1"
+  },
+  "schema": {
+    "version": 1,
+    "fingerprint": "sha256:1420468400000000000000000000000000000000000000000000000000000000"
+  },
+  "grantedCapabilities": [
+    "userShell",
+    "sessionMcp"
+  ],
+  "sessionDurability": "durable"
+}

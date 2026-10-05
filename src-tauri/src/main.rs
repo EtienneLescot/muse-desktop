@@ -422,6 +422,8 @@ struct AppState {
     /// Capabilities are fixed for a connection lifetime and never inferred
     /// from the renderer's authorization posture.
     host_capabilities: Mutex<HashMap<PathBuf, Vec<String>>>,
+    /// Engine version and schema fingerprint per workspace host (diagnostics).
+    host_engines: Mutex<HashMap<PathBuf, HostEngine>>,
     approvals: Mutex<HashMap<(String, String), PendingApproval>>,
     /// (session_id, item_id) -> MSP item kind (`agentMessage`, `subagent`,
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
@@ -482,6 +484,8 @@ pub struct NativeDiagnosticsSnapshot {
     pub running_session_count: usize,
     pub pending_approval_count: usize,
     pub event_buffer_count: usize,
+    /// Last engine seen per workspace host (kept after the host exits), sorted; no workspace path.
+    pub host_engines: Vec<HostEngine>,
 }
 
 const DIAGNOSTIC_MAX_LINES: usize = 20;
@@ -825,10 +829,20 @@ fn host_approval_mode(mode: &str) -> Option<&'static str> {
     }
 }
 
+/// Engine identity announced by a host's `initialize`, kept per workspace for
+/// the diagnostics export (M0-08 version matrix). Version and fingerprint
+/// only: no path or credential leaves through this struct.
+#[derive(Debug, Serialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub struct HostEngine {
+    pub server_version: String,
+    pub schema_fingerprint: String,
+}
+
 /// Validate the minimum initialize contract before the host accepts any
 /// session. Unknown additive fields remain allowed, while a missing identity
 /// or unsupported schema version produces a startup error with remediation.
-fn validate_initialize_result(result: &Value) -> Result<(), String> {
+fn validate_initialize_result(result: &Value) -> Result<HostEngine, String> {
     let server = result
         .get("serverInfo")
         .ok_or_else(|| "incompatible Muse host: initialize response has no serverInfo".to_string())?;
@@ -863,8 +877,10 @@ fn validate_initialize_result(result: &Value) -> Result<(), String> {
         .and_then(Value::as_str)
         .filter(|f| f.starts_with("sha256:") && f.len() > "sha256:".len())
         .ok_or_else(|| "incompatible Muse host: schema.fingerprint is missing or invalid".to_string())?;
-    let _ = fingerprint;
-    Ok(())
+    Ok(HostEngine {
+        server_version: truncate(version, 64),
+        schema_fingerprint: truncate(fingerprint, 80),
+    })
 }
 
 fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: String) {
@@ -1448,11 +1464,11 @@ async fn ensure_host(
                 }),
             )
             .await?;
-        validate_initialize_result(&initialized)?;
+        let engine = validate_initialize_result(&initialized)?;
         client.notify("initialized", Value::Null).await?;
-        Ok::<Value, String>(initialized)
+        Ok::<(Value, HostEngine), String>((initialized, engine))
     };
-    let initialized = match handshake.await {
+    let (initialized, engine) = match handshake.await {
         Ok(value) => value,
         Err(e) => {
             state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.remove(&client);
@@ -1485,6 +1501,12 @@ async fn ensure_host(
         .lock()
         .map_err(|e| format!("state lock: {e}"))?;
     cache_initialize_granted_capabilities(&mut host_capabilities, &root, &initialized);
+
+    state
+        .host_engines
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .insert(root.clone(), engine);
 
     Ok(client)
 }
@@ -1609,6 +1631,9 @@ async fn retire_host(
     }
     if let Ok(mut capabilities) = state.host_capabilities.lock() {
         capabilities.remove(root);
+    }
+    if let Ok(mut engines) = state.host_engines.lock() {
+        engines.remove(root);
     }
 
     for session_id in &session_ids {
@@ -2389,23 +2414,18 @@ where
                 .get("currentRequirementId")
                 .or_else(|| p.get("current_requirement_id"))
                 .cloned();
+            let mut updated = method == "approval/updated";
             if let Ok(mut approvals) = state.approvals.lock() {
                 let key = (sid.to_string(), approval_id.to_string());
-                if method == "approval/updated" {
-                    if let Some(pending) = approvals.get_mut(&key) {
-                        // Metadata-only updates are legal; keep the last
-                        // usable token when no replacement is supplied.
-                        if let Some(next) = requirement.clone() {
-                            pending.requirement_id = next;
-                        }
-                    } else {
-                        approvals.insert(
-                            key,
-                            PendingApproval {
-                                session_id: sid.to_string(),
-                                requirement_id: requirement.clone().unwrap_or(Value::Null),
-                            },
-                        );
+                if let Some(pending) = approvals.get_mut(&key) {
+                    // A known id is an update even when it arrives as a
+                    // request: the server-request twin re-delivers it, and a
+                    // compound command's next stage re-requests it after a
+                    // non-terminal decide. Metadata-only updates are legal;
+                    // keep the last usable token when no replacement is supplied.
+                    updated = true;
+                    if let Some(next) = requirement {
+                        pending.requirement_id = next;
                     }
                 } else {
                     approvals.insert(
@@ -2420,7 +2440,7 @@ where
             emit_fn("tool_request",
                 sid,
                 "tool_request",
-                approval_payload(p, approval_id, method == "approval/updated").to_string(),
+                approval_payload(p, approval_id, updated).to_string(),
             );
         }
         "approval/resolved" => {
@@ -2812,6 +2832,14 @@ fn collect_diagnostics(state: State<'_, AppState>) -> Result<NativeDiagnosticsSn
         .lock()
         .map_err(|e| format!("event diagnostics lock: {e}"))?
         .len();
+    let mut host_engines: Vec<HostEngine> = state
+        .host_engines
+        .lock()
+        .map_err(|e| format!("engine diagnostics lock: {e}"))?
+        .values()
+        .cloned()
+        .collect();
+    host_engines.sort();
     Ok(NativeDiagnosticsSnapshot {
         schema: "muse-desktop.native-diagnostics.v1".to_string(),
         workspace_configured,
@@ -2820,6 +2848,7 @@ fn collect_diagnostics(state: State<'_, AppState>) -> Result<NativeDiagnosticsSn
         running_session_count,
         pending_approval_count,
         event_buffer_count,
+        host_engines,
     })
 }
 
@@ -6018,6 +6047,7 @@ mod tests {
             host_durability: Mutex::new(HashMap::new()),
             host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
+            host_engines: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -6131,6 +6161,38 @@ mod tests {
         assert_eq!(approvals[&(String::from("session-a"), String::from("same-approval"))].session_id, "session-a");
         assert_eq!(approvals[&(String::from("session-b"), String::from("same-approval"))].requirement_id, json!("req-b"));
         assert_eq!(events.iter().filter(|e| e.0 == "tool_request").count(), 2);
+    }
+
+    #[test]
+    fn repeated_approval_request_is_forwarded_as_an_update() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        // Notification + server-request twin, or the next stage of a compound
+        // command: same approvalId, delivered as a request again.
+        for requirement in ["req-1", "req-2"] {
+            route_notification_with_emit(
+                &state,
+                "approval/requested",
+                &json!({
+                    "sessionId": "session-a",
+                    "approvalId": "a1",
+                    "currentRequirementId": requirement,
+                    "subject": {"kind":"shell","command":"echo a && echo b"}
+                }),
+                &mut emit,
+            );
+        }
+        let updated: Vec<Value> = events
+            .iter()
+            .filter(|e| e.0 == "tool_request")
+            .map(|e| serde_json::from_str::<Value>(&e.3).unwrap()["updated"].clone())
+            .collect();
+        assert_eq!(updated, vec![json!(false), json!(true)]);
+        let approvals = state.approvals.lock().unwrap();
+        assert_eq!(approvals[&(String::from("session-a"), String::from("a1"))].requirement_id, json!("req-2"));
     }
 
     #[tokio::test]
@@ -8289,6 +8351,62 @@ mod tests {
         assert!(validate_initialize_result(&result).is_ok());
     }
 
+    /// M0-08 engine matrix. Anonymised shapes: the fingerprints are
+    /// placeholders, the hosts were not run to capture them.
+    #[test]
+    fn engine_matrix_fixtures_pass_the_handshake_and_reach_diagnostics() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let state = app.state::<AppState>();
+        for (root, fixture, version) in [
+            ("a", include_str!("../tests/fixtures/initialize-1.3.0-R3401.1.json"), "1.3.0-R3401.1"),
+            ("b", include_str!("../tests/fixtures/initialize-1.4.2-R4684.1.json"), "1.4.2-R4684.1"),
+        ] {
+            let result: Value = serde_json::from_str(fixture).unwrap();
+            let engine = validate_initialize_result(&result).unwrap();
+            assert_eq!(engine.server_version, version);
+            assert!(engine.schema_fingerprint.starts_with("sha256:"));
+            assert_eq!(
+                initialize_granted_capabilities(&result).unwrap(),
+                vec!["userShell".to_string(), "sessionMcp".to_string()]
+            );
+            state.host_engines.lock().unwrap().insert(PathBuf::from(root), engine);
+        }
+        let snapshot = serde_json::to_value(collect_diagnostics(app.state::<AppState>()).unwrap()).unwrap();
+        let versions: Vec<&str> = snapshot["hostEngines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|engine| engine["serverVersion"].as_str().unwrap())
+            .collect();
+        assert_eq!(versions, vec!["1.3.0-R3401.1", "1.4.2-R4684.1"]);
+        assert!(snapshot["hostEngines"][1]["schemaFingerprint"].as_str().unwrap().starts_with("sha256:"));
+    }
+
+    #[test]
+    fn unknown_additive_notifications_are_ignored_and_routing_continues() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        // 1.4.2 emits these; this build does not know them.
+        for method in ["session/todoListChanged", "session/goalChanged"] {
+            route_notification_with_emit(&state, method, &json!({"sessionId":"s","todos":[{"x":1}],"goal":null}), &mut emit);
+        }
+        route_notification_with_emit(
+            &state,
+            "item/delta",
+            &json!({"sessionId":"s","itemId":"i","delta":"still routed"}),
+            &mut emit,
+        );
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0].0, "output");
+        assert!(events[0].3.contains("still routed"));
+    }
+
     #[test]
     fn initialize_compatibility_rejects_missing_or_unsupported_metadata() {
         let missing = json!({"serverInfo": {"name": "muse", "version": "1.3.0"}});
@@ -8921,6 +9039,7 @@ fn main() {
             host_durability: Mutex::new(HashMap::new()),
             host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
+            host_engines: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),

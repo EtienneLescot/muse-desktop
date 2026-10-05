@@ -15,8 +15,10 @@
 //! driven with the right argv, which is the part this app owns.
 
 use serde_json::{json, Value};
+use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 const HOST_CHARS: &str = "^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$";
@@ -73,10 +75,10 @@ fn matches(value: &str, pattern: &str, max: usize) -> bool {
 fn regex_is_match(pattern: &str, value: &str) -> bool {
     match pattern {
         HOST_CHARS => {
-            let body = &value[1..value.len() - 1];
-            (value.as_bytes()[0].is_ascii_alphanumeric())
-                && (value.as_bytes()[value.len() - 1].is_ascii_alphanumeric())
-                && body.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+            // Bytes, not str slices: a 1-char or multibyte host must not panic.
+            let bytes = value.as_bytes();
+            matches!((bytes.first(), bytes.last()), (Some(f), Some(l)) if f.is_ascii_alphanumeric() && l.is_ascii_alphanumeric())
+                && bytes.iter().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-'))
         }
         NAME_CHARS => value
             .bytes()
@@ -131,12 +133,16 @@ fn ssh_argv(ssh: &PathBuf, host: &str, port: u16, user: &str, identity_file: &st
     argv
 }
 
-fn bounded(mut text: String) -> String {
-    if text.len() > OUTPUT_LIMIT {
-        text.truncate(OUTPUT_LIMIT);
-        text.push('…');
-    }
-    text
+/// Drain one pipe on its own thread so a chatty remote can never fill it and
+/// stall ssh until the deadline. Keeps `OUTPUT_LIMIT` bytes plus one char's
+/// worth (so the cut lands on a boundary), discards the rest.
+fn drain_bounded<R: Read + Send + 'static>(mut reader: R) -> JoinHandle<String> {
+    thread::spawn(move || {
+        let mut kept = Vec::new();
+        let _ = (&mut reader).take(OUTPUT_LIMIT as u64 + 4).read_to_end(&mut kept);
+        let _ = std::io::copy(&mut reader, &mut std::io::sink());
+        crate::truncate(&String::from_utf8_lossy(&kept), OUTPUT_LIMIT)
+    })
 }
 
 /// Run one command on the remote host. Returns the bounded stdout/stderr and
@@ -146,7 +152,11 @@ pub fn remote_ssh_exec(host: &str, port: u16, user: &str, identity_file: &str, c
     let timeout = timeout_secs.unwrap_or(EXEC_TIMEOUT_DEFAULT).clamp(EXEC_TIMEOUT_MIN, EXEC_TIMEOUT_MAX);
     validate(host, port, user, identity_file, command)?;
     let ssh = ssh_binary().ok_or_else(|| "no ssh binary found; install the system OpenSSH client".to_string())?;
-    let argv = ssh_argv(&ssh, host, port, user, identity_file, command);
+    run_bounded(&ssh_argv(&ssh, host, port, user, identity_file, command), timeout)
+}
+
+/// Spawn `argv` and wait at most `timeout` seconds while both pipes drain.
+fn run_bounded(argv: &[String], timeout: u64) -> Result<Value, String> {
     let mut child = Command::new(&argv[0])
         .args(&argv[1..])
         .stdin(Stdio::null())
@@ -154,30 +164,26 @@ pub fn remote_ssh_exec(host: &str, port: u16, user: &str, identity_file: &str, c
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| format!("cannot start ssh: {error}"))?;
+    let stdout = child.stdout.take().map(drain_bounded);
+    let stderr = child.stderr.take().map(drain_bounded);
+    let collect = |reader: Option<JoinHandle<String>>| reader.and_then(|r| r.join().ok()).unwrap_or_default();
     let started = std::time::Instant::now();
     let deadline = Duration::from_secs(timeout);
     let mut timed_out = false;
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                let mut stdout = String::new();
-                let mut stderr = String::new();
-                if let Some(mut out) = child.stdout.take() {
-                    let _ = std::io::Read::read_to_string(&mut out, &mut stdout);
-                }
-                if let Some(mut err) = child.stderr.take() {
-                    let _ = std::io::Read::read_to_string(&mut err, &mut stderr);
-                }
                 return Ok(json!({
                     "exitCode": status.code(),
                     "timedOut": false,
-                    "stdout": bounded(stdout),
-                    "stderr": bounded(stderr),
+                    "stdout": collect(stdout),
+                    "stderr": collect(stderr),
                     "elapsedMs": started.elapsed().as_millis() as u64,
                 }));
             }
             Ok(None) if started.elapsed() >= deadline => {
                 timed_out = true;
+                // The drain threads end on their own once the pipes close.
                 let _ = child.kill();
                 let _ = child.wait();
             }
@@ -235,6 +241,44 @@ mod tests {
         assert_eq!(&sneaky[sneaky.len() - 2], "--");
         assert_eq!(&sneaky[sneaky.len() - 1], "-oProxyCommand=evil");
         assert!(sneaky.contains(&"2222".to_string()));
+    }
+
+    #[test]
+    fn one_char_and_multibyte_hosts_do_not_panic() {
+        assert!(validate("a", 22, "", "", "uptime").is_ok());
+        assert!(validate("-", 22, "", "", "uptime").is_err());
+        assert!(validate("é", 22, "", "", "uptime").is_err());
+    }
+
+    #[test]
+    fn truncation_lands_on_a_char_boundary() {
+        // Odd offset: byte OUTPUT_LIMIT falls inside an `é`.
+        let text = format!("x{}", "é".repeat(OUTPUT_LIMIT));
+        let out = drain_bounded(std::io::Cursor::new(text)).join().unwrap();
+        assert!(out.ends_with('…'));
+        assert!(out.len() <= OUTPUT_LIMIT + '…'.len_utf8());
+        assert!(!out.contains('\u{fffd}'));
+    }
+
+    #[test]
+    fn output_beyond_the_pipe_buffer_is_drained_and_bounded() {
+        // ~200 KB on stdout: more than any pipe buffer, so waiting before
+        // reading would stall the child until the deadline.
+        let argv: Vec<String> = if cfg!(windows) {
+            ["cmd", "/C", "for /L %i in (1,1,4000) do @echo 01234567890123456789012345678901234567890123456789"]
+                .map(String::from)
+                .to_vec()
+        } else {
+            ["sh", "-c", "yes 01234567890123456789012345678901234567890123456789 | head -c 200000"]
+                .map(String::from)
+                .to_vec()
+        };
+        let out = run_bounded(&argv, 60).unwrap();
+        assert_eq!(out["timedOut"], false, "{out}");
+        assert_eq!(out["exitCode"], 0);
+        let stdout = out["stdout"].as_str().unwrap();
+        assert!(stdout.ends_with('…'));
+        assert!(stdout.len() <= OUTPUT_LIMIT + '…'.len_utf8());
     }
 
     #[cfg(windows)]

@@ -112,12 +112,34 @@ pub fn split_lines(buf: &mut Vec<u8>, chunk: &[u8]) -> Vec<String> {
 }
 
 /// Route one parsed frame: responses complete a pending request by id,
-/// notifications go to the event channel.
+/// notifications go to the event channel. A server-initiated request
+/// (`method` and `id`) is forwarded like its notification twin and returns
+/// the reply frame the caller must write back to the host.
 pub fn route_frame(
     frame: Value,
     pending: &mut HashMap<String, oneshot::Sender<Result<Value, RpcError>>>,
     notify_tx: &mpsc::UnboundedSender<(String, Value)>,
-) {
+) -> Option<String> {
+    if let (Some(method), Some(id)) = (frame.get("method").and_then(Value::as_str), frame.get("id")) {
+        // SS5.3.3: `approval/request` and `userInput/request` share their
+        // params with `approval/requested` / `userInput/requested`. The empty
+        // receipt only acknowledges presentation; the decision travels as
+        // `approval/decide` / `userInput/answer`. The id is the host's, so it
+        // never touches the client's pending map.
+        let twin = match method {
+            "approval/request" => "approval/requested",
+            "userInput/request" => "userInput/requested",
+            _ => {
+                return Some(
+                    json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": format!("method not found: {method}")}})
+                        .to_string(),
+                )
+            }
+        };
+        let params = frame.get("params").cloned().unwrap_or(Value::Null);
+        let _ = notify_tx.send((twin.to_string(), params));
+        return Some(json!({"jsonrpc": "2.0", "id": id, "result": {}}).to_string());
+    }
     if let Some(id) = frame.get("id") {
         let key = id.to_string();
         if let Some(tx) = pending.remove(&key) {
@@ -149,12 +171,13 @@ pub fn route_frame(
             };
             let _ = tx.send(out);
         }
-        return;
+        return None;
     }
     if let Some(method) = frame.get("method").and_then(Value::as_str) {
         let params = frame.get("params").cloned().unwrap_or(Value::Null);
         let _ = notify_tx.send((method.to_string(), params));
     }
+    None
 }
 
 /// The small child-process surface used by the MSP transport.
@@ -210,10 +233,15 @@ impl MspClient {
     }
 
     /// Feed one parsed frame from the host's stdout into response routing
-    /// (by id) or the notification channel (by method).
+    /// (by id) or the notification channel (by method), answering
+    /// server-initiated requests on the host's stdin.
     pub async fn ingest(&self, frame: Value) {
-        let mut pending = self.pending.lock().await;
-        route_frame(frame, &mut pending, &self.notify_tx);
+        let reply = route_frame(frame, &mut *self.pending.lock().await, &self.notify_tx);
+        if let Some(line) = reply {
+            // A failed receipt leaves the request pending host-side; it is
+            // re-issued on the next subscribe (SS5.6).
+            let _ = self.write_line(line).await;
+        }
     }
 
     async fn remove_pending(&self, key: &str) {
@@ -420,6 +448,36 @@ mod tests {
         let (m, p) = nrx.recv().await.unwrap();
         assert_eq!(m, "turn/completed");
         assert_eq!(p["terminal"], "cancelled");
+    }
+
+    #[tokio::test]
+    async fn server_request_is_answered_forwarded_and_leaves_pending_alone() {
+        let (tx, mut rx) = oneshot::channel();
+        let mut pending = HashMap::new();
+        pending.insert("7".to_string(), tx);
+        let (ntx, mut nrx) = mpsc::unbounded_channel();
+        let reply = route_frame(
+            json!({"jsonrpc":"2.0","id":7,"method":"approval/request","params":{"approvalId":"a1"}}),
+            &mut pending,
+            &ntx,
+        )
+        .expect("a server-initiated request must be answered");
+        let reply: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(reply, json!({"jsonrpc":"2.0","id":7,"result":{}}));
+        let (m, p) = nrx.recv().await.unwrap();
+        assert_eq!(m, "approval/requested");
+        assert_eq!(p["approvalId"], "a1");
+        assert!(pending.contains_key("7"), "host id must not resolve a client request");
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn ingest_writes_the_receipt_on_host_stdin() {
+        let (client, mut writes, _) = test_client();
+        client
+            .ingest(json!({"jsonrpc":"2.0","id":"s-1","method":"userInput/request","params":{}}))
+            .await;
+        assert_eq!(next_frame(&mut writes).await, json!({"jsonrpc":"2.0","id":"s-1","result":{}}));
     }
 
     #[tokio::test]
