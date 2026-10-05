@@ -9,20 +9,24 @@
  *   ab    projects A and B (temp folders), a turn and an approval card in
  *         each; deciding A's card reaches A only, B stays pending and intact.
  *   send  B's host dies on a turn/start before answering (`[fixture:exit]`):
- *         the text is still in the transcript or the outbox.
+ *         the text is still in the transcript or the outbox, and on screen.
  *
  * Isolation: MUSE_DESKTOP_TEST_DATA_DIR (app data and WebView2 profile) is a
  * fresh temp folder and MUSE_DESKTOP_TEST_SIDECAR runs the fixture, so the
  * user's profile and engine are never touched; MUSE_DESKTOP_TEST_CDP_PORT
- * opens CDP. Windows only: CDP needs WebView2.
+ * opens CDP. No WEBVIEW2_* variable reaches the app. Before driving anything
+ * the runner checks that the exe reads the switch, that the app wrote its
+ * test-mode marker and that the WebView2 browser runs on the test profile;
+ * otherwise it kills the app. Windows only: CDP needs WebView2.
  *
  * Usage: npm run e2e:fixture [-- --exe <muse-desktop.exe>] [--keep]
- * Prints the verdict as JSON; exit code 1 when any check fails.
+ * Prints the verdict as JSON; exit code 1 when any check fails, or when the
+ * watchdog stops a run that hangs.
  */
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // A port of its own: never attach to a developer's CDP-enabled app on 9222.
@@ -33,6 +37,42 @@ const PORT = Number(process.env.MUSE_CDP_PORT);
 const EXE = resolve(argValue("--exe", join(process.env.CARGO_TARGET_DIR ?? join("src-tauri", "target"), "debug", "muse-desktop.exe")));
 const FIXTURE = fileURLToPath(new URL("./muse-fixture.mjs", import.meta.url));
 const DONE = "the fixture turn resumed successfully";
+// test_mode.rs: the variable only a test-mode build reads, and the file its enter() writes.
+const SWITCH = "MUSE_DESKTOP_TEST_DATA_DIR";
+const MARKER = "test-mode.pid";
+// The CI step stops at 8 minutes (ci.yml, e2e-windows): the verdict prints before.
+const WATCHDOG_MS = 6 * 60_000;
+
+/** A diagnostic command's bounded output; never throws. */
+function run(cmd, args, max = 600) {
+  try { return execFileSync(cmd, args, { encoding: "utf8", timeout: 20_000 }).trim().slice(0, max); } catch (error) { return `failed: ${String(error?.message ?? error).slice(0, 200)}`; }
+}
+
+/** Command lines of the WebView2 browser processes (child processes carry --type=). */
+const browserCommandLines = () => run("powershell", ["-NoProfile", "-Command",
+  "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Where-Object { $_.CommandLine -notmatch '--type=' } | ForEach-Object { $_.CommandLine }"], 200_000);
+
+/** The --user-data-dir of the WebView2 browser that serves CDP on PORT. */
+function webviewProfile() {
+  const line = browserCommandLines().split(/\r?\n/).find((entry) => entry.includes(`--remote-debugging-port=${PORT}`));
+  const flag = line?.match(/--user-data-dir=(?:"([^"]+)"|(\S+))/);
+  return flag ? flag[1] ?? flag[2] : null;
+}
+
+/** Whether `path` is inside `dir`, both resolved on disk (short names, case). */
+function under(path, dir) {
+  try {
+    const rel = relative(realpathSync.native(dir), realpathSync.native(path));
+    return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+  } catch {
+    return false;
+  }
+}
+
+/** A CDP call that has not settled in `ms` fails instead of hanging the run. */
+const withTimeout = (promise, ms, what) => Promise.race([promise, new Promise((_, reject) => {
+  setTimeout(() => reject(new Error(`${what}: no answer in ${ms / 1000} s`)), ms).unref();
+})]);
 
 const H = `
   const vis = (n) => n && n.offsetParent !== null;
@@ -138,7 +178,8 @@ async function scenario(app, dirs, report) {
   verdict.abBDecidedAfterwards = Boolean(await waitFor(async () => (await pending(app, b)).length === 0 && (await finished(app, b)), 20_000));
 
   // send: B's host dies before answering this turn/start.
-  const text = `[fixture:exit] keep this text ${Date.now().toString(36)}`;
+  const shown = `keep this text ${Date.now().toString(36)}`;
+  const text = `[fixture:exit] ${shown}`;
   report.send = await app.ev(page(`
     const field = await until(() => document.querySelector('textarea[aria-label="Message Muse"]'));
     if (!field) return 'no composer';
@@ -154,32 +195,32 @@ async function scenario(app, dirs, report) {
   verdict.sendHostFailureForced = settled?.ok === false;
   const kept = await app.ev(page(`
     const has = (rows) => (rows || []).some((e) => String(e.text || '').includes(${JSON.stringify(text)}));
+    // What the user sees: the bubble, or the unsent row under the transcript.
+    const onScreen = await until(() => q('.msg.user, .pending-send-text').some((n) => n.innerText.includes(${JSON.stringify(shown)})));
     return { transcript: has(store('muse-desktop.log.v1.' + ${JSON.stringify(b)}, '[]')),
-      outbox: has(store('muse-desktop.outbox.v1.' + ${JSON.stringify(b)}, '[]')) };
+      outbox: has(store('muse-desktop.outbox.v1.' + ${JSON.stringify(b)}, '[]')),
+      onScreen, ...(onScreen ? {} : { lastRows: q('.msg, .pending-send').slice(-3).map((n) => n.innerText.slice(0, 80)) }) };
   `));
   const ledger = join(dirs.data, "outbox", "outbox.json");
   kept.nativeOutbox = existsSync(ledger) && readFileSync(ledger, "utf8").includes(text);
   report.sendKeptIn = kept;
   verdict.sendNeverLost = kept.transcript || kept.outbox || kept.nativeOutbox;
+  verdict.sendTextOnScreen = kept.onScreen;
   verdict.otherHostUnaffected = await pending(app, a).then(() => true, () => false);
 
   verdict.isolatedWebviewProfile = existsSync(join(dirs.data, "WebView2", "EBWebView"));
-  verdict.isolatedAppData = readdirSync(dirs.data).some((name) => name !== "WebView2");
+  verdict.isolatedAppData = readdirSync(dirs.data).some((name) => name !== "WebView2" && name !== MARKER);
 }
 
 /** What the runner can tell when the app does not answer: bounded, path-free once redacted. */
 async function diagnose(dirs) {
-  const run = (cmd, args, max = 600) => {
-    try { return execFileSync(cmd, args, { encoding: "utf8", timeout: 20_000 }).trim().slice(0, max); } catch (error) { return `failed: ${String(error?.message ?? error).slice(0, 200)}`; }
-  };
-  const browser = run("powershell", ["-NoProfile", "-Command",
-    "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Where-Object { $_.CommandLine -notmatch '--type=' } | ForEach-Object { $_.CommandLine }"], 20_000);
+  const browser = browserCommandLines().slice(0, 20_000);
   return {
     webview2Runtime: run("reg", ["query", "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", "/v", "pv"]),
     webviewProcesses: run("tasklist", ["/FI", "IMAGENAME eq msedgewebview2.exe", "/FO", "CSV", "/NH"]).split("\n").length,
     browserFlags: browser.match(/--(remote-debugging|user-data-dir|disable-features|embedded-browser)[^ ]*/g) ?? browser.slice(0, 300),
-    listening: run("netstat", ["-ano", "-p", "TCP"]).split("\n").filter((line) => line.includes(`:${PORT} `)).map((line) => line.trim()),
-    cdpTargets: await fetch(`http://127.0.0.1:${PORT}/json/list`).then((r) => r.json())
+    listening: run("netstat", ["-ano", "-p", "TCP"], 200_000).split("\n").filter((line) => line.includes(`:${PORT} `)).map((line) => line.trim()),
+    cdpTargets: await fetch(`http://127.0.0.1:${PORT}/json/list`, { signal: AbortSignal.timeout(5_000) }).then((r) => r.json())
       .then((list) => list.map((t) => `${t.type} ${t.url}`.slice(0, 120)))
       .catch((error) => `unreachable: ${error?.cause?.code ?? error?.message ?? error}`),
     dataDir: existsSync(dirs.data) ? readdirSync(dirs.data) : null,
@@ -189,7 +230,11 @@ async function diagnose(dirs) {
 async function main() {
   if (process.platform !== "win32") throw new Error("this check drives WebView2 over CDP: Windows only (ADR 0003)");
   if (!existsSync(EXE)) throw new Error(`no app at ${EXE}: run cargo build --manifest-path src-tauri/Cargo.toml (or pass --exe)`);
-  if (await fetch(`http://127.0.0.1:${PORT}/json/version`).then(() => true, () => false)) {
+  // A release build, or a debug build without the test mode, would run on the
+  // user's own profile and engine: only an exe that reads the switch starts.
+  if (!readFileSync(EXE).includes(SWITCH)) throw new Error(`${EXE} has no test mode (release build?): refusing to start it`);
+  // Taken when something answers, or accepts and never answers.
+  if (await fetch(`http://127.0.0.1:${PORT}/json/version`, { signal: AbortSignal.timeout(5_000) }).then(() => true, (error) => error?.name === "TimeoutError")) {
     throw new Error(`CDP port ${PORT} is already taken: refusing to drive another app`);
   }
   const root = mkdtempSync(join(tmpdir(), "muse-e2e-"));
@@ -197,10 +242,13 @@ async function main() {
   for (const dir of [dirs.data, dirs.A, dirs.B]) mkdirSync(dir);
   const report = { schema: "muse-desktop.e2e-fixture.v1", verdict: {} };
   const output = [];
+  // No WEBVIEW2_* variable reaches the app: its profile and flags are the test mode's alone.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^WEBVIEW2_/i.test(name)));
+  const started = Date.now();
   const child = spawn(EXE, [], {
     env: {
-      ...process.env,
-      MUSE_DESKTOP_TEST_DATA_DIR: dirs.data,
+      ...env,
+      [SWITCH]: dirs.data,
       MUSE_DESKTOP_TEST_SIDECAR: JSON.stringify([process.execPath, FIXTURE]),
       // Through the WebView2 options: an elevated runner ignores WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS.
       MUSE_DESKTOP_TEST_CDP_PORT: String(PORT),
@@ -213,11 +261,48 @@ async function main() {
   };
   child.stdout.on("data", keep);
   child.stderr.on("data", keep);
+  // A failed spawn is reported by the marker wait, not by a crash of the runner.
+  child.once("error", (error) => keep(`spawn failed: ${error.message}`));
+  const kill = () => {
+    if (child.exitCode !== null) return;
+    try { execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", timeout: 20_000 }); } catch { /* already gone */ }
+  };
+  const print = () => {
+    const values = Object.values(report.verdict);
+    report.passed = !report.failure && values.length > 0 && values.every((value) => value === true);
+    if (!report.passed) report.appOutputTail = output;
+    return new Promise((done) => process.stdout.write(`${JSON.stringify(redactor([[root, "<e2e>"]])(report), null, 2)}\n`, done));
+  };
+  // A hang still ends with a verdict: stop the app, print, fail.
+  const watchdog = setTimeout(async () => {
+    report.failure = `watchdog: no verdict after ${WATCHDOG_MS / 60_000} minutes`;
+    kill();
+    await print();
+    process.exit(1);
+  }, WATCHDOG_MS);
   let app = null;
   try {
+    // enter() writes its pid at startup: without it the app is not in test
+    // mode and may be on the user's profile, so it goes at once.
+    const marker = join(dirs.data, MARKER);
+    const entered = await waitFor(() => {
+      try { return readFileSync(marker, "utf8").trim() === String(child.pid); } catch { return false; }
+    }, 10_000, 100);
+    if (!entered) {
+      kill();
+      throw new Error(`no ${MARKER} within 10 s (exit code ${child.exitCode}): the app is not in test mode, stopped`);
+    }
+    report.markerMs = Date.now() - started;
     // A cold runner creates the WebView2 profile first: give it time.
-    app = await waitFor(() => (child.exitCode === null ? openPage().catch(() => null) : "exited"), 120_000, 1_000);
+    app = await waitFor(() => (child.exitCode === null ? withTimeout(openPage(), 15_000, "CDP page").catch(() => null) : "exited"), 120_000, 1_000);
     if (!app || app === "exited") throw new Error(`the app exposed no page on CDP ${PORT} (exit code ${child.exitCode})`);
+    // Before driving anything: the browser runs on the test profile. An HKLM
+    // WebView2 policy, honoured even for an elevated host, could move it.
+    report.webviewProfile = webviewProfile();
+    if (!under(report.webviewProfile, dirs.data)) {
+      kill();
+      throw new Error("the WebView2 browser is not on the test profile: stopped before driving the app");
+    }
     await scenario(app, dirs, report);
   } catch (error) {
     report.failure = String(error?.message ?? error).slice(0, 400);
@@ -225,19 +310,16 @@ async function main() {
   } finally {
     report.consoleErrors = app?.errors?.slice(0, 20) ?? [];
     app?.close?.();
-    if (child.exitCode === null) {
-      try { execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" }); } catch { /* already gone */ }
-    }
+    kill();
     await sleep(1_000);
     if (!process.argv.includes("--keep")) {
       try { rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch { /* a temp folder */ }
     }
   }
-  const values = Object.values(report.verdict);
-  report.passed = !report.failure && values.length > 0 && values.every((value) => value === true);
-  if (!report.passed) report.appOutputTail = output;
-  process.stdout.write(`${JSON.stringify(redactor([[root, "<e2e>"]])(report), null, 2)}\n`);
-  process.exitCode = report.passed ? 0 : 1;
+  clearTimeout(watchdog);
+  await print();
+  // Exit now: a CDP socket opened after its timeout would keep the process alive.
+  process.exit(report.passed ? 0 : 1);
 }
 
 await main();
