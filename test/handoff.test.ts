@@ -15,6 +15,7 @@ const preview: HandoffPreview = {
   tracked: 2,
   untracked: 1,
   ignored: 3,
+  partlyStaged: [],
   conflicts: [],
   snapshot: null,
   sameSession: true,
@@ -37,6 +38,13 @@ describe("M2-05 handoff wording", () => {
     assert.match(same.text, /The conversation moves with them/);
     const old = handoffQuestion({ ...preview, sameSession: false }, "a new worktree");
     assert.match(old.text, /cannot move a conversation: a new one opens there/);
+  });
+
+  it("names the files whose staged version will not move", () => {
+    assert.doesNotMatch(handoffQuestion(preview, "Local").text, /after staging/);
+    const question = handoffQuestion({ ...preview, partlyStaged: ["src/a.ts"] }, "Local");
+    assert.equal(question.blocked, false);
+    assert.match(question.text, /1 file changed again after staging \(src\/a\.ts\): the file moves as it is now; the staged version stays only in the snapshot/);
   });
 
   it("records the move without claiming an old host moved the conversation", () => {

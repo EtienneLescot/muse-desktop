@@ -18,6 +18,8 @@ export interface HandoffPreview {
   untracked: number;
   /** Ignored entries; never moved. */
   ignored: number;
+  /** Staged, then changed again: the file moves, the staged version stays in the snapshot. */
+  partlyStaged: string[];
   conflicts: string[];
   /** After a move: the Git ref keeping both folders as they were before it. */
   snapshot: string | null;
@@ -62,6 +64,13 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
+function listPaths(paths: readonly string[]): string {
+  const more = paths.length > MAX_LISTED_CONFLICTS
+    ? `, and ${paths.length - MAX_LISTED_CONFLICTS} more`
+    : "";
+  return `${paths.slice(0, MAX_LISTED_CONFLICTS).join(", ")}${more}`;
+}
+
 /**
  * The question asked before a move, or why it cannot happen. `destination`
  * names the target for a person: "Local", "a new worktree".
@@ -72,21 +81,21 @@ export function handoffQuestion(
 ): { blocked: boolean; text: string } {
   const conflicts = preview.conflicts;
   if (conflicts.length > 0) {
-    const listed = conflicts.slice(0, MAX_LISTED_CONFLICTS).join(", ");
-    const more = conflicts.length > MAX_LISTED_CONFLICTS
-      ? `, and ${conflicts.length - MAX_LISTED_CONFLICTS} more`
-      : "";
     return {
       blocked: true,
-      text: `Nothing was moved: ${plural(conflicts.length, "file")} would conflict in ${destination} (${listed}${more}). Commit, discard or move them there first.`,
+      text: `Nothing was moved: ${plural(conflicts.length, "file")} would conflict in ${destination} (${listPaths(conflicts)}). Commit, discard or move them there first.`,
     };
   }
+  const partly = preview.partlyStaged;
   return {
     blocked: false,
     text: [
       `Move all the uncommitted work in this folder to ${destination}, including changes made outside this conversation?`,
       "",
       `• ${plural(preview.tracked, "changed file")} (staged changes arrive unstaged)`,
+      ...(partly.length > 0
+        ? [`• ${plural(partly.length, "file")} changed again after staging (${listPaths(partly)}): the file moves as it is now; the staged version stays only in the snapshot`]
+        : []),
       `• ${plural(preview.untracked, "untracked file")}`,
       `• ${plural(preview.ignored, "ignored item")} left where they are`,
       "",

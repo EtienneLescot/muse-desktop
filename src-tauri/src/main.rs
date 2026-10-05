@@ -2493,15 +2493,20 @@ where
                 payload.to_string(),
             );
         }
-        "turn/started" => emit_fn("status",
-            sid,
-            "started",
-            json!({
-                "turnId": p.get("turnId"),
-                "commandId": p.get("commandId"),
-            })
-            .to_string(),
-        ),
+        "turn/started" => {
+            // The host also starts turns by itself (its queue, a retry); the
+            // handoff guard must see those as running too.
+            mark_running(state, sid, true);
+            emit_fn("status",
+                sid,
+                "started",
+                json!({
+                    "turnId": p.get("turnId"),
+                    "commandId": p.get("commandId"),
+                })
+                .to_string(),
+            )
+        }
         "turn/completed" => {
             let terminal = p.get("terminal").and_then(Value::as_str).unwrap_or("completed");
             mark_running(state, sid, false);
@@ -2546,6 +2551,9 @@ where
             );
         }
         "turn/unqueued" | "turn/retryScheduled" => {
+            if method == "turn/retryScheduled" {
+                mark_running(state, sid, true);
+            }
             emit_fn("status", sid, method, p.to_string())
         }
         "userInput/requested" => {
@@ -3576,6 +3584,14 @@ fn session_folders(meta: &SessionMeta) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Whether a turn in one folder can touch the other's files: one holds the
+/// other, except the app's own checkouts under `.muse/`, which a handoff of
+/// the folder around them leaves alone.
+fn folders_overlap(a: &Path, b: &Path) -> bool {
+    let inside = |inner: &Path, outer: &Path| inner.starts_with(outer) && !inner.starts_with(outer.join(".muse"));
+    inside(a, b) || inside(b, a)
+}
+
 /// M2-05: claim `folders` for a handoff, refused while a turn runs in one of
 /// them, whichever conversation it belongs to. A turn starts under the read
 /// lock, held until it counts as running, so none slips past this check.
@@ -3592,7 +3608,11 @@ async fn claim_handoff(state: &AppState, folders: &[PathBuf]) -> Result<(), Stri
         .filter(|meta| meta.running)
         .cloned()
         .collect();
-    if running.iter().flat_map(session_folders).any(|folder| folders.contains(&folder)) {
+    if running
+        .iter()
+        .flat_map(session_folders)
+        .any(|folder| folders.iter().any(|claimed| folders_overlap(&folder, claimed)))
+    {
         return Err("a conversation is still responding in this folder: stop it before moving".to_string());
     }
     handoffs.extend_from_slice(folders);
@@ -5373,7 +5393,11 @@ async fn send_input_for_state(
             .map_err(|e| format!("state lock: {e}"))?
             .get(&session_id)
             .cloned();
-        if meta.iter().flat_map(session_folders).any(|folder| handoffs.contains(&folder)) {
+        if meta
+            .iter()
+            .flat_map(session_folders)
+            .any(|folder| handoffs.iter().any(|claimed| folders_overlap(&folder, claimed)))
+        {
             return Err("this conversation's folder is being moved: send again once the move is done".to_string());
         }
     }
@@ -6591,6 +6615,7 @@ mod tests {
             tracked: 1,
             untracked: 0,
             ignored: 0,
+            partly_staged: Vec::new(),
             conflicts: Vec::new(),
             snapshot: Some("refs/muse/handoff/1".into()),
         };
@@ -6643,6 +6668,48 @@ mod tests {
             .unwrap_err();
         assert!(error.contains("being moved"), "{error}");
         assert!(frames.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn a_turn_the_host_starts_by_itself_blocks_a_handoff() {
+        let state = empty_state();
+        let folder = std::env::temp_dir().canonicalize().unwrap();
+        let (client, _frames) = fixture_client(false);
+        register_fixture_session(&state, "session-b", &folder.display().to_string(), client);
+        // The host's queue starts the next turn right after the last one ends.
+        for method in ["turn/completed", "turn/started"] {
+            route_notification_with_emit(&state, method, &json!({"sessionId": "session-b"}), |_, _, _, _| {});
+        }
+        let error = claim_handoff(&state, &[folder]).await.unwrap_err();
+        assert!(error.contains("still responding"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_handoff_counts_turns_in_a_subfolder_but_not_in_its_worktrees() {
+        let root = std::env::temp_dir().join(format!("muse-overlap-{}", uuid::Uuid::new_v4()));
+        let (sub, worktree) = (root.join("frontend"), root.join(".muse/worktrees/wt"));
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::create_dir_all(&worktree).unwrap();
+        let root = root.canonicalize().unwrap();
+        let state = empty_state();
+        let (client, mut frames) = fixture_client(false);
+        register_fixture_session(&state, "session-b", &sub.display().to_string(), client.clone());
+        register_fixture_session(&state, "session-c", &worktree.display().to_string(), client);
+        for id in ["session-b", "session-c"] {
+            state.sessions.lock().unwrap().get_mut(id).unwrap().running = true;
+        }
+        let error = claim_handoff(&state, &[root.clone()]).await.unwrap_err();
+        assert!(error.contains("still responding"), "{error}");
+
+        // A worktree under `.muse/` is not part of the folder a handoff moves.
+        state.sessions.lock().unwrap().get_mut("session-b").unwrap().running = false;
+        claim_handoff(&state, &[root.clone()]).await.unwrap();
+        let error = send_input_for_state(&state, "session-b".into(), "command-1".into(), "go".into(), None)
+            .await
+            .unwrap_err();
+        assert!(error.contains("being moved"), "{error}");
+        assert!(frames.try_recv().is_err());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[tokio::test]

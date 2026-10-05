@@ -1524,10 +1524,14 @@ pub struct HandoffPreview {
     pub untracked: usize,
     /// Ignored entries, never moved (an ignored folder counts once).
     pub ignored: usize,
+    /// Paths whose staged version differs from the file: only the file's
+    /// version moves; the staged one stays in the snapshot.
+    pub partly_staged: Vec<String>,
     /// Paths that would not merge into the target; any of them blocks the move.
     pub conflicts: Vec<String>,
     /// After a move: `refs/muse/handoff/<id>`, whose `source` and `target`
-    /// commits hold both sides exactly as they were before it.
+    /// commits hold both sides exactly as they were before it (files, and
+    /// the index as second parent).
     pub snapshot: Option<String>,
 }
 
@@ -1641,24 +1645,23 @@ fn snapshot(dir: &Path, scratch: &Path, label: &str) -> Result<Side, String> {
     // refresh only says that some files differ from the index.
     git_output(dir, &["update-index", "-q", "--refresh"], None, Some(&private))?;
     let tree = oid(git_with_index(dir, &private, &["write-tree"], None)?);
+    // The index rides along as a second parent: a staged version the file
+    // no longer holds stays reachable from the handoff refs.
+    let staged = commit_tree(dir, &index, &["-p", &head], &format!("muse handoff: {label} index"))?;
     let message = format!("muse handoff: {label} {} (index {index})", dir.display());
-    let commit = oid(git_command(
-        dir,
-        &[
-            "-c",
-            "user.name=Muse-Desktop",
-            "-c",
-            "user.email=muse-desktop@localhost",
-            "commit-tree",
-            "--no-gpg-sign",
-            &tree,
-            "-p",
-            &head,
-            "-m",
-            &message,
-        ],
-    )?);
+    let commit = commit_tree(dir, &tree, &["-p", &head, "-p", &staged], &message)?;
     Ok(Side { dir: dir.to_path_buf(), head, index, tree, commit, scratch: private })
+}
+
+fn commit_tree(dir: &Path, tree: &str, parents: &[&str], message: &str) -> Result<String, String> {
+    let identity = ["-c", "user.name=Muse-Desktop", "-c", "user.email=muse-desktop@localhost"];
+    let args: Vec<&str> = identity
+        .into_iter()
+        .chain(["commit-tree", "--no-gpg-sign", tree])
+        .chain(parents.iter().copied())
+        .chain(["-m", message])
+        .collect();
+    Ok(oid(git_command(dir, &args)?))
 }
 
 /// Paths that differ between two trees, narrowed by a `--diff-filter` (empty
@@ -1687,12 +1690,19 @@ fn handoff_counts(side: &Side) -> Result<HandoffPreview, String> {
     .into_iter()
     .filter(|entry| entry.trim_end_matches('/') != ".muse")
     .count();
+    // Staged, then changed again on disk: the file's version is the one that moves.
+    let unstaged: HashSet<String> = tree_diff(dir, &side.index, &side.tree, "")?.into_iter().collect();
+    let partly_staged = tree_diff(dir, &side.head, &side.index, "")?
+        .into_iter()
+        .filter(|path| unstaged.contains(path))
+        .collect();
     Ok(HandoffPreview {
         source: dir.display().to_string(),
         target: None,
         tracked: changed.saturating_sub(untracked),
         untracked,
         ignored,
+        partly_staged,
         conflicts: Vec::new(),
         snapshot: None,
     })
@@ -1846,7 +1856,11 @@ fn restore_side(side: &Side, written: &str, backup: &Path, index: bool) -> Resul
             }
             let copy = backup.join(path);
             if copy.is_file() {
-                std::fs::create_dir_all(file.parent().unwrap_or(dir))
+                // A symlink the step wrote goes first: copying onto it would
+                // write through to whatever it points at.
+                let symlink = file.symlink_metadata().is_ok_and(|meta| meta.file_type().is_symlink());
+                (if symlink { std::fs::remove_file(&file) } else { Ok(()) })
+                    .and_then(|_| std::fs::create_dir_all(file.parent().unwrap_or(dir)))
                     .and_then(|_| std::fs::copy(&copy, &file))
                     .map_err(|e| format!("could not restore {path}: {e}"))?;
             } else {
@@ -2870,6 +2884,49 @@ mod tests {
         assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "later edit\n");
         assert_eq!(fs::read_to_string(root.join("package.json")).unwrap(), "{\"later\":true}");
         assert_eq!(fs::read(wt.join("main.txt")).unwrap(), target_main);
+    }
+
+    #[test]
+    fn handoff_undo_never_writes_through_a_symlink_the_move_created() {
+        #[cfg(unix)]
+        use std::os::unix::fs::symlink as symlink_file;
+        #[cfg(windows)]
+        use std::os::windows::fs::symlink_file;
+        let (root, wt) = worktree_fixture();
+        run_git(&root, &["config", "core.symlinks", "true"]);
+        let outside = temp_dir("muse-handoff-outside").join("precious.txt");
+        fs::write(&outside, "precious outside\n").unwrap();
+        fs::remove_file(root.join("main.txt")).unwrap();
+        symlink_file(&outside, root.join("main.txt")).unwrap();
+        let target_main = fs::read(wt.join("main.txt")).unwrap();
+
+        // The target receives the symlink, then the undo puts its file back.
+        let error = handoff_move_with(&root, &wt, || Err("injected failure".to_string())).unwrap_err();
+        assert!(error.contains("restored as they were"), "{error}");
+        assert_eq!(fs::read_to_string(&outside).unwrap(), "precious outside\n");
+        assert!(wt.join("main.txt").symlink_metadata().unwrap().is_file());
+        assert_eq!(fs::read(wt.join("main.txt")).unwrap(), target_main);
+    }
+
+    #[test]
+    fn handoff_keeps_a_staged_version_the_file_no_longer_holds() {
+        let (root, wt) = worktree_fixture();
+        fs::write(root.join("main.txt"), "staged\n").unwrap();
+        fs::write(root.join("gone.txt"), "staged only\n").unwrap();
+        run_git(&root, &["add", "--", "main.txt", "gone.txt"]);
+        fs::write(root.join("main.txt"), "edited after\n").unwrap();
+        fs::remove_file(root.join("gone.txt")).unwrap();
+        let preview = handoff_preview(&root, Some(&wt)).unwrap();
+        assert_eq!(preview.partly_staged, vec!["gone.txt", "main.txt"]);
+
+        let snapshot = handoff_move(&root, &wt).unwrap().snapshot.unwrap();
+        assert_eq!(fs::read_to_string(wt.join("main.txt")).unwrap(), "edited after\n");
+        let staged = |path: &str| {
+            let spec = format!("{snapshot}/source^2:{path}");
+            decode(&Command::new("git").args(["show", &spec]).current_dir(&root).output().unwrap().stdout)
+        };
+        assert_eq!(staged("main.txt"), "staged\n");
+        assert_eq!(staged("gone.txt"), "staged only\n");
     }
 
     #[test]
