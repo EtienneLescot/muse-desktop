@@ -20,6 +20,7 @@ import {
   SETTINGS_KEY,
   WEB_SEARCH_DEFAULT_NOTE,
   canSelectMode,
+  conflictRestart,
   effectiveSandboxMode,
   hostSandboxConfigForProject,
   isOutsideWorkspace,
@@ -33,8 +34,10 @@ import {
   parseSandboxSettings,
   providerById,
   providerForProject,
+  type HostRequest,
   type SandboxSettings,
 } from "../src/lib/settings.ts";
+import { reconnectErrorMessage } from "../src/lib/errorCopy.ts";
 
 describe("sandbox settings", () => {
   it("defaults to workspace-confined with no permissions", () => {
@@ -151,6 +154,25 @@ describe("sandbox settings", () => {
       ),
       { mode: "network", disableWrite: false, disableShell: false },
     );
+  });
+
+  it("restarts the host a posture conflict refused, with the posture it asked for", () => {
+    // ensure_host's refusal (main.rs sandbox_policy_conflict), as start and reconnect show it.
+    const refusal = "workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with network";
+    const remote: HostRequest = {
+      workspace: "ssh://ops@box:22/srv/app",
+      sandbox: { mode: "network", disableWrite: false, disableShell: false },
+    };
+    assert.deepEqual(conflictRestart(`start_session failed: ${refusal}`, remote), remote);
+    const project: HostRequest = {
+      workspace: "C:/work/other-project",
+      sandbox: { mode: "workspace", disableWrite: true, disableShell: true },
+    };
+    assert.deepEqual(conflictRestart(reconnectErrorMessage(refusal), project), project);
+    // An unknown host restarts nothing in its place; another failure offers no restart.
+    assert.equal(conflictRestart(`start_session failed: ${refusal}`, null), null);
+    assert.equal(conflictRestart("start_session failed: could not start ssh to ssh://ops@box:22/srv/app", remote), null);
+    assert.equal(conflictRestart(null, remote), null);
   });
 
   it("web-search default note says off by default", () => {

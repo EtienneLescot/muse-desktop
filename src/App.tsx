@@ -6,6 +6,7 @@ import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { MuseSetupScreen } from "./components/MuseSetupScreen";
 import { isMacPlatform } from "./lib/platform";
+import { conflictRestart } from "./lib/settings";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -305,6 +306,7 @@ export default function App() {
     removeMemoryEntry,
     ackScanNudge,
     error,
+    errorHost,
     backendMissing,
     startupProbe,
     probeStartup,
@@ -607,6 +609,8 @@ export default function App() {
   // US-33: sidecar startup failures surface explicitly (message + expected
   // paths + retry/re-pick actions), never as a blank screen.
   const sidecarKind = classifySidecarError(error);
+  // A posture conflict restarts the host that refused, not the default folder's.
+  const hostRestart = conflictRestart(error, errorHost);
   // macOS does not bundle the engine: a missing sidecar there means the Muse
   // CLI is simply not installed yet — a first-run step, not an error.
   const needsMuseSetup = sidecarKind === "missing" && isMacPlatform() && isTauriRuntime();
@@ -1382,13 +1386,13 @@ export default function App() {
               : error && (
                 <div className="error-banner" role="alert">
                   <span>{userFacingError(error)}</span>
-                  {error.toLowerCase().includes("restart the workspace host") && !backendMissing && (
+                  {hostRestart !== null && !backendMissing && (
                     <button
                       type="button"
                       className="error-banner-action"
                       onClick={() => {
                         if (!window.confirm("Restart the workspace host? Active conversations will disconnect and can reconnect when the host supports durable sessions.")) return;
-                        void restartHost(workspace);
+                        void restartHost(hostRestart.workspace, hostRestart.sandbox);
                       }}
                     >
                       Restart workspace host
