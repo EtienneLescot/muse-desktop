@@ -168,14 +168,19 @@ async function scenario(app, dirs, report) {
 
 /** What the runner can tell when the app does not answer: bounded, path-free once redacted. */
 async function diagnose(dirs) {
-  const run = (cmd, args) => {
-    try { return execFileSync(cmd, args, { encoding: "utf8", timeout: 10_000 }).trim().slice(0, 600); } catch (error) { return `failed: ${String(error?.message ?? error).slice(0, 200)}`; }
+  const run = (cmd, args, max = 600) => {
+    try { return execFileSync(cmd, args, { encoding: "utf8", timeout: 20_000 }).trim().slice(0, max); } catch (error) { return `failed: ${String(error?.message ?? error).slice(0, 200)}`; }
   };
+  const browser = run("powershell", ["-NoProfile", "-Command",
+    "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Where-Object { $_.CommandLine -notmatch '--type=' } | ForEach-Object { $_.CommandLine }"], 20_000);
   return {
     webview2Runtime: run("reg", ["query", "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", "/v", "pv"]),
     webviewProcesses: run("tasklist", ["/FI", "IMAGENAME eq msedgewebview2.exe", "/FO", "CSV", "/NH"]).split("\n").length,
+    browserFlags: browser.match(/--(remote-debugging|user-data-dir|disable-features|embedded-browser)[^ ]*/g) ?? browser.slice(0, 300),
+    listening: run("netstat", ["-ano", "-p", "TCP"]).split("\n").filter((line) => line.includes(`:${PORT} `)).map((line) => line.trim()),
     cdpTargets: await fetch(`http://127.0.0.1:${PORT}/json/list`).then((r) => r.json())
-      .then((list) => list.map((t) => `${t.type} ${t.url}`.slice(0, 120))).catch((error) => `unreachable: ${error?.message ?? error}`),
+      .then((list) => list.map((t) => `${t.type} ${t.url}`.slice(0, 120)))
+      .catch((error) => `unreachable: ${error?.cause?.code ?? error?.message ?? error}`),
     dataDir: existsSync(dirs.data) ? readdirSync(dirs.data) : null,
   };
 }
