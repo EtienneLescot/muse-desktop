@@ -40,6 +40,11 @@ export interface StoredSession {
   /** Host-reported persistence posture; absent in older local rows. */
   session_durability?: string;
   /**
+   * M2-05: set once the conversation moved between Local and a worktree. The
+   * host session lives (and resumes) here; `workspace` is where turns run.
+   */
+  host_workspace?: string;
+  /**
    * US-5: archived threads leave the main sidebar list for the collapsible
    * archived section. Persisted like the rest; absent = active (V1 data).
    */
@@ -193,6 +198,7 @@ function isValidSession(s: unknown): s is StoredSession {
     (r.branch === undefined || (typeof r.branch === "string" && r.branch.trim().length > 0)) &&
     (r.session_durability === undefined ||
       (typeof r.session_durability === "string" && r.session_durability.trim().length > 0)) &&
+    (r.host_workspace === undefined || typeof r.host_workspace === "string") &&
     (r.archived === undefined || typeof r.archived === "boolean") &&
     (r.pinned === undefined || typeof r.pinned === "boolean") &&
     (r.unread === undefined || typeof r.unread === "boolean") &&

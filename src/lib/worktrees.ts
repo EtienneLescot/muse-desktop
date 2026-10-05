@@ -14,6 +14,18 @@ export const WORKTREE_ROOT = ".muse/worktrees";
 /** Default base ref for new worktree branches. */
 export const WORKTREE_BASE = "HEAD";
 
+const WORKTREE_MARKER = /[\\/]\.muse[\\/]worktrees[\\/]/;
+
+/** The repository root of `workspace`, whether it is a worktree or the main checkout. */
+export function mainRootOf(workspace: string): string {
+  const match = workspace.match(WORKTREE_MARKER);
+  return match && match.index !== undefined ? workspace.slice(0, match.index) : workspace;
+}
+
+export function insideWorktree(workspace: string): boolean {
+  return WORKTREE_MARKER.test(workspace);
+}
+
 /** Manual-setup plan for one agent's worktree. */
 export interface WorktreePlan {
   agent: string;

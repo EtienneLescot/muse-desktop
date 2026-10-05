@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { insideWorktree, mainRootOf } from "../lib/worktrees";
 
 /**
  * M2-04 / M2-06: the worktree environment and cleanup surfaces.
@@ -66,17 +67,6 @@ function writeMap<T>(key: string, value: Record<string, T>): void {
   } catch {
     /* best effort */
   }
-}
-
-/** The repository root of `workspace`, whether it is a worktree or the main checkout. */
-function mainRootOf(workspace: string): string {
-  const marker = /[\\/]\.muse[\\/]worktrees[\\/]/;
-  const match = workspace.match(marker);
-  return match && match.index !== undefined ? workspace.slice(0, match.index) : workspace;
-}
-
-function insideWorktree(workspace: string): boolean {
-  return /[\\/]\.muse[\\/]worktrees[\\/]/.test(workspace);
 }
 
 function ageLabel(modifiedAtMs: number): string {
@@ -196,8 +186,12 @@ export function WorktreeTools({ workspace }: { workspace: string | null }) {
         try {
           const sessions = JSON.parse(localStorage.getItem("muse-desktop.sessions.v1") || "[]") as Array<{
             workspace?: string;
+            host_workspace?: string;
           }>;
-          return sessions.map((session) => (session.workspace || "").replace(/[\\/]+$/, ""));
+          // M2-05: a moved conversation still resumes from its host's folder.
+          return sessions.flatMap((session) =>
+            [session.workspace, session.host_workspace].map((path) => (path || "").replace(/[\\/]+$/, "")),
+          );
         } catch {
           return [];
         }
@@ -378,10 +372,12 @@ function attachedWorktree(activeWorkspace: string, path: string): boolean {
   try {
     const sessions = JSON.parse(
       localStorage.getItem("muse-desktop.sessions.v1") || "[]",
-    ) as Array<{ workspace?: string }>;
+    ) as Array<{ workspace?: string; host_workspace?: string }>;
     const normalized = path.replace(/[\\/]+$/, "");
-    return sessions.some(
-      (session) => (session.workspace || "").replace(/[\\/]+$/, "") === normalized,
+    return sessions.some((session) =>
+      [session.workspace, session.host_workspace].some(
+        (candidate) => (candidate || "").replace(/[\\/]+$/, "") === normalized,
+      ),
     );
   } catch {
     return false;

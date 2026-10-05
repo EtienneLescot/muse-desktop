@@ -39,7 +39,7 @@ import { ComputerUsePanel } from "./components/ComputerUsePanel";
 import { SharePanel } from "./components/SharePanel";
 import { WorktreeTools } from "./components/WorktreeTools";
 import { isTauriRuntime } from "./lib/env";
-import { formatWorktreeContinuationNote } from "./lib/handoff";
+import { formatHandoffContext, handoffQuestion } from "./lib/handoff";
 import {
   folderName,
   parseWorkspaceRootObservation,
@@ -47,7 +47,7 @@ import {
   projectWorkspaces,
 } from "./lib/projects";
 import { parseHarnessRules } from "./lib/harnessRules";
-import { planConversationWorktree } from "./lib/worktrees";
+import { insideWorktree, mainRootOf, planConversationWorktree } from "./lib/worktrees";
 // US-32: polite live-region announcements for stream/approval/input changes.
 import {
   approvalAnnouncement,
@@ -266,6 +266,8 @@ export default function App() {
     runUserShell,
     resizeTerminal,
     closeTerminal,
+    previewHandoff,
+    handoffConversation,
     prepareTerminalContext,
     filesForSession,
     prepareWorkspaceFileContext,
@@ -306,9 +308,10 @@ export default function App() {
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // M2-05: the step a move to a worktree is on, or null. The button carries it
-  // because the conversation screen has no preparation banner of its own.
-  const [movingToWorktree, setMovingToWorktree] = useState<string | null>(null);
+  // M2-05: the step a move between Local and a worktree is on, or null. The
+  // button carries it because the conversation screen has no preparation
+  // banner of its own.
+  const [movingConversation, setMovingConversation] = useState<string | null>(null);
   // The conversation being started, before the host has given it a session id:
   // the first message as typed, and what the app is waiting for in plain words.
   // Null when idle.
@@ -687,48 +690,58 @@ export default function App() {
   }
 
   /**
-   * Continue this conversation in a worktree.
-   *
-   * This is not a transfer, and it does not pretend to be one: MSP has no
-   * multi-workspace contract, so a session cannot move between hosts. What
-   * happens is a copy of the folder, a new conversation in it, and a bounded
-   * context note in the composer — while this conversation stays exactly where
-   * it is, transcript included.
+   * M2-05: move this conversation and its uncommitted work between Local and a
+   * worktree. Local goes to a fresh worktree, a worktree back to its Local
+   * checkout. Nothing moves before the confirmation; a host that cannot move
+   * the conversation gets a new one in the target, with a note.
    */
-  async function moveToWorktree(sessionId: string): Promise<void> {
+  async function moveConversationFolder(sessionId: string): Promise<void> {
     const session = sessions.find((candidate) => candidate.session_id === sessionId);
-    if (session === undefined || movingToWorktree !== null) return;
+    if (session === undefined || movingConversation !== null) return;
     const source = session.workspace;
+    const local = insideWorktree(source) ? mainRootOf(source) : null;
     try {
-      setError(null);
-      setMovingToWorktree("Creating a worktree…");
-      const plan = planConversationWorktree(
-        folderName(source),
-        undefined,
-        Date.now().toString(36).slice(-5),
-      );
-      const record = await createWorktreeForWorkspace(source, plan);
-      if (record === null) return;
-      setMovingToWorktree("Starting Muse in the copy…");
+      setMovingConversation("Checking what will move…");
+      const preview = await previewHandoff(sessionId, local);
+      if (preview === null) return;
+      const question = handoffQuestion(preview, local !== null ? "Local" : "a new worktree");
+      if (question.blocked) {
+        setError(question.text);
+        return;
+      }
+      if (!window.confirm(question.text)) return;
+      let target = local;
+      if (target === null) {
+        setMovingConversation("Creating a worktree…");
+        const plan = planConversationWorktree(
+          folderName(source),
+          undefined,
+          Date.now().toString(36).slice(-5),
+        );
+        target = (await createWorktreeForWorkspace(source, plan))?.path ?? null;
+        if (target === null) return;
+      }
+      setMovingConversation("Moving the work…");
+      const result = await handoffConversation(sessionId, target);
+      if (result === null || result.sameSession) return;
+      setMovingConversation("Starting Muse there…");
       const project = projectForSession(sessionId);
       const opened = await startSessionInWorkspace(
-        record.path,
+        target,
         project !== null ? settingsFor(project.id) : undefined,
         project?.id,
       );
       if (opened === null) {
         setError(
-          "The worktree was created but no conversation could start in it; it is kept, and you can open it from the worktrees panel.",
+          "The work was moved, but no conversation could start in its new folder; open that folder to continue.",
         );
         return;
       }
-      prefillComposer(
-        formatWorktreeContinuationNote(source, record.path, record.branch),
-      );
+      prefillComposer(formatHandoffContext(result, logs[sessionId] ?? []));
     } catch (error) {
-      setError(userFacingError(error, "The worktree action could not be completed."));
+      setError(userFacingError(error, "The conversation could not be moved."));
     } finally {
-      setMovingToWorktree(null);
+      setMovingConversation(null);
     }
   }
 
@@ -748,7 +761,7 @@ export default function App() {
               // A running Muse host read its credentials at start: restart it
               // so it sees the new sign-in, reconnect, then replay the turn.
               const session = sessions.find((candidate) => candidate.session_id === target.sessionId);
-              if (session !== undefined && await restartHost(session.workspace)) {
+              if (session !== undefined && await restartHost(session.host_workspace ?? session.workspace)) {
                 await reconnectSession(target.sessionId);
               }
               await retryFailedTurn(target.sessionId, target.entryId);
@@ -852,8 +865,8 @@ export default function App() {
             onArchive={archiveSession}
             onRestore={restoreSession}
             onFork={(id) => void forkSession(id)}
-            onMoveToWorktree={(id) => void moveToWorktree(id)}
-            movingToWorktree={movingToWorktree}
+            onMoveFolder={(id) => void moveConversationFolder(id)}
+            movingFolder={movingConversation}
             canStart
             projects={projects}
             threadProjects={threadProjects}
@@ -1764,7 +1777,9 @@ export default function App() {
                         <Icon name="close" />
                       </button>
                     </nav>
-                    <div className="work-panel-body">
+                    {/* M2-05: a moved conversation remounts its panels so the
+                        changes, terminal and files start over in its new folder. */}
+                    <div className="work-panel-body" key={active.workspace}>
                       {workPanel === "review" && (
                         <ReviewPanel
                           sessionId={active.session_id}

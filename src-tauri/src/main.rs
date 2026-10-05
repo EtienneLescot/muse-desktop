@@ -105,6 +105,13 @@ pub struct SessionMeta {
     /// conversation" or "Session 01a0…" while the host knew it as "yo".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// M2-05: set once the conversation moved between Local and a worktree.
+    /// The MSP session stays owned by the host it started in (it cannot
+    /// migrate between host processes, and `session/resume` checks the
+    /// durable `workspaceRoot`), so this is that host's folder, while
+    /// `workspace` is where turns now run through `turn/start.workspaceRoots`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_workspace: Option<String>,
 }
 
 /// Host title, trimmed, without control characters (a live title carried a
@@ -1187,6 +1194,7 @@ fn session_meta_from_list_row(
         model_id: session_model_id(session),
         loaded: session_loaded(session),
         title: session_title(session),
+        host_workspace: None,
     })
 }
 
@@ -2700,22 +2708,23 @@ fn workspace_for_inspection(state: &State<'_, AppState>, session_id: &str) -> Re
     if session_id.is_empty() {
         return Err("sessionId must not be empty".to_string());
     }
-    if let Ok(root) = state
-        .hosts
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?
-        .session_workspace(session_id)
-    {
-        return Ok(root);
-    }
-    state
+    // The conversation's own workspace first: after a handoff it differs from
+    // the host's root, and Git, files and the terminal follow the turns.
+    if let Some(root) = state
         .sessions
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
         .get(session_id)
         .map(|meta| PathBuf::from(&meta.workspace))
         .filter(|root| !root.as_os_str().is_empty())
-        .ok_or_else(|| "conversation workspace is unavailable".to_string())
+    {
+        return Ok(root);
+    }
+    state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(session_id)
 }
 
 
@@ -3435,6 +3444,106 @@ async fn git_worktree_remove(workspace: String, path: String, force: bool) -> Re
         .map_err(|e| format!("worktree remove task failed: {e}"))?
 }
 
+/// M2-05: `turn/start.workspaceRoots` first shipped in Muse 1.4.2; the 1.3.0
+/// schema has no such member.
+fn accepts_workspace_roots(version: &str) -> bool {
+    let core = version.split(['-', '+']).next().unwrap_or_default();
+    let mut parts = core.split('.').map(|part| part.parse::<u64>().unwrap_or(0));
+    let mut next = || parts.next().unwrap_or(0);
+    (next(), next(), next()) >= (1, 4, 2)
+}
+
+fn host_accepts_workspace_roots(state: &AppState, session_id: &str) -> Result<bool, String> {
+    let root = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(session_id)?;
+    Ok(state
+        .host_engines
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&root)
+        .is_some_and(|engine| accepts_workspace_roots(&engine.server_version)))
+}
+
+/// Point a live conversation's turns at `workspace`. The session itself stays
+/// on the host it started in (see `SessionMeta::host_workspace`).
+fn move_session_workspace(
+    state: &AppState,
+    session_id: &str,
+    workspace: &Path,
+) -> Result<SessionMeta, String> {
+    let host_root = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(session_id)?;
+    let mut sessions = state.sessions.lock().map_err(|e| format!("state lock: {e}"))?;
+    let meta = sessions
+        .get_mut(session_id)
+        .ok_or_else(|| "conversation metadata is unavailable".to_string())?;
+    meta.host_workspace = Some(host_root.display().to_string());
+    meta.workspace = workspace.display().to_string();
+    Ok(meta.clone())
+}
+
+fn with_same_session(preview: git::HandoffPreview, same_session: bool) -> Result<Value, String> {
+    let mut value = serde_json::to_value(preview).map_err(|e| e.to_string())?;
+    value["sameSession"] = json!(same_session);
+    Ok(value)
+}
+
+/// M2-05: what moving this conversation's uncommitted work would do. `target`
+/// is Local or a worktree; none previews a worktree about to be created.
+#[tauri::command]
+async fn handoff_preview(
+    state: State<'_, AppState>,
+    session_id: String,
+    target: Option<String>,
+) -> Result<Value, String> {
+    let source = workspace_for_inspection(&state, &session_id)?;
+    let same_session = host_accepts_workspace_roots(&state, &session_id)?;
+    let preview = tokio::task::spawn_blocking(move || {
+        git::handoff_preview(&source, target.as_deref().map(|t| Path::new(t.trim())))
+    })
+    .await
+    .map_err(|e| format!("handoff preview task failed: {e}"))??;
+    with_same_session(preview, same_session)
+}
+
+/// M2-05: move this conversation's uncommitted work to `target`, Local or a
+/// worktree of the same repository. On a host with `workspaceRoots` the
+/// conversation follows and its next turn runs there; otherwise only the
+/// files move, and `sameSession: false` tells the renderer to open a new
+/// conversation in the target.
+#[tauri::command]
+async fn handoff_move(
+    state: State<'_, AppState>,
+    session_id: String,
+    target: String,
+) -> Result<Value, String> {
+    if state
+        .sessions
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&session_id)
+        .is_some_and(|meta| meta.running)
+    {
+        return Err("stop the current response before moving the conversation".to_string());
+    }
+    let source = workspace_for_inspection(&state, &session_id)?;
+    let same_session = host_accepts_workspace_roots(&state, &session_id)?;
+    let moved = tokio::task::spawn_blocking(move || git::handoff_move(&source, Path::new(target.trim())))
+        .await
+        .map_err(|e| format!("handoff task failed: {e}"))??;
+    if same_session {
+        let target = PathBuf::from(moved.target.clone().unwrap_or_default());
+        move_session_workspace(&state, &session_id, &target)?;
+    }
+    with_same_session(moved, same_session)
+}
+
 
 
 
@@ -4096,7 +4205,7 @@ fn check_scope(state: State<'_, AppState>, path: String, session_id: Option<Stri
         return Err("empty path".to_string());
     }
     let root = if let Some(sid) = session_id {
-        state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.session_workspace(&sid)?
+        workspace_for_inspection(&state, &sid)?
     } else { state
         .workspace
         .lock()
@@ -4345,6 +4454,7 @@ async fn start_session_at_workspace(
         model_id: session_model_id(session),
         loaded: session_loaded(session),
         title: None,
+        host_workspace: None,
     };
     state
         .sessions
@@ -4469,7 +4579,7 @@ async fn fork_session(
         .get("status")
         .and_then(Value::as_str)
         .is_some_and(|status| status == "running");
-    let meta = SessionMeta {
+    let mut meta = SessionMeta {
         session_id: fork_id.clone(),
         workspace: root.display().to_string(),
         running,
@@ -4484,12 +4594,15 @@ async fn fork_session(
         model_id: session_model_id(session),
         loaded: session_loaded(session),
         title: None,
+        host_workspace: None,
     };
-    state
-        .sessions
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?
-        .insert(fork_id, meta.clone());
+    let mut sessions = state.sessions.lock().map_err(|e| format!("state lock: {e}"))?;
+    // A fork of a moved conversation runs where its source runs.
+    if let Some(source) = sessions.get(&source_id).filter(|s| s.host_workspace.is_some()) {
+        meta.workspace = source.workspace.clone();
+        meta.host_workspace = source.host_workspace.clone();
+    }
+    sessions.insert(fork_id, meta.clone());
     Ok(meta)
 }
 
@@ -4571,6 +4684,7 @@ async fn resume_session_with_client(
             .and_then(session_loaded)
             .or_else(|| session_loaded(&read)),
         title: read.get("session").and_then(session_title),
+        host_workspace: None,
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     if let Err(error) = state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client) {
@@ -4656,17 +4770,41 @@ async fn resume_session(
     sandbox_disable_write: Option<bool>,
     sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
+    effective_workspace: Option<String>,
 ) -> Result<SessionMeta, String> {
-    resume_session_inner(
+    let meta = resume_session_inner(
         &app,
         &state,
-        session_id,
+        session_id.clone(),
         workspace_path,
         sandbox_mode,
         sandbox_disable_write,
         sandbox_disable_shell,
         mcp_servers,
-    ).await
+    ).await?;
+    // M2-05: `workspace_path` is the host's root; a moved conversation also
+    // names where it ran. A folder that is gone or no longer a checkout of the
+    // repository brings it back to the host's root; a host without
+    // `workspaceRoots` keeps it there.
+    let Some(workspace) = effective_workspace.filter(|w| !w.trim().is_empty()) else {
+        return Ok(meta);
+    };
+    if !host_accepts_workspace_roots(&state, &session_id)? {
+        return Ok(meta);
+    }
+    let host_root = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(&session_id)?;
+    let target = tokio::task::spawn_blocking(move || {
+        git::handoff_pair(&host_root, Path::new(workspace.trim()))
+            .map(|(_, target)| target)
+            .unwrap_or(host_root)
+    })
+    .await
+    .map_err(|e| format!("workspace check failed: {e}"))?;
+    move_session_workspace(&state, &session_id, &target)
 }
 
 /// Read the folded durable item history for an attached conversation.
@@ -5157,19 +5295,27 @@ async fn send_input_for_state(
     let input = input_parts.unwrap_or_else(|| json!([{ "type": "text", "text": text }]));
     validate_turn_input_parts(&input)?;
     let client = session_client(&state, &session_id)?;
-    let result = client
-        .request(
-            "turn/start",
-            json!({
-                // The frontend persists this id before the request starts.
-                // Reusing it makes an ambiguous retry idempotent at the
-                // supervisor boundary instead of admitting a second turn.
-                "commandId": command_id,
-                "sessionId": session_id,
-                "input": input,
-            }),
-        )
-        .await?;
+    let mut params = json!({
+        // The frontend persists this id before the request starts.
+        // Reusing it makes an ambiguous retry idempotent at the
+        // supervisor boundary instead of admitting a second turn.
+        "commandId": command_id,
+        "sessionId": session_id,
+        "input": input,
+    });
+    // M2-05: a moved conversation names its root on every turn. The host keeps
+    // the replacement, but repeating it also covers a host that restarted.
+    if let Some(root) = state
+        .sessions
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&session_id)
+        .filter(|meta| meta.host_workspace.is_some())
+        .map(|meta| meta.workspace.clone())
+    {
+        params["workspaceRoots"] = json!([root]);
+    }
+    let result = client.request("turn/start", params).await?;
     mark_running(&state, &session_id, true);
     Ok(result)
 }
@@ -6032,6 +6178,7 @@ mod tests {
 
                 loaded: None,
                 title: None,
+                host_workspace: None,
                 granted_capabilities: None,
             },
         );
@@ -6282,6 +6429,44 @@ mod tests {
         assert!(!state.sessions.lock().unwrap()["session-a"].running);
     }
 
+    #[test]
+    fn workspace_roots_need_muse_1_4_2() {
+        assert!(!accepts_workspace_roots("1.3.0-R3401.1"));
+        assert!(!accepts_workspace_roots("1.4.1"));
+        assert!(accepts_workspace_roots("1.4.2-R4684.1"));
+        assert!(accepts_workspace_roots("2.0.0"));
+    }
+
+    #[tokio::test]
+    async fn a_moved_conversation_names_its_root_on_every_turn() {
+        let state = Arc::new(empty_state());
+        let (client, mut frames) = fixture_client(false);
+        register_fixture_session(state.as_ref(), "session-a", "fixture-a", client.clone());
+        let turn = |command: &'static str| {
+            let state = state.clone();
+            tokio::spawn(async move {
+                send_input_for_state(state.as_ref(), "session-a".into(), command.into(), "go".into(), None)
+                    .await
+            })
+        };
+        let reply = |frame: Value| json!({"jsonrpc": "2.0", "id": frame["id"], "result": {"status": "accepted"}});
+
+        let before = turn("command-1");
+        let frame = fixture_frame(&mut frames).await;
+        assert!(frame["params"].get("workspaceRoots").is_none());
+        client.ingest(reply(frame)).await;
+        before.await.unwrap().unwrap();
+
+        let moved = move_session_workspace(&state, "session-a", Path::new("fixture-a/.muse/worktrees/wt"))
+            .unwrap();
+        assert_eq!(moved.host_workspace.as_deref(), Some("fixture-a"));
+        let after = turn("command-2");
+        let frame = fixture_frame(&mut frames).await;
+        assert_eq!(frame["params"]["workspaceRoots"], json!([moved.workspace]));
+        client.ingest(reply(frame)).await;
+        after.await.unwrap().unwrap();
+    }
+
     #[tokio::test]
     async fn interrupt_ack_keeps_session_running_until_terminal_notification() {
         let state = Arc::new(empty_state());
@@ -6337,6 +6522,7 @@ mod tests {
 
                 loaded: None,
                 title: None,
+                host_workspace: None,
                 granted_capabilities: None,
             },
         );
@@ -6400,6 +6586,7 @@ mod tests {
 
                 loaded: None,
                 title: None,
+                host_workspace: None,
                 granted_capabilities: None,
             },
         );
@@ -6462,6 +6649,7 @@ mod tests {
 
                 loaded: None,
                 title: None,
+                host_workspace: None,
                 granted_capabilities: None,
             },
         );
@@ -8915,6 +9103,7 @@ mod tests {
             model_id: None,
             loaded: Some(false),
             title: None,
+            host_workspace: None,
         };
         apply_resumed_session(
             &mut meta,
@@ -9104,6 +9293,8 @@ fn main() {
             git_worktree_readiness,
             git_worktree_inspect,
             git_worktree_remove,
+            handoff_preview,
+            handoff_move,
             mcp_local_probe,
             mcp_local_call,
             mcp_package_install,
