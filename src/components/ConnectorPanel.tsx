@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   CURATED_CONNECTORS,
+  connectorReachable,
   localConnectorIdForName,
   type ConnectorEntry,
   type ConnectorTool,
@@ -420,7 +421,7 @@ export function ConnectorPanel({
                 </small>
               </span>
               {done ? (
-                <span className="integration-flag">configured</span>
+                <span className="integration-flag">added</span>
               ) : (
                 <button type="button" onClick={() => onInstall(c.id)}>
                   Add
@@ -444,6 +445,12 @@ export function ConnectorPanel({
                     {e.name}
                     {e.kind === "remote" && <small> (remote)</small>}
                   </strong>
+                  {!connectorReachable(e) && (
+                    <CapabilityBadge
+                      status="unavailable"
+                      reason="Catalog entry only: no server command is set, so Muse cannot call these tools."
+                    />
+                  )}
                   <small className="muted">
                     {e.status === "disabled"
                       ? "disabled"

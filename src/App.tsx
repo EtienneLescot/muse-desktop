@@ -613,6 +613,26 @@ export default function App() {
       startupProbe={startupProbe}
     />
   );
+  // A failed action reports through `error` wherever it was clicked, so the
+  // banner follows the user: rendered only beside the conversation, a refused
+  // MCP probe or bundle on Extensions was invisible (M0-13 audit, 05/10/2026).
+  const errorBanner = !needsMuseSetup && sidecarKind === null && error ? (
+    <div className="error-banner" role="alert">
+      <span>{userFacingError(error)}</span>
+      {error.toLowerCase().includes("restart the workspace host") && !backendMissing && (
+        <button
+          type="button"
+          className="error-banner-action"
+          onClick={() => {
+            if (!window.confirm("Restart the workspace host? Active conversations will disconnect and can reconnect when the host supports durable sessions.")) return;
+            void restartHost(workspace);
+          }}
+        >
+          Restart workspace host
+        </button>
+      )}
+    </div>
+  ) : null;
 
   /**
    * Drive the Muse CLI's device-code sign-in inside the built-in terminal.
@@ -992,6 +1012,7 @@ export default function App() {
           <section className="destination-page">
             <div className="eyebrow">MAKE IT YOURS</div>
             <h1>Settings</h1>{" "}
+            {errorBanner}
             <SettingsPanel
               workspace={workspace}
               onPickWorkspace={setWorkspace}
@@ -1067,6 +1088,7 @@ export default function App() {
                 }[page]
               }
             </p>
+            {errorBanner}
             {page === "projects" && (
               <>
                 {" "}
@@ -1345,27 +1367,7 @@ export default function App() {
                 Muse. Your local history is still available.
               </div>
             )}
-            {needsMuseSetup
-              ? null
-              : sidecarKind !== null
-              ? sidecarPanel
-              : error && (
-                <div className="error-banner" role="alert">
-                  <span>{userFacingError(error)}</span>
-                  {error.toLowerCase().includes("restart the workspace host") && !backendMissing && (
-                    <button
-                      type="button"
-                      className="error-banner-action"
-                      onClick={() => {
-                        if (!window.confirm("Restart the workspace host? Active conversations will disconnect and can reconnect when the host supports durable sessions.")) return;
-                        void restartHost(workspace);
-                      }}
-                    >
-                      Restart workspace host
-                    </button>
-                  )}
-                </div>
-              )}
+            {needsMuseSetup ? null : sidecarKind !== null ? sidecarPanel : errorBanner}
             {active === null && preparation !== null ? (
               /* The conversation opens on the first message, not on a spinner in
                  the middle of the welcome screen: the host has no session id yet,

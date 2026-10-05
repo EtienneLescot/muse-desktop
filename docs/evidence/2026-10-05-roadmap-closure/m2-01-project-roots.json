@@ -1,0 +1,447 @@
+{
+  "schema": "muse-desktop.m2-01-project-roots.v1",
+  "ticket": "M2-01",
+  "platform": "Windows 11 (26200), debug build with embedded frontend, WebView2 over CDP",
+  "phases": {
+    "setup": {
+      "userProjects": {
+        "count": 3,
+        "sha": "8ba3e9697fe80999"
+      },
+      "create": {
+        "pickerSays": "4 folders selected",
+        "stored": {
+          "id": "muv876b3-dpbbpf",
+          "workspace": "<root A>",
+          "workspaces": [
+            "<root A>",
+            "<root B>",
+            "<root C>",
+            "<root D>"
+          ],
+          "workspaceReviewed": true
+        },
+        "panel": {
+          "summary": "baseline-m2-01 0 conversations",
+          "folders": [
+            {
+              "path": "<root A>",
+              "health": null,
+              "reason": null
+            },
+            {
+              "path": "<root B>",
+              "health": null,
+              "reason": null
+            },
+            {
+              "path": "<root C>",
+              "health": null,
+              "reason": null
+            },
+            {
+              "path": "<root D>",
+              "health": null,
+              "reason": null
+            }
+          ]
+        },
+        "quota": "PROJECTS (4/5)"
+      },
+      "legacyBefore": {
+        "notice": "1 project need a folder",
+        "row": {
+          "summary": "baseline-m2-01-legacy 0 conversations folder needed",
+          "folders": []
+        }
+      },
+      "legacyAfter": {
+        "notice": null,
+        "stored": {
+          "workspace": "<root E>",
+          "workspaceReviewed": true
+        },
+        "panel": {
+          "summary": "baseline-m2-01-legacy 0 conversations",
+          "folders": [
+            {
+              "path": "<root E>",
+              "health": null,
+              "reason": null
+            }
+          ]
+        }
+      },
+      "checkAllPresent": {
+        "summary": "baseline-m2-01 0 conversations",
+        "folders": [
+          {
+            "path": "<root A>",
+            "health": "Available",
+            "reason": "Folder is available."
+          },
+          {
+            "path": "<root B>",
+            "health": "Available",
+            "reason": "Folder is available."
+          },
+          {
+            "path": "<root C>",
+            "health": "Available",
+            "reason": "Folder is available."
+          },
+          {
+            "path": "<root D>",
+            "health": "Available",
+            "reason": "Folder is available."
+          }
+        ]
+      },
+      "ipc": [
+        {
+          "cmd": "plugin:dialog|open",
+          "options": {
+            "directory": true,
+            "multiple": true
+          },
+          "path": null,
+          "answeredByHarness": true,
+          "ok": true
+        },
+        {
+          "cmd": "plugin:dialog|open",
+          "options": {
+            "directory": true,
+            "multiple": false
+          },
+          "path": null,
+          "answeredByHarness": true,
+          "ok": true
+        },
+        {
+          "cmd": "inspect_workspace_root",
+          "options": null,
+          "path": "<root A>",
+          "answeredByHarness": false,
+          "ok": true,
+          "result": {
+            "path": "<root A>",
+            "exists": true,
+            "is_directory": true,
+            "canonical_path": "<root A>",
+            "reason": "Folder is available."
+          }
+        },
+        {
+          "cmd": "inspect_workspace_root",
+          "options": null,
+          "path": "<root B>",
+          "answeredByHarness": false,
+          "ok": true,
+          "result": {
+            "path": "<root B>",
+            "exists": true,
+            "is_directory": true,
+            "canonical_path": "<root B>",
+            "reason": "Folder is available."
+          }
+        },
+        {
+          "cmd": "inspect_workspace_root",
+          "options": null,
+          "path": "<root C>",
+          "answeredByHarness": false,
+          "ok": true,
+          "result": {
+            "path": "<root C>",
+            "exists": true,
+            "is_directory": true,
+            "canonical_path": "<root C>",
+            "reason": "Folder is available."
+          }
+        },
+        {
+          "cmd": "inspect_workspace_root",
+          "options": null,
+          "path": "<root D>",
+          "answeredByHarness": false,
+          "ok": true,
+          "result": {
+            "path": "<root D>",
+            "exists": true,
+            "is_directory": true,
+            "canonical_path": "<root D>",
+            "reason": "Folder is available."
+          }
+        }
+      ],
+      "verdict": {
+        "multiRootStored": true,
+        "panelListsFourRoots": true,
+        "legacyNoticeShown": true,
+        "legacyMigrated": true,
+        "allAvailable": true
+      },
+      "boot": {
+        "timeOrigin": 1791203304212
+      },
+      "consoleErrors": []
+    },
+    "check": {
+      "startHere": {
+        "selected": "<root A>",
+        "clicked": true,
+        "startSession": {
+          "workspacePath": "<root A>",
+          "ok": true,
+          "sessionId": "01a10c0b-e0f2-7693-95cf-41d428d26012"
+        },
+        "after": {
+          "attachedTo": "muv876b3-dpbbpf",
+          "workspace": "<root A>",
+          "logEntries": 0
+        }
+      },
+      "checkAfterMove": {
+        "summary": "baseline-m2-01 2 conversations",
+        "folders": [
+          {
+            "path": "<root A>",
+            "health": "Available",
+            "reason": "Folder is available."
+          },
+          {
+            "path": "<root B>",
+            "health": "Available",
+            "reason": "Folder is available."
+          },
+          {
+            "path": "<root C>",
+            "health": "Missing",
+            "reason": "The configured folder could not be found."
+          },
+          {
+            "path": "<root D>",
+            "health": "Not a folder",
+            "reason": "The configured path is a file, not a folder."
+          }
+        ]
+      },
+      "storedRoots": {
+        "workspace": "<root A>",
+        "workspaces": [
+          "<root A>",
+          "<root B>",
+          "<root C>",
+          "<root D>"
+        ]
+      },
+      "verdict": {
+        "startedInChosenRoot": true,
+        "attachedToProject": true,
+        "noModelTurn": true,
+        "rootA": "Available",
+        "rootB": "Available",
+        "rootC": "Missing",
+        "rootD": "Not a folder",
+        "observationsDistinct": true,
+        "rootsNotRewritten": true
+      },
+      "boot": {
+        "timeOrigin": 1791203304212
+      },
+      "consoleErrors": []
+    },
+    "verify": {
+      "stored": {
+        "project": {
+          "id": "muv876b3-dpbbpf",
+          "workspace": "<root A>",
+          "workspaces": [
+            "<root A>",
+            "<root B>",
+            "<root C>",
+            "<root D>"
+          ],
+          "workspaceReviewed": true
+        },
+        "legacy": {
+          "id": "baseline-legacy-muv876xk",
+          "workspace": "<root E>",
+          "workspaceReviewed": true
+        },
+        "attached": [
+          {
+            "workspace": "<root B>",
+            "title": "Reply with just the word BASELINE and noth…"
+          },
+          {
+            "workspace": "<root A>",
+            "title": "Session 01a10c0b"
+          }
+        ]
+      },
+      "panel": {
+        "notice": null,
+        "project": {
+          "summary": "baseline-m2-01 2 conversations",
+          "folders": [
+            {
+              "path": "<root A>",
+              "health": null,
+              "reason": null
+            },
+            {
+              "path": "<root B>",
+              "health": null,
+              "reason": null
+            },
+            {
+              "path": "<root C>",
+              "health": null,
+              "reason": null
+            },
+            {
+              "path": "<root D>",
+              "health": null,
+              "reason": null
+            }
+          ]
+        },
+        "legacy": {
+          "summary": "baseline-m2-01-legacy 0 conversations",
+          "folders": [
+            {
+              "path": "<root E>",
+              "health": null,
+              "reason": null
+            }
+          ]
+        }
+      },
+      "checkAfterRestart": {
+        "summary": "baseline-m2-01 2 conversations",
+        "folders": [
+          {
+            "path": "<root A>",
+            "health": "Available",
+            "reason": "Folder is available."
+          },
+          {
+            "path": "<root B>",
+            "health": "Available",
+            "reason": "Folder is available."
+          },
+          {
+            "path": "<root C>",
+            "health": "Missing",
+            "reason": "The configured folder could not be found."
+          },
+          {
+            "path": "<root D>",
+            "health": "Not a folder",
+            "reason": "The configured path is a file, not a folder."
+          }
+        ]
+      },
+      "picker": [
+        {
+          "optionId": "muv876b3-dpbbpf:0",
+          "label": "baseline-m2-01 · root-a",
+          "workspace": "<root A>"
+        },
+        {
+          "optionId": "muv876b3-dpbbpf:1",
+          "label": "baseline-m2-01 · root-b",
+          "workspace": "<root B>"
+        },
+        {
+          "optionId": "muv876b3-dpbbpf:2",
+          "label": "baseline-m2-01 · root-c",
+          "workspace": "<root C>"
+        },
+        {
+          "optionId": "muv876b3-dpbbpf:3",
+          "label": "baseline-m2-01 · root-d",
+          "workspace": "<root D>"
+        }
+      ],
+      "startInMissingRoot": {
+        "picked": true,
+        "note": "Runs in root-c. The agent reads the rules of that folder.",
+        "alerts": [
+          "This conversation could not be started. — workspace is not a directory: <root C>"
+        ],
+        "sessionsAdded": 0,
+        "draftKept": true,
+        "calls": [
+          {
+            "cmd": "start_session",
+            "ok": false,
+            "blockedByHarness": false,
+            "result": "\"workspace is not a directory: <root C>\""
+          }
+        ]
+      },
+      "verdict": {
+        "restartedSinceCheck": true,
+        "rootsPersisted": true,
+        "migrationPersisted": true,
+        "observationsAfterRestart": true,
+        "conversationsStillAttached": 2,
+        "pickerOptionIds": [
+          "<projectId>:0",
+          "<projectId>:1",
+          "<projectId>:2",
+          "<projectId>:3"
+        ],
+        "missingRootStartRefused": true,
+        "choiceKeptAfterFailedStart": true
+      },
+      "boot": {
+        "timeOrigin": 1791204734225
+      },
+      "consoleErrors": []
+    },
+    "cleanup": {
+      "deleted": [
+        {
+          "name": "baseline-m2-01",
+          "clicked": true
+        },
+        {
+          "name": "baseline-m2-01-legacy",
+          "clicked": true
+        }
+      ],
+      "verdict": {
+        "userProjectsRestored": true,
+        "danglingAttachments": 0
+      },
+      "boot": {
+        "timeOrigin": 1791205079923
+      },
+      "consoleErrors": []
+    }
+  },
+  "commit": "52f50cd",
+  "date": "2026-10-05",
+  "beforeFix": {
+    "verify · startInMissingRoot": {
+      "choiceKeptAfterFailedStart": false,
+      "note": "Runs in openscreen with the global settings. The agent reads that folder's rules.",
+      "measured": "the failed start remounted the welcome screen: the draft survived but the picker fell back to the default folder, so a retry would have started elsewhere"
+    }
+  },
+  "defects": [
+    {
+      "id": "M2-01-a",
+      "status": "fixed in this commit",
+      "what": "A failed start reset the welcome screen's environment (and worktree switch) to the defaults while keeping the draft.",
+      "fix": "src/components/EmptySessionScreen.tsx keeps both in session storage with the draft until a start succeeds; guard test/visibleFailures.test.ts",
+      "reproof": "verify.verdict.choiceKeptAfterFailedStart = true"
+    }
+  ],
+  "method": "No model turn. The OS folder dialog is answered at the IPC boundary by the harness (plugin:dialog|open, recorded as answeredByHarness); the welcome-screen start with a real turn through projectId:rootIndex is m0-08-engine-run-1.4.2.json (root B). The missing-root start runs with send_input blocked by the harness so no turn could be sent.",
+  "observation": "The welcome picker still offers a root that is Missing or Not a folder; choosing it fails at start_session with 'workspace is not a directory' (honest refusal, no session created)."
+}

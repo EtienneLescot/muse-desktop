@@ -424,6 +424,15 @@ export function listConnectorTools(registry: ConnectorEntry[]): ConnectorTool[] 
   return out;
 }
 
+/**
+ * Whether anything backs this entry: a remote endpoint, or a local server
+ * with a command to start. A curated catalog entry has neither, so adding it
+ * only lists tools that nothing serves (M0-13 audit, 05/10/2026).
+ */
+export function connectorReachable(entry: ConnectorEntry): boolean {
+  return entry.kind === "remote" || (entry.command ?? "").trim().length > 0;
+}
+
 /** Tool names present in `after` but not `before` (and vice versa). */
 export function diffTools(
   before: ConnectorTool[],

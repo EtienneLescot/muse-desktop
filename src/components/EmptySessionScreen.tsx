@@ -101,7 +101,15 @@ export function EmptySessionScreen({
   }, [draft]);
   const [starting, setStarting] = useState(false);
   const startAttempted = useRef(false);
-  const [worktree, setWorktree] = useState(false);
+  // Where the conversation runs is kept with the draft: a failed start
+  // remounts this screen, and the choice used to fall back to the default
+  // folder while the draft stayed, so a retry ran elsewhere (M2-01, 05/10/2026).
+  const welcomeEnvironmentKey = "muse-desktop.welcome-environment";
+  const welcomeWorktreeKey = "muse-desktop.welcome-worktree";
+  const [worktree, setWorktree] = useState(() => readSessionStorageString(welcomeWorktreeKey) === "1");
+  useEffect(() => {
+    writeSessionStorageString(welcomeWorktreeKey, worktree ? "1" : "");
+  }, [worktree]);
   const [initialAttachmentDraft] = useState(() => loadAttachmentDraft("welcome"));
   const [attachments, setAttachments] = useState<ComposerAttachment[]>(
     initialAttachmentDraft.attachments,
@@ -116,7 +124,12 @@ export function EmptySessionScreen({
   useEffect(() => {
     saveAttachmentDraft("welcome", attachments);
   }, [attachments]);
-  const [environmentId, setEnvironmentId] = useState("default");
+  const [environmentId, setEnvironmentId] = useState(
+    () => readSessionStorageString(welcomeEnvironmentKey) || "default",
+  );
+  useEffect(() => {
+    writeSessionStorageString(welcomeEnvironmentKey, environmentId);
+  }, [environmentId]);
   const selectedEnvironment = environmentOptions.find(
     (option) => option.optionId === environmentId,
   );
@@ -200,6 +213,8 @@ export function EmptySessionScreen({
         // in the next conversation's composer and was sent twice.
         setDraft("");
         removeSessionStorageKey(welcomeDraftKey);
+        removeSessionStorageKey(welcomeEnvironmentKey);
+        removeSessionStorageKey(welcomeWorktreeKey);
         setAttachments([]);
       }
     } finally {

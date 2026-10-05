@@ -378,6 +378,7 @@ import {
   findConnector,
   installConnector,
   listConnectorTools,
+  connectorReachable,
   loadConnectors,
   localConnectorIdForName,
   registerLocalConnector,
@@ -4696,7 +4697,12 @@ export function useMuseSessions(): UseMuseSessions {
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
   // Hot-listed tools: re-read from the registry on every render, so a
   // fresh install lists without restart (no cache to invalidate).
-  const connectorTools = useMemo(() => listConnectorTools(connectors), [connectors]);
+  // Only tools something can serve: a catalog entry with no command lists
+  // tools that no server provides.
+  const connectorTools = useMemo(
+    () => listConnectorTools(connectors.filter(connectorReachable)),
+    [connectors],
+  );
 
   const installConnectorById = useCallback((dirId: string): void => {
     const r = installConnector(connectorsRef.current, dirId);

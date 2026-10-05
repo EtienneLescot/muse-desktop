@@ -9,6 +9,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   CURATED_CONNECTORS,
+  connectorReachable,
   diffTools,
   findCurated,
   installConnector,
@@ -441,5 +442,25 @@ describe("remote guard (US-26: single remote + public internet)", () => {
 describe("persistence", () => {
   it("loads [] without localStorage (node:test has none)", () => {
     assert.deepEqual(loadConnectors(), []);
+  });
+});
+
+describe("connectorReachable (M0-13: a listed tool needs a server)", () => {
+  it("a curated catalog entry has nothing behind it", () => {
+    const [entry] = installed("local-sqlite");
+    assert.equal(connectorReachable(entry), false);
+  });
+
+  it("a local server with a command and a remote endpoint are reachable", () => {
+    const local = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "node server.js",
+      tools: [{ name: "demo.read", description: "" }],
+    });
+    assert.ok(local);
+    assert.equal(connectorReachable(local.entry), true);
+    assert.equal(connectorReachable({ ...local.entry, command: "   " }), false);
+    assert.equal(connectorReachable({ ...local.entry, kind: "remote", command: undefined }), true);
   });
 });
