@@ -45,6 +45,7 @@ mod scheduler_wakeup;
 mod notification_ledger;
 mod outbox_ledger;
 mod workspace_watch;
+mod test_mode;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -1885,6 +1886,18 @@ fn spawn_sidecar(
     root: &PathBuf,
     sandbox: &HostSandboxPolicy,
 ) -> Result<(tauri::async_runtime::Receiver<CommandEvent>, CommandChild), String> {
+    // M0-14 isolated test mode: every engine is the fixture, never a real one.
+    if test_mode::data_dir().is_some() {
+        let argv = test_mode::sidecar_argv()?;
+        return app
+            .shell()
+            .command(&argv[0])
+            .args(&argv[1..])
+            .args(sandbox.cli_args())
+            .current_dir(root)
+            .spawn()
+            .map_err(|e| format!("could not spawn sidecar `{}` in {}: {e}", argv[0], root.display()));
+    }
     if let Some(remote) = remote_ssh::remote_engine(root) {
         // M4-07: the same host on another machine, over the system ssh. The
         // stdout pump and `MspClient` downstream cannot tell the difference.
@@ -2880,25 +2893,27 @@ fn collect_diagnostics(state: State<'_, AppState>) -> Result<NativeDiagnosticsSn
     })
 }
 
+/// App data, or the isolated test instance's folder (`test_mode`).
+fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    match test_mode::data_dir() {
+        Some(dir) => Ok(dir),
+        None => app
+            .path()
+            .app_data_dir()
+            .map_err(|error| format!("cannot resolve app data directory: {error}")),
+    }
+}
+
 fn scheduler_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|path| path.join("scheduler"))
-        .map_err(|error| format!("cannot resolve scheduler data directory: {error}"))
+    app_data_dir(app).map(|path| path.join("scheduler"))
 }
 
 fn notification_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|path| path.join("notifications"))
-        .map_err(|error| format!("cannot resolve notification data directory: {error}"))
+    app_data_dir(app).map(|path| path.join("notifications"))
 }
 
 fn computer_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|path| path.join("computer-use"))
-        .map_err(|error| format!("cannot resolve computer-use data directory: {error}"))
+    app_data_dir(app).map(|path| path.join("computer-use"))
 }
 
 /// Computer use: what is installed, what is granted, and whether the grant is
@@ -3116,10 +3131,7 @@ fn scheduler_runs_write(app: AppHandle, payload: String) -> Result<(), String> {
 }
 
 fn outbox_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|path| path.join("outbox"))
-        .map_err(|error| format!("cannot resolve outbox data directory: {error}"))
+    app_data_dir(app).map(|path| path.join("outbox"))
 }
 
 /// Read the renderer-owned schedule definitions from app data. The native
@@ -3143,6 +3155,10 @@ fn scheduler_wakeup_sync(
     app: AppHandle,
     wake_at: Option<u64>,
 ) -> Result<scheduler_wakeup::WakeupResponse, String> {
+    // The wake-up task is one per user account: a test instance leaves it alone.
+    if test_mode::data_dir().is_some() {
+        return Err("native wake-up is off in test mode".to_string());
+    }
     let data_dir = scheduler_data_dir(&app)?;
     let executable = std::env::current_exe()
         .map_err(|error| format!("cannot resolve Muse executable: {error}"))?;
@@ -9107,15 +9123,19 @@ fn main() {
     }
     #[cfg(target_os = "macos")]
     login_env::adopt_login_shell_path();
-    tauri::Builder::default()
-        // M2/M3 follow-up (measured 27/09): the automation wake task relaunches
-        // this executable while the user's instance may still run — two
-        // instances then clobber the shared WebView2 profile and their durable
-        // ledgers. The first-registered plugin must stay first: the second
-        // instance exits after forwarding its argv to this callback, which
-        // focuses the primary window (the scheduler re-checks on focus) and
-        // re-emits the wake so a due automation dispatches at once.
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+    let builder = tauri::Builder::default();
+    // M2/M3 follow-up (measured 27/09): the automation wake task relaunches
+    // this executable while the user's instance may still run — two
+    // instances then clobber the shared WebView2 profile and their durable
+    // ledgers. The first-registered plugin must stay first: the second
+    // instance exits after forwarding its argv to this callback, which
+    // focuses the primary window (the scheduler re-checks on focus) and
+    // re-emits the wake so a due automation dispatches at once. An isolated
+    // test instance shares neither, so it runs beside the user's own.
+    let builder = if test_mode::enter() {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             let is_wake = args.iter().any(|arg| arg == "--automation-wakeup");
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -9127,6 +9147,8 @@ fn main() {
                 let _ = app.emit("automation-wakeup", ());
             }
         }))
+    };
+    builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())

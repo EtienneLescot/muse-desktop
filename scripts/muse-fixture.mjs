@@ -12,8 +12,12 @@
  *   initialize -> session/start -> turn/start -> approval/requested
  *   -> approval/decide -> approval/resolved -> item/* -> turn/completed
  *   -> session/read / approval/listPending / session/resume
+ *
+ * Host failure: a turn/start whose text contains `[fixture:exit]` makes the
+ * process exit before it answers, as a host crashing mid-send (M0-14 E2E).
  */
 
+import { createHash } from "node:crypto";
 import process from "node:process";
 
 const sessions = new Map();
@@ -34,9 +38,14 @@ function stringValue(value, fallback = "") {
   return typeof value === "string" && value.trim() ? value : fallback;
 }
 
-const instancePrefix = process.env.MUSE_FIXTURE_PREFIX
-  ? `${process.env.MUSE_FIXTURE_PREFIX}-`
-  : "";
+// Ids stay unique across the hosts of one app run (one fixture per workspace).
+const instancePrefix = `${process.env.MUSE_FIXTURE_PREFIX || `p${process.pid}`}-`;
+
+// The 1.4.2 host's choices (docs/evidence/2026-10-05-roadmap-closure/m0-05-msp-approval-prompt-1.4.2.json).
+const choices = [
+  { choiceId: "allow_once", label: "Allow once", decision: "approved", scope: "once" },
+  { choiceId: "abort", label: "Reject", decision: "abort", scope: "once" },
+];
 
 function id(prefix, counter) {
   return `${instancePrefix}${prefix}-${counter}`;
@@ -128,6 +137,7 @@ function emitTurnPrelude(session, turnId) {
     turnId,
     kind: "shell",
     subject: { kind: "shell", command: "git status --short" },
+    availableChoices: choices,
     status: "pending",
   };
   session.pendingApprovals.push(pending);
@@ -137,6 +147,7 @@ function emitTurnPrelude(session, turnId) {
     approvalId,
     currentRequirementId: requirementId,
     subject: pending.subject,
+    availableChoices: choices,
   });
 }
 
@@ -209,7 +220,8 @@ function handle(frame) {
     case "initialize":
       resultResponse(frame, {
         protocolVersion: "1",
-        schema: { version: 1, fingerprint: "muse-fixture-approval" },
+        // The supervisor's handshake accepts a `sha256:` fingerprint only.
+        schema: { version: 1, fingerprint: `sha256:${createHash("sha256").update("muse-fixture-approval").digest("hex")}` },
         serverInfo: { name: "muse", version: "fixture-1.0.0" },
         sessionDurability: "durable",
         grantedCapabilities: ["userShell"],
@@ -272,9 +284,10 @@ function handle(frame) {
         errorResponse(frame, -32004, "session not found");
         return;
       }
-      const turnId = id("turn", ++turnNumber);
       const input = Array.isArray(params.input) ? params.input : [];
       const text = input.filter((part) => part?.type === "text").map((part) => part.text).join(" ").trim();
+      if (text.includes("[fixture:exit]")) process.exit(1);
+      const turnId = id("turn", ++turnNumber);
       item(session, turnId, "userMessage", text || "fixture input");
       session.status = "running";
       session.activeTurnId = turnId;
@@ -306,6 +319,7 @@ function handle(frame) {
           approvalId,
           requirementId,
           choiceId,
+          decision: "approved",
           terminal: true,
         });
         finishApprovedTurn(session, pending, choiceId);

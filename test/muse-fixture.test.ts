@@ -81,6 +81,10 @@ async function bootstrap(client: FixtureClient, workspaceRoot = "C:\\fixture-wor
   });
   assert.equal((init.result as Frame).serverInfo && ((init.result as Frame).serverInfo as Frame).name, "muse");
   assert.equal((init.result as Frame).sessionDurability, "durable");
+  // What the supervisor's handshake (validate_initialize_result) accepts.
+  const schema = (init.result as Frame).schema as Frame;
+  assert.equal(schema.version, 1);
+  assert.match(String(schema.fingerprint), /^sha256:[0-9a-f]{64}$/);
   client.write({ jsonrpc: "2.0", method: "initialized" });
   const started = await client.request(2, "session/start", { workspaceRoot });
   const session = (started.result as Frame).session as Frame;
@@ -109,6 +113,8 @@ test("Muse fixture resumes a turn after a terminal approval", async () => {
     const requestParams = requested.params as Frame;
     assert.equal(requestParams.sessionId, sessionId);
     assert.equal(requestParams.turnId, turnId);
+    // The card needs the host's choices to offer a decision.
+    assert.deepEqual((requestParams.availableChoices as Frame[]).map((choice) => choice.label), ["Allow once", "Reject"]);
 
     const pending = await client.request(4, "approval/listPending", { sessionId });
     const approvals = (pending.result as Frame).approvals as Frame[];
@@ -312,5 +318,23 @@ test("Muse fixture keeps a pending approval visible once across resume and resum
     assert.deepEqual((after.result as Frame).approvals, []);
   } finally {
     await client.close();
+  }
+});
+
+test("Muse fixture dies without answering a turn/start flagged [fixture:exit]", async () => {
+  const client = new FixtureClient();
+  try {
+    const sessionId = await bootstrap(client);
+    const closed = once(client.child, "close");
+    client.write({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "turn/start",
+      params: { commandId: "command-exit", sessionId, input: [{ type: "text", text: "[fixture:exit] keep this text" }] },
+    });
+    const [code] = await closed;
+    assert.equal(code, 1);
+  } finally {
+    if (client.child.exitCode === null) client.child.kill();
   }
 });
