@@ -27,6 +27,8 @@ interface Props {
    * report a status, and the action stays available.
    */
   sessionLoaded?: boolean;
+  /** M2-05: why "Run in Muse" would run in the wrong folder, if it would. */
+  runThroughMuseBlocked?: string | null;
   onRunThroughMuse: (sessionId: string, command: string) => Promise<boolean>;
   onInsertContext: (sessionId: string) => boolean;
 }
@@ -47,6 +49,7 @@ export function TerminalPanel({
   onClose,
   canRunThroughMuse,
   sessionLoaded,
+  runThroughMuseBlocked = null,
   onRunThroughMuse,
   onInsertContext,
 }: Props) {
@@ -178,9 +181,10 @@ export function TerminalPanel({
    * An absent `sessionLoaded` (older host) never blocks the action.
    */
   const sessionReady = sessionLoaded !== false;
+  const museShellUsable = canRunThroughMuse && sessionReady && runThroughMuseBlocked === null;
 
   const runThroughMuse = () => {
-    if (!canRunThroughMuse || !sessionReady || command.trim().length === 0 || runningThroughMuse) return;
+    if (!museShellUsable || command.trim().length === 0 || runningThroughMuse) return;
     setRunningThroughMuse(true);
     void onRunThroughMuse(sessionId, command)
       .then((accepted) => {
@@ -258,13 +262,15 @@ export function TerminalPanel({
           type="button"
           className="terminal-muse"
           onClick={runThroughMuse}
-          disabled={!canRunThroughMuse || !sessionReady || !command.trim() || runningThroughMuse}
+          disabled={!museShellUsable || !command.trim() || runningThroughMuse}
           title={
             !canRunThroughMuse
               ? "This Muse host did not grant the userShell capability"
-              : !sessionReady
-                ? "The host has not loaded this conversation yet: reconnect it, or send a message"
-                : "Run this command through the Muse host (userShell)"
+              : runThroughMuseBlocked !== null
+                ? runThroughMuseBlocked
+                : !sessionReady
+                  ? "The host has not loaded this conversation yet: reconnect it, or send a message"
+                  : "Run this command through the Muse host (userShell)"
           }
         >
           Run in Muse

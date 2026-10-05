@@ -39,7 +39,7 @@ import { ComputerUsePanel } from "./components/ComputerUsePanel";
 import { SharePanel } from "./components/SharePanel";
 import { WorktreeTools } from "./components/WorktreeTools";
 import { isTauriRuntime } from "./lib/env";
-import { formatHandoffContext, handoffQuestion } from "./lib/handoff";
+import { formatHandoffContext, handoffQuestion, userShellBlocked } from "./lib/handoff";
 import {
   folderName,
   parseWorkspaceRootObservation,
@@ -312,6 +312,8 @@ export default function App() {
   // button carries it because the conversation screen has no preparation
   // banner of its own.
   const [movingConversation, setMovingConversation] = useState<string | null>(null);
+  // Its composer waits: the supervisor refuses a turn in a folder being moved.
+  const [movingSessionId, setMovingSessionId] = useState<string | null>(null);
   // The conversation being started, before the host has given it a session id:
   // the first message as typed, and what the app is waiting for in plain words.
   // Null when idle.
@@ -702,6 +704,7 @@ export default function App() {
     const local = insideWorktree(source) ? mainRootOf(source) : null;
     try {
       setMovingConversation("Checking what will move…");
+      setMovingSessionId(sessionId);
       const preview = await previewHandoff(sessionId, local);
       if (preview === null) return;
       const question = handoffQuestion(preview, local !== null ? "Local" : "a new worktree");
@@ -742,6 +745,7 @@ export default function App() {
       setError(userFacingError(error, "The conversation could not be moved."));
     } finally {
       setMovingConversation(null);
+      setMovingSessionId(null);
     }
   }
 
@@ -1690,7 +1694,17 @@ export default function App() {
                           origin: "workspace",
                         })),
                     ]}
-                    disabled={backendMissing || active.archived === true || !connectedIds.includes(active.session_id)}
+                    disabled={
+                      backendMissing ||
+                      active.archived === true ||
+                      !connectedIds.includes(active.session_id) ||
+                      movingSessionId === active.session_id
+                    }
+                    disabledReason={
+                      movingSessionId === active.session_id
+                        ? "This conversation's folder is being moved: send once the move is done."
+                        : undefined
+                    }
                     modelControl={
                       <>
                         <ModelControl
@@ -1815,6 +1829,7 @@ export default function App() {
                           onClose={closeTerminal}
                           canRunThroughMuse={userShellAvailableForSession(active.session_id)}
                           sessionLoaded={sessionLoadedForSession(active.session_id)}
+                          runThroughMuseBlocked={userShellBlocked(active)}
                           onRunThroughMuse={runUserShell}
                           onInsertContext={prepareTerminalContext}
                         />

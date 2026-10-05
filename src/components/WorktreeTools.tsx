@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { pathKey } from "../lib/paths";
 import { insideWorktree, mainRootOf } from "../lib/worktrees";
 
 /**
@@ -190,7 +191,7 @@ export function WorktreeTools({ workspace }: { workspace: string | null }) {
           }>;
           // M2-05: a moved conversation still resumes from its host's folder.
           return sessions.flatMap((session) =>
-            [session.workspace, session.host_workspace].map((path) => (path || "").replace(/[\\/]+$/, "")),
+            [session.workspace, session.host_workspace].map((path) => pathKey(path || "")),
           );
         } catch {
           return [];
@@ -200,7 +201,7 @@ export function WorktreeTools({ workspace }: { workspace: string | null }) {
     for (const inspection of inspections) {
       if (inspection.isMain) continue;
       if (!inspection.clean || inspection.conflicted) continue;
-      if (attached.has(inspection.path.replace(/[\\/]+$/, ""))) continue;
+      if (attached.has(pathKey(inspection.path))) continue;
       if (retentionDays !== null && Date.now() - inspection.modifiedAtMs < retentionDays * 86_400_000)
         continue;
       try {
@@ -368,15 +369,15 @@ export function WorktreeTools({ workspace }: { workspace: string | null }) {
 function attachedWorktree(activeWorkspace: string, path: string): boolean {
   // A worktree is attached when the active conversation itself runs in it —
   // other conversations are detected through the persisted session workspaces.
-  if (activeWorkspace.replace(/[\\/]+$/, "") === path.replace(/[\\/]+$/, "")) return true;
+  const normalized = pathKey(path);
+  if (pathKey(activeWorkspace) === normalized) return true;
   try {
     const sessions = JSON.parse(
       localStorage.getItem("muse-desktop.sessions.v1") || "[]",
     ) as Array<{ workspace?: string; host_workspace?: string }>;
-    const normalized = path.replace(/[\\/]+$/, "");
     return sessions.some((session) =>
       [session.workspace, session.host_workspace].some(
-        (candidate) => (candidate || "").replace(/[\\/]+$/, "") === normalized,
+        (candidate) => pathKey(candidate || "") === normalized,
       ),
     );
   } catch {

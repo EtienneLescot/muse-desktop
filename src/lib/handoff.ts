@@ -6,7 +6,7 @@
  * happened.
  */
 
-import { displayPath } from "./paths.ts";
+import { displayPath, pathKey } from "./paths.ts";
 
 /** `handoff_preview`, or the outcome of `handoff_move`. */
 export interface HandoffPreview {
@@ -23,6 +23,8 @@ export interface HandoffPreview {
   snapshot: string | null;
   /** The conversation moves too; otherwise a new one opens in the target. */
   sameSession: boolean;
+  /** After a move: why the conversation could not follow the files. */
+  sessionError?: string;
 }
 
 /** Minimal transcript shape used for a bounded local context excerpt. */
@@ -82,7 +84,7 @@ export function handoffQuestion(
   return {
     blocked: false,
     text: [
-      `Move this conversation's uncommitted work to ${destination}?`,
+      `Move all the uncommitted work in this folder to ${destination}, including changes made outside this conversation?`,
       "",
       `• ${plural(preview.tracked, "changed file")} (staged changes arrive unstaged)`,
       `• ${plural(preview.untracked, "untracked file")}`,
@@ -101,9 +103,26 @@ export function describeHandoffResult(result: HandoffPreview): string {
     `Moved ${plural(result.tracked, "changed file")} and ${plural(result.untracked, "untracked file")} to ${contextValue(displayPath(result.target ?? ""), "the target")}; ${plural(result.ignored, "ignored item")} stayed behind.`,
     result.sameSession
       ? "This conversation now runs there."
-      : "This conversation stays here; the work continues in a new conversation there.",
+      : `This conversation stays here${result.sessionError ? ` (it could not follow: ${contextValue(result.sessionError, "unknown error")})` : ""}; the work continues in a new conversation there.`,
     result.snapshot !== null ? `Both folders as they were before the move: ${result.snapshot}.` : "",
   ].filter((line) => line.length > 0).join(" ");
+}
+
+/**
+ * Why "Run in Muse" is off for a moved conversation: the host runs
+ * `session/userShell` in its own folder, which the conversation left (probed
+ * on 1.4.2). Null while the conversation runs in the host's folder.
+ */
+export function userShellBlocked(session: { workspace: string; host_workspace?: string }): string | null {
+  const host = session.host_workspace;
+  return host === undefined || pathKey(host) === pathKey(session.workspace)
+    ? null
+    : `This Muse engine runs it in ${contextValue(displayPath(host), "another folder")}, the folder this conversation moved from: use Send to run it here.`;
+}
+
+/** The transcript line when a resumed conversation could not go back to the folder it had moved to. */
+export function describeWorkspaceFallback(left: string, now: string, reason: string): string {
+  return `This conversation runs in ${contextValue(displayPath(now), "its first folder")} again: ${contextValue(displayPath(left), "the folder it had moved to")} could not be used (${contextValue(reason, "unknown error")}). Nothing was moved.`;
 }
 
 /**

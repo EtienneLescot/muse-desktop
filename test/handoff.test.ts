@@ -2,8 +2,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   describeHandoffResult,
+  describeWorkspaceFallback,
   formatHandoffContext,
   handoffQuestion,
+  userShellBlocked,
   type HandoffPreview,
 } from "../src/lib/handoff.ts";
 
@@ -28,6 +30,7 @@ describe("M2-05 handoff wording", () => {
   it("asks with the counts, the ignored files left behind and what the conversation does", () => {
     const same = handoffQuestion(preview, "a new worktree");
     assert.equal(same.blocked, false);
+    assert.match(same.text, /all the uncommitted work in this folder/);
     assert.match(same.text, /2 changed files/);
     assert.match(same.text, /1 untracked file\b/);
     assert.match(same.text, /3 ignored items left where they are/);
@@ -57,5 +60,29 @@ describe("M2-05 handoff wording", () => {
     assert.match(context, /From: C:\\repo\n/);
     assert.doesNotMatch(context, /internal protocol payload/);
     assert.ok(context.length <= 4_000);
+  });
+
+  it("reports the files as moved when only the conversation could not follow", () => {
+    const text = describeHandoffResult({ ...preview, sameSession: false, sessionError: "conversation metadata is unavailable" });
+    assert.match(text, /^Moved 2 changed files/);
+    assert.match(text, /could not follow: conversation metadata is unavailable/);
+    assert.match(text, /new conversation there/);
+  });
+
+  it("turns Run in Muse off only while the conversation is away from its host's folder", () => {
+    const host = "\\\\?\\C:\\repo";
+    const moved = userShellBlocked({ workspace: "\\\\?\\C:\\repo\\.muse\\worktrees\\x", host_workspace: host });
+    assert.match(moved ?? "", /runs it in C:\\repo, the folder this conversation moved from/);
+    assert.equal(userShellBlocked({ workspace: "C:\\repo\\", host_workspace: host }), null);
+    assert.equal(userShellBlocked({ workspace: "C:\\repo" }), null);
+  });
+
+  it("says why a resumed conversation came back to its first folder", () => {
+    const text = describeWorkspaceFallback(
+      "\\\\?\\C:\\repo\\.muse\\worktrees\\gone",
+      "\\\\?\\C:\\repo",
+      "cannot resolve the folder",
+    );
+    assert.match(text, /runs in C:\\repo again: C:\\repo\\\.muse\\worktrees\\gone could not be used \(cannot resolve the folder\)/);
   });
 });

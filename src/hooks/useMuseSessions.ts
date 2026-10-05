@@ -218,7 +218,7 @@ import {
   type WorktreePlan,
   type WorktreeRecord,
 } from "../lib/worktrees";
-import { describeHandoffResult, type HandoffPreview } from "../lib/handoff";
+import { describeHandoffResult, describeWorkspaceFallback, type HandoffPreview } from "../lib/handoff";
 import {
   loadWorktreeCleanupIntents,
   saveWorktreeCleanupIntents,
@@ -1338,6 +1338,8 @@ interface BackendSessionMeta {
   title?: string;
   /** M2-05: the host's folder once the conversation moved (see StoredSession). */
   host_workspace?: string;
+  /** M2-05, `resume_session` only: why the conversation left the folder it had moved to. */
+  workspace_notice?: string;
 }
 
 /** A placeholder title ("Session 01a0…" or none) gives way to the host title. */
@@ -4614,6 +4616,17 @@ export function useMuseSessions(): UseMuseSessions {
       setConnectionState(id, "connected");
       clearStopping(id);
       setSessions((cur) => cur.map((s) => s.session_id === id ? { ...s, running: meta.running } : s));
+      // M2-05: a moved conversation that could not go back to its folder says so.
+      if (meta.workspace_notice !== undefined) {
+        const note: LogEntry = {
+          id: newId(),
+          ts: Date.now(),
+          role: "system",
+          text: describeWorkspaceFallback(session.workspace, meta.workspace, meta.workspace_notice),
+        };
+        setLogs((cur) => ({ ...cur, [id]: [...(cur[id] ?? []), note] }));
+        appendLog(id, [note]);
+      }
       kickPoll();
       await refreshModels(id);
       await refreshHostSkills(id);

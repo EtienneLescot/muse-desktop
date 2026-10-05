@@ -452,6 +452,8 @@ struct AppState {
     /// Serializes host creation: check-spawn-insert must be atomic or two
     /// concurrent `start_session` calls spawn two hosts.
     host_mutex: tokio::sync::Mutex<()>,
+    /// M2-05: canonical folders a handoff is moving files in (`claim_handoff`).
+    handoffs: tokio::sync::RwLock<Vec<PathBuf>>,
     event_seq: Mutex<u64>,
     event_buffer: Mutex<std::collections::VecDeque<DrainedEvent>>,
     terminals: terminal::TerminalRegistry,
@@ -3494,8 +3496,9 @@ fn with_same_session(preview: git::HandoffPreview, same_session: bool) -> Result
     Ok(value)
 }
 
-/// M2-05: what moving this conversation's uncommitted work would do. `target`
-/// is Local or a worktree; none previews a worktree about to be created.
+/// M2-05: what moving the uncommitted work of this conversation's folder
+/// would do. `target` is Local or a worktree; none previews a worktree about
+/// to be created.
 #[tauri::command]
 async fn handoff_preview(
     state: State<'_, AppState>,
@@ -3512,36 +3515,88 @@ async fn handoff_preview(
     with_same_session(preview, same_session)
 }
 
-/// M2-05: move this conversation's uncommitted work to `target`, Local or a
-/// worktree of the same repository. On a host with `workspaceRoots` the
-/// conversation follows and its next turn runs there; otherwise only the
-/// files move, and `sameSession: false` tells the renderer to open a new
-/// conversation in the target.
+/// M2-05: move the uncommitted work of this conversation's folder to
+/// `target`, Local or a worktree of the same repository. On a host with
+/// `workspaceRoots` the conversation follows and its next turn runs there;
+/// otherwise only the files move, and `sameSession: false` tells the renderer
+/// to open a new conversation in the target.
 #[tauri::command]
 async fn handoff_move(
     state: State<'_, AppState>,
     session_id: String,
     target: String,
 ) -> Result<Value, String> {
-    if state
+    let source = workspace_for_inspection(&state, &session_id)?;
+    let same_session = host_accepts_workspace_roots(&state, &session_id)?;
+    let (source, target) =
+        tokio::task::spawn_blocking(move || git::handoff_pair(&source, Path::new(target.trim())))
+            .await
+            .map_err(|e| format!("handoff task failed: {e}"))??;
+    let folders = [source.clone(), target.clone()];
+    claim_handoff(&state, &folders).await?;
+    // The conversation follows before the claim ends, so no turn starts in
+    // the folder it just left.
+    let moved = tokio::task::spawn_blocking(move || git::handoff_move(&source, &target))
+        .await
+        .map_err(|e| format!("handoff task failed: {e}"))
+        .and_then(|moved| moved)
+        .and_then(|moved| follow_handoff(&state, &session_id, moved, same_session));
+    state.handoffs.write().await.retain(|folder| !folders.contains(folder));
+    moved
+}
+
+/// The files have moved; the conversation follows when it can. Failing that
+/// is not a failed move: `sameSession: false` opens a new conversation there,
+/// and `sessionError` says why this one stayed.
+fn follow_handoff(
+    state: &AppState,
+    session_id: &str,
+    moved: git::HandoffPreview,
+    same_session: bool,
+) -> Result<Value, String> {
+    let target = PathBuf::from(moved.target.clone().unwrap_or_default());
+    let followed = if same_session {
+        move_session_workspace(state, session_id, &target).map(|_| ())
+    } else {
+        Ok(())
+    };
+    let mut value = with_same_session(moved, same_session && followed.is_ok())?;
+    if let Err(error) = followed {
+        value["sessionError"] = json!(error);
+    }
+    Ok(value)
+}
+
+/// Canonical folders a conversation's turns may touch: its own, and for a
+/// moved one the host's.
+fn session_folders(meta: &SessionMeta) -> Vec<PathBuf> {
+    std::iter::once(&meta.workspace)
+        .chain(meta.host_workspace.as_ref())
+        .filter_map(|folder| Path::new(folder).canonicalize().ok())
+        .collect()
+}
+
+/// M2-05: claim `folders` for a handoff, refused while a turn runs in one of
+/// them, whichever conversation it belongs to. A turn starts under the read
+/// lock, held until it counts as running, so none slips past this check.
+async fn claim_handoff(state: &AppState, folders: &[PathBuf]) -> Result<(), String> {
+    let mut handoffs = state.handoffs.write().await;
+    if handoffs.iter().any(|folder| folders.contains(folder)) {
+        return Err("another move is already under way in this folder".to_string());
+    }
+    let running: Vec<SessionMeta> = state
         .sessions
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
-        .get(&session_id)
-        .is_some_and(|meta| meta.running)
-    {
-        return Err("stop the current response before moving the conversation".to_string());
+        .values()
+        .filter(|meta| meta.running)
+        .cloned()
+        .collect();
+    if running.iter().flat_map(session_folders).any(|folder| folders.contains(&folder)) {
+        return Err("a conversation is still responding in this folder: stop it before moving".to_string());
     }
-    let source = workspace_for_inspection(&state, &session_id)?;
-    let same_session = host_accepts_workspace_roots(&state, &session_id)?;
-    let moved = tokio::task::spawn_blocking(move || git::handoff_move(&source, Path::new(target.trim())))
-        .await
-        .map_err(|e| format!("handoff task failed: {e}"))??;
-    if same_session {
-        let target = PathBuf::from(moved.target.clone().unwrap_or_default());
-        move_session_workspace(&state, &session_id, &target)?;
-    }
-    with_same_session(moved, same_session)
+    handoffs.extend_from_slice(folders);
+    Ok(())
 }
 
 
@@ -4771,7 +4826,7 @@ async fn resume_session(
     sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
     effective_workspace: Option<String>,
-) -> Result<SessionMeta, String> {
+) -> Result<Value, String> {
     let meta = resume_session_inner(
         &app,
         &state,
@@ -4782,29 +4837,44 @@ async fn resume_session(
         sandbox_disable_shell,
         mcp_servers,
     ).await?;
-    // M2-05: `workspace_path` is the host's root; a moved conversation also
-    // names where it ran. A folder that is gone or no longer a checkout of the
-    // repository brings it back to the host's root; a host without
-    // `workspaceRoots` keeps it there.
-    let Some(workspace) = effective_workspace.filter(|w| !w.trim().is_empty()) else {
-        return Ok(meta);
-    };
-    if !host_accepts_workspace_roots(&state, &session_id)? {
-        return Ok(meta);
+    match effective_workspace.filter(|w| !w.trim().is_empty()) {
+        Some(workspace) => resume_in_workspace(&state, &session_id, meta, workspace).await,
+        None => serde_json::to_value(meta).map_err(|e| e.to_string()),
     }
-    let host_root = state
-        .hosts
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?
-        .session_workspace(&session_id)?;
-    let target = tokio::task::spawn_blocking(move || {
-        git::handoff_pair(&host_root, Path::new(workspace.trim()))
-            .map(|(_, target)| target)
-            .unwrap_or(host_root)
-    })
-    .await
-    .map_err(|e| format!("workspace check failed: {e}"))?;
-    move_session_workspace(&state, &session_id, &target)
+}
+
+/// M2-05: `workspace_path` is the host's root; a moved conversation also
+/// names where it ran, and goes back there. A folder that is gone or no longer
+/// a checkout of the repository, or a host without `workspaceRoots`, leaves it
+/// in the host's root, and `workspace_notice` says why.
+async fn resume_in_workspace(
+    state: &AppState,
+    session_id: &str,
+    meta: SessionMeta,
+    workspace: String,
+) -> Result<Value, String> {
+    let (meta, notice) = if host_accepts_workspace_roots(state, session_id)? {
+        let host_root = state
+            .hosts
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .session_workspace(session_id)?;
+        let repo = host_root.clone();
+        let checked = tokio::task::spawn_blocking(move || git::attached_checkout(&repo, Path::new(workspace.trim())))
+            .await
+            .map_err(|e| format!("workspace check failed: {e}"))?;
+        let target = checked.as_ref().unwrap_or(&host_root);
+        (move_session_workspace(state, session_id, target)?, checked.err())
+    } else if Path::new(workspace.trim()) == Path::new(&meta.workspace) {
+        (meta, None)
+    } else {
+        (meta, Some("this Muse engine runs a conversation only in its own folder".to_string()))
+    };
+    let mut value = serde_json::to_value(meta).map_err(|e| e.to_string())?;
+    if let Some(notice) = notice {
+        value["workspace_notice"] = json!(notice);
+    }
+    Ok(value)
 }
 
 /// Read the folded durable item history for an attached conversation.
@@ -5294,6 +5364,19 @@ async fn send_input_for_state(
     }
     let input = input_parts.unwrap_or_else(|| json!([{ "type": "text", "text": text }]));
     validate_turn_input_parts(&input)?;
+    // M2-05: no turn starts in a folder a handoff is moving; see `claim_handoff`.
+    let handoffs = state.handoffs.read().await;
+    if !handoffs.is_empty() {
+        let meta = state
+            .sessions
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(&session_id)
+            .cloned();
+        if meta.iter().flat_map(session_folders).any(|folder| handoffs.contains(&folder)) {
+            return Err("this conversation's folder is being moved: send again once the move is done".to_string());
+        }
+    }
     let client = session_client(&state, &session_id)?;
     let mut params = json!({
         // The frontend persists this id before the request starts.
@@ -5357,6 +5440,18 @@ async fn user_shell_for_state(
     command_text: String,
 ) -> Result<Value, String> {
     let payload = user_shell_payload(&session_id, &command_id, &command_text)?;
+    // M2-05: the host runs it in its own folder, which a moved conversation
+    // left; probed on 1.4.2, it stays there even after a turn that set
+    // `workspaceRoots`.
+    if state
+        .sessions
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&session_id)
+        .is_some_and(|meta| meta.host_workspace.as_deref().is_some_and(|host| Path::new(host) != Path::new(&meta.workspace)))
+    {
+        return Err("Run in Muse would run in the folder this conversation moved from: use the terminal instead".to_string());
+    }
     let client = session_client(state, &session_id)?;
     let root = state
         .hosts
@@ -6202,6 +6297,7 @@ mod tests {
             item_deltas_seen: Mutex::new(HashSet::new()),
             item_fallback_emitted: Mutex::new(HashSet::new()),
             host_mutex: tokio::sync::Mutex::new(()),
+            handoffs: tokio::sync::RwLock::new(Vec::new()),
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
             terminals: terminal::TerminalRegistry::default(),
@@ -6465,6 +6561,88 @@ mod tests {
         assert_eq!(frame["params"]["workspaceRoots"], json!([moved.workspace]));
         client.ingest(reply(frame)).await;
         after.await.unwrap().unwrap();
+
+        // The host would run it in the folder the conversation left.
+        let shell = user_shell_for_state(&state, "session-a".into(), "command-3".into(), "git status".into())
+            .await
+            .unwrap_err();
+        assert!(shell.contains("moved from"), "{shell}");
+
+        // Back in the host's folder, it runs where the conversation is.
+        move_session_workspace(&state, "session-a", Path::new("fixture-a")).unwrap();
+        let shell = {
+            let state = state.clone();
+            tokio::spawn(async move {
+                user_shell_for_state(state.as_ref(), "session-a".into(), "command-4".into(), "git status".into())
+                    .await
+            })
+        };
+        let frame = fixture_frame(&mut frames).await;
+        assert_eq!(frame["method"], "session/userShell");
+        client.ingest(reply(frame)).await;
+        shell.await.unwrap().unwrap();
+    }
+
+    #[test]
+    fn a_moved_conversation_that_cannot_follow_still_reports_the_move() {
+        let moved = git::HandoffPreview {
+            source: "a".into(),
+            target: Some("b".into()),
+            tracked: 1,
+            untracked: 0,
+            ignored: 0,
+            conflicts: Vec::new(),
+            snapshot: Some("refs/muse/handoff/1".into()),
+        };
+        let value = follow_handoff(&empty_state(), "unknown-session", moved, true).unwrap();
+        assert_eq!(value["sameSession"], json!(false));
+        assert_eq!(value["snapshot"], json!("refs/muse/handoff/1"));
+        assert!(value["sessionError"].is_string(), "{value}");
+    }
+
+    #[tokio::test]
+    async fn a_resume_says_why_the_conversation_left_its_folder() {
+        let root = std::env::temp_dir().join(format!("muse-resume-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        assert!(std::process::Command::new("git").args(["init", "--quiet"]).current_dir(&root).status().unwrap().success());
+        let root = root.canonicalize().unwrap();
+        let state = empty_state();
+        let (client, _frames) = fixture_client(false);
+        register_fixture_session(&state, "session-a", &root.display().to_string(), client);
+        let engine = HostEngine { server_version: "1.4.2".into(), schema_fingerprint: String::new() };
+        state.host_engines.lock().unwrap().insert(root.clone(), engine);
+        let meta = || state.sessions.lock().unwrap()["session-a"].clone();
+
+        let gone = root.join(".muse/worktrees/gone").display().to_string();
+        let value = resume_in_workspace(&state, "session-a", meta(), gone).await.unwrap();
+        assert_eq!(value["workspace"], json!(root.display().to_string()));
+        assert!(value["workspace_notice"].is_string(), "{value}");
+
+        // Back home is not a fallback.
+        let home = root.display().to_string();
+        let value = resume_in_workspace(&state, "session-a", meta(), home).await.unwrap();
+        assert!(value.get("workspace_notice").is_none(), "{value}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn a_handoff_waits_for_running_turns_and_holds_new_ones_back() {
+        let state = empty_state();
+        let folder = std::env::temp_dir().canonicalize().unwrap();
+        let (client, mut frames) = fixture_client(false);
+        register_fixture_session(&state, "session-a", &folder.display().to_string(), client.clone());
+        register_fixture_session(&state, "session-b", &folder.display().to_string(), client);
+        state.sessions.lock().unwrap().get_mut("session-b").unwrap().running = true;
+        let error = claim_handoff(&state, &[folder.clone()]).await.unwrap_err();
+        assert!(error.contains("still responding"), "{error}");
+
+        state.sessions.lock().unwrap().get_mut("session-b").unwrap().running = false;
+        claim_handoff(&state, &[folder.clone()]).await.unwrap();
+        let error = send_input_for_state(&state, "session-a".into(), "command-1".into(), "go".into(), None)
+            .await
+            .unwrap_err();
+        assert!(error.contains("being moved"), "{error}");
+        assert!(frames.try_recv().is_err());
     }
 
     #[tokio::test]
@@ -9236,6 +9414,7 @@ fn main() {
             item_deltas_seen: Mutex::new(HashSet::new()),
             item_fallback_emitted: Mutex::new(HashSet::new()),
             host_mutex: tokio::sync::Mutex::new(()),
+            handoffs: tokio::sync::RwLock::new(Vec::new()),
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
             terminals: terminal::TerminalRegistry::default(),
