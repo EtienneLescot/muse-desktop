@@ -8,6 +8,7 @@ import {
   selectArchivedThreads,
 } from "../lib/threads";
 import type { Project, ThreadProjectMap } from "../lib/projects";
+import { worktreeUnavailableReason } from "../lib/remoteSsh";
 
 interface Props {
   showArchived?: boolean;
@@ -486,7 +487,8 @@ export function SessionSidebar({
             )}
             {selected && !selected.archived && onMoveToWorktree && (
               <button
-                disabled={movingToWorktree !== null || selected.running}
+                disabled={movingToWorktree !== null || selected.running || worktreeUnavailableReason(selected.workspace) !== null}
+                title={worktreeUnavailableReason(selected.workspace) ?? undefined}
                 onClick={() => {
                   onMoveToWorktree(selected.session_id);
                   closeActions();

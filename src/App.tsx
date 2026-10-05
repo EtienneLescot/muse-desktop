@@ -50,8 +50,10 @@ import {
   describeRemoteEngine,
   isRemoteWorkspace,
   loadRemoteEngine,
+  remoteSignInHint,
   remoteWorkspaceUri,
   saveRemoteEngine,
+  worktreeUnavailableReason,
   type RemoteEngineTarget,
 } from "./lib/remoteSsh";
 import { parseHarnessRules } from "./lib/harnessRules";
@@ -716,6 +718,11 @@ export default function App() {
   async function moveToWorktree(sessionId: string): Promise<void> {
     const session = sessions.find((candidate) => candidate.session_id === sessionId);
     if (session === undefined || movingToWorktree !== null) return;
+    const unavailable = worktreeUnavailableReason(session.workspace);
+    if (unavailable !== null) {
+      setError(unavailable);
+      return;
+    }
     const source = session.workspace;
     try {
       setError(null);
@@ -1589,10 +1596,12 @@ export default function App() {
                     onForceStop={() => void killSession(active.session_id)}
                     onRetryFailedTurn={(entry) => retryFailedTurn(active.session_id, entry.id)}
                     onSignInForFailedTurn={
-                      isMacPlatform() && isTauriRuntime()
+                      // The local sign-in does not reach a remote engine's credentials.
+                      isMacPlatform() && isTauriRuntime() && !activeIsRemote
                         ? (entry) => setSignInFor({ sessionId: active.session_id, entryId: entry.id })
                         : undefined
                     }
+                    signInHint={remoteSignInHint(active.workspace) ?? undefined}
                     onForkFromEntry={(turnId) => void forkSession(active.session_id, turnId)}
                     onOpenWorkspacePath={(path) => openWorkspacePath(active.session_id, path)}
                     controls={{

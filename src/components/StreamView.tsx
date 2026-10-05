@@ -224,6 +224,8 @@ interface Props {
   onRetryFailedTurn?: (entry: LogEntry) => Promise<void>;
   /** `authRequired` failures: sign in to Muse, then the app replays the turn. */
   onSignInForFailedTurn?: (entry: LogEntry) => void;
+  /** `authRequired` failures the app cannot sign in for: what to do instead. */
+  signInHint?: string;
   /** Start a server-side branch from this completed turn. */
   onForkFromEntry?: (turnId: string) => void;
   /** Open a verified workspace output with the system default application. */
@@ -297,6 +299,7 @@ export function StreamView({
   onForceStop,
   onRetryFailedTurn,
   onSignInForFailedTurn,
+  signInHint,
   onForkFromEntry,
   onOpenWorkspacePath,
   controls,
@@ -1246,6 +1249,9 @@ export function StreamView({
                   >
                     Sign in with Meta
                   </button>
+                )}
+                {e.engineError.kind === "authRequired" && signInHint && (
+                  <p className="engine-error-reason">{signInHint}</p>
                 )}
                 {e.engineError.retryable && onRetryFailedTurn && (
                   <button
