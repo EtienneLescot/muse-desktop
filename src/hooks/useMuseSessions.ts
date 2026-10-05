@@ -402,6 +402,7 @@ import {
   type ParsedMcpPackage,
 } from "../lib/mcpPackage.ts";
 import { buildHostMcpServers, type HostMcpStdioServer } from "../lib/hostMcp";
+import { isRemoteWorkspace } from "../lib/remoteSsh";
 import {
   parseComputerStatus,
   type ComputerLevel,
@@ -4302,7 +4303,11 @@ export function useMuseSessions(): UseMuseSessions {
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
         sandboxDisableShell: sandboxConfig.disableShell,
-        mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
+        // Connectors and computer use live on this machine: a remote engine
+        // (M4-07) would launch them on its own host, where they do not exist.
+        mcpServers: isRemoteWorkspace(ws)
+          ? undefined
+          : buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
       });
       const requestedModelId = projectSettings?.model.trim();
       const record: MuseSession = {
@@ -4493,7 +4498,9 @@ export function useMuseSessions(): UseMuseSessions {
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
         sandboxDisableShell: sandboxConfig.disableShell,
-        mcpServers: buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
+        mcpServers: isRemoteWorkspace(session.workspace)
+          ? undefined
+          : buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
       });
       if (tombstoned.current?.has(id)) return;
       setGrantedCapabilitiesBySession((cur) => ({

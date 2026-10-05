@@ -18,6 +18,7 @@
  * `remote_ssh_exec` drives the real binary, and whether a specific host
  * accepts the connection is a property of that host, not of this code.
  */
+import { readStorageJson, removeStorageKey, writeStorageJson } from "./storage.ts";
 
 export const SSH_CONNECT_TIMEOUT = 10;
 /** 1–120 s: the exec is an interactive control run, not a batch job. */
@@ -44,6 +45,11 @@ const HOST_CHARS = /^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/;
 const NAME_CHARS = /^[A-Za-z0-9._-]+$/;
 const PATH_CHARS = /^[A-Za-z0-9 ._\\/:()-]+$/;
 
+/** A dash-leading user would make `user@host` an ssh option (`-E…` writes a log file). */
+function validUser(user: string): boolean {
+  return NAME_CHARS.test(user) && !user.startsWith("-");
+}
+
 function cleanString(value: unknown, max: number): string {
   if (typeof value !== "string") return "";
   const trimmed = value.trim();
@@ -65,7 +71,7 @@ export function validateSshTarget(input: unknown): RemoteSshTarget | null {
   const user = cleanString(raw.user, 64);
   const identityFile = cleanString(raw.identityFile, 400);
   if (!id || !label || !host || !HOST_CHARS.test(host)) return null;
-  if (user && !NAME_CHARS.test(user)) return null;
+  if (user && !validUser(user)) return null;
   if (identityFile && !PATH_CHARS.test(identityFile)) return null;
   const port = raw.port;
   if (port !== undefined && (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535)) return null;
@@ -98,6 +104,75 @@ export function describeSshTarget(target: RemoteSshTarget): string {
   const who = target.user ? `${target.user}@${target.host}` : target.host;
   const key = target.identityFile ? ` (key ${target.identityFile.split(/[\\/]/).pop()})` : "";
   return `${who}:${target.port}${key} — ${target.label}`;
+}
+
+/**
+ * M4-07 remote engine: a conversation whose Muse host is `muse serve` on
+ * another machine, reached through the system ssh. The whole target is the
+ * conversation's workspace key, `ssh://[user@]host:port/abs/path` plus
+ * `?muse=<binary>` when it is not the default, so a reconnect needs only the
+ * conversation record and a remote host never collides with a local folder.
+ * `RemoteEngine` in `remote_ssh.rs` re-parses and rebuilds that key.
+ */
+export const REMOTE_ENGINE_STORAGE_KEY = "muse-desktop.remote-engine.v1";
+/** Where the official installer puts Muse; the remote shell expands `~`. */
+export const DEFAULT_REMOTE_MUSE = "~/.local/bin/muse";
+
+export interface RemoteEngineTarget {
+  /** Login user; empty string means "the system ssh default". */
+  user: string;
+  host: string;
+  port: number;
+  /** Remote binary: absolute, or `~/`-relative. */
+  musePath: string;
+  /** Absolute folder on the remote host: the conversation's workspace there. */
+  workspacePath: string;
+}
+
+/** One plain word for the remote login shell: no space, quote or metacharacter. */
+const REMOTE_PATH = /^(?:\/|~\/)[A-Za-z0-9._/-]*$/;
+
+/** Validate the remote engine form or its stored copy; `null` for anything Rust would refuse. */
+export function validateRemoteEngine(input: unknown): RemoteEngineTarget | null {
+  if (typeof input !== "object" || input === null) return null;
+  const raw = input as Record<string, unknown>;
+  const host = cleanString(raw.host, 255);
+  const user = cleanString(raw.user, 64);
+  const musePath = cleanString(raw.musePath, 400);
+  // The host reports the folder without a trailing slash.
+  const workspacePath = cleanString(raw.workspacePath, 400).replace(/(.)\/+$/, "$1");
+  const port = raw.port ?? 22;
+  if (!host || !HOST_CHARS.test(host) || (user && !validUser(user))) return null;
+  if (!REMOTE_PATH.test(musePath) || !workspacePath.startsWith("/") || !REMOTE_PATH.test(workspacePath)) return null;
+  if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535) return null;
+  return { user, host, port, musePath, workspacePath };
+}
+
+/** The workspace key a remote conversation is started and stored under. */
+export function remoteWorkspaceUri(target: RemoteEngineTarget): string {
+  const who = target.user ? `${target.user}@${target.host}` : target.host;
+  const muse = target.musePath === DEFAULT_REMOTE_MUSE ? "" : `?muse=${target.musePath}`;
+  return `ssh://${who}:${target.port}${target.workspacePath}${muse}`;
+}
+
+export function isRemoteWorkspace(workspace: string | null | undefined): boolean {
+  return typeof workspace === "string" && workspace.startsWith("ssh://");
+}
+
+/** "Remote: user@host": the picker appends the folder, as for any project. */
+export function describeRemoteEngine(target: RemoteEngineTarget): string {
+  return `Remote: ${target.user ? `${target.user}@${target.host}` : target.host}`;
+}
+
+export function loadRemoteEngine(): RemoteEngineTarget | null {
+  return validateRemoteEngine(readStorageJson<unknown>(REMOTE_ENGINE_STORAGE_KEY, null));
+}
+
+/** `null` forgets the target; conversations already started keep their key. */
+export function saveRemoteEngine(target: RemoteEngineTarget | null): boolean {
+  return target === null
+    ? removeStorageKey(REMOTE_ENGINE_STORAGE_KEY)
+    : writeStorageJson(REMOTE_ENGINE_STORAGE_KEY, target);
 }
 
 /** The one-line summary for a finished exec, bounded like every other status. */

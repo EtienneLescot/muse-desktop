@@ -13,6 +13,7 @@ import {
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
 import { userFacingError } from "../lib/errorCopy";
 import { displayPath } from "../lib/paths";
+import { isRemoteWorkspace } from "../lib/remoteSsh";
 import {
   buildTurnInputParts,
   maxAttachmentsFor,
@@ -121,6 +122,8 @@ export function EmptySessionScreen({
     (option) => option.optionId === environmentId,
   );
   const selectedWorkspace = selectedEnvironment?.workspace ?? workspace;
+  // A worktree is a local git copy; a remote folder (M4-07) has none.
+  const worktreeAvailable = selectedWorkspace !== null && !isRemoteWorkspace(selectedWorkspace);
   // Computed as a set: a folder is appended only where it distinguishes the row.
   const projectLabels = projectOptionLabels(environmentOptions);
   useEffect(() => {
@@ -192,7 +195,7 @@ export function EmptySessionScreen({
           // The choice is made here, before the conversation exists: starting in
           // a worktree is a decision about the next conversation, not a move of
           // an existing one.
-          worktree,
+          worktree: worktree && worktreeAvailable,
         },
       );
       if (sent) {
@@ -256,7 +259,7 @@ export function EmptySessionScreen({
             role="switch"
             checked={worktree}
             onChange={(event) => setWorktree(event.target.checked)}
-            disabled={selectedWorkspace === null}
+            disabled={!worktreeAvailable}
           />
           <span>Worktree</span>
         </label>
@@ -264,7 +267,7 @@ export function EmptySessionScreen({
       <p className="welcome-project-note">
         {selectedWorkspace === null
           ? "Choose a project folder: a project is a folder, and its name comes from it."
-          : worktree
+          : worktree && worktreeAvailable
             ? `Runs in a copy of ${folderName(selectedWorkspace)} on a new branch, leaving it untouched.`
             : selectedEnvironment
               ? `Runs in ${folderName(selectedEnvironment.workspace)}. The agent reads the rules of that folder.`

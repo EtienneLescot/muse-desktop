@@ -2,9 +2,9 @@ import { isMacPlatform } from "../lib/platform";
 /**
  * w-settings (US-16 sandbox + US-31 providers): settings panel UI.
  *
- * Settings: environment check, default folder, authorization, reasoning
- * effort, isolation, Muse authentication and local data. The model is chosen
- * in the composer, not here.
+ * Settings: environment check, default folder, remote engine, authorization,
+ * reasoning effort, isolation, Muse authentication and local data. The model
+ * is chosen in the composer, not here.
  */
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -30,6 +30,12 @@ import {
   type AuthorizationMode,
 } from "../lib/authorization";
 import { userFacingError } from "../lib/errorCopy";
+import {
+  DEFAULT_REMOTE_MUSE,
+  describeRemoteEngine,
+  validateRemoteEngine,
+  type RemoteEngineTarget,
+} from "../lib/remoteSsh";
 import {
   reasoningEffortChoices,
   reasoningEffortDescription,
@@ -77,7 +83,19 @@ interface Props {
    * desktop could authenticate against on its own.
    */
   onSignIn: () => void | Promise<unknown>;
+  /** M4-07: the host new conversations can run on through ssh; null when none. */
+  remoteEngine: RemoteEngineTarget | null;
+  onRemoteEngineChange: (next: RemoteEngineTarget | null) => void;
 }
+
+const REMOTE_FIELDS = [
+  ["user", "User", "Your ssh default"],
+  ["host", "Host", "build.example.com"],
+  ["port", "Port", "22"],
+  ["musePath", "Muse on that host", DEFAULT_REMOTE_MUSE],
+  ["workspacePath", "Folder on that host", "/home/you/project"],
+] as const;
+type RemoteForm = Record<(typeof REMOTE_FIELDS)[number][0], string>;
 
 /**
  * Isolation is what the engine's process may reach; authorization, above, is
@@ -117,7 +135,26 @@ export function SettingsPanel({
   startupProbe = null,
   onProbeStartup,
   onSignIn,
+  remoteEngine,
+  onRemoteEngineChange,
 }: Props) {
+  const [remoteForm, setRemoteForm] = useState<RemoteForm>(() => ({
+    user: remoteEngine?.user ?? "",
+    host: remoteEngine?.host ?? "",
+    port: String(remoteEngine?.port ?? 22),
+    musePath: remoteEngine?.musePath ?? DEFAULT_REMOTE_MUSE,
+    workspacePath: remoteEngine?.workspacePath ?? "",
+  }));
+  const [remoteStatus, setRemoteStatus] = useState<string | null>(null);
+  function saveRemote(): void {
+    const target = validateRemoteEngine({ ...remoteForm, port: Number(remoteForm.port) });
+    if (target === null) {
+      setRemoteStatus("Not saved: give a host, a port from 1 to 65535, and absolute paths without spaces or shell characters.");
+      return;
+    }
+    onRemoteEngineChange(target);
+    setRemoteStatus(`Saved. Pick "${describeRemoteEngine(target)}" as the project of a new conversation.`);
+  }
   const [restartingHost, setRestartingHost] = useState(false);
   const [restartStatus, setRestartStatus] = useState<string | null>(null);  const [exportStatus, setExportStatus] = useState<string | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
@@ -366,6 +403,56 @@ export function SettingsPanel({
           conversations keep their own folder.
         </p>
         <WorkspacePicker workspace={workspace} onPick={onPickWorkspace} />
+      </div>
+
+      <div className="settings-group">
+        <h3>Remote engine</h3>
+        <p className="settings-note">
+          Run a conversation on another machine: Muse starts there through your
+          system ssh, with your ssh agent's keys, and never asks for a password.
+          Connect once from a terminal first to accept the host key. Changes,
+          Terminal and Files stay local and are unavailable there.
+        </p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            saveRemote();
+          }}
+        >
+          {REMOTE_FIELDS.map(([field, label, placeholder]) => (
+            <div key={field}>
+              <label className="settings-label" htmlFor={`settings-remote-${field}`}>
+                {label}
+              </label>
+              <div className="settings-row">
+                <input
+                  id={`settings-remote-${field}`}
+                  value={remoteForm[field]}
+                  placeholder={placeholder}
+                  spellCheck={false}
+                  onChange={(event) => setRemoteForm((form) => ({ ...form, [field]: event.target.value }))}
+                />
+              </div>
+            </div>
+          ))}
+          <div className="settings-row">
+            <button type="submit">Save</button>
+            {remoteEngine !== null && (
+              <button
+                type="button"
+                onClick={() => {
+                  onRemoteEngineChange(null);
+                  setRemoteStatus("Removed. Conversations already started there keep their host.");
+                }}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </form>
+        {remoteStatus !== null && (
+          <p className="settings-note" role="status">{remoteStatus}</p>
+        )}
       </div>
       <div className="settings-group">
         <h3>Authorization</h3>

@@ -1160,6 +1160,9 @@ fn listed_in_workspace(root: &Path, session: &Value) -> bool {
     let Some(raw) = session.get("workspaceRoot").and_then(Value::as_str) else {
         return true;
     };
+    if let Some(remote) = remote_ssh::remote_engine(root) {
+        return remote.names_workspace(raw);
+    }
     resume::host_path(raw)
         .canonicalize()
         .is_ok_and(|listed| listed == root)
@@ -1473,10 +1476,15 @@ async fn ensure_host(
         Err(e) => {
             state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.remove(&client);
             client.shutdown().await;
-            return Err(format!(
-                "MSP handshake failed ({e}). Host stderr: {}",
-                tail_of(&stderr_tail)
-            ));
+            let stderr = tail_of(&stderr_tail);
+            // A remote failure is ssh's, not the local sidecar's: say which
+            // step refused, without the wording that opens the sidecar panel.
+            return Err(match remote_ssh::remote_engine(root) {
+                Some(remote) => remote.explain_failure(&stderr).unwrap_or_else(|| {
+                    format!("the remote Muse at {} did not answer the MSP handshake ({e}). ssh stderr: {stderr}", remote.key())
+                }),
+                None => format!("MSP handshake failed ({e}). Host stderr: {stderr}"),
+            });
         }
     };
 
@@ -1874,6 +1882,17 @@ fn spawn_sidecar(
     root: &PathBuf,
     sandbox: &HostSandboxPolicy,
 ) -> Result<(tauri::async_runtime::Receiver<CommandEvent>, CommandChild), String> {
+    if let Some(remote) = remote_ssh::remote_engine(root) {
+        // M4-07: the same host on another machine, over the system ssh. The
+        // stdout pump and `MspClient` downstream cannot tell the difference.
+        let argv = remote.serve_command(&sandbox.cli_args())?;
+        return app
+            .shell()
+            .command(&argv[0])
+            .args(&argv[1..])
+            .spawn()
+            .map_err(|e| format!("could not start ssh to {}: {e}", remote.key()));
+    }
     let bin = resolve_sidecar()?;
     let cmd = app
         .shell()
@@ -2700,22 +2719,28 @@ fn workspace_for_inspection(state: &State<'_, AppState>, session_id: &str) -> Re
     if session_id.is_empty() {
         return Err("sessionId must not be empty".to_string());
     }
-    if let Ok(root) = state
+    let root = match state
         .hosts
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
         .session_workspace(session_id)
     {
-        return Ok(root);
+        Ok(root) => root,
+        Err(_) => state
+            .sessions
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(session_id)
+            .map(|meta| PathBuf::from(&meta.workspace))
+            .filter(|root| !root.as_os_str().is_empty())
+            .ok_or_else(|| "conversation workspace is unavailable".to_string())?,
+    };
+    // Git, files, the terminal and the scope check read this computer's disk;
+    // a remote conversation's folder is on another host.
+    if remote_ssh::remote_engine(&root).is_some() {
+        return Err("Not available for remote conversations.".to_string());
     }
-    state
-        .sessions
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?
-        .get(session_id)
-        .map(|meta| PathBuf::from(&meta.workspace))
-        .filter(|root| !root.as_os_str().is_empty())
-        .ok_or_else(|| "conversation workspace is unavailable".to_string())
+    Ok(root)
 }
 
 
@@ -4096,7 +4121,7 @@ fn check_scope(state: State<'_, AppState>, path: String, session_id: Option<Stri
         return Err("empty path".to_string());
     }
     let root = if let Some(sid) = session_id {
-        state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.session_workspace(&sid)?
+        workspace_for_inspection(&state, &sid)?
     } else { state
         .workspace
         .lock()
@@ -4142,6 +4167,11 @@ fn resolve_workspace(
                 "no workspace selected — pick a folder first (arg present: {arg_present})"
             )
         })?;
+    // M4-07: a remote engine is keyed by its canonical `ssh://` target. It is
+    // not a folder here, so it is neither checked nor made the default one.
+    if let Some(remote) = root.to_str().and_then(remote_ssh::RemoteEngine::parse) {
+        return remote.map(|remote| PathBuf::from(remote.key()));
+    }
     if !root.is_dir() {
         return Err(format!("workspace is not a directory: {}", root.display()));
     }
@@ -4293,8 +4323,10 @@ async fn start_session_at_workspace(
     let mut params = json!({
         "commandId": new_command_id(),
         // The host runs the agent's shell there: PowerShell shows the canonical
-        // `\\?\G:\…` form verbatim and some tools refuse it.
-        "workspaceRoot": rules::display_path(&root),
+        // `\\?\G:\…` form verbatim and some tools refuse it. A remote
+        // engine gets its folder as that host spells it.
+        "workspaceRoot": remote_ssh::remote_engine(&root)
+            .map_or_else(|| rules::display_path(&root), |remote| remote.workspace),
     });
     if let Some(mode) = authorization_mode.as_deref() {
         let wire_mode = host_approval_mode(mode)

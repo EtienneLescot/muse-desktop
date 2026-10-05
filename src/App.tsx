@@ -46,6 +46,14 @@ import {
   projectWorkspaceOptions,
   projectWorkspaces,
 } from "./lib/projects";
+import {
+  describeRemoteEngine,
+  isRemoteWorkspace,
+  loadRemoteEngine,
+  remoteWorkspaceUri,
+  saveRemoteEngine,
+  type RemoteEngineTarget,
+} from "./lib/remoteSsh";
 import { parseHarnessRules } from "./lib/harnessRules";
 import { planConversationWorktree } from "./lib/worktrees";
 // US-32: polite live-region announcements for stream/approval/input changes.
@@ -482,6 +490,8 @@ export default function App() {
   }, [theme]);
 
   const active = sessions.find((s) => s.session_id === activeId) ?? null;
+  // M4-07: its folder is on another host, so the local-disk panels stand down.
+  const activeIsRemote = isRemoteWorkspace(active?.workspace);
   const activeProject =
     active === null ? null : projectForSession(active.session_id);
   const activeProjectSettings =
@@ -507,10 +517,18 @@ export default function App() {
     const parts = workspace.split(/[\\/]/).filter((p) => p.length > 0);
     return parts[parts.length - 1] ?? workspace;
   }, [workspace]);
-  const environmentOptions = useMemo(
-    () => projectWorkspaceOptions(projects),
-    [projects],
-  );
+  const [remoteEngine, setRemoteEngine] = useState<RemoteEngineTarget | null>(loadRemoteEngine);
+  const environmentOptions = useMemo(() => {
+    const options = projectWorkspaceOptions(projects);
+    // M4-07: a remote engine is a place a conversation runs, not a project.
+    return remoteEngine === null ? options : [...options, {
+      projectId: "",
+      projectName: describeRemoteEngine(remoteEngine),
+      workspace: remoteWorkspaceUri(remoteEngine),
+      optionId: "remote",
+      rootIndex: 0,
+    }];
+  }, [projects, remoteEngine]);
 
   // US-32: one polite live region announces stream running/stopped
   // transitions plus approval/input arrivals (not every render).
@@ -1006,11 +1024,16 @@ export default function App() {
               startupProbe={startupProbe}
               onProbeStartup={() => probeStartup(workspace)}
               onSignIn={signInWithMuseCli}
+              remoteEngine={remoteEngine}
+              onRemoteEngineChange={(next) => {
+                saveRemoteEngine(next);
+                setRemoteEngine(next);
+              }}
             />
             {/* Global capabilities, not work on the current conversation: they
                 used to be side-panel tabs next to Changes and Terminal. */}
             <div className="settings-extra">
-              <WorktreeTools workspace={active?.workspace ?? workspace} />
+              <WorktreeTools workspace={active !== null && !activeIsRemote ? active.workspace : workspace} />
               <ComputerUsePanel
                 status={computerUse}
                 busy={computerBusy}
@@ -1709,7 +1732,7 @@ export default function App() {
                     }
                     running={active.running}
                     stopping={stoppingBySession[active.session_id] === true}
-                    workspace={active.workspace}
+                    workspace={activeIsRemote ? null : active.workspace}
                     onSend={(text, inputParts) => sendInput(active.session_id, text, undefined, inputParts)}
                     onSteer={(text, inputParts) => steerInput(active.session_id, text, inputParts)}
                     onCancel={() => void cancelSession(active.session_id)}
@@ -1765,7 +1788,12 @@ export default function App() {
                       </button>
                     </nav>
                     <div className="work-panel-body">
-                      {workPanel === "review" && (
+                      {activeIsRemote && workPanel !== "browser" && (
+                        <section className="settings-note" role="status">
+                          Not available for remote conversations: this panel works on this computer's files.
+                        </section>
+                      )}
+                      {workPanel === "review" && !activeIsRemote && (
                         <ReviewPanel
                           sessionId={active.session_id}
                           review={gitReview(active.session_id)}
@@ -1789,7 +1817,7 @@ export default function App() {
                           }}
                         />
                       )}
-                      {workPanel === "terminal" && (
+                      {workPanel === "terminal" && !activeIsRemote && (
                         <TerminalPanel
                           sessionId={active.session_id}
                           terminal={terminalForSession(active.session_id)}
@@ -1804,7 +1832,7 @@ export default function App() {
                           onInsertContext={prepareTerminalContext}
                         />
                       )}
-                      {workPanel === "files" && (
+                      {workPanel === "files" && !activeIsRemote && (
                         <FilesPanel
                           sessionId={active.session_id}
                           state={filesForSession(active.session_id)}
