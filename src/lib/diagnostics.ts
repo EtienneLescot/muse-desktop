@@ -26,6 +26,8 @@ export interface NativeDiagnosticsSnapshot {
   runningSessionCount: number;
   pendingApprovalCount: number;
   eventBufferCount: number;
+  /** M0-14 isolated test mode (debug Windows builds): fixture engines, test profile. */
+  testMode?: boolean;
 }
 
 export interface DiagnosticsSnapshot {

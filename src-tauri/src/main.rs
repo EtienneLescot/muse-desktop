@@ -487,6 +487,8 @@ pub struct NativeDiagnosticsSnapshot {
     pub event_buffer_count: usize,
     /// Last engine seen per workspace host (kept after the host exits), sorted; no workspace path.
     pub host_engines: Vec<HostEngine>,
+    /// The M0-14 isolated test mode is on (`test_mode`): fixture engines, test profile.
+    pub test_mode: bool,
 }
 
 const DIAGNOSTIC_MAX_LINES: usize = 20;
@@ -2890,6 +2892,7 @@ fn collect_diagnostics(state: State<'_, AppState>) -> Result<NativeDiagnosticsSn
         pending_approval_count,
         event_buffer_count,
         host_engines,
+        test_mode: test_mode::data_dir().is_some(),
     })
 }
 
@@ -8461,6 +8464,7 @@ mod tests {
             .collect();
         assert_eq!(versions, vec!["1.3.0", "1.4.2"]);
         assert!(snapshot["hostEngines"][1]["schemaFingerprint"].as_str().unwrap().starts_with("sha256:"));
+        assert!(snapshot["testMode"].is_boolean());
     }
 
     #[test]
