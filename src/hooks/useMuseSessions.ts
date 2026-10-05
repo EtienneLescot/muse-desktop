@@ -5460,13 +5460,6 @@ export function useMuseSessions(): UseMuseSessions {
         updateOutbox(sessionId, (cur) =>
           upsertOutbox(cur, markFailed(entry, failure, Date.now(), ambiguous)),
         );
-        // M0-14 MUTATION (temporary): the refused send is then dropped, bubble included.
-        updateOutbox(sessionId, (cur) => removeOutbox(cur, clientMessageId));
-        setLogs((cur) => {
-          const next = (cur[sessionId] ?? []).filter((e) => e.clientMessageId !== clientMessageId);
-          saveLog(sessionId, next);
-          return { ...cur, [sessionId]: next };
-        });
         if (skillInvocation !== null) {
           updateSkillInvocation(sessionId, {
             stage: ambiguous ? "unknown" : "failed",
