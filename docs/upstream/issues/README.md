@@ -101,3 +101,34 @@ clients can only show a recovery message.
       stop-during-tool and the M1-06 "Run in Muse" flows (#57), and
       **M1-09's fork creation** (#55 — re-run
       `scripts/cdp-m1-files-fork.mjs` and the direct `fork_session` probe).
+
+## Follow-up of 5 October 2026 (host 1.4.2-R4684.1)
+
+The maintainer answered on 01–02/10 and asked for a 1.4.2 re-test of #56. The re-tests were posted
+on 05/10, with Étienne's approval. The measurements are in
+[`docs/evidence/2026-10-05-roadmap-closure/`](../../evidence/2026-10-05-roadmap-closure/).
+
+- **#56, approvals: answered** ([comment](https://github.com/meta-models/muse-code-sdk/issues/56#issuecomment-5999607360)).
+  - The host raises approvals for a dynamic-argv write command in both `onRequest` and
+    `promptUnmatched`.
+  - The two-stage decide works, and so do abort, stale (`-32053`) and already-resolved (`-32051`).
+  - The "ceiling" reading came from the allowlisted `echo`. File 1 above is superseded.
+- **#55, fork: commented** ([comment](https://github.com/meta-models/muse-code-sdk/issues/55#issuecomment-5999607722)).
+  - The defect is still present on 1.4.2 native Windows with the echo provider: `InvalidCut` with
+    a cut point, `WriteFailed` without.
+  - It is the same defect as [#31](https://github.com/meta-models/muse-code-sdk/issues/31), which
+    the maintainer confirmed on 01/10.
+  - The sub-agent-lane correlation of File 3 does not hold.
+- **#88, new issue: the sandboxed shell starts in a verbatim location** ([#88](https://github.com/meta-models/muse-code-sdk/issues/88)).
+  - Under `--sandbox-network restricted` on 1.4.2, the model's PowerShell starts in
+    `Microsoft.PowerShell.Core\FileSystem::\\?\G:\…`, so cmdlets with relative paths fail.
+  - Absolute paths, `write_file` and `--disable-sandbox` work.
+  - Related: #26, the shell starting in `System32` for workspaces under the profile.
+- **#57, powershell hangs under the sandbox:** the 1.3.0 hang does not reproduce on 1.4.2. Every
+  turn of the 05/10 matrix reached `turn/completed`. The issue can be updated or closed when
+  convenient. This has not been posted yet.
+- **Not posted yet:**
+  - On native Windows 1.4.2, the "Workspace and network" isolation still gives the sandboxed shell
+    no network. `Invoke-WebRequest` fails and `curl.exe` returns `000`. Measured in the app by the
+    M0-05/M0-06 proof on 05/10.
+  - French-locale PowerShell output is mis-decoded. This one is mentioned as a side note in #88.
