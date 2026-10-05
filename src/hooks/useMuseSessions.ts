@@ -358,10 +358,8 @@ import {
 } from "../lib/settings";
 import {
   AUTHORIZATION_MODE_KEY,
-  automaticApprovalChoice,
   authorizationModeLabel,
   hostApprovalMode,
-  hostModeMatches,
   parseAuthorizationMode,
   productAuthorizationMode,
   type AuthorizationMode,
@@ -1642,10 +1640,6 @@ export function useMuseSessions(): UseMuseSessions {
   const [authorizationMode, setAuthorizationModeState] = useState<AuthorizationMode>(() => {
     return parseAuthorizationMode(readStorageString(AUTHORIZATION_MODE_KEY));
   });
-  /** Effective host posture by session. `null` means a requested change was
-   * refused or the host returned an incomplete projection; in that state the
-   * local selector must never auto-approve a tool. */
-  const [hostApprovalModeBySession, setHostApprovalModeBySession] = useState<Record<string, string | null>>({});
   // US-15 allowlist: restored once (survives restarts via localStorage),
   // written through on every change.
   const [allowlist, setAllowlist] = useState<AllowRule[]>(() => loadAllowlist());
@@ -2269,15 +2263,6 @@ export function useMuseSessions(): UseMuseSessions {
           for (const meta of restored) {
             if (!tombstoned.current?.has(meta.session_id)) {
               next[meta.session_id] = "connected";
-            }
-          }
-          return next;
-        });
-        setHostApprovalModeBySession((cur) => {
-          const next = { ...cur };
-          for (const meta of restored) {
-            if (typeof meta.approval_mode === "string" && !tombstoned.current?.has(meta.session_id)) {
-              next[meta.session_id] = meta.approval_mode;
             }
           }
           return next;
@@ -3328,12 +3313,6 @@ export function useMuseSessions(): UseMuseSessions {
         return next;
       });
       setConnectionState(sid, "disconnected");
-      setHostApprovalModeBySession((cur) => {
-        if (!(sid in cur)) return cur;
-        const next = { ...cur };
-        delete next[sid];
-        return next;
-      });
       clearStopping(sid);
       clearRetryScheduled(sid);
       // A full host was replaced to make room (`HOST_RECYCLED_MESSAGE` in
@@ -3784,15 +3763,11 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         const hostMode = typeof obj.mode === "string" ? obj.mode : "";
-        const mapped = productAuthorizationMode(hostMode);
-        if (mapped === null) {
+        if (productAuthorizationMode(hostMode) === null) {
           setError(`The host reported an unsupported approval mode: ${hostMode || "unknown"}.`);
-          return;
         }
-        setHostApprovalModeBySession((cur) => ({ ...cur, [sid]: hostMode }));
-        // The notification is scoped to this session. Keep it as the host
-        // projection used by approval gating; never overwrite the global
-        // selector or its persisted value from a delayed sibling event.
+        // The notification is scoped to this session: never overwrite the
+        // global selector or its persisted value from a delayed sibling event.
       } catch {
         setError("The host reported an invalid approval mode update.");
       }
@@ -4103,13 +4078,6 @@ export function useMuseSessions(): UseMuseSessions {
       connectedIds.includes(session.session_id),
     );
     if (targets.length === 0) return;
-    // Until each host confirms the same closed MSP mode, suspend automatic
-    // decisions for these sessions. A local preference is never authority
-    // enough to bypass a host ceiling (for example promptUnmatched).
-    setHostApprovalModeBySession((cur) => targets.reduce(
-      (next, session) => ({ ...next, [session.session_id]: null }),
-      { ...cur },
-    ));
     // The host applies the new posture to subsequent actions. Pending
     // approvals remain race-guarded by their current requirement token.
     void Promise.allSettled(
@@ -4122,19 +4090,9 @@ export function useMuseSessions(): UseMuseSessions {
         if (result.status !== "accepted" || effective !== hostApprovalMode(next)) {
           throw new Error("host did not confirm the requested approval posture");
         }
-        return session.session_id;
       }),
     ).then((results) => {
-      const succeeded = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
-      const failed = results.length - succeeded.length;
-      setHostApprovalModeBySession((cur) => {
-        const nextState = { ...cur };
-        for (const sessionId of succeeded) nextState[sessionId] = hostApprovalMode(next);
-        for (const session of targets) {
-          if (!succeeded.includes(session.session_id)) nextState[session.session_id] = null;
-        }
-        return nextState;
-      });
+      const failed = results.filter((result) => result.status === "rejected").length;
       if (failed > 0) {
         const firstRejection = results.find((result) => result.status === "rejected");
         const reason = firstRejection?.status === "rejected"
@@ -4322,9 +4280,6 @@ export function useMuseSessions(): UseMuseSessions {
       }));
       setConnectedIds((cur) => [...new Set([...cur, meta.session_id])]);
       setConnectionState(meta.session_id, "connected");
-      if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
-        setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
-      }
       setSessions((cur) => [...cur, record]);
       setLogs((cur) => (cur[meta.session_id] ? cur : { ...cur, [meta.session_id]: [] }));
       setActiveId(meta.session_id);
@@ -4337,6 +4292,10 @@ export function useMuseSessions(): UseMuseSessions {
       }
       if (projectSettings?.reasoningEffort !== undefined) {
         await setSessionReasoningEffort(meta.session_id, projectSettings.reasoningEffort);
+      }
+      // A host ceiling makes `session/start` fall back to the host default.
+      if (meta.approval_mode && meta.approval_mode !== hostApprovalMode(authorizationMode)) {
+        setError("Conversation started, but the host kept its default authorization posture.");
       }
       void refreshHostSkills(meta.session_id);
       return meta.session_id;
@@ -4518,10 +4477,10 @@ export function useMuseSessions(): UseMuseSessions {
             : session,
         ),
       );
-      // Resume restores the host's persisted posture. Reconcile it with the
-      // current global selector before enabling the composer again. A host
-      // ceiling must not make the saved conversation unusable: preserve the
-      // observed projection and keep automatic approval fail-closed.
+      // Resume restores the host's persisted posture, which may predate the
+      // current selector or its mapping. Re-project it before enabling the
+      // composer again. A host ceiling must not make the saved conversation
+      // unusable: keep it connected and report the posture it kept.
       let postureError: unknown = null;
       try {
         const posture = await invoke<Record<string, unknown>>("set_approval_mode", {
@@ -4529,18 +4488,11 @@ export function useMuseSessions(): UseMuseSessions {
           mode: authorizationMode,
         });
         const effective = (posture.effectiveMode as Record<string, unknown> | undefined)?.mode;
-        if (typeof effective === "string") {
-          setHostApprovalModeBySession((cur) => ({ ...cur, [id]: effective }));
-        } else {
-          postureError = new Error("host returned no effective approval mode");
-          setHostApprovalModeBySession((cur) => ({ ...cur, [id]: null }));
+        if (effective !== hostApprovalMode(authorizationMode)) {
+          postureError = new Error("host did not confirm the requested approval posture");
         }
       } catch (error) {
         postureError = error;
-        setHostApprovalModeBySession((cur) => ({
-          ...cur,
-          [id]: meta.approval_mode ?? null,
-        }));
       }
       // Cold reconnects can outlive the renderer's local log (for example
       // after a storage reset or a crash during streaming). Reconcile the
@@ -4702,9 +4654,6 @@ export function useMuseSessions(): UseMuseSessions {
           ...(meta.session_durability ? { session_durability: meta.session_durability } : {}),
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
-        if (typeof meta.approval_mode === "string" && meta.approval_mode.length > 0) {
-          setHostApprovalModeBySession((cur) => ({ ...cur, [meta.session_id]: meta.approval_mode! }));
-        }
         setConnectionState(meta.session_id, "connected");
         setSessions((current) => [
           ...current.filter((session) => session.session_id !== meta.session_id),
@@ -4720,6 +4669,11 @@ export function useMuseSessions(): UseMuseSessions {
         if (source.model_id && source.model_id !== "default") {
           await setSessionModel(meta.session_id, source.model_id);
         }
+        // Same for the posture: the branch may start at the host default.
+        if (meta.approval_mode !== hostApprovalMode(authorizationMode)) {
+          await invoke("set_approval_mode", { sessionId: meta.session_id, mode: authorizationMode })
+            .catch(() => setError("Branch created, but the host kept its existing authorization posture."));
+        }
         void refreshHostSkills(meta.session_id);
         return meta.session_id;
       } catch (error) {
@@ -4729,7 +4683,7 @@ export function useMuseSessions(): UseMuseSessions {
         setForkingId(null);
       }
     },
-    [forkingId, refreshHostSkills, sessions, setConnectionState, setSessionModel],
+    [authorizationMode, forkingId, refreshHostSkills, sessions, setConnectionState, setSessionModel],
   );
 
   // ---- w-integrations: connectors (US-24/US-26) + skills (US-25) ----
@@ -5797,50 +5751,6 @@ export function useMuseSessions(): UseMuseSessions {
     },
     [approvals, kickPoll, touchStreamActivity],
   );
-
-  // Balanced mode removes repetitive prompts for local workspace actions;
-  // YOLO removes prompts for every non-denied choice. Network/elevated scopes
-  // continue through the visible panel in balanced mode. Decisions still go
-  // through the same approve IPC path, preserving host stale-token guards.
-  const autoApprovalInFlight = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    for (const key of autoApprovalInFlight.current) {
-      const [sessionId, requestId] = key.split("|");
-      if (!approvals.some((a) => a.session_id === sessionId && a.request_id === requestId)) {
-        autoApprovalInFlight.current.delete(key);
-      }
-    }
-    if (authorizationMode === "ask") return;
-    for (const approval of approvals) {
-      const resolved = resolveApproval(allowlist, {
-        toolName: approval.toolName,
-        summary: approval.summary,
-        scopes: approval.choices.map((choice) => choice.scope),
-      });
-      // An explicit persisted prompt/forbidden rule is more restrictive than
-      // the global posture and must remain user-controlled.
-      if (
-        resolved.rule?.decision === "prompt" ||
-        resolved.rule?.decision === "forbidden"
-      ) {
-        continue;
-      }
-      const choice = automaticApprovalChoice(authorizationMode, approval.choices);
-      if (choice === null) continue;
-      const effectiveHostMode = hostApprovalModeBySession[approval.session_id];
-      if (!hostModeMatches(authorizationMode, effectiveHostMode)) {
-        continue;
-      }
-      // Include the current choice set so an approval/updated stage can be
-      // auto-decided even though the host intentionally reuses approvalId.
-      const key = `${approval.session_id}|${approval.request_id}|${approval.choices
-        .map((choice) => choice.choiceId)
-        .join(",")}`;
-      if (autoApprovalInFlight.current.has(key)) continue;
-      autoApprovalInFlight.current.add(key);
-      void approve(approval.session_id, approval.request_id, choice.choiceId);
-    }
-  }, [approvals, authorizationMode, approve, allowlist, hostApprovalModeBySession]);
 
   // US-15: effective allowlist decision for one pending approval request
   // (badge in the panel; most-restrictive-wins, network default-deny).

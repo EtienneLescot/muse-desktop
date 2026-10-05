@@ -2,8 +2,8 @@
  * Global authorization posture for tool actions.
  *
  * The product posture is mapped to the closed approval modes exposed by MSP.
- * The host remains the authority for the effective policy; the client keeps
- * its local scope guard and allowlist as a second, conservative layer.
+ * The host alone decides which actions prompt; the client never answers a
+ * host prompt on the user's behalf.
  * This module is deliberately dependency-free and can be tested without a
  * browser or Tauri.
  */
@@ -27,12 +27,6 @@ export const AUTHORIZATION_MODES: readonly AuthorizationMode[] = [
   "yolo",
 ];
 
-export interface ApprovalChoiceLike {
-  choiceId: string;
-  decision: string;
-  scope: string;
-}
-
 export function isAuthorizationMode(value: unknown): value is AuthorizationMode {
   return value === "ask" || value === "workspace" || value === "yolo";
 }
@@ -55,18 +49,18 @@ export function authorizationModeLabel(mode: AuthorizationMode): string {
 export function authorizationModeDescription(mode: AuthorizationMode): string {
   switch (mode) {
     case "workspace":
-      return "Approve local workspace actions; ask before network or elevated access.";
+      return "Tools run in the sandbox without asking. Muse asks when one needs more, such as network or elevated access.";
     case "yolo":
-      return "Approve every non-denied action automatically in this trusted workspace.";
+      return "Muse never asks. Every action runs.";
     default:
-      return "Always ask before a tool changes files or uses external services.";
+      return "Muse asks before any action its rules do not already allow.";
   }
 }
 
 /**
  * Connector calls are explicit user actions, but they still follow the same
- * global posture as host tools. A remote call is always an external/network
- * action, so the balanced workspace posture keeps it behind a one-time review.
+ * global posture as host tools. A remote call is always a network action,
+ * which the workspace posture treats as an escalation, so it keeps a review.
  */
 export function connectorCallRequiresApproval(
   mode: AuthorizationMode,
@@ -75,77 +69,33 @@ export function connectorCallRequiresApproval(
   return mode === "ask" || (mode === "workspace" && transport === "remote");
 }
 
-/** Translate product language to the host's stable, closed enum. */
+/**
+ * Translate product language to the host's stable, closed enum. Host meanings:
+ * `promptUnmatched` prompts for anything no rule matches, `onRequest` runs
+ * tools sandboxed and prompts only on explicit permission requests,
+ * `allowAll` never prompts.
+ */
 export function hostApprovalMode(mode: AuthorizationMode): MuseHostApprovalMode {
   switch (mode) {
     case "workspace":
-      return "promptUnmatched";
+      return "onRequest";
     case "yolo":
       return "allowAll";
     default:
-      return "onRequest";
+      return "promptUnmatched";
   }
-}
-
-/**
- * A local posture can drive automatic decisions only after the host confirms
- * the same closed mode. `undefined` keeps compatibility with older sessions
- * that never reported a projection; `null` is an explicit failed/unknown
- * update and therefore fails closed.
- */
-export function hostModeMatches(
-  local: AuthorizationMode,
-  observed: MuseHostApprovalMode | string | null | undefined,
-): boolean {
-  if (observed === undefined) return true;
-  return observed !== null && observed === hostApprovalMode(local);
 }
 
 /** Translate a host projection back to the product selector language. */
 export function productAuthorizationMode(mode: string): AuthorizationMode | null {
   switch (mode) {
-    case "onRequest":
-      return "ask";
     case "promptUnmatched":
+      return "ask";
+    case "onRequest":
       return "workspace";
     case "allowAll":
       return "yolo";
     default:
       return null;
   }
-}
-
-/**
- * Network, URL and elevated scopes always remain explicit in the balanced
- * posture. The matcher is intentionally conservative: an unknown scope is
- * treated as local, while recognizable external or privileged scopes prompt.
- */
-export function isRiskyApprovalScope(scope: string): boolean {
-  const value = scope.trim();
-  if (value.length === 0) return false;
-  return (
-    /^(?:network|elevated|sudo|root|admin|privileged)\b/i.test(value) ||
-    /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ||
-    /^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/.*)?$/i.test(value)
-  );
-}
-
-/**
- * Return the host choice that may be decided automatically, or null when the
- * current posture requires the user to review the request.
- */
-export function automaticApprovalChoice(
-  mode: AuthorizationMode,
-  choices: readonly ApprovalChoiceLike[],
-): ApprovalChoiceLike | null {
-  if (mode === "ask") return null;
-  const choice = choices.find((candidate) => !candidate.decision.startsWith("denied"));
-  if (choice === undefined) return null;
-  if (
-    mode === "workspace" &&
-    choices.some((candidate) => isRiskyApprovalScope(candidate.scope))
-  ) {
-    return null;
-  }
-  return choice;
 }

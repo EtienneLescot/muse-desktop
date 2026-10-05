@@ -74,8 +74,8 @@ pub struct SessionMeta {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_durability: Option<String>,
     /// The host's effective approval projection when the session API returns
-    /// one. This is advisory renderer metadata; automatic decisions still
-    /// require an explicit per-session confirmation in the hook.
+    /// one. This is advisory renderer metadata; the client never decides an
+    /// approval from it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_mode: Option<String>,
     /// Capabilities granted by the workspace-owned host at initialize time.
@@ -819,11 +819,14 @@ fn approval_terminal(result: &Value) -> bool {
 
 /// Map the product-facing posture to the host's closed MSP enum. Keeping this
 /// translation in Rust means every wire write is validated even if a stale or
-/// malformed renderer invokes the command directly.
+/// malformed renderer invokes the command directly. It follows the host's own
+/// meanings: `promptUnmatched` prompts for anything no rule matches,
+/// `onRequest` runs tools sandboxed and prompts only on explicit permission
+/// requests, `allowAll` never prompts.
 fn host_approval_mode(mode: &str) -> Option<&'static str> {
     match mode {
-        "ask" => Some("onRequest"),
-        "workspace" => Some("promptUnmatched"),
+        "ask" => Some("promptUnmatched"),
+        "workspace" => Some("onRequest"),
         "yolo" => Some("allowAll"),
         _ => None,
     }
@@ -4368,8 +4371,8 @@ async fn request_session_start(
         Err(error) if authorization_mode.is_some() && is_approval_mode_ceiling(&error) => {
             // A persisted local preference must not make a new conversation
             // unusable when this host advertises a stricter ceiling. Start
-            // with the host default, expose its effective projection below,
-            // and let the renderer keep automatic decisions fail-closed.
+            // with the host default and expose its effective projection below
+            // so the renderer reports the posture the host kept.
             if let Some(object) = params.as_object_mut() {
                 object.remove("approvalMode");
             }
@@ -8251,8 +8254,8 @@ mod tests {
 
     #[test]
     fn product_authorization_modes_map_to_closed_host_values() {
-        assert_eq!(host_approval_mode("ask"), Some("onRequest"));
-        assert_eq!(host_approval_mode("workspace"), Some("promptUnmatched"));
+        assert_eq!(host_approval_mode("ask"), Some("promptUnmatched"));
+        assert_eq!(host_approval_mode("workspace"), Some("onRequest"));
         assert_eq!(host_approval_mode("yolo"), Some("allowAll"));
         assert_eq!(host_approval_mode("deny"), None);
     }

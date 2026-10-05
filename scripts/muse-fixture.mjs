@@ -219,6 +219,7 @@ function handle(frame) {
       const params = frame.params && typeof frame.params === "object" ? frame.params : {};
       const sessionId = id("session", ++sessionNumber);
       const session = ensureSession(sessionId, stringValue(params.workspaceRoot, "C:\\muse-fixture"));
+      session.approvalMode = stringValue(params.approvalMode, session.approvalMode);
       resultResponse(frame, { session: sessionSnapshot(session) });
       return;
     }
