@@ -1,0 +1,126 @@
+{
+  "schema": "muse-desktop.msp-probe.v1",
+  "live": true,
+  "checks": {
+    "approval": {
+      "approvalMode": "onRequest",
+      "modeSet": {
+        "applyOutcome": "noop",
+        "effectiveMode": "onRequest"
+      },
+      "sent": "accepted",
+      "approvalRequested": {
+        "approvalId": "01a10bcf-01ef-7ef1-962f-97354dc4d0ae",
+        "currentRequirementId": "{\"approvalId\":\"01a10bcf-01ef-7ef1-962f-97354dc4d0ae\",\"sourceIndex\":0}",
+        "toolName": "powershell",
+        "subjectKind": "shell",
+        "choices": [
+          {
+            "choiceId": "allow_once",
+            "decision": "approved",
+            "scope": "once"
+          },
+          {
+            "choiceId": "abort",
+            "decision": "abort",
+            "scope": "once"
+          }
+        ]
+      },
+      "serverRequest": {
+        "approvalId": "01a10bcf-01ef-7ef1-962f-97354dc4d0ae",
+        "currentRequirementId": "{\"approvalId\":\"01a10bcf-01ef-7ef1-962f-97354dc4d0ae\",\"sourceIndex\":0}",
+        "toolName": "powershell",
+        "subjectKind": "shell",
+        "choices": [
+          {
+            "choiceId": "allow_once",
+            "decision": "approved",
+            "scope": "once"
+          },
+          {
+            "choiceId": "abort",
+            "decision": "abort",
+            "scope": "once"
+          }
+        ],
+        "answeredWithEmptyResult": true
+      },
+      "pendingRows": [
+        {
+          "approvalId": "01a10bcf-01ef-7ef1-962f-97354dc4d0ae",
+          "currentRequirementId": "{\"approvalId\":\"01a10bcf-01ef-7ef1-962f-97354dc4d0ae\",\"sourceIndex\":0}",
+          "toolName": "powershell",
+          "subjectKind": "shell",
+          "choices": [
+            {
+              "choiceId": "allow_once",
+              "decision": "approved",
+              "scope": "once"
+            },
+            {
+              "choiceId": "abort",
+              "decision": "abort",
+              "scope": "once"
+            }
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "requirementId": "{\"approvalId\":\"01a10bcf-01ef-7ef1-962f-97354dc4d0ae\",\"sourceIndex\":0}",
+          "choiceId": "allow_once",
+          "status": "accepted",
+          "terminal": false
+        },
+        {
+          "requirementId": "{\"approvalId\":\"01a10bcf-01ef-7ef1-962f-97354dc4d0ae\",\"sourceIndex\":1}",
+          "choiceId": "allow_once",
+          "status": "accepted",
+          "terminal": true
+        }
+      ],
+      "stale": {
+        "code": -32053,
+        "kind": "approvalRequirementStale",
+        "expectedCode": -32053,
+        "matched": true
+      },
+      "resumedToTerminal": "turn/completed",
+      "probeFileWritten": false
+    }
+  },
+  "host": {
+    "serverInfo": "muse",
+    "serverVersion": "1.4.2",
+    "schemaVersion": 1,
+    "sessionDurability": "durable",
+    "grantedCapabilities": [],
+    "initializeFields": [
+      "experimentalApi",
+      "grantedCapabilities",
+      "museHome",
+      "platformFamily",
+      "platformOs",
+      "schema",
+      "serverInfo",
+      "sessionDurability",
+      "userAgent"
+    ]
+  },
+  "sessionCreated": true,
+  "notificationMethods": [
+    "approval/request",
+    "approval/requested",
+    "approval/resolved",
+    "approval/updated",
+    "item/completed",
+    "item/delta",
+    "item/started",
+    "session/started",
+    "session/statusChanged",
+    "session/tokenUsage",
+    "turn/completed",
+    "turn/started"
+  ]
+}

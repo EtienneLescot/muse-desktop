@@ -59,11 +59,11 @@ function reason(error) {
 }
 
 /** Minimal MSP client over newline JSON-RPC on a real child process. */
-function createHost(binary, workspace) {
+export function createHost(binary, workspace, extraArgs = []) {
   // The app's own argv (main.rs HostSandboxPolicy for the workspace mode), so
   // the probe measures the host the desktop actually runs. The launcher
   // self-updates unless told not to.
-  const child = spawn(binary, ["serve", "--sandbox-network", "restricted", "--trust-workspace"], {
+  const child = spawn(binary, ["serve", "--sandbox-network", "restricted", "--trust-workspace", ...extraArgs], {
     cwd: workspace,
     env: { ...process.env, MUSE_NO_AUTO_UPDATE: "1" },
     stdio: ["pipe", "pipe", "pipe"],
@@ -182,7 +182,7 @@ export const uuidv7 = () => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
 
-async function connect(host, capabilities) {
+export async function connect(host, capabilities) {
   const initialized = await host.request("initialize", {
     clientInfo: { name: "msp_probe", version: "1.0.0" },
     ...(capabilities ? { capabilities } : {}),
@@ -191,7 +191,7 @@ async function connect(host, capabilities) {
   return initialized;
 }
 
-async function startSession(host, workspaceRoot) {
+export async function startSession(host, workspaceRoot) {
   const commandId = uuidv7();
   const result = await host.request("session/start", { commandId, workspaceRoot });
   const session = result?.session;

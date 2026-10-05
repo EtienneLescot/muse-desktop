@@ -1,0 +1,62 @@
+{
+  "schema": "muse-desktop.msp-echo-probe.v1",
+  "provider": "echo",
+  "sandbox": "disabled",
+  "serverVersion": "1.4.2",
+  "turns": [
+    {
+      "sent": "accepted",
+      "terminal": "completed"
+    },
+    {
+      "sent": "accepted",
+      "terminal": "completed"
+    }
+  ],
+  "fork": {
+    "atFirstTurn": {
+      "created": false,
+      "code": -32023,
+      "kind": "forkBoundaryInvalid",
+      "detail": "session/fork failed: invalid fork boundary for session 01a10bd4-45c0-7ed1-90b9-f3cc04fa3f81: InvalidCut"
+    },
+    "anchorless": {
+      "created": false,
+      "code": -32023,
+      "kind": "forkBoundaryInvalid",
+      "detail": "session/fork failed: invalid fork boundary for session 01a10bd4-45c0-7ed1-90b9-f3cc04fa3f81: WriteFailed"
+    }
+  },
+  "workspaceRoots": {
+    "before": {
+      "admitted": "accepted",
+      "status": "completed",
+      "cwd": "A"
+    },
+    "turnInB": {
+      "sent": "accepted",
+      "terminal": "completed"
+    },
+    "after": {
+      "admitted": "accepted",
+      "status": "completed",
+      "cwd": "A"
+    },
+    "sessionReadRoot": "A",
+    "modelToolAfterMove": {
+      "sent": "accepted",
+      "terminal": "completed",
+      "toolCalls": 1,
+      "cwd": "B"
+    },
+    "turnBackInA": {
+      "sent": "accepted",
+      "terminal": "completed"
+    },
+    "afterBack": {
+      "admitted": "accepted",
+      "status": "completed",
+      "cwd": "A"
+    }
+  }
+}
