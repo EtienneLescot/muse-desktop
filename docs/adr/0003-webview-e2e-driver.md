@@ -28,6 +28,8 @@ The check, in a fresh temp folder:
 - **Lost send:** B's host dies on the next `turn/start` before answering. The text must still be in the transcript, the outbox or the native outbox ledger. A's host still answers.
 - **Isolation:** the WebView2 profile and the app data were written in the temp folder.
 
+It catches both faults: on 05/10/2026 a decision sent to the other conversation's card, then a refused send dropped with its bubble, each turned `e2e-windows` red with the matching verdicts false. Both were temporary commits, reverted.
+
 ## Alternatives rejected
 
 - **`tauri-driver` with Edge Driver on Windows:** one more binary to fetch on every run and to keep at the runtime's exact version, for the same Chromium underneath, and a second harness beside the one the native campaigns use.
@@ -37,7 +39,7 @@ The check, in a fresh temp folder:
 
 ## Consequences
 
-- `npm test` stays free of any app or engine. `npm run e2e:fixture` needs a built debug app (`npm run build`, then `cargo build --manifest-path src-tauri/Cargo.toml`) and runs on Windows only.
+- `npm test` stays free of any app or engine. `npm run e2e:fixture` needs a built debug app (`npm run build`, then `cargo build --manifest-path src-tauri/Cargo.toml`) and runs on Windows only. The CI job takes about five minutes, most of it the debug build.
 - **macOS:** no end-to-end check. The way in is `tauri-plugin-wdio-webdriver` in debug builds with `@wdio/tauri-service`, or CrabNebula with a paid key. The test mode isolates the app data there, not the WKWebView store.
 - **Linux:** no end-to-end check in CI. `tauri-driver` with WebKitWebDriver would work, but the test mode does not move the WebKitGTK data folder, which Tauri derives from the app's local data folder.
 - The fixture is a protocol double, not a model. It does not replace the native campaigns on the real engine.
