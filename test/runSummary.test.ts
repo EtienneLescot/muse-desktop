@@ -80,6 +80,22 @@ describe("scheduled run result summaries", () => {
     assert.equal(scheduleRunPreview(log, { startedAt: 2300 }), undefined);
   });
 
+  it("counts only the rows the stream shows (M3-08, 1.4.2 run measured 05/10)", () => {
+    // A one-answer run: a reasoning item closed without text, then
+    // host-internal reminder children around the answer.
+    const log = [
+      { id: "u", ts: 10, role: "user", text: "Reply with exactly: DONE" },
+      { id: "r", ts: 10, role: "assistant", text: "", turnId: "t1" },
+      { id: "c1", ts: 11, role: "subagent", text: "Reminder child session", subagentInternal: true },
+      { id: "a", ts: 12, role: "assistant", text: "DONE", turnId: "t1" },
+      { id: "c2", ts: 13, role: "subagent", text: "Reminder child session", subagentInternal: true },
+    ];
+    const summary = buildScheduleRunSummary("s", log, { startedAt: 10, turnId: "t1" });
+    assert.equal(summary.assistantMessages, 1);
+    assert.equal(summary.totalItems, 2);
+    assert.equal(summary.headline, "DONE");
+  });
+
   it("merges host facts without replacing the local recap", () => {
     const summary = buildScheduleRunSummary("session-5", [
       { id: "a", role: "assistant", text: "Decision: keep the current plan." },

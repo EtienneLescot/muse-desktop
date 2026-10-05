@@ -15,7 +15,7 @@ export interface ScheduleRunSummary {
 }
 
 /** A persisted transcript row; `ts` and `turnId` anchor it to one run. */
-export type RunLogEntry = ArtifactLogEntry & { ts?: number; turnId?: string };
+export type RunLogEntry = ArtifactLogEntry & { ts?: number; turnId?: string; subagentInternal?: boolean };
 
 type RunAnchor = { startedAt?: number; turnId?: string };
 
@@ -128,6 +128,11 @@ export function mergeScheduleRunSummary(
  */
 function runEntries(log: RunLogEntry[], anchor: RunAnchor = {}): RunLogEntry[] {
   return log.filter((entry) =>
+    // Rows the stream never shows are not run output: a message item the host
+    // closed without text (reasoning) and a host-internal child lane. Counted,
+    // a one-answer run read "2 responses" (measured on 1.4.2, 05/10/2026).
+    entry.subagentInternal !== true &&
+    !(entry.role === "assistant" && entry.text.trim().length === 0 && entry.engineError === undefined) &&
     (entry.ts ?? 0) >= (anchor.startedAt ?? 0) &&
     (entry.turnId === undefined || anchor.turnId === undefined || entry.turnId === anchor.turnId));
 }
