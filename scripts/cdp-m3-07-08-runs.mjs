@@ -213,7 +213,7 @@ function merge(phaseResult) {
     schema: "muse-desktop.m3-07-08-runs.v1",
     tickets: ["M3-08", "M3-07"],
     platform: "Windows 11 (26200), debug build with embedded frontend, WebView2 over CDP",
-    posture: "Approve on my behalf (host onRequest); text-only prompts, no tool call expected",
+    posture: "Ask only for more access (host onRequest); text-only prompts, no tool call expected",
     phases: {},
   });
   record.commit = gitHead();
@@ -407,7 +407,7 @@ async function pickDefaultFolder(app, folder) {
 }
 
 async function setPosture(app, mode) {
-  const label = { ask: "Ask for approval", workspace: "Approve on my behalf", yolo: "YOLO" }[mode];
+  const label = { ask: "Ask for approval", workspace: "Ask only for more access", yolo: "YOLO" }[mode];
   return app.ev(page(`
     if (!document.querySelector('button[role="menuitemradio"]')) { nav('New conversation'); await pause(1200); }
     const item = [...document.querySelectorAll('button[role="menuitemradio"]')]

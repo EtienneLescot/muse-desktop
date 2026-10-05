@@ -22,8 +22,13 @@ describe("global authorization posture", () => {
 
   it("exposes calm, product-facing labels", () => {
     assert.equal(authorizationModeLabel("yolo"), "YOLO");
-    // `onRequest` only prompts past the sandbox, so its reach is Isolation's.
-    assert.match(authorizationModeDescription("workspace"), /isolation/i);
+    // The app approves nothing itself: the label says what the engine does.
+    assert.equal(authorizationModeLabel("workspace"), "Ask only for more access");
+    // Measured on 1.4.2: `onRequest` asked for every shell action on Windows,
+    // and `allowAll` never asked while the sandbox still applied.
+    assert.match(authorizationModeDescription("workspace"), /asks when a tool needs more access/);
+    assert.doesNotMatch(authorizationModeDescription("workspace"), /without asking/i);
+    assert.match(authorizationModeDescription("yolo"), /Isolation setting still limits/);
   });
 
   it("maps product postures to the host's own mode semantics", () => {

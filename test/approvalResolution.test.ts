@@ -14,6 +14,12 @@ describe("approval resolution payloads", () => {
     assert.equal(isApprovalDecisionAccepted("rejected"), false);
     assert.equal(isApprovalDecisionAccepted("deny"), false);
     assert.equal(isApprovalDecisionAccepted(""), false);
+    // The 1.4.2 decision vocabulary (ApprovalDecision).
+    assert.equal(isApprovalDecisionAccepted("approvedForSession"), true);
+    assert.equal(isApprovalDecisionAccepted("approvedPolicyAmendment"), true);
+    assert.equal(isApprovalDecisionAccepted("abort"), false);
+    assert.equal(isApprovalDecisionAccepted("deniedPolicyAmendment"), false);
+    assert.equal(isApprovalDecisionAccepted("timedOut"), false);
   });
   it("recognizes accepted decisions and all supported id spellings", () => {
     assert.deepEqual(

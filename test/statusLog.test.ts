@@ -10,6 +10,8 @@ describe("user-facing lifecycle status copy", () => {
     );
     assert.equal(statusLogText("turn/retryScheduled"), "Muse scheduled this turn for another attempt.");
     assert.equal(statusLogText("turn/unqueued"), "Queued turn removed.");
+    // M0-05: the engine aborts an open approval when the app closes.
+    assert.match(statusLogText("approval_cancelled_by_restart") ?? "", /^Approval cancelled: .*did not run\.$/);
   });
 
   it("drops protocol housekeeping and unknown payloads", () => {

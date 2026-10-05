@@ -9,6 +9,8 @@ export function statusLogText(kind: string, _payload = ""): string | null {
   switch (kind) {
     case "host_exited":
       return "Muse stopped because the host process ended. Reconnect to continue.";
+    case "approval_cancelled_by_restart":
+      return "Approval cancelled: Muse closed before you answered, so the action did not run.";
     case "turn/retracted":
       return "Muse retracted the last turn.";
     case "turn/retryScheduled":

@@ -38,7 +38,8 @@ export function parseAuthorizationMode(value: unknown): AuthorizationMode {
 export function authorizationModeLabel(mode: AuthorizationMode): string {
   switch (mode) {
     case "workspace":
-      return "Approve on my behalf";
+      // Says what the engine does (`onRequest`): the app approves nothing itself.
+      return "Ask only for more access";
     case "yolo":
       return "YOLO";
     default:
@@ -46,12 +47,18 @@ export function authorizationModeLabel(mode: AuthorizationMode): string {
   }
 }
 
+/**
+ * Each sentence matches the 1.4.2 verdict matrix
+ * (docs/evidence/2026-10-05-roadmap-closure/m0-06-verdict-matrix-1.4.2.json):
+ * `onRequest` asked for every shell action on Windows, and `allowAll` never
+ * asked while the Isolation sandbox still blocked out-of-root writes and network.
+ */
 export function authorizationModeDescription(mode: AuthorizationMode): string {
   switch (mode) {
     case "workspace":
-      return "Tools run without asking within your Isolation setting. Muse asks only when one needs more access than it allows.";
+      return "Muse runs what its sandbox allows and asks when a tool needs more access. On Windows it asks for most shell commands.";
     case "yolo":
-      return "Muse never asks. Every action runs.";
+      return "Muse never asks. Your Isolation setting still limits what an action can reach.";
     default:
       return "Muse asks before any action its rules do not already allow.";
   }

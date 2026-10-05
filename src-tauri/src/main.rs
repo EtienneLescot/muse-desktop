@@ -4820,7 +4820,24 @@ async fn list_pending_requests(
             );
         }
     }
-    Ok(result)
+    Ok(pending_snapshot_payload(&result))
+}
+
+/// `approval/listPending` rows are the raw `approval/request` and
+/// `userInput/request` params. Give them the same shape as the live events
+/// (`tool_request`, `input_request`): the renderer parses one shape, so a card
+/// rebuilt after a restart keeps its choices and its questions.
+fn pending_snapshot_payload(result: &Value) -> Value {
+    let rows = |key: &str| result.get(key).and_then(Value::as_array).cloned().unwrap_or_default();
+    let approvals: Vec<Value> = rows("approvals")
+        .iter()
+        .filter_map(|p| {
+            let id = p.get("approvalId").and_then(Value::as_str)?;
+            Some(approval_payload(p, id, false))
+        })
+        .collect();
+    let inputs: Vec<Value> = rows("userInputs").iter().filter_map(build_input_request_payload).collect();
+    json!({"approvals": approvals, "userInputs": inputs})
 }
 
 /// Drain backend events after `since` (None = head cursor only, no replay).
@@ -5411,12 +5428,22 @@ fn validate_turn_input_parts(input: &Value) -> Result<(), String> {
     Ok(())
 }
 
+/// The requirement a decision targets: the one on the card the user clicked,
+/// when the renderer sends it. The registry already holds the next stage once
+/// `approval/updated` lands, so falling back to it would let a late click on
+/// the previous card satisfy a stage the user never saw; the pinned token
+/// makes the host refuse it (-32053) instead.
+fn decision_requirement(pinned: Option<Value>, current: &Value) -> Value {
+    pinned.filter(|v| !v.is_null()).unwrap_or_else(|| current.clone())
+}
+
 #[tauri::command]
 async fn approve(
     state: State<'_, AppState>,
     session_id: String,
     approval_id: String,
     choice_id: String,
+    requirement_id: Option<Value>,
 ) -> Result<bool, String> {
     let requirement_id = {
         let approvals = state
@@ -5434,7 +5461,7 @@ async fn approve(
                 "approval {approval_id} belongs to a different session"
             ));
         }
-        pending.requirement_id.clone()
+        decision_requirement(requirement_id, &pending.requirement_id)
     };
     let client = session_client(&state, &session_id)?;
     // A stale requirementId is rejected by the host (-32053) and surfaces as
@@ -8509,6 +8536,44 @@ mod tests {
         assert!(!approval_terminal(&json!({"terminal": false})));
         assert!(!approval_terminal(&json!({"result": {"terminal": false}})));
         assert!(approval_terminal(&json!({"status": "accepted"})));
+    }
+
+    #[test]
+    fn pending_snapshot_rows_get_the_live_event_shape() {
+        // A 1.4.2 `approval/listPending` result: raw request params.
+        let snapshot = json!({
+            "approvals": [{
+                "approvalId": "approval-1",
+                "currentRequirementId": {"approvalId": "approval-1", "sourceIndex": 0},
+                "availableChoices": [
+                    {"choiceId": "allow_once", "label": "Allow once", "decision": "approved", "scope": "once"},
+                    {"choiceId": "abort", "label": "Reject", "decision": "abort", "scope": "once"}
+                ],
+                "rawArgs": "{\"command\":\"Set-Content probe.txt\"}",
+                "subject": {"kind": "shell", "command": "Set-Content probe.txt"},
+                "toolName": "powershell"
+            }, {"availableChoices": []}],
+            "userInputs": [sample_prompt()]
+        });
+        let out = pending_snapshot_payload(&snapshot);
+        let card = &out["approvals"][0];
+        assert_eq!(out["approvals"].as_array().map(Vec::len), Some(1), "a row without an id is dropped");
+        assert_eq!(card["request_id"], "approval-1");
+        assert_eq!(card["toolName"], "powershell");
+        assert_eq!(card["choices"][1]["label"], "Reject");
+        assert_eq!(card["choices"][1]["decision"], "abort");
+        assert_eq!(card["currentRequirementId"]["sourceIndex"], 0);
+        assert_eq!(out["userInputs"][0], build_input_request_payload(&sample_prompt()).unwrap());
+        assert_eq!(pending_snapshot_payload(&json!({})), json!({"approvals": [], "userInputs": []}));
+    }
+
+    #[test]
+    fn a_decision_targets_the_requirement_of_the_clicked_card() {
+        let current = json!({"approvalId": "a", "sourceIndex": 1});
+        let clicked = json!({"approvalId": "a", "sourceIndex": 0});
+        assert_eq!(decision_requirement(Some(clicked.clone()), &current), clicked);
+        assert_eq!(decision_requirement(None, &current), current);
+        assert_eq!(decision_requirement(Some(Value::Null), &current), current);
     }
 
     fn sample_prompt() -> Value {

@@ -1,4 +1,4 @@
-import { isMacPlatform } from "../lib/platform";
+import { hostPlatform, isMacPlatform } from "../lib/platform";
 /**
  * w-settings (US-16 sandbox + US-31 providers): settings panel UI.
  *
@@ -80,22 +80,25 @@ interface Props {
 }
 
 /**
- * Isolation is what the engine's process may reach; under the workspace
- * posture (`onRequest`) it is also what runs unprompted, since the host only
- * asks past the sandbox. Picking a level here is the permission — the
- * separate "saved permission" checkboxes said the same thing twice, and the
- * select fell back to workspace when they disagreed.
+ * Isolation is what the engine's process may reach. It does not decide what
+ * runs unprompted: on Windows with Muse 1.4.2, `onRequest` asked for every
+ * shell action of the verdict matrix, inside the root too. Picking a level
+ * here is the permission — the separate "saved permission" checkboxes said
+ * the same thing twice, and the select fell back to workspace when they
+ * disagreed.
  */
 const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }[] = [
   {
     mode: "workspace",
     label: "Workspace only",
-    detail: "Muse reads and writes inside the conversation's folder, and nowhere else.",
+    // Measured on 1.4.2: out-of-root writes and network fail, out-of-root reads succeed.
+    detail: "Writes stay inside the conversation's folder, with no network. Reads can reach other folders.",
   },
   {
     mode: "network",
     label: "Workspace and network",
-    detail: "Adds outbound network access: package installs, API calls, downloads.",
+    // Only a request: on Windows with 1.4.2 the sandboxed shell still got no network (note below).
+    detail: "Also asks the engine to allow outbound network: package installs, API calls, downloads.",
   },
   {
     mode: "elevated",
@@ -430,9 +433,17 @@ export function SettingsPanel({
       <div className="settings-group">
         <h3>Isolation</h3>
         <p className="settings-note">
-          How far Muse's engine can reach. Under Approve on my behalf, anything
-          within this reach runs without asking. Applied when a new engine
-          starts: a running conversation keeps its own until it is restarted.
+          How far Muse's engine can reach. Applied when a new engine starts: a
+          running conversation keeps its own until it is restarted.
+          {hostPlatform() === "windows" && (
+            // Decision D1 (05/10/2026): keep the default and state the limit,
+            // as measured in docs/evidence/2026-10-05-roadmap-closure/m0-05-06-approvals.json.
+            <> On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on
+            relative paths (Set-Content -Path notes.txt), while absolute paths
+            and Muse's own file tools work. The sandboxed shell got no network
+            at either level, Workspace and network included; only Elevated
+            access reached it.</>
+          )}
         </p>
         <div className="authorization-mode-list" role="radiogroup" aria-label="Isolation">
           {SANDBOX_MODES.map(({ mode, label, detail }) => (

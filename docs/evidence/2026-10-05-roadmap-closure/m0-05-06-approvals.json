@@ -1,0 +1,3589 @@
+{
+  "schema": "muse-desktop.m0-05-06-approvals.v1",
+  "tickets": [
+    "M0-05",
+    "M0-06"
+  ],
+  "platform": "Windows 11 (26200), debug build with embedded frontend, WebView2 over CDP",
+  "posture": "Ask -> promptUnmatched, no client auto-approval (decision 05/10)",
+  "phases": {
+    "setup": {
+      "build": "pre-fix",
+      "userPosture": "yolo",
+      "userIsolation": "network",
+      "projectsCreated": [
+        "A",
+        "B"
+      ],
+      "setAsk": {
+        "clicked": true,
+        "stored": "ask"
+      },
+      "liveTurns": 0,
+      "consoleErrors": []
+    },
+    "reject": {
+      "build": "pre-fix",
+      "liveTurns": 1,
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "ask",
+        "sandboxMode": "workspace"
+      },
+      "msToCard": 12660,
+      "hostChoices": [
+        {
+          "choiceId": "allow_once",
+          "label": "Allow once",
+          "decision": "approved",
+          "scope": "once"
+        },
+        {
+          "choiceId": "abort",
+          "label": "Reject",
+          "decision": "abort",
+          "scope": "once"
+        }
+      ],
+      "rawListPendingFields": [
+        "approvalId",
+        "availableChoices",
+        "currentRequirementId",
+        "itemId",
+        "judgeEscalated",
+        "protectedWrite",
+        "rawArgs",
+        "sessionId",
+        "sourceRange",
+        "subject",
+        "taskId",
+        "toolCallId",
+        "toolName",
+        "turnId",
+        "viewCursor"
+      ],
+      "card": {
+        "title": "powershell",
+        "badge": "no rule — prompt",
+        "command": "powershell: {\"command\":\"$m = 'm05-reject'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Run requested probe command\"}",
+        "scope": "scope: once",
+        "buttons": [
+          {
+            "text": "Allow once",
+            "aria": "Allow once, scope once",
+            "cls": "approve"
+          },
+          {
+            "text": "Reject",
+            "aria": "Reject, scope once",
+            "cls": "approve"
+          },
+          {
+            "text": "Allow in workspace",
+            "aria": null,
+            "cls": "remember"
+          }
+        ],
+        "noChoices": false
+      },
+      "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+      "shot": "shots/m0-05-a-card.png",
+      "rejectLabel": "Reject",
+      "click": {
+        "clicked": true,
+        "count": 1
+      },
+      "after": {
+        "idle": false,
+        "msToIdle": null,
+        "healthSamples": [
+          {
+            "atMs": 2,
+            "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+            "cards": 1,
+            "running": "true"
+          },
+          {
+            "atMs": 706,
+            "health": "Muse is working Last update 0s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 2840,
+            "health": "Muse is working Last update 1s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 3553,
+            "health": "Muse is working Last update 2s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 4268,
+            "health": "Muse is working Last update 3s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 4984,
+            "health": "Muse is working Last update 0s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 6392,
+            "health": "Muse is working Last update 1s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 7811,
+            "health": "Muse is working Last update 2s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 8513,
+            "health": "Muse is working Last update 3s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 9939,
+            "health": "Muse is working Last update 4s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 10647,
+            "health": "Muse is working Last update 5s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 11361,
+            "health": "Muse is working Last update 6s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 12781,
+            "health": "Muse is working Last update 7s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 13495,
+            "health": "Muse is working Last update 8s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 14913,
+            "health": "Muse is working Last update 9s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 15629,
+            "health": "Muse is working Last update 10s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 16342,
+            "health": "Muse is working Last update 11s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 17773,
+            "health": "Muse is working Last update 12s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 18486,
+            "health": "Muse is working Last update 13s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 19890,
+            "health": "Muse is working Last update 14s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 20607,
+            "health": "Muse is working Last update 15s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 21310,
+            "health": "Muse is working Last update 16s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 22727,
+            "health": "Muse is working Last update 17s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 23442,
+            "health": "Muse is working Last update 18s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 24875,
+            "health": "Muse is working Last update 19s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 25590,
+            "health": "Muse is working Last update 0s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 26305,
+            "health": "Muse is working Last update 1s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 27722,
+            "health": "Muse is working Last update 2s ago. · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 28425,
+            "health": "Muse is working Last update 0s ago. · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 29141,
+            "health": "Muse is working Last update 0s ago. · token usage.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 30556,
+            "health": "Muse is working Last update 1s ago. · token usage.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 31260,
+            "health": "Muse is working Last update 2s ago. · token usage.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 31973,
+            "health": "Muse is working Last update 0s ago. · reasoning update.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 33390,
+            "health": "Muse is working Last update 1s ago. · reasoning update.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 34820,
+            "health": "Muse is working Last update 0s ago. · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 35536,
+            "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+            "cards": 1,
+            "running": "true"
+          }
+        ],
+        "alerts": []
+      },
+      "decide": [
+        {
+          "atMs": 48299,
+          "args": {
+            "sessionId": "01a10c31-ebd7-77e1-a99d-db91893d2902",
+            "approvalId": "01a10c32-1e52-7a31-aac0-92ffc0eded84",
+            "choiceId": "abort"
+          },
+          "ok": true,
+          "result": "true"
+        }
+      ],
+      "pendingAfter": 1,
+      "transcript": [
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Command not executed. Approval aborted the single PowerShell run, so `probe.txt` was left unchanged."
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": ""
+        },
+        {
+          "role": "thinking",
+          "text": "Checking safety and scope constraints for a high-risk request."
+        },
+        {
+          "role": "thinking",
+          "text": "Checking safety and scope constraints for a high-risk request."
+        },
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: {\"command\":\"$m = 'm05-reject'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Run requested probe command\"}"
+        }
+      ],
+      "verdict": {
+        "a_cardWithHostChoices": true,
+        "b_oneDecisionSent": true,
+        "b_noResumingState": true,
+        "b_turnTerminal": false,
+        "b_nothingPending": false
+      },
+      "consoleErrors": []
+    },
+    "reject-continued": {
+      "build": "pre-fix",
+      "liveTurns": 0,
+      "startSession": null,
+      "rounds": [
+        {
+          "approvalId": "01a10c32-ad4e-7e10-9b24-62d9a7a13667",
+          "msToCard": 24,
+          "hostChoices": [
+            {
+              "choiceId": "allow_once",
+              "label": "Allow once",
+              "decision": "approved",
+              "scope": "once"
+            },
+            {
+              "choiceId": "abort",
+              "label": "Reject",
+              "decision": "abort",
+              "scope": "once"
+            }
+          ],
+          "rawListPendingFields": [
+            "approvalId",
+            "availableChoices",
+            "currentRequirementId",
+            "itemId",
+            "judgeEscalated",
+            "protectedWrite",
+            "rawArgs",
+            "sessionId",
+            "sourceRange",
+            "subject",
+            "taskId",
+            "toolCallId",
+            "toolName",
+            "turnId",
+            "viewCursor"
+          ],
+          "card": {
+            "title": "powershell",
+            "badge": "no rule — prompt",
+            "command": "powershell: {\"command\":\"$m = 'm05-reject'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Run requested probe command\"}",
+            "scope": "scope: once",
+            "buttons": [
+              {
+                "text": "Allow once",
+                "aria": "Allow once, scope once",
+                "cls": "approve"
+              },
+              {
+                "text": "Reject",
+                "aria": "Reject, scope once",
+                "cls": "approve"
+              },
+              {
+                "text": "Allow in workspace",
+                "aria": null,
+                "cls": "remember"
+              }
+            ],
+            "noChoices": false
+          },
+          "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+          "rejectLabel": "Reject",
+          "click": {
+            "clicked": true,
+            "count": 1
+          },
+          "after": {
+            "idle": false,
+            "newCard": false,
+            "msToEnd": null,
+            "healthSamples": [
+              {
+                "atMs": 1,
+                "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+                "cards": 1,
+                "running": "true"
+              },
+              {
+                "atMs": 717,
+                "health": "Muse is working · work item started.",
+                "cards": 0,
+                "running": "true"
+              },
+              {
+                "atMs": 3567,
+                "health": "Muse is working · reasoning update.",
+                "cards": 0,
+                "running": "true"
+              },
+              {
+                "atMs": 4283,
+                "health": "Muse is working · work item completed.",
+                "cards": 0,
+                "running": "true"
+              },
+              {
+                "atMs": 4999,
+                "health": "Muse is working · work item started.",
+                "cards": 0,
+                "running": "true"
+              },
+              {
+                "atMs": 7850,
+                "health": "Muse is working · reasoning update.",
+                "cards": 0,
+                "running": "true"
+              },
+              {
+                "atMs": 8567,
+                "health": "Muse is working · response update.",
+                "cards": 0,
+                "running": "true"
+              },
+              {
+                "atMs": 9269,
+                "health": "Muse is working · work item started.",
+                "cards": 0,
+                "running": "true"
+              },
+              {
+                "atMs": 20621,
+                "health": "",
+                "cards": 0,
+                "running": "false"
+              }
+            ],
+            "alerts": []
+          }
+        }
+      ],
+      "decide": [
+        {
+          "atMs": 218993,
+          "args": {
+            "sessionId": "01a10c31-ebd7-77e1-a99d-db91893d2902",
+            "approvalId": "01a10c32-ad4e-7e10-9b24-62d9a7a13667",
+            "choiceId": "abort"
+          },
+          "ok": true,
+          "result": "true"
+        }
+      ],
+      "pendingAfter": 0,
+      "transcript": [
+        {
+          "role": "thinking",
+          "text": "Checking safety and scope constraints for a high-risk request."
+        },
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: {\"command\":\"$m = 'm05-reject'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Run requested probe command\"}"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "thinking",
+          "text": "Reporting approval failure due to denied and forbidden permissions with no escalation path."
+        },
+        {
+          "role": "tool",
+          "text": "read_file · probe.txt tool failed: Le fichier spécifié est introuvable. (os error 2); requested relative path \"probe.txt\"; resolved candidate \"\\\\\\\\?\\\\<project A>\\\\probe.txt\"; Active Workspace Root \"\\\\\\\\"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "thinking",
+          "text": "Resolving conflict between user brevity request and project rule for a complete self-contained final answer."
+        },
+        {
+          "role": "assistant",
+          "text": "Not done. The exact command did not run and `probe.txt` was not created. **Blocage** - Sandboxed runs: denied twice with `approval aborted`. - Unsandboxed run: refused with `launch policy forbids unsandboxed execution`, "
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "verdict": {
+        "a_cardWithHostChoices": true,
+        "b_oneDecisionPerCard": true,
+        "b_noResumingState": true,
+        "b_turnTerminal": true,
+        "b_nothingPending": true
+      },
+      "consoleErrors": [],
+      "note": "Idle detected by the sidebar dot (running=false) and an absent status row; the first harness build waited for a status text the app no longer shows at rest."
+    },
+    "allow": {
+      "build": "pre-fix",
+      "liveTurns": 1,
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "ask",
+        "sandboxMode": "workspace"
+      },
+      "msToCard": 18082,
+      "hostChoices": [
+        {
+          "choiceId": "allow_once",
+          "label": "Allow once",
+          "decision": "approved",
+          "scope": "once"
+        },
+        {
+          "choiceId": "abort",
+          "label": "Reject",
+          "decision": "abort",
+          "scope": "once"
+        }
+      ],
+      "allowLabel": "Allow once",
+      "stage0": "{\"approvalId\":\"01a10c37-c6c8-71d2-8133-1a7f042e3949\",\"sourceIndex\":0}",
+      "doubleClick": {
+        "clicked": true,
+        "count": 2
+      },
+      "decideAfterDoubleClick": [
+        {
+          "atMs": 417786,
+          "args": {
+            "sessionId": "01a10c37-7bfa-78a3-bb62-835cb592a541",
+            "approvalId": "01a10c37-c6c8-71d2-8133-1a7f042e3949",
+            "choiceId": "allow_once"
+          },
+          "ok": true,
+          "result": "false"
+        },
+        {
+          "atMs": 417789,
+          "args": {
+            "sessionId": "01a10c37-7bfa-78a3-bb62-835cb592a541",
+            "approvalId": "01a10c37-c6c8-71d2-8133-1a7f042e3949",
+            "choiceId": "allow_once"
+          },
+          "ok": false,
+          "result": "\"MSP error -32053: approval 01a10c37-c6c8-71d2-8133-1a7f042e3949 requirement is stale [approvalRequirementStale] [retryable=false]\""
+        }
+      ],
+      "afterDoubleClick": {
+        "activeSid": "01a10c37-7bfa-78a3-bb62-835cb592a541",
+        "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+        "cards": [
+          {
+            "title": "bash",
+            "badge": "no rule — prompt",
+            "command": "bash: $m = 'm05-allow'; Set-Content -Path probe.txt -Value $m",
+            "scope": "scope: once",
+            "buttons": [
+              {
+                "text": "Allow once",
+                "aria": "Allow once, scope once",
+                "cls": "approve"
+              },
+              {
+                "text": "Reject",
+                "aria": "Reject, scope once",
+                "cls": "approve"
+              },
+              {
+                "text": "Allow in workspace",
+                "aria": null,
+                "cls": "remember"
+              }
+            ],
+            "noChoices": false
+          }
+        ],
+        "alerts": [
+          "Your response could not be submitted. — MSP error -32053: approval 01a10c37-c6c8-71d2-8133-1a7f042e3949 requirement is stale [approvalRequirementStale] [retryable=false]"
+        ],
+        "pending": {
+          "raw": [
+            "approvalId",
+            "availableChoices",
+            "currentRequirementId",
+            "itemId",
+            "judgeEscalated",
+            "protectedWrite",
+            "rawArgs",
+            "sessionId",
+            "sourceRange",
+            "subject",
+            "taskId",
+            "toolCallId",
+            "toolName",
+            "turnId",
+            "viewCursor"
+          ],
+          "approvals": [
+            {
+              "approvalId": "01a10c37-c6c8-71d2-8133-1a7f042e3949",
+              "requirement": {
+                "approvalId": "01a10c37-c6c8-71d2-8133-1a7f042e3949",
+                "sourceIndex": 1
+              },
+              "choices": [
+                {
+                  "choiceId": "allow_once",
+                  "label": "Allow once",
+                  "decision": "approved",
+                  "scope": "once"
+                },
+                {
+                  "choiceId": "abort",
+                  "label": "Reject",
+                  "decision": "abort",
+                  "scope": "once"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "stages": [
+        {
+          "requirement": "{\"approvalId\":\"01a10c37-c6c8-71d2-8133-1a7f042e3949\",\"sourceIndex\":1}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        }
+      ],
+      "after": {
+        "idle": true,
+        "newCard": false,
+        "msToEnd": 10649,
+        "healthSamples": [
+          {
+            "atMs": 1,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 2136,
+            "health": "Muse is working · response update.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 2850,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 4984,
+            "health": "Muse is working · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 5687,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 10649,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "decide": [
+        {
+          "atMs": 417786,
+          "args": {
+            "sessionId": "01a10c37-7bfa-78a3-bb62-835cb592a541",
+            "approvalId": "01a10c37-c6c8-71d2-8133-1a7f042e3949",
+            "choiceId": "allow_once"
+          },
+          "ok": true,
+          "result": "false"
+        },
+        {
+          "atMs": 417789,
+          "args": {
+            "sessionId": "01a10c37-7bfa-78a3-bb62-835cb592a541",
+            "approvalId": "01a10c37-c6c8-71d2-8133-1a7f042e3949",
+            "choiceId": "allow_once"
+          },
+          "ok": false,
+          "result": "\"MSP error -32053: approval 01a10c37-c6c8-71d2-8133-1a7f042e3949 requirement is stale [approvalRequirementStale] [retryable=false]\""
+        },
+        {
+          "atMs": 420466,
+          "args": {
+            "sessionId": "01a10c37-7bfa-78a3-bb62-835cb592a541",
+            "approvalId": "01a10c37-c6c8-71d2-8133-1a7f042e3949",
+            "choiceId": "allow_once"
+          },
+          "ok": true,
+          "result": "true"
+        }
+      ],
+      "transcript": [
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: {\"command\":\"$m = 'm05-allow'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Write probe marker file\"}"
+        },
+        {
+          "role": "assistant",
+          "text": "Set-Content : Un objet � l'emplacement sp�cifi� probe.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 19 + $m = 'm05-allow'; Set-Content -Path probe.txt -Value $m + ~"
+        },
+        {
+          "role": "tool",
+          "text": "powershell · Write probe marker file"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Command exécutée une fois, inchangée. Échec (exit 1) : `probe.txt` introuvable selon `Set-Content`."
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "probeFile": null,
+      "verdict": {
+        "e_doubleClickSendsOneDecision": false,
+        "d_cardFollowedStages": true,
+        "c_turnTerminal": true
+      },
+      "consoleErrors": []
+    },
+    "allow-fixed": {
+      "build": "fixed",
+      "liveTurns": 1,
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "ask",
+        "sandboxMode": "workspace"
+      },
+      "msToCard": 6453,
+      "hostChoices": [
+        {
+          "choiceId": "allow_once",
+          "label": "Allow once",
+          "decision": "approved",
+          "scope": "once"
+        },
+        {
+          "choiceId": "abort",
+          "label": "Reject",
+          "decision": "abort",
+          "scope": "once"
+        }
+      ],
+      "allowLabel": "Allow once",
+      "stage0": "{\"approvalId\":\"01a10c3c-d6ef-7893-8da0-07f664e204aa\",\"sourceIndex\":0}",
+      "doubleClick": {
+        "clicked": true,
+        "count": 2
+      },
+      "decideAfterDoubleClick": [
+        {
+          "atMs": 9740,
+          "args": {
+            "sessionId": "01a10c3c-bd85-7373-8289-ae23be10c8c6",
+            "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+            "choiceId": "allow_once",
+            "requirementId": {
+              "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+              "sourceIndex": 0
+            }
+          },
+          "ok": true,
+          "result": "false"
+        }
+      ],
+      "afterDoubleClick": {
+        "activeSid": "01a10c3c-bd85-7373-8289-ae23be10c8c6",
+        "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+        "cards": [
+          {
+            "title": "bash",
+            "badge": "no rule — prompt",
+            "command": "bash: $m = 'm05-allow'; Set-Content -Path probe.txt -Value $m",
+            "scope": "scope: once",
+            "buttons": [
+              {
+                "text": "Allow once",
+                "aria": "Allow once, scope once",
+                "cls": "approve"
+              },
+              {
+                "text": "Reject",
+                "aria": "Reject, scope once",
+                "cls": "deny"
+              },
+              {
+                "text": "Allow in workspace",
+                "aria": null,
+                "cls": "remember"
+              }
+            ],
+            "noChoices": false
+          }
+        ],
+        "alerts": [],
+        "pending": {
+          "raw": [
+            "approvalId",
+            "choices",
+            "currentRequirementId",
+            "itemId",
+            "request_id",
+            "summary",
+            "toolName",
+            "updated"
+          ],
+          "approvals": [
+            {
+              "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+              "requirement": {
+                "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+                "sourceIndex": 1
+              },
+              "choices": [
+                {
+                  "choiceId": "allow_once",
+                  "label": "Allow once",
+                  "decision": "approved",
+                  "scope": "once"
+                },
+                {
+                  "choiceId": "abort",
+                  "label": "Reject",
+                  "decision": "abort",
+                  "scope": "once"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "staleReplay": {
+        "replayedRequirement": "{\"approvalId\":\"01a10c3c-d6ef-7893-8da0-07f664e204aa\",\"sourceIndex\":0}",
+        "accepted": false,
+        "error": "MSP error -32053: approval 01a10c3c-d6ef-7893-8da0-07f664e204aa requirement is stale [approvalRequirementStale] [retryable=false]",
+        "after": {
+          "activeSid": "01a10c3c-bd85-7373-8289-ae23be10c8c6",
+          "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+          "cards": [
+            {
+              "title": "bash",
+              "badge": "no rule — prompt",
+              "command": "bash: $m = 'm05-allow'; Set-Content -Path probe.txt -Value $m",
+              "scope": "scope: once",
+              "buttons": [
+                {
+                  "text": "Allow once",
+                  "aria": "Allow once, scope once",
+                  "cls": "approve"
+                },
+                {
+                  "text": "Reject",
+                  "aria": "Reject, scope once",
+                  "cls": "deny"
+                },
+                {
+                  "text": "Allow in workspace",
+                  "aria": null,
+                  "cls": "remember"
+                }
+              ],
+              "noChoices": false
+            }
+          ],
+          "alerts": [],
+          "pending": {
+            "raw": [
+              "approvalId",
+              "choices",
+              "currentRequirementId",
+              "itemId",
+              "request_id",
+              "summary",
+              "toolName",
+              "updated"
+            ],
+            "approvals": [
+              {
+                "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+                "requirement": {
+                  "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+                  "sourceIndex": 1
+                },
+                "choices": [
+                  {
+                    "choiceId": "allow_once",
+                    "label": "Allow once",
+                    "decision": "approved",
+                    "scope": "once"
+                  },
+                  {
+                    "choiceId": "abort",
+                    "label": "Reject",
+                    "decision": "abort",
+                    "scope": "once"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "stages": [
+        {
+          "requirement": "{\"approvalId\":\"01a10c3c-d6ef-7893-8da0-07f664e204aa\",\"sourceIndex\":1}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        }
+      ],
+      "after": {
+        "idle": true,
+        "newCard": false,
+        "msToEnd": 14912,
+        "healthSamples": [
+          {
+            "atMs": 1,
+            "health": "Muse is resuming Your decision was accepted; waiting for the host to continue the turn. Last event: authorization sent.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 715,
+            "health": "Muse is working · response update.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 1424,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 14912,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "decide": [
+        {
+          "atMs": 9740,
+          "args": {
+            "sessionId": "01a10c3c-bd85-7373-8289-ae23be10c8c6",
+            "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+            "choiceId": "allow_once",
+            "requirementId": {
+              "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+              "sourceIndex": 0
+            }
+          },
+          "ok": true,
+          "result": "false"
+        },
+        {
+          "atMs": 12266,
+          "args": {
+            "sessionId": "01a10c3c-bd85-7373-8289-ae23be10c8c6",
+            "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+            "choiceId": "allow_once",
+            "requirementId": {
+              "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+              "sourceIndex": 0
+            }
+          },
+          "ok": false,
+          "result": "\"MSP error -32053: approval 01a10c3c-d6ef-7893-8da0-07f664e204aa requirement is stale [approvalRequirementStale] [retryable=false]\""
+        },
+        {
+          "atMs": 13968,
+          "args": {
+            "sessionId": "01a10c3c-bd85-7373-8289-ae23be10c8c6",
+            "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+            "choiceId": "allow_once",
+            "requirementId": {
+              "approvalId": "01a10c3c-d6ef-7893-8da0-07f664e204aa",
+              "sourceIndex": 1
+            }
+          },
+          "ok": true,
+          "result": "true"
+        }
+      ],
+      "transcript": [
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: {\"command\":\"$m = 'm05-allow'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Write probe marker file\"}"
+        },
+        {
+          "role": "assistant",
+          "text": "Set-Content : Un objet � l'emplacement sp�cifi� probe.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 19 + $m = 'm05-allow'; Set-Content -Path probe.txt -Value $m + ~"
+        },
+        {
+          "role": "tool",
+          "text": "powershell · Write probe marker file"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Command échec exit 1. `Set-Content` : objet `probe.txt` introuvable ou filtré."
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "probeFile": null,
+      "verdict": {
+        "e_doubleClickSendsOneDecision": true,
+        "d_cardFollowedStages": true,
+        "d_staleRefused": true,
+        "c_turnTerminal": true
+      },
+      "consoleErrors": []
+    },
+    "restart": {
+      "build": "fixed",
+      "liveTurns": 1,
+      "before": {
+        "approvalId": "01a10c3d-6ed6-7742-a6de-0f45fa7e9439",
+        "requirement": {
+          "approvalId": "01a10c3d-6ed6-7742-a6de-0f45fa7e9439",
+          "sourceIndex": 0
+        },
+        "card": {
+          "title": "powershell",
+          "badge": "no rule — prompt",
+          "command": "powershell: {\"command\":\"$m = 'm05-restart'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Write probe marker file\"}",
+          "scope": "scope: once",
+          "buttons": [
+            {
+              "text": "Allow once",
+              "aria": "Allow once, scope once",
+              "cls": "approve"
+            },
+            {
+              "text": "Reject",
+              "aria": "Reject, scope once",
+              "cls": "deny"
+            },
+            {
+              "text": "Allow in workspace",
+              "aria": null,
+              "cls": "remember"
+            }
+          ],
+          "noChoices": false
+        }
+      },
+      "kill": {
+        "appKilled": true,
+        "hostsBefore": 1,
+        "hostsAlive5s": 0
+      },
+      "relaunch": {
+        "msToCard": null,
+        "card": null,
+        "health": null,
+        "listPendingCalls": [
+          {
+            "ok": true
+          }
+        ],
+        "sameApproval": false
+      },
+      "stages": [],
+      "after": {
+        "idle": true,
+        "newCard": false,
+        "msToEnd": 3,
+        "healthSamples": [
+          {
+            "atMs": 3,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "decide": [],
+      "transcript": [
+        {
+          "role": "assistant",
+          "text": ""
+        },
+        {
+          "role": "user",
+          "text": "Use your PowerShell tool to run exactly this command in the workspace, unchanged, once: $m = 'm05-restart'; Set-Content -Path probe.txt -Value $m"
+        },
+        {
+          "role": "subagent",
+          "text": ""
+        },
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: {\"command\":\"$m = 'm05-restart'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Write probe marker file\"}"
+        }
+      ],
+      "consoleErrors": [],
+      "verdict": {
+        "f_cardRebuiltAfterKill": false,
+        "f_rebuiltCardHasHostChoices": false,
+        "f_decisionWorks": false
+      },
+      "hostShutdown": {
+        "source": "the host's own session log (session.jsonl) of that conversation",
+        "facts": [
+          "approval requested at +7.46 s; the app was killed about 2 s later",
+          "approval decision_applied: decision abort, policy_result deny, both stages unresolved",
+          "approval_wait terminal: aborted; task cancelled: approval aborted",
+          "run terminal: cancelled (cancelled during model step)",
+          "session_end: exit_reason clean, then session_resumed after the relaunch"
+        ],
+        "reading": "On stdin EOF the 1.4.2 host settles the pending approval as abort and ends the session cleanly, so approval/listPending is empty after any app restart. The relaunched app shows no phantom card (correct) but the transcript gives no sign that the approval was aborted by the shutdown."
+      }
+    },
+    "reload": {
+      "build": "fixed",
+      "failure": "Cannot read properties of undefined (reading 'calls')",
+      "consoleErrors": [],
+      "liveTurns": 1,
+      "note": "The turn reached its card and Page.reload ran; the harness then stopped reading its boot trace (Page.enable was missing before addScriptToEvaluateOnNewDocument). The pending card was carried on in reload-continued."
+    },
+    "reload-continued": {
+      "build": "fixed",
+      "liveTurns": 0,
+      "afterReload": {
+        "autoRebuilt": false,
+        "hostPending": 1,
+        "view": {
+          "activeSid": "01a10c3f-e108-7502-9fcb-334b10ec8191",
+          "health": "Waiting for the desktop host The turn is marked active, but no host event has reached this window yet. Sync now Reconnect Stop",
+          "cards": [],
+          "alerts": []
+        }
+      },
+      "syncNow": {
+        "clicked": true
+      },
+      "rebuilt": {
+        "msFromStart": 4305,
+        "card": {
+          "title": "powershell",
+          "badge": "no rule — prompt",
+          "command": "powershell: {\"command\":\"$m = 'm05-reload'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Write reload probe file\"}",
+          "scope": "scope: once",
+          "buttons": [
+            {
+              "text": "Allow once",
+              "aria": "Allow once, scope once",
+              "cls": "approve"
+            },
+            {
+              "text": "Reject",
+              "aria": "Reject, scope once",
+              "cls": "deny"
+            },
+            {
+              "text": "Allow in workspace",
+              "aria": null,
+              "cls": "remember"
+            }
+          ],
+          "noChoices": false
+        },
+        "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+        "listPendingBySync": [
+          {
+            "ok": true,
+            "sameSession": true
+          }
+        ]
+      },
+      "shot": "shots/m0-05-f-sync-rebuilt.png",
+      "stages": [
+        {
+          "requirement": "{\"approvalId\":\"01a10c3f-fcff-7d61-a2eb-5cf0d9bc6371\",\"sourceIndex\":0}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        },
+        {
+          "requirement": "{\"approvalId\":\"01a10c3f-fcff-7d61-a2eb-5cf0d9bc6371\",\"sourceIndex\":1}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        }
+      ],
+      "after": {
+        "idle": true,
+        "newCard": false,
+        "msToEnd": 21358,
+        "healthSamples": [
+          {
+            "atMs": 2,
+            "health": "Muse is resuming Your decision was accepted; waiting for the host to continue the turn. Last event: authorization sent.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 706,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 7122,
+            "health": "Muse is working · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 7824,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 21358,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "decide": [
+        {
+          "choiceId": "allow_once",
+          "pinned": {
+            "approvalId": "01a10c3f-fcff-7d61-a2eb-5cf0d9bc6371",
+            "sourceIndex": 0
+          },
+          "ok": true,
+          "result": "false"
+        },
+        {
+          "choiceId": "allow_once",
+          "pinned": {
+            "approvalId": "01a10c3f-fcff-7d61-a2eb-5cf0d9bc6371",
+            "sourceIndex": 1
+          },
+          "ok": true,
+          "result": "true"
+        }
+      ],
+      "transcript": [
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Commande exécutée une fois, sans modification. Elle a échoué avec le code 1 : `probe.txt` introuvable selon `Set-Content`."
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "verdict": {
+        "f_cardBackWithoutAction": false,
+        "f_cardRebuiltFromListPending": true,
+        "f_rebuiltCardHasHostChoices": true,
+        "f_decisionWorks": true
+      },
+      "consoleErrors": [],
+      "note": "Run on the reload turn's still-pending card, after the first harness run stopped on a trace bug right after Page.reload. The window had reloaded with the approval pending on the host (listPending 1) and showed no card, only the recovery row; Sync now rebuilt it. The first listPending read of that run was the harness's own and is excluded."
+    },
+    "two": {
+      "build": "fixed",
+      "liveTurns": 2,
+      "approvalIds": {
+        "A": "01a10c44-b7b3-72c1-aef1-469510f5f0bd",
+        "B": "01a10c44-e547-7690-9ab2-ccc207a84aa2"
+      },
+      "bothPending": {
+        "A": 1,
+        "B": 1
+      },
+      "reload": {
+        "bootListPending": {
+          "A": 1,
+          "B": 1
+        },
+        "cardAWithoutAction": true,
+        "cardBWithoutAction": true
+      },
+      "viewA": {
+        "activeSid": "01a10c44-8778-7410-b7b4-de0d4faf6886",
+        "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+        "cards": [
+          {
+            "title": "powershell",
+            "badge": "no rule — prompt",
+            "command": "powershell: {\"command\":\"$m = 'm05-two-a'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Run user-provided probe command\",\"workdir\":\"<project A>\"}",
+            "scope": "scope: once",
+            "buttons": [
+              {
+                "text": "Allow once",
+                "aria": "Allow once, scope once",
+                "cls": "approve"
+              },
+              {
+                "text": "Reject",
+                "aria": "Reject, scope once",
+                "cls": "deny"
+              },
+              {
+                "text": "Allow in workspace",
+                "aria": null,
+                "cls": "remember"
+              }
+            ],
+            "noChoices": false
+          }
+        ],
+        "alerts": []
+      },
+      "stagesA": [
+        {
+          "requirement": "{\"approvalId\":\"01a10c44-b7b3-72c1-aef1-469510f5f0bd\",\"sourceIndex\":0}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        },
+        {
+          "requirement": "{\"approvalId\":\"01a10c44-b7b3-72c1-aef1-469510f5f0bd\",\"sourceIndex\":1}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        },
+        {
+          "requirement": "{\"approvalId\":\"01a10c44-b7b3-72c1-aef1-469510f5f0bd\",\"sourceIndex\":1}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        }
+      ],
+      "afterA": {
+        "idle": true,
+        "newCard": false,
+        "msToEnd": 20618,
+        "healthSamples": [
+          {
+            "atMs": 3,
+            "health": "Muse is resuming Your decision was accepted; waiting for the host to continue the turn. Last event: authorization sent.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 707,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 5680,
+            "health": "Muse is working · reasoning update.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 6394,
+            "health": "Muse is working · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 7111,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 20618,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "bAfterA": {
+        "pending": 1,
+        "sameApproval": true,
+        "requirementUnchanged": true
+      },
+      "decideA": [
+        {
+          "sessionIsA": true,
+          "sessionIsB": false,
+          "ok": true
+        },
+        {
+          "sessionIsA": true,
+          "sessionIsB": false,
+          "ok": false
+        },
+        {
+          "sessionIsA": true,
+          "sessionIsB": false,
+          "ok": true
+        }
+      ],
+      "viewB": {
+        "activeSid": "01a10c44-c9a7-7941-a58a-1d8ac85df5a6",
+        "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+        "cards": [
+          {
+            "title": "powershell",
+            "badge": "no rule — prompt",
+            "command": "powershell: {\"command\":\"$m = 'm05-two-b'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Write probe marker file\"}",
+            "scope": "scope: once",
+            "buttons": [
+              {
+                "text": "Allow once",
+                "aria": "Allow once, scope once",
+                "cls": "approve"
+              },
+              {
+                "text": "Reject",
+                "aria": "Reject, scope once",
+                "cls": "deny"
+              },
+              {
+                "text": "Allow in workspace",
+                "aria": null,
+                "cls": "remember"
+              }
+            ],
+            "noChoices": false
+          }
+        ],
+        "alerts": []
+      },
+      "stagesB": [
+        {
+          "requirement": "{\"approvalId\":\"01a10c44-e547-7690-9ab2-ccc207a84aa2\",\"sourceIndex\":0}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        },
+        {
+          "requirement": "{\"approvalId\":\"01a10c44-e547-7690-9ab2-ccc207a84aa2\",\"sourceIndex\":1}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        }
+      ],
+      "afterB": {
+        "idle": true,
+        "newCard": false,
+        "msToEnd": 14176,
+        "healthSamples": [
+          {
+            "atMs": 2,
+            "health": "Muse is resuming Your decision was accepted; waiting for the host to continue the turn. Last event: authorization sent.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 705,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 4258,
+            "health": "Muse is working · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 4960,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 14176,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "decideB": [
+        {
+          "sessionIsB": true,
+          "ok": true
+        },
+        {
+          "sessionIsB": true,
+          "ok": true
+        }
+      ],
+      "verdict": {
+        "g_bothPendingTogether": true,
+        "g_decidingAReachesOnlyA": true,
+        "g_bStillPendingAfterA": true,
+        "g_thenB": true,
+        "f_bothCardsBackAfterReloadWithoutAction": true
+      },
+      "consoleErrors": [],
+      "note": "All three decide calls of the A phase carried A's session and B's approval and requirement were unchanged after A finished. The second call failed: the harness clicked the moment approval/listPending showed stage 1, before the card repainted, so the decision was pinned to stage 0 and refused (the harness did not keep the error text in that run; the pacing and result capture were added afterwards). The next click, on the repainted card, decided stage 1."
+    },
+    "posture": {
+      "build": "fixed",
+      "liveTurns": 2,
+      "switchedTo": "yolo",
+      "before": {
+        "approvalId": "01a10c46-c6cb-7742-a4f8-d8c001960f50",
+        "requirement": {
+          "approvalId": "01a10c46-c6cb-7742-a4f8-d8c001960f50",
+          "sourceIndex": 0
+        }
+      },
+      "switch": {
+        "clicked": true,
+        "stored": "yolo"
+      },
+      "setApprovalMode": [
+        {
+          "thisSession": false,
+          "mode": "yolo",
+          "ok": false,
+          "effective": null
+        },
+        {
+          "thisSession": false,
+          "mode": "yolo",
+          "ok": false,
+          "effective": null
+        },
+        {
+          "thisSession": false,
+          "mode": "yolo",
+          "ok": false,
+          "effective": null
+        },
+        {
+          "thisSession": false,
+          "mode": "yolo",
+          "ok": false,
+          "effective": null
+        },
+        {
+          "thisSession": false,
+          "mode": "yolo",
+          "ok": true,
+          "effective": "allowAll"
+        },
+        {
+          "thisSession": false,
+          "mode": "yolo",
+          "ok": true,
+          "effective": "allowAll"
+        },
+        {
+          "thisSession": false,
+          "mode": "yolo",
+          "ok": true,
+          "effective": "allowAll"
+        },
+        {
+          "thisSession": true,
+          "mode": "yolo",
+          "ok": true,
+          "effective": "allowAll"
+        }
+      ],
+      "afterSwitch": {
+        "pending": 1,
+        "sameApproval": true,
+        "requirementUnchanged": true,
+        "decideCalls": 0,
+        "view": {
+          "activeSid": "01a10c46-a6dd-7781-af4f-f2668ba99616",
+          "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+          "cards": [
+            {
+              "title": "powershell",
+              "badge": "no rule — prompt",
+              "command": "powershell: {\"command\":\"$m = 'm05-posture'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Write probe marker file\"}",
+              "scope": "scope: once",
+              "buttons": [
+                {
+                  "text": "Allow once",
+                  "aria": "Allow once, scope once",
+                  "cls": "approve"
+                },
+                {
+                  "text": "Reject",
+                  "aria": "Reject, scope once",
+                  "cls": "deny"
+                },
+                {
+                  "text": "Allow in workspace",
+                  "aria": null,
+                  "cls": "remember"
+                }
+              ],
+              "noChoices": false
+            }
+          ],
+          "alerts": [
+            "YOLO saved locally, but 4 conversations could not update the host. First reason: MSP error -32024: session 01a10c31-ebd7-77e1-a99d-db91893d2902 is not loaded on this host [sessionNotLoaded] [retryable=false]"
+          ]
+        }
+      },
+      "shot": "shots/m0-06-h-switched.png",
+      "stages": [
+        {
+          "requirement": "{\"approvalId\":\"01a10c46-c6cb-7742-a4f8-d8c001960f50\",\"sourceIndex\":0}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        },
+        {
+          "requirement": "{\"approvalId\":\"01a10c46-c6cb-7742-a4f8-d8c001960f50\",\"sourceIndex\":1}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        }
+      ],
+      "after": {
+        "idle": true,
+        "newCard": false,
+        "msToEnd": 8509,
+        "healthSamples": [
+          {
+            "atMs": 2,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 7792,
+            "health": "Muse is working · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 8509,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "transcript": [
+        {
+          "role": "tool",
+          "text": "powershell · Write probe marker file"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Command failed with exit code 1. `Set-Content` reported `probe.txt` not found. "
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "next": {
+        "sent": {
+          "sent": true
+        },
+        "idle": true,
+        "cardShown": false,
+        "hostPending": 0,
+        "decideCalls": 0,
+        "transcript": [
+          {
+            "role": "assistant",
+            "text": "Set-Content : Un objet � l'emplacement sp�cifi� probe.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 18 + $m = 'm05-next'; Set-Content -Path probe.txt -Value $m + ~~"
+          },
+          {
+            "role": "assistant",
+            "text": "Command failed with exit code 1. `Set-Content` reported `probe.txt` not found. "
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          }
+        ]
+      },
+      "probeFile": null,
+      "verdict": {
+        "h_projectedToHost": true,
+        "h_pendingNotDecidedRetroactively": true,
+        "h_pendingStillDecidable": true,
+        "h_nextActionFollowsNewPosture": true
+      },
+      "consoleErrors": []
+    },
+    "texts": {
+      "build": "fixed",
+      "liveTurns": 0,
+      "ui": {
+        "postures": [
+          {
+            "label": "Ask for approval",
+            "text": "Muse asks before any action its rules do not already allow."
+          },
+          {
+            "label": "Approve on my behalf",
+            "text": "Tools run without asking within your Isolation setting. Muse asks only when one needs more access than it allows."
+          },
+          {
+            "label": "YOLO",
+            "text": "Muse never asks. Every action runs."
+          }
+        ],
+        "isolation": [
+          {
+            "label": "Workspace only",
+            "text": "Muse reads and writes inside the conversation's folder, and nowhere else."
+          },
+          {
+            "label": "Workspace and network",
+            "text": "Adds outbound network access: package installs, API calls, downloads."
+          },
+          {
+            "label": "Elevated access",
+            "text": "Adds files and commands outside the folder. Grant it to a workspace you trust."
+          }
+        ],
+        "isolationNote": "How far Muse's engine can reach. Under Approve on my behalf, anything within this reach runs without asking. Applied when a new engine starts: a running conversation keeps its own until it is restarted."
+      },
+      "claims": [
+        {
+          "text": "Muse asks before any action its rules do not already allow.",
+          "claim": "asks for actions no rule allows",
+          "measured": [
+            "writeInsideRoot: asked=true",
+            "writeOutsideRoot: asked=true",
+            "readOutsideRoot: asked=true",
+            "readThroughJunction: asked=true",
+            "network: asked=true",
+            "refusedCommand: asked=true"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "Tools run without asking within your Isolation setting. Muse asks only when one needs more access than it allows.",
+          "claim": "runs without asking within Isolation",
+          "measured": [
+            "writeInsideRoot (workspace isolation, onRequest): asked=true, stages=2",
+            "elevated writeInsideRoot (onRequest): asked=true"
+          ],
+          "contradiction": true
+        },
+        {
+          "text": "Muse never asks. Every action runs.",
+          "claim": "every action runs",
+          "measured": [
+            "writeOutsideRoot: asked=false, outcome=failed",
+            "network: asked=false, outcome=failed",
+            "writeInsideRoot (off profile): asked=false, outcome=failed"
+          ],
+          "contradiction": true,
+          "note": "Never asks (true), but the Isolation sandbox still blocks writes and network: the text does not say so."
+        },
+        {
+          "text": "Muse reads and writes inside the conversation's folder, and nowhere else.",
+          "claim": "reads and writes inside the folder, nowhere else",
+          "measured": [
+            "writeInsideRoot (allow_once): outcome=failed",
+            "readOutsideRoot (allow_once): outcome=completed",
+            "readThroughJunction (allow_once): outcome=completed",
+            "writeOutsideRoot (allow_once): outcome=failed"
+          ],
+          "contradiction": true,
+          "note": "In-root writes fail even approved (host 1.4.2 sandbox defect); reads outside the root and through a junction succeed."
+        },
+        {
+          "text": "How far Muse's engine can reach. Under Approve on my behalf, anything within this reach runs without asking. Applied when a new engine starts: a running conversation keeps its own until it is restarted.",
+          "claim": "under Approve on my behalf, anything within this reach runs without asking",
+          "measured": [
+            "writeInsideRoot onRequest: asked=true",
+            "readOutsideRoot onRequest: asked=true"
+          ],
+          "contradiction": true
+        },
+        {
+          "text": "Adds outbound network access: package installs, API calls, downloads.",
+          "claim": "adds outbound network",
+          "measured": [
+            "not in the matrix: network isolation was not measured"
+          ],
+          "contradiction": null
+        },
+        {
+          "text": "Adds files and commands outside the folder. Grant it to a workspace you trust.",
+          "claim": "adds files and commands outside the folder",
+          "measured": [
+            "writeInsideRoot (elevated, onRequest): outcome=completed",
+            "outside-root actions not measured under elevated"
+          ],
+          "contradiction": null
+        }
+      ],
+      "contradictions": 4,
+      "consoleErrors": []
+    },
+    "forged": {
+      "build": "final",
+      "liveTurns": 1,
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "ask",
+        "sandboxMode": "workspace",
+        "hostApprovalMode": "promptUnmatched"
+      },
+      "bResumedOk": null,
+      "approvalIdA": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+      "livePayloadA": {
+        "approvalId": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+        "choices": [
+          {
+            "choiceId": "allow_once",
+            "decision": "approved",
+            "label": "Allow once",
+            "scope": "once"
+          },
+          {
+            "choiceId": "abort",
+            "decision": "abort",
+            "label": "Reject",
+            "scope": "once"
+          }
+        ],
+        "currentRequirementId": {
+          "approvalId": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+          "sourceIndex": 0
+        },
+        "itemId": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+        "request_id": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+        "summary": "powershell: {\"command\":\"$m = 'm05-forged-a'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Run requested probe command\"}",
+        "toolName": "powershell",
+        "updated": false
+      },
+      "forgedApplied": true,
+      "bBefore": [
+        {
+          "key": "01a10c44-c9a7-7941-a58a-1d8ac85df5a6:01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+          "requirementId": {
+            "approvalId": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+            "sourceIndex": 0
+          },
+          "choices": [
+            "allow_once/approved",
+            "abort/abort"
+          ],
+          "summary": "powershell: {\"command\":\"$m = 'm05-forged-a'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Run requested probe command\"}",
+          "buttons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ]
+        }
+      ],
+      "aBefore": [
+        {
+          "key": "01a10d2c-ec5a-7c22-8fc9-246a4bd8ccc0:01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+          "requirementId": {
+            "approvalId": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+            "sourceIndex": 0
+          },
+          "choices": [
+            "allow_once/approved",
+            "abort/abort"
+          ],
+          "summary": "powershell: {\"command\":\"$m = 'm05-forged-a'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Run requested probe command\"}",
+          "buttons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ]
+        }
+      ],
+      "stagesA": [
+        {
+          "requirement": "{\"approvalId\":\"01a10d2d-d9de-7012-a5f1-ec47e6d28e90\",\"sourceIndex\":0}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        },
+        {
+          "requirement": "{\"approvalId\":\"01a10d2d-d9de-7012-a5f1-ec47e6d28e90\",\"sourceIndex\":1}",
+          "choices": [
+            "allow_once",
+            "abort"
+          ],
+          "cardButtons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ],
+          "clicked": true,
+          "count": 1
+        }
+      ],
+      "afterA": {
+        "idle": true,
+        "newCard": false,
+        "msToEnd": 17845,
+        "healthSamples": [
+          {
+            "atMs": 1,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 4293,
+            "health": "Muse is working · response update.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 6437,
+            "health": "Muse is working · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 7152,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 11416,
+            "health": "Muse is working · token usage.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 12132,
+            "health": "Muse is working · work item started.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 17132,
+            "health": "Muse is working · work item completed.",
+            "cards": 0,
+            "running": "true"
+          },
+          {
+            "atMs": 17845,
+            "health": "",
+            "cards": 0,
+            "running": "false"
+          }
+        ],
+        "alerts": []
+      },
+      "bAfter": [
+        {
+          "key": "01a10c44-c9a7-7941-a58a-1d8ac85df5a6:01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+          "requirementId": {
+            "approvalId": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+            "sourceIndex": 0
+          },
+          "choices": [
+            "allow_once/approved",
+            "abort/abort"
+          ],
+          "summary": "powershell: {\"command\":\"$m = 'm05-forged-a'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Run requested probe command\"}",
+          "buttons": [
+            "Allow once",
+            "Reject",
+            "Allow in workspace"
+          ]
+        }
+      ],
+      "decide": [
+        {
+          "sessionIsA": true,
+          "sessionIsB": false,
+          "approvalId": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+          "pinned": {
+            "approvalId": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+            "sourceIndex": 0
+          },
+          "ok": true,
+          "result": "false"
+        },
+        {
+          "sessionIsA": true,
+          "sessionIsB": false,
+          "approvalId": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+          "pinned": {
+            "approvalId": "01a10d2d-d9de-7012-a5f1-ec47e6d28e90",
+            "sourceIndex": 1
+          },
+          "ok": true,
+          "result": "true"
+        }
+      ],
+      "bridgePendingB": 0,
+      "shot": "shots/m0-05-g-forged-b-kept.png",
+      "afterReload": {
+        "cardsB": 0,
+        "noticeB": false,
+        "marker": []
+      },
+      "verdict": {
+        "g_forgedCardHasAsId": true,
+        "g_decidingAUsesOnlyA": true,
+        "g_aWentThroughItsStages": true,
+        "g_bStillPendingUntouched": true,
+        "g_forgedNeverReachedBridge": true,
+        "cleanup_noCardNoNoticeAfterReload": true
+      },
+      "consoleErrors": []
+    },
+    "isolation-network": {
+      "build": "final",
+      "liveTurns": 1,
+      "kind": "network",
+      "project": {
+        "id": "muv9rghn-80pvqo",
+        "index": 1,
+        "set": {
+          "select": true,
+          "value": "allow"
+        },
+        "settings": {
+          "networkDefault": "allow"
+        },
+        "roots": 2
+      },
+      "command": "$u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty StatusCode",
+      "setPosture": {
+        "clicked": true,
+        "stored": "workspace"
+      },
+      "postureProjection": [
+        {
+          "sessionId": "01a10c31-ebd7-77e1-a99d-db91893d2902",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c31-ebd7-77e1-a99d-db91893d2902 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c37-7bfa-78a3-bb62-835cb592a541",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c37-7bfa-78a3-bb62-835cb592a541 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c3c-bd85-7373-8289-ae23be10c8c6",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c3c-bd85-7373-8289-ae23be10c8c6 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c3d-518e-7dc2-aaac-dd6ba4d053d8",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c3d-518e-7dc2-aaac-dd6ba4d053d8 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c3f-e108-7502-9fcb-334b10ec8191",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c3f-e108-7502-9fcb-334b10ec8191 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c44-8778-7410-b7b4-de0d4faf6886",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c44-8778-7410-b7b4-de0d4faf6886 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c44-c9a7-7941-a58a-1d8ac85df5a6",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        },
+        {
+          "sessionId": "01a10c46-a6dd-7781-af4f-f2668ba99616",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c46-a6dd-7781-af4f-f2668ba99616 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10cb0-5d70-72f0-b81d-0af0fce0c5b2",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        },
+        {
+          "sessionId": "01a10d2c-ec5a-7c22-8fc9-246a4bd8ccc0",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        }
+      ],
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "workspace",
+        "sandboxMode": "network",
+        "hostApprovalMode": "onRequest"
+      },
+      "run": {
+        "idle": true,
+        "msToEnd": 19080,
+        "stages": [
+          {
+            "approvalId": "01a10d32-372a-7663-a7ba-db2ddf8ccd5f",
+            "requirement": "{\"approvalId\":\"01a10d32-372a-7663-a7ba-db2ddf8ccd5f\",\"sourceIndex\":0}",
+            "choices": [
+              "allow_once",
+              "abort"
+            ],
+            "title": "powershell",
+            "command": "powershell: {\"command\":\"$u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty StatusCode\",\"description\":\"Fetch example status code\"}",
+            "clicked": true,
+            "count": 1
+          },
+          {
+            "approvalId": "01a10d32-372a-7663-a7ba-db2ddf8ccd5f",
+            "requirement": "{\"approvalId\":\"01a10d32-372a-7663-a7ba-db2ddf8ccd5f\",\"sourceIndex\":1}",
+            "choices": [
+              "allow_once",
+              "abort"
+            ],
+            "title": "bash",
+            "command": "bash: $u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty StatusCode",
+            "clicked": true,
+            "count": 1
+          }
+        ],
+        "alerts": []
+      },
+      "transcript": [
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: {\"command\":\"$u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty StatusCode\",\"description\":\"Fetch example status code\"}"
+        },
+        {
+          "role": "assistant",
+          "text": "Invoke-WebRequest : La connexion sous-jacente a �t� ferm�e�: Une erreur inattendue s'est produite lors de la r�ception. Au caract�re Ligne:1 : 29 + ... ps://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Selec ... + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+        },
+        {
+          "role": "tool",
+          "text": "powershell · Fetch example status code"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Commande échouée, exit 1, connexion fermée."
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "statusCode200": false,
+      "wire": {
+        "resume": [],
+        "setApprovalMode": []
+      },
+      "cell": {
+        "posture": "workspace (onRequest)",
+        "isolation": "network",
+        "asked": true,
+        "stages": 2,
+        "network": "failed"
+      },
+      "verdict": {
+        "startedUnderMiddlePosture": true,
+        "startedWithIsolation": true,
+        "turnTerminal": true
+      },
+      "consoleErrors": [],
+      "classifierNote": "Reclassified after the run from the recorded transcript: the shell output lane is logged as its own (assistant) entry, so the status code is a bare \"200\" entry; the first classifier looked only at tool entries."
+    },
+    "isolation-elevated": {
+      "build": "final",
+      "liveTurns": 1,
+      "kind": "elevated",
+      "project": {
+        "id": "muv9rghn-80pvqo",
+        "index": 2,
+        "set": {
+          "select": true,
+          "value": "full"
+        },
+        "settings": {
+          "networkDefault": "allow",
+          "sandbox": "full"
+        },
+        "roots": 3
+      },
+      "isolationBefore": {
+        "mode": "network",
+        "networkAllowed": true,
+        "elevatedAllowed": false
+      },
+      "setElevated": {
+        "clicked": true,
+        "stored": {
+          "mode": "elevated",
+          "networkAllowed": true,
+          "elevatedAllowed": true
+        }
+      },
+      "command": "$p = '<outside>\\elevated-muvjtmtu.txt'; Set-Content -Path $p -Value 'm06'; $u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty StatusCode",
+      "setPosture": {
+        "clicked": true,
+        "stored": "workspace"
+      },
+      "postureProjection": [
+        {
+          "sessionId": "01a10c31-ebd7-77e1-a99d-db91893d2902",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c31-ebd7-77e1-a99d-db91893d2902 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c37-7bfa-78a3-bb62-835cb592a541",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c37-7bfa-78a3-bb62-835cb592a541 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c3c-bd85-7373-8289-ae23be10c8c6",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c3c-bd85-7373-8289-ae23be10c8c6 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c3d-518e-7dc2-aaac-dd6ba4d053d8",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c3d-518e-7dc2-aaac-dd6ba4d053d8 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c3f-e108-7502-9fcb-334b10ec8191",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c3f-e108-7502-9fcb-334b10ec8191 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c44-8778-7410-b7b4-de0d4faf6886",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c44-8778-7410-b7b4-de0d4faf6886 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c44-c9a7-7941-a58a-1d8ac85df5a6",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        },
+        {
+          "sessionId": "01a10c46-a6dd-7781-af4f-f2668ba99616",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c46-a6dd-7781-af4f-f2668ba99616 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10cb0-5d70-72f0-b81d-0af0fce0c5b2",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        },
+        {
+          "sessionId": "01a10d2c-ec5a-7c22-8fc9-246a4bd8ccc0",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        },
+        {
+          "sessionId": "01a10d32-1550-75e3-b295-df75809d788d",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        }
+      ],
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "workspace",
+        "sandboxMode": "elevated",
+        "hostApprovalMode": "onRequest"
+      },
+      "run": {
+        "idle": true,
+        "msToEnd": 43168,
+        "stages": [
+          {
+            "approvalId": "01a10d33-d212-7491-bb25-8fd9a356a554",
+            "requirement": "{\"approvalId\":\"01a10d33-d212-7491-bb25-8fd9a356a554\",\"sourceIndex\":0}",
+            "choices": [
+              "allow_once",
+              "abort"
+            ],
+            "title": "powershell",
+            "command": "powershell: {\"command\":\"$p = '<outside>\\\\elevated-muvjtmtu.txt'; Set-Content -Path $p -Value 'm06'; $u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object…",
+            "clicked": true,
+            "count": 1
+          },
+          {
+            "approvalId": "01a10d33-d212-7491-bb25-8fd9a356a554",
+            "requirement": "{\"approvalId\":\"01a10d33-d212-7491-bb25-8fd9a356a554\",\"sourceIndex\":1}",
+            "choices": [
+              "allow_once",
+              "abort"
+            ],
+            "title": "bash",
+            "command": "bash: $p = '<outside>\\elevated-muvjtmtu.txt'; Set-Content -Path $p -Value 'm06'; $u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty…",
+            "clicked": true,
+            "count": 1
+          },
+          {
+            "approvalId": "01a10d33-d212-7491-bb25-8fd9a356a554",
+            "requirement": "{\"approvalId\":\"01a10d33-d212-7491-bb25-8fd9a356a554\",\"sourceIndex\":2}",
+            "choices": [
+              "allow_once",
+              "abort"
+            ],
+            "title": "bash",
+            "command": "bash: $p = '<outside>\\elevated-muvjtmtu.txt'; Set-Content -Path $p -Value 'm06'; $u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty…",
+            "clicked": true,
+            "count": 1
+          },
+          {
+            "approvalId": "01a10d33-d212-7491-bb25-8fd9a356a554",
+            "requirement": "{\"approvalId\":\"01a10d33-d212-7491-bb25-8fd9a356a554\",\"sourceIndex\":3}",
+            "choices": [
+              "allow_once",
+              "abort"
+            ],
+            "title": "bash",
+            "command": "bash: $p = '<outside>\\elevated-muvjtmtu.txt'; Set-Content -Path $p -Value 'm06'; $u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object -ExpandProperty…",
+            "clicked": true,
+            "count": 1
+          }
+        ],
+        "alerts": []
+      },
+      "transcript": [
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: {\"command\":\"$p = '<outside>\\\\elevated-muvjtmtu.txt'; Set-Content -Path $p -Value 'm06'; $u = 'https://example.com'; Invoke-WebRequest -Uri $u -UseBasicParsing | Select-Object…"
+        },
+        {
+          "role": "assistant",
+          "text": "200 "
+        },
+        {
+          "role": "tool",
+          "text": "powershell · Run requested proof command once"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Done: 200"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "statusCode200": true,
+      "outsideWrite": "m06",
+      "wire": {
+        "resume": [],
+        "setApprovalMode": []
+      },
+      "isolationRestored": {
+        "clicked": true,
+        "stored": {
+          "mode": "network",
+          "networkAllowed": true,
+          "elevatedAllowed": false
+        }
+      },
+      "cell": {
+        "posture": "workspace (onRequest)",
+        "isolation": "elevated",
+        "asked": true,
+        "stages": 4,
+        "network": "completed",
+        "writeOutsideRoot": "completed"
+      },
+      "verdict": {
+        "startedUnderMiddlePosture": true,
+        "startedWithIsolation": true,
+        "turnTerminal": true,
+        "isolationRestored": true
+      },
+      "consoleErrors": [],
+      "classifierNote": "Reclassified after the run from the recorded transcript: the shell output lane is logged as its own (assistant) entry, so the status code is a bare \"200\" entry; the first classifier looked only at tool entries."
+    },
+    "isolation-network-curl": {
+      "build": "final",
+      "liveTurns": 1,
+      "kind": "network",
+      "project": {
+        "id": "muv9rghn-80pvqo",
+        "index": 1,
+        "set": {
+          "select": true,
+          "value": "allow"
+        },
+        "settings": {
+          "networkDefault": "allow",
+          "sandbox": "full"
+        },
+        "roots": 3
+      },
+      "command": "$u = 'https://example.com'; curl.exe -s -o NUL -w '%{http_code}' $u",
+      "setPosture": {
+        "clicked": true,
+        "stored": "workspace"
+      },
+      "postureProjection": [
+        {
+          "sessionId": "01a10c31-ebd7-77e1-a99d-db91893d2902",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c31-ebd7-77e1-a99d-db91893d2902 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c37-7bfa-78a3-bb62-835cb592a541",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c37-7bfa-78a3-bb62-835cb592a541 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c3c-bd85-7373-8289-ae23be10c8c6",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c3c-bd85-7373-8289-ae23be10c8c6 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c3d-518e-7dc2-aaac-dd6ba4d053d8",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c3d-518e-7dc2-aaac-dd6ba4d053d8 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c3f-e108-7502-9fcb-334b10ec8191",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c3f-e108-7502-9fcb-334b10ec8191 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c44-8778-7410-b7b4-de0d4faf6886",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c44-8778-7410-b7b4-de0d4faf6886 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10c44-c9a7-7941-a58a-1d8ac85df5a6",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        },
+        {
+          "sessionId": "01a10c46-a6dd-7781-af4f-f2668ba99616",
+          "mode": "workspace",
+          "ok": false,
+          "status": null,
+          "effectiveMode": null,
+          "error": "\"MSP error -32024: session 01a10c46-a6dd-7781-af4f-f2668ba99616 is not loaded on this host [sessionNotLoaded] [retryable=false]\""
+        },
+        {
+          "sessionId": "01a10cb0-5d70-72f0-b81d-0af0fce0c5b2",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        },
+        {
+          "sessionId": "01a10d2c-ec5a-7c22-8fc9-246a4bd8ccc0",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        },
+        {
+          "sessionId": "01a10d32-1550-75e3-b295-df75809d788d",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        },
+        {
+          "sessionId": "01a10d33-6c05-7571-9153-c9de7b449a1a",
+          "mode": "workspace",
+          "ok": true,
+          "status": "accepted",
+          "effectiveMode": "onRequest"
+        }
+      ],
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "workspace",
+        "sandboxMode": "network",
+        "hostApprovalMode": "onRequest"
+      },
+      "run": {
+        "idle": true,
+        "msToEnd": 19053,
+        "stages": [
+          {
+            "approvalId": "01a10d35-2c11-7ab3-b639-a856d75e6860",
+            "requirement": "{\"approvalId\":\"01a10d35-2c11-7ab3-b639-a856d75e6860\",\"sourceIndex\":0}",
+            "choices": [
+              "allow_once",
+              "abort"
+            ],
+            "title": "powershell",
+            "command": "powershell: {\"command\":\"$u = 'https://example.com'; curl.exe -s -o NUL -w '%{http_code}' $u\",\"description\":\"Run requested curl command\"}",
+            "clicked": true,
+            "count": 1
+          },
+          {
+            "approvalId": "01a10d35-2c11-7ab3-b639-a856d75e6860",
+            "requirement": "{\"approvalId\":\"01a10d35-2c11-7ab3-b639-a856d75e6860\",\"sourceIndex\":1}",
+            "choices": [
+              "allow_once",
+              "abort"
+            ],
+            "title": "bash",
+            "command": "bash: $u = 'https://example.com'; curl.exe -s -o NUL -w '%{http_code}' $u",
+            "clicked": true,
+            "count": 1
+          }
+        ],
+        "alerts": []
+      },
+      "transcript": [
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: {\"command\":\"$u = 'https://example.com'; curl.exe -s -o NUL -w '%{http_code}' $u\",\"description\":\"Run requested curl command\"}"
+        },
+        {
+          "role": "assistant",
+          "text": "000"
+        },
+        {
+          "role": "tool",
+          "text": "powershell · Run requested curl command"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Command returned 000."
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "statusCode200": false,
+      "wire": {
+        "resume": [],
+        "setApprovalMode": []
+      },
+      "cell": {
+        "posture": "workspace (onRequest)",
+        "isolation": "network",
+        "asked": true,
+        "stages": 2,
+        "network": "failed"
+      },
+      "verdict": {
+        "startedUnderMiddlePosture": true,
+        "startedWithIsolation": true,
+        "turnTerminal": true
+      },
+      "consoleErrors": []
+    },
+    "d1": {
+      "build": "final",
+      "liveTurns": 1,
+      "setPosture": {
+        "clicked": true,
+        "stored": "yolo"
+      },
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "yolo",
+        "sandboxMode": "workspace",
+        "hostApprovalMode": "allowAll"
+      },
+      "run": {
+        "idle": true,
+        "msToEnd": 32818,
+        "stages": [],
+        "alerts": []
+      },
+      "transcript": [
+        {
+          "role": "thinking",
+          "text": "Executing two sequential file operations via write_file and PowerShell under workspace path constraints."
+        },
+        {
+          "role": "tool",
+          "text": "write_file · d1-tool-muvjx4d2.txt wrote 3 bytes to <project A>\\d1-tool-muvjx4d2.txt"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "tool",
+          "text": "powershell · Create abs file with m06 { \"chunk_id\": \"exec-1-1\", \"command\": \"Set-Content -Path '<project A>\\\\d1-abs-muvjx4d2.txt' -Value 'm06'\", \"description\": \"Create abs file with m06\", \"exit_code\": 0, \"terminal_status\": \"completed\", \"output"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Both files created with m06. "
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "files": {
+        "writeFileTool": "m06",
+        "absolutePowerShell": "m06"
+      },
+      "verdict": {
+        "startedUnderYolo": true,
+        "noCard": true,
+        "writeFileToolWorks": true,
+        "absolutePathWorks": true,
+        "turnTerminal": true
+      },
+      "consoleErrors": []
+    },
+    "restart-kill": {
+      "build": "final",
+      "liveTurns": 1,
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "ask",
+        "sandboxMode": "workspace",
+        "hostApprovalMode": "promptUnmatched"
+      },
+      "before": {
+        "approvalId": "01a10d38-f821-7253-85b6-a93da57630fe",
+        "requirement": {
+          "approvalId": "01a10d38-f821-7253-85b6-a93da57630fe",
+          "sourceIndex": 0
+        },
+        "card": {
+          "title": "powershell",
+          "badge": "no rule — prompt",
+          "command": "powershell: {\"command\":\"$m = 'm05-restart'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Write restart probe file\"}",
+          "scope": "scope: once",
+          "buttons": [
+            {
+              "text": "Allow once",
+              "aria": "Allow once, scope once",
+              "cls": "approve"
+            },
+            {
+              "text": "Reject",
+              "aria": "Reject, scope once",
+              "cls": "deny"
+            },
+            {
+              "text": "Allow in workspace",
+              "aria": null,
+              "cls": "remember"
+            }
+          ],
+          "noChoices": false
+        },
+        "markerStored": true
+      },
+      "kill": {
+        "appKilled": true,
+        "hostsBefore": 1,
+        "hostsAlive5s": 0
+      },
+      "relaunch": {
+        "noticeAtBoot": true,
+        "phantomCard": null,
+        "view": {
+          "activeSid": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+          "health": null,
+          "cards": [],
+          "alerts": []
+        },
+        "hostPending": 0,
+        "resume": [],
+        "setApprovalMode": [
+          {
+            "sessionId": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+            "mode": "ask",
+            "ok": true,
+            "status": "accepted",
+            "effectiveMode": "promptUnmatched"
+          }
+        ],
+        "transcript": [
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "Approval requested: powershell: {\"command\":\"$m = 'm05-restart'; Set-Content -Path probe.txt -Value $m\",\"description\":\"Write restart probe file\"}"
+          },
+          {
+            "role": "system",
+            "text": "Approval cancelled: Muse closed before you answered, so the action did not run."
+          }
+        ],
+        "markerAfterBoot": []
+      },
+      "shot": "shots/m0-05-f-restart-notice.png",
+      "decide": [],
+      "consoleErrors": [],
+      "verdict": {
+        "f_noPhantomCardAfterRestart": true,
+        "f_transcriptSaysCancelledByRestart": true,
+        "f_noDecisionSent": true
+      }
+    },
+    "wire": {
+      "build": "final",
+      "liveTurns": 0,
+      "measured": [
+        "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+        "01a10d35-11bc-79f2-b4e1-e2ee28c76498",
+        "01a10d35-cf50-7362-988f-add32aaddb47"
+      ],
+      "rounds": [
+        {
+          "selected": "ask",
+          "stored": "ask",
+          "expected": "promptUnmatched",
+          "setApprovalMode": [
+            {
+              "sessionId": "01a10d35-11bc-79f2-b4e1-e2ee28c76498",
+              "mode": "ask",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "promptUnmatched"
+            },
+            {
+              "sessionId": "01a10d35-cf50-7362-988f-add32aaddb47",
+              "mode": "ask",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "promptUnmatched"
+            },
+            {
+              "sessionId": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+              "mode": "ask",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "promptUnmatched"
+            }
+          ],
+          "selectorAtLaunch": "ask",
+          "resumedCold": [
+            true,
+            true,
+            true
+          ],
+          "reopen": {
+            "resume": [
+              {
+                "sessionId": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+                "ok": true,
+                "sandboxMode": "workspace",
+                "hostApprovalMode": "promptUnmatched"
+              },
+              {
+                "sessionId": "01a10d35-11bc-79f2-b4e1-e2ee28c76498",
+                "ok": true,
+                "sandboxMode": "network",
+                "hostApprovalMode": "promptUnmatched"
+              },
+              {
+                "sessionId": "01a10d35-cf50-7362-988f-add32aaddb47",
+                "ok": true,
+                "sandboxMode": "workspace",
+                "hostApprovalMode": "promptUnmatched"
+              }
+            ],
+            "setApprovalMode": [
+              {
+                "sessionId": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+                "mode": "ask",
+                "ok": true,
+                "status": "accepted",
+                "effectiveMode": "promptUnmatched"
+              },
+              {
+                "sessionId": "01a10d35-11bc-79f2-b4e1-e2ee28c76498",
+                "mode": "ask",
+                "ok": true,
+                "status": "accepted",
+                "effectiveMode": "promptUnmatched"
+              },
+              {
+                "sessionId": "01a10d35-cf50-7362-988f-add32aaddb47",
+                "mode": "ask",
+                "ok": true,
+                "status": "accepted",
+                "effectiveMode": "promptUnmatched"
+              }
+            ]
+          }
+        },
+        {
+          "selected": "workspace",
+          "stored": "workspace",
+          "expected": "onRequest",
+          "setApprovalMode": [
+            {
+              "sessionId": "01a10d2c-ec5a-7c22-8fc9-246a4bd8ccc0",
+              "mode": "workspace",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "onRequest"
+            },
+            {
+              "sessionId": "01a10d35-11bc-79f2-b4e1-e2ee28c76498",
+              "mode": "workspace",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "onRequest"
+            },
+            {
+              "sessionId": "01a10d35-cf50-7362-988f-add32aaddb47",
+              "mode": "workspace",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "onRequest"
+            },
+            {
+              "sessionId": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+              "mode": "workspace",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "onRequest"
+            }
+          ],
+          "selectorAtLaunch": "workspace",
+          "resumedCold": [
+            true,
+            true,
+            true
+          ],
+          "reopen": {
+            "resume": [
+              {
+                "sessionId": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+                "ok": true,
+                "sandboxMode": "workspace",
+                "hostApprovalMode": "onRequest"
+              },
+              {
+                "sessionId": "01a10d35-11bc-79f2-b4e1-e2ee28c76498",
+                "ok": true,
+                "sandboxMode": "network",
+                "hostApprovalMode": "onRequest"
+              },
+              {
+                "sessionId": "01a10d35-cf50-7362-988f-add32aaddb47",
+                "ok": true,
+                "sandboxMode": "workspace",
+                "hostApprovalMode": "onRequest"
+              }
+            ],
+            "setApprovalMode": [
+              {
+                "sessionId": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+                "mode": "workspace",
+                "ok": true,
+                "status": "accepted",
+                "effectiveMode": "onRequest"
+              },
+              {
+                "sessionId": "01a10d35-11bc-79f2-b4e1-e2ee28c76498",
+                "mode": "workspace",
+                "ok": true,
+                "status": "accepted",
+                "effectiveMode": "onRequest"
+              },
+              {
+                "sessionId": "01a10d35-cf50-7362-988f-add32aaddb47",
+                "mode": "workspace",
+                "ok": true,
+                "status": "accepted",
+                "effectiveMode": "onRequest"
+              }
+            ]
+          }
+        },
+        {
+          "selected": "yolo",
+          "stored": "yolo",
+          "expected": "allowAll",
+          "setApprovalMode": [
+            {
+              "sessionId": "01a10d2c-ec5a-7c22-8fc9-246a4bd8ccc0",
+              "mode": "yolo",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "allowAll"
+            },
+            {
+              "sessionId": "01a10d35-11bc-79f2-b4e1-e2ee28c76498",
+              "mode": "yolo",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "allowAll"
+            },
+            {
+              "sessionId": "01a10d35-cf50-7362-988f-add32aaddb47",
+              "mode": "yolo",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "allowAll"
+            },
+            {
+              "sessionId": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+              "mode": "yolo",
+              "ok": true,
+              "status": "accepted",
+              "effectiveMode": "allowAll"
+            }
+          ],
+          "selectorAtLaunch": "yolo",
+          "resumedCold": [
+            true,
+            true,
+            true
+          ],
+          "reopen": {
+            "resume": [
+              {
+                "sessionId": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+                "ok": true,
+                "sandboxMode": "workspace",
+                "hostApprovalMode": "allowAll"
+              },
+              {
+                "sessionId": "01a10d35-11bc-79f2-b4e1-e2ee28c76498",
+                "ok": true,
+                "sandboxMode": "network",
+                "hostApprovalMode": "allowAll"
+              },
+              {
+                "sessionId": "01a10d35-cf50-7362-988f-add32aaddb47",
+                "ok": true,
+                "sandboxMode": "workspace",
+                "hostApprovalMode": "allowAll"
+              }
+            ],
+            "setApprovalMode": [
+              {
+                "sessionId": "01a10d38-ddd1-74a3-b110-505d6f3bae6b",
+                "mode": "yolo",
+                "ok": true,
+                "status": "accepted",
+                "effectiveMode": "allowAll"
+              },
+              {
+                "sessionId": "01a10d35-11bc-79f2-b4e1-e2ee28c76498",
+                "mode": "yolo",
+                "ok": true,
+                "status": "accepted",
+                "effectiveMode": "allowAll"
+              },
+              {
+                "sessionId": "01a10d35-cf50-7362-988f-add32aaddb47",
+                "mode": "yolo",
+                "ok": true,
+                "status": "accepted",
+                "effectiveMode": "allowAll"
+              }
+            ]
+          }
+        }
+      ],
+      "consoleErrors": [],
+      "verdict": {
+        "everySwitchConfirmedByTheHost": true,
+        "resumeAnswersThePersistedPosture": true
+      }
+    },
+    "texts-final": {
+      "build": "final",
+      "liveTurns": 0,
+      "ui": {
+        "postures": [
+          {
+            "label": "Ask for approval",
+            "text": "Muse asks before any action its rules do not already allow."
+          },
+          {
+            "label": "Ask only for more access",
+            "text": "Muse runs what its sandbox allows and asks when a tool needs more access. On Windows it asks for most shell commands."
+          },
+          {
+            "label": "YOLO",
+            "text": "Muse never asks. Your Isolation setting still limits what an action can reach."
+          }
+        ],
+        "isolation": [
+          {
+            "label": "Workspace only",
+            "text": "Writes stay inside the conversation's folder, with no network. Reads can reach other folders."
+          },
+          {
+            "label": "Workspace and network",
+            "text": "Also asks the engine to allow outbound network: package installs, API calls, downloads."
+          },
+          {
+            "label": "Elevated access",
+            "text": "Adds files and commands outside the folder. Grant it to a workspace you trust."
+          }
+        ],
+        "isolationNote": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work. The sandboxed shell got no network at either level, Workspace and network included; only Elevated access reached it.",
+        "composer": []
+      },
+      "claims": [
+        {
+          "text": "Muse asks before any action its rules do not already allow.",
+          "claim": "asks before any action no rule allows",
+          "measured": [
+            "writeInsideRoot: asked=true",
+            "writeOutsideRoot: asked=true",
+            "readOutsideRoot: asked=true",
+            "readThroughJunction: asked=true",
+            "network: asked=true",
+            "refusedCommand: asked=true"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "Muse runs what its sandbox allows and asks when a tool needs more access. On Windows it asks for most shell commands.",
+          "claim": "asks when a tool needs more access than the sandbox allows",
+          "measured": [
+            "writeOutsideRoot (workspace isolation, onRequest): asked=true",
+            "network (workspace isolation, onRequest): asked=true"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "Muse runs what its sandbox allows and asks when a tool needs more access. On Windows it asks for most shell commands.",
+          "claim": "on Windows it asks for most shell commands",
+          "measured": [
+            "matrix onRequest: 7/7 asked",
+            "in app, network isolation: asked=true, stages=2; curl variant asked=true, stages=2",
+            "in app, elevated isolation: asked=true, stages=4"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "Muse runs what its sandbox allows and asks when a tool needs more access. On Windows it asks for most shell commands.",
+          "claim": "no promise that anything runs without asking",
+          "measured": [
+            "label: Ask only for more access"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "Muse never asks. Your Isolation setting still limits what an action can reach.",
+          "claim": "never asks; Isolation still limits what an action reaches",
+          "measured": [
+            "writeOutsideRoot: asked=false, outcome=failed",
+            "network: asked=false, outcome=failed",
+            "writeInsideRoot: asked=false, outcome=failed",
+            "d1 (in app): card=false"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "Writes stay inside the conversation's folder, with no network. Reads can reach other folders.",
+          "claim": "writes stay inside the folder, no network, reads reach other folders",
+          "measured": [
+            "writeOutsideRoot: failed,failed,failed",
+            "network: failed,failed,failed,failed,failed",
+            "readOutsideRoot: completed,completed",
+            "readThroughJunction: completed,completed"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "Also asks the engine to allow outbound network: package installs, API calls, downloads.",
+          "claim": "asks the engine to allow outbound network (a request, not a promise)",
+          "measured": [
+            "in app: start_session sandboxMode=network (host flag --sandbox-network enabled)"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work. The sandboxed shell got no network at either level, Workspace and network included; only Elevated access reached it.",
+          "claim": "Windows 1.4.2: the sandboxed shell got no network at either level; only Elevated access reached it",
+          "measured": [
+            "workspace isolation (matrix): network failed,failed,failed,failed,failed",
+            "network isolation (in app): Invoke-WebRequest failed, curl.exe failed",
+            "elevated isolation (in app): completed"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "Adds files and commands outside the folder. Grant it to a workspace you trust.",
+          "claim": "adds files and commands outside the folder",
+          "measured": [
+            "in app, elevated isolation, onRequest, Allow once: writeOutsideRoot=completed, network=completed",
+            "matrix elevated writeInsideRoot (onRequest): completed"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work. The sandboxed shell got no network at either level, Workspace and network included; only Elevated access reached it.",
+          "claim": "Windows 1.4.2: relative PowerShell paths fail; absolute paths and Muse's file tools work",
+          "measured": [
+            "writeInsideRoot, relative path (matrix, workspace isolation): failed,failed,failed,failed,failed",
+            "d1 (in app, YOLO, workspace isolation): absolutePathWorks=true, writeFileToolWorks=true"
+          ],
+          "contradiction": false
+        },
+        {
+          "text": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work. The sandboxed shell got no network at either level, Workspace and network included; only Elevated access reached it.",
+          "claim": "applied when a new engine starts",
+          "measured": [
+            "not measured here (M2-02)"
+          ],
+          "contradiction": null
+        }
+      ],
+      "contradictions": 0,
+      "unmeasured": 1,
+      "consoleErrors": [],
+      "shots": [
+        "shots/m0-06-settings-postures.png",
+        "shots/m0-06-settings-isolation.png"
+      ],
+      "composerNote": "composer is empty: the Settings view does not render the composer; its posture menu uses the same authorizationModeLabel/Description (shots/m0-06-d4-composer-label.png)."
+    },
+    "restore": {
+      "build": "final",
+      "liveTurns": 0,
+      "posture": {
+        "clicked": true,
+        "stored": "yolo"
+      },
+      "isolation": "network",
+      "projectB": {
+        "roots": 1,
+        "settings": {}
+      },
+      "verdict": {
+        "postureRestored": true,
+        "isolationRestored": true,
+        "projectBRestored": true
+      },
+      "consoleErrors": []
+    }
+  },
+  "commit": "17f37e3",
+  "date": "2026-10-05",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 15,
+  "commitNote": "setup, reject, reject-continued and allow ran on 2626c4d as is (build: pre-fix); the other 'fixed' phases on 2626c4d plus the bridge and card fixes of this commit; every 'final' phase on 17f37e3 plus everything this commit adds (restart notice, renamed posture, measured texts).",
+  "isolation": "Test conversations ran in test projects under the proof folder. The default isolation (sandboxMode workspace) kept the known 1.4.2 sandbox defect: every relative-path Set-Content failed and probe.txt was never written; it does not affect the card flow. The isolation phases used extra folders of test project B (the projects list is capped at 5), each with its own host; B was restored afterwards (phases.restore).",
+  "summary": {
+    "criteria": {
+      "M0-05 a card renders the host's choices": {
+        "verdict": "pass",
+        "phase": "reject",
+        "facts": "card 12.7 s after send: tool powershell, command, scope once, buttons 'Allow once' and 'Reject' = host labels (allow_once/approved, abort/abort). Pre-fix the Reject button carried the approve style; fixed (shots/m0-05-g-forged-b-kept.png shows it red)."
+      },
+      "M0-05 b Reject denies the tool, no false resumed state": {
+        "verdict": "pass",
+        "phase": "reject, reject-continued",
+        "facts": "one approve(abort) per card, accepted; no 'Muse is resuming' in any sample; tool not executed ('approval aborted'). The host re-requested the same command once inside the same turn (new approvalId); the second Reject ended the turn; nothing pending."
+      },
+      "M0-05 c Allow proceeds to a terminal": {
+        "verdict": "pass",
+        "phase": "allow, allow-fixed, two, posture, forged",
+        "facts": "every stage decided allow_once, turn idle 10-20 s later."
+      },
+      "M0-05 d card per stage, stale decision refused cleanly": {
+        "verdict": "pass",
+        "phase": "allow (pre-fix), allow-fixed",
+        "facts": "the card moves sourceIndex 0 -> 1 and stays mounted; replaying the stage-0 requirement returns -32053 approvalRequirementStale and the card stays on stage 1. The decision is now pinned to the token of the card clicked."
+      },
+      "M0-05 e double-click on Allow sends exactly one decision": {
+        "verdict": "pass after fix",
+        "phase": "allow (fail) -> allow-fixed (pass)",
+        "facts": "pre-fix: 2 approve calls 3 ms apart, the second refused -32053 with a banner; fixed: 1 call, no banner."
+      },
+      "M0-05 f restart (re-scoped): no phantom card, and the transcript says the pending approval was cancelled by the restart": {
+        "verdict": "pass (re-scoped)",
+        "phase": "restart (host facts), restart-kill, two --reload, forged afterReload",
+        "facts": "A card cannot be rebuilt after an app kill: the 1.4.2 host aborts the approval on stdin EOF and listPending is empty (phases.restart.hostShutdown). restart-kill: card pending, marker stored, taskkill /F, both processes gone, relaunch from PowerShell, reopen: no card for 15 s, host pending 0, no decide call; the transcript reads 'Approval requested: ...' then 'Approval cancelled: Muse closed before you answered, so the action did not run.', written at boot (shots/m0-05-f-restart-notice.png). Window reload with the host alive: both cards back with no action (two --reload) and no notice (forged afterReload)."
+      },
+      "M0-05 g same approval id in two conversations, a decision reaches only its target": {
+        "verdict": "pass",
+        "phase": "two (live, distinct ids), forged (renderer, same id), Rust test",
+        "facts": "forged: B got A's exact live payload (same approvalId and requirement, card key '<B>:<A approvalId>'); A was decided through the UI (2 stages, both approve calls carried A's session and A's pinned token); B's card stayed pending and identical (same token at sourceIndex 0, choices, command, buttons); the bridge listed nothing for B. Rust: approval_cards_are_isolated_when_ids_repeat_between_sessions."
+      },
+      "M0-06 h posture switch with a card pending": {
+        "verdict": "pass",
+        "phase": "posture",
+        "facts": "Ask -> YOLO: setApprovalMode accepted (allowAll); the pending approval stayed pending with the same token, 0 decide calls, still decidable; the next action ran with no card."
+      },
+      "M0-06 Ask -> promptUnmatched on the wire": {
+        "verdict": "pass",
+        "phase": "wire, forged, restart-kill, isolation-*, d1",
+        "facts": "start_session answered promptUnmatched under Ask (forged, restart-kill), onRequest under the middle posture (3 isolation runs), allowAll under YOLO (d1). wire, 3 rounds with an app close and relaunch each: setApprovalMode accepted with effectiveMode promptUnmatched / onRequest / allowAll for all 3 measured conversations, cold resume_session answered the same mode, and the re-projection after resume confirmed it."
+      },
+      "M0-06 middle posture under network and elevated isolation": {
+        "verdict": "measured",
+        "phase": "isolation-network, isolation-network-curl, isolation-elevated",
+        "facts": "Every run asked (2, 2 and 4 stages), as the matrix did under the default isolation. 'Workspace and network' (host --sandbox-network enabled): after Allow once the network call failed in the sandbox, Invoke-WebRequest 'connection closed on receive' and curl.exe '000', while the same calls outside the sandbox return 200. 'Elevated access': the write outside the folder landed and the call returned 200."
+      },
+      "M0-06 Settings texts vs the measurements": {
+        "verdict": "pass (0 contradictions)",
+        "phase": "texts (pre-fix: 4) -> texts-final",
+        "facts": "strings read from the running app; 11 claims, 0 contradictions, 1 not measured here ('applied when a new engine starts', M2-02). D4: the middle posture is now 'Ask only for more access' (stored value workspace; composer chip in shots/m0-06-d4-composer-label.png). D1: the Isolation help states the Windows 1.4.2 limits, checked in d1 (absolute-path Set-Content and write_file both wrote m06 under the default isolation)."
+      }
+    },
+    "defectsFixed": [
+      "approval/listPending rows reached the renderer raw: a rebuilt card had no choices. list_pending_requests now returns the live event shape, for approvals and questions.",
+      "A double-click on a decision button sent two decisions. The second click of a double-click is ignored.",
+      "A decision used the bridge's latest requirement token, not the card's: a late click could satisfy a stage the user never saw. The renderer sends the card's currentRequirementId; the host refuses a stale one (-32053).",
+      "After a window reload a pending card stayed hidden until Sync now. Boot re-reads the pending fold of restored running conversations.",
+      "The host's 'abort' choice (Reject) was styled as an approval; approvedForSession / approvedPolicyAmendment were not recognised as accepted.",
+      "After an app restart the transcript kept 'Approval requested' with no sign of the abort. A marker of conversations with an open card is persisted with the log entry; at the next boot, one that no live host serves gets 'Approval cancelled: Muse closed before you answered, so the action did not run.'",
+      "Settings texts contradicted the measurements (4 contradictions): middle posture renamed and rewritten, YOLO and Isolation texts rewritten, Windows limits stated; 0 contradictions now."
+    ],
+    "defectsRecorded": [
+      "Engine 1.4.2 on Windows: under 'Workspace and network' the sandboxed shell gets no network (Invoke-WebRequest: connection closed on receive; curl.exe: 000), while the same calls outside the sandbox return 200 and 'Elevated access' reaches the network. Stated in Settings; an upstream report belongs with D2.",
+      "Stage 0 of a card shows the tool's raw JSON args (powershell: {\"command\":...}); from stage 1 the card shows subject.command and the title switches from 'powershell' to 'bash' (approval/updated has no toolName).",
+      "A click between the host advancing a stage and the card repainting is refused (-32053) with the raw MSP error text: safe, but the copy is technical.",
+      "Posture change: conversations marked connected but not loaded on their host fail setApprovalMode with -32024 and raise a banner. Root cause seen here: after a window reload, restore_sessions marks every conversation its live hosts list as connected, loaded or not (7 such rows in phases.isolation-network.postureProjection)."
+    ],
+    "liveTurns": 15,
+    "liveTurnsThisRound": 6
+  },
+  "forgedNote": "forged: the second tool_request entered through a poll_events response, the path every bridge event takes to the renderer (push_event -> poll_events -> pollOnce -> handleEvent); it never reached the Rust registry, which approval_cards_are_isolated_when_ids_repeat_between_sessions covers. Its exact copy of A's payload (updated: false) also logged one 'Approval requested' line in test conversation B. bResumedOk is null because the harness did not see B's reopen read within its bound; B was loaded and connected afterwards (it took the next posture projection), and bAfter equals bBefore."
+}

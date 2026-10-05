@@ -14,6 +14,7 @@ import {
   loadGitTurnSnapshot,
   loadLog,
   loadOutbox,
+  loadPendingApprovalSessions,
   loadProjects,
   loadSessions,
   loadThreadProjects,
@@ -26,6 +27,7 @@ import {
   saveGitTurnSnapshot,
   saveLog,
   saveOutbox,
+  savePendingApprovalSessions,
   saveProjects,
   saveSessions,
   saveThreadProjects,
@@ -797,6 +799,8 @@ export interface ApprovalRequest {
   summary: string;
   toolName: string;
   choices: ApprovalChoice[];
+  /** The stage token this card shows; a decision is pinned to it. */
+  requirementId?: unknown;
 }
 
 /** One bounded chunk returned by the host's lazy item output reader. */
@@ -1515,7 +1519,8 @@ function parseApproval(sessionId: string, payload: string): ApprovalRequest {
           };
         })
         .filter((c) => c.choiceId.length > 0);
-      return { session_id: sessionId, request_id: requestId, summary, toolName, choices };
+      return { session_id: sessionId, request_id: requestId, summary, toolName, choices,
+        requirementId: obj.currentRequirementId ?? undefined };
     } catch {
       // fall through
     }
@@ -1573,6 +1578,12 @@ export function useMuseSessions(): UseMuseSessions {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  // M0-05: conversations whose card was open when the app last closed, read
+  // during render so the write-through below cannot clear it first.
+  const bootPendingApprovalsRef = useRef<string[] | null>(null);
+  if (bootPendingApprovalsRef.current === null) {
+    bootPendingApprovalsRef.current = loadPendingApprovalSessions();
+  }
   // M0-02: keep a live heartbeat separate from the transcript. Persisted
   // entries can be old after a restart and must never masquerade as current
   // host activity.
@@ -2217,6 +2228,15 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         const restored = await invoke<BackendSessionMeta[]>("restore_sessions");
         if (cancelled) return;
+        // A card open when the app closed died with its host: the engine
+        // aborts it on stdin EOF and lists nothing pending afterwards. A
+        // window reload keeps the host, so its card comes back below instead.
+        const served = new Set(restored.map((s) => s.session_id));
+        for (const id of new Set(bootPendingApprovalsRef.current ?? [])) {
+          if (served.has(id) || tombstoned.current?.has(id) || !stored.some((s) => s.session_id === id)) continue;
+          const text = statusLogText("approval_cancelled_by_restart");
+          if (text !== null) pushLog(id, [{ id: newId(), ts: Date.now(), role: "system", text }]);
+        }
         setConnectedIds(restored.map((s) => s.session_id));
         setGrantedCapabilitiesBySession((cur) => {
           const next = { ...cur };
@@ -2284,6 +2304,22 @@ export function useMuseSessions(): UseMuseSessions {
           restored
             .filter((meta) => !tombstoned.current?.has(meta.session_id))
             .map((meta) => refreshHostSkills(meta.session_id)),
+        );
+        // A reloaded window polls from the head, so a request raised before
+        // the reload lives only in the host's pending fold. Without this read
+        // the card stayed hidden behind "Waiting for the desktop host" until
+        // the user pressed Sync now.
+        void Promise.allSettled(
+          restored
+            .filter((meta) => meta.running && !tombstoned.current?.has(meta.session_id))
+            .map(async ({ session_id: id }) => {
+              const pending = parsePendingSnapshot(
+                id,
+                await invoke<unknown>("list_pending_requests", { sessionId: id }),
+              );
+              setApprovals((cur) => [...cur.filter((a) => a.session_id !== id), ...pending.approvals]);
+              setInputRequests((cur) => [...cur.filter((r) => r.session_id !== id), ...pending.inputs]);
+            }),
         );
       } catch (e) {
         if (!cancelled) setError(`restore_sessions failed: ${String(e)}`);
@@ -2358,6 +2394,11 @@ export function useMuseSessions(): UseMuseSessions {
   useEffect(() => {
     saveAllowlist(allowlist);
   }, [allowlist]);
+
+  // M0-05: which conversations have a card open, for the next boot's notice.
+  useEffect(() => {
+    savePendingApprovalSessions(approvals.map((a) => a.session_id));
+  }, [approvals]);
 
   // US-3 + US-30 write-through persistence (best-effort, cf. persist.ts).
   // M0-02: same hydration guard as sessions above — the loaded value (which may
@@ -5731,10 +5772,17 @@ export function useMuseSessions(): UseMuseSessions {
           approvalId,
           choiceId,
         );
+        // Pin the decision to the stage the card shows: a click on a card
+        // the host has already moved past is refused (-32053), never applied
+        // to the next stage.
+        const card = approvals.find(
+          (a) => a.session_id === sessionId && a.request_id === approvalId,
+        );
         const terminal = await invoke<boolean>("approve", {
           sessionId,
           approvalId,
           choiceId,
+          requirementId: card?.requirementId ?? null,
         });
         // A compound command returns terminal=false after one stage. Keep
         // the card mounted until the host emits the next stage update (the

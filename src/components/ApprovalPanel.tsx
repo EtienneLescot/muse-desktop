@@ -6,6 +6,7 @@ import type {
   ResolvedApproval,
 } from "../hooks/useMuseSessions";
 import { choiceIndexForKey, trapTabIndex } from "../lib/a11y";
+import { isApprovalDecisionAccepted } from "../lib/approvalResolution";
 
 interface Props {
   approvals: ApprovalRequest[];
@@ -129,7 +130,7 @@ export function ApprovalPanel({
       </header>
       {approvals.map((a) => {
         const resolved = decisionFor(a);
-        const allowChoice = a.choices.find((c) => !c.decision.startsWith("denied"));
+        const allowChoice = a.choices.find((c) => isApprovalDecisionAccepted(c.decision));
         const scopes = [...new Set(a.choices.map((c) => c.scope).filter((s) => s !== ""))];
         return (
           <div
@@ -176,10 +177,16 @@ export function ApprovalPanel({
                 a.choices.map((c) => (
                   <button
                     key={c.choiceId}
-                    className={c.decision.startsWith("denied") ? "deny" : "approve"}
+                    className={isApprovalDecisionAccepted(c.decision) ? "approve" : "deny"}
                     title={`${c.scope} (←/→ to move, Enter to choose)`.trim()}
                     aria-label={`${c.label}${c.scope !== "" ? `, scope ${c.scope}` : ""}`}
-                    onClick={() => onDecision(a.session_id, a.request_id, c.choiceId)}
+                    // The second click of a double-click (detail 2) would be a
+                    // second decision: on this card, or on the next stage's
+                    // card if it has already replaced this one.
+                    onClick={(e) => {
+                      if (e.detail > 1) return;
+                      onDecision(a.session_id, a.request_id, c.choiceId);
+                    }}
                   >
                     {c.label}
                   </button>
@@ -191,7 +198,10 @@ export function ApprovalPanel({
                 <button
                   className="remember"
                   title={`Approve and remember: pattern "${allowChoice.scope !== "" ? `${a.toolName} · ${allowChoice.scope}` : a.toolName}" as allow`}
-                  onClick={() => onRemember(a, allowChoice.choiceId)}
+                  onClick={(e) => {
+                    if (e.detail > 1) return;
+                    onRemember(a, allowChoice.choiceId);
+                  }}
                 >
                   Allow in workspace
                 </button>

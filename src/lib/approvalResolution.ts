@@ -28,6 +28,8 @@ const ACCEPTED_DECISIONS = new Set([
   "allow_once_in_workspace",
   "always_allow",
   "approved",
+  "approvedforsession",
+  "approvedpolicyamendment",
   "approve",
   "accepted",
   "continue",

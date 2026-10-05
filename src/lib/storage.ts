@@ -369,6 +369,8 @@ export function storageDataKind(key: string): StorageDataKind {
     normalized === "muse-desktop.theme.v1" ||
     normalized === "muse-desktop.welcome-draft" ||
     normalized === "muse-desktop.scheduler-lease.v1" ||
+    // Boot-only marker: restored later, it would repeat an old cancellation notice.
+    normalized === "muse-desktop.pending-approvals.v1" ||
     normalized === "muse-desktop.stream-position.v1" ||
     normalized === "muse-desktop.storage-migrations.v1" ||
     normalized.includes(".draft.") ||
