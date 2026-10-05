@@ -1779,6 +1779,11 @@ export function useMuseSessions(): UseMuseSessions {
   const connectorsRef = useRef<ConnectorEntry[]>(connectors);
   connectorsRef.current = connectors;
   const [inputRequests, setInputRequests] = useState<InputRequest[]>([]);
+  // M0-05: questions already in the transcript; the host delivers each twice.
+  const loggedInputsRef = useRef(new Set<string>());
+  // M0-05: conversations whose engine runs no turn of theirs: being resumed,
+  // or resumed idle until their next turn starts (see reconnectSession).
+  const noLiveTurnRef = useRef(new Set<string>());
   // US-19 browser: anchored comments + per-app computer-use permissions,
   // restored once (survive restarts via localStorage), written through below.
   const [browserAnnotations, setBrowserAnnotations] = useState<BrowserAnnotation[]>(() =>
@@ -3272,6 +3277,10 @@ export function useMuseSessions(): UseMuseSessions {
     // Deleted stays deleted: late in-flight events for a killed session are
     // dropped instead of resurrecting its row.
     if (tombstoned.current?.has(sid)) return;
+    // M0-05: a question or an approval raised while no turn of this
+    // conversation runs belongs to a dead turn.
+    if (kind === "started") noLiveTurnRef.current.delete(sid);
+    if ((kind === "input_request" || kind === "tool_request") && noLiveTurnRef.current.has(sid)) return;
     if (kind === "workspace_changed") {
       let changedPaths: string[] = [];
       try {
@@ -3613,6 +3622,10 @@ export function useMuseSessions(): UseMuseSessions {
         }
         return [...cur, req];
       });
+      // One line per question: userInput/request and its userInput/requested twin both arrive.
+      const logged = `${sid}:${req.input_id}`;
+      if (loggedInputsRef.current.has(logged)) return;
+      loggedInputsRef.current.add(logged);
       pushLog(sid, [
         { id: newId(), ts: Date.now(), role: "tool", text: `Input requested: ${req.tool_name}` },
       ]);
@@ -4562,6 +4575,12 @@ export function useMuseSessions(): UseMuseSessions {
     if (!silent) setReconnectingId(id);
     setConnectionState(id, "connecting");
     if (!silent) setError(null);
+    // M0-05: a question or an approval waits inside a turn. What the engine
+    // re-issues during the resume is ignored, and stays ignored until the next
+    // turn starts when the resume says none runs: Muse 1.4.2 keeps a killed
+    // engine's question, re-issues it right after the resume, lists it as
+    // pending and refuses every answer to it.
+    noLiveTurnRef.current.add(id);
     let host: HostRequest | null = null;
     try {
       const projectSettings = threadProjects[id] !== undefined
@@ -4583,6 +4602,7 @@ export function useMuseSessions(): UseMuseSessions {
           : buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
       });
       if (tombstoned.current?.has(id)) return;
+      if (meta.running) noLiveTurnRef.current.delete(id);
       setGrantedCapabilitiesBySession((cur) => ({
         ...cur,
         [id]: meta.granted_capabilities,
@@ -4629,9 +4649,9 @@ export function useMuseSessions(): UseMuseSessions {
         console.warn("session history hydration unavailable", historyError);
       }
       try {
-        const pending = await invoke<unknown>("list_pending_requests", {
-          sessionId: id,
-        });
+        const pending = meta.running
+          ? await invoke<unknown>("list_pending_requests", { sessionId: id })
+          : {};
         if (typeof pending === "object" && pending !== null) {
           const { approvals: nextApprovals, inputs: nextInputs } = parsePendingSnapshot(id, pending);
           setApprovals((cur) => [

@@ -19,6 +19,11 @@
  *   still showed the old failure: no connector action cleared the banner.
  * - M0-05: when a host died with the app open, its approval and question
  *   cards stayed answerable, and every answer could only fail.
+ * - M0-05: the engine that resumes such a conversation still lists and
+ *   re-issues the dead turn's question (1.4.2), so Reconnect brought the card
+ *   back, and every answer was refused (-32057, then -32603 after a restart).
+ * - M0-05: each question was written twice to the transcript (the host's
+ *   userInput/request and its userInput/requested twin).
  * - M2-05: every window.confirm question was skipped in the app: the dialog
  *   plugin's replacement calls a command the plugin no longer has, and its
  *   Promise read as a yes.
@@ -139,5 +144,26 @@ describe("visible failures", () => {
     assert.match(block, /hostExitNotices\(sid, approvals, inputRequests\)/);
     assert.match(block, /setApprovals\(\(cur\) => cur\.filter\(\(a\) => a\.session_id !== sid\)\)/);
     assert.match(block, /setInputRequests\(\(cur\) => cur\.filter\(\(r\) => r\.session_id !== sid\)\)/);
+  });
+
+  it("brings back no question or approval of a turn that died with its engine", () => {
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const start = hook.indexOf("const reconnectSession = useCallback(");
+    const body = hook.slice(start, hook.indexOf("}, [globalSettings", start));
+    const guard = body.indexOf("noLiveTurnRef.current.add(id);");
+    assert.ok(guard > 0 && guard < body.indexOf('invoke<BackendSessionMeta>("resume_session"'), "guarded before the resume");
+    assert.match(body, /if \(meta\.running\) noLiveTurnRef\.current\.delete\(id\);/);
+    assert.match(body, /const pending = meta\.running\s*\? await invoke<unknown>\("list_pending_requests"[^)]*\)\s*: \{\};/);
+    const events = hook.slice(hook.indexOf("function handleEvent(evt: MuseEvent)"), hook.indexOf('if (kind === "workspace_changed")'));
+    assert.match(events, /if \(kind === "started"\) noLiveTurnRef\.current\.delete\(sid\);/);
+    assert.match(events, /if \(\(kind === "input_request" \|\| kind === "tool_request"\) && noLiveTurnRef\.current\.has\(sid\)\) return;/);
+  });
+
+  it("writes one transcript line per question, though the host delivers it twice", () => {
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const start = hook.indexOf('if (kind === "input_request") {');
+    const block = hook.slice(start, hook.indexOf('if (kind === "input_settled")', start));
+    const known = block.indexOf("if (loggedInputsRef.current.has(logged)) return;");
+    assert.ok(known > 0 && known < block.indexOf("Input requested:"), "a question already written returns before its line");
   });
 });
