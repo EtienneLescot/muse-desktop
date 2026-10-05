@@ -183,7 +183,8 @@ pub struct RemoteEngine {
     pub port: u16,
     /// Remote binary: absolute, or `~/`-relative (the remote shell expands it).
     pub muse: String,
-    /// Remote folder: the session's `workspaceRoot`, a path on that host.
+    /// Remote folder: the engine's working directory and the session's
+    /// `workspaceRoot`, a path on that host.
     pub workspace: String,
 }
 
@@ -264,14 +265,18 @@ impl RemoteEngine {
         key
     }
 
-    /// `ssh -T … [user@]host -- env MUSE_NO_AUTO_UPDATE=1 MUSE_LOGIN=0 <muse>
-    /// serve <posture>`: no pty (MSP is a byte stream), never a prompt, the
-    /// posture the local spawn would use. The local sidecar is a frozen
-    /// binary; the default remote one is the self-updating launcher, which
-    /// must neither update nor ask for a sign-in mid-handshake: the same two
-    /// variables as the startup probe (`startup.rs`).
+    /// `ssh -T -a -x … [user@]host -- cd <workspace> && exec env
+    /// MUSE_NO_AUTO_UPDATE=1 MUSE_LOGIN=0 <muse> serve <posture>`: no pty
+    /// (MSP is a byte stream), never a prompt, and what the local spawn does:
+    /// the folder as working directory (`current_dir`), the same posture.
+    /// The command line beats `~/.ssh/config`, so a host entry can neither
+    /// forward the user's agent, X11 or ports to the engine nor replace its
+    /// command (`RemoteCommand`). The local sidecar is a frozen binary; the
+    /// default remote one is the self-updating launcher, which must neither
+    /// update nor ask for a sign-in mid-handshake: the same two variables as
+    /// the startup probe (`startup.rs`).
     fn serve_argv(&self, ssh: &PathBuf, posture: &[&str]) -> Vec<String> {
-        let command = ["env", "MUSE_NO_AUTO_UPDATE=1", "MUSE_LOGIN=0", self.muse.as_str()]
+        let command = ["cd", self.workspace.as_str(), "&&", "exec", "env", "MUSE_NO_AUTO_UPDATE=1", "MUSE_LOGIN=0", self.muse.as_str()]
             .into_iter()
             .chain(posture.iter().copied())
             .collect::<Vec<_>>()
@@ -281,6 +286,12 @@ impl RemoteEngine {
             1..1,
             [
                 "-T".to_string(),
+                "-a".to_string(),
+                "-x".to_string(),
+                "-o".to_string(),
+                "ClearAllForwardings=yes".to_string(),
+                "-o".to_string(),
+                "RemoteCommand=none".to_string(),
                 "-o".to_string(),
                 format!("ServerAliveInterval={SERVER_ALIVE_INTERVAL}"),
                 "-o".to_string(),
@@ -328,12 +339,20 @@ impl RemoteEngine {
         if said.contains("timed out") {
             return Some(format!("{at} did not answer within {CONNECT_TIMEOUT} s."));
         }
+        // The stderr tail joins its lines with ` | ` (`tail_of`).
+        let lines = || said.split(" | ").flat_map(str::lines);
+        // Every shell says `cd:` on the line naming the folder it could not
+        // enter. Checked before Muse: that line also says "no such file".
+        let folder = self.workspace.to_ascii_lowercase();
+        if lines().any(|line| line.contains("cd:") && line.contains(&folder)) {
+            return Some(format!(
+                "The folder {} was not found on {}, or cannot be opened there. Change the remote folder in Settings.",
+                self.workspace, self.host
+            ));
+        }
         // The remote shell names the binary as it expanded it: `~/x` → `/home/u/x`.
         let muse = self.muse.strip_prefix('~').unwrap_or(&self.muse).to_ascii_lowercase();
-        if said
-            .lines()
-            .any(|line| line.contains(&muse) && (line.contains("not found") || line.contains("no such file")))
-        {
+        if lines().any(|line| line.contains(&muse) && (line.contains("not found") || line.contains("no such file"))) {
             return Some(format!(
                 "Muse was not found at {} on {}. Install it there, or change the remote Muse path in Settings.",
                 self.muse, self.host
@@ -511,12 +530,17 @@ mod tests {
     fn the_serve_argv_is_the_local_posture_after_the_separator() {
         let remote = RemoteEngine::parse("ssh://ops@127.0.0.1:2222/home/ops/proj").unwrap().unwrap();
         let argv = remote.serve_argv(&PathBuf::from("/usr/bin/ssh"), &["serve", "--sandbox-network", "restricted", "--trust-workspace"]);
+        // `-a -x ClearAllForwardings RemoteCommand=none`: a `~/.ssh/config`
+        // host entry cannot forward the agent, X11 or ports, nor replace the
+        // command (`ssh -G` resolves the command line first). The engine
+        // starts in the folder, as the local sidecar does.
         assert_eq!(
             argv,
             [
-                "/usr/bin/ssh", "-T", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
+                "/usr/bin/ssh", "-T", "-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "RemoteCommand=none",
+                "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
                 "-p", "2222", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "ops@127.0.0.1", "--",
-                "env MUSE_NO_AUTO_UPDATE=1 MUSE_LOGIN=0 ~/.local/bin/muse serve --sandbox-network restricted --trust-workspace",
+                "cd /home/ops/proj && exec env MUSE_NO_AUTO_UPDATE=1 MUSE_LOGIN=0 ~/.local/bin/muse serve --sandbox-network restricted --trust-workspace",
             ]
             .map(String::from)
         );
@@ -537,6 +561,21 @@ mod tests {
             .explain_failure(DIED, "env: '/home/ops/.local/bin/muse': No such file or directory")
             .unwrap()
             .starts_with("Muse was not found"));
+        // A missing folder, as bash, dash and zsh say it.
+        for said in [
+            "bash: line 1: cd: /home/ops/proj: No such file or directory",
+            "sh: 1: cd: can't cd to /home/ops/proj",
+            "zsh:cd:1: no such file or directory: /home/ops/proj",
+        ] {
+            let folder = remote.explain_failure(DIED, said).unwrap();
+            assert!(folder.starts_with("The folder /home/ops/proj was not found on 127.0.0.1"), "{folder}");
+        }
+        // The production tail: one line per stderr line, joined by ` | `. A
+        // `.bashrc` cd error and a Muse line naming the folder are not one line.
+        assert_eq!(
+            remote.explain_failure(DIED, "bash: line 3: cd: /old: No such file or directory | error: cannot trust /home/ops/proj"),
+            None
+        );
         assert_eq!(remote.explain_failure(DIED, "thread 'main' panicked"), None);
     }
 
