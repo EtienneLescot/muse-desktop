@@ -18,7 +18,7 @@
  * Live turns spend provider tokens, so nothing runs without --live:
  *   node scripts/msp-verdict-matrix.mjs --no-live
  *   node scripts/msp-verdict-matrix.mjs --live [--modes onRequest] [--actions 1,6]
- *     [--posture elevated] [--out report.json [--append]]
+ *     [--posture elevated] [--base G:\] [--no-fallback] [--out report.json [--append]]
  *
  * The report is path-free: the workspace is <root>, the junction target
  * <outside>, the temp directory <temp>, anything else that looks like a path
@@ -46,7 +46,7 @@ const POSTURES = {
 const PLAN = [
   { mode: "promptUnmatched", actions: [1, 2, 3, 4, 5, 6] },
   { mode: "onRequest", actions: [1, 2, 3, 4, 5, 6] },
-  { mode: "allowAll", actions: [2, 5] },
+  { mode: "allowAll", actions: [1, 2, 5] },
 ];
 
 // Every argv is built from a variable so no static allowlist rule can match.
@@ -162,11 +162,15 @@ async function runCell(host, sessionId, n, ctx, places) {
       decided.add(key);
       const choiceId = action.refuse ? "abort" : "allow_once";
       const offered = Array.isArray(stage.availableChoices) ? stage.availableChoices.map((choice) => choice?.choiceId) : [];
+      // The raw stage minus its ids, so a reader can tell what each stage
+      // asks for (the client has no schema for the later stages).
+      const { approvalId: _a, currentRequirementId: _r, sessionId: _s, ...detail } = stage;
       const row = {
         toolName: bounded(stage.toolName),
         subjectKind: bounded(stage.subject?.kind),
         choices: offered.map((choice) => bounded(choice, 40)),
         choiceId,
+        stage: scrub(JSON.stringify(detail), places, 900),
       };
       if (!offered.includes(choiceId)) {
         approvals.push({ ...row, skipped: "choice not offered" });
@@ -246,8 +250,10 @@ async function runCell(host, sessionId, n, ctx, places) {
 }
 
 async function runMode(binary, posture, mode, actions, live, liveTurns) {
-  const root = await mkdtemp(join(tmpdir(), "muse-matrix-root-"));
-  const outside = await mkdtemp(join(tmpdir(), "muse-matrix-outside-"));
+  // --base puts both folders elsewhere, e.g. off the user profile.
+  const base = resolve(value("--base") ?? tmpdir());
+  const root = await mkdtemp(join(base, "muse-matrix-"));
+  const outside = await mkdtemp(join(base, "muse-matrix-outside-"));
   const tag = uuidv7().slice(-6);
   const ctx = { root, outside, readMarker: `outside-${tag}`, junctionMarker: `junction-${tag}`, liveTurns };
   const places = [[root, "<root>"], [outside, "<outside>"], [tmpdir(), "<temp>"], [homedir(), "<home>"], [userInfo().username, "<user>"]];
@@ -337,7 +343,7 @@ async function main() {
     runs: [await runPosture(binary, first, plan, live, liveTurns)],
   };
   const cells = report.runs[0].modes.flatMap((entry) => entry.cells);
-  if (live && first === "workspace" && sandboxBlocked(cells)) {
+  if (live && first === "workspace" && !has("--no-fallback") && sandboxBlocked(cells)) {
     report.sandboxFallback = "workspace posture blocked every non-refused cell; reran under elevated";
     report.runs.push(await runPosture(binary, "elevated", plan, live, liveTurns));
   }
@@ -355,7 +361,8 @@ async function main() {
   }
   const json = `${JSON.stringify(merged ?? report, null, 2)}\n`;
   if (out) {
-    await mkdir(dirname(resolve(out)), { recursive: true });
+    // mkdir on a drive root throws EPERM on Windows, even with recursive.
+    if (!existsSync(dirname(resolve(out)))) await mkdir(dirname(resolve(out)), { recursive: true });
     await writeFile(resolve(out), json, "utf8");
   }
   process.stdout.write(json);

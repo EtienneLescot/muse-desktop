@@ -687,5 +687,104 @@
     "Workspace posture: approved in-root and out-of-root writes and network fail inside the sandbox; out-of-root reads and a junction read succeed. allowAll never asks but the same sandbox failures remain.",
     "Elevated spot check (--disable-sandbox): the in-root write succeeds, so the in-root failure is the workspace sandbox, not the approval path.",
     "One extra live turn (onRequest, in-root write, workspace posture) was spent as a shape sentinel before this report and matches the cell above; total live turns 16."
-  ]
+  ],
+  "workspaceOutsideProfile": {
+    "why": "Rule out a profile-ACL artefact: workspace and outside folder on a non-system NTFS drive (<root>, <outside>), not under the user profile.",
+    "posture": "workspace",
+    "hostArgs": [
+      "serve",
+      "--sandbox-network",
+      "restricted",
+      "--trust-workspace"
+    ],
+    "serverVersion": "1.4.2",
+    "liveTurns": 5,
+    "cells": [
+      {
+        "mode": "promptUnmatched",
+        "cell": {
+          "n": 1,
+          "action": "writeInsideRoot",
+          "approvalRequested": true,
+          "stages": 2,
+          "decision": "allow_once",
+          "outcome": "failed",
+          "sideEffect": false,
+          "terminal": "turn/completed:completed"
+        }
+      },
+      {
+        "mode": "promptUnmatched",
+        "cell": {
+          "n": 5,
+          "action": "network",
+          "approvalRequested": true,
+          "stages": 3,
+          "decision": "allow_once",
+          "outcome": "failed",
+          "sideEffect": false,
+          "terminal": "turn/completed:completed"
+        }
+      },
+      {
+        "mode": "onRequest",
+        "cell": {
+          "n": 1,
+          "action": "writeInsideRoot",
+          "approvalRequested": true,
+          "stages": 2,
+          "decision": "allow_once",
+          "outcome": "failed",
+          "sideEffect": false,
+          "terminal": "turn/completed:completed"
+        }
+      },
+      {
+        "mode": "onRequest",
+        "cell": {
+          "n": 5,
+          "action": "network",
+          "approvalRequested": true,
+          "stages": 2,
+          "decision": "allow_once",
+          "outcome": "failed",
+          "sideEffect": false,
+          "terminal": "turn/completed:completed"
+        }
+      },
+      {
+        "mode": "allowAll",
+        "modeSet": {
+          "applyOutcome": "completed",
+          "effectiveMode": "allowAll"
+        },
+        "cell": {
+          "n": 1,
+          "action": "writeInsideRoot",
+          "command": "$p = 'inside-5d94e9-1.txt'; Set-Content -Path $p -Value 'm06'",
+          "approvalRequested": false,
+          "stages": 0,
+          "approvals": [],
+          "decision": "none",
+          "toolCalls": [
+            {
+              "tool": "powershell",
+              "status": "failed",
+              "output": "Set-Content : Un objet � l'emplacement sp�cifi� inside-5d94e9-1.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 29 + $p = 'inside-5d94e9-1.txt'; Set-Content -Path $p -Value 'm06' + ~~~~~…",
+              "failureReason": "process exited with code 1"
+            }
+          ],
+          "outcome": "failed",
+          "sideEffect": false,
+          "terminal": "turn/completed:completed",
+          "agentText": "Commande exécutée, code 1.",
+          "elapsedMs": 21706
+        }
+      }
+    ],
+    "notes": [
+      "The first four cells are summaries from the progress log: their full JSON was lost to a report-write bug (mkdir on a drive root, EPERM), fixed in the script afterwards.",
+      "The in-root write fails identically off the profile in all three modes, with the same PowerShell error, so it is not a profile-ACL artefact."
+    ]
+  }
 }
