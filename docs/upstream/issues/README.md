@@ -112,7 +112,12 @@ on 05/10, with Étienne's approval. The measurements are in
   - The host raises approvals for a dynamic-argv write command in both `onRequest` and
     `promptUnmatched`.
   - The two-stage decide works, and so do abort, stale (`-32053`) and already-resolved (`-32051`).
-  - The "ceiling" reading came from the allowlisted `echo`. File 1 above is superseded.
+  - The 1.3.0 "ceiling" reading had two causes: the probes asked for `echo`, which `onRequest`
+    runs without asking, and a live-delivery bug that the maintainer says was fixed in 1.4.0.
+    File 1 above is superseded.
+  - **Closed by the maintainer on 05/10** ([comment](https://github.com/meta-models/muse-code-sdk/issues/56#issuecomment-6003421351)):
+    fixed in 1.4.0 and later, no SDK update needed. Reopen with the version and steps if it
+    comes back on 1.4.2 or later.
 - **#55, fork: commented** ([comment](https://github.com/meta-models/muse-code-sdk/issues/55#issuecomment-5999607722)).
   - The defect is still present on 1.4.2 native Windows with the echo provider: `InvalidCut` with
     a cut point, `WriteFailed` without.
