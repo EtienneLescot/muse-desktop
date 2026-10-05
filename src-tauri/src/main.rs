@@ -5069,9 +5069,17 @@ async fn list_pending_requests(
 ) -> Result<Value, String> {
     let session_id = require_non_empty(&session_id, "sessionId")?;
     let client = session_client(&state, &session_id)?;
-    let result = client
-        .request("approval/listPending", json!({"sessionId": session_id}))
-        .await?;
+    // Best effort: without the session's running turn, nothing is filtered.
+    let read = client
+        .request("session/read", json!({"sessionId": session_id, "excludeItems": true}))
+        .await
+        .ok();
+    let result = live_pending(
+        client
+            .request("approval/listPending", json!({"sessionId": session_id}))
+            .await?,
+        read.as_ref().and_then(|r| r.get("session")),
+    );
     // Rebuild the supervisor's opaque requirement registry from the same
     // point-in-time fold that feeds the renderer. Without this step a card
     // recovered after reconnect would render but its approval click would be
@@ -5107,6 +5115,24 @@ async fn list_pending_requests(
         }
     }
     Ok(pending_snapshot_payload(&result))
+}
+
+/// M0-05: a question or an approval waits inside its turn, so only the rows of
+/// the session's running turn (`activeTurnId`, null when idle) can be answered.
+/// Muse 1.4.2 keeps listing those of a turn its killed engine left behind,
+/// next to the running turn's, and refuses every answer to them (-32057
+/// invalid_target). A host that folds no `activeTurnId`, or a row without
+/// `turnId`, leaves the rows as listed.
+fn live_pending(mut result: Value, session: Option<&Value>) -> Value {
+    let Some(active) = session.and_then(|s| s.get("activeTurnId")).cloned() else {
+        return result;
+    };
+    for key in ["approvals", "userInputs"] {
+        if let Some(rows) = result.get_mut(key).and_then(Value::as_array_mut) {
+            rows.retain(|row| row.get("turnId").map_or(true, |turn| *turn == active));
+        }
+    }
+    result
 }
 
 /// `approval/listPending` rows are the raw `approval/request` and
@@ -9115,6 +9141,30 @@ mod tests {
         assert_eq!(approval_payload(&args_only, "b", false)["summary"], "src/a.ts");
         let opaque = json!({"toolName": "mcp__x__y", "rawArgs": "{\"n\":1}"});
         assert_eq!(approval_payload(&opaque, "c", false)["summary"], "");
+    }
+
+    #[test]
+    fn pending_rows_of_a_turn_that_is_not_running_are_dropped() {
+        // Muse 1.4.2 after its engine was killed mid-question, then a new turn.
+        let listed = json!({
+            "approvals": [{"approvalId": "a-dead", "turnId": "dead"}],
+            "userInputs": [
+                {"userInputId": "q-dead", "turnId": "dead"},
+                {"userInputId": "q-live", "turnId": "live"},
+                {"userInputId": "q-unknown"}
+            ]
+        });
+        let ids = |v: &Value, key: &str, id: &str| -> Vec<String> {
+            v[key].as_array().unwrap().iter().map(|r| r[id].as_str().unwrap().to_string()).collect()
+        };
+        let running = live_pending(listed.clone(), Some(&json!({"activeTurnId": "live"})));
+        assert_eq!(ids(&running, "userInputs", "userInputId"), ["q-live", "q-unknown"]);
+        assert!(ids(&running, "approvals", "approvalId").is_empty());
+        let idle = live_pending(listed.clone(), Some(&json!({"activeTurnId": null})));
+        assert_eq!(ids(&idle, "userInputs", "userInputId"), ["q-unknown"]);
+        // No running-turn fact (older host, failed read): nothing to judge by.
+        assert_eq!(live_pending(listed.clone(), Some(&json!({"status": "idle"}))), listed);
+        assert_eq!(live_pending(listed.clone(), None), listed);
     }
 
     #[test]
