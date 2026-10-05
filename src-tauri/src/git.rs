@@ -2195,7 +2195,8 @@ mod tests {
         let outcome = run_worktree_setup(
             &root,
             &wt.display().to_string(),
-            "cmd /C exit /b 3",
+            // Portable: `cmd /C exit 3` and `sh -c 'exit 3'` both exit 3.
+            "exit 3",
             "t4",
             30,
             flag,
