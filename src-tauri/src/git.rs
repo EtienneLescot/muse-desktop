@@ -1872,7 +1872,10 @@ fn back_up(side: &Side, written: &str) -> Result<PathBuf, String> {
 /// Write the merged tree into the target, then give the files that come
 /// unchanged from the source their exact bytes back from its backup.
 fn receive(from: &Side, to: &Side, merged: &str) -> Result<(), String> {
-    git_with_index(&to.dir, &to.scratch, &["read-tree", "-m", "-u", &to.tree, merged], None)?;
+    // A sparse checkout would leave a path outside its patterns unwritten:
+    // the moved change would then be in neither folder.
+    let args = ["read-tree", "-m", "-u", "--no-sparse-checkout", &to.tree, merged];
+    git_with_index(&to.dir, &to.scratch, &args, None)?;
     let combined: HashSet<String> = tree_diff(&from.dir, &from.tree, merged, "")?.into_iter().collect();
     let source = from.scratch.with_extension("files");
     for path in tree_diff(&to.dir, &to.tree, merged, "d")? {
@@ -1951,7 +1954,9 @@ fn restore_side(side: &Side, written: &str, backup: &Path, index: bool) -> Resul
         }
     }
     if index {
-        git_command(dir, &["read-tree", &side.index])?;
+        // `-m -i` keeps what the index holds beyond the tree, such as the
+        // paths a sparse checkout leaves out.
+        git_command(dir, &["read-tree", "-m", "-i", &side.index])?;
     }
     Ok(left)
 }
@@ -2049,13 +2054,14 @@ fn handoff_move_with(
     }
     // Only now is the source cleaned: files and index back to HEAD, the moved
     // untracked files removed. The private index refuses to overwrite a file
-    // changed since the snapshot.
+    // changed since the snapshot. Sparse patterns are ignored as in `receive`:
+    // a moved file outside them gets HEAD's version back, not removed.
     let cleaned = before_cleanup()
         .and_then(|_| {
             git_with_index(
                 &from.dir,
                 &from.scratch,
-                &["read-tree", "-m", "-u", &from.tree, &from.head],
+                &["read-tree", "-m", "-u", "--no-sparse-checkout", &from.tree, &from.head],
                 None,
             )
         })
@@ -3148,5 +3154,41 @@ mod tests {
         assert!(root.join("feature.txt").is_file() && !wt.join("feature.txt").exists());
         assert!(wt.join("own.txt").is_file() && !root.join("own.txt").exists());
         assert!(git_command(&root, &["for-each-ref", "refs/muse"]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn handoff_moves_work_across_a_sparse_checkout() {
+        let (root, wt) = worktree_fixture();
+        run_git(&root, &["config", "core.autocrlf", "false"]);
+        fs::create_dir_all(root.join("docs")).unwrap();
+        fs::write(root.join("docs/a.md"), lines(&[])).unwrap();
+        fs::write(root.join("docs/b.md"), "b\n").unwrap();
+        run_git(&root, &["add", "-A"]);
+        run_git(&root, &["commit", "--quiet", "-m", "docs"]);
+        run_git(&wt, &["reset", "--quiet", "--hard", &oid(git_command(&root, &["rev-parse", "HEAD"]).unwrap())]);
+        // The worktree's branch changed line 1, then left docs/ out of its checkout.
+        fs::write(wt.join("docs/a.md"), lines(&[(1, "branch")])).unwrap();
+        run_git(&wt, &["commit", "--quiet", "-am", "branch"]);
+        run_git(&wt, &["sparse-checkout", "set", "src"]);
+        fs::write(wt.join("own.txt"), "worktree work\n").unwrap();
+        // An undo keeps docs/ out: rebuilt from the tree alone, the index
+        // would list its files as deleted.
+        let sparse = status(&wt).unwrap().fingerprint;
+        handoff_move_with(&wt, &root, || Err("injected failure".to_string())).unwrap_err();
+        assert_eq!(status(&wt).unwrap().fingerprint, sparse);
+        // Git alone merges Local's line 10 into the index entry and writes
+        // nothing there: the edit would be in neither folder.
+        fs::write(root.join("docs/a.md"), lines(&[(10, "local")])).unwrap();
+        handoff_move(&root, &wt).unwrap();
+        assert_eq!(fs::read_to_string(wt.join("docs/a.md")).unwrap(), lines(&[(1, "branch"), (10, "local")]));
+        assert!(status(&root).unwrap().files.is_empty());
+        assert!(status(&wt).unwrap().files.iter().any(|file| file.path == "docs/a.md"));
+        // The next index write records the file as checked out, as Git does
+        // for any file present outside the patterns.
+        run_git(&wt, &["update-index", "--no-skip-worktree", "--", "docs/a.md"]);
+        // And back out of the sparse checkout.
+        handoff_move(&wt, &root).unwrap();
+        assert_eq!(fs::read_to_string(root.join("docs/a.md")).unwrap(), lines(&[(10, "local")]));
+        assert!(status(&wt).unwrap().files.is_empty());
     }
 }
