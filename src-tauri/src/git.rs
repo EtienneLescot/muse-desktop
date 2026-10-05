@@ -1760,82 +1760,48 @@ fn occupied(side: &Side, written: &str) -> Result<Vec<String>, String> {
     Ok(blocked)
 }
 
-/// The paths of `merged`, files a merge combines from two changes, that a
-/// configured `merge.<name>.driver` merges, named by their `merge` attribute
-/// or by `merge.default`. Both are read in `dir`, where `merge-tree` runs.
-fn driven(dir: &Path, merged: &[String]) -> Result<Vec<String>, String> {
-    if merged.is_empty() {
-        return Ok(Vec::new());
-    }
-    let (mut default, mut drivers) = (None, HashSet::new());
-    for entry in nul_fields(&git_command(dir, &["config", "-z", "--list"])?) {
-        let (key, value) = entry.split_once('\n').unwrap_or((&entry, ""));
-        if key == "merge.default" {
-            default = Some(value.to_string());
-        } else if let Some(name) = key.strip_prefix("merge.").and_then(|key| key.strip_suffix(".driver")) {
-            drivers.insert(name.to_string());
-        }
-    }
-    let paths: String = merged.iter().map(|path| format!("{path}\0")).collect();
-    let attributes = git_command_with_input(dir, &["check-attr", "-z", "--stdin", "merge"], &paths)?;
-    // `<path> NUL merge NUL <value> NUL`, and `merge=` gives an empty value.
-    let fields: Vec<String> = attributes.split(|byte| *byte == 0).map(decode).collect();
-    Ok(fields
-        .chunks_exact(3)
-        .filter(|entry| {
-            let name = match entry[2].as_str() {
-                "set" | "unset" => None,
-                "unspecified" => default.as_deref(),
-                name => Some(name),
-            };
-            name.is_some_and(|name| drivers.contains(name))
-        })
-        .map(|entry| entry[0].clone())
-        .collect())
-}
-
 /// Replay the source's uncommitted work onto the target's files with the
 /// source HEAD as base (a cherry-pick of the working tree), entirely in the
 /// object store. `Ok(Err(paths))` lists what stands in the way: merge
 /// conflicts, files a merge driver would settle, or ignored files either
 /// write would land on.
 fn merge_sides(from: &Side, to: &Side) -> Result<Result<String, Vec<String>>, String> {
+    // A configured `merge.<name>.driver` can keep one side and drop the
+    // other's change without a conflict (`cp %B %A`), and it would run here,
+    // in the source, preview included, free to write its files there
+    // (npm-merge-driver writes `%P`). Each one becomes a failing command: a
+    // file it would merge conflicts, and nothing runs.
+    // ponytail: a driver name holding `=` escapes `-c`; switch to
+    // `--config-env` if one turns up.
+    let mut drivers = Vec::new();
+    for key in nul_fields(&git_command(&from.dir, &["config", "-z", "--name-only", "--list"])?) {
+        if key.strip_prefix("merge.").and_then(|key| key.strip_suffix(".driver")).is_some() {
+            drivers.extend(["-c".to_string(), format!("{key}=exit 1")]);
+        }
+    }
     let base = format!("--merge-base={}", from.head);
-    let args = [
-        "merge-tree", "--write-tree", "-z", "--name-only", "--messages",
-        &base, &to.commit, &from.commit,
-    ];
+    let args: Vec<&str> = drivers
+        .iter()
+        .map(String::as_str)
+        .chain(["merge-tree", "--write-tree", "-z", "--name-only", "--no-messages"])
+        .chain([base.as_str(), &to.commit, &from.commit])
+        .collect();
     let output = git_output(&from.dir, &args, None, None)?;
-    // The tree, the conflicted paths and an empty field, then the notes: a
-    // count, that many paths, a type and a message each.
-    let mut fields = output.stdout.split(|byte| *byte == 0).map(decode);
-    let tree = fields.next().unwrap_or_default();
-    let conflicts: Vec<String> = fields.by_ref().take_while(|path| !path.is_empty()).collect();
-    match output.status.code() {
-        Some(0) if !tree.is_empty() => {}
-        Some(0) => return Err("git merge-tree returned no tree".to_string()),
-        Some(1) => return Ok(Err(conflicts)),
+    let fields = nul_fields(&output.stdout);
+    let tree = match output.status.code() {
+        Some(0) => fields
+            .into_iter()
+            .next()
+            .ok_or_else(|| "git merge-tree returned no tree".to_string())?,
+        Some(1) => return Ok(Err(fields.into_iter().skip(1).collect())),
         _ => {
             return Err(format!(
                 "git merge-tree failed (Git 2.40 or later is required): {}",
                 decode(&output.stderr).trim()
             ))
         }
-    }
-    // A file both sides changed, each its own way, is noted "Auto-merging"
-    // under the name its attributes are read for (a renamed file's new one).
-    // A merge driver there can keep one side and drop the other's change
-    // without a conflict (`cp %B %A`, `git merge-file --ours`): refused too.
-    let mut merged = Vec::new();
-    while let Some(count) = fields.next().and_then(|count| count.parse().ok()) {
-        let paths: Vec<String> = fields.by_ref().take(count).collect();
-        if fields.next().is_some_and(|kind| kind == "Auto-merging") {
-            merged.extend(paths);
-        }
-        fields.next();
-    }
-    let mut blocked = driven(&from.dir, &merged)?;
-    blocked.extend(occupied(to, &tree)?);
+    };
+    let mut blocked = occupied(to, &tree)?;
     blocked.extend(occupied(from, &from.head)?);
     Ok(if blocked.is_empty() { Ok(tree) } else { Err(blocked) })
 }
@@ -3114,6 +3080,24 @@ mod tests {
         let error = handoff_move(&wt, &root).unwrap_err();
         assert!(error.contains("lock.json"), "{error}");
         assert_eq!(fs::read_to_string(root.join("lock.json")).unwrap(), local);
+        assert_eq!(fs::read_to_string(wt.join("lock.json")).unwrap(), worktree);
+    }
+
+    #[test]
+    fn handoff_never_runs_a_merge_driver() {
+        // Like npm-merge-driver, this one writes the merged path in the
+        // working tree (`%P`): run by a mere preview, it would put Local's
+        // version over the worktree's own edit.
+        let (root, wt) = driven_lock("cp %A %P");
+        let (local, worktree) = (lines(&[(10, "local")]), lines(&[(1, "worktree")]));
+        fs::write(root.join("lock.json"), &local).unwrap();
+        fs::write(wt.join("lock.json"), &worktree).unwrap();
+        assert_eq!(handoff_preview(&wt, Some(&root)).unwrap().conflicts, vec!["lock.json"]);
+        assert_eq!(fs::read_to_string(wt.join("lock.json")).unwrap(), worktree);
+        // Whatever its name: `check-attr` reads `merge=set` as a bare `merge`.
+        fs::write(wt.join(".gitattributes"), "lock.json merge=set\n").unwrap();
+        run_git(&root, &["config", "merge.set.driver", "cp %A %P"]);
+        assert_eq!(handoff_preview(&wt, Some(&root)).unwrap().conflicts, vec!["lock.json"]);
         assert_eq!(fs::read_to_string(wt.join("lock.json")).unwrap(), worktree);
     }
 
