@@ -6883,7 +6883,9 @@ mod tests {
         assert_eq!(requested["sessionId"], json!(session_id));
         assert_eq!(requested["turnId"], json!(turn_id));
         let approval_id = requested["approvalId"].as_str().expect("approval id").to_string();
-        let requirement_id = requested["currentRequirementId"].as_str().expect("requirement id").to_string();
+        // 1.4.2's token: an object naming the approval and its stage.
+        let requirement_id = requested["currentRequirementId"].clone();
+        assert_eq!(requirement_id, json!({"approvalId": approval_id, "sourceIndex": 0}));
 
         let resumed = client
             .request("session/resume", json!({"sessionId": session_id}))
@@ -6894,7 +6896,7 @@ mod tests {
         let decided = client
             .request(
                 "approval/decide",
-                json!({"commandId": "pump-cmd-2", "sessionId": session_id, "approvalId": approval_id, "requirementId": requirement_id, "choiceId": "allow-once"}),
+                json!({"commandId": "pump-cmd-2", "sessionId": session_id, "approvalId": approval_id, "requirementId": requirement_id, "choiceId": "allow_once"}),
             )
             .await
             .expect("fixture approval decide");

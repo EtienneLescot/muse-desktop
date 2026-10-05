@@ -58,10 +58,16 @@ class FixtureClient {
 
   async request(id: number, method: string, params: Record<string, unknown> = {}): Promise<Frame> {
     this.write({ jsonrpc: "2.0", id, method, params });
-    for (;;) {
-      const frame = await this.read();
-      if (frame.id === id) return frame;
-      this.queue.push(frame);
+    // Frames read on the way stay queued, in order, for the caller.
+    const skipped: Frame[] = [];
+    try {
+      for (;;) {
+        const frame = await this.read();
+        if (frame.id === id && !("method" in frame)) return frame;
+        skipped.push(frame);
+      }
+    } finally {
+      this.queue.unshift(...skipped);
     }
   }
 
@@ -115,23 +121,28 @@ test("Muse fixture resumes a turn after a terminal approval", async () => {
     assert.equal(requestParams.turnId, turnId);
     // The card needs the host's choices to offer a decision.
     assert.deepEqual((requestParams.availableChoices as Frame[]).map((choice) => choice.label), ["Allow once", "Reject"]);
+    // 1.4.2's token is an object naming the approval and its stage...
+    assert.deepEqual(requestParams.currentRequirementId, { approvalId: requestParams.approvalId, sourceIndex: 0 });
+    // ...and the stage also arrives as the `approval/request` server request.
+    const twin = await nextNotification(client, "approval/request");
+    assert.equal(typeof twin.id, "string");
+    assert.deepEqual(twin.params, requestParams);
 
     const pending = await client.request(4, "approval/listPending", { sessionId });
-    const approvals = (pending.result as Frame).approvals as Frame[];
-    assert.equal(approvals.length, 1);
-    assert.equal(approvals[0].approvalId, requestParams.approvalId);
+    assert.deepEqual((pending.result as Frame).approvals, [requestParams]);
 
     const decided = await client.request(5, "approval/decide", {
       commandId: "command-2",
       sessionId,
       approvalId: requestParams.approvalId,
       requirementId: requestParams.currentRequirementId,
-      choiceId: "allow-once",
+      choiceId: "allow_once",
     });
-    assert.deepEqual(decided.result, { terminal: true });
+    assert.deepEqual(decided.result, { approvalId: requestParams.approvalId, commandId: "command-2", status: "accepted", terminal: true });
 
     const resolved = await nextNotification(client, "approval/resolved");
     assert.equal((resolved.params as Frame).approvalId, requestParams.approvalId);
+    assert.equal((resolved.params as Frame).decision, "approved");
     let sawNestedReasoning = false;
     let sawNestedShell = false;
     let completed: Frame | undefined;
@@ -179,7 +190,7 @@ test("Muse fixture keeps a durable transcript across read and resume", async () 
       sessionId,
       approvalId: requestParams.approvalId,
       requirementId: requestParams.currentRequirementId,
-      choiceId: "allow-once",
+      choiceId: "allow_once",
     });
     await nextNotification(client, "turn/completed");
 
@@ -242,9 +253,9 @@ test("Muse fixture isolates concurrent A/B sessions: B terminates abruptly while
       sessionId: sessionA,
       approvalId: paramsA.approvalId,
       requirementId: paramsA.currentRequirementId,
-      choiceId: "allow-once",
+      choiceId: "allow_once",
     });
-    assert.deepEqual(decidedA.result, { terminal: true });
+    assert.equal((decidedA.result as Frame).terminal, true);
 
     const resolvedA = await nextNotification(clientA, "approval/resolved");
     assert.equal((resolvedA.params as Frame).approvalId, paramsA.approvalId);
@@ -295,7 +306,7 @@ test("Muse fixture keeps a pending approval visible once across resume and resum
     const approvals = ((pending.result as Frame).approvals as Frame[]);
     assert.equal(approvals.length, 1);
     assert.equal(approvals[0].approvalId, requestParams.approvalId);
-    assert.equal(approvals[0].currentRequirementId, requestParams.currentRequirementId);
+    assert.deepEqual(approvals[0].currentRequirementId, requestParams.currentRequirementId);
 
     const read = await client.request(7, "session/read", { sessionId, excludeItems: false });
     const itemIds = (((read.result as Frame).history as Frame).items as Frame[]).map((entry) => entry.itemId);
@@ -306,9 +317,9 @@ test("Muse fixture keeps a pending approval visible once across resume and resum
       sessionId,
       approvalId: requestParams.approvalId,
       requirementId: requestParams.currentRequirementId,
-      choiceId: "allow-once",
+      choiceId: "allow_once",
     });
-    assert.deepEqual(decided.result, { terminal: true });
+    assert.equal((decided.result as Frame).terminal, true);
 
     await nextNotification(client, "approval/resolved");
     const completed = await nextNotification(client, "turn/completed");
@@ -316,6 +327,73 @@ test("Muse fixture keeps a pending approval visible once across resume and resum
 
     const after = await client.request(9, "approval/listPending", { sessionId });
     assert.deepEqual((after.result as Frame).approvals, []);
+  } finally {
+    await client.close();
+  }
+});
+
+/** `[code, data.kind]` of an error response. */
+const failure = (frame: Frame): unknown[] => {
+  const error = frame.error as Frame;
+  return [error.code, (error.data as Frame).kind];
+};
+
+test("Muse fixture refuses decisions as 1.4.2 does and resolves abort as a denial", async () => {
+  const client = new FixtureClient();
+  try {
+    const sessionId = await bootstrap(client);
+    await client.request(3, "turn/start", { commandId: "command-1", sessionId, input: [{ type: "text", text: "Inspect the project" }] });
+    const params = (await nextNotification(client, "approval/requested")).params as Frame;
+    const decide = (id: number, choiceId: string, requirementId: unknown) => client.request(id, "approval/decide", {
+      commandId: `command-${id}`, sessionId, approvalId: params.approvalId, requirementId, choiceId,
+    });
+
+    assert.deepEqual(failure(await decide(4, "allow-once", params.currentRequirementId)), [-32052, "approvalChoiceInvalid"]);
+    assert.deepEqual(failure(await decide(5, "allow_once", { approvalId: params.approvalId, sourceIndex: 1 })), [-32053, "approvalRequirementStale"]);
+    assert.deepEqual((await decide(6, "abort", params.currentRequirementId)).result, {
+      approvalId: params.approvalId, commandId: "command-6", status: "accepted", terminal: true,
+    });
+    const resolved = (await nextNotification(client, "approval/resolved")).params as Frame;
+    assert.equal(resolved.decision, "abort");
+    assert.equal(resolved.policyResult, "deny");
+    const items: Frame[] = [];
+    for (let frame = await client.read(); frame.method !== "turn/completed"; frame = await client.read()) {
+      if ((frame.params as Frame | undefined)?.item) items.push((frame.params as Frame).item as Frame);
+    }
+    // Denied: nothing ran, and the turn says so.
+    assert.equal(items.some((entry) => entry.kind === "toolCall"), false);
+    assert.ok(items.some((entry) => entry.kind === "agentMessage" && String(entry.text).includes("rejected")));
+    assert.deepEqual(failure(await decide(7, "allow_once", params.currentRequirementId)), [-32051, "approvalAlreadyResolved"]);
+  } finally {
+    await client.close();
+  }
+});
+
+test("Muse fixture walks a [fixture:two-stage] approval and refuses the first stage's token once it moved", async () => {
+  const client = new FixtureClient();
+  try {
+    const sessionId = await bootstrap(client);
+    const turn = await client.request(3, "turn/start", {
+      commandId: "command-1", sessionId, input: [{ type: "text", text: "[fixture:two-stage] Inspect the project" }],
+    });
+    const first = (await nextNotification(client, "approval/requested")).params as Frame;
+    const decide = (id: number, requirementId: unknown) => client.request(id, "approval/decide", {
+      commandId: `command-${id}`, sessionId, approvalId: first.approvalId, requirementId, choiceId: "allow_once",
+    });
+
+    assert.equal(((await decide(4, first.currentRequirementId)).result as Frame).terminal, false);
+    const second = { approvalId: first.approvalId, sourceIndex: 1 };
+    assert.deepEqual(((await nextNotification(client, "approval/updated")).params as Frame).currentRequirementId, second);
+    assert.deepEqual(((await nextNotification(client, "approval/request")).params as Frame).currentRequirementId, second);
+    const pending = await client.request(5, "approval/listPending", { sessionId });
+    assert.deepEqual(((pending.result as Frame).approvals as Frame[]).map((row) => row.currentRequirementId), [second]);
+
+    const stale = await decide(6, first.currentRequirementId);
+    assert.deepEqual(failure(stale), [-32053, "approvalRequirementStale"]);
+    assert.deepEqual(((stale.error as Frame).data as Frame).currentRequirementId, second);
+    assert.equal(((await decide(7, second)).result as Frame).terminal, true);
+    assert.equal(((await nextNotification(client, "approval/resolved")).params as Frame).decision, "approved");
+    assert.equal(((await nextNotification(client, "turn/completed")).params as Frame).turnId, (turn.result as Frame).turnId);
   } finally {
     await client.close();
   }

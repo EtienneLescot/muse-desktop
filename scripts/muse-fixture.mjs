@@ -13,8 +13,20 @@
  *   -> approval/decide -> approval/resolved -> item/* -> turn/completed
  *   -> session/read / approval/listPending / session/resume
  *
- * Host failure: a turn/start whose text contains `[fixture:exit]` makes the
- * process exit before it answers, as a host crashing mid-send (M0-14 E2E).
+ * Approvals behave as on the 1.4.2 host
+ * (docs/evidence/2026-10-05-roadmap-closure/m0-05-msp-approval-*-1.4.2.json):
+ * each stage arrives twice, as the `approval/requested` notification and as
+ * the `approval/request` server request; the requirement token is the object
+ * `{approvalId, sourceIndex}`; `approval/decide` refuses a choice not offered
+ * (-32052), a stale stage (-32053) and a resolved approval (-32051); `abort`
+ * resolves as a denial and the turn ends without running the action.
+ *
+ * Scenario flags, in the turn/start text:
+ *   [fixture:two-stage]  a compound command: the first decide answers
+ *                        `terminal: false`, the host re-issues the approval
+ *                        at stage 1.
+ *   [fixture:exit]       the process exits before it answers, as a host
+ *                        crashing mid-send (M0-14 E2E).
  */
 
 import { createHash } from "node:crypto";
@@ -25,6 +37,7 @@ let sessionNumber = 0;
 let itemNumber = 0;
 let turnNumber = 0;
 let approvalNumber = 0;
+let requestNumber = 0;
 
 function send(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
@@ -46,6 +59,8 @@ const choices = [
   { choiceId: "allow_once", label: "Allow once", decision: "approved", scope: "once" },
   { choiceId: "abort", label: "Reject", decision: "abort", scope: "once" },
 ];
+// One command per stage of a compound approval.
+const stageCommands = ["git status --short", "git diff --stat"];
 
 function id(prefix, counter) {
   return `${instancePrefix}${prefix}-${counter}`;
@@ -76,6 +91,7 @@ function ensureSession(sessionId, workspaceRoot = "C:\\muse-fixture") {
     approvalMode: "promptUnmatched",
     items: [],
     pendingApprovals: [],
+    resolvedApprovals: new Map(),
     activeTurnId: null,
   };
   sessions.set(sessionId, session);
@@ -109,7 +125,27 @@ function resultResponse(frame, result) {
   send({ jsonrpc: "2.0", id: frame.id, result });
 }
 
-function emitTurnPrelude(session, turnId) {
+/** `approval/request(ed)` params at the current stage, also the `approval/listPending` row. */
+function approvalParams(session, pending) {
+  return {
+    sessionId: session.sessionId,
+    turnId: pending.turnId,
+    approvalId: pending.approvalId,
+    itemId: pending.approvalId,
+    currentRequirementId: { approvalId: pending.approvalId, sourceIndex: pending.stage },
+    subject: { kind: "shell", command: stageCommands[pending.stage] },
+    availableChoices: choices,
+  };
+}
+
+/** A stage reaches the client twice, as on 1.4.2: the notification, then the server request. */
+function requestApproval(session, pending) {
+  const params = approvalParams(session, pending);
+  notify("approval/requested", params);
+  send({ jsonrpc: "2.0", id: `fixture-request-${++requestNumber}`, method: "approval/request", params });
+}
+
+function emitTurnPrelude(session, turnId, stages) {
   notify("turn/started", { sessionId: session.sessionId, turnId });
   const reasoning = {
     itemId: id("item", ++itemNumber),
@@ -129,29 +165,13 @@ function emitTurnPrelude(session, turnId) {
     delta: "I’m checking the project context before running the requested action.",
   });
 
-  const approvalId = id("approval", ++approvalNumber);
-  const requirementId = id("requirement", approvalNumber);
-  const pending = {
-    approvalId,
-    currentRequirementId: requirementId,
-    turnId,
-    kind: "shell",
-    subject: { kind: "shell", command: "git status --short" },
-    availableChoices: choices,
-    status: "pending",
-  };
+  const pending = { approvalId: id("approval", ++approvalNumber), turnId, stage: 0, stages };
   session.pendingApprovals.push(pending);
-  notify("approval/requested", {
-    sessionId: session.sessionId,
-    turnId,
-    approvalId,
-    currentRequirementId: requirementId,
-    subject: pending.subject,
-    availableChoices: choices,
-  });
+  requestApproval(session, pending);
 }
 
-function finishApprovedTurn(session, pending, choiceId) {
+function finishTurn(session, pending, choice) {
+  const approved = choice.decision === "approved";
   const reasoning = session.items.find((entry) => entry.turnId === pending.turnId && entry.kind === "reasoning");
   if (reasoning) {
     reasoning.status = "completed";
@@ -173,26 +193,31 @@ function finishApprovedTurn(session, pending, choiceId) {
     });
     notify("item/completed", { sessionId: session.sessionId, turnId: pending.turnId, item: reasoning });
   }
-  const tool = item(session, pending.turnId, "toolCall", "git status --short\n(clean fixture workspace)");
-  tool.tool = "bash";
-  tool.args = JSON.stringify({ command: "git status --short" });
-  tool.visibleOutput = "(clean fixture workspace)";
-  notify("item/started", { sessionId: session.sessionId, turnId: pending.turnId, item: { ...tool, status: "inProgress" } });
-  notify("item/completed", { sessionId: session.sessionId, turnId: pending.turnId, item: tool });
-  notify("item/updated", {
-    sessionId: session.sessionId,
-    turnId: pending.turnId,
-    item: {
-      itemId: tool.itemId,
-      turn_id: pending.turnId,
-      kind: "userShell",
-      status: "succeeded",
-      content: tool.visibleOutput,
-      command_text: tool.args,
-      revision: 1,
-    },
-  });
-  const assistant = item(session, pending.turnId, "agentMessage", `Action approved (${choiceId}); the fixture turn resumed successfully.`);
+  // A denial runs nothing: the model is told and ends the turn.
+  if (approved) {
+    const tool = item(session, pending.turnId, "toolCall", "git status --short\n(clean fixture workspace)");
+    tool.tool = "bash";
+    tool.args = JSON.stringify({ command: "git status --short" });
+    tool.visibleOutput = "(clean fixture workspace)";
+    notify("item/started", { sessionId: session.sessionId, turnId: pending.turnId, item: { ...tool, status: "inProgress" } });
+    notify("item/completed", { sessionId: session.sessionId, turnId: pending.turnId, item: tool });
+    notify("item/updated", {
+      sessionId: session.sessionId,
+      turnId: pending.turnId,
+      item: {
+        itemId: tool.itemId,
+        turn_id: pending.turnId,
+        kind: "userShell",
+        status: "succeeded",
+        content: tool.visibleOutput,
+        command_text: tool.args,
+        revision: 1,
+      },
+    });
+  }
+  const assistant = item(session, pending.turnId, "agentMessage", approved
+    ? `Action approved (${choice.choiceId}); the fixture turn resumed successfully.`
+    : `Action rejected (${choice.choiceId}); the fixture turn ended without running it.`);
   notify("item/started", { sessionId: session.sessionId, turnId: pending.turnId, item: assistant });
   notify("item/delta", {
     sessionId: session.sessionId,
@@ -214,6 +239,8 @@ function finishApprovedTurn(session, pending, choiceId) {
 function handle(frame) {
   if (!frame || typeof frame !== "object") return;
   if (frame.method === "initialized" || frame.method === "notifications/initialized") return;
+  // The client's receipt for an `approval/request`: it carries nothing.
+  if (typeof frame.method !== "string") return;
   if (typeof frame.id !== "number" && typeof frame.id !== "string") return;
 
   switch (frame.method) {
@@ -274,7 +301,10 @@ function handle(frame) {
         errorResponse(frame, -32004, "session not found");
         return;
       }
-      resultResponse(frame, { approvals: session.pendingApprovals });
+      resultResponse(frame, {
+        approvals: session.pendingApprovals.map((pending) => approvalParams(session, pending)),
+        userInputs: [],
+      });
       return;
     }
     case "turn/start": {
@@ -292,37 +322,61 @@ function handle(frame) {
       session.status = "running";
       session.activeTurnId = turnId;
       resultResponse(frame, { status: "accepted", turnId });
-      queueMicrotask(() => emitTurnPrelude(session, turnId));
+      queueMicrotask(() => emitTurnPrelude(session, turnId, text.includes("[fixture:two-stage]") ? 2 : 1));
       return;
     }
     case "approval/decide": {
       const params = frame.params && typeof frame.params === "object" ? frame.params : {};
       const session = sessions.get(stringValue(params.sessionId));
       const approvalId = stringValue(params.approvalId);
-      const requirementId = stringValue(params.requirementId);
-      const choiceId = stringValue(params.choiceId, "allow-once");
+      // Resolved first, then the stage, then the choice: 1.4.2 answers a replay
+      // after the end with -32051, and a choice on a moved stage reads as stale.
+      const resolution = session?.resolvedApprovals.get(approvalId);
+      if (resolution) {
+        errorResponse(frame, -32051, `approval ${approvalId} is already resolved`, { kind: "approvalAlreadyResolved", approvalId, resolution, retryable: false });
+        return;
+      }
       const pending = session?.pendingApprovals.find((entry) => entry.approvalId === approvalId);
-      if (!session || !pending) {
-        errorResponse(frame, -32054, "unknown or stale approval");
+      if (!pending) {
+        errorResponse(frame, -32050, `approval ${approvalId} not found`, { kind: "approvalNotFound", approvalId, retryable: false });
         return;
       }
-      if (pending.currentRequirementId !== requirementId) {
-        errorResponse(frame, -32053, "approval requirement is stale");
+      const current = approvalParams(session, pending).currentRequirementId;
+      if (params.requirementId?.approvalId !== current.approvalId || params.requirementId?.sourceIndex !== current.sourceIndex) {
+        errorResponse(frame, -32053, `approval ${approvalId} requirement is stale`, { kind: "approvalRequirementStale", approvalId, currentRequirementId: current, retryable: false });
         return;
       }
-      session.pendingApprovals = session.pendingApprovals.filter((entry) => entry !== pending);
-      resultResponse(frame, { terminal: true });
+      const choice = choices.find((entry) => entry.choiceId === params.choiceId);
+      if (!choice) {
+        errorResponse(frame, -32052, `approval ${approvalId} does not offer that choice`, { kind: "approvalChoiceInvalid", approvalId, choiceId: params.choiceId, retryable: false });
+        return;
+      }
+      // A denial ends the approval at any stage; an approval moves to the next stage, if any.
+      const terminal = choice.decision !== "approved" || pending.stage + 1 === pending.stages;
+      if (terminal) {
+        session.pendingApprovals = session.pendingApprovals.filter((entry) => entry !== pending);
+        session.resolvedApprovals.set(approvalId, { decision: choice.decision, resolvedBy: "user" });
+      } else {
+        pending.stage += 1;
+      }
+      resultResponse(frame, { approvalId, commandId: params.commandId, status: "accepted", terminal });
       queueMicrotask(() => {
+        if (!terminal) {
+          notify("approval/updated", approvalParams(session, pending));
+          requestApproval(session, pending);
+          return;
+        }
         notify("approval/resolved", {
           sessionId: session.sessionId,
           turnId: pending.turnId,
           approvalId,
-          requirementId,
-          choiceId,
-          decision: "approved",
-          terminal: true,
+          itemId: approvalId,
+          decision: choice.decision,
+          policyResult: choice.decision === "approved" ? "allow" : "deny",
+          resolvedBy: "user",
+          decidedByCommandId: params.commandId,
         });
-        finishApprovedTurn(session, pending, choiceId);
+        finishTurn(session, pending, choice);
       });
       return;
     }
