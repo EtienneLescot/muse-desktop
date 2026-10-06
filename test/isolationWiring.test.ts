@@ -19,4 +19,14 @@ describe("project isolation wiring", () => {
     assert.match(panel, /isolationLabel=\{sandboxModeLabel\(hostSandboxConfigForProject\(sandbox, p\)\.mode\)\}/);
     assert.match(panel, /a running\s+engine keeps its posture until it restarts/);
   });
+
+  it("attaches a branch to its source's project", () => {
+    // Unattached, a branch of a read-only project resumed at the global posture.
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const start = hook.indexOf("const forkSession = useCallback(");
+    const body = hook.slice(start, hook.indexOf(" = useCallback(", start + 30));
+    assert.match(body, /const sourceProject = threadProjectsRef\.current\[sourceId\];/);
+    assert.match(body, /attachThreadRow\(threadProjectsRef\.current, projectsRef\.current, meta\.session_id, sourceProject\)/);
+    assert.ok(body.indexOf("setThreadProjects(next)") > 0, "the attachment is kept");
+  });
 });

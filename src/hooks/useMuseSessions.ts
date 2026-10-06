@@ -4815,6 +4815,14 @@ export function useMuseSessions(): UseMuseSessions {
         ]);
         setLogs((current) => ({ ...current, [meta.session_id]: inherited }));
         if (inherited.length > 0) appendLog(meta.session_id, inherited);
+        // The branch runs in its source's project: without it, every later
+        // reconnect resumed it at the global posture in that project's folder.
+        const sourceProject = threadProjectsRef.current[sourceId];
+        if (sourceProject !== undefined) {
+          const next = attachThreadRow(threadProjectsRef.current, projectsRef.current, meta.session_id, sourceProject);
+          threadProjectsRef.current = next;
+          setThreadProjects(next);
+        }
         setActiveId(meta.session_id);
         // A fork is a new host session, so the renderer-side copy of the
         // requested model must be applied through the same session/setModel
