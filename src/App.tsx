@@ -6,7 +6,7 @@ import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { MuseSetupScreen } from "./components/MuseSetupScreen";
 import { isMacPlatform } from "./lib/platform";
-import { conflictRestart, effectiveSandboxMode, hostSandboxConfigForProject } from "./lib/settings";
+import { conflictRestart, hostSandboxConfigForProject } from "./lib/settings";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -1147,7 +1147,7 @@ export default function App() {
                   projectError={projectError}
                   activeSessionId={activeId}
                   globalSettings={globalSettings}
-                  isolation={effectiveSandboxMode(sandbox)}
+                  sandbox={sandbox}
                   onCreate={(projectName, projectWorkspaces) =>
                     createProject(projectName, projectWorkspaces)
                   }

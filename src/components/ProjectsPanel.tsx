@@ -12,7 +12,7 @@ import {
   type ThreadProjectMap,
   type WorkspaceRootObservation,
 } from "../lib/projects";
-import type { SandboxMode } from "../lib/settings";
+import { hostSandboxConfigForProject, type SandboxSettings } from "../lib/settings";
 import { sandboxModeLabel } from "./SettingsPanel";
 import { userFacingError } from "../lib/errorCopy";
 import {
@@ -34,8 +34,8 @@ interface ProjectsPanelProps {
   projectError: string | null;
   activeSessionId: string | null;
   globalSettings: ProjectSettings;
-  /** The Isolation level in force in Settings, which projects follow. */
-  isolation: SandboxMode;
+  /** The Isolation setting, which a project follows unless it restricts it. */
+  sandbox: SandboxSettings;
   onCreate: (name: string, workspaces?: string[]) => void;
   onDelete: (id: string) => void;
   onUpdate: (
@@ -119,7 +119,7 @@ export function ProjectsPanel({
   projectError,
   activeSessionId,
   globalSettings,
-  isolation,
+  sandbox,
   onCreate,
   onDelete,
   onUpdate,
@@ -293,7 +293,8 @@ export function ProjectsPanel({
             }
             hasActiveThread={activeSessionId !== null}
             globalSettings={globalSettings}
-            isolationLabel={sandboxModeLabel(isolation)}
+            // The level this project really runs at: another preference can cap it.
+            isolationLabel={sandboxModeLabel(hostSandboxConfigForProject(sandbox, p).mode)}
             effective={settingsFor(p.id)}
             onDelete={() => onDelete(p.id)}
             onUpdate={(patch) => onUpdate(p.id, patch)}
@@ -702,6 +703,10 @@ function ProjectRow({
                 onSet={(value) => onSetOverride(key, value)}
               />
             ))}
+            <small className="muted">
+              Isolation applies when the project's engine starts: a running
+              engine keeps its posture until it restarts.
+            </small>
           </div>
           {diff.length === 0 ? (
             <p className="muted">This project inherits the global preferences.</p>
