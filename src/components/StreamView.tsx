@@ -614,12 +614,16 @@ export function StreamView({
     return () => window.cancelAnimationFrame(frame);
   }, [findTarget, safeWindowStart, windowStart]);
 
+  // Decided at commit, before the first resize pin can fire: sticking first
+  // would scroll the restored window to its end, where onScroll swaps it for
+  // the tail, and a viewport saved at the top of a long history reopened on
+  // the blank top spacer of the last window.
+  useLayoutEffect(() => {
+    stickRef.current = (scrollTopsRef.current[sessionId ?? ""] ?? loadStreamPosition(sessionId)?.scrollTop) === undefined;
+  }, [sessionId]);
+
   useEffect(() => {
     const savedTop = scrollTopsRef.current[sessionId ?? ""];
-    // Sticking first would scroll the restored window to its end, where
-    // onScroll swaps it for the tail: a viewport saved at the top of a long
-    // history reopened on the blank top spacer of the last window.
-    stickRef.current = savedTop === undefined;
     setAwayFromBottom(false);
     const frame = window.requestAnimationFrame(() => {
       const stream = streamRef.current;
