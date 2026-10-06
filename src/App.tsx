@@ -811,7 +811,7 @@ export default function App() {
               const session = sessions.find((candidate) => candidate.session_id === target.sessionId);
               if (session !== undefined && await restartHost(
                 session.host_workspace ?? session.workspace,
-                hostSandboxConfigForProject(sandbox, projectForSession(session.session_id)?.settings),
+                hostSandboxConfigForProject(sandbox, projectForSession(session.session_id)),
               )) {
                 await reconnectSession(target.sessionId);
               }

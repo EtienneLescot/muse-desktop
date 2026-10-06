@@ -92,9 +92,10 @@ const SANDBOX_ORDER: SandboxMode[] = ["workspace", "network", "elevated"];
 
 /**
  * The posture a project's host starts with: the level chosen in Settings,
- * which the project's own preferences can only restrict. `project` is the
- * project's sparse override, never settings merged with defaults: an absent
- * key follows Settings, and a default filled in would cap every project.
+ * which the project's own preferences can only restrict. It takes the project
+ * itself: only its sparse override counts, and an absent key follows
+ * Settings. Settings merged with defaults have no `settings` and are refused
+ * by the type: a default filled in would cap every project.
  * Sandbox `read-only` means Workspace only with no writes and no shell,
  * `workspace` stops at Workspace and network, network `deny` at Workspace
  * only; `full`, `allow` and `prompt` restrict nothing. The Rust bridge
@@ -102,12 +103,13 @@ const SANDBOX_ORDER: SandboxMode[] = ["workspace", "network", "elevated"];
  */
 export function hostSandboxConfigForProject(
   global: SandboxSettings,
-  project?: Partial<ProjectSandboxPreferences>,
+  project?: { settings?: Partial<ProjectSandboxPreferences> } | null,
 ): HostSandboxConfig {
-  const readOnly = project?.sandbox === "read-only";
-  const cap: SandboxMode = readOnly || project?.networkDefault === "deny"
+  const override = project?.settings;
+  const readOnly = override?.sandbox === "read-only";
+  const cap: SandboxMode = readOnly || override?.networkDefault === "deny"
     ? "workspace"
-    : project?.sandbox === "workspace" ? "network" : "elevated";
+    : override?.sandbox === "workspace" ? "network" : "elevated";
   const level = Math.min(
     SANDBOX_ORDER.indexOf(effectiveSandboxMode(global)),
     SANDBOX_ORDER.indexOf(cap),

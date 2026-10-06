@@ -199,7 +199,6 @@ import {
   settingsForThread,
   type Project,
   type ProjectSettings,
-  type ProjectSettingsOverride,
   type ThreadProjectMap,
 } from "../lib/projects";
 import {
@@ -4370,8 +4369,8 @@ export function useMuseSessions(): UseMuseSessions {
     async (
       workspaceOverride?: string,
       projectSettings?: ProjectSettings,
-      // The project's own preferences, unmerged: Isolation follows Settings unless they restrict it.
-      projectOverride?: ProjectSettingsOverride,
+      // The project itself: Isolation follows Settings unless its own preferences restrict it.
+      project?: Project,
     ): Promise<string | null> => {
     let host: HostRequest | null = null;
     try {
@@ -4384,7 +4383,7 @@ export function useMuseSessions(): UseMuseSessions {
         setError("Pick a workspace folder first.");
         return null;
       }
-      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectOverride);
+      const sandboxConfig = hostSandboxConfigForProject(sandbox, project);
       host = { workspace: ws, sandbox: sandboxConfig };
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
@@ -4587,7 +4586,7 @@ export function useMuseSessions(): UseMuseSessions {
     try {
       const sandboxConfig = hostSandboxConfigForProject(
         sandbox,
-        projects.find((project) => project.id === threadProjects[id])?.settings,
+        projects.find((project) => project.id === threadProjects[id]),
       );
       host = { workspace: session.workspace, sandbox: sandboxConfig };
       const meta = await invoke<BackendSessionMeta>("resume_session", {
@@ -4751,7 +4750,7 @@ export function useMuseSessions(): UseMuseSessions {
       const sessionId = await startSessionRow(
         workspacePath,
         sessionSettings,
-        projectsRef.current.find((project) => project.id === projectId)?.settings,
+        projectsRef.current.find((project) => project.id === projectId),
       );
       if (sessionId === null || projectId === undefined) return sessionId;
       // Attach before the caller can send the first turn. The ref is updated
@@ -6477,7 +6476,7 @@ export function useMuseSessions(): UseMuseSessions {
           ...capturedSettings,
           ...(item.model?.trim() ? { model: item.model.trim() } : {}),
         };
-        const fresh = await startSessionRow(item.workspace, settings, capturedProject?.settings);
+        const fresh = await startSessionRow(item.workspace, settings, capturedProject);
         if (fresh === null) {
           failRun("could not start target conversation", false);
           return false;

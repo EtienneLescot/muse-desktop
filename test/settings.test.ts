@@ -137,16 +137,17 @@ describe("sandbox settings", () => {
       [{ networkDefault: "deny" }, ["workspace", "workspace", "workspace"]],
       [{ sandbox: "full", networkDefault: "deny" }, ["workspace", "workspace", "workspace"]],
     ];
-    for (const [project, modes] of table) {
+    for (const [override, modes] of table) {
       levels.forEach((level, i) => assert.deepEqual(
-        hostSandboxConfigForProject(settings(level), project),
+        hostSandboxConfigForProject(settings(level), { settings: override }),
         { mode: modes[i], disableWrite: false, disableShell: false },
-        `${level} ${JSON.stringify(project)}`,
+        `${level} ${JSON.stringify(override)}`,
       ));
     }
     for (const level of levels) {
+      assert.equal(hostSandboxConfigForProject(settings(level)).mode, level, "no project");
       assert.deepEqual(
-        hostSandboxConfigForProject(settings(level), { sandbox: "read-only", networkDefault: "allow" }),
+        hostSandboxConfigForProject(settings(level), { settings: { sandbox: "read-only", networkDefault: "allow" } }),
         { mode: "workspace", disableWrite: true, disableShell: true },
       );
     }
@@ -154,15 +155,24 @@ describe("sandbox settings", () => {
     for (const sandbox of [undefined, "read-only", "workspace", "full"] as const) {
       for (const networkDefault of [undefined, "allow", "prompt", "deny"] as const) {
         for (const level of levels) {
-          const { mode } = hostSandboxConfigForProject(settings(level), { sandbox, networkDefault });
+          const { mode } = hostSandboxConfigForProject(settings(level), { settings: { sandbox, networkDefault } });
           assert.ok(levels.indexOf(mode) <= levels.indexOf(level), `${level} ${sandbox} ${networkDefault}`);
         }
         assert.equal(hostSandboxConfigForProject(
           { mode: "elevated", networkAllowed: false, elevatedAllowed: false },
-          { sandbox, networkDefault },
+          { settings: { sandbox, networkDefault } },
         ).mode, "workspace");
       }
     }
+  });
+
+  it("reads only the project's own override, never settings merged with defaults", () => {
+    const elevated: SandboxSettings = { mode: "elevated", networkAllowed: true, elevatedAllowed: true };
+    // Merged settings carry the default sandbox "workspace": read as an
+    // override, they would cap every project at Workspace and network.
+    const merged = { model: "default", sandbox: "workspace", networkDefault: "prompt", autoCompact: true, reasoningEffort: "high" };
+    assert.equal(hostSandboxConfigForProject(elevated, merged as never).mode, "elevated");
+    assert.equal(hostSandboxConfigForProject(elevated, { settings: { sandbox: "workspace" } }).mode, "network");
   });
 
   it("restarts the host a posture conflict refused, with the posture it asked for", () => {
