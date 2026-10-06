@@ -636,8 +636,9 @@ export function ConnectorPanel({
       )}
       <h4>Remote MCP connector (one maximum)</h4>
       <p className="muted">
-        Connect to a public HTTPS MCP endpoint. The bearer token stays in
-        memory and is cleared when you disconnect or close the app.
+        Connect to a public HTTPS MCP endpoint. The bearer token is saved in
+        your system's credential store, so Reconnect works after a restart;
+        Forget token deletes it.
       </p>
       <form
         className="integration-form"

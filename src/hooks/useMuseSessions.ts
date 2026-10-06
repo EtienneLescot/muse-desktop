@@ -402,8 +402,11 @@ import {
 import {
   callRemoteMcp as callRemoteMcpTransport,
   isRemoteMcpAuthenticationError,
+  isRemoteMcpSessionExpired,
   probeRemoteMcp as probeRemoteMcpTransport,
   remoteMcpCredentialKey,
+  remoteMcpFailureMessage,
+  storedBearerApplies,
   type RemoteMcpCallResult,
   type RemoteMcpProbeResult,
   type RemoteMcpSession,
@@ -4964,12 +4967,14 @@ export function useMuseSessions(): UseMuseSessions {
         }
       }
       setRemoteNotice(null);
+      let effectiveToken = token;
+      // The stored bearer belongs to the connector's registered URL only.
+      const ownUrl = existing?.kind === "remote" && storedBearerApplies(existing.url, endpoint);
       try {
-        let effectiveToken = token;
         // Reconnects may be initiated from a persisted connector row, where
         // the token input is intentionally empty. Retrieve it only through
         // the native credential boundary; it never enters localStorage.
-        if (!effectiveToken.trim() && existing?.kind === "remote" && isTauriRuntime()) {
+        if (!effectiveToken.trim() && ownUrl && isTauriRuntime()) {
           try {
             effectiveToken = (await invoke<string | null>("secure_store_get", {
               key: remoteMcpCredentialKey(id),
@@ -5011,13 +5016,17 @@ export function useMuseSessions(): UseMuseSessions {
           } catch {
             setRemoteNotice("Connected, but the native secure store is unavailable; reconnect after restart will require the token again.");
           }
+        } else if (existing?.kind === "remote" && !ownUrl && isTauriRuntime()) {
+          // Moved to another URL without a token: the stored one was the old URL's.
+          await invoke("secure_store_remove", { key: remoteMcpCredentialKey(id) }).catch(() => undefined);
         }
         return result;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = remoteMcpFailureMessage(error instanceof Error ? error.message : String(error), effectiveToken);
         setRemoteNotice(message);
+        // A failed probe of another URL leaves the registered endpoint as it was.
         setConnectors((current) => current.map((entry) =>
-          entry.id === id && entry.kind === "remote"
+          entry.id === id && entry.kind === "remote" && entry.url === endpoint
             ? { ...entry, status: "error", guardMessage: message }
             : entry,
         ));
@@ -5054,11 +5063,12 @@ export function useMuseSessions(): UseMuseSessions {
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (isRemoteMcpAuthenticationError(message) && session.token.trim()) {
-          // A 401/403 can mean that only the MCP session expired. Re-run the
-          // initialize/tools-list handshake once with the in-memory bearer
-          // token, then retry the call exactly once. Network timeouts and
-          // ambiguous tool outcomes remain non-retryable.
+        if (isRemoteMcpSessionExpired(message) || (isRemoteMcpAuthenticationError(message) && session.token.trim())) {
+          // The server ended the MCP session (404), or a 401/403 that can mean
+          // only the session expired. Re-run the initialize/tools-list
+          // handshake once with the in-memory bearer token, then retry the
+          // call exactly once. Network timeouts and ambiguous tool outcomes
+          // remain non-retryable.
           const entry = findConnector(connectorsRef.current, id);
           const name = entry?.kind === "remote" ? entry.name : id.replace(/^remote-/, "");
           try {

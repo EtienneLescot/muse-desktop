@@ -36,6 +36,13 @@
  *   ordinary collapsed row.
  * - M0-13: a share snapshot of a conversation with no messages created no
  *   bundle and said nothing.
+ * - M3-02 (06/10/2026, isolated instance, local bearer server): a probe under
+ *   the connector's name to another URL, token field empty, sent the stored
+ *   bearer there and marked the working entry in error; Reconnect after
+ *   Forget token read "rejected or expired" though no token was sent; a
+ *   session the server ended (404) disconnected instead of starting a new
+ *   one; the panel said the bearer "stays in memory" while Credential
+ *   Manager held it.
  *
  * Both are layout/lifecycle facts that the pure-logic tests cannot see.
  */
@@ -213,5 +220,20 @@ describe("visible failures", () => {
     const block = hook.slice(start, hook.indexOf('if (kind === "input_settled")', start));
     const known = block.indexOf("if (loggedInputsRef.current.has(logged)) return;");
     assert.ok(known > 0 && known < block.indexOf("Input requested:"), "a question already written returns before its line");
+  });
+
+  it("keeps a remote connector's stored bearer with its URL and says what happened to it", () => {
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const probe = hook.slice(hook.indexOf("const probeRemoteMcp = useCallback("), hook.indexOf("const callRemoteMcp = useCallback("));
+    assert.match(probe, /const ownUrl = existing\?\.kind === "remote" && storedBearerApplies\(existing\.url, endpoint\);/);
+    assert.match(probe, /if \(!effectiveToken\.trim\(\) && ownUrl && isTauriRuntime\(\)\) \{\s*try \{\s*effectiveToken = \(await invoke<string \| null>\("secure_store_get"/, "re-read for the registered URL only");
+    assert.match(probe, /\} else if \(existing\?\.kind === "remote" && !ownUrl && isTauriRuntime\(\)\) \{[^}]*secure_store_remove/, "moved without a token: the old bearer goes");
+    assert.match(probe, /entry\.id === id && entry\.kind === "remote" && entry\.url === endpoint/, "a failed probe of another URL leaves the entry");
+    assert.match(probe, /const message = remoteMcpFailureMessage\(.*, effectiveToken\);/, "a refusal without a token says so");
+    const call = hook.slice(hook.indexOf("const callRemoteMcp = useCallback("), hook.indexOf("const setSkillEnabledByName"));
+    assert.match(call, /if \(isRemoteMcpSessionExpired\(message\) \|\| \(isRemoteMcpAuthenticationError\(message\) && session\.token\.trim\(\)\)\) \{/, "an ended session gets the one re-handshake");
+    const panel = read("../src/components/ConnectorPanel.tsx");
+    assert.doesNotMatch(panel, /stays in\s+memory and is cleared when you disconnect or close the app/, "the bearer is stored, not only in memory");
+    assert.match(panel, /saved in\s+your system's credential store/);
   });
 });

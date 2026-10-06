@@ -56,6 +56,27 @@ export function isRemoteMcpAuthenticationError(message: string): boolean {
   return /remote MCP authentication was rejected or expired/i.test(message);
 }
 
+/** The server ended the MCP session (404 to its id): a new initialize starts another. */
+export function isRemoteMcpSessionExpired(message: string): boolean {
+  return /remote MCP session expired/i.test(message);
+}
+
+/**
+ * A connector's stored bearer was saved for its registered URL: a probe may
+ * re-read it for that URL only (05/10/2026: a probe under the same name to
+ * another URL, token field empty, sent it there).
+ */
+export function storedBearerApplies(registeredUrl: string | undefined, endpoint: string): boolean {
+  return registeredUrl !== undefined && registeredUrl.trim() === endpoint.trim();
+}
+
+/** A refusal of a request that carried no token says so, instead of "rejected or expired". */
+export function remoteMcpFailureMessage(message: string, sentToken: string): string {
+  return isRemoteMcpAuthenticationError(message) && !sentToken.trim()
+    ? "remote MCP authentication was refused: no token was sent (none typed or stored for this connector). Enter a bearer token, then connect."
+    : message;
+}
+
 export type RemoteRequest = (
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -185,6 +206,9 @@ async function post(
     if (response.status === 401 || response.status === 403) {
       throw new Error("remote MCP authentication was rejected or expired");
     }
+    // MCP 2025-06-18: an ended session answers 404 to its id, and the client
+    // must start a new one (the 404 of an initialize, sent without id, is not that).
+    if (response.status === 404 && session.sessionId) throw new Error("remote MCP session expired");
     throw new Error(`remote MCP returned HTTP ${response.status}`);
   }
   const nextSessionId = response.headers.get("Mcp-Session-Id") ?? session.sessionId;

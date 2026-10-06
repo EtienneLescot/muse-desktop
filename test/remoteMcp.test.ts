@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { registerRemoteConnector } from "../src/lib/connectors.ts";
-import { callRemoteMcp, isRemoteMcpAuthenticationError, probeRemoteMcp, remoteMcpCredentialKey, type RemoteRequest } from "../src/lib/remoteMcp.ts";
+import {
+  callRemoteMcp,
+  isRemoteMcpAuthenticationError,
+  isRemoteMcpSessionExpired,
+  probeRemoteMcp,
+  remoteMcpCredentialKey,
+  remoteMcpFailureMessage,
+  storedBearerApplies,
+  type RemoteRequest,
+} from "../src/lib/remoteMcp.ts";
 
 function response(body: unknown, headers: Record<string, string> = {}, status = 200): Response {
   return new Response(typeof body === "string" ? body : JSON.stringify(body), {
@@ -94,6 +103,36 @@ test("remote MCP identifies only the retryable authentication/session failure", 
   assert.equal(isRemoteMcpAuthenticationError("remote MCP authentication was rejected or expired"), true);
   assert.equal(isRemoteMcpAuthenticationError("remote MCP request timed out"), false);
   assert.equal(isRemoteMcpAuthenticationError("remote MCP returned HTTP 500"), false);
+});
+
+// M3-02 native proof, 06/10/2026: a server that ends the MCP session answers
+// 404 to its id (MCP 2025-06-18), and the app disconnected on "HTTP 404"
+// instead of starting a new session.
+test("remote MCP reads a 404 to a session id as an ended session, not to an initialize", async () => {
+  const notFound: RemoteRequest = async () => response({ error: "session not found" }, {}, 404);
+  await assert.rejects(
+    () => callRemoteMcp({ url: "https://mcp.example.com/rpc", token: "t", sessionId: "gone", protocolVersion: "2025-06-18", nextRequestId: 3 }, "echo", {}, notFound),
+    (error: Error) => isRemoteMcpSessionExpired(error.message),
+  );
+  await assert.rejects(() => probeRemoteMcp("https://mcp.example.com/rpc", "t", notFound), /returned HTTP 404/);
+  assert.equal(isRemoteMcpSessionExpired("remote MCP returned HTTP 404"), false);
+});
+
+// M3-02 native proof, 06/10/2026: a probe under an existing connector's name
+// to another URL, token field empty, re-read the stored bearer and sent it there.
+test("a stored bearer applies to its connector's registered URL only", () => {
+  assert.equal(storedBearerApplies("https://mcp.example.com/rpc", " https://mcp.example.com/rpc "), true);
+  assert.equal(storedBearerApplies("https://mcp.example.com/rpc", "https://mcp.example.com/other"), false);
+  assert.equal(storedBearerApplies("https://mcp.example.com/rpc", "https://evil.example.net/rpc"), false);
+  assert.equal(storedBearerApplies(undefined, "https://mcp.example.com/rpc"), false);
+});
+
+// After Forget token, Reconnect sent no token and read "rejected or expired".
+test("a refusal of a request without a token says no token was sent", () => {
+  const rejected = "remote MCP authentication was rejected or expired";
+  assert.match(remoteMcpFailureMessage(rejected, ""), /no token was sent/);
+  assert.equal(remoteMcpFailureMessage(rejected, "a-token"), rejected);
+  assert.equal(remoteMcpFailureMessage("remote MCP returned HTTP 500", ""), "remote MCP returned HTTP 500");
 });
 
 test("remote MCP credential keys stay stable and safe for native storage", () => {

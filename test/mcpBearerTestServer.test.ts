@@ -62,7 +62,7 @@ describe("M3-02 bearer test server", () => {
     assert.match(text, /^echo_nonce: nonce=n-1 proof=[0-9a-f]{10}$/);
 
     await admin("/admin/drop-sessions", {});
-    await assert.rejects(() => callRemoteMcp(session, "echo_nonce", { nonce: "n-2" }), /HTTP 404|session expired/);
+    await assert.rejects(() => callRemoteMcp(session, "echo_nonce", { nonce: "n-2" }), /session expired/);
     await admin("/admin/expire", {});
     await assert.rejects(() => probeRemoteMcp(url, TOKEN), /authentication was rejected or expired/);
   });
