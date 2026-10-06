@@ -1,0 +1,1392 @@
+{
+  "schema": "muse-desktop.m0-13-click-effect.v2",
+  "ticket": "M0-13",
+  "date": "2026-10-06",
+  "commit": "87a1a0c",
+  "productTreeClean": true,
+  "exeSha256": "727ea574b228d5217d973aa4953e7f9aeaf6674b6b3efd1cae016d86258b7b83",
+  "platform": "Windows 11 (26200), debug build with embedded frontend, isolated test mode (ADR 0003), WebView2 over CDP",
+  "harness": "scripts/cdp-m0-13-click-effect.mjs",
+  "rehearsal": false,
+  "liveTurns": 1,
+  "engine": {
+    "version": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+    "sha256": "39a97806d315ece0fc5cdbb88c903ef5bc77655f32e66dc22d267a212c5030ba",
+    "role": "MUSE_DESKTOP_TEST_SIDECAR: every local engine of this instance"
+  },
+  "computerDriver": {
+    "version": "cua-driver 0.28.2"
+  },
+  "isolation": {
+    "testModeMarker": true,
+    "webviewProfileUnderTestFolder": true,
+    "testMode": true
+  },
+  "readOnly": {
+    "project": {
+      "picked": true,
+      "rowShown": true,
+      "stored": {
+        "id": "muwi18fi-2difsy",
+        "workspace": "<project>",
+        "workspaces": []
+      }
+    },
+    "override": {
+      "label": "Project sandbox (global workspace)",
+      "options": [
+        "read-only=Read only",
+        "workspace=Project",
+        "full=Full access"
+      ],
+      "diff": [
+        "sandbox: workspace → read-only"
+      ],
+      "flag": "override",
+      "storedOverride": "read-only"
+    },
+    "host": {
+      "clicked": true,
+      "startArgs": {
+        "sandboxMode": "workspace",
+        "sandboxDisableWrite": true,
+        "sandboxDisableShell": true
+      },
+      "startOk": true,
+      "error": null,
+      "engineArgv": [
+        "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+      ],
+      "grantedCapabilities": [
+        "userShell",
+        "sessionMcp"
+      ],
+      "hostEngines": [
+        {
+          "serverVersion": "1.4.2",
+          "schemaFingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2",
+          "platform": "windows"
+        }
+      ]
+    },
+    "surfaces": {
+      "composer": {
+        "placeholder": "Ask Muse to continue…",
+        "composerText": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context",
+        "postureNote": {
+          "text": "This project is Read only: Muse cannot write files or run commands here.",
+          "role": "note",
+          "rightAboveComposer": true
+        },
+        "readOnlyStated": true,
+        "capabilityBadgesInConversation": []
+      },
+      "terminal": {
+        "runInMuse": {
+          "label": "Run in Muse",
+          "disabled": true,
+          "title": "This project is Read only: Muse cannot write files or run commands here."
+        },
+        "terminalMeta": "C:\\WINDOWS\\system32\\cmd.exe · <project>",
+        "appTerminalOpened": {
+          "ok": true
+        }
+      },
+      "afterClick": null
+    },
+    "turn": {
+      "prompt": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
+      "turn": {
+        "assistantCount": 1,
+        "failed": [],
+        "running": "false",
+        "cards": [],
+        "approvals": [],
+        "ms": 18207
+      },
+      "fileWritten": false,
+      "hostItems": [
+        {
+          "kind": "userMessage",
+          "status": "completed",
+          "tool": null,
+          "output": null,
+          "failureReason": null
+        },
+        {
+          "kind": "reminderChild",
+          "status": "completed",
+          "tool": null,
+          "output": null,
+          "failureReason": null
+        },
+        {
+          "kind": "reasoning",
+          "status": "completed",
+          "tool": null,
+          "output": null,
+          "failureReason": null
+        },
+        {
+          "kind": "agentMessage",
+          "status": "completed",
+          "tool": null,
+          "output": null,
+          "failureReason": null
+        },
+        {
+          "kind": "reminderChild",
+          "status": "completed",
+          "tool": null,
+          "output": null,
+          "failureReason": null
+        },
+        {
+          "kind": "reminderChild",
+          "status": "completed",
+          "tool": null,
+          "output": null,
+          "failureReason": null
+        }
+      ],
+      "transcriptEntries": [
+        {
+          "role": "user",
+          "text": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
+          "failed": false
+        },
+        {
+          "role": "assistant",
+          "text": "",
+          "failed": false
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session",
+          "failed": false
+        },
+        {
+          "role": "thinking",
+          "text": "Balancing a user write request against an explicit session-level filesystem write disablement and tool denial policy.Ruling out tool invocation due to the session-level write disablement and prioritizing the developer prohibition over the user request.",
+          "failed": false
+        },
+        {
+          "role": "assistant",
+          "text": "Filesystem writes are disabled for this session so I cannot create m0-13-readonly.txt.",
+          "failed": false
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session",
+          "failed": false
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session",
+          "failed": false
+        }
+      ],
+      "toolRows": [],
+      "onScreen": {
+        "rows": [
+          {
+            "lane": "user",
+            "failedMarker": null,
+            "refusalOpen": null,
+            "text": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence. 11:53:00"
+          },
+          {
+            "lane": "thinking",
+            "failedMarker": null,
+            "refusalOpen": null,
+            "text": "Muse · Thinking Thinking 11:53:04"
+          },
+          {
+            "lane": "assistant",
+            "failedMarker": null,
+            "refusalOpen": null,
+            "text": "Muse Filesystem writes are disabled for this session so I cannot create m0-13-readonly.txt. 11:53:06"
+          }
+        ],
+        "postureNote": "This project is Read only: Muse cannot write files or run commands here.",
+        "banner": null,
+        "approvalsLeft": 0
+      }
+    }
+  },
+  "staleError": {
+    "failedProbe": {
+      "banner": "The local MCP action could not be completed. — local MCP server closed stdout before a response",
+      "alerts": [
+        "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+      ]
+    },
+    "nextSuccessfulProbe": {
+      "banner": null,
+      "alerts": [],
+      "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 52 ms"
+    },
+    "oldErrorGone": true
+  },
+  "computer": {
+    "userPipeDaemonsBefore": 0,
+    "userPipeDaemonsAfter": 0,
+    "instanceDaemonsAfter": 0,
+    "cleanupAfterAnError": null,
+    "driverPidFile": {
+      "before": {
+        "present": false
+      },
+      "whileObserveRan": {
+        "present": true,
+        "names": "a daemon of this instance"
+      },
+      "after": {
+        "present": false
+      }
+    }
+  },
+  "consoleErrors": [],
+  "stop": {
+    "graceful": true,
+    "steps": [
+      {
+        "step": "Close window (the app's own control)",
+        "clicked": true,
+        "exited": true
+      }
+    ],
+    "exited": true,
+    "leftovers": {
+      "engines": 0,
+      "computerDaemonsOnTestPipe": 0,
+      "localMcpFixtures": 0
+    }
+  },
+  "audit": [
+    {
+      "surface": "readonly",
+      "action": "Projects: Choose project folders + Add project",
+      "outcome": "effect",
+      "measured": {
+        "picked": true,
+        "rowShown": true,
+        "stored": {
+          "id": "muwi18fi-2difsy",
+          "workspace": "<project>",
+          "workspaces": []
+        },
+        "folderDialogAnsweredByHarness": 1
+      }
+    },
+    {
+      "surface": "readonly",
+      "action": "Projects: Project sandbox = Read only",
+      "outcome": "effect",
+      "measured": {
+        "label": "Project sandbox (global workspace)",
+        "options": [
+          "read-only=Read only",
+          "workspace=Project",
+          "full=Full access"
+        ],
+        "diff": [
+          "sandbox: workspace → read-only"
+        ],
+        "flag": "override",
+        "storedOverride": "read-only"
+      }
+    },
+    {
+      "surface": "readonly",
+      "action": "Projects: New conversation here (read-only host, no turn)",
+      "outcome": "effect",
+      "measured": {
+        "clicked": true,
+        "startArgs": {
+          "sandboxMode": "workspace",
+          "sandboxDisableWrite": true,
+          "sandboxDisableShell": true
+        },
+        "startOk": true,
+        "error": null,
+        "engineArgv": [
+          "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+        ],
+        "grantedCapabilities": [
+          "userShell",
+          "sessionMcp"
+        ],
+        "hostEngines": [
+          {
+            "serverVersion": "1.4.2",
+            "schemaFingerprint": "sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2",
+            "platform": "windows"
+          }
+        ]
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "capability badge",
+      "outcome": "observed",
+      "measured": {
+        "label": "Local",
+        "accessibleName": "Local: The curated catalog is local; explicit local MCP probes use the real stdio handshake. Next: Run or refresh it locally when needed."
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Probe (nonexistent command)",
+      "outcome": "refusal",
+      "measured": {
+        "ui": {
+          "notice": null,
+          "result": false,
+          "sectionStatus": [],
+          "alertsOnPage": [
+            "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+          ],
+          "errorBanner": "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+        },
+        "ipc": {
+          "ok": false,
+          "error": "\"local MCP server closed stdout before a response\""
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Probe (real local stdio MCP), right after the failed one",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 52 ms",
+          "result": true,
+          "sectionStatus": [
+            "Connected to msp-fixture 1.0.0 · 1 tool(s) · 52 ms"
+          ],
+          "alertsOnPage": [],
+          "errorBanner": null
+        },
+        "previousErrorStillShown": false,
+        "previousError": "The local MCP action could not be completed. — local MCP server closed stdout before a response",
+        "ipc": {
+          "ok": true,
+          "serverName": "msp-fixture",
+          "tools": [
+            "fixture.echo"
+          ]
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Probe (quoted command path)",
+      "outcome": "refusal",
+      "measured": {
+        "ui": {
+          "notice": null,
+          "result": false,
+          "sectionStatus": [],
+          "alertsOnPage": [
+            "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+          ],
+          "errorBanner": "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+        },
+        "ipc": {
+          "ok": false,
+          "error": "\"local MCP server closed stdout before a response\""
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Call tool",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "label": "Review and call",
+          "approvalShown": true,
+          "output": "{ \"content\": [ { \"text\": \"m0-13 echo\", \"type\": \"text\" } ] }"
+        },
+        "ipcOk": true
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Save connector",
+      "outcome": "effect",
+      "measured": {
+        "rowShown": true,
+        "stored": {
+          "status": "installed",
+          "tools": [
+            "fixture.echo"
+          ],
+          "hasCommand": true
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Start server / Stop server",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "started": "Persistent server running · 1 tools",
+          "stopped": "Persistent server stopped."
+        },
+        "fixtureProcesses": {
+          "whileRunning": 1,
+          "afterStop": 0
+        },
+        "ipc": [
+          {
+            "cmd": "mcp_local_start",
+            "ok": true
+          },
+          {
+            "cmd": "mcp_local_stop",
+            "ok": true
+          }
+        ]
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Remove",
+      "outcome": "effect",
+      "measured": {
+        "rowGone": true,
+        "stored": false
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Add (curated catalog entry)",
+      "outcome": "refusal",
+      "measured": {
+        "catalogFlag": "added",
+        "configuredHeading": "Configured",
+        "configuredRow": {
+          "text": "SQLite Not connected Catalog entry only: no server command is set, so Muse cannot call these tools. sqlite.query · sqlite.schema Remove",
+          "badge": "Not connected",
+          "actions": [
+            "Remove"
+          ],
+          "toggles": 1
+        },
+        "stored": {
+          "status": "installed",
+          "hasCommand": false,
+          "useInMuse": false
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Install an MCP Bundle (not a bundle)",
+      "outcome": "refusal",
+      "measured": {
+        "filesDelivered": 1,
+        "ui": {
+          "sectionStatus": [],
+          "alertsOnPage": [
+            "MCP bundle installation failed: MCP bundle is not a valid zip archive"
+          ],
+          "errorBanner": "MCP bundle installation failed: MCP bundle is not a valid zip archive"
+        },
+        "rowAdded": false
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Connect and list tools (loopback URL)",
+      "outcome": "refusal",
+      "measured": {
+        "ui": {
+          "result": null,
+          "notices": [
+            "Remote connector unreachable: the host looks like a private/VPN address. Remote MCP requires a public-internet HTTPS endpoint with allowlisted IPs; VPN or firewall-private hosts (localhost, 10/8, 172.16/12, 192.168/16, *.local/*.internal) cannot be reached. Expose the server publicly or run it locally as a local connector instead."
+          ],
+          "alertsOnPage": []
+        },
+        "ipc": []
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Reconnect with current connectors",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "shown": true,
+          "after": "Reconnect with current connectors",
+          "errorBanner": null
+        },
+        "resume": [
+          {
+            "ok": true,
+            "sameSession": true,
+            "sandboxDisableWrite": true,
+            "sandboxDisableShell": true,
+            "mcpServers": []
+          }
+        ],
+        "enginesBefore": 1,
+        "enginesAfter": 1,
+        "sameEngine": true
+      }
+    },
+    {
+      "surface": "library",
+      "action": "capability badges",
+      "outcome": "observed",
+      "measured": [
+        {
+          "label": "Local",
+          "accessibleName": "Local: The index is opt-in and reads selected workspace files locally. Next: Run or refresh it locally when needed."
+        },
+        {
+          "label": "Manual",
+          "accessibleName": "Manual: Import parses content you choose; it never overwrites live conversations or runs a config. Next: Choose the input or run the prepared step yourself."
+        }
+      ]
+    },
+    {
+      "surface": "library",
+      "action": "Index On",
+      "outcome": "effect",
+      "measured": {
+        "status": "Empty — pick a folder to build.",
+        "stored": "1"
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Choose folder (2 files) + search",
+      "outcome": "effect",
+      "measured": {
+        "filesDelivered": 2,
+        "status": [
+          "2 file(s), 6 line(s) · built 06/10/2026 11:51:48",
+          "Built 2 file(s), 6 line(s) from 2 picked."
+        ],
+        "hits": [
+          "alpha.md:2 m0needle lives here"
+        ]
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Rescan / Pause / Resume",
+      "outcome": "effect",
+      "measured": {
+        "before": "Built 2 file(s), 6 line(s) from 2 picked.",
+        "after": "Rescan: 0 added, 0 updated, 0 removed, 2 unchanged.",
+        "paused": {
+          "status": "2 file(s), 6 line(s) · built 06/10/2026 11:51:49 · paused",
+          "rescanDisabled": true
+        },
+        "resumed": "2 file(s), 6 line(s) · built 06/10/2026 11:51:49"
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Delete Index / Off",
+      "outcome": "effect",
+      "measured": {
+        "status": "Empty — pick a folder to build.",
+        "data": null,
+        "enabled": null
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Import text (unparseable)",
+      "outcome": "refusal",
+      "measured": {
+        "notes": [
+          "no importable sessions found in ~/.muse/config.json"
+        ]
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Import text (one session) / Remove",
+      "outcome": "effect",
+      "measured": {
+        "rows": [
+          "m0-13 import probe ~/.muse/config.json Remove"
+        ],
+        "removed": true
+      }
+    },
+    {
+      "surface": "library",
+      "action": "Choose a file… (one session) / Remove",
+      "outcome": "effect",
+      "measured": {
+        "filesDelivered": 1,
+        "rows": [
+          "m0-13 file import import-muwi13an.json Remove"
+        ],
+        "removed": true
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "state shown vs computer_status (comparison, not a click)",
+      "outcome": "observed",
+      "measured": {
+        "shown": {
+          "state": "Off",
+          "summary": "Muse cannot control this computer.",
+          "levels": [
+            {
+              "value": "observe",
+              "checked": false
+            },
+            {
+              "value": "act",
+              "checked": false
+            }
+          ],
+          "attachChecked": false,
+          "actions": [],
+          "errorBanner": null
+        },
+        "native": {
+          "available": true,
+          "grantState": "stopped",
+          "attach": null,
+          "driverVersion": "cua-driver 0.28.2"
+        }
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "own pipe, before any click (the instance's status probe caught on it)",
+      "outcome": "effect",
+      "measured": {
+        "expectedPipe": "<test pipe>",
+        "probe": {
+          "argv": "status --socket <test pipe>",
+          "parentIsApp": true,
+          "onExpectedPipe": true
+        },
+        "connectionsHeld": 1,
+        "userPipeProcessesMeanwhile": 0,
+        "grantStateAfter": "expired"
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "Level: Observe only",
+      "outcome": "effect",
+      "measured": {
+        "ipc": {
+          "ok": true,
+          "error": null
+        },
+        "ui": {
+          "state": "Granted",
+          "checked": "observe",
+          "errorBanner": null
+        },
+        "daemon": [
+          {
+            "pid": 33972,
+            "onTestPipe": true,
+            "argv": "serve --socket <test pipe> --permission-mode bounded --capability-manifest <appdata>\\computer-use\\computer-manifest.json --approve-capability-manifest"
+          }
+        ],
+        "manifestMode": "bounded",
+        "userPipeDaemons": 0
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "Level: Observe and act",
+      "outcome": "not-exercised",
+      "measured": {
+        "reason": "Not started in this session: a direct probe of the driver with --dangerously-bypass-approvals was refused by the session's permission classifier, so the unrestricted service was not started through the app either. Its launch is fixed and unit-tested (serve_argv matrix); the click on the pre-fix build is recorded under beforeFix."
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "Refresh",
+      "outcome": "effect",
+      "measured": {
+        "statusCalls": 1,
+        "stateAfter": "Granted",
+        "grantState": "active"
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "Attach the user's browser: on",
+      "outcome": "effect",
+      "measured": {
+        "ipc": {
+          "ok": true,
+          "error": null
+        },
+        "ui": {
+          "checked": true,
+          "state": "Granted"
+        },
+        "daemon": [
+          {
+            "pid": 18312,
+            "onTestPipe": true,
+            "argv": "serve --socket <test pipe> --permission-mode standard --grant existing-profile"
+          }
+        ],
+        "restarted": true,
+        "consentOnDisk": true,
+        "userPipeDaemons": 0
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "Attach the user's browser: off",
+      "outcome": "effect",
+      "measured": {
+        "ipc": {
+          "ok": true,
+          "error": null
+        },
+        "ui": {
+          "checked": false,
+          "state": "Granted"
+        },
+        "daemon": [
+          {
+            "pid": 42908,
+            "onTestPipe": true,
+            "argv": "serve --socket <test pipe> --permission-mode bounded --capability-manifest <appdata>\\computer-use\\computer-manifest.json --approve-capability-manifest"
+          }
+        ],
+        "restarted": true,
+        "consentOnDisk": false,
+        "userPipeDaemons": 0
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "Turn off and revoke",
+      "outcome": "effect",
+      "measured": {
+        "ipc": {
+          "ok": true,
+          "grantState": "stopped"
+        },
+        "ui": {
+          "state": "Off",
+          "levels": [
+            {
+              "value": "observe",
+              "checked": false
+            },
+            {
+              "value": "act",
+              "checked": false
+            }
+          ],
+          "actions": []
+        },
+        "daemonsLeft": [],
+        "manifestOnDisk": false,
+        "consentOnDisk": null
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Snapshot (Markdown) of the empty conversation",
+      "outcome": "refusal",
+      "measured": {
+        "before": 0,
+        "after": 0,
+        "said": "Nothing to snapshot: this conversation has no messages yet.",
+        "newest": null,
+        "conversationEntries": 0
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Go (invalid address)",
+      "outcome": "refusal",
+      "measured": {
+        "notice": "Enter an http or https address, or a local server such as localhost:5173.",
+        "iframe": null,
+        "address": "not a url ::",
+        "iframeUnchanged": true
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Go (local page)",
+      "outcome": "effect",
+      "measured": {
+        "iframe": "<server>/page-1",
+        "serverHits": [
+          "/page-1"
+        ]
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Back / Forward / Reload",
+      "outcome": "effect",
+      "measured": {
+        "back": "<server>/page-1",
+        "forward": "<server>/page-2",
+        "serverHits": [
+          "/page-1",
+          "/page-2",
+          "/page-2"
+        ]
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Add this page to the prompt",
+      "outcome": "effect",
+      "measured": {
+        "inserted": "[Browser context]\nURL: <server>/page-2",
+        "composerRestored": true
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Open in a browser window",
+      "outcome": "effect",
+      "measured": {
+        "ipcOk": true,
+        "ipcResult": "\"opened\"",
+        "newCdpTarget": "<server>/page-2",
+        "serverHits": [
+          "/page-2",
+          "/favicon.ico"
+        ],
+        "windows": 1
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Close the browser window (its own close action)",
+      "outcome": "effect",
+      "measured": {
+        "close": {
+          "invoked": "closed through its WindowPattern",
+          "windowGone": true,
+          "cdpPageTargetsLeft": 0
+        },
+        "reopen": {
+          "ipcResult": "\"opened\"",
+          "windows": 1
+        },
+        "closeAgain": {
+          "invoked": "closed through its WindowPattern",
+          "windowGone": true,
+          "cdpPageTargetsLeft": 0
+        },
+        "inAppControl": "none: the window is closed by its own close action"
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "New tab / close tab",
+      "outcome": "effect",
+      "measured": {
+        "n0": 1,
+        "n1": 2,
+        "n2": 1
+      }
+    },
+    {
+      "surface": "browser",
+      "action": "Anchor / remove annotation",
+      "outcome": "effect",
+      "measured": {
+        "n0": 0,
+        "n1": 1,
+        "n2": 0,
+        "listed": [
+          "m0-13 annotation"
+        ]
+      }
+    },
+    {
+      "surface": "readonly",
+      "action": "composer and conversation (what they say about Read only)",
+      "outcome": "refusal",
+      "measured": {
+        "placeholder": "Ask Muse to continue…",
+        "composerText": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context",
+        "postureNote": {
+          "text": "This project is Read only: Muse cannot write files or run commands here.",
+          "role": "note",
+          "rightAboveComposer": true
+        },
+        "readOnlyStated": true,
+        "capabilityBadgesInConversation": []
+      }
+    },
+    {
+      "surface": "readonly",
+      "action": "terminal: Run in Muse (Read only host)",
+      "outcome": "refusal",
+      "measured": {
+        "runInMuse": {
+          "label": "Run in Muse",
+          "disabled": true,
+          "title": "This project is Read only: Muse cannot write files or run commands here."
+        },
+        "terminalMeta": "C:\\WINDOWS\\system32\\cmd.exe · <project>",
+        "appTerminalOpened": {
+          "ok": true
+        },
+        "afterClick": null
+      }
+    },
+    {
+      "surface": "readonly",
+      "action": "terminal: Close (the app's own shell)",
+      "outcome": "effect",
+      "measured": {
+        "clicked": true,
+        "emptyState": "No terminal running Open one to start a shell in this workspace. Open terminal",
+        "ipcOk": true
+      }
+    },
+    {
+      "surface": "turn",
+      "action": "Send: write a file in the read-only project",
+      "outcome": "refusal",
+      "measured": {
+        "prompt": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
+        "turn": {
+          "assistantCount": 1,
+          "failed": [],
+          "running": "false",
+          "cards": [],
+          "approvals": [],
+          "ms": 18207
+        },
+        "fileWritten": false,
+        "hostItems": [
+          {
+            "kind": "userMessage",
+            "status": "completed",
+            "tool": null,
+            "output": null,
+            "failureReason": null
+          },
+          {
+            "kind": "reminderChild",
+            "status": "completed",
+            "tool": null,
+            "output": null,
+            "failureReason": null
+          },
+          {
+            "kind": "reasoning",
+            "status": "completed",
+            "tool": null,
+            "output": null,
+            "failureReason": null
+          },
+          {
+            "kind": "agentMessage",
+            "status": "completed",
+            "tool": null,
+            "output": null,
+            "failureReason": null
+          },
+          {
+            "kind": "reminderChild",
+            "status": "completed",
+            "tool": null,
+            "output": null,
+            "failureReason": null
+          },
+          {
+            "kind": "reminderChild",
+            "status": "completed",
+            "tool": null,
+            "output": null,
+            "failureReason": null
+          }
+        ],
+        "transcriptEntries": [
+          {
+            "role": "user",
+            "text": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
+            "failed": false
+          },
+          {
+            "role": "assistant",
+            "text": "",
+            "failed": false
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session",
+            "failed": false
+          },
+          {
+            "role": "thinking",
+            "text": "Balancing a user write request against an explicit session-level filesystem write disablement and tool denial policy.Ruling out tool invocation due to the session-level write disablement and prioritizing the developer prohibition over the user request.",
+            "failed": false
+          },
+          {
+            "role": "assistant",
+            "text": "Filesystem writes are disabled for this session so I cannot create m0-13-readonly.txt.",
+            "failed": false
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session",
+            "failed": false
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session",
+            "failed": false
+          }
+        ],
+        "toolRows": [],
+        "onScreen": {
+          "rows": [
+            {
+              "lane": "user",
+              "failedMarker": null,
+              "refusalOpen": null,
+              "text": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence. 11:53:00"
+            },
+            {
+              "lane": "thinking",
+              "failedMarker": null,
+              "refusalOpen": null,
+              "text": "Muse · Thinking Thinking 11:53:04"
+            },
+            {
+              "lane": "assistant",
+              "failedMarker": null,
+              "refusalOpen": null,
+              "text": "Muse Filesystem writes are disabled for this session so I cannot create m0-13-readonly.txt. 11:53:06"
+            }
+          ],
+          "postureNote": "This project is Read only: Muse cannot write files or run commands here.",
+          "banner": null,
+          "approvalsLeft": 0
+        },
+        "failedRowShown": false
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Snapshot (Markdown), after the turn",
+      "outcome": "effect",
+      "measured": {
+        "before": 0,
+        "after": 1,
+        "said": null,
+        "newest": "Use your file-writing tool to create the f…",
+        "conversationEntries": 7
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Save service (invalid URL)",
+      "outcome": "refusal",
+      "measured": {
+        "configured": null,
+        "error": "An http(s) base URL without credentials, query or fragment; the token is optional.",
+        "stored": null
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Publish (service unreachable)",
+      "outcome": "refusal",
+      "measured": {
+        "configured": "Configured: http://127.0.0.1:<port> (token set)",
+        "url": null,
+        "title": "Use your file-writing tool to create the f…",
+        "alerts": [
+          "the share service did not answer: TypeError: Failed to fetch"
+        ]
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Publish (local reference server)",
+      "outcome": "effect",
+      "measured": {
+        "urlShape": "<server>/muse-share/share-nn0bof7u",
+        "secondClient": {
+          "status": 200,
+          "carriesTitle": true
+        },
+        "alerts": []
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Revoke",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "text": "Revoked — the link returns 404 for every client."
+        },
+        "secondClientStatus": 404
+      }
+    },
+    {
+      "surface": "share",
+      "action": "Forget",
+      "outcome": "effect",
+      "measured": {
+        "clicked": true,
+        "configured": null,
+        "stored": "null"
+      }
+    }
+  ],
+  "summary": {
+    "effect": 33,
+    "observed": 3,
+    "refusal": 13,
+    "not-exercised": 1
+  },
+  "gaps": {
+    "1 stale error residue": {
+      "verdict": "closed",
+      "measured": {
+        "failedProbe": {
+          "banner": "The local MCP action could not be completed. — local MCP server closed stdout before a response",
+          "alerts": [
+            "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+          ]
+        },
+        "nextSuccessfulProbe": {
+          "banner": null,
+          "alerts": [],
+          "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 52 ms"
+        },
+        "oldErrorGone": true
+      }
+    },
+    "2 a capability the host refuses": {
+      "verdict": "closed",
+      "hostGrants": [
+        "userShell",
+        "sessionMcp"
+      ],
+      "engineArgv": [
+        "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+      ],
+      "surfaces": {
+        "composer": "refusal",
+        "runInMuse": "refusal",
+        "liveWrite": "refusal"
+      }
+    },
+    "3 non-click effects replaced": {
+      "verdict": "closed",
+      "replaced": {
+        "close the browser window (app command)": "its own close action through UI Automation (no in-app control, no title-bar button exposed): effect",
+        "state shown vs computer_status": "kept as an observation; the clicks it stood for are Level, Refresh, Attach and Turn off and revoke: effect, effect, effect, effect, effect",
+        "closing the instance": "its own Close window button, it exited"
+      }
+    },
+    "4 computer use and share on the isolated profile": {
+      "verdict": "closed except Observe and act (not started, see notExercised)",
+      "userPipeDaemons": {
+        "before": 0,
+        "after": 0
+      }
+    }
+  },
+  "beforeFix": {
+    "build": {
+      "exeSha256": "6191eec8e0d2904585abeb52d0384091b3c6fe2e9f089a65112bd566d8c67467",
+      "from": "merge 77bba05 of this branch: computer-use pipe fix 109c9a4 in, the fixes c9e34e1, 692952a and 87a1a0c not yet",
+      "harnessRun": "the same harness, --rehearse --only readonly,share,browser (no model turn), on the same date",
+      "stop": {
+        "graceful": true,
+        "steps": [
+          {
+            "step": "Close window (the app's own control)",
+            "clicked": true,
+            "exited": true
+          }
+        ],
+        "exited": true,
+        "leftovers": {
+          "engines": 0,
+          "computerDaemonsOnTestPipe": 0,
+          "localMcpFixtures": 0
+        }
+      }
+    },
+    "audit": [
+      {
+        "surface": "share",
+        "action": "Snapshot (Markdown) of the empty conversation",
+        "outcome": "silent",
+        "measured": {
+          "before": 0,
+          "after": 0,
+          "said": null,
+          "newest": null,
+          "conversationEntries": 0
+        }
+      },
+      {
+        "surface": "browser",
+        "action": "Open in a browser window",
+        "outcome": "fail",
+        "measured": {
+          "ipcOk": true,
+          "ipcResult": "\"opened\"",
+          "newCdpTarget": null,
+          "serverHits": [],
+          "windows": 0
+        }
+      },
+      {
+        "surface": "browser",
+        "action": "Close the browser window (its own close action)",
+        "outcome": "fail",
+        "measured": {
+          "close": {
+            "invoked": "no window",
+            "windowGone": true,
+            "cdpPageTargetsLeft": 0
+          },
+          "reopen": {
+            "ipcResult": "\"reused\"",
+            "windows": 0
+          },
+          "closeAgain": {
+            "invoked": "no window",
+            "windowGone": true,
+            "cdpPageTargetsLeft": 0
+          },
+          "inAppControl": "none: the window is closed by its own close action"
+        }
+      },
+      {
+        "surface": "readonly",
+        "action": "composer and conversation (what they say about Read only)",
+        "outcome": "silent",
+        "measured": {
+          "placeholder": "Ask Muse to continue…",
+          "composerText": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context",
+          "postureNote": null,
+          "readOnlyStated": false,
+          "capabilityBadgesInConversation": []
+        }
+      },
+      {
+        "surface": "readonly",
+        "action": "terminal: Run in Muse (Read only host)",
+        "outcome": "silent",
+        "measured": {
+          "runInMuse": {
+            "label": "Run in Muse",
+            "disabled": false,
+            "title": "Run this command through the Muse host (userShell)"
+          },
+          "terminalMeta": "C:\\WINDOWS\\system32\\cmd.exe · <project>",
+          "appTerminalOpened": {
+            "ok": true
+          },
+          "afterClick": {
+            "ipc": {
+              "ok": true,
+              "result": "{\"commandId\":\"01a1109a-a0b3-7538-8125-df1b2062c739\",\"status\":\"accepted\"}"
+            },
+            "ui": {
+              "banner": null,
+              "rows": [
+                {
+                  "lane": "tool",
+                  "failedMarker": false,
+                  "text": "$ echo m0-13-run-in-muse 11:45:31"
+                }
+              ]
+            },
+            "hostItem": {
+              "status": "failed",
+              "visibleOutput": "tool failed: tool policy denied shell execution"
+            }
+          }
+        }
+      }
+    ],
+    "interactive": {
+      "source": "Interactive CDP evaluations on an isolated instance of the pre-fix build (same exe as the harness beforeFix run), 06/10/2026 11:06-11:13; not produced by the harness. Values copied from the evaluation outputs.",
+      "computer use · Observe and act (one click, from Observe only)": {
+        "ipc": {
+          "cmd": "computer_enable",
+          "ok": false,
+          "error": "the computer-use service did not start; run `cua-driver doctor` to see why (an interactive desktop session is required)"
+        },
+        "panelAfter": {
+          "state": "Granted",
+          "checked": "observe",
+          "actions": [
+            "Turn off and revoke",
+            "Refresh"
+          ]
+        },
+        "errorBanner": "the computer-use service did not start; run `cua-driver doctor` to see why (an interactive desktop session is required)",
+        "driverProcessesAfter": 0,
+        "manifestOnDisk": {
+          "mode": "unrestricted",
+          "tools": 57
+        },
+        "cause": "enable() handed the act record to the driver as a bounded capability manifest (manifest path set whenever the browser is not attached, since 811cf05)"
+      },
+      "computer use · the failure after the next actions": {
+        "afterTurnOffAndRevokeThenObserveOnly": {
+          "panel": "Granted, observe checked",
+          "errorBanner": "the computer-use service did not start; run `cua-driver doctor` to see why (an interactive desktop session is required)"
+        }
+      },
+      "computer use · own pipe": {
+        "probeCaught": "status --socket <test pipe>, parent: the instance",
+        "daemonArgvAfterObserve": "serve --socket <test pipe> --permission-mode bounded --capability-manifest <appdata>\\computer-use\\computer-manifest.json --approve-capability-manifest",
+        "driverPidFile": "rewritten by the instance's daemon, removed by its stop; before: a pid with no live process"
+      }
+    }
+  },
+  "notExercised": [
+    "Computer use 'Observe and act': not started in this session. A direct probe of the driver with --dangerously-bypass-approvals was refused by the session's permission classifier, so the unrestricted service was not started through the app either; the user decides. Its launch defect is fixed and unit-tested (serve_argv matrix); the one click on the pre-fix build is under beforeFix.",
+    "Share 'Copy link' and Computer use 'Copy install command': they write the system clipboard, which test mode does not isolate.",
+    "Remote connector 'Reconnect' and 'Forget token': no remote connector can exist here (the loopback URL is refused above and the proof has no public HTTPS MCP server); a token would go to the keyring, shared even in test mode (ADR 0003).",
+    "Computer use 'Install cua-driver': the driver is installed; its installer is machine-wide.",
+    "A valid MCP Bundle install: covered by the M3-03 proof (scripts/cdp-m3-03-mcpb-install.mjs), not repeated here."
+  ],
+  "disclosedForgeries": [
+    "Clicks are DOM clicks on the real control in the real webview (HTMLElement.click()), not OS mouse input; typing sets the value through the native setter and fires input, a select fires change.",
+    "The OS folder dialog of 'Choose project folders' is answered by the harness (window.__baselineIpc.dialogQueue, plugin:dialog|open never reaches the OS).",
+    "File inputs (index folder, import file, MCP Bundle) are fed with DOM.setFileInputFiles: the OS file dialog cannot be driven over CDP.",
+    "The native browser window has no in-app close control and exposes no title-bar button to UI Automation: it is closed through its own close action in UI Automation (WindowPattern.Close, what Alt+F4 or a screen reader does), not clicked with the mouse.",
+    "Own-pipe check: the harness holds a server on the pipe the instance must use (accepting, never answering) and invokes computer_status over IPC, so the instance's status probe lives long enough to read its argv; it then closes that server.",
+    "computer_status, collect_diagnostics and read_session_history are also invoked directly over IPC to measure state; no action is performed through IPC."
+  ],
+  "method": "One launch of the debug build in test mode: a fresh data folder and WebView2 profile, started from PowerShell with no WEBVIEW2_* variable, the local engine pinned by MUSE_DESKTOP_TEST_SIDECAR, MUSE_NO_AUTO_UPDATE=1, CDP through the WebView2 options. Isolation is checked before driving (test-mode.pid, --user-data-dir under the test folder), and the computer-use pipe before any Computer use click. Effects are measured outside the click: IPC results traced on window.fetch, localStorage, files under the test folder, Win32_Process argv and parents (engine, local MCP fixture, app shell, cua-driver daemons and probes), the driver's per-user pid file, the share server read by a second client, a harness HTTP server's own log, CDP targets, UI Automation windows, the host's own history (session/read). The user's computer-use pipe is never connected to: daemons on it are read from the process table. The instance is closed with its own Close window button, then by PID.",
+  "notes": [
+    "Added by hand after the run, from this record only; no measured value was changed.",
+    "Live turn: the host items of the turn hold no toolCall: the model never attempted the write. Its reasoning summary cites a session-level filesystem write disablement, so 1.4.2 tells the model before any attempt. On screen: the app's posture note above the composer and the model's one-sentence refusal; the file is absent. A row the host refused (Failed) is therefore measured only before the fix (Run in Muse in beforeFix: the item failed, the row stayed collapsed and unmarked) and by the tests (a_refused_item_closes_with_its_failed_status, history, visibleFailures).",
+    "Observe and act was not started in this session: see notExercised. Its launch defect (act served as a bounded manifest, never started) is in beforeFix.interactive and fixed in c9e34e1.",
+    "cua-driver keeps one pid file per user account (computer.driverPidFile): this instance's daemon wrote it and its stop removed it. No daemon ran on the user's pipe before, during or after (userPipeDaemons 0 and 0), and the harness never connected to that pipe."
+  ]
+}
