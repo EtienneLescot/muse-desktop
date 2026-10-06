@@ -1725,9 +1725,13 @@ async fn retire_host(
         events.retain(|event| !session_ids.contains(&event.session_id));
     }
 
-    old_client.shutdown().await;
+    old_client.stop(HOST_STOP_GRACE).await;
     Ok(session_ids)
 }
+
+/// How long a host whose stdin was closed gets to exit on its own before it
+/// is killed. An idle Muse 1.4.2 host exits in about 0.1 s.
+const HOST_STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// A Muse 1.3 host keeps at most 32 sessions loaded and never unloads an idle
 /// one, and MSP has no client unload (measured: 32 idle sessions, half of them
@@ -10051,8 +10055,8 @@ fn main() {
         .build(context)
         .expect("failed to build muse-desktop app")
         .run(|app, event| {
-            // Clean shutdown: kill every workspace sidecar so no `muse`
-            // process survives app exit.
+            // Clean shutdown: stop every workspace sidecar (stdin closed,
+            // killed if still running) so no `muse` process survives app exit.
             if let RunEvent::Exit = event {
                 let state: State<AppState> = app.state();
                 state.terminals.close_all();
@@ -10062,7 +10066,9 @@ fn main() {
                     }
                 }
                 let clients = state.hosts.lock().map(|mut h| h.drain()).unwrap_or_default();
-                for client in clients { tauri::async_runtime::block_on(client.shutdown()); }
+                tauri::async_runtime::block_on(futures_util::future::join_all(
+                    clients.iter().map(|client| client.stop(HOST_STOP_GRACE)),
+                ));
                 if let Ok(mut servers) = state.mcp_servers.lock() {
                     servers.clear();
                 };
