@@ -1909,7 +1909,20 @@ fn spawn_sidecar(
     root: &PathBuf,
     sandbox: &HostSandboxPolicy,
 ) -> Result<(tauri::async_runtime::Receiver<CommandEvent>, CommandChild), String> {
-    // M0-14 isolated test mode: every engine is the fixture, never a real one.
+    if let Some(remote) = remote_ssh::remote_engine(root) {
+        // M4-07: the same host on another machine, over the system ssh. The
+        // stdout pump and `MspClient` downstream cannot tell the difference.
+        // Checked before test mode: a remote target the test profile itself
+        // configured is reached for real (ADR 0003).
+        let argv = remote.serve_command(&sandbox.cli_args())?;
+        return app
+            .shell()
+            .command(&argv[0])
+            .args(&argv[1..])
+            .spawn()
+            .map_err(|e| format!("could not start ssh to {}: {e}", remote.key()));
+    }
+    // M0-14 isolated test mode: every local engine is the fixture, never a real one.
     if test_mode::data_dir().is_some() {
         let argv = test_mode::sidecar_argv()?;
         return app
@@ -1920,17 +1933,6 @@ fn spawn_sidecar(
             .current_dir(root)
             .spawn()
             .map_err(|e| format!("could not spawn sidecar `{}` in {}: {e}", argv[0], root.display()));
-    }
-    if let Some(remote) = remote_ssh::remote_engine(root) {
-        // M4-07: the same host on another machine, over the system ssh. The
-        // stdout pump and `MspClient` downstream cannot tell the difference.
-        let argv = remote.serve_command(&sandbox.cli_args())?;
-        return app
-            .shell()
-            .command(&argv[0])
-            .args(&argv[1..])
-            .spawn()
-            .map_err(|e| format!("could not start ssh to {}: {e}", remote.key()));
     }
     let bin = resolve_sidecar()?;
     let cmd = app
