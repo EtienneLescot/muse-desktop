@@ -17,7 +17,6 @@ use std::path::PathBuf;
 
 const HOST_CHARS: &str = "^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$";
 const NAME_CHARS: &str = "^[A-Za-z0-9._-]+$";
-const PATH_CHARS: &str = "^[A-Za-z0-9 ._\\\\/:()-]+$";
 const CONNECT_TIMEOUT: u64 = 10;
 
 /// Where `ssh` lives: the PATH the app was started with, then the canonical
@@ -60,7 +59,7 @@ fn matches(value: &str, pattern: &str, max: usize) -> bool {
         && regex_is_match(pattern, value)
 }
 
-/// A minimal anchored matcher for the three closed character classes above —
+/// A minimal anchored matcher for the two closed character classes above —
 /// no regex crate, the classes are fixed and simple.
 fn regex_is_match(pattern: &str, value: &str) -> bool {
     match pattern {
@@ -73,25 +72,19 @@ fn regex_is_match(pattern: &str, value: &str) -> bool {
         NAME_CHARS => value
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')),
-        PATH_CHARS => value
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b' ' | b'.' | b'_' | b'\\' | b'/' | b':' | b'(' | b')' | b'-')),
         _ => false,
     }
 }
 
 /// The pure gate a remote key passes before anything is spawned. `Err` carries
 /// the field name: the renderer shows it, the log never carries values.
-fn validate(host: &str, port: u16, user: &str, identity_file: &str, command: &str) -> Result<(), String> {
+fn validate(host: &str, port: u16, user: &str, command: &str) -> Result<(), String> {
     if !matches(host, HOST_CHARS, 255) {
         return Err("invalid ssh host".to_string());
     }
     // A dash-leading user would make `user@host` an ssh option (`-E…` writes a log file).
     if !user.is_empty() && (!matches(user, NAME_CHARS, 64) || user.starts_with('-')) {
         return Err("invalid ssh user".to_string());
-    }
-    if !identity_file.is_empty() && !matches(identity_file, PATH_CHARS, 400) {
-        return Err("invalid ssh identity path".to_string());
     }
     let command = command.trim();
     if command.is_empty() || command.len() > 8_000 || command.chars().any(|c| c == '\0') {
@@ -101,18 +94,12 @@ fn validate(host: &str, port: u16, user: &str, identity_file: &str, command: &st
     Ok(())
 }
 
-/// The canonical argv, rebuilt here from the validated fields. Mirrors
-/// `buildSshArgv` in `src/lib/remoteSsh.ts`; both are tested so a drift is a
-/// failing test, not a surprise.
-fn ssh_argv(ssh: &PathBuf, host: &str, port: u16, user: &str, identity_file: &str, command: &str) -> Vec<String> {
+/// The canonical argv, rebuilt here from the validated fields.
+fn ssh_argv(ssh: &PathBuf, host: &str, port: u16, user: &str, command: &str) -> Vec<String> {
     let mut argv = vec![ssh.display().to_string()];
     if port != 22 {
         argv.push("-p".to_string());
         argv.push(port.to_string());
-    }
-    if !identity_file.is_empty() {
-        argv.push("-i".to_string());
-        argv.push(identity_file.to_string());
     }
     argv.push("-o".to_string());
     argv.push("BatchMode=yes".to_string());
@@ -197,7 +184,7 @@ impl RemoteEngine {
             None => (authority, 22),
         };
         let (user, host) = who.split_once('@').unwrap_or(("", who));
-        validate(host, port, user, "", muse)?;
+        validate(host, port, user, muse)?;
         if !remote_path(workspace, false) {
             return Err("invalid remote folder".to_string());
         }
@@ -249,7 +236,7 @@ impl RemoteEngine {
             .chain(posture.iter().copied())
             .collect::<Vec<_>>()
             .join(" ");
-        let mut argv = ssh_argv(ssh, &self.host, self.port, &self.user, "", &command);
+        let mut argv = ssh_argv(ssh, &self.host, self.port, &self.user, &command);
         argv.splice(
             1..1,
             [
@@ -339,20 +326,18 @@ mod tests {
 
     #[test]
     fn the_gate_refuses_what_argv_cannot_carry() {
-        assert!(validate("example.com", 22, "", "", "uptime").is_ok());
-        assert!(validate("bad host", 22, "", "", "uptime").is_err(), "space is not a host character");
-        assert!(validate("-leading-dash", 22, "", "", "uptime").is_err(), "an option-shaped host is refused");
-        assert!(validate("example.com", 22, "bad user", "", "uptime").is_err());
-        assert!(validate("example.com", 22, "", "C:\\keys\\id_ed25519", "uptime").is_ok());
-        assert!(validate("example.com", 22, "", "bad\npath", "uptime").is_err());
-        assert!(validate("example.com", 22, "", "", "").is_err(), "an empty command is refused");
-        assert!(validate("example.com", 22, "", "", &"x".repeat(8_001)).is_err());
+        assert!(validate("example.com", 22, "", "uptime").is_ok());
+        assert!(validate("bad host", 22, "", "uptime").is_err(), "space is not a host character");
+        assert!(validate("-leading-dash", 22, "", "uptime").is_err(), "an option-shaped host is refused");
+        assert!(validate("example.com", 22, "bad user", "uptime").is_err());
+        assert!(validate("example.com", 22, "", "").is_err(), "an empty command is refused");
+        assert!(validate("example.com", 22, "", &"x".repeat(8_001)).is_err());
     }
 
     #[test]
     fn the_argv_carries_the_command_after_a_literal_separator() {
         let ssh = PathBuf::from("C:\\Windows\\System32\\OpenSSH\\ssh.exe");
-        let argv = ssh_argv(&ssh, "example.com", 22, "", "", "uptime");
+        let argv = ssh_argv(&ssh, "example.com", 22, "", "uptime");
         assert_eq!(
             argv,
             vec![
@@ -368,7 +353,7 @@ mod tests {
         );
         // A dash-leading remote command still lands after `--`: it is a
         // positional, not an option of ssh.
-        let sneaky = ssh_argv(&ssh, "example.com", 2222, "ops", "C:\\keys\\id", "-oProxyCommand=evil");
+        let sneaky = ssh_argv(&ssh, "example.com", 2222, "ops", "-oProxyCommand=evil");
         assert_eq!(&sneaky[sneaky.len() - 2], "--");
         assert_eq!(&sneaky[sneaky.len() - 1], "-oProxyCommand=evil");
         assert!(sneaky.contains(&"2222".to_string()));
@@ -376,9 +361,9 @@ mod tests {
 
     #[test]
     fn one_char_and_multibyte_hosts_do_not_panic() {
-        assert!(validate("a", 22, "", "", "uptime").is_ok());
-        assert!(validate("-", 22, "", "", "uptime").is_err());
-        assert!(validate("é", 22, "", "", "uptime").is_err());
+        assert!(validate("a", 22, "", "uptime").is_ok());
+        assert!(validate("-", 22, "", "uptime").is_err());
+        assert!(validate("é", 22, "", "uptime").is_err());
     }
 
     #[test]
