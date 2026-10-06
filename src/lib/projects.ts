@@ -424,8 +424,19 @@ export interface SettingsDiffEntry {
 }
 
 /**
+ * The isolation values that restrict the level chosen in Settings
+ * (`hostSandboxConfigForProject`). Any other stored value (`full`, `allow`,
+ * `prompt`) restricts nothing: the project follows Settings, as when unset.
+ */
+export const ISOLATION_RESTRICTIONS: Partial<Record<keyof ProjectSettings, readonly string[]>> = {
+  sandbox: ["workspace", "read-only"],
+  networkDefault: ["deny"],
+};
+
+/**
  * Global-vs-project diff (US-30 AC): one entry per override key whose
- * value actually diverges from global. Empty = fully inherited.
+ * value actually diverges from global. Empty = fully inherited. Isolation
+ * keys diverge when they restrict Settings, whatever the stored default says.
  */
 export function diffProjectSettings(
   global: ProjectSettings,
@@ -436,7 +447,8 @@ export function diffProjectSettings(
   (Object.keys(override) as (keyof ProjectSettings)[]).forEach((key) => {
     const value = override[key];
     if (value === undefined) return;
-    if (value !== global[key]) {
+    const restrictions = ISOLATION_RESTRICTIONS[key];
+    if (restrictions ? restrictions.includes(String(value)) : value !== global[key]) {
       out.push({ key, global: global[key], project: value });
     }
   });

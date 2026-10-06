@@ -87,39 +87,32 @@ export function effectiveSandboxMode(s: SandboxSettings): SandboxMode {
   return s.mode;
 }
 
+/** Isolation levels from the narrowest to the widest. */
+const SANDBOX_ORDER: SandboxMode[] = ["workspace", "network", "elevated"];
+
 /**
- * Resolve the global permission gate and the project override once, before a
- * host is spawned. A project can tighten the global posture (read-only or
- * deny network); it can relax it only when the corresponding global toggle
- * has already granted permission. This keeps the hook as the SSOT while the
- * Rust bridge receives only concrete startup flags.
+ * The posture a project's host starts with: the level chosen in Settings,
+ * which the project's own preferences can only restrict. `project` is the
+ * project's sparse override, never settings merged with defaults: an absent
+ * key follows Settings, and a default filled in would cap every project.
+ * Sandbox `read-only` means Workspace only with no writes and no shell,
+ * `workspace` stops at Workspace and network, network `deny` at Workspace
+ * only; `full`, `allow` and `prompt` restrict nothing. The Rust bridge
+ * receives only these concrete startup flags.
  */
 export function hostSandboxConfigForProject(
   global: SandboxSettings,
-  project?: ProjectSandboxPreferences,
+  project?: Partial<ProjectSandboxPreferences>,
 ): HostSandboxConfig {
-  const globalMode = effectiveSandboxMode(global);
-  if (project === undefined) {
-    return {
-      mode: globalMode,
-      disableWrite: false,
-      disableShell: false,
-    };
-  }
-  const preferences = project;
-  const networkEnabled =
-    preferences.networkDefault === "allow" && globalMode !== "workspace";
-  const mode: SandboxMode =
-    preferences.sandbox === "full" && globalMode === "elevated"
-      ? "elevated"
-      : networkEnabled
-        ? "network"
-        : "workspace";
-  return {
-    mode,
-    disableWrite: preferences.sandbox === "read-only",
-    disableShell: preferences.sandbox === "read-only",
-  };
+  const readOnly = project?.sandbox === "read-only";
+  const cap: SandboxMode = readOnly || project?.networkDefault === "deny"
+    ? "workspace"
+    : project?.sandbox === "workspace" ? "network" : "elevated";
+  const level = Math.min(
+    SANDBOX_ORDER.indexOf(effectiveSandboxMode(global)),
+    SANDBOX_ORDER.indexOf(cap),
+  );
+  return { mode: SANDBOX_ORDER[level], disableWrite: readOnly, disableShell: readOnly };
 }
 
 /** The host a start or reconnect asked for: its workspace key and posture. */

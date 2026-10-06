@@ -274,6 +274,17 @@ describe("US-30 settings override + diff", () => {
     assert.deepEqual(diffProjectSettings(DEFAULT_PROJECT_SETTINGS, projects[0].settings), []);
   });
 
+  it("isolation keys diverge only when they restrict Settings", () => {
+    let projects = fill(1);
+    // `workspace` equals the stored default yet restricts; `allow` restricts nothing.
+    projects = setProjectOverride(projects, "p0", "sandbox", "workspace");
+    projects = setProjectOverride(projects, "p0", "networkDefault", "allow");
+    assert.deepEqual(
+      diffProjectSettings(DEFAULT_PROJECT_SETTINGS, projects[0].settings).map((d) => d.key),
+      ["sandbox"],
+    );
+  });
+
   it("resolves one conversation from its attached project", () => {
     let projects = fill(2);
     projects = setProjectOverride(projects, "p1", "model", "gpt-5.6");

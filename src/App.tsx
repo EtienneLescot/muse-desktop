@@ -6,7 +6,7 @@ import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { MuseSetupScreen } from "./components/MuseSetupScreen";
 import { isMacPlatform } from "./lib/platform";
-import { conflictRestart } from "./lib/settings";
+import { conflictRestart, effectiveSandboxMode, hostSandboxConfigForProject } from "./lib/settings";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -809,7 +809,10 @@ export default function App() {
               // A running Muse host read its credentials at start: restart it
               // so it sees the new sign-in, reconnect, then replay the turn.
               const session = sessions.find((candidate) => candidate.session_id === target.sessionId);
-              if (session !== undefined && await restartHost(session.host_workspace ?? session.workspace)) {
+              if (session !== undefined && await restartHost(
+                session.host_workspace ?? session.workspace,
+                hostSandboxConfigForProject(sandbox, projectForSession(session.session_id)?.settings),
+              )) {
                 await reconnectSession(target.sessionId);
               }
               await retryFailedTurn(target.sessionId, target.entryId);
@@ -1144,6 +1147,7 @@ export default function App() {
                   projectError={projectError}
                   activeSessionId={activeId}
                   globalSettings={globalSettings}
+                  isolation={effectiveSandboxMode(sandbox)}
                   onCreate={(projectName, projectWorkspaces) =>
                     createProject(projectName, projectWorkspaces)
                   }

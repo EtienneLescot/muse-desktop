@@ -199,6 +199,7 @@ import {
   settingsForThread,
   type Project,
   type ProjectSettings,
+  type ProjectSettingsOverride,
   type ThreadProjectMap,
 } from "../lib/projects";
 import {
@@ -4369,7 +4370,8 @@ export function useMuseSessions(): UseMuseSessions {
     async (
       workspaceOverride?: string,
       projectSettings?: ProjectSettings,
-      projectSandboxSettings?: ProjectSettings,
+      // The project's own preferences, unmerged: Isolation follows Settings unless they restrict it.
+      projectOverride?: ProjectSettingsOverride,
     ): Promise<string | null> => {
     let host: HostRequest | null = null;
     try {
@@ -4382,7 +4384,7 @@ export function useMuseSessions(): UseMuseSessions {
         setError("Pick a workspace folder first.");
         return null;
       }
-      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSandboxSettings);
+      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectOverride);
       host = { workspace: ws, sandbox: sandboxConfig };
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
@@ -4583,10 +4585,10 @@ export function useMuseSessions(): UseMuseSessions {
     noLiveTurnRef.current.add(id);
     let host: HostRequest | null = null;
     try {
-      const projectSettings = threadProjects[id] !== undefined
-        ? settingsForThread(globalSettings, projects, threadProjects, id)
-        : undefined;
-      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSettings);
+      const sandboxConfig = hostSandboxConfigForProject(
+        sandbox,
+        projects.find((project) => project.id === threadProjects[id])?.settings,
+      );
       host = { workspace: session.workspace, sandbox: sandboxConfig };
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
@@ -4712,7 +4714,7 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [globalSettings, projects, projectPosture, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, recordConnectionFailure, sandbox]);
+  }, [projects, projectPosture, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, recordConnectionFailure, sandbox]);
 
   // Resume on open: `restore_sessions` only admits sessions for
   // already-connected hosts, and hosts do not survive an app restart. Once
@@ -4749,7 +4751,7 @@ export function useMuseSessions(): UseMuseSessions {
       const sessionId = await startSessionRow(
         workspacePath,
         sessionSettings,
-        projectSettings,
+        projectsRef.current.find((project) => project.id === projectId)?.settings,
       );
       if (sessionId === null || projectId === undefined) return sessionId;
       // Attach before the caller can send the first turn. The ref is updated
@@ -6475,7 +6477,7 @@ export function useMuseSessions(): UseMuseSessions {
           ...capturedSettings,
           ...(item.model?.trim() ? { model: item.model.trim() } : {}),
         };
-        const fresh = await startSessionRow(item.workspace, settings);
+        const fresh = await startSessionRow(item.workspace, settings, capturedProject?.settings);
         if (fresh === null) {
           failRun("could not start target conversation", false);
           return false;

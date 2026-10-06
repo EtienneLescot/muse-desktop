@@ -105,7 +105,7 @@ type RemoteForm = Record<(typeof REMOTE_FIELDS)[number][0], string>;
  * the same thing twice, and the select fell back to workspace when they
  * disagreed.
  */
-const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }[] = [
+export const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }[] = [
   {
     mode: "workspace",
     label: "Workspace only",
@@ -523,9 +523,8 @@ export function SettingsPanel({
         <h3>Isolation</h3>
         <p className="settings-note">
           How far Muse's engine can reach. Applied when a new engine starts: a
-          running conversation keeps its own until it is restarted. In a
-          project, its preferences must allow it too: networkDefault Allow for
-          network, sandbox Full access for Elevated access.
+          running conversation keeps its own until it is restarted. A project
+          follows this level unless its own preferences restrict it.
           {hostPlatform() === "windows" && (
             // Decision D1 (05/10/2026): keep the default and state the limit,
             // as measured in docs/evidence/2026-10-05-roadmap-closure/

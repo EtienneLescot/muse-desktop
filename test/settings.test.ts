@@ -35,6 +35,8 @@ import {
   providerById,
   providerForProject,
   type HostRequest,
+  type ProjectSandboxPreferences,
+  type SandboxMode,
   type SandboxSettings,
 } from "../src/lib/settings.ts";
 import { reconnectErrorMessage } from "../src/lib/errorCopy.ts";
@@ -121,39 +123,46 @@ describe("sandbox settings", () => {
     assert.equal(isSandboxMode(null), false);
   });
 
-  it("projects global permission gates and project overrides into host flags", () => {
-    assert.deepEqual(
-      hostSandboxConfigForProject({ mode: "network", networkAllowed: true, elevatedAllowed: false }),
-      { mode: "network", disableWrite: false, disableShell: false },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(DEFAULT_SANDBOX, {
-        sandbox: "read-only",
-        networkDefault: "allow",
-      }),
-      { mode: "workspace", disableWrite: true, disableShell: true },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(
-        { mode: "network", networkAllowed: true, elevatedAllowed: false },
-        { sandbox: "workspace", networkDefault: "allow" },
-      ),
-      { mode: "network", disableWrite: false, disableShell: false },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(
-        { mode: "elevated", networkAllowed: true, elevatedAllowed: true },
-        { sandbox: "full", networkDefault: "deny" },
-      ),
-      { mode: "elevated", disableWrite: false, disableShell: false },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(
-        { mode: "network", networkAllowed: true, elevatedAllowed: false },
-        { sandbox: "full", networkDefault: "allow" },
-      ),
-      { mode: "network", disableWrite: false, disableShell: false },
-    );
+  it("a project follows the Settings level unless its own preferences restrict it", () => {
+    const levels: SandboxMode[] = ["workspace", "network", "elevated"];
+    const settings = (mode: SandboxMode): SandboxSettings =>
+      ({ mode, networkAllowed: mode !== "workspace", elevatedAllowed: mode === "elevated" });
+    // The project's sparse override -> its mode at Workspace only, Workspace and network, Elevated access.
+    const table: [Partial<ProjectSandboxPreferences> | undefined, SandboxMode[]][] = [
+      [undefined, ["workspace", "network", "elevated"]],
+      [{}, ["workspace", "network", "elevated"]],
+      [{ sandbox: "full", networkDefault: "allow" }, ["workspace", "network", "elevated"]],
+      [{ networkDefault: "prompt" }, ["workspace", "network", "elevated"]],
+      [{ sandbox: "workspace" }, ["workspace", "network", "network"]],
+      [{ networkDefault: "deny" }, ["workspace", "workspace", "workspace"]],
+      [{ sandbox: "full", networkDefault: "deny" }, ["workspace", "workspace", "workspace"]],
+    ];
+    for (const [project, modes] of table) {
+      levels.forEach((level, i) => assert.deepEqual(
+        hostSandboxConfigForProject(settings(level), project),
+        { mode: modes[i], disableWrite: false, disableShell: false },
+        `${level} ${JSON.stringify(project)}`,
+      ));
+    }
+    for (const level of levels) {
+      assert.deepEqual(
+        hostSandboxConfigForProject(settings(level), { sandbox: "read-only", networkDefault: "allow" }),
+        { mode: "workspace", disableWrite: true, disableShell: true },
+      );
+    }
+    // Never above the level in force, an ungranted one included.
+    for (const sandbox of [undefined, "read-only", "workspace", "full"] as const) {
+      for (const networkDefault of [undefined, "allow", "prompt", "deny"] as const) {
+        for (const level of levels) {
+          const { mode } = hostSandboxConfigForProject(settings(level), { sandbox, networkDefault });
+          assert.ok(levels.indexOf(mode) <= levels.indexOf(level), `${level} ${sandbox} ${networkDefault}`);
+        }
+        assert.equal(hostSandboxConfigForProject(
+          { mode: "elevated", networkAllowed: false, elevatedAllowed: false },
+          { sandbox, networkDefault },
+        ).mode, "workspace");
+      }
+    }
   });
 
   it("restarts the host a posture conflict refused, with the posture it asked for", () => {

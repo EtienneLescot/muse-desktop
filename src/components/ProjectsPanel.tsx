@@ -2,6 +2,7 @@ import { useEffect, useState, type ChangeEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   diffProjectSettings,
+  ISOLATION_RESTRICTIONS,
   MAX_PROJECTS,
   projectWorkspaces,
   projectsNeedingWorkspace,
@@ -11,6 +12,8 @@ import {
   type ThreadProjectMap,
   type WorkspaceRootObservation,
 } from "../lib/projects";
+import type { SandboxMode } from "../lib/settings";
+import { SANDBOX_MODES } from "./SettingsPanel";
 import { userFacingError } from "../lib/errorCopy";
 import {
   describeRules,
@@ -31,6 +34,8 @@ interface ProjectsPanelProps {
   projectError: string | null;
   activeSessionId: string | null;
   globalSettings: ProjectSettings;
+  /** The Isolation level in force in Settings, which projects follow. */
+  isolation: SandboxMode;
   onCreate: (name: string, workspaces?: string[]) => void;
   onDelete: (id: string) => void;
   onUpdate: (
@@ -69,11 +74,31 @@ const SETTING_KEYS: (keyof ProjectSettings)[] = [
   "reasoningEffort",
 ];
 
+/** What each preference is called on screen; its stored key never shows. */
+const SETTING_LABELS: Record<keyof ProjectSettings, string> = {
+  model: "Model",
+  sandbox: "Isolation",
+  networkDefault: "Network",
+  autoCompact: "Auto-compact",
+  reasoningEffort: "Reasoning effort",
+};
+
+/** The restricting values of ISOLATION_RESTRICTIONS, in words. */
+const RESTRICTION_LABELS: Record<string, string> = {
+  workspace: "No Elevated access",
+  "read-only": "Read only, no commands",
+  deny: "No network",
+};
+
 function formatSetting(
   key: keyof ProjectSettings,
   value: string | boolean,
 ): string {
   if (key === "autoCompact") return value === true ? "on" : "off";
+  const restrictions = ISOLATION_RESTRICTIONS[key];
+  if (restrictions !== undefined) {
+    return restrictions.includes(String(value)) ? RESTRICTION_LABELS[String(value)] : "Follow Settings";
+  }
   // The inherited value is shown next to the override: naming the tier beats
   // echoing the wire spelling ("Very high" rather than "xhigh").
   if (key === "reasoningEffort" && isReasoningEffort(value)) {
@@ -94,6 +119,7 @@ export function ProjectsPanel({
   projectError,
   activeSessionId,
   globalSettings,
+  isolation,
   onCreate,
   onDelete,
   onUpdate,
@@ -267,6 +293,7 @@ export function ProjectsPanel({
             }
             hasActiveThread={activeSessionId !== null}
             globalSettings={globalSettings}
+            isolationLabel={SANDBOX_MODES.find((level) => level.mode === isolation)?.label ?? isolation}
             effective={settingsFor(p.id)}
             onDelete={() => onDelete(p.id)}
             onUpdate={(patch) => onUpdate(p.id, patch)}
@@ -355,6 +382,7 @@ interface ProjectRowProps {
   activeAttached: boolean;
   hasActiveThread: boolean;
   globalSettings: ProjectSettings;
+  isolationLabel: string;
   effective: ProjectSettings;
   onDelete: () => void;
   onUpdate: (patch: { name?: string; instructions?: string; workspace?: string; workspaces?: string[] }) => void;
@@ -377,6 +405,7 @@ function ProjectRow({
   activeAttached,
   hasActiveThread,
   globalSettings,
+  isolationLabel,
   effective,
   onDelete,
   onUpdate,
@@ -669,6 +698,7 @@ function ProjectRow({
                 globalValue={globalSettings[key]}
                 overrideValue={project.settings?.[key]}
                 effectiveValue={effective[key]}
+                isolationLabel={isolationLabel}
                 onSet={(value) => onSetOverride(key, value)}
               />
             ))}
@@ -682,7 +712,8 @@ function ProjectRow({
             >
               {diff.map((d) => (
                 <li key={d.key}>
-                  {d.key}: {formatSetting(d.key, d.global)} →{" "}
+                  {SETTING_LABELS[d.key]}:{" "}
+                  {ISOLATION_RESTRICTIONS[d.key] !== undefined ? "Follow Settings" : formatSetting(d.key, d.global)} →{" "}
                   {formatSetting(d.key, d.project)}
                 </li>
               ))}
@@ -699,6 +730,7 @@ interface OverrideRowProps {
   globalValue: string | boolean;
   overrideValue: string | boolean | undefined;
   effectiveValue: string | boolean;
+  isolationLabel: string;
   onSet: (value: ProjectSettings[keyof ProjectSettings] | undefined) => void;
 }
 
@@ -707,18 +739,16 @@ function OverrideRow({
   globalValue,
   overrideValue,
   effectiveValue,
+  isolationLabel,
   onSet,
 }: OverrideRowProps) {
+  const restrictions = ISOLATION_RESTRICTIONS[settingKey];
   function commit(next: string | boolean): void {
     // Editing back to the global value clears the override (inherits).
     if (next === globalValue) {
       onSet(undefined);
     } else if (settingKey === "model") {
       onSet(next as string);
-    } else if (settingKey === "sandbox") {
-      onSet(next as ProjectSettings["sandbox"]);
-    } else if (settingKey === "networkDefault") {
-      onSet(next as ProjectSettings["networkDefault"]);
     } else if (settingKey === "reasoningEffort") {
       onSet(next as ProjectSettings["reasoningEffort"]);
     } else {
@@ -735,33 +765,26 @@ function OverrideRow({
   }
 
   const editor =
-    settingKey === "model" ? (
+    restrictions !== undefined ? (
+      // Isolation follows Settings unless the project restricts it: a value
+      // that restricts nothing reads, and stays, as following Settings.
+      <select
+        value={restrictions.includes(String(overrideValue)) ? String(overrideValue) : ""}
+        onChange={(e) => onSet(e.target.value === "" ? undefined : e.target.value)}
+        aria-label={`Project ${SETTING_LABELS[settingKey].toLowerCase()}`}
+      >
+        <option value="">Follow Settings ({isolationLabel})</option>
+        {restrictions.map((value) => (
+          <option key={value} value={value}>{RESTRICTION_LABELS[value]}</option>
+        ))}
+      </select>
+    ) : settingKey === "model" ? (
       <input
         type="text"
         value={String(effectiveValue)}
         onChange={onText}
         aria-label={`Project model (global ${globalValue})`}
       />
-    ) : settingKey === "sandbox" ? (
-      <select
-        value={String(effectiveValue)}
-        onChange={onText}
-        aria-label={`Project sandbox (global ${globalValue})`}
-      >
-        <option value="read-only">Read only</option>
-        <option value="workspace">Project</option>
-        <option value="full">Full access</option>
-      </select>
-    ) : settingKey === "networkDefault" ? (
-      <select
-        value={String(effectiveValue)}
-        onChange={onText}
-        aria-label={`Project network (global ${globalValue})`}
-      >
-        <option value="allow">Allow</option>
-        <option value="prompt">Ask</option>
-        <option value="deny">Deny</option>
-      </select>
     ) : settingKey === "reasoningEffort" ? (
       <select
         value={String(effectiveValue)}
@@ -791,11 +814,11 @@ function OverrideRow({
   return (
     <label className="project-setting">
       <span>
-        {settingKey}
-        <small> g:{formatSetting(settingKey, globalValue)}</small>
+        {SETTING_LABELS[settingKey]}
+        {restrictions === undefined && <small> g:{formatSetting(settingKey, globalValue)}</small>}
       </span>
       {editor}
-      {overrideValue !== undefined && (
+      {restrictions === undefined && overrideValue !== undefined && (
         <button
           type="button"
           onClick={() => onSet(undefined)}
