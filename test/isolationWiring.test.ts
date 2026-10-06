@@ -40,4 +40,15 @@ describe("project isolation wiring", () => {
     assert.match(body, /host = \{ workspace: resumedFolder, sandbox: sandboxConfig \};/);
     assert.match(body, /workspacePath: resumedFolder,/);
   });
+
+  it("speaks of one global level, with no dead defaults editor nor g: hint", () => {
+    // "Grant it to a workspace you trust" read as a per-workspace grant.
+    const settings = read("../src/components/SettingsPanel.tsx");
+    assert.doesNotMatch(settings, /Grant it to a workspace you trust/);
+    assert.match(settings, /It reaches every project that does not restrict it\./);
+    const panel = read("../src/components/ProjectsPanel.tsx");
+    assert.doesNotMatch(panel, /project-global|onSetGlobal|hideGlobalSettings/, "the hidden defaults editor drove nothing");
+    assert.doesNotMatch(panel, / g:/);
+    assert.match(panel, /<small> Default: \{formatSetting\(settingKey, globalValue\)\}<\/small>/);
+  });
 });

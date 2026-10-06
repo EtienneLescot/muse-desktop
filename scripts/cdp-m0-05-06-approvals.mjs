@@ -1445,7 +1445,7 @@ const SENTENCES = [
       return { measured: [`app policy-elevated: writeOutside=${c?.writeOutside}, engine ${c?.engine}`],
         contradiction: !c ? null : c.writeOutside !== "completed" || !/--disable-sandbox/.test(c.engine) };
     } },
-  { text: "Grant it to a workspace you trust.",
+  { text: "It reaches every project that does not restrict it.",
     claim: "it reaches every project that does not restrict it",
     check: (e) => {
       const f = e.rec.scope?.change;

@@ -123,7 +123,7 @@ const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }[] = [
   {
     mode: "elevated",
     label: "Elevated access",
-    detail: "Adds files and commands outside the folder. Grant it to a workspace you trust.",
+    detail: "Adds files and commands outside the folder. It reaches every project that does not restrict it.",
   },
 ];
 

@@ -3393,22 +3393,6 @@ body.dark .composer textarea::placeholder {
   padding: 5px 9px;
 }
 
-.project-global {
-  border-top: 1px solid var(--line);
-  padding-top: 6px;
-}
-
-.project-global summary {
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.project-global .project-settings {
-  border-top: none;
-  margin-top: 6px;
-}
-
 .project-diff {
   list-style: none;
   margin: 0;

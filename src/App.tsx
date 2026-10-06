@@ -1163,7 +1163,6 @@ export default function App() {
                       project.id,
                     );
                   }}
-                  onSetGlobal={setGlobalSettings}
                   onSetOverride={setProjectOverride}
                   settingsFor={settingsFor}
                   onCheckWorkspace={async (path) => {
@@ -1184,7 +1183,6 @@ export default function App() {
                       return null;
                     }
                   }}
-                  hideGlobalSettings
                 />
               </>
             )}

@@ -44,7 +44,6 @@ interface ProjectsPanelProps {
   ) => void;
   onAttach: (sessionId: string, projectId: string | null) => void;
   onStartConversation: (project: Project, workspace?: string) => Promise<void>;
-  onSetGlobal: (patch: Partial<ProjectSettings>) => void;
   onSetOverride: (
     projectId: string,
     key: keyof ProjectSettings,
@@ -58,12 +57,6 @@ interface ProjectsPanelProps {
    * panel shows what the backend reads instead of offering a second store.
    */
   onReadRules: (path: string) => Promise<HarnessRules | null>;
-  /**
-   * Hide the global-defaults editor: global settings live in the Settings
-   * panel (sidebar footer). Per-project overrides stay — they are
-   * project-scoped, not global.
-   */
-  hideGlobalSettings?: boolean;
 }
 
 const SETTING_KEYS: (keyof ProjectSettings)[] = [
@@ -110,8 +103,7 @@ function formatSetting(
 /**
  * US-3 + US-30 projects panel: create (max 5, client-side), the folder's real
  * rules (read-only, as the CLI loads them), thread attach/detach for the active
- * thread, and the small settings panel (global defaults + per-project overrides
- * with diff).
+ * thread, and each project's preferences with their diff from the defaults.
  */
 export function ProjectsPanel({
   projects,
@@ -125,12 +117,10 @@ export function ProjectsPanel({
   onUpdate,
   onAttach,
   onStartConversation,
-  onSetGlobal,
   onSetOverride,
   settingsFor,
   onCheckWorkspace,
   onReadRules,
-  hideGlobalSettings = false,
 }: ProjectsPanelProps) {
   const [name, setName] = useState("");
   const [workspacePaths, setWorkspacePaths] = useState<string[]>([]);
@@ -315,64 +305,6 @@ export function ProjectsPanel({
           />
         ))}
       </ul>
-      {!hideGlobalSettings && (
-        <details className="project-global">
-          <summary>Global settings (project defaults)</summary>
-          <div className="project-settings">
-            <label className="project-setting">
-              <span>Model</span>
-              <input
-                type="text"
-                value={globalSettings.model}
-                onChange={(e) => onSetGlobal({ model: e.target.value })}
-                aria-label="Global model"
-              />
-            </label>
-            <label className="project-setting">
-              <span>Sandbox</span>
-              <select
-                value={globalSettings.sandbox}
-                onChange={(e) =>
-                  onSetGlobal({
-                    sandbox: e.target.value as ProjectSettings["sandbox"],
-                  })
-                }
-                aria-label="Global sandbox"
-              >
-                <option value="read-only">Read only</option>
-                <option value="workspace">Project</option>
-                <option value="full">Full access</option>
-              </select>
-            </label>
-            <label className="project-setting">
-              <span>Network</span>
-              <select
-                value={globalSettings.networkDefault}
-                onChange={(e) =>
-                  onSetGlobal({
-                    networkDefault: e.target
-                      .value as ProjectSettings["networkDefault"],
-                  })
-                }
-                aria-label="Global network default"
-              >
-                <option value="allow">Allow</option>
-                <option value="prompt">Ask</option>
-                <option value="deny">Deny</option>
-              </select>
-            </label>
-            <label className="project-setting">
-              <span>Auto-compact</span>
-              <input
-                type="checkbox"
-                checked={globalSettings.autoCompact}
-                onChange={(e) => onSetGlobal({ autoCompact: e.target.checked })}
-                aria-label="Global auto-compact"
-              />
-            </label>
-          </div>
-        </details>
-      )}
     </div>
   );
 }
@@ -820,7 +752,7 @@ function OverrideRow({
     <label className="project-setting">
       <span>
         {SETTING_LABELS[settingKey]}
-        {restrictions === undefined && <small> g:{formatSetting(settingKey, globalValue)}</small>}
+        {restrictions === undefined && <small> Default: {formatSetting(settingKey, globalValue)}</small>}
       </span>
       {editor}
       {restrictions === undefined && overrideValue !== undefined && (
