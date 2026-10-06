@@ -89,15 +89,18 @@ export async function waitFor(probe, timeoutMs, everyMs = 500) {
  * result; event polls are skipped. `plugin:dialog|open` is answered from
  * window.__baselineIpc.dialogQueue when an answer is queued: CDP cannot drive
  * the OS folder dialog, so the harness supplies the folder the user would pick.
+ * `plugin:dialog|message` (an OK/Cancel confirmation) likewise from
+ * window.__baselineIpc.messageQueue.
  * Wraps fetch once per page load; every call starts a fresh trace.
  */
 export const INSTALL_IPC_TRACE = `(() => {
   if (window.__baselineIpc && window.__baselineIpc.installed) {
     window.__baselineIpc.calls = [];
     window.__baselineIpc.dialogQueue = [];
+    window.__baselineIpc.messageQueue = [];
     return 'reset';
   }
-  const state = window.__baselineIpc = { installed: true, calls: [], dialogQueue: [], t0: Date.now() };
+  const state = window.__baselineIpc = { installed: true, calls: [], dialogQueue: [], messageQueue: [], t0: Date.now() };
   const original = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const url = String(typeof input === 'string' ? input : (input && input.url) || input);
@@ -120,8 +123,11 @@ export const INSTALL_IPC_TRACE = `(() => {
         headers: { 'Tauri-Response': 'error', 'Content-Type': 'application/json' },
       });
     }
-    if (cmd === 'plugin:dialog|open' && state.dialogQueue.length > 0) {
-      const answer = state.dialogQueue.shift();
+    // A confirmation box (confirmAction): answered from messageQueue ("Ok" or
+    // "Cancel"), as the user's click would, when an answer is queued.
+    const queue = cmd === 'plugin:dialog|open' ? state.dialogQueue : cmd === 'plugin:dialog|message' ? state.messageQueue : null;
+    if (queue && queue.length > 0) {
+      const answer = queue.shift();
       entry.answeredByHarness = true;
       entry.ok = true;
       entry.result = JSON.stringify(answer);

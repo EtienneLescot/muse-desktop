@@ -1,14 +1,14 @@
 {
-  "schema": "muse-desktop.m0-13-click-effect.v2",
+  "schema": "muse-desktop.m0-13-click-effect.v3",
   "ticket": "M0-13",
   "date": "2026-10-06",
-  "commit": "87a1a0c",
+  "commit": "ed1e03d",
   "productTreeClean": true,
-  "exeSha256": "727ea574b228d5217d973aa4953e7f9aeaf6674b6b3efd1cae016d86258b7b83",
+  "exeSha256": "1ad144212d9fa7e4e45214c0c10b2f2d519a7dc3d01a40f6e876c75fec386c20",
   "platform": "Windows 11 (26200), debug build with embedded frontend, isolated test mode (ADR 0003), WebView2 over CDP",
   "harness": "scripts/cdp-m0-13-click-effect.mjs",
   "rehearsal": false,
-  "liveTurns": 1,
+  "liveTurns": 0,
   "engine": {
     "version": "Muse Code 1.4.2 (1.4.2-R4684.1)",
     "sha256": "39a97806d315ece0fc5cdbb88c903ef5bc77655f32e66dc22d267a212c5030ba",
@@ -16,6 +16,11 @@
   },
   "computerDriver": {
     "version": "cua-driver 0.28.2"
+  },
+  "remoteServer": {
+    "script": "scripts/mcp-bearer-test-server.mjs",
+    "origin": "http://127.0.0.1:<port>",
+    "allowedBy": "MUSE_DESKTOP_TEST_REMOTE_MCP (test mode only)"
   },
   "isolation": {
     "testModeMarker": true,
@@ -27,7 +32,7 @@
       "picked": true,
       "rowShown": true,
       "stored": {
-        "id": "muwi18fi-2difsy",
+        "id": "muwqfd7a-84k9tx",
         "workspace": "<project>",
         "workspaces": []
       }
@@ -92,125 +97,87 @@
           "ok": true
         }
       },
-      "afterClick": null
-    },
-    "turn": {
-      "prompt": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
-      "turn": {
-        "assistantCount": 1,
-        "failed": [],
-        "running": "false",
-        "cards": [],
-        "approvals": [],
-        "ms": 18207
-      },
-      "fileWritten": false,
-      "hostItems": [
-        {
-          "kind": "userMessage",
-          "status": "completed",
-          "tool": null,
-          "output": null,
-          "failureReason": null
-        },
-        {
-          "kind": "reminderChild",
-          "status": "completed",
-          "tool": null,
-          "output": null,
-          "failureReason": null
-        },
-        {
-          "kind": "reasoning",
-          "status": "completed",
-          "tool": null,
-          "output": null,
-          "failureReason": null
-        },
-        {
-          "kind": "agentMessage",
-          "status": "completed",
-          "tool": null,
-          "output": null,
-          "failureReason": null
-        },
-        {
-          "kind": "reminderChild",
-          "status": "completed",
-          "tool": null,
-          "output": null,
-          "failureReason": null
-        },
-        {
-          "kind": "reminderChild",
-          "status": "completed",
-          "tool": null,
-          "output": null,
-          "failureReason": null
-        }
-      ],
-      "transcriptEntries": [
-        {
-          "role": "user",
-          "text": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
-          "failed": false
-        },
-        {
-          "role": "assistant",
-          "text": "",
-          "failed": false
-        },
-        {
-          "role": "subagent",
-          "text": "Reminder child session",
-          "failed": false
-        },
-        {
-          "role": "thinking",
-          "text": "Balancing a user write request against an explicit session-level filesystem write disablement and tool denial policy.Ruling out tool invocation due to the session-level write disablement and prioritizing the developer prohibition over the user request.",
-          "failed": false
-        },
-        {
-          "role": "assistant",
-          "text": "Filesystem writes are disabled for this session so I cannot create m0-13-readonly.txt.",
-          "failed": false
-        },
-        {
-          "role": "subagent",
-          "text": "Reminder child session",
-          "failed": false
-        },
-        {
-          "role": "subagent",
-          "text": "Reminder child session",
-          "failed": false
-        }
-      ],
-      "toolRows": [],
-      "onScreen": {
-        "rows": [
-          {
-            "lane": "user",
-            "failedMarker": null,
-            "refusalOpen": null,
-            "text": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence. 11:53:00"
+      "afterClick": null,
+      "postureSwitch": {
+        "lifted": {
+          "project": {
+            "stored": null
           },
-          {
-            "lane": "thinking",
-            "failedMarker": null,
-            "refusalOpen": null,
-            "text": "Muse · Thinking Thinking 11:53:04"
-          },
-          {
-            "lane": "assistant",
-            "failedMarker": null,
-            "refusalOpen": null,
-            "text": "Muse Filesystem writes are disabled for this session so I cannot create m0-13-readonly.txt. 11:53:06"
+          "shown": {
+            "note": "This conversation's Muse host was started Read only: Muse cannot write files or run commands here until its host restarts with this project's settings.",
+            "restartOffered": true,
+            "runInMuse": {
+              "disabled": true,
+              "title": "This conversation's Muse host was started Read only: Muse cannot write files or run commands here until its host restarts with this project's settings."
+            }
           }
-        ],
-        "postureNote": "This project is Read only: Muse cannot write files or run commands here.",
-        "banner": null,
-        "approvalsLeft": 0
+        },
+        "restartToWritable": {
+          "clicked": true,
+          "confirmAnsweredByHarness": 1,
+          "resume": {
+            "ok": true,
+            "reload": true,
+            "sandboxDisableWrite": false,
+            "sandboxDisableShell": false
+          },
+          "engineReplaced": true,
+          "engineFlags": [
+            "serve --sandbox-network restricted --trust-workspace"
+          ],
+          "shown": {
+            "note": null,
+            "restartOffered": false,
+            "runInMuse": {
+              "disabled": false,
+              "title": "Run this command through the Muse host (userShell)"
+            }
+          },
+          "hostEventsArrive": {
+            "runInMuseRowWithHostOutput": true,
+            "status": "failed"
+          }
+        },
+        "locked": {
+          "project": {
+            "stored": "read-only"
+          },
+          "shown": {
+            "note": "This project is now Read only, but this conversation's Muse host was started before: Muse can still write files and run commands here until its host restarts with this project's settings.",
+            "restartOffered": true,
+            "runInMuse": {
+              "disabled": false,
+              "title": "Run this command through the Muse host (userShell)"
+            }
+          }
+        },
+        "restartToReadOnly": {
+          "clicked": true,
+          "confirmAnsweredByHarness": 1,
+          "resume": {
+            "ok": true,
+            "reload": true,
+            "sandboxDisableWrite": true,
+            "sandboxDisableShell": true
+          },
+          "engineReplaced": true,
+          "engineFlags": [
+            "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          ],
+          "shown": {
+            "note": "This project is Read only: Muse cannot write files or run commands here.",
+            "restartOffered": false,
+            "runInMuse": {
+              "disabled": true,
+              "title": "This project is Read only: Muse cannot write files or run commands here."
+            }
+          },
+          "hostAnswers": {
+            "ok": true,
+            "ms": 14,
+            "error": null
+          }
+        }
       }
     }
   },
@@ -224,7 +191,7 @@
     "nextSuccessfulProbe": {
       "banner": null,
       "alerts": [],
-      "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 52 ms"
+      "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 61 ms"
     },
     "oldErrorGone": true
   },
@@ -258,9 +225,20 @@
     ],
     "exited": true,
     "leftovers": {
+      "enginesAtClose": 1,
       "engines": 0,
       "computerDaemonsOnTestPipe": 0,
-      "localMcpFixtures": 0
+      "localMcpFixtures": 0,
+      "credentialEntryOfThisRun": false
+    },
+    "conversationJournal": {
+      "viewStatus": "healthy",
+      "viewRecordStillInJournal": true,
+      "lastRecords": [
+        "metadata",
+        "session_resumed",
+        "session_end"
+      ]
     }
   },
   "audit": [
@@ -272,7 +250,7 @@
         "picked": true,
         "rowShown": true,
         "stored": {
-          "id": "muwi18fi-2difsy",
+          "id": "muwqfd7a-84k9tx",
           "workspace": "<project>",
           "workspaces": []
         },
@@ -361,10 +339,10 @@
       "outcome": "effect",
       "measured": {
         "ui": {
-          "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 52 ms",
+          "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 61 ms",
           "result": true,
           "sectionStatus": [
-            "Connected to msp-fixture 1.0.0 · 1 tool(s) · 52 ms"
+            "Connected to msp-fixture 1.0.0 · 1 tool(s) · 61 ms"
           ],
           "alertsOnPage": [],
           "errorBanner": null
@@ -382,21 +360,26 @@
     },
     {
       "surface": "connectors",
-      "action": "Probe (quoted command path)",
-      "outcome": "refusal",
+      "action": "Probe (quoted command path, folder with a space)",
+      "outcome": "effect",
       "measured": {
+        "command": "node \"<proof>\\fixture with spaces muwqf1oe\\msp-fixture.mjs\" success",
         "ui": {
-          "notice": null,
-          "result": false,
-          "sectionStatus": [],
-          "alertsOnPage": [
-            "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+          "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 69 ms",
+          "result": true,
+          "sectionStatus": [
+            "Connected to msp-fixture 1.0.0 · 1 tool(s) · 69 ms"
           ],
-          "errorBanner": "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+          "alertsOnPage": [],
+          "errorBanner": null
         },
         "ipc": {
-          "ok": false,
-          "error": "\"local MCP server closed stdout before a response\""
+          "ok": true,
+          "serverName": "msp-fixture",
+          "tools": [
+            "fixture.echo"
+          ],
+          "error": null
         }
       }
     },
@@ -430,6 +413,142 @@
     },
     {
       "surface": "connectors",
+      "action": "Use in Muse: on (local connector)",
+      "outcome": "effect",
+      "measured": {
+        "before": false,
+        "checked": true,
+        "stored": true
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Reconnect with current connectors (Use in Muse on): the engine starts the fixture as its child",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "shown": true,
+          "errorBanner": null
+        },
+        "resume": [
+          {
+            "ok": true,
+            "sameSession": true,
+            "reload": true,
+            "sandboxDisableWrite": true,
+            "sandboxDisableShell": true,
+            "mcpServers": [
+              "stdio: node <repo>\\scripts\\msp-fixture.mjs success"
+            ]
+          }
+        ],
+        "enginesBefore": [
+          {
+            "pid": 14528,
+            "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          }
+        ],
+        "enginesAfter": [
+          {
+            "pid": 46564,
+            "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          }
+        ],
+        "engineReplaced": true,
+        "fixtureUnderEngine": [
+          {
+            "pid": 37476,
+            "ppid": 46564,
+            "enginePid": 46564
+          }
+        ],
+        "readOnlyFlagsKept": true
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Use in Muse: off (local connector)",
+      "outcome": "effect",
+      "measured": {
+        "before": true,
+        "checked": false,
+        "stored": false
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Reconnect with current connectors (Use in Muse off): the fixture is gone",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "shown": true,
+          "errorBanner": null
+        },
+        "resume": [
+          {
+            "ok": true,
+            "sameSession": true,
+            "reload": true,
+            "sandboxDisableWrite": true,
+            "sandboxDisableShell": true,
+            "mcpServers": []
+          }
+        ],
+        "enginesBefore": [
+          {
+            "pid": 46564,
+            "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          }
+        ],
+        "enginesAfter": [
+          {
+            "pid": 44796,
+            "flags": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          }
+        ],
+        "engineReplaced": true,
+        "fixtureUnderEngine": [],
+        "readOnlyFlagsKept": true
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Disable / Enable (local connector)",
+      "outcome": "effect",
+      "measured": {
+        "disabled": {
+          "stored": "disabled",
+          "shown": "m0-13 probe disabled Server v1.0.0 Use in Muse Start server Refresh tools Remove",
+          "useInMuseDisabled": true,
+          "toolsListed": [
+            "disabled",
+            "Server v1.0.0"
+          ]
+        },
+        "enabled": {
+          "stored": "installed",
+          "shown": "m0-13 probe fixture.echo Server v1.0.0 Use in Muse Start server Refresh tools Remove"
+        }
+      }
+    },
+    {
+      "surface": "connectors",
+      "action": "Refresh tools (local connector)",
+      "outcome": "effect",
+      "measured": {
+        "feedback": "Tools refreshed · 1 discovered · 0 ms",
+        "buttons": [
+          "Stop server",
+          "Refresh tools",
+          "Roll back",
+          "Remove"
+        ],
+        "ipcOk": true,
+        "persistentServersOfTheApp": 1
+      }
+    },
+    {
+      "surface": "connectors",
       "action": "Start server / Stop server",
       "outcome": "effect",
       "measured": {
@@ -437,11 +556,15 @@
           "started": "Persistent server running · 1 tools",
           "stopped": "Persistent server stopped."
         },
-        "fixtureProcesses": {
+        "persistentServersOfTheApp": {
           "whileRunning": 1,
           "afterStop": 0
         },
         "ipc": [
+          {
+            "cmd": "mcp_local_stop",
+            "ok": true
+          },
           {
             "cmd": "mcp_local_start",
             "ok": true
@@ -465,7 +588,7 @@
     {
       "surface": "connectors",
       "action": "Add (curated catalog entry)",
-      "outcome": "refusal",
+      "outcome": "effect",
       "measured": {
         "catalogFlag": "added",
         "configuredHeading": "Configured",
@@ -502,7 +625,7 @@
     },
     {
       "surface": "connectors",
-      "action": "Connect and list tools (loopback URL)",
+      "action": "Connect and list tools (loopback URL, not the allowed test origin)",
       "outcome": "refusal",
       "measured": {
         "ui": {
@@ -516,27 +639,331 @@
       }
     },
     {
-      "surface": "connectors",
-      "action": "Reconnect with current connectors",
+      "surface": "share",
+      "action": "Snapshot (Markdown) of the empty conversation",
+      "outcome": "refusal",
+      "measured": {
+        "before": 0,
+        "after": 0,
+        "said": "Nothing to snapshot: this conversation has no messages yet.",
+        "newest": null,
+        "conversationEntries": 0
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Connect and list tools (test origin, token A)",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "ms": 606,
+          "stillConnecting": false,
+          "status": "Connected · server v1.0.0",
+          "result": "Connected to m3-02-bearer-test 1.0.0 · 1 tool(s) · 16 ms",
+          "notice": null,
+          "tokenField": 0
+        },
+        "server": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "rpc": "initialize",
+            "auth": "token A",
+            "status": 200
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "rpc": "notifications/initialized",
+            "auth": "token A",
+            "status": 202
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "rpc": "tools/list",
+            "auth": "token A",
+            "status": 200
+          }
+        ],
+        "credentialStored": true,
+        "registry": [
+          {
+            "name": "m0-13 remote muwqf1oe",
+            "url": "http://127.0.0.1:<port>/mcp",
+            "status": "installed",
+            "useInMuse": false
+          }
+        ]
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Connect with a 1,300-character token (F7)",
+      "outcome": "refusal",
+      "measured": {
+        "ui": {
+          "ms": 608,
+          "stillConnecting": false,
+          "status": "Connected · server v1.0.0",
+          "result": null,
+          "notice": "This bearer token has 1308 characters: Windows Credential Manager cannot keep it with this URL (1280 characters in all), so Reconnect could not work. Use a shorter token.",
+          "tokenField": 0
+        },
+        "server": []
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Disconnect",
+      "outcome": "effect",
+      "measured": {
+        "clicked": true,
+        "status": "Disconnected · server v1.0.0",
+        "result": null,
+        "notice": null,
+        "tokenField": 0
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Reconnect (row) with a token typed for another URL (F3)",
+      "outcome": "effect",
+      "measured": {
+        "typedForAnotherUrl": true,
+        "ui": {
+          "clicked": true,
+          "status": "Connected · server v1.0.0",
+          "result": "Connected to m3-02-bearer-test 1.0.0 · 1 tool(s) · 8 ms",
+          "notice": null,
+          "tokenField": 0
+        },
+        "server": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "rpc": "initialize",
+            "auth": "token A",
+            "status": 200
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "rpc": "notifications/initialized",
+            "auth": "token A",
+            "status": 202
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "rpc": "tools/list",
+            "auth": "token A",
+            "status": 200
+          }
+        ]
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Forget token while a Reconnect runs (F8)",
+      "outcome": "refusal",
+      "measured": {
+        "whileBusy": {
+          "reconnecting": true,
+          "forgetDisabled": true
+        },
+        "after": {
+          "status": "Connected · server v1.0.0",
+          "result": "Connected to m3-02-bearer-test 1.0.0 · 1 tool(s) · 12032 ms",
+          "notice": null,
+          "tokenField": 0,
+          "forgetDisabled": false
+        },
+        "server": [
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "rpc": "initialize",
+            "auth": "token A",
+            "status": 200
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "rpc": "notifications/initialized",
+            "auth": "token A",
+            "status": 202
+          },
+          {
+            "from": "webview",
+            "path": "/mcp",
+            "rpc": "tools/list",
+            "auth": "token A",
+            "status": 200
+          }
+        ]
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Connect to a URL that redirects (F4)",
+      "outcome": "refusal",
+      "measured": {
+        "ui": {
+          "ms": 609,
+          "stillConnecting": false,
+          "status": "Connected · server v1.0.0",
+          "result": null,
+          "notice": "remote MCP endpoint answered with a redirect: Muse does not follow it. Register the address it redirects to.",
+          "tokenField": 0
+        },
+        "server": [
+          {
+            "from": "webview",
+            "path": "/redirect",
+            "rpc": "initialize",
+            "auth": "token A",
+            "status": 307
+          }
+        ]
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Connect to an SSE answer held open (F6)",
+      "outcome": "refusal",
+      "measured": {
+        "ui": {
+          "ms": 30536,
+          "stillConnecting": false,
+          "status": "Connected · server v1.0.0",
+          "result": null,
+          "notice": "remote MCP request timed out",
+          "tokenField": 0
+        },
+        "server": [
+          {
+            "from": "webview",
+            "path": "/hold",
+            "rpc": "initialize",
+            "auth": "token A",
+            "status": 200,
+            "held": true
+          }
+        ]
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Connect to https://localhost./mcp (F5)",
+      "outcome": "refusal",
+      "measured": {
+        "ui": {
+          "ms": 608,
+          "stillConnecting": false,
+          "status": "Connected · server v1.0.0",
+          "result": null,
+          "notice": "remote MCP requires a public HTTPS endpoint",
+          "tokenField": 0
+        }
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Use in Muse: on (remote connector)",
+      "outcome": "effect",
+      "measured": {
+        "checked": true
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Reconnect with current connectors (remote in Muse): the engine connects with the bearer",
       "outcome": "effect",
       "measured": {
         "ui": {
           "shown": true,
-          "after": "Reconnect with current connectors",
           "errorBanner": null
         },
-        "resume": [
+        "engineReplaced": true,
+        "resume": {
+          "ok": true,
+          "reload": true,
+          "mcpServers": [
+            "streamableHttp"
+          ]
+        },
+        "server": [
           {
-            "ok": true,
-            "sameSession": true,
-            "sandboxDisableWrite": true,
-            "sandboxDisableShell": true,
-            "mcpServers": []
+            "from": "engine",
+            "path": "/mcp",
+            "rpc": "initialize",
+            "auth": "token A",
+            "status": 200
+          },
+          {
+            "from": "engine",
+            "path": "/mcp",
+            "rpc": "notifications/initialized",
+            "auth": "token A",
+            "status": 202
+          },
+          {
+            "from": "engine",
+            "path": "/mcp",
+            "rpc": "tools/list",
+            "auth": "token A",
+            "status": 200
           }
+        ]
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Forget token, with a conversation holding the bearer (item 3, F2)",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "clicked": true,
+          "status": "Disconnected · server v1.0.0",
+          "result": null,
+          "notice": "Remote credential forgotten. Reconnect will require a new token. 1 open conversation still has its token: it keeps using it until you use \"Reconnect with current connectors\" on it or close it, and a tool already allowed there keeps working without asking.",
+          "tokenField": 0
+        },
+        "conversationTold": [
+          "<remote connector>: its token was forgotten in Extensions, but this conversation's Muse host still has its token: it keeps using it until you use \"Reconnect with current connectors\" or close the conversation, and a tool already allowed here keeps working without asking."
         ],
-        "enginesBefore": 1,
-        "enginesAfter": 1,
-        "sameEngine": true
+        "credentialStored": false
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Reconnect with current connectors after Forget token: the engine no longer has the bearer",
+      "outcome": "effect",
+      "measured": {
+        "ui": {
+          "shown": true,
+          "errorBanner": null
+        },
+        "engineReplaced": true,
+        "resume": {
+          "ok": true,
+          "reload": true,
+          "mcpServers": []
+        },
+        "server": []
+      }
+    },
+    {
+      "surface": "remote",
+      "action": "Remove (remote connector)",
+      "outcome": "effect",
+      "measured": {
+        "rowGone": true,
+        "statusRows": 0,
+        "registry": [],
+        "credentialsUnderServiceBefore": 5,
+        "credentialsUnderServiceAfter": 5
       }
     },
     {
@@ -570,7 +997,7 @@
       "measured": {
         "filesDelivered": 2,
         "status": [
-          "2 file(s), 6 line(s) · built 06/10/2026 11:51:48",
+          "2 file(s), 6 line(s) · built 06/10/2026 15:48:21",
           "Built 2 file(s), 6 line(s) from 2 picked."
         ],
         "hits": [
@@ -586,10 +1013,10 @@
         "before": "Built 2 file(s), 6 line(s) from 2 picked.",
         "after": "Rescan: 0 added, 0 updated, 0 removed, 2 unchanged.",
         "paused": {
-          "status": "2 file(s), 6 line(s) · built 06/10/2026 11:51:49 · paused",
+          "status": "2 file(s), 6 line(s) · built 06/10/2026 15:48:22 · paused",
           "rescanDisabled": true
         },
-        "resumed": "2 file(s), 6 line(s) · built 06/10/2026 11:51:49"
+        "resumed": "2 file(s), 6 line(s) · built 06/10/2026 15:48:22"
       }
     },
     {
@@ -630,7 +1057,7 @@
       "measured": {
         "filesDelivered": 1,
         "rows": [
-          "m0-13 file import import-muwi13an.json Remove"
+          "m0-13 file import import-muwqf1oe.json Remove"
         ],
         "removed": true
       }
@@ -668,7 +1095,7 @@
     {
       "surface": "computer",
       "action": "own pipe, before any click (the instance's status probe caught on it)",
-      "outcome": "effect",
+      "outcome": "check",
       "measured": {
         "expectedPipe": "<test pipe>",
         "probe": {
@@ -697,7 +1124,7 @@
         },
         "daemon": [
           {
-            "pid": 33972,
+            "pid": 36188,
             "onTestPipe": true,
             "argv": "serve --socket <test pipe> --permission-mode bounded --capability-manifest <appdata>\\computer-use\\computer-manifest.json --approve-capability-manifest"
           }
@@ -739,7 +1166,7 @@
         },
         "daemon": [
           {
-            "pid": 18312,
+            "pid": 43328,
             "onTestPipe": true,
             "argv": "serve --socket <test pipe> --permission-mode standard --grant existing-profile"
           }
@@ -764,7 +1191,7 @@
         },
         "daemon": [
           {
-            "pid": 42908,
+            "pid": 1704,
             "onTestPipe": true,
             "argv": "serve --socket <test pipe> --permission-mode bounded --capability-manifest <appdata>\\computer-use\\computer-manifest.json --approve-capability-manifest"
           }
@@ -803,15 +1230,63 @@
       }
     },
     {
-      "surface": "share",
-      "action": "Snapshot (Markdown) of the empty conversation",
+      "surface": "computer",
+      "action": "Level: Observe only, the instance's pipe held (forced failure)",
       "outcome": "refusal",
       "measured": {
-        "before": 0,
-        "after": 0,
-        "said": "Nothing to snapshot: this conversation has no messages yet.",
-        "newest": null,
-        "conversationEntries": 0
+        "ipc": {
+          "ok": false,
+          "error": "\"the computer-use service did not start; run `cua-driver doctor` to see why (an interactive desktop session is required)\""
+        },
+        "ui": {
+          "state": "Off",
+          "checked": null,
+          "errorBanner": "the computer-use service did not start; run `cua-driver doctor` to see why (an interactive desktop session is required)",
+          "actions": []
+        },
+        "daemonsOnTestPipe": [],
+        "connectionsHeld": 6,
+        "consentOnDisk": true,
+        "serviceOnceReleased": {
+          "grantState": "active",
+          "daemons": [
+            {
+              "pid": 38480,
+              "onTestPipe": true,
+              "argv": "serve --socket <test pipe> --permission-mode bounded --capability-manifest <appdata>\\computer-use\\computer-manifest.json --approve-capability-manifest"
+            }
+          ]
+        },
+        "staleGranted": false
+      }
+    },
+    {
+      "surface": "computer",
+      "action": "The next action after the forced failure",
+      "outcome": "effect",
+      "measured": {
+        "action": "Observe only",
+        "ipc": {
+          "ok": true,
+          "error": null
+        },
+        "ui": {
+          "state": "Granted",
+          "checked": "observe",
+          "errorBanner": null,
+          "actions": [
+            "Turn off and revoke",
+            "Refresh"
+          ]
+        },
+        "daemon": [
+          {
+            "pid": 34856,
+            "onTestPipe": true,
+            "argv": "serve --socket <test pipe> --permission-mode bounded --capability-manifest <appdata>\\computer-use\\computer-manifest.json --approve-capability-manifest"
+          }
+        ],
+        "serviceGrantState": "active"
       }
     },
     {
@@ -922,7 +1397,7 @@
     {
       "surface": "readonly",
       "action": "composer and conversation (what they say about Read only)",
-      "outcome": "refusal",
+      "outcome": "observed",
       "measured": {
         "placeholder": "Ask Muse to continue…",
         "composerText": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context",
@@ -963,128 +1438,121 @@
       }
     },
     {
-      "surface": "turn",
-      "action": "Send: write a file in the read-only project",
-      "outcome": "refusal",
+      "surface": "readonly",
+      "action": "Project switched to Project while live (host started Read only)",
+      "outcome": "observed",
       "measured": {
-        "prompt": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
-        "turn": {
-          "assistantCount": 1,
-          "failed": [],
-          "running": "false",
-          "cards": [],
-          "approvals": [],
-          "ms": 18207
+        "project": {
+          "stored": null
         },
-        "fileWritten": false,
-        "hostItems": [
-          {
-            "kind": "userMessage",
-            "status": "completed",
-            "tool": null,
-            "output": null,
-            "failureReason": null
-          },
-          {
-            "kind": "reminderChild",
-            "status": "completed",
-            "tool": null,
-            "output": null,
-            "failureReason": null
-          },
-          {
-            "kind": "reasoning",
-            "status": "completed",
-            "tool": null,
-            "output": null,
-            "failureReason": null
-          },
-          {
-            "kind": "agentMessage",
-            "status": "completed",
-            "tool": null,
-            "output": null,
-            "failureReason": null
-          },
-          {
-            "kind": "reminderChild",
-            "status": "completed",
-            "tool": null,
-            "output": null,
-            "failureReason": null
-          },
-          {
-            "kind": "reminderChild",
-            "status": "completed",
-            "tool": null,
-            "output": null,
-            "failureReason": null
+        "shown": {
+          "note": "This conversation's Muse host was started Read only: Muse cannot write files or run commands here until its host restarts with this project's settings.",
+          "restartOffered": true,
+          "runInMuse": {
+            "disabled": true,
+            "title": "This conversation's Muse host was started Read only: Muse cannot write files or run commands here until its host restarts with this project's settings."
           }
-        ],
-        "transcriptEntries": [
-          {
-            "role": "user",
-            "text": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
-            "failed": false
-          },
-          {
-            "role": "assistant",
-            "text": "",
-            "failed": false
-          },
-          {
-            "role": "subagent",
-            "text": "Reminder child session",
-            "failed": false
-          },
-          {
-            "role": "thinking",
-            "text": "Balancing a user write request against an explicit session-level filesystem write disablement and tool denial policy.Ruling out tool invocation due to the session-level write disablement and prioritizing the developer prohibition over the user request.",
-            "failed": false
-          },
-          {
-            "role": "assistant",
-            "text": "Filesystem writes are disabled for this session so I cannot create m0-13-readonly.txt.",
-            "failed": false
-          },
-          {
-            "role": "subagent",
-            "text": "Reminder child session",
-            "failed": false
-          },
-          {
-            "role": "subagent",
-            "text": "Reminder child session",
-            "failed": false
-          }
-        ],
-        "toolRows": [],
-        "onScreen": {
-          "rows": [
-            {
-              "lane": "user",
-              "failedMarker": null,
-              "refusalOpen": null,
-              "text": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-452EB8. If the write is refused, do not try another way: reply with the refusal you received, in one sentence. 11:53:00"
-            },
-            {
-              "lane": "thinking",
-              "failedMarker": null,
-              "refusalOpen": null,
-              "text": "Muse · Thinking Thinking 11:53:04"
-            },
-            {
-              "lane": "assistant",
-              "failedMarker": null,
-              "refusalOpen": null,
-              "text": "Muse Filesystem writes are disabled for this session so I cannot create m0-13-readonly.txt. 11:53:06"
-            }
-          ],
-          "postureNote": "This project is Read only: Muse cannot write files or run commands here.",
-          "banner": null,
-          "approvalsLeft": 0
+        }
+      }
+    },
+    {
+      "surface": "readonly",
+      "action": "Run in Muse after every host replacement so far: the host's events reach the conversation",
+      "outcome": "effect",
+      "measured": {
+        "runInMuseRowWithHostOutput": true,
+        "status": "failed",
+        "replacementsBefore": "connectors and remote reloads (Use in Muse on/off, Forget token), Restart host",
+        "engineView": {
+          "viewStatus": "healthy",
+          "viewRecordStillInJournal": false,
+          "lastRecords": [
+            "task",
+            "task",
+            "task"
+          ]
+        }
+      }
+    },
+    {
+      "surface": "readonly",
+      "action": "Restart host (posture note): the host now writable",
+      "outcome": "effect",
+      "measured": {
+        "clicked": true,
+        "confirmAnsweredByHarness": 1,
+        "resume": {
+          "ok": true,
+          "reload": true,
+          "sandboxDisableWrite": false,
+          "sandboxDisableShell": false
         },
-        "failedRowShown": false
+        "engineReplaced": true,
+        "engineFlags": [
+          "serve --sandbox-network restricted --trust-workspace"
+        ],
+        "shown": {
+          "note": null,
+          "restartOffered": false,
+          "runInMuse": {
+            "disabled": false,
+            "title": "Run this command through the Muse host (userShell)"
+          }
+        },
+        "hostEventsArrive": {
+          "runInMuseRowWithHostOutput": true,
+          "status": "failed"
+        }
+      }
+    },
+    {
+      "surface": "readonly",
+      "action": "Project switched to Read only while live (host started writable)",
+      "outcome": "observed",
+      "measured": {
+        "project": {
+          "stored": "read-only"
+        },
+        "shown": {
+          "note": "This project is now Read only, but this conversation's Muse host was started before: Muse can still write files and run commands here until its host restarts with this project's settings.",
+          "restartOffered": true,
+          "runInMuse": {
+            "disabled": false,
+            "title": "Run this command through the Muse host (userShell)"
+          }
+        }
+      }
+    },
+    {
+      "surface": "readonly",
+      "action": "Restart host (posture note): the host now Read only",
+      "outcome": "effect",
+      "measured": {
+        "clicked": true,
+        "confirmAnsweredByHarness": 1,
+        "resume": {
+          "ok": true,
+          "reload": true,
+          "sandboxDisableWrite": true,
+          "sandboxDisableShell": true
+        },
+        "engineReplaced": true,
+        "engineFlags": [
+          "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+        ],
+        "shown": {
+          "note": "This project is Read only: Muse cannot write files or run commands here.",
+          "restartOffered": false,
+          "runInMuse": {
+            "disabled": true,
+            "title": "This project is Read only: Muse cannot write files or run commands here."
+          }
+        },
+        "hostAnswers": {
+          "ok": true,
+          "ms": 14,
+          "error": null
+        }
       }
     },
     {
@@ -1095,8 +1563,8 @@
         "before": 0,
         "after": 1,
         "said": null,
-        "newest": "Use your file-writing tool to create the f…",
-        "conversationEntries": 7
+        "newest": "Session 01a11177",
+        "conversationEntries": 2
       }
     },
     {
@@ -1116,7 +1584,7 @@
       "measured": {
         "configured": "Configured: http://127.0.0.1:<port> (token set)",
         "url": null,
-        "title": "Use your file-writing tool to create the f…",
+        "title": "Session 01a11177",
         "alerts": [
           "the share service did not answer: TypeError: Failed to fetch"
         ]
@@ -1127,7 +1595,7 @@
       "action": "Publish (local reference server)",
       "outcome": "effect",
       "measured": {
-        "urlShape": "<server>/muse-share/share-nn0bof7u",
+        "urlShape": "<server>/muse-share/share-ux80yky9",
         "secondClient": {
           "status": 200,
           "carriesTitle": true
@@ -1155,12 +1623,41 @@
         "configured": null,
         "stored": "null"
       }
+    },
+    {
+      "surface": "readonly",
+      "action": "The conversation's engine view after every host replacement",
+      "outcome": "check",
+      "measured": {
+        "viewStatus": "healthy",
+        "viewRecordStillInJournal": true,
+        "lastRecords": [
+          "session_end",
+          "metadata",
+          "session_resumed"
+        ]
+      }
+    },
+    {
+      "surface": "readonly",
+      "action": "Close window: the conversation's host ends it cleanly (session_end, view kept)",
+      "outcome": "check",
+      "measured": {
+        "viewStatus": "healthy",
+        "viewRecordStillInJournal": true,
+        "lastRecords": [
+          "metadata",
+          "session_resumed",
+          "session_end"
+        ]
+      }
     }
   ],
   "summary": {
-    "effect": 33,
-    "observed": 3,
-    "refusal": 13,
+    "effect": 51,
+    "observed": 6,
+    "refusal": 15,
+    "check": 3,
     "not-exercised": 1
   },
   "gaps": {
@@ -1176,13 +1673,13 @@
         "nextSuccessfulProbe": {
           "banner": null,
           "alerts": [],
-          "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 52 ms"
+          "notice": "Connected to msp-fixture 1.0.0 · 1 tool(s) · 61 ms"
         },
         "oldErrorGone": true
       }
     },
     "2 a capability the host refuses": {
-      "verdict": "closed",
+      "verdict": "open",
       "hostGrants": [
         "userShell",
         "sessionMcp"
@@ -1191,9 +1688,9 @@
         "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
       ],
       "surfaces": {
-        "composer": "refusal",
+        "composer": "observed",
         "runInMuse": "refusal",
-        "liveWrite": "refusal"
+        "liveWrite": "missing"
       }
     },
     "3 non-click effects replaced": {
@@ -1212,6 +1709,30 @@
       }
     }
   },
+  "followUps": {
+    "1 quoted command path (M3-01)": "closed",
+    "2 posture from the running host": "closed",
+    "3 Forget token with conversations holding the bearer": "closed",
+    "4 Use in Muse, Enable/Disable, Refresh tools, the engine's fixture, a forced Computer use failure": "closed",
+    "5 labels": "corrected",
+    "6 a replaced or closed host keeps its conversation's live events (found by the 0d677ea live turn)": "closed",
+    "F1 stored bearer bound to its URL": "unit and wiring tests (test/remoteMcp.test.ts, test/visibleFailures.test.ts); the failed save it needs cannot be forced here: the one trigger that was certain (a bearer over 1,280 characters on Windows) is refused up front (F7)",
+    "F2": "closed",
+    "F3": "closed",
+    "F4": "closed",
+    "F5": "closed",
+    "F6": "closed",
+    "F7": "closed",
+    "F8": "closed"
+  },
+  "notes": [
+    "Added by hand after the run, from this record and the engine records named below; no measured value was changed.",
+    "Labels corrected (item 5): 'own pipe' is a harness IPC check (outcome 'check'), not a click effect; 'composer and conversation' is an observation ('observed'); 'Add (curated catalog entry)' is an effect (the entry on record, said 'Not connected'); 'Probe (quoted command path)' was the M3-01 defect, fixed in 38d6994 and measured here as an effect, under a folder whose name has a space. The earlier run's rows for these are kept under beforeFix.previousAuditRun.",
+    "Engine measurement behind 'Reconnect with current connectors' (scripts/msp-resume-mcp-config.mjs, Muse 1.4.2, no turn): a conversation its host has loaded keeps its MCP configuration and refuses another one (session_configuration_conflict); in a new host the conversation is not loaded, and its resume binds the configuration it carries, the stdio server starting as the engine's child; a resume without servers binds none. Before d81642f the button returned the loaded conversation's metadata and applied nothing; it now replaces the folder's host (refused while a conversation there works).",
+    "Forced failure of a level change: on the build before 0d677ea the click never returned while the pipe was held: the driver's `status` starts a second `status`, which kept the pipes open after its parent was killed at the timeout, and the call waited for it; once released, the late call started the service. Measured in this branch's rehearsal on build 2d32f77c (exe SHA-256 prefix), fixed in 0d677ea (tree kill, bounded read), and measured again here.",
+    "Live turn: the one this task allowed ran on the 0d677ea build (beforeFix.runOn0d677ea). The engine refused the write in 21.6 s (its own journal) and wrote no file; the screen stayed on 'Muse thinking…' until the 240 s timeout. The harness recorded it as 'refusal' through a defect (its refusal test matched the row key 'refusalOpen'); re-derived 'silent', and turnVerdict() fixed. This run on ed1e03d sends no turn: gap 2 reads 'open' for that reason only (liveWrite missing), and the live refusal display is not re-measured on this build.",
+    "Why that reply never showed, and the fix measured here: the app stopped hosts by killing them, and a host killed shortly after writing could lose records its MSP view already held; the next resume set the conversation's view 'unavailable' and no event of it reached the app again. In the 0d677ea run the lost record was the remote connector's tool catalog, killed by the Use in Muse off reload four minutes before the turn. ed1e03d stops hosts by closing stdin (killed only after 3 s); scripts/msp-host-stop.mjs measures both ways on the engine (m0-13-msp-host-stop-1.4.2.json). Here, after every reload and Restart host of the run, Run in Muse still reaches the conversation, its engine view is healthy, and Close window leaves session_end in its journal."
+  ],
   "beforeFix": {
     "build": {
       "exeSha256": "6191eec8e0d2904585abeb52d0384091b3c6fe2e9f089a65112bd566d8c67467",
@@ -1365,28 +1886,279 @@
         "daemonArgvAfterObserve": "serve --socket <test pipe> --permission-mode bounded --capability-manifest <appdata>\\computer-use\\computer-manifest.json --approve-capability-manifest",
         "driverPidFile": "rewritten by the instance's daemon, removed by its stop; before: a pid with no live process"
       }
+    },
+    "previousAuditRun": {
+      "note": "The previous run of this audit, on build 727ea574 (commit 87a1a0c, fixes of this branch not yet in): its rows for what this run fixed or relabels, copied from that record.",
+      "exeSha256": "727ea574b228d5217d973aa4953e7f9aeaf6674b6b3efd1cae016d86258b7b83",
+      "commit": "87a1a0c",
+      "summary": {
+        "effect": 33,
+        "observed": 3,
+        "refusal": 13,
+        "not-exercised": 1
+      },
+      "rows": [
+        {
+          "surface": "connectors",
+          "action": "Probe (quoted command path)",
+          "outcome": "refusal",
+          "measured": {
+            "ui": {
+              "notice": null,
+              "result": false,
+              "sectionStatus": [],
+              "alertsOnPage": [
+                "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+              ],
+              "errorBanner": "The local MCP action could not be completed. — local MCP server closed stdout before a response"
+            },
+            "ipc": {
+              "ok": false,
+              "error": "\"local MCP server closed stdout before a response\""
+            }
+          }
+        },
+        {
+          "surface": "connectors",
+          "action": "Reconnect with current connectors",
+          "outcome": "effect",
+          "measured": {
+            "ui": {
+              "shown": true,
+              "after": "Reconnect with current connectors",
+              "errorBanner": null
+            },
+            "resume": [
+              {
+                "ok": true,
+                "sameSession": true,
+                "sandboxDisableWrite": true,
+                "sandboxDisableShell": true,
+                "mcpServers": []
+              }
+            ],
+            "enginesBefore": 1,
+            "enginesAfter": 1,
+            "sameEngine": true
+          }
+        },
+        {
+          "surface": "computer",
+          "action": "own pipe, before any click (the instance's status probe caught on it)",
+          "outcome": "effect",
+          "measured": {
+            "expectedPipe": "<test pipe>",
+            "probe": {
+              "argv": "status --socket <test pipe>",
+              "parentIsApp": true,
+              "onExpectedPipe": true
+            },
+            "connectionsHeld": 1,
+            "userPipeProcessesMeanwhile": 0,
+            "grantStateAfter": "expired"
+          }
+        },
+        {
+          "surface": "readonly",
+          "action": "composer and conversation (what they say about Read only)",
+          "outcome": "refusal",
+          "measured": {
+            "placeholder": "Ask Muse to continue…",
+            "composerText": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context",
+            "postureNote": {
+              "text": "This project is Read only: Muse cannot write files or run commands here.",
+              "role": "note",
+              "rightAboveComposer": true
+            },
+            "readOnlyStated": true,
+            "capabilityBadgesInConversation": []
+          }
+        },
+        {
+          "surface": "connectors",
+          "action": "Add (curated catalog entry)",
+          "outcome": "refusal",
+          "measured": {
+            "catalogFlag": "added",
+            "configuredHeading": "Configured",
+            "configuredRow": {
+              "text": "SQLite Not connected Catalog entry only: no server command is set, so Muse cannot call these tools. sqlite.query · sqlite.schema Remove",
+              "badge": "Not connected",
+              "actions": [
+                "Remove"
+              ],
+              "toggles": 1
+            },
+            "stored": {
+              "status": "installed",
+              "hasCommand": false,
+              "useInMuse": false
+            }
+          }
+        }
+      ]
+    },
+    "forcedFailureBeforeTheTimeoutFix": {
+      "note": "This branch's rehearsal (--rehearse, no model turn) on build 2d32f77c4a5e4cb2714a95f9ca33e338beac495860fa658e5f095abb2cb6548d (commit d81642f), before 0d677ea: while the harness held the pipe, the level change never returned (ipc null after the harness's 90 s wait, panel still busy); once released, the late call started the service.",
+      "exeSha256": "2d32f77c4a5e4cb2714a95f9ca33e338beac495860fa658e5f095abb2cb6548d",
+      "commit": "d81642f",
+      "rows": [
+        {
+          "surface": "computer",
+          "action": "Level: Observe only, the instance's pipe held (forced failure)",
+          "outcome": "fail",
+          "measured": {
+            "ipc": null,
+            "ui": {
+              "state": "Off",
+              "checked": null,
+              "errorBanner": null,
+              "actions": []
+            },
+            "daemonsOnTestPipe": [],
+            "connectionsHeld": 1,
+            "consentOnDisk": true,
+            "serviceOnceReleased": {
+              "grantState": "active",
+              "daemons": [
+                {
+                  "pid": 34220,
+                  "onTestPipe": true,
+                  "argv": "serve --socket <test pipe> --permission-mode bounded --capability-manifest <appdata>\\computer-use\\computer-manifest.json --approve-capability-manifest"
+                }
+              ]
+            },
+            "staleGranted": false
+          }
+        },
+        {
+          "surface": "computer",
+          "action": "The next action after the forced failure",
+          "outcome": "fail",
+          "measured": {
+            "action": "Observe only",
+            "ipc": null,
+            "ui": {
+              "state": "Granted",
+              "checked": "observe",
+              "errorBanner": null,
+              "actions": [
+                "Turn off and revoke",
+                "Refresh"
+              ]
+            },
+            "daemon": [
+              {
+                "pid": 34220,
+                "onTestPipe": true,
+                "argv": "serve --socket <test pipe> --permission-mode bounded --capability-manifest <appdata>\\computer-use\\computer-manifest.json --approve-capability-manifest"
+              }
+            ],
+            "serviceGrantState": "active"
+          }
+        }
+      ]
+    },
+    "runOn0d677ea": {
+      "commit": "0d677ea",
+      "exeSha256": "ee71e02be9e9a2dd557abb84664fbaa72333aa39ce60a7ea763f2ea7a2ee5fd8",
+      "liveTurns": 1,
+      "summaryAsRecorded": {
+        "effect": 50,
+        "observed": 6,
+        "refusal": 16,
+        "check": 1,
+        "not-exercised": 1
+      },
+      "summaryWithTheTurnRederived": {
+        "effect": 50,
+        "observed": 6,
+        "refusal": 15,
+        "check": 1,
+        "not-exercised": 1,
+        "silent": 1
+      },
+      "turn": {
+        "surface": "turn",
+        "action": "Send: write a file in the read-only project",
+        "outcome": "silent",
+        "outcomeAsRecorded": "refusal",
+        "whyRederived": "Harness defect, fixed since: the refusal test ran over JSON.stringify(rows) and matched the row key \"refusalOpen\". The turn had timed out (240.9 s) with the screen on \"Muse thinking…\". turnVerdict() in scripts/cdp-m0-13-click-effect.mjs now reads only the texts after the prompt, and a timed-out turn is silent.",
+        "measured": {
+          "prompt": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-297DCE. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
+          "turn": {
+            "timedOut": true,
+            "approvals": [],
+            "ms": 240894
+          },
+          "fileWritten": false,
+          "hostItems": [],
+          "transcriptEntries": [
+            {
+              "role": "user",
+              "text": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-297DCE. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
+              "failed": false
+            },
+            {
+              "role": "assistant",
+              "text": "",
+              "failed": false
+            }
+          ],
+          "toolRows": [],
+          "onScreen": {
+            "rows": [
+              {
+                "lane": "system",
+                "failedMarker": null,
+                "refusalOpen": null,
+                "text": "m0-13 remote muwmj32v: its token was forgotten in Extensions, but this conversation's Muse host still has its token: it keeps using it until you use \"Reconnect with current connectors\" or close the conversation, and a tool already allowed here keeps working without asking. 13:59:03"
+              },
+              {
+                "lane": "user",
+                "failedMarker": null,
+                "refusalOpen": null,
+                "text": "Use your file-writing tool to create the file m0-13-readonly.txt in the current folder with exactly this one line: READONLY-297DCE. If the write is refused, do not try another way: reply with the refusal you received, in one sentence. 14:03:08"
+              },
+              {
+                "lane": "assistant",
+                "failedMarker": null,
+                "refusalOpen": null,
+                "text": "Muse thinking… 14:03:08"
+              }
+            ],
+            "postureNote": "This project is Read only: Muse cannot write files or run commands here.",
+            "banner": null,
+            "approvalsLeft": 0
+          },
+          "failedRowShown": false
+        }
+      },
+      "engineJournalOfTheTurn": {
+        "source": "the engine's session journal of that conversation (~/.local/share/muse/sessions), read after the run",
+        "turnDurationMs": 21617,
+        "terminal": "completed",
+        "fileWritten": false,
+        "answer": "Write of m0-13-readonly.txt refused: filesystem writes are disabled for this session."
+      },
+      "whyTheReplyNeverShowed": "The conversation's MSP view in the engine was \"unavailable\" from 11:59:06 UTC, four minutes before the turn. At 11:59:01.676 the host resumed with the remote connector (Use in Muse on, then Reconnect with current connectors) wrote the connector's tool catalog record, and the view took it. At about 11:59:04 the next Reconnect (Use in Muse off) killed that host before the record reached the journal. The next resume reused its sequence number, found the view ahead of the journal and set it unavailable: from then on no event of this conversation reached the app, in any host. Same signature on 12 conversations of this branch's runs that day (bisect, rehearsals, this run) and 1 of the day before. Fixed in ed1e03d (hosts stopped by closing stdin); engine measurement: m0-13-msp-host-stop-1.4.2.json."
     }
   },
   "notExercised": [
     "Computer use 'Observe and act': not started in this session. A direct probe of the driver with --dangerously-bypass-approvals was refused by the session's permission classifier, so the unrestricted service was not started through the app either; the user decides. Its launch defect is fixed and unit-tested (serve_argv matrix); the one click on the pre-fix build is under beforeFix.",
     "Share 'Copy link' and Computer use 'Copy install command': they write the system clipboard, which test mode does not isolate.",
-    "Remote connector 'Reconnect' and 'Forget token': no remote connector can exist here (the loopback URL is refused above and the proof has no public HTTPS MCP server); a token would go to the keyring, shared even in test mode (ADR 0003).",
+    "A remote connector over public HTTPS: the remote section uses the loopback test origin of ADR 0003 (plain HTTP, no TLS check exercised).",
     "Computer use 'Install cua-driver': the driver is installed; its installer is machine-wide.",
     "A valid MCP Bundle install: covered by the M3-03 proof (scripts/cdp-m3-03-mcpb-install.mjs), not repeated here."
   ],
   "disclosedForgeries": [
     "Clicks are DOM clicks on the real control in the real webview (HTMLElement.click()), not OS mouse input; typing sets the value through the native setter and fires input, a select fires change.",
-    "The OS folder dialog of 'Choose project folders' is answered by the harness (window.__baselineIpc.dialogQueue, plugin:dialog|open never reaches the OS).",
+    "The OS folder dialog of 'Choose project folders' is answered by the harness (window.__baselineIpc.dialogQueue, plugin:dialog|open never reaches the OS); so is the OK/Cancel box of the posture note's 'Restart host' (messageQueue, plugin:dialog|message, answered OK).",
     "File inputs (index folder, import file, MCP Bundle) are fed with DOM.setFileInputFiles: the OS file dialog cannot be driven over CDP.",
     "The native browser window has no in-app close control and exposes no title-bar button to UI Automation: it is closed through its own close action in UI Automation (WindowPattern.Close, what Alt+F4 or a screen reader does), not clicked with the mouse.",
-    "Own-pipe check: the harness holds a server on the pipe the instance must use (accepting, never answering) and invokes computer_status over IPC, so the instance's status probe lives long enough to read its argv; it then closes that server.",
+    "Own-pipe check: the harness holds a server on the pipe the instance must use (accepting, never answering) and invokes computer_status over IPC, so the instance's status probe lives long enough to read its argv; it then closes that server. The forced failure of a level change holds that pipe the same way while 'Observe only' is clicked.",
+    "The remote server is the harness's own loopback bearer server (scripts/mcp-bearer-test-server.mjs), reachable only because test mode names its origin (MUSE_DESKTOP_TEST_REMOTE_MCP); its admin calls (accept a token hash, slow its answers for the Forget token check) are the harness's, never the app's. Its tokens are dummies; the record holds labels for their hashes.",
     "computer_status, collect_diagnostics and read_session_history are also invoked directly over IPC to measure state; no action is performed through IPC."
   ],
-  "method": "One launch of the debug build in test mode: a fresh data folder and WebView2 profile, started from PowerShell with no WEBVIEW2_* variable, the local engine pinned by MUSE_DESKTOP_TEST_SIDECAR, MUSE_NO_AUTO_UPDATE=1, CDP through the WebView2 options. Isolation is checked before driving (test-mode.pid, --user-data-dir under the test folder), and the computer-use pipe before any Computer use click. Effects are measured outside the click: IPC results traced on window.fetch, localStorage, files under the test folder, Win32_Process argv and parents (engine, local MCP fixture, app shell, cua-driver daemons and probes), the driver's per-user pid file, the share server read by a second client, a harness HTTP server's own log, CDP targets, UI Automation windows, the host's own history (session/read). The user's computer-use pipe is never connected to: daemons on it are read from the process table. The instance is closed with its own Close window button, then by PID.",
-  "notes": [
-    "Added by hand after the run, from this record only; no measured value was changed.",
-    "Live turn: the host items of the turn hold no toolCall: the model never attempted the write. Its reasoning summary cites a session-level filesystem write disablement, so 1.4.2 tells the model before any attempt. On screen: the app's posture note above the composer and the model's one-sentence refusal; the file is absent. A row the host refused (Failed) is therefore measured only before the fix (Run in Muse in beforeFix: the item failed, the row stayed collapsed and unmarked) and by the tests (a_refused_item_closes_with_its_failed_status, history, visibleFailures).",
-    "Observe and act was not started in this session: see notExercised. Its launch defect (act served as a bounded manifest, never started) is in beforeFix.interactive and fixed in c9e34e1.",
-    "cua-driver keeps one pid file per user account (computer.driverPidFile): this instance's daemon wrote it and its stop removed it. No daemon ran on the user's pipe before, during or after (userPipeDaemons 0 and 0), and the harness never connected to that pipe."
-  ]
+  "method": "One launch of the debug build in test mode: a fresh data folder and WebView2 profile, started from PowerShell with no WEBVIEW2_* variable, the local engine pinned by MUSE_DESKTOP_TEST_SIDECAR, MUSE_NO_AUTO_UPDATE=1, CDP through the WebView2 options. Isolation is checked before driving (test-mode.pid, --user-data-dir under the test folder), and the computer-use pipe before any Computer use click. Effects are measured outside the click: IPC results traced on window.fetch, localStorage, files under the test folder, Win32_Process argv and parents (engine and its replacements, the local MCP fixture as the engine's child or the app's, app shell, cua-driver daemons and probes), the driver's per-user pid file, Credential Manager entry names (cmdkey, never a value), the share server read by a second client, the bearer test server's own request log (which bearer, as a hash, reached which path, from the webview or the engine), a harness HTTP server's own log, CDP targets, UI Automation windows, the host's own history (session/read). The user's computer-use pipe is never connected to: daemons on it are read from the process table. The instance is closed with its own Close window button, then by PID."
 }
