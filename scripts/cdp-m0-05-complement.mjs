@@ -1363,8 +1363,9 @@ async function staleKill(app) {
     cardOnStage0: stage0?.sourceIndex === 0,
     twoSingleClicksReachedTheButton: J(clickDetails) === J([1, 1]),
     twoDecisionsPinnedToStage0: calls.length === 2 && calls.every((c) => sameToken(c.args?.requirementId, stage0)) && result.clicks.approveInvoke.length === 2,
-    firstDecidedStage0: calls[0]?.ok === true && calls[0]?.result === "false",
-    secondRefusedStale: calls[1]?.ok === false && /-32053/.test(calls[1]?.result ?? ""),
+    // Whichever the host took first: one decides stage 0 (not terminal), the other is stale.
+    oneDecidedStage0: calls.filter((c) => c.ok === true && c.result === "false").length === 1,
+    otherRefusedStale: calls.filter((c) => c.ok === false && /-32053/.test(c.result ?? "")).length === 1,
     calmNotice: after.view.banner === STALE_NOTICE,
     cardReReadByTheApp: Boolean(reread?.ok),
     cardShowsTheCurrentStep: Boolean(reread?.requirement) && sameToken(after.panel[0]?.requirementId, reread.requirement) && !sameToken(reread.requirement, stage0),
@@ -1583,7 +1584,7 @@ function finalSummary() {
     "5c approval pending at a force-kill, relaunched": item("stale-kill", stale, ["approvalPendingAtTheKill", "appForceKilled", "enginesEndedWithTheApp",
       "reopenedAndConnected", "noCardAfterTheRelaunch", "cancelLineOnce", "markerReadOnce", "noDecisionSent", "notLeftWorking"]),
     "5d stale approval click, said calmly": item("stale-kill", stale, ["cardOnStage0", "twoSingleClicksReachedTheButton", "twoDecisionsPinnedToStage0",
-      "firstDecidedStage0", "secondRefusedStale", "calmNotice", "cardReReadByTheApp", "cardShowsTheCurrentStep", "stillDecidable"]),
+      "oneDecidedStage0", "otherRefusedStale", "calmNotice", "cardReReadByTheApp", "cardShowsTheCurrentStep", "stillDecidable"]),
     "one build": { verdict: builds.length === 1 ? "pass" : "fail", exeSha256: builds },
   };
   record.liveTurnsDetail = Object.entries(p).filter(([, x]) => (x.liveTurns ?? 0) > 0)
