@@ -1849,7 +1849,49 @@ fn deleted_as_written(dir: &Path, tree: &str, written: &str) -> Result<(), Strin
     if left.is_empty() {
         return Ok(());
     }
-    Err(format!("Git could not delete {} (in use by another program?)", left.join(", ")))
+    Err(format!("Git could not delete {}", left.join(", ")))
+}
+
+/// The files among `paths` that another program holds open without delete
+/// sharing. On Windows such a file can be neither replaced nor deleted, and
+/// Git says only "Invalid argument", or merely warns.
+#[cfg(windows)]
+fn held_open(dir: &Path, paths: &[String]) -> Vec<String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    // Opening for DELETE while sharing everything is refused with a sharing
+    // violation exactly when some handle withholds delete sharing.
+    const DELETE: u32 = 0x0001_0000;
+    const SHARE_ALL: u32 = 0x7;
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+    paths
+        .iter()
+        .filter(|path| {
+            std::fs::OpenOptions::new()
+                .access_mode(DELETE)
+                .share_mode(SHARE_ALL)
+                .open(dir.join(path))
+                .is_err_and(|error| error.raw_os_error() == Some(ERROR_SHARING_VIOLATION))
+        })
+        .cloned()
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn held_open(_dir: &Path, _paths: &[String]) -> Vec<String> {
+    Vec::new()
+}
+
+/// A failed step's error, led by the files it changes that another program
+/// holds open, when there are: that is the cause Git leaves out.
+fn naming_files_in_use(side: &Side, written: &str, error: String) -> String {
+    let held = tree_diff(&side.dir, &side.tree, written, "")
+        .map(|paths| held_open(&side.dir, &paths))
+        .unwrap_or_default();
+    match held.as_slice() {
+        [] => error,
+        [file] => format!("{file} is in use by another program: close it, then move again ({error})"),
+        files => format!("{} are in use by another program: close them, then move again ({error})", files.join(", ")),
+    }
 }
 
 /// Write the merged tree into the target, then give the files that come
@@ -2030,6 +2072,7 @@ fn handoff_move_with(
     // The target receives the work first. Its real index is never touched,
     // so the moved changes arrive unstaged.
     if let Err(error) = receive(&from, &to, &merged) {
+        let error = naming_files_in_use(&to, &merged, error);
         return Err(undo(
             &[(&to, merged.as_str(), &to_files, false)],
             "the target could not receive the changes",
@@ -2062,6 +2105,7 @@ fn handoff_move_with(
             git_command_with_input(&from.dir, &["update-index", "-z", "--stdin"], &paths)
         });
     if let Err(error) = cleaned {
+        let error = naming_files_in_use(&from, &from.head, error);
         return Err(undo(
             &[(&from, from.head.as_str(), &from_files, true), (&to, merged.as_str(), &to_files, false)],
             "the source could not be cleaned",
@@ -3006,7 +3050,7 @@ mod tests {
         let held = hold_open(&root.join("new.txt"));
         let error = handoff_move(&root, &wt).unwrap_err();
         drop(held);
-        assert!(error.contains("source could not be cleaned") && error.contains("restored as they were") && error.contains("new.txt"), "{error}");
+        assert!(error.contains("source could not be cleaned") && error.contains("restored as they were: new.txt is in use by another program"), "{error}");
         assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "one\nlocal\n");
         assert_eq!(fs::read_to_string(root.join("new.txt")).unwrap(), "untracked\n");
         assert_eq!(fs::read(wt.join("main.txt")).unwrap(), target_main);
@@ -3029,6 +3073,22 @@ mod tests {
         assert!(!root.join("package.json").exists());
         assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "one\nlocal\n");
         assert!(wt.join("package.json").is_file());
+        assert_eq!(fs::read(wt.join("main.txt")).unwrap(), target_main);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn handoff_names_a_tracked_file_another_program_holds_open() {
+        // Native proof, 06/10/2026: the move said only Git's "unable to unlink
+        // old 'src/app.txt': Invalid argument".
+        let (root, wt) = worktree_fixture();
+        fs::write(root.join("main.txt"), "one\nlocal\n").unwrap();
+        let target_main = fs::read(wt.join("main.txt")).unwrap();
+        let held = hold_open(&root.join("main.txt"));
+        let error = handoff_move(&root, &wt).unwrap_err();
+        drop(held);
+        assert!(error.contains("restored as they were: main.txt is in use by another program: close it, then move again"), "{error}");
+        assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "one\nlocal\n");
         assert_eq!(fs::read(wt.join("main.txt")).unwrap(), target_main);
     }
 
