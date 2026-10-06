@@ -8,7 +8,7 @@
  * alone.
  */
 
-import { isPublicHttpUrl, type ConnectorTool } from "./connectors.ts";
+import { isRemoteMcpUrlAllowed, type ConnectorTool } from "./connectors.ts";
 
 export const REMOTE_MCP_PROTOCOL_VERSION = "2025-06-18";
 export const REMOTE_MCP_TIMEOUT_MS = 30_000;
@@ -220,7 +220,7 @@ export async function probeRemoteMcp(
   now = Date.now(),
 ): Promise<RemoteMcpProbeResult> {
   const endpoint = url.trim();
-  if (!isPublicHttpUrl(endpoint)) {
+  if (!isRemoteMcpUrlAllowed(endpoint)) {
     throw new Error("remote MCP requires a public HTTPS endpoint");
   }
   const started = now;

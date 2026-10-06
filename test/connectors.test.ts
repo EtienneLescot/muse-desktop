@@ -8,12 +8,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  allowTestRemoteMcpOrigin,
   CURATED_CONNECTORS,
   connectorReachable,
   diffTools,
   findCurated,
   installConnector,
   isPublicHttpUrl,
+  isRemoteMcpUrlAllowed,
   listConnectorTools,
   loadConnectors,
   REMOTE_LIMIT_MESSAGE,
@@ -379,6 +381,24 @@ describe("remote guard (US-26: single remote + public internet)", () => {
     assert.equal(isPublicHttpUrl("https://169.254.1.1/x"), false);
     assert.equal(isPublicHttpUrl("https://user:pass@mcp.acme.com/x"), false);
     assert.equal(isPublicHttpUrl("not a url"), false);
+  });
+
+  it("accepts the test instance's loopback origin only once named, and only it", () => {
+    const url = "http://127.0.0.1:47123/mcp";
+    assert.equal(isRemoteMcpUrlAllowed(url), false);
+    allowTestRemoteMcpOrigin("http://127.0.0.1:47123");
+    try {
+      assert.equal(isRemoteMcpUrlAllowed(url), true);
+      assert.equal(requestRemoteConnector([], { id: "r", name: "R", url }).ok, true);
+      for (const other of ["http://127.0.0.1:47124/mcp", "http://localhost:47123/mcp", "https://127.0.0.1:47123/mcp", "http://user:pw@127.0.0.1:47123/mcp"]) {
+        assert.equal(isRemoteMcpUrlAllowed(other), false, other);
+      }
+      assert.equal(isRemoteMcpUrlAllowed("https://mcp.acme.com/rpc"), true);
+      assert.equal(isPublicHttpUrl(url), false, "the public rule itself is unchanged");
+    } finally {
+      allowTestRemoteMcpOrigin(null);
+    }
+    assert.equal(isRemoteMcpUrlAllowed(url), false);
   });
 
   it("registers a remote only after a verified tool catalogue", () => {

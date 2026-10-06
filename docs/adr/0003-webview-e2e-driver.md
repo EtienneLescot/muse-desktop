@@ -19,6 +19,7 @@ The app starts in an isolated test mode, compiled into debug builds on Windows o
 - The mode never goes unnoticed: one line on stderr, `testMode: true` in the native diagnostics, and `test-mode.pid` written in the folder at startup.
 - `MUSE_DESKTOP_TEST_SIDECAR`, a JSON argv, replaces every local engine. Missing or malformed, the start fails: a test instance never runs a real local engine. A remote target (`ssh://`, ADR 0002) that the test profile itself configured is reached over the system ssh, as outside test mode; a test that configures no remote target never leaves the fixture, as in CI.
 - `MUSE_DESKTOP_TEST_CDP_PORT` opens CDP through the window's `additionalBrowserArgs`, a WebView2 option, so an elevated host keeps it.
+- `MUSE_DESKTOP_TEST_REMOTE_MCP`, exactly `http://127.0.0.1:<port>`, is the one origin a remote MCP connector of the test instance may use over plain HTTP: the M3-02 bearer proof's local server (`scripts/mcp-bearer-test-server.mjs`). The renderer learns it only from the Rust side (`test_remote_mcp_origin`, `null` outside test mode). Every other URL keeps the public-HTTPS rule, and no TLS check changes.
 - The single-instance guard and the OS wake-up task are skipped. The test instance runs beside the user's own and never edits the per-account `schtasks` entry.
 - In a release build, and on macOS and Linux, `test_mode::data_dir()` is `None` by construction: no variable is read, no branch can switch on. There the mode would lift the single-instance guard without moving the WKWebView or WebKitGTK store.
 

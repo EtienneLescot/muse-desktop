@@ -3748,6 +3748,13 @@ fn secure_store_remove(key: String) -> Result<(), String> {
     secret_store::remove(&key)
 }
 
+/// ADR 0003: the loopback origin a test instance may use as a remote MCP
+/// endpoint (`test_mode::remote_mcp_origin`); `null` in every other build.
+#[tauri::command]
+fn test_remote_mcp_origin() -> Option<String> {
+    test_mode::remote_mcp_origin()
+}
+
 /// Report which Muse credential is in effect, so the UI can tell the user.
 ///
 /// The desktop cannot authenticate on its own — MSP is a stdio protocol inside
@@ -9886,6 +9893,7 @@ fn main() {
             computer_mcp_server,
             remote_ssh_exec,
             secure_store_remove,
+            test_remote_mcp_origin,
             mcp_local_start,
             mcp_local_refresh,
             mcp_local_poll,

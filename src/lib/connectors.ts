@@ -499,6 +499,29 @@ export function isPublicHttpUrl(url: string): boolean {
   return true;
 }
 
+/**
+ * ADR 0003 test mode only: the one loopback origin (`http://127.0.0.1:<port>`)
+ * where the native M3-02 proof runs its MCP server, named by the Rust side
+ * (`test_remote_mcp_origin`). Null in every other build.
+ */
+let testRemoteMcpOrigin: string | null = null;
+
+export function allowTestRemoteMcpOrigin(origin: string | null): void {
+  testRemoteMcpOrigin = origin;
+}
+
+/** A remote connector URL: public HTTPS, or the test instance's loopback origin. */
+export function isRemoteMcpUrlAllowed(url: string): boolean {
+  if (isPublicHttpUrl(url)) return true;
+  if (testRemoteMcpOrigin === null) return false;
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.origin === testRemoteMcpOrigin && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
 export type RemoteGuardCode = "remote-limit" | "private-network";
 
 /** Outcome of requesting a remote (US-26) connector entry. */
@@ -524,7 +547,7 @@ export function requestRemoteConnector(
   if (existingRemote !== null) {
     return { ok: false, registry, code: "remote-limit", message: REMOTE_LIMIT_MESSAGE };
   }
-  if (!isPublicHttpUrl(spec.url)) {
+  if (!isRemoteMcpUrlAllowed(spec.url)) {
     return { ok: false, registry, code: "private-network", message: VPN_FAILURE_MESSAGE };
   }
   const entry: ConnectorEntry = {
@@ -560,7 +583,7 @@ export function registerRemoteConnector(
   const id = spec.id.trim();
   const name = spec.name.trim();
   const url = spec.url.trim();
-  if (!id || !name || !isPublicHttpUrl(url) || !Array.isArray(spec.tools)) return null;
+  if (!id || !name || !isRemoteMcpUrlAllowed(url) || !Array.isArray(spec.tools)) return null;
   const tools = spec.tools
     .map((tool) => ({ name: tool.name.trim(), description: tool.description.trim() }))
     .filter((tool) => tool.name.length > 0 && tool.name.length <= 200);

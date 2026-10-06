@@ -366,6 +366,7 @@ import { forkFailureMessage, inheritedForkLog } from "../lib/fork";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
 import {
+  allowTestRemoteMcpOrigin,
   findConnector,
   installConnector,
   listConnectorTools,
@@ -1715,6 +1716,11 @@ export function useMuseSessions(): UseMuseSessions {
   const remoteSessionsRef = useRef<Record<string, RemoteMcpSession>>({});
   const [remoteConnectedIds, setRemoteConnectedIds] = useState<string[]>([]);
   const [remoteNotice, setRemoteNotice] = useState<string | null>(null);
+  useEffect(() => {
+    // ADR 0003: only a test instance names a loopback origin (M3-02 proof server).
+    if (!isTauriRuntime()) return;
+    invoke<string | null>("test_remote_mcp_origin").then(allowTestRemoteMcpOrigin, () => undefined);
+  }, []);
   // w-integrations US-25: skills, builtins merged over stored overrides.
   const [skills, setSkills] = useState<Skill[]>(() => mergeBuiltinSkills(loadSkills()));
   // Latest skills for the render-detached `/skill` path inside sendInput.
