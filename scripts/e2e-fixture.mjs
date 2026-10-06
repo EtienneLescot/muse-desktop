@@ -277,8 +277,10 @@ async function main() {
     if (!app || app === "exited") throw new Error(`the app exposed no page on CDP ${PORT} (exit code ${child.exitCode})`);
     // Before driving anything: the browser runs on the test profile. An HKLM
     // WebView2 policy, honoured even for an elevated host, could move it.
-    report.webviewProfile = webviewProfile();
+    // WMI can answer late on a cold runner (null once in CI): read again for a minute.
+    report.webviewProfile = await waitFor(() => webviewProfile(), 60_000, 2_000);
     if (!under(report.webviewProfile, dirs.data)) {
+      report.browserCommandLines = browserCommandLines().slice(0, 600);
       kill();
       throw new Error("the WebView2 browser is not on the test profile: stopped before driving the app");
     }
