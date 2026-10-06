@@ -165,7 +165,7 @@ export function hostPostureNotice(
       ? `This conversation's Muse host was started Read only: Muse cannot ${refused} here until its host restarts with this project's settings.`
       : wanted.disableWrite || wanted.disableShell
         ? "This project is now Read only, but this conversation's Muse host was started before: Muse can still write files and run commands here until its host restarts with this project's settings."
-        : "This project's settings changed since this conversation's Muse host started: they apply once its host restarts.";
+        : "The sandbox settings changed since this conversation's Muse host started: they apply once its host restarts.";
   return { note, blocked: host.disableShell ? note : null, restart };
 }
 

@@ -42,7 +42,7 @@ use serde_json::{json, Value};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{mpsc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -567,27 +567,33 @@ fn run(program: &Path, args: &[&str], timeout: Duration) -> Result<Probe, String
     let mut child = command
         .spawn()
         .map_err(|error| format!("cannot run {}: {error}", program.display()))?;
+    // Read while waiting: a child that fills a pipe would block until the timeout.
+    let stdout = child.stdout.take().map(drain);
+    let stderr = child.stderr.take().map(drain);
     let started = Instant::now();
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) if started.elapsed() < timeout => thread::sleep(Duration::from_millis(25)),
             Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_tree(&mut child);
                 break None;
             }
             Err(error) => return Err(format!("waiting for {} failed: {error}", program.display())),
         }
     };
-    let stdout = child.stdout.take().map(drain);
-    let stderr = child.stderr.take().map(drain);
+    // What the child started can keep its pipes open after it ended: read
+    // what came, never past this bound.
+    let read_until = Instant::now() + Duration::from_secs(2);
+    let collect = |reader: Option<mpsc::Receiver<Vec<u8>>>| {
+        reader
+            .and_then(|rx| rx.recv_timeout(read_until.saturating_duration_since(Instant::now())).ok())
+            .unwrap_or_default()
+    };
     let mut text = String::new();
-    if let Some(reader) = stdout {
-        text.push_str(&String::from_utf8_lossy(&reader.join().unwrap_or_default()));
-    }
-    if let Some(reader) = stderr {
-        let extra = String::from_utf8_lossy(&reader.join().unwrap_or_default()).to_string();
+    text.push_str(&String::from_utf8_lossy(&collect(stdout)));
+    {
+        let extra = String::from_utf8_lossy(&collect(stderr)).to_string();
         if !extra.trim().is_empty() {
             if !text.is_empty() && !text.ends_with('\n') {
                 text.push('\n');
@@ -608,12 +614,34 @@ fn run(program: &Path, args: &[&str], timeout: Duration) -> Result<Probe, String
     }
 }
 
-fn drain<R: Read + Send + 'static>(mut reader: R) -> thread::JoinHandle<Vec<u8>> {
+fn drain<R: Read + Send + 'static>(mut reader: R) -> mpsc::Receiver<Vec<u8>> {
+    let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let mut bytes = Vec::new();
         let _ = reader.read_to_end(&mut bytes);
-        bytes
-    })
+        let _ = tx.send(bytes);
+    });
+    rx
+}
+
+/// Kill the child and what it started. A driver `status` runs a second
+/// `status`; killed alone, the parent left it holding the pipes, and with a
+/// pipe nobody answered the call hung for good, its timeout notwithstanding
+/// (M0-13 forced failure, 06/10/2026).
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(windows)]
+    {
+        let mut taskkill = Command::new("taskkill");
+        taskkill
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        hidden_window(&mut taskkill);
+        let _ = taskkill.status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 /// The driver's own tool list, one name per line.
@@ -1025,6 +1053,18 @@ pub fn resume(dir: &Path) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// M0-13 forced failure (06/10/2026): a timed-out child whose own child
+    /// kept the pipes open hung `run` (and a level change) for good.
+    #[cfg(windows)]
+    #[test]
+    fn a_timed_out_child_and_what_it_started_never_hang_the_call() {
+        let started = Instant::now();
+        // cmd waits for ping, which inherits the pipes and outlives a plain kill of cmd.
+        let result = run(Path::new("cmd"), &["/C", "ping -n 30 127.0.0.1"], Duration::from_secs(1));
+        assert!(result.is_err(), "timed out");
+        assert!(started.elapsed() < Duration::from_secs(10), "returned after {:?}", started.elapsed());
+    }
 
     /// The exact list `cua-driver 0.28.2` reports through `list-tools`.
     const V0282: [&str; 57] = [
