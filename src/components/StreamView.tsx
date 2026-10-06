@@ -1423,7 +1423,10 @@ export function StreamView({
       };
       // Two or more tool calls in a row fold into one line: what is running
       // now, how many steps, how long. The steps stay one click away.
-      return workRuns(visibleEntries).map((run) => {
+      // flatMap keeps one flat keyed list: nested per-run arrays were matched
+      // by position, so a window that dropped its first entry remounted every
+      // entry, and the reader's text moved with each new message.
+      return workRuns(visibleEntries).flatMap((run) => {
         const rendered = run.entries.map((e, offset) => renderEntry(e, run.start + offset));
         if (run.tools < 2) return rendered;
         const tools = run.entries.filter((e) => e.role === "tool");
