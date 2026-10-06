@@ -1,10 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   describeHandoffResult,
   describeWorkspaceFallback,
   formatHandoffContext,
   handoffQuestion,
+  moveBlockedReason,
   userShellBlocked,
   type HandoffPreview,
 } from "../src/lib/handoff.ts";
@@ -75,6 +77,15 @@ describe("M2-05 handoff wording", () => {
     assert.match(text, /^Moved 2 changed files/);
     assert.match(text, /could not follow: conversation metadata is unavailable/);
     assert.match(text, /new conversation there/);
+  });
+
+  it("says on the Move action why a responding conversation cannot move", () => {
+    // Native proof, 06/10/2026: the action was greyed out with no reason.
+    assert.match(moveBlockedReason({ workspace: "C:\\repo", running: true }) ?? "", /still responding: stop the response before moving/);
+    assert.equal(moveBlockedReason({ workspace: "C:\\repo", running: false }), null);
+    assert.match(moveBlockedReason({ workspace: "ssh://box:22/srv/app" }) ?? "", /^Not available for remote conversations/);
+    const sidebar = readFileSync(new URL("../src/components/SessionSidebar.tsx", import.meta.url), "utf8");
+    assert.match(sidebar, /disabled=\{movingFolder !== null \|\| moveBlockedReason\(selected\) !== null\}\s*title=\{moveBlockedReason\(selected\) \?\? undefined\}/);
   });
 
   it("turns Run in Muse off only while the conversation is away from its host's folder", () => {
