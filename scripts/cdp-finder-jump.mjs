@@ -15,7 +15,9 @@
  * type the needle, ArrowDown + Enter (keyboard only), then record the window
  * move, the finder status line ("… message N of M"), the scrollIntoView
  * behaviour the app asked for, the scroll frames actually observed and the
- * mounted DOM size (the bound).
+ * mounted DOM size (the bound). Since 06/10/2026 it also follows the hit's
+ * offset on screen: scroll anchoring can move scrollTop one frame after an
+ * instant jump while the hit stays put (hitMovesAfterLanding).
  *
  * Requires the CDP-enabled dev build. Usage:
  *   node scripts/cdp-finder-jump.mjs [--entries 2000] [--index 137] [--out report.json]
@@ -124,9 +126,13 @@ const INSTRUMENT = `(() => {
     window.__findJumpSpy = true;
   }
   const t0 = performance.now();
+  window.__findJump.targetTops = [];
   const sample = () => {
     if (!window.__findJump || performance.now() - t0 > 4000) return;
     window.__findJump.frames.push(Math.round(host.scrollTop));
+    // What the reader sees move: the hit's offset in the transcript's viewport.
+    const target = host.querySelector('[data-entry-index="${NEEDLE_INDEX}"]');
+    window.__findJump.targetTops.push(target ? Math.round(target.getBoundingClientRect().top - host.getBoundingClientRect().top) : null);
     requestAnimationFrame(sample);
   };
   requestAnimationFrame(sample);
@@ -169,12 +175,19 @@ async function jump(client, motion) {
   const spy = await evaluate(client, "window.__findJump");
   const frames = spy.frames;
   const distinct = frames.filter((value, index) => index === 0 || value !== frames[index - 1]);
+  // scrollTop also moves when scroll anchoring absorbs entries settling to
+  // their real size above the hit; the hit's own offset says whether it moved.
+  const viewport = await evaluate(client, `document.querySelector('[data-entry-count]').clientHeight`);
+  const landedAt = spy.targetTops.findIndex((top) => top !== null && top >= 0 && top <= viewport);
+  const afterLanding = landedAt < 0 ? [] : spy.targetTops.slice(landedAt);
   run.scroll = {
     requestedBehavior: spy.calls.map((c) => c.behavior),
     targetEntryIndex: spy.calls.map((c) => c.entryIndex),
     framesSampled: frames.length,
     distinctScrollPositions: distinct.length,
     intermediatePositions: Math.max(0, distinct.length - 2),
+    hitLandedAtPx: landedAt < 0 ? null : afterLanding[0],
+    hitMovesAfterLanding: afterLanding.filter((top, index) => index > 0 && top !== afterLanding[index - 1]).length,
   };
   await key(client, "Escape", "Escape", 27);
   await sleep(500);
@@ -225,6 +238,8 @@ async function main() {
       statusAnnounced: report.runs.every((r) => new RegExp(`message ${NEEDLE_INDEX + 1} of ${r.after.entryCount}`).test(r.after.findStatus ?? "") && r.after.findStatusRole === "status"),
       smoothWithoutPreference: runs["no-preference"]?.scroll.requestedBehavior.includes("smooth") ?? false,
       instantWhenReduced: (runs.reduce?.scroll.requestedBehavior.every((b) => b === "auto") && runs.reduce.scroll.intermediatePositions === 0) ?? false,
+      hitStillOnceLandedWhenReduced: (runs.reduce?.scroll.requestedBehavior.every((b) => b === "auto") && runs.reduce.scroll.hitLandedAtPx !== null
+        && runs.reduce.scroll.hitMovesAfterLanding === 0) ?? false,
       domBound: Math.max(...report.runs.map((r) => r.after.mountedArticles)),
     };
   } catch (error) {
