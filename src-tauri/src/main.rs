@@ -923,7 +923,7 @@ fn validate_initialize_result(result: &Value) -> Result<HostEngine, String> {
     })
 }
 
-fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: String) {
+fn emit<R: tauri::Runtime>(app: &AppHandle<R>, _event: &str, session_id: &str, kind: &str, payload: String) {
     // Poll transport: buffer the event with a sequence number. The UI drains
     // via `poll_events`. (`event` is kept for log readability.)
     let state: State<AppState> = app.state();
@@ -1635,6 +1635,7 @@ async fn restart_host(
         &root,
         &old_client,
         "Muse host restarted; reconnect the conversation to continue.",
+        None,
     )
     .await?;
     // `ensure_host` owns the creation mutex. Do not hold a lock across this
@@ -1667,12 +1668,14 @@ async fn restart_host(
 
 /// Detach a workspace host from every route, tell its conversations they
 /// are disconnected, and stop the process. Returns the detached session ids.
-async fn retire_host(
-    app: &AppHandle,
+/// `resumed` is resumed in the replacement at once and is not told.
+async fn retire_host<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     state: &State<'_, AppState>,
     root: &PathBuf,
     old_client: &std::sync::Arc<MspClient>,
     message: &str,
+    resumed: Option<&str>,
 ) -> Result<Vec<String>, String> {
     let session_ids = state
         .hosts
@@ -1695,11 +1698,6 @@ async fn retire_host(
     }
     if let Ok(mut engines) = state.host_engines.lock() {
         engines.remove(root);
-    }
-
-    for session_id in &session_ids {
-        mark_running(state, session_id, false);
-        emit(app, "status", session_id, "host_exited", message.to_string());
     }
 
     // Pending approvals and item tables belong to the old process. The
@@ -1725,6 +1723,16 @@ async fn retire_host(
     }
     if let Ok(mut events) = state.event_buffer.lock() {
         events.retain(|event| !session_ids.contains(&event.session_id));
+    }
+    // Told after the purge: emitted before it, host_exited was dropped with
+    // the stale events, and after "Restart workspace host" a conversation
+    // stayed Connected with no route, its next send refused (06/10/2026). The
+    // routes are gone, so the old host can add nothing after it.
+    for session_id in &session_ids {
+        mark_running(state, session_id, false);
+        if resumed != Some(session_id.as_str()) {
+            emit(app, "status", session_id, "host_exited", message.to_string());
+        }
     }
 
     old_client.stop(HOST_STOP_GRACE).await;
@@ -1770,13 +1778,14 @@ async fn recycle_full_host(
         (sandbox_mode, sandbox_disable_write, sandbox_disable_shell),
         "Muse already has 32 conversations open in this folder and one of them is still working. Try again when it finishes.",
         HOST_RECYCLED_MESSAGE,
+        None,
     )
     .await
 }
 
 /// Replace `root`'s host with a fresh process started with `sandbox`.
 /// Refused with `busy_message` while any of its conversations is working:
-/// that would kill the turn.
+/// that would kill the turn. `resumed`: see `retire_host`.
 async fn replace_idle_host(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -1784,6 +1793,7 @@ async fn replace_idle_host(
     sandbox: (Option<&str>, Option<bool>, Option<bool>),
     busy_message: &str,
     message: &str,
+    resumed: Option<&str>,
 ) -> Result<std::sync::Arc<MspClient>, String> {
     let (sandbox_mode, sandbox_disable_write, sandbox_disable_shell) = sandbox;
     let old_client = state
@@ -1807,7 +1817,7 @@ async fn replace_idle_host(
         if busy {
             return Err(busy_message.to_string());
         }
-        retire_host(app, state, root, &old_client, message).await?;
+        retire_host(app, state, root, &old_client, message, resumed).await?;
     }
     ensure_host(app, state, root, sandbox_mode, sandbox_disable_write, sandbox_disable_shell).await
 }
@@ -4990,8 +5000,8 @@ async fn resume_session_inner(
         // 1.4.2 refuses another MCP config on it (`session_configuration_conflict`,
         // measured 06/10/2026) and fixes the posture at `serve`. In a fresh host
         // it is not loaded, and its resume takes the current ones. retire_host
-        // drops the buffered events of the host's conversations, its host_exited
-        // included: this one is not told it left.
+        // drops the buffered events of the host's conversations and tells the
+        // others it left: this one, resumed below, is not told.
         replace_idle_host(
             app,
             state,
@@ -4999,6 +5009,7 @@ async fn resume_session_inner(
             (sandbox_mode.as_deref(), sandbox_disable_write, sandbox_disable_shell),
             "A conversation in this folder is still working: try again when it finishes.",
             HOST_RELOADED_MESSAGE,
+            Some(&session_id),
         )
         .await?;
     }
@@ -7764,6 +7775,38 @@ mod tests {
         responder.join().expect("fixture responder should finish");
         assert_eq!(response["turnId"], "turn-ipc");
         assert!(state.inner().sessions.lock().unwrap()["session-a"].running);
+    }
+
+    /// Restart workspace host: the old host's buffered events are dropped, but
+    /// each of its conversations is told it left, except one resumed at once.
+    #[test]
+    fn retire_host_tells_its_conversations_after_dropping_their_stale_events() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let state = app.state::<AppState>();
+        let (client, _frames) = fixture_client(false);
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client.clone());
+        register_fixture_session(state.inner(), "session-b", "fixture-a", client.clone());
+        push_event(state.inner(), "session-a", "output", "stale".into());
+
+        let retired = tauri::async_runtime::block_on(retire_host(
+            app.handle(),
+            &state,
+            &PathBuf::from("fixture-a"),
+            &client,
+            "restarted",
+            Some("session-b"),
+        ))
+        .unwrap();
+
+        assert_eq!(retired.len(), 2);
+        let events: Vec<_> = state.event_buffer.lock().unwrap().iter()
+            .map(|e| (e.session_id.clone(), e.kind.clone(), e.payload.clone()))
+            .collect();
+        assert_eq!(events, vec![("session-a".to_string(), "host_exited".to_string(), "restarted".to_string())]);
+        assert!(state.hosts.lock().unwrap().session("session-a").is_err());
     }
 
     #[test]
