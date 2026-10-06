@@ -1248,8 +1248,8 @@ pub fn run_worktree_setup(
     #[cfg(target_os = "windows")]
     let mut child = {
         use std::os::windows::process::CommandExt;
-        Command::new("cmd")
-            .args(["/C", trimmed])
+        // As typed: a quoted path failed through Rust's own quoting (M3-01).
+        crate::mcp::shell(trimmed)
             .current_dir(&dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
