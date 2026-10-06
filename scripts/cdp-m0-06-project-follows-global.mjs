@@ -16,11 +16,13 @@
  *
  * Steps, in one fresh profile: "Workspace and network" granted and selected, a
  * project with no override, a conversation in it; then "Elevated access"; then
- * the project's Network "No network"; then its Isolation "Read only" (network
- * cleared). After each, the argv the OS runs for the project's engine (a child
- * of the app). When a running engine has another posture, the start is refused
- * and the error banner's "Restart workspace host" restarts it, the confirmation
- * answered by the harness. The record is path-free.
+ * the project's Isolation "No Elevated access"; then its Network "No network"
+ * alone; then its Isolation "Read only" alone. After each, the argv the OS runs
+ * for the project's engine (a child of the app). When a running engine has
+ * another posture, the start is refused and the error banner's "Restart
+ * workspace host" restarts it, the confirmation answered by the harness. Last,
+ * the project's folder becomes the default folder and Settings' "Restart
+ * workspace host" restarts it. The record is path-free.
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -103,8 +105,30 @@ async function setIsolation(app, label) {
     l.querySelector('input').click();
     await new Promise((r) => setTimeout(r, 600));
     const group = q('.settings-group').find((g) => g.querySelector('h3')?.innerText.trim() === 'Isolation');
-    return { clicked: true, stored: store('muse-desktop.settings.v1', 'null'), note: group?.querySelector('.settings-note')?.innerText.replace(/\\s+/g, ' ').trim() ?? null };
+    return { clicked: true, stored: store('muse-desktop.settings.v1', 'null'), note: group?.querySelector('.settings-note')?.innerText.replace(/\\s+/g, ' ').trim() ?? null,
+      levels: q('[role="radiogroup"][aria-label="Isolation"] label').map((x) => x.innerText.replace(/\\s+/g, ' ').trim()),
+      current: group?.querySelector('.authorization-status')?.innerText.replace(/\\s+/g, ' ').trim() ?? null };
   `));
+}
+
+/** The project's folder as Settings' default folder, then Settings' "Restart workspace host", confirmed. */
+async function settingsRestart(app) {
+  await openSettings(app);
+  await sleep(1_200);
+  await app.ev(`(window.__baselineIpc.dialogQueue.push(${JSON.stringify(ROOT)}), true)`);
+  const picked = await app.ev(page("const b = q('button.workspace-button')[0]; if (!b) return false; b.click(); return true;"));
+  await sleep(1_000);
+  const n = (await ipc(app, "restart_host")).length;
+  const before = engines();
+  const clicked = await app.ev(page("const b = q('.settings-host-restart button').find((x) => /Restart workspace host/.test(x.innerText)); if (!b) return false; b.click(); return true;"));
+  if (!picked || !clicked) return { picked, clicked };
+  const call = await waitFor(async () => {
+    const calls = await ipc(app, "restart_host");
+    return calls.length > n && calls.at(-1).result !== undefined ? calls.at(-1) : null;
+  }, 90_000);
+  const spawned = await waitFor(() => { const s = spawnedSince(before); return s.length > 0 ? s : null; }, 30_000);
+  return { picked, clicked, requested: posture(call?.args), ok: Boolean(call?.ok), ...(call?.ok ? {} : { error: refusal(call) }),
+    engine: spawned ? spawned.join(" | ") : null, running: Object.values(engines()) };
 }
 
 async function openRow(app) {
@@ -119,14 +143,14 @@ async function openRow(app) {
   if (!open) throw new Error("project row not found");
 }
 
-/** The row's preferences as shown: label, selected choice, choices. */
+/** The row's preferences as shown: label, selected choice, choices; and the note under them. */
 async function preferences(app) {
   await openRow(app);
-  return app.ev(page(`return [...row().querySelectorAll('.project-settings label.project-setting')].map((l) => {
+  return app.ev(page(`return { rows: [...row().querySelectorAll('.project-settings label.project-setting')].map((l) => {
     const s = l.querySelector('select');
     return { label: l.querySelector('span')?.innerText.replace(/\\s+/g, ' ').trim() ?? null,
       selected: s ? s.selectedOptions[0]?.text ?? null : null, choices: s ? [...s.options].map((o) => o.text) : null };
-  });`));
+  }), note: row().querySelector('.project-settings > small')?.innerText.replace(/\\s+/g, ' ').trim() ?? null };`));
 }
 
 /**
@@ -224,25 +248,44 @@ run.preferencesShown = await preferences(app);
 run.steps.push(await step(app, "no override", "Workspace and network"));
 run.grantElevated = await setIsolation(app, "Elevated access");
 run.steps.push(await step(app, "no override", "Elevated access"));
+// The old select read "workspace" as its global value and cleared it.
+run.setNoElevated = await setPreference(app, "isolation", "workspace");
+run.steps.push(await step(app, "Isolation: no Elevated access", "Elevated access"));
+run.clearIsolation = await setPreference(app, "isolation", null);
 run.setNoNetwork = await setPreference(app, "network", "deny");
 run.steps.push(await step(app, "Network: no network", "Elevated access"));
 run.clearNetwork = await setPreference(app, "network", null);
 run.setReadOnly = await setPreference(app, "isolation", "read-only");
 run.steps.push(await step(app, "Isolation: read only", "Elevated access"));
 run.preferencesShownAtEnd = await preferences(app);
+run.settingsRestart = await settingsRestart(app);
 run.errors = app.errors.slice(0, 5);
 app.close();
 
-const argv = (s) => s.running.join(" | ");
-const [network, elevated, noNetwork, readOnly] = run.steps;
+const argv = (s) => (s?.running ?? []).join(" | ");
+const [network, elevated, noElevated, noNetwork, readOnly] = run.steps;
+const networkRow = run.preferencesShownAtEnd.rows.find((r) => r.label === "Network");
 run.verdict = BUILD === "before"
-  ? { restrictedAtEveryLevel: run.steps.every((s) => argv(s).includes("--sandbox-network restricted") && !argv(s).includes("--disable-sandbox")) }
+  ? {
+      restrictedAtEveryLevel: run.steps.every((s) => argv(s).includes("--sandbox-network restricted") && !argv(s).includes("--disable-sandbox")),
+      settingsRestartLiftsReadOnly: argv(run.settingsRestart).includes("--disable-sandbox"),
+    }
   : {
       followsWorkspaceAndNetwork: argv(network).includes("--sandbox-network enabled") && !argv(network).includes("--disable-sandbox"),
       followsElevated: argv(elevated).includes("--disable-sandbox"),
+      noElevatedRestricts: argv(noElevated).includes("--sandbox-network enabled") && !argv(noElevated).includes("--disable-sandbox"),
       noNetworkRestricts: argv(noNetwork).includes("--sandbox-network restricted") && !argv(noNetwork).includes("--disable-sandbox"),
       readOnlyRestricts: ["--sandbox-network restricted", "--disable-write", "--disable-shell"].every((flag) => argv(readOnly).includes(flag)),
-      restartedThroughTheBanner: [elevated, noNetwork, readOnly].every((s) => s.restart?.ok && s.startAfterRestart?.ok),
+      restartedThroughTheBanner: [elevated, noElevated, noNetwork, readOnly].every((s) => s.restart?.ok && s.startAfterRestart?.ok),
+      conflictInWords: [elevated, noElevated, noNetwork, readOnly].every((s) =>
+        /^This folder's engine is running with [A-Z][^;]+; restart it to apply [A-Z][^.]+\.$/.test(s.start.error ?? "")),
+      followLabelIsTheLevelRun: networkRow?.selected === "Follow Settings (Workspace only)",
+      runningEngineNoteShown: /a running engine keeps its posture until it restarts/.test(run.preferencesShownAtEnd.note ?? ""),
+      noGHint: run.preferencesShown.rows.every((r) => !/\bg:/.test(r.label ?? "")),
+      elevatedSaysGlobal: run.grantElevated.levels.some((l) => l.includes("It reaches every project that does not restrict it.")),
+      currentIsolationInWords: run.grantElevated.current === "Current isolation: Elevated access",
+      settingsRestartKeepsTheProjectPosture: run.settingsRestart.requested?.disableWrite === true
+        && ["--disable-write", "--disable-shell"].every((flag) => argv(run.settingsRestart).includes(flag)),
     };
 
 let record;
@@ -264,7 +307,11 @@ record.builds[BUILD] = redact(run);
 const before = record.builds.before;
 const after = record.builds.after;
 if (before && after) {
-  record.table = before.steps.map((s, i) => ({ isolation: s.isolation, project: s.step, before: s.running.join(" | "), after: after.steps[i]?.running.join(" | ") ?? null }));
+  record.table = [
+    ...before.steps.map((s, i) => ({ isolation: s.isolation, project: s.step, before: s.running.join(" | "), after: after.steps[i]?.running.join(" | ") ?? null })),
+    { isolation: "Elevated access", project: "Isolation: read only, its folder restarted from Settings",
+      before: before.settingsRestart?.running?.join(" | ") ?? null, after: after.settingsRestart?.running?.join(" | ") ?? null },
+  ];
 }
 writeFileSync(OUT, `${JSON.stringify(record, null, 2)}\n`);
 console.log(JSON.stringify({ build: BUILD, verdict: run.verdict, running: run.steps.map((s) => s.running) }, null, 2));
