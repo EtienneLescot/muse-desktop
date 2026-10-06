@@ -234,6 +234,7 @@ export function historyItemsToLogEntries(items: unknown[], now = Date.now()): Lo
       ...(outputRef === undefined ? {} : { outputRef }),
       ...(metadata === undefined ? {} : { richContent: metadata }),
       open: normalizedStatus === "in_progress" || normalizedStatus === "running" || normalizedStatus === "started",
+      ...(role === "tool" && normalizedStatus === "failed" ? { failed: true } : {}),
     };
     const revision = typeof item.revision === "number" && Number.isFinite(item.revision)
       ? item.revision

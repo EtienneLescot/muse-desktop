@@ -32,6 +32,7 @@ import {
   parseProviderId,
   parseProviderMap,
   parseSandboxSettings,
+  postureRefusal,
   providerById,
   providerForProject,
   type HostRequest,
@@ -154,6 +155,15 @@ describe("sandbox settings", () => {
       ),
       { mode: "network", disableWrite: false, disableShell: false },
     );
+  });
+
+  it("says what a Read only project's host refuses, and nothing otherwise", () => {
+    // M0-13: 1.4.2 still grants userShell under --disable-shell (06/10/2026).
+    const readOnly = hostSandboxConfigForProject(DEFAULT_SANDBOX, { sandbox: "read-only", networkDefault: "prompt" });
+    assert.equal(postureRefusal(readOnly), "This project is Read only: Muse cannot write files or run commands here.");
+    assert.equal(postureRefusal({ mode: "workspace", disableWrite: false, disableShell: true }), "This project is Read only: Muse cannot run commands here.");
+    assert.equal(postureRefusal(hostSandboxConfigForProject(DEFAULT_SANDBOX, { sandbox: "workspace", networkDefault: "prompt" })), null);
+    assert.equal(postureRefusal(hostSandboxConfigForProject(DEFAULT_SANDBOX)), null);
   });
 
   it("restarts the host a posture conflict refused, with the posture it asked for", () => {

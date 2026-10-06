@@ -27,6 +27,13 @@
  * - M2-05: every window.confirm question was skipped in the app: the dialog
  *   plugin's replacement calls a command the plugin no longer has, and its
  *   Promise read as a yes.
+ * - M0-13 (06/10/2026, isolated instance): a failed computer-use level change
+ *   left the panel on "Granted" with no service running, and its failure
+ *   stayed on screen through the next revoke and level change.
+ * - M0-13: in a Read only project, "Run in Muse" was offered (1.4.2 still
+ *   grants userShell) and the host refused the command after the click; the
+ *   composer said nothing. A refused command or tool call closed as an
+ *   ordinary collapsed row.
  *
  * Both are layout/lifecycle facts that the pure-logic tests cannot see.
  */
@@ -157,6 +164,37 @@ describe("visible failures", () => {
     const events = hook.slice(hook.indexOf("function handleEvent(evt: MuseEvent)"), hook.indexOf('if (kind === "workspace_changed")'));
     assert.match(events, /if \(kind === "started"\) noLiveTurnRef\.current\.delete\(sid\);/);
     assert.match(events, /if \(\(kind === "input_request" \|\| kind === "tool_request"\) && noLiveTurnRef\.current\.has\(sid\)\) return;/);
+  });
+
+  it("clears a computer-use failure at the next action and shows the service as it is after one", () => {
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    for (const action of ["setComputerLevel", "setComputerAttach", "disableComputerUse"]) {
+      const head = `const ${action} = useCallback(`;
+      const start = hook.indexOf(head);
+      assert.ok(start > 0, `${action} is declared`);
+      const body = hook.slice(start, hook.indexOf(" = useCallback(", start + head.length));
+      const clear = body.indexOf("clearComputerError();");
+      assert.ok(clear > 0 && clear < body.indexOf("invoke<unknown>("), `${action} clears before it acts`);
+      const failure = body.slice(body.indexOf("} catch (error) {"));
+      assert.match(failure, /setComputerError\(userFacingError\(/, `${action} records its failure as computer use's`);
+      assert.match(failure, /await refreshComputerUse\(\);/, `${action} re-reads the service after a failure`);
+      assert.doesNotMatch(body, /\bsetError\(/, `${action} raises no failure the next action cannot clear`);
+    }
+  });
+
+  it("says before the click what a Read only project's host refuses, and marks a refused item", () => {
+    const app = read("../src/App.tsx");
+    assert.match(app, /const activeRefusal =\s*activeProject === null \? null : postureRefusal\(hostSandboxConfigForProject\(sandbox, activeProjectSettings\)\);/);
+    assert.match(app, /runThroughMuseBlocked=\{userShellBlocked\(active\) \?\? activeRefusal\}/, "Run in Muse is off, with the reason");
+    const note = app.indexOf("{activeRefusal !== null && (");
+    assert.ok(note > 0 && note < app.indexOf("<Composer", note) && app.indexOf("<Composer", note) - note < 400, "the note sits right above the composer");
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const done = hook.slice(hook.indexOf('if (kind === "item_done") {'), hook.indexOf("refreshAutoShare(sid);", hook.indexOf('if (kind === "item_done") {')));
+    assert.match(done, /failed = itemId !== undefined && obj\.status === "failed";/);
+    assert.match(done, /closeOpenBlocks\(sid, itemId, turnId, failed\);/);
+    const stream = read("../src/components/StreamView.tsx");
+    assert.match(stream, /e\.role === "tool" && e\.failed === true && <strong className="tool-failed">Failed<\/strong>/);
+    assert.match(stream, /<details className="tool-call" open=\{e\.failed === true\}>/);
   });
 
   it("writes one transcript line per question, though the host delivers it twice", () => {

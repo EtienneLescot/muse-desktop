@@ -3088,7 +3088,7 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
-  function closeOpenBlocks(sessionId: string, itemId?: string, turnId?: string): void {
+  function closeOpenBlocks(sessionId: string, itemId?: string, turnId?: string, failed = false): void {
     setLogs((cur) => {
       const log = cur[sessionId];
       if (!log || !log.some((e) => e.open)) return cur;
@@ -3096,7 +3096,7 @@ export function useMuseSessions(): UseMuseSessions {
       // streaming into their own entries. Without one (turn end), close all.
       const next = log.map((e) =>
         e.open && (itemId === undefined || e.itemId === itemId)
-          ? { ...e, open: false, ...(turnId ? { turnId } : {}) }
+          ? { ...e, open: false, ...(turnId ? { turnId } : {}), ...(failed && e.role === "tool" ? { failed: true } : {}) }
           : e,
       );
       saveLog(sessionId, next);
@@ -3720,14 +3720,18 @@ export function useMuseSessions(): UseMuseSessions {
       ensureSessionRow(sid, null);
       let itemId: string | undefined;
       let turnId: string | undefined;
+      let failed = false;
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         if (typeof obj.itemId === "string" && obj.itemId.length > 0) itemId = obj.itemId;
         if (typeof obj.turnId === "string" && obj.turnId.length > 0) turnId = obj.turnId;
+        // M0-13: a refused item says so (`status: "failed"`, e.g. a write in
+        // a Read only project), instead of closing as an ordinary row.
+        failed = itemId !== undefined && obj.status === "failed";
       } catch {
         // unparseable payload: close all, as before
       }
-      closeOpenBlocks(sid, itemId, turnId);
+      closeOpenBlocks(sid, itemId, turnId, failed);
       // w-collab US-27: a turn end (item_done without item id) refreshes
       // the auto snapshot; per-item completions never do (no spam).
       if (itemId === undefined) refreshAutoShare(sid);
@@ -5959,6 +5963,19 @@ export function useMuseSessions(): UseMuseSessions {
   const [computerUse, setComputerUse] = useState<ComputerStatus | null>(null);
   const computerServerRef = useRef<HostMcpStdioServer | null>(null);
   const [computerBusy, setComputerBusy] = useState(false);
+  // M0-13: the failure the last computer-use action raised. The next action
+  // clears it, so a revoke or another level no longer shows an old failure;
+  // another surface's failure stays.
+  const computerErrorRef = useRef<string | null>(null);
+  const clearComputerError = (): void => {
+    const last = computerErrorRef.current;
+    computerErrorRef.current = null;
+    if (last !== null) setErrorMessage((current) => (current === last ? null : current));
+  };
+  const setComputerError = (message: string): void => {
+    computerErrorRef.current = message;
+    setError(message);
+  };
 
   const refreshComputerUse = useCallback(async () => {
     if (!isTauriRuntime()) return null;
@@ -5982,16 +5999,20 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, []);
 
+  // After a failure the panel shows the service as it is: a failed level
+  // change stops the previous service first, and the panel kept "Granted".
   const setComputerLevel = useCallback(
     async (level: ComputerLevel) => {
       if (!isTauriRuntime()) return;
       setComputerBusy(true);
+      clearComputerError();
       try {
         const raw = await invoke<unknown>("computer_enable", { level });
         setComputerUse(parseComputerStatus(raw));
         await refreshComputerUse();
       } catch (error) {
-        setError(userFacingError(error, "Computer use could not be enabled."));
+        setComputerError(userFacingError(error, "Computer use could not be enabled."));
+        await refreshComputerUse();
       } finally {
         setComputerBusy(false);
       }
@@ -6003,12 +6024,14 @@ export function useMuseSessions(): UseMuseSessions {
     async (attach: boolean) => {
       if (!isTauriRuntime()) return;
       setComputerBusy(true);
+      clearComputerError();
       try {
         const raw = await invoke<unknown>("computer_set_attach", { attach });
         setComputerUse(parseComputerStatus(raw));
         await refreshComputerUse();
       } catch (error) {
-        setError(userFacingError(error, "The browser consent could not be changed."));
+        setComputerError(userFacingError(error, "The browser consent could not be changed."));
+        await refreshComputerUse();
       } finally {
         setComputerBusy(false);
       }
@@ -6019,16 +6042,18 @@ export function useMuseSessions(): UseMuseSessions {
   const disableComputerUse = useCallback(async () => {
     if (!isTauriRuntime()) return;
     setComputerBusy(true);
+    clearComputerError();
     try {
       const raw = await invoke<unknown>("computer_disable");
       setComputerUse(parseComputerStatus(raw));
       computerServerRef.current = null;
     } catch (error) {
-      setError(userFacingError(error, "Computer use could not be turned off."));
+      setComputerError(userFacingError(error, "Computer use could not be turned off."));
+      await refreshComputerUse();
     } finally {
       setComputerBusy(false);
     }
-  }, []);
+  }, [refreshComputerUse]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;

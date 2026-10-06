@@ -122,6 +122,22 @@ export function hostSandboxConfigForProject(
   };
 }
 
+/**
+ * M0-13: what a conversation's host refuses, said before anything is tried.
+ * Muse 1.4.2 still grants `userShell` under `--disable-shell` and refuses each
+ * command afterwards (measured 06/10/2026), so the posture is the only
+ * advance notice. Null when the host refuses nothing.
+ */
+export function postureRefusal(config: HostSandboxConfig): string | null {
+  const refused = [
+    config.disableWrite ? "write files" : null,
+    config.disableShell ? "run commands" : null,
+  ].filter((part) => part !== null);
+  return refused.length === 0
+    ? null
+    : `This project is Read only: Muse cannot ${refused.join(" or ")} here.`;
+}
+
 /** The host a start or reconnect asked for: its workspace key and posture. */
 export interface HostRequest {
   workspace: string;

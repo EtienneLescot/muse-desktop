@@ -1225,6 +1225,8 @@ export function StreamView({
             aria-label={entryA11y.label}
           >
             <span className="role">{roleLabel(e)}</span>
+            {/* M0-13: the host refused this tool call or command. */}
+            {e.role === "tool" && e.failed === true && <strong className="tool-failed">Failed</strong>}
             {e.engineError ? (
               <details className="engine-error" open>
                 <summary>
@@ -1280,8 +1282,9 @@ export function StreamView({
             ) : e.role === "tool" && e.text.includes("\n") ? (
               // The host's tool text is a one-line summary ("Read text file
               // `README.md`.") followed by the raw output. Show the summary and
-              // keep the output one click away instead of a 100-line dump.
-              <details className="tool-call">
+              // keep the output one click away instead of a 100-line dump. A
+              // refusal is shown open: its reason is the output.
+              <details className="tool-call" open={e.failed === true}>
                 <summary>
                   {e.text.slice(0, e.text.indexOf("\n")).split(/(`[^`]+`)/g).map((part, i) =>
                     part.startsWith("`") ? <code key={i}>{part.slice(1, -1)}</code> : part,

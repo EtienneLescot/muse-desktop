@@ -6,7 +6,7 @@ import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { MuseSetupScreen } from "./components/MuseSetupScreen";
 import { isMacPlatform } from "./lib/platform";
-import { conflictRestart } from "./lib/settings";
+import { conflictRestart, hostSandboxConfigForProject, postureRefusal } from "./lib/settings";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -500,6 +500,10 @@ export default function App() {
     active === null ? null : projectForSession(active.session_id);
   const activeProjectSettings =
     activeProject === null ? globalSettings : settingsFor(activeProject.id);
+  // M0-13: what this conversation's host refuses (a Read only project), the
+  // posture its host was started with, said before the click.
+  const activeRefusal =
+    activeProject === null ? null : postureRefusal(hostSandboxConfigForProject(sandbox, activeProjectSettings));
   // M0-03: retryable sends of the viewed conversation only — a retry never
   // routes by this view, it goes to the entry's own sessionId.
   const activePendingSends =
@@ -1700,6 +1704,11 @@ export default function App() {
                       </button>
                     </div>
                   ))}
+                  {activeRefusal !== null && (
+                    <p className="settings-note settings-note-warning posture-note" role="note">
+                      {activeRefusal}
+                    </p>
+                  )}
                   <Composer
                     key={active.session_id}
                     draftKey={active.session_id}
@@ -1860,7 +1869,7 @@ export default function App() {
                           onClose={closeTerminal}
                           canRunThroughMuse={userShellAvailableForSession(active.session_id)}
                           sessionLoaded={sessionLoadedForSession(active.session_id)}
-                          runThroughMuseBlocked={userShellBlocked(active)}
+                          runThroughMuseBlocked={userShellBlocked(active) ?? activeRefusal}
                           onRunThroughMuse={runUserShell}
                           onInsertContext={prepareTerminalContext}
                         />

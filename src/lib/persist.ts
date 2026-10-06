@@ -111,6 +111,8 @@ export interface LogEntry {
   clientMessageId?: string;
   /** M0-07: structured terminal failure details, when a turn failed. */
   engineError?: EngineErrorDetails;
+  /** M0-13: the host closed this tool or shell item as `failed` (refused). */
+  failed?: boolean;
 }
 
 const SESSIONS_KEY = "muse-desktop.sessions.v1";

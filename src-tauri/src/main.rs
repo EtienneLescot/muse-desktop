@@ -2457,11 +2457,14 @@ where
                 }
             }
             if item_terminal {
+                // M0-13: the status says whether the host refused the item
+                // ("failed"); without it a refused write or command closed as
+                // an ordinary row.
                 emit_fn(
                     "status",
                     sid,
                     "item_done",
-                    json!({"itemId": item_id, "turnId": turn_id}).to_string(),
+                    json!({"itemId": item_id, "turnId": turn_id, "status": item.and_then(|i| i.get("status"))}).to_string(),
                 );
             }
         }
@@ -8682,6 +8685,32 @@ mod tests {
         assert!(events.iter().any(|(_, _, kind, payload)| {
             kind == "item_done" && payload.contains("shell-complete")
         }));
+    }
+
+    /// M0-13: a refused item closes as refused. Measured on 1.4.2 with
+    /// `--disable-shell`: the userShell item completes `failed`.
+    #[test]
+    fn a_refused_item_closes_with_its_failed_status() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        let refused = json!({
+            "sessionId": "session-a",
+            "item": {
+                "itemId": "shell-refused",
+                "kind": "userShell",
+                "commandText": "echo m0-13",
+                "visibleOutput": "tool failed: tool policy denied shell execution",
+                "status": "failed"
+            }
+        });
+        route_notification_with_emit(&state, "item/completed", &refused, &mut emit);
+        let done = events.iter().find(|(_, _, kind, _)| kind == "item_done").unwrap();
+        let payload: Value = serde_json::from_str(&done.3).unwrap();
+        assert_eq!(payload["itemId"], "shell-refused");
+        assert_eq!(payload["status"], "failed");
     }
 
     #[test]

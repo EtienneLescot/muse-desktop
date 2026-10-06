@@ -1107,6 +1107,12 @@ body.dark .avatar {
   font-size: 0.72rem;
 }
 
+/* M0-13: a tool call or command the host refused. */
+.tool-failed {
+  color: var(--danger);
+  font-size: 0.72rem;
+}
+
 .engine-error > p {
   margin: 0;
   padding: 0 12px 8px 28px;
@@ -5844,6 +5850,11 @@ body.dark .composer textarea::placeholder {
    signal, since the same paragraph also carries the word "priority". */
 .settings-note-warning {
   color: var(--warning, #d89024);
+}
+
+/* M0-13: above the composer, what a Read only project's engine refuses. */
+.posture-note {
+  margin: 0 0 6px;
 }
 
 .notification-show-more {
