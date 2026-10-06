@@ -913,6 +913,10 @@ body.dark .avatar {
   content-visibility: auto;
   contain: layout paint style;
   contain-intrinsic-size: 0 112px;
+  /* A skipped entry has no content height left to hold it: as an item of the
+     stream's flex column it shrank to its padding (8 px measured), then grew
+     back once in view, so End and "Latest messages" stopped short of the end. */
+  flex-shrink: 0;
 }
 
 .msg .role {

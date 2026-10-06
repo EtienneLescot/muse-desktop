@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
 import {
   initialStreamWindowStart,
   maxStreamWindowStart,
@@ -76,5 +77,15 @@ describe("bounded transcript window", () => {
       top: 0,
       bottom: 0,
     });
+  });
+});
+describe("skipped transcript entries", () => {
+  it("keep their size in the stream's flex column", () => {
+    // content-visibility: auto leaves a skipped entry no content height: a
+    // shrinkable flex item collapsed to its padding and End stopped short.
+    const css = readFileSync(new URL("../src/App.css", import.meta.url), "utf8");
+    const rule = css.match(/\n\.stream > \.msg \{([^}]*)\}/)?.[1] ?? "";
+    assert.match(rule, /content-visibility:\s*auto/);
+    assert.match(rule, /flex-shrink:\s*0/);
   });
 });

@@ -611,9 +611,12 @@ export function StreamView({
   }, [findTarget, safeWindowStart, windowStart]);
 
   useEffect(() => {
-    stickRef.current = true;
-    setAwayFromBottom(false);
     const savedTop = scrollTopsRef.current[sessionId ?? ""];
+    // Sticking first would scroll the restored window to its end, where
+    // onScroll swaps it for the tail: a viewport saved at the top of a long
+    // history reopened on the blank top spacer of the last window.
+    stickRef.current = savedTop === undefined;
+    setAwayFromBottom(false);
     const frame = window.requestAnimationFrame(() => {
       const stream = streamRef.current;
       if (!stream || savedTop === undefined) return;
