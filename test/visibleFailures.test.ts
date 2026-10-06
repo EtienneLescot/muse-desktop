@@ -28,6 +28,8 @@
  *   the second answer and the banner said the answer had failed.
  * - M0-05: a question left open when the app closed left no line after the
  *   restart, where an approval said it was cancelled.
+ * - M0-05: after that restart, the conversation stayed "Muse may still be
+ *   working": 1.4.2 replays the cancelled turn's items after the resume.
  * - M2-05: every window.confirm question was skipped in the app: the dialog
  *   plugin's replacement calls a command the plugin no longer has, and its
  *   Promise read as a yes.
@@ -191,6 +193,16 @@ describe("visible failures", () => {
       // Released only when the host refuses: the card stays for a corrected answer.
       assert.match(body, /catch \(e\) \{\s*answeredInputsRef\.current\.delete\(key\);/, `${name}: released on refusal`);
     }
+  });
+
+  it("keeps a conversation resumed with no turn idle while the engine replays the dead turn's items", () => {
+    // M0-05: after a restart with a question pending, the resume reported the
+    // turn cancelled, then 1.4.2 replayed its in-flight items: the
+    // conversation stayed "Muse may still be working", with Stop and Guide.
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const start = hook.indexOf("if (isItemStartKind(kind)) {");
+    const block = hook.slice(start, hook.indexOf("ensurePlaceholder(sid, itemId, agentId, itemRole", start));
+    assert.match(block, /if \(\(itemRole !== "tool" \|\| modelToolCall\) && !noLiveTurnRef\.current\.has\(sid\)\) \{\s*setSessions\(/);
   });
 
   it("says a question left open when the app closed was cancelled, as for an approval", () => {

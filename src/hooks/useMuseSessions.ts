@@ -3945,7 +3945,10 @@ export function useMuseSessions(): UseMuseSessions {
         delete lastTerminalTurnIdsRef.current[sid];
       }
       // A user shell runs outside any turn; the model's tool call is its turn.
-      if (itemRole !== "tool" || modelToolCall) {
+      // M0-05: a resume that runs no turn is followed, on Muse 1.4.2, by the
+      // items the killed engine left in flight, after their turn's
+      // cancellation: history, not a turn ("Muse may still be working").
+      if ((itemRole !== "tool" || modelToolCall) && !noLiveTurnRef.current.has(sid)) {
         setSessions((cur) =>
           cur.map((s) => (s.session_id === sid ? { ...s, running: true } : s)),
         );
