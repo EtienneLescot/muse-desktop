@@ -129,11 +129,27 @@ on 05/10, with Étienne's approval. The measurements are in
     `Microsoft.PowerShell.Core\FileSystem::\\?\G:\…`, so cmdlets with relative paths fail.
   - Absolute paths, `write_file` and `--disable-sandbox` work.
   - Related: #26, the shell starting in `System32` for workspaces under the profile.
-- **#57, powershell hangs under the sandbox:** the 1.3.0 hang does not reproduce on 1.4.2. Every
-  turn of the 05/10 matrix reached `turn/completed`. The issue can be updated or closed when
-  convenient. This has not been posted yet.
-- **Not posted yet:**
-  - On native Windows 1.4.2, the "Workspace and network" isolation still gives the sandboxed shell
-    no network. `Invoke-WebRequest` fails and `curl.exe` returns `000`. Measured in the app by the
-    M0-05/M0-06 proof on 05/10.
-  - French-locale PowerShell output is mis-decoded. This one is mentioned as a side note in #88.
+## Follow-up of 6 October 2026
+
+Étienne asked for the relevant findings to be posted in his name.
+
+- **#57, powershell hangs under the sandbox: commented** ([comment](https://github.com/meta-models/muse-code-sdk/issues/57#issuecomment-6012103614)).
+  The 1.3.0 hang does not reproduce on 1.4.2: more than 25 live turns with the sandboxed
+  `powershell` tool all reached `turn/completed`. The comment says it can be closed.
+- **#91, new issue: HTTPS fails under `--sandbox-network enabled`** ([#91](https://github.com/meta-models/muse-code-sdk/issues/91)).
+  - Schannel has no credentials for the sandbox account (`muse-sbx-u1`,
+    `SEC_E_NO_CREDENTIALS 0x8009030E`), for `Invoke-WebRequest` and `curl.exe` alike.
+  - DNS, raw TCP and plain HTTP work, and the same probe outside the sandbox passes.
+  - Measured on 06/10 in [m0-06-junction-network-1.4.2.json](../../evidence/2026-10-05-roadmap-closure/m0-06-junction-network-1.4.2.json).
+    The 05/10 reading, "no network at all", is superseded.
+- **#92, new issue: a question orphaned by a lost engine** ([#92](https://github.com/meta-models/muse-code-sdk/issues/92)).
+  - A `request_user_input` question from a turn lost with its engine stays in
+    `approval/listPending` and is re-sent after `session/resume`, which reports the session idle.
+  - Every answer is refused with `-32057`. The client filters questions on
+    `session/read.activeTurnId` meanwhile (9771bdb).
+  - Recorded in [m0-05-questions.json](../../evidence/2026-10-05-roadmap-closure/m0-05-questions.json),
+    phase `msp-orphan-head`.
+- **Not posted:**
+  - A conversation resumed within about 1 s of its engine being killed stopped publishing events.
+    It was seen once and never reproduced, so it needs a raw MSP re-run before filing.
+  - French-locale PowerShell output is mis-decoded. It is a side note in #88.

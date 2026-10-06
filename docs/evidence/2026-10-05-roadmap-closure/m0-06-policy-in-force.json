@@ -1,0 +1,1087 @@
+{
+  "schema": "muse-desktop.m0-06-policy-in-force.v1",
+  "tickets": [
+    "M0-06"
+  ],
+  "platform": "Windows 11 (26200), debug build with embedded frontend, isolated test mode (ADR 0003), WebView2 over CDP",
+  "phases": {
+    "setup": {
+      "build": "baseline",
+      "userPosture": "ask",
+      "userIsolation": "workspace",
+      "projectsCreated": [
+        "A",
+        "B",
+        "N"
+      ],
+      "setAsk": {
+        "clicked": true,
+        "stored": "ask"
+      },
+      "liveTurns": 0,
+      "consoleErrors": []
+    },
+    "scope": {
+      "build": "baseline",
+      "liveTurns": 0,
+      "cases": [
+        {
+          "isolation": "Workspace and network",
+          "project": "A",
+          "stored": "network",
+          "ok": true,
+          "sessionId": "01a1102c-55a9-7e50-8d33-4dcb6157a9c3",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "workspace"
+          },
+          "hostApprovalMode": "promptUnmatched",
+          "engine": "<engine> serve --sandbox-network restricted --trust-workspace"
+        },
+        {
+          "isolation": "Workspace and network",
+          "project": "N",
+          "stored": "network",
+          "ok": true,
+          "sessionId": "01a1102c-707d-7c50-96ed-5810b4cb89c5",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "network"
+          },
+          "hostApprovalMode": "promptUnmatched",
+          "engine": "<engine> serve --sandbox-network enabled --trust-workspace"
+        },
+        {
+          "isolation": "Elevated access",
+          "project": "A",
+          "stored": "elevated",
+          "ok": true,
+          "sessionId": "01a1102c-85b4-7391-9f0d-934fc2ec0c0c",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "workspace"
+          },
+          "hostApprovalMode": "promptUnmatched",
+          "engine": "reused a running engine"
+        },
+        {
+          "isolation": "Elevated access",
+          "project": "N",
+          "stored": "elevated",
+          "ok": true,
+          "sessionId": "01a1102c-9a4c-7681-af3a-45a73b919b9d",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "network"
+          },
+          "hostApprovalMode": "promptUnmatched",
+          "engine": "reused a running engine"
+        }
+      ],
+      "overrideN": {
+        "select": true,
+        "value": "allow"
+      },
+      "overrideA": {
+        "select": true,
+        "value": "full"
+      },
+      "change": {
+        "isolation": "Elevated access",
+        "project": "A (Sandbox Full access)",
+        "ok": false,
+        "sessionId": null,
+        "requested": {
+          "authorizationMode": "ask",
+          "sandboxMode": "elevated"
+        },
+        "hostApprovalMode": null,
+        "engine": "reused a running engine",
+        "error": "workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with elevated"
+      },
+      "resetA": {
+        "select": true,
+        "value": "workspace"
+      },
+      "restored": {
+        "clicked": true,
+        "stored": {
+          "mode": "workspace",
+          "networkAllowed": false,
+          "elevatedAllowed": false
+        }
+      },
+      "verdict": {
+        "defaultProjectStaysWorkspace": true,
+        "networkProjectGetsNetwork": true,
+        "engineArgvMatches": true,
+        "runningEngineKeepsItsPosture": true
+      },
+      "consoleErrors": []
+    },
+    "policy-workspace": {
+      "build": "baseline",
+      "liveTurns": 1,
+      "kind": "workspace",
+      "project": "A",
+      "setIsolation": {
+        "clicked": true,
+        "stored": {
+          "mode": "workspace",
+          "networkAllowed": false,
+          "elevatedAllowed": false
+        }
+      },
+      "setPosture": {
+        "clicked": true,
+        "stored": "workspace"
+      },
+      "command": "$p = '<outside>\\workspace-muwdjkjq.txt'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; $u = 'https://example.com'; try { 'net=' + (Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 15).StatusCode } catch { 'net=' + $_.Exception.Status }",
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "workspace",
+        "sandboxMode": "workspace",
+        "hostApprovalMode": "onRequest"
+      },
+      "engine": "reused a running engine",
+      "card": {
+        "msToCard": 7319,
+        "hostChoices": [
+          {
+            "choiceId": "allow_once",
+            "label": "Allow once",
+            "decision": "approved",
+            "scope": "once"
+          },
+          {
+            "choiceId": "abort",
+            "label": "Reject",
+            "decision": "abort",
+            "scope": "once"
+          }
+        ],
+        "dom": {
+          "title": "powershell",
+          "command": "$p = '<outside>\\workspace-muwdjkjq.txt'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; $u = 'https://…",
+          "scope": "scope: once",
+          "buttons": [
+            {
+              "text": "Allow once",
+              "aria": "Allow once, scope once",
+              "cls": "approve"
+            },
+            {
+              "text": "Reject",
+              "aria": "Reject, scope once",
+              "cls": "deny"
+            }
+          ],
+          "noChoices": false
+        },
+        "panel": {
+          "text": "PERMISSION REVIEW 1 action waiting powershell Review command $p = '<outside>\\workspace-muwdjkjq.txt'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; $u = 'https://… scope: once Allow once Reject",
+          "controls": [
+            "button:Allow once",
+            "button:Reject"
+          ]
+        },
+        "shot": "shots/m0-06-card-workspace.png"
+      },
+      "run": {
+        "idle": true,
+        "msToEnd": 13704,
+        "stages": [
+          {
+            "approvalId": "01a1102d-2896-7642-a185-003eaf3a59bb",
+            "requirement": "{\"approvalId\":\"01a1102d-2896-7642-a185-003eaf3a59bb\",\"sourceIndex\":0}",
+            "choices": [
+              "allow_once",
+              "abort"
+            ],
+            "title": "powershell",
+            "command": "$p = '<outside>\\workspace-muwdjkjq.txt'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; $u = 'https://…",
+            "clicked": true,
+            "count": 1
+          }
+        ],
+        "alerts": []
+      },
+      "transcript": [
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: $p = '<outside>\\workspace-muwdjkjq.txt'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; $u = 'https://…"
+        },
+        {
+          "role": "assistant",
+          "text": "write=UnauthorizedAccessException net=ConnectFailure "
+        },
+        {
+          "role": "tool",
+          "text": "powershell · Run requested write and network probe"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "write=UnauthorizedAccessException net=ConnectFailure"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "write": "UnauthorizedAccessException",
+      "net": "ConnectFailure",
+      "outsideFile": null,
+      "cell": {
+        "posture": "Ask only for more access (onRequest)",
+        "isolation": "workspace",
+        "project": "A",
+        "hostSandboxMode": "workspace",
+        "hostApprovalMode": "onRequest",
+        "engine": "reused a running engine",
+        "asked": true,
+        "stages": 1,
+        "writeOutside": "failed",
+        "writeError": "UnauthorizedAccessException",
+        "network": "failed",
+        "networkStage": "connect"
+      },
+      "verdict": {
+        "startedUnderMiddlePosture": true,
+        "startedWithIsolation": true,
+        "turnTerminal": true,
+        "cardButtonsAreTheHostChoices": true,
+        "cardHasNoOtherControl": true,
+        "cardHasNoClientRule": true
+      },
+      "consoleErrors": [],
+      "parseNote": "write re-read from the recorded transcript after a harness fix: the first parse matched the command echo in the approval entry (write=ok) instead of the shell output (assistant entries)."
+    },
+    "policy-elevated": {
+      "build": "baseline",
+      "liveTurns": 1,
+      "kind": "elevated",
+      "project": "B",
+      "setIsolation": {
+        "clicked": true,
+        "stored": {
+          "mode": "elevated",
+          "networkAllowed": true,
+          "elevatedAllowed": true
+        }
+      },
+      "override": {
+        "select": true,
+        "value": "full"
+      },
+      "setPosture": {
+        "clicked": true,
+        "stored": "workspace"
+      },
+      "command": "$p = '<outside>\\elevated-muwdkwcw.txt'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; $u = 'https://example.com'; try { 'net=' + (Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 15).StatusCode } catch { 'net=' + $_.Exception.Status }",
+      "startSession": {
+        "ok": true,
+        "authorizationMode": "workspace",
+        "sandboxMode": "elevated",
+        "hostApprovalMode": "onRequest"
+      },
+      "engine": "<engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+      "card": {
+        "msToCard": 5108,
+        "hostChoices": [
+          {
+            "choiceId": "allow_once",
+            "label": "Allow once",
+            "decision": "approved",
+            "scope": "once"
+          },
+          {
+            "choiceId": "abort",
+            "label": "Reject",
+            "decision": "abort",
+            "scope": "once"
+          }
+        ],
+        "dom": {
+          "title": "powershell",
+          "command": "$p = '<outside>\\elevated-muwdkwcw.txt'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; $u = 'https://e…",
+          "scope": "scope: once",
+          "buttons": [
+            {
+              "text": "Allow once",
+              "aria": "Allow once, scope once",
+              "cls": "approve"
+            },
+            {
+              "text": "Reject",
+              "aria": "Reject, scope once",
+              "cls": "deny"
+            }
+          ],
+          "noChoices": false
+        },
+        "panel": {
+          "text": "PERMISSION REVIEW 1 action waiting powershell Review command $p = '<outside>\\elevated-muwdkwcw.txt'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; $u = 'https://e… scope: once Allow once Reject",
+          "controls": [
+            "button:Allow once",
+            "button:Reject"
+          ]
+        },
+        "shot": "shots/m0-06-card-elevated.png"
+      },
+      "run": {
+        "idle": true,
+        "msToEnd": 12257,
+        "stages": [
+          {
+            "approvalId": "01a1102e-17ec-7be1-aec7-f5807117da21",
+            "requirement": "{\"approvalId\":\"01a1102e-17ec-7be1-aec7-f5807117da21\",\"sourceIndex\":0}",
+            "choices": [
+              "allow_once",
+              "abort"
+            ],
+            "title": "powershell",
+            "command": "$p = '<outside>\\elevated-muwdkwcw.txt'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; $u = 'https://e…",
+            "clicked": true,
+            "count": 1
+          }
+        ],
+        "alerts": []
+      },
+      "transcript": [
+        {
+          "role": "subagent",
+          "text": ""
+        },
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: $p = '<outside>\\elevated-muwdkwcw.txt'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; $u = 'https://e…"
+        },
+        {
+          "role": "assistant",
+          "text": "write=ok net=200 "
+        },
+        {
+          "role": "tool",
+          "text": "powershell · Run requested probe command"
+        },
+        {
+          "role": "assistant",
+          "text": "write=ok net=200"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "write": "ok",
+      "net": "200",
+      "outsideFile": "m06",
+      "cell": {
+        "posture": "Ask only for more access (onRequest)",
+        "isolation": "elevated",
+        "project": "B",
+        "hostSandboxMode": "elevated",
+        "hostApprovalMode": "onRequest",
+        "engine": "<engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace",
+        "asked": true,
+        "stages": 1,
+        "writeOutside": "completed",
+        "writeError": null,
+        "network": "completed",
+        "networkStage": "ok"
+      },
+      "verdict": {
+        "startedUnderMiddlePosture": true,
+        "startedWithIsolation": true,
+        "turnTerminal": true,
+        "cardButtonsAreTheHostChoices": true,
+        "cardHasNoOtherControl": true,
+        "cardHasNoClientRule": true
+      },
+      "consoleErrors": []
+    },
+    "sentences-baseline": {
+      "build": "baseline",
+      "liveTurns": 0,
+      "ui": {
+        "postures": [
+          {
+            "label": "Ask for approval",
+            "text": "Muse asks before any action the engine's own rules do not allow."
+          },
+          {
+            "label": "Ask only for more access",
+            "text": "The engine's sandbox decides when Muse asks. On Windows it asks for shell commands."
+          },
+          {
+            "label": "YOLO",
+            "text": "Muse never asks. Your Isolation setting still limits what an action can reach."
+          }
+        ],
+        "isolation": [
+          {
+            "label": "Workspace only",
+            "text": "Writes stay inside the conversation's folder, with no network. Reads can reach other folders."
+          },
+          {
+            "label": "Workspace and network",
+            "text": "Also asks the engine to allow outbound network: package installs, API calls, downloads."
+          },
+          {
+            "label": "Elevated access",
+            "text": "Adds files and commands outside the folder. Grant it to a workspace you trust."
+          }
+        ],
+        "isolationNote": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work. The sandboxed shell got no network at either level, Workspace and network included; only Elevated access reached it.",
+        "headings": [
+          "Environment",
+          "Default folder",
+          "Remote engine",
+          "Authorization",
+          "Reasoning effort",
+          "Isolation",
+          "Muse authentication",
+          "Local data",
+          "Worktrees"
+        ],
+        "ruleControls": [],
+        "composer": [
+          {
+            "label": "Ask for approval",
+            "text": "Muse asks before any action the engine's own rules do not allow."
+          },
+          {
+            "label": "Ask only for more access",
+            "text": "The engine's sandbox decides when Muse asks. On Windows it asks for shell commands."
+          },
+          {
+            "label": "YOLO",
+            "text": "Muse never asks. Your Isolation setting still limits what an action can reach."
+          }
+        ]
+      },
+      "rows": [
+        {
+          "where": "posture Ask for approval",
+          "sentence": "Muse asks before any action the engine's own rules do not allow.",
+          "claim": "under promptUnmatched nothing outside the engine's rules runs without a card",
+          "measured": [
+            "05/10 matrix workspace/promptUnmatched writeInsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched writeOutsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched readOutsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched readThroughJunction: asked=true",
+            "05/10 matrix workspace/promptUnmatched network: asked=true",
+            "05/10 matrix workspace/promptUnmatched refusedCommand: asked=true",
+            "msp workspace/promptUnmatched writeThroughJunction: asked=true",
+            "msp network/promptUnmatched writeThroughJunction: asked=true",
+            "msp write_file outside the root: refused by the engine, landed=false",
+            "msp write_file outside the root: refused by the engine, landed=false"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "posture Ask only for more access",
+          "sentence": "The engine's sandbox decides when Muse asks.",
+          "claim": "the middle posture is the host's own onRequest mode",
+          "measured": [
+            "app policy-workspace: session/start approvalMode=onRequest",
+            "app policy-elevated: session/start approvalMode=onRequest",
+            "msp workspace/onRequest: setApprovalMode effective=onRequest",
+            "msp network/onRequest: setApprovalMode effective=onRequest"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "posture Ask only for more access",
+          "sentence": "On Windows it asks for shell commands.",
+          "claim": "every shell command under onRequest raised a card",
+          "measured": [
+            "msp and 05/10 matrix, onRequest: 11/11 asked",
+            "app policy-workspace: asked=true, stages=1",
+            "app policy-elevated: asked=true, stages=1"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "posture YOLO",
+          "sentence": "Muse never asks.",
+          "claim": "allowAll raised no card",
+          "measured": [
+            "05/10 matrix workspace/allowAll writeOutsideRoot: asked=false",
+            "05/10 matrix workspace/allowAll network: asked=false",
+            "05/10 matrix off-profile/allowAll writeInsideRoot: asked=false",
+            "05/10 app d1: card=false"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "posture YOLO",
+          "sentence": "Your Isolation setting still limits what an action can reach.",
+          "claim": "under allowAll the sandbox still blocked an out-of-root write and the network",
+          "measured": [
+            "05/10 matrix workspace/allowAll writeOutsideRoot: failed",
+            "05/10 matrix workspace/allowAll network: failed"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "composer Ask for approval",
+          "sentence": "Muse asks before any action the engine's own rules do not allow.",
+          "claim": "under promptUnmatched nothing outside the engine's rules runs without a card",
+          "measured": [
+            "05/10 matrix workspace/promptUnmatched writeInsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched writeOutsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched readOutsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched readThroughJunction: asked=true",
+            "05/10 matrix workspace/promptUnmatched network: asked=true",
+            "05/10 matrix workspace/promptUnmatched refusedCommand: asked=true",
+            "msp workspace/promptUnmatched writeThroughJunction: asked=true",
+            "msp network/promptUnmatched writeThroughJunction: asked=true",
+            "msp write_file outside the root: refused by the engine, landed=false",
+            "msp write_file outside the root: refused by the engine, landed=false"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "composer Ask only for more access",
+          "sentence": "The engine's sandbox decides when Muse asks.",
+          "claim": "the middle posture is the host's own onRequest mode",
+          "measured": [
+            "app policy-workspace: session/start approvalMode=onRequest",
+            "app policy-elevated: session/start approvalMode=onRequest",
+            "msp workspace/onRequest: setApprovalMode effective=onRequest",
+            "msp network/onRequest: setApprovalMode effective=onRequest"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "composer Ask only for more access",
+          "sentence": "On Windows it asks for shell commands.",
+          "claim": "every shell command under onRequest raised a card",
+          "measured": [
+            "msp and 05/10 matrix, onRequest: 11/11 asked",
+            "app policy-workspace: asked=true, stages=1",
+            "app policy-elevated: asked=true, stages=1"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "composer YOLO",
+          "sentence": "Muse never asks.",
+          "claim": "allowAll raised no card",
+          "measured": [
+            "05/10 matrix workspace/allowAll writeOutsideRoot: asked=false",
+            "05/10 matrix workspace/allowAll network: asked=false",
+            "05/10 matrix off-profile/allowAll writeInsideRoot: asked=false",
+            "05/10 app d1: card=false"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "composer YOLO",
+          "sentence": "Your Isolation setting still limits what an action can reach.",
+          "claim": "under allowAll the sandbox still blocked an out-of-root write and the network",
+          "measured": [
+            "05/10 matrix workspace/allowAll writeOutsideRoot: failed",
+            "05/10 matrix workspace/allowAll network: failed"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation Workspace only",
+          "sentence": "Writes stay inside the conversation's folder, with no network.",
+          "claim": "no write outside the folder and no network at all",
+          "measured": [
+            "msp workspace/promptUnmatched junction cell: landed outside=none",
+            "msp workspace/onRequest junction cell: landed outside=none",
+            "msp network/promptUnmatched junction cell: landed outside=none",
+            "msp network/onRequest junction cell: landed outside=none",
+            "app policy-workspace: write outside=failed (UnauthorizedAccessException)",
+            "05/10 matrix workspace/promptUnmatched writeOutsideRoot: failed",
+            "05/10 matrix workspace/onRequest writeOutsideRoot: failed",
+            "msp restricted: dns=ok, tcp 80/443=connect:AccessDenied/connect:AccessDenied"
+          ],
+          "contradiction": true,
+          "why": "names resolve: DNS is network, so 'no network' overstates it"
+        },
+        {
+          "where": "isolation Workspace only",
+          "sentence": "Reads can reach other folders.",
+          "claim": "a read outside the folder, and through a junction, succeeds",
+          "measured": [
+            "05/10 matrix workspace/promptUnmatched readOutsideRoot: completed",
+            "05/10 matrix workspace/promptUnmatched readThroughJunction: completed",
+            "05/10 matrix workspace/onRequest readOutsideRoot: completed",
+            "05/10 matrix workspace/onRequest readThroughJunction: completed"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation Workspace and network",
+          "sentence": "Also asks the engine to allow outbound network: package installs, API calls, downloads.",
+          "claim": "package installs, API calls and downloads (HTTPS) get through",
+          "measured": [
+            "msp enabled: https iwr=tls, curl=tls (* schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030E) - Aucune information d�identification n�est disponible dans le package de s�curit�)"
+          ],
+          "contradiction": true,
+          "why": "HTTPS fails at the TLS stage"
+        },
+        {
+          "where": "isolation Elevated access",
+          "sentence": "Adds files and commands outside the folder.",
+          "claim": "an approved write outside the folder lands, with the sandbox off",
+          "measured": [
+            "app policy-elevated: writeOutside=completed, engine <engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation Elevated access",
+          "sentence": "Grant it to a workspace you trust.",
+          "claim": "it is granted per project: only a project whose Sandbox is Full access gets it",
+          "measured": [
+            "app scope: project A (default Sandbox) under Elevated access -> workspace",
+            "app policy-elevated: project B (Sandbox Full access) -> elevated"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "How far Muse's engine can reach.",
+          "claim": "the level is the engine's own sandbox flags",
+          "measured": [
+            "app engine argv, workspace: <engine> serve --sandbox-network restricted --trust-workspace",
+            "app engine argv, network: <engine> serve --sandbox-network enabled --trust-workspace",
+            "app engine argv, elevated: <engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "Applied when a new engine starts: a running conversation keeps its own until it is restarted.",
+          "claim": "a running engine keeps its flags; another posture for its folder is refused until a restart",
+          "measured": [
+            "app scope: Elevated access asked for folder A while its engine runs Workspace only -> workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with elevated"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work.",
+          "claim": "relative PowerShell writes fail in the sandbox; absolute paths and write_file work in the folder",
+          "measured": [
+            "05/10 matrix workspace/promptUnmatched writeInsideRoot (relative): failed",
+            "05/10 matrix workspace/onRequest writeInsideRoot (relative): failed",
+            "05/10 app d1: absolutePathWorks=true, writeFileToolWorks=true"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "The sandboxed shell got no network at either level, Workspace and network included; only Elevated access reached it.",
+          "claim": "no connection at all under Workspace and network",
+          "measured": [
+            "msp enabled: tcp 80/443=ok/ok, http iwr=ok, curl=ok"
+          ],
+          "contradiction": true,
+          "why": "connections open and plain HTTP works"
+        }
+      ],
+      "contradictions": 3,
+      "unmapped": 0,
+      "unmeasured": 0,
+      "verdict": {
+        "everySentenceMapped": true,
+        "noContradiction": false,
+        "noClientRuleInSettings": true
+      },
+      "consoleErrors": []
+    },
+    "sentences-reread": {
+      "build": "reworded",
+      "liveTurns": 0,
+      "ui": {
+        "postures": [
+          {
+            "label": "Ask for approval",
+            "text": "Muse asks before any action the engine's own rules do not allow."
+          },
+          {
+            "label": "Ask only for more access",
+            "text": "The engine's sandbox decides when Muse asks. On Windows it asks for shell commands."
+          },
+          {
+            "label": "YOLO",
+            "text": "Muse never asks. Your Isolation setting still limits what an action can reach."
+          }
+        ],
+        "isolation": [
+          {
+            "label": "Workspace only",
+            "text": "Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders."
+          },
+          {
+            "label": "Workspace and network",
+            "text": "Also lets commands connect out."
+          },
+          {
+            "label": "Elevated access",
+            "text": "Adds files and commands outside the folder. Grant it to a workspace you trust."
+          }
+        ],
+        "isolationNote": "How far Muse's engine can reach. Applied when a new engine starts: a running conversation keeps its own until it is restarted. In a project, its preferences must allow it too: networkDefault Allow for network, sandbox Full access for Elevated access. On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work. Under Workspace only, names still resolve. Under Workspace and network, HTTPS fails in Windows' TLS layer (PowerShell, curl.exe); plain HTTP works. Elevated access reaches HTTPS.",
+        "headings": [
+          "Environment",
+          "Default folder",
+          "Remote engine",
+          "Authorization",
+          "Reasoning effort",
+          "Isolation",
+          "Muse authentication",
+          "Local data"
+        ],
+        "ruleControls": [],
+        "composer": [
+          {
+            "label": "Ask for approval",
+            "text": "Muse asks before any action the engine's own rules do not allow."
+          },
+          {
+            "label": "Ask only for more access",
+            "text": "The engine's sandbox decides when Muse asks. On Windows it asks for shell commands."
+          },
+          {
+            "label": "YOLO",
+            "text": "Muse never asks. Your Isolation setting still limits what an action can reach."
+          }
+        ]
+      },
+      "rows": [
+        {
+          "where": "posture Ask for approval",
+          "sentence": "Muse asks before any action the engine's own rules do not allow.",
+          "claim": "under promptUnmatched nothing outside the engine's rules runs without a card",
+          "measured": [
+            "05/10 matrix workspace/promptUnmatched writeInsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched writeOutsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched readOutsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched readThroughJunction: asked=true",
+            "05/10 matrix workspace/promptUnmatched network: asked=true",
+            "05/10 matrix workspace/promptUnmatched refusedCommand: asked=true",
+            "msp workspace/promptUnmatched writeThroughJunction: asked=true",
+            "msp network/promptUnmatched writeThroughJunction: asked=true",
+            "msp write_file outside the root: refused by the engine, landed=false",
+            "msp write_file outside the root: refused by the engine, landed=false"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "posture Ask only for more access",
+          "sentence": "The engine's sandbox decides when Muse asks.",
+          "claim": "the middle posture is the host's own onRequest mode",
+          "measured": [
+            "app policy-workspace: session/start approvalMode=onRequest",
+            "app policy-elevated: session/start approvalMode=onRequest",
+            "msp workspace/onRequest: setApprovalMode effective=onRequest",
+            "msp network/onRequest: setApprovalMode effective=onRequest"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "posture Ask only for more access",
+          "sentence": "On Windows it asks for shell commands.",
+          "claim": "every shell command under onRequest raised a card",
+          "measured": [
+            "msp and 05/10 matrix, onRequest: 11/11 asked",
+            "app policy-workspace: asked=true, stages=1",
+            "app policy-elevated: asked=true, stages=1"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "posture YOLO",
+          "sentence": "Muse never asks.",
+          "claim": "allowAll raised no card",
+          "measured": [
+            "05/10 matrix workspace/allowAll writeOutsideRoot: asked=false",
+            "05/10 matrix workspace/allowAll network: asked=false",
+            "05/10 matrix off-profile/allowAll writeInsideRoot: asked=false",
+            "05/10 app d1: card=false"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "posture YOLO",
+          "sentence": "Your Isolation setting still limits what an action can reach.",
+          "claim": "under allowAll the sandbox still blocked an out-of-root write and the network",
+          "measured": [
+            "05/10 matrix workspace/allowAll writeOutsideRoot: failed",
+            "05/10 matrix workspace/allowAll network: failed"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "composer Ask for approval",
+          "sentence": "Muse asks before any action the engine's own rules do not allow.",
+          "claim": "under promptUnmatched nothing outside the engine's rules runs without a card",
+          "measured": [
+            "05/10 matrix workspace/promptUnmatched writeInsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched writeOutsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched readOutsideRoot: asked=true",
+            "05/10 matrix workspace/promptUnmatched readThroughJunction: asked=true",
+            "05/10 matrix workspace/promptUnmatched network: asked=true",
+            "05/10 matrix workspace/promptUnmatched refusedCommand: asked=true",
+            "msp workspace/promptUnmatched writeThroughJunction: asked=true",
+            "msp network/promptUnmatched writeThroughJunction: asked=true",
+            "msp write_file outside the root: refused by the engine, landed=false",
+            "msp write_file outside the root: refused by the engine, landed=false"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "composer Ask only for more access",
+          "sentence": "The engine's sandbox decides when Muse asks.",
+          "claim": "the middle posture is the host's own onRequest mode",
+          "measured": [
+            "app policy-workspace: session/start approvalMode=onRequest",
+            "app policy-elevated: session/start approvalMode=onRequest",
+            "msp workspace/onRequest: setApprovalMode effective=onRequest",
+            "msp network/onRequest: setApprovalMode effective=onRequest"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "composer Ask only for more access",
+          "sentence": "On Windows it asks for shell commands.",
+          "claim": "every shell command under onRequest raised a card",
+          "measured": [
+            "msp and 05/10 matrix, onRequest: 11/11 asked",
+            "app policy-workspace: asked=true, stages=1",
+            "app policy-elevated: asked=true, stages=1"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "composer YOLO",
+          "sentence": "Muse never asks.",
+          "claim": "allowAll raised no card",
+          "measured": [
+            "05/10 matrix workspace/allowAll writeOutsideRoot: asked=false",
+            "05/10 matrix workspace/allowAll network: asked=false",
+            "05/10 matrix off-profile/allowAll writeInsideRoot: asked=false",
+            "05/10 app d1: card=false"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "composer YOLO",
+          "sentence": "Your Isolation setting still limits what an action can reach.",
+          "claim": "under allowAll the sandbox still blocked an out-of-root write and the network",
+          "measured": [
+            "05/10 matrix workspace/allowAll writeOutsideRoot: failed",
+            "05/10 matrix workspace/allowAll network: failed"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation Workspace only",
+          "sentence": "Writes stay inside the conversation's folder, and commands cannot connect out.",
+          "claim": "no write outside the folder (junctions included, either tool); every connect refused",
+          "measured": [
+            "msp workspace/promptUnmatched junction cell: landed outside=none",
+            "msp workspace/onRequest junction cell: landed outside=none",
+            "msp network/promptUnmatched junction cell: landed outside=none",
+            "msp network/onRequest junction cell: landed outside=none",
+            "app policy-workspace: write outside=failed (UnauthorizedAccessException)",
+            "05/10 matrix workspace/promptUnmatched writeOutsideRoot: failed",
+            "05/10 matrix workspace/onRequest writeOutsideRoot: failed",
+            "msp restricted: tcp 80/443=connect:AccessDenied/connect:AccessDenied, iwr http/https=connect/connect, tnc=connect",
+            "app policy-workspace: https=connect"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation Workspace only",
+          "sentence": "Reads can reach other folders.",
+          "claim": "a read outside the folder, and through a junction, succeeds",
+          "measured": [
+            "05/10 matrix workspace/promptUnmatched readOutsideRoot: completed",
+            "05/10 matrix workspace/promptUnmatched readThroughJunction: completed",
+            "05/10 matrix workspace/onRequest readOutsideRoot: completed",
+            "05/10 matrix workspace/onRequest readThroughJunction: completed"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation Workspace and network",
+          "sentence": "Also lets commands connect out.",
+          "claim": "connects succeed under --sandbox-network enabled",
+          "measured": [
+            "msp enabled: tcp 80/443=ok/ok, tnc=ok, http iwr=ok"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation Elevated access",
+          "sentence": "Adds files and commands outside the folder.",
+          "claim": "an approved write outside the folder lands, with the sandbox off",
+          "measured": [
+            "app policy-elevated: writeOutside=completed, engine <engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation Elevated access",
+          "sentence": "Grant it to a workspace you trust.",
+          "claim": "it is granted per project: only a project whose Sandbox is Full access gets it",
+          "measured": [
+            "app scope: project A (default Sandbox) under Elevated access -> workspace",
+            "app policy-elevated: project B (Sandbox Full access) -> elevated"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "How far Muse's engine can reach.",
+          "claim": "the level is the engine's own sandbox flags",
+          "measured": [
+            "app engine argv, workspace: <engine> serve --sandbox-network restricted --trust-workspace",
+            "app engine argv, network: <engine> serve --sandbox-network enabled --trust-workspace",
+            "app engine argv, elevated: <engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "Applied when a new engine starts: a running conversation keeps its own until it is restarted.",
+          "claim": "a running engine keeps its flags; another posture for its folder is refused until a restart",
+          "measured": [
+            "app scope: Elevated access asked for folder A while its engine runs Workspace only -> workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with elevated"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "In a project, its preferences must allow it too: networkDefault Allow for network, sandbox Full access for Elevated access.",
+          "claim": "a project conversation gets network only with networkDefault Allow, Elevated access only with sandbox Full access",
+          "measured": [
+            "app scope: Workspace and network, project A -> workspace",
+            "app scope: Workspace and network, project N -> network",
+            "app scope: Elevated access, project A -> workspace",
+            "app scope: Elevated access, project N -> network",
+            "app policy-elevated: Elevated access, project B (sandbox Full access) -> elevated"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work.",
+          "claim": "relative PowerShell writes fail in the sandbox; absolute paths and write_file work in the folder",
+          "measured": [
+            "05/10 matrix workspace/promptUnmatched writeInsideRoot (relative): failed",
+            "05/10 matrix workspace/onRequest writeInsideRoot (relative): failed",
+            "05/10 app d1: absolutePathWorks=true, writeFileToolWorks=true"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "Under Workspace only, names still resolve.",
+          "claim": "DNS answers under --sandbox-network restricted",
+          "measured": [
+            "msp restricted: dns=ok, tnc dns resolved=true"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "Under Workspace and network, HTTPS fails in Windows' TLS layer (PowerShell, curl.exe); plain HTTP works.",
+          "claim": "with --sandbox-network enabled, HTTPS stops at TLS for PowerShell and curl.exe while HTTP gets its 200",
+          "measured": [
+            "msp enabled: https iwr=tls, curl=tls (* schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030E) - Aucune information d�identification n�est disponible dans le package de s�curit�); http iwr=ok, curl=ok"
+          ],
+          "contradiction": false
+        },
+        {
+          "where": "isolation note",
+          "sentence": "Elevated access reaches HTTPS.",
+          "claim": "an HTTPS call returns 200 with the sandbox off",
+          "measured": [
+            "app policy-elevated: https=ok (200), engine <engine> serve --disable-sandbox --sandbox-network enabled --trust-workspace"
+          ],
+          "contradiction": false
+        }
+      ],
+      "contradictions": 0,
+      "unmapped": 0,
+      "unmeasured": 0,
+      "verdict": {
+        "everySentenceMapped": true,
+        "noContradiction": true,
+        "noClientRuleInSettings": true
+      },
+      "consoleErrors": []
+    }
+  },
+  "commit": "81a8e53",
+  "date": "2026-10-06",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "liveTurns": 2,
+  "commitNote": "setup, scope, policy-* and sentences-baseline ran on e8306a7 (texts of d01fefa) with this harness from the working tree; sentences-reread ran on the rebuilt app whose texts are 81a8e53. The harness is in the commit that adds this file.",
+  "mspReport": "m0-06-junction-network-1.4.2.json",
+  "summary": {
+    "gap 1, junction write (MSP)": "No: 0 of 20 writes landed outside the root (4 cells x 5 writes, restricted and enabled, promptUnmatched and onRequest). write_file is refused by the engine, PowerShell gets PermissionDenied, the direct write to a folder open to all users included.",
+    "gap 2, network stages (MSP)": "restricted: DNS ok, every connect refused (AccessDenied). enabled: DNS, TCP, HTTP 200 ok; HTTPS fails at TLS (Schannel SEC_E_NO_CREDENTIALS for the sandbox account), PowerShell and curl.exe.",
+    "gap 3, policy in the isolated app": "Middle posture, project A, default Isolation: engine '--sandbox-network restricted', card, write outside refused (UnauthorizedAccessException), HTTPS ConnectFailure. Project B, Elevated access with sandbox Full access: engine '--disable-sandbox --sandbox-network enabled', card, write outside lands, HTTPS 200. scope (no turn): a project with default preferences stays on Workspace only under every level; networkDefault Allow gives network; a running engine keeps its posture (start refused until restart).",
+    "gap 4, approval card": "Both live cards showed exactly the host's choices (Allow once, Reject = allow_once, abort), no other control, no rule wording; Settings has no rules section (shots/m0-06-card-workspace.png, shots/m0-06-card-elevated.png).",
+    "texts": "Read from the running app: before, 19 sentence rows, 3 contradictions; after the rewording and a rebuild, 22 rows, 0 contradictions, 0 unmapped, 0 unmeasured (shots/m0-06-settings-isolation-reworded.png)."
+  },
+  "wordingChanges": [
+    {
+      "where": "Isolation, Workspace only",
+      "before": "Writes stay inside the conversation's folder, with no network.",
+      "after": "Writes stay inside the conversation's folder, and commands cannot connect out.",
+      "why": "names still resolve under restricted: 'no network' overstated it"
+    },
+    {
+      "where": "Isolation, Workspace and network",
+      "before": "Also asks the engine to allow outbound network: package installs, API calls, downloads.",
+      "after": "Also lets commands connect out.",
+      "why": "connects succeed, but HTTPS, which those examples need, fails on Windows"
+    },
+    {
+      "where": "Isolation note (Windows)",
+      "before": "The sandboxed shell got no network at either level, Workspace and network included; only Elevated access reached it.",
+      "after": "Under Workspace only, names still resolve. Under Workspace and network, HTTPS fails in Windows' TLS layer (PowerShell, curl.exe); plain HTTP works. Elevated access reaches HTTPS.",
+      "why": "contradicted by the enabled stages: connects and plain HTTP work"
+    },
+    {
+      "where": "Isolation note",
+      "before": null,
+      "after": "In a project, its preferences must allow it too: networkDefault Allow for network, sandbox Full access for Elevated access.",
+      "why": "scope: with default project preferences a project conversation stays on Workspace only under every level"
+    }
+  ],
+  "forgedInput": "None: every card, engine and transcript came from the real 1.4.2 host and model in the isolated app; the harness only answered the folder dialog (CDP cannot drive it) and clicked as a user.",
+  "liveTurnsWithMsp": 8
+}

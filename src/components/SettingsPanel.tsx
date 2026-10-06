@@ -109,14 +109,16 @@ const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }[] = [
   {
     mode: "workspace",
     label: "Workspace only",
-    // Measured on 1.4.2: out-of-root writes and network fail, out-of-root reads succeed.
-    detail: "Writes stay inside the conversation's folder, with no network. Reads can reach other folders.",
+    // Measured on Windows with 1.4.2 (m0-06-junction-network-1.4.2.json): writes
+    // outside the root fail, junctions included, every connect is refused (DNS
+    // still answers, note below); reads outside the root succeed.
+    detail: "Writes stay inside the conversation's folder, and commands cannot connect out. Reads can reach other folders.",
   },
   {
     mode: "network",
     label: "Workspace and network",
-    // Only a request: on Windows with 1.4.2 the sandboxed shell still got no network (note below).
-    detail: "Also asks the engine to allow outbound network: package installs, API calls, downloads.",
+    // Measured on Windows with 1.4.2: connects and plain HTTP work, HTTPS fails (note below).
+    detail: "Also lets commands connect out.",
   },
   {
     mode: "elevated",
@@ -521,15 +523,20 @@ export function SettingsPanel({
         <h3>Isolation</h3>
         <p className="settings-note">
           How far Muse's engine can reach. Applied when a new engine starts: a
-          running conversation keeps its own until it is restarted.
+          running conversation keeps its own until it is restarted. In a
+          project, its preferences must allow it too: networkDefault Allow for
+          network, sandbox Full access for Elevated access.
           {hostPlatform() === "windows" && (
             // Decision D1 (05/10/2026): keep the default and state the limit,
-            // as measured in docs/evidence/2026-10-05-roadmap-closure/m0-05-06-approvals.json.
+            // as measured in docs/evidence/2026-10-05-roadmap-closure/
+            // m0-05-06-approvals.json, then stage by stage (06/10) in
+            // m0-06-junction-network-1.4.2.json and m0-06-policy-in-force.json.
             <> On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on
             relative paths (Set-Content -Path notes.txt), while absolute paths
-            and Muse's own file tools work. The sandboxed shell got no network
-            at either level, Workspace and network included; only Elevated
-            access reached it.</>
+            and Muse's own file tools work. Under Workspace only, names still
+            resolve. Under Workspace and network, HTTPS fails in Windows' TLS
+            layer (PowerShell, curl.exe); plain HTTP works. Elevated access
+            reaches HTTPS.</>
           )}
         </p>
         <div className="authorization-mode-list" role="radiogroup" aria-label="Isolation">

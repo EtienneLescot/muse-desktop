@@ -48,6 +48,32 @@
  *                  measured matrix (m0-06-verdict-matrix-1.4.2.json) and the
  *                  isolation, d1 and wire phases of this record.
  *
+ * M0-06, policy in force, on the isolated app only (test mode, ADR 0003; pass
+ * --test-data: the run stops unless the WebView2 profile lies in that folder):
+ *   setup --projects A,B,N   no turn. Three test projects; N will allow network.
+ *   scope          no turn. A conversation with no message per case: which
+ *                  Isolation a project conversation really gets, from the
+ *                  start_session posture and the engine argv the OS runs;
+ *                  then a posture change against a running engine.
+ *   policy         1 turn. --tag workspace|elevated: the middle posture, one
+ *                  PowerShell write outside the folder and one HTTPS call,
+ *                  under the default Isolation (project A) or Elevated access
+ *                  (project B, Sandbox "Full access"). The first card is read
+ *                  in the DOM against the host's choices, and shot.
+ *   sentences      no turn. Every posture and Isolation sentence read from
+ *                  Settings, each with its measured cells (this record, the
+ *                  --msp report of msp-verdict-matrix.mjs, the 05/10 matrix and
+ *                  approvals records); a sentence with no claim fails.
+ * Launch for these (PowerShell, a fresh data folder):
+ *   $env:MUSE_DESKTOP_TEST_DATA_DIR='G:\muse-proofs\m0-06\appdata-1'
+ *   $env:MUSE_DESKTOP_TEST_SIDECAR='["<repo>/src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe"]'
+ *   $env:MUSE_DESKTOP_TEST_CDP_PORT='9333'; $env:MUSE_NO_AUTO_UPDATE='1'
+ *   (no WEBVIEW2_* variable) Start-Process <muse-desktop.exe>
+ * then MUSE_CDP_PORT=9333 node scripts/cdp-m0-05-06-approvals.mjs <phase>
+ *   --test-data G:\muse-proofs\m0-06\appdata-1 --base G:\muse-proofs\m0-06\app
+ *   --out docs/evidence/2026-10-05-roadmap-closure/m0-06-policy-in-force.json
+ *   [--msp docs/evidence/2026-10-05-roadmap-closure/m0-06-junction-network-1.4.2.json]
+ *
  * The decide calls are counted on window.fetch (Tauri's IPC transport):
  * `__TAURI_INTERNALS__` rejects a monkey-patched `invoke` (cdp-stop-terminal).
  *
@@ -62,7 +88,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { INSTALL_IPC_TRACE, argValue, gitHead, openPage, redactor, sleep, waitFor } from "./cdp-harness.mjs";
+import { INSTALL_IPC_TRACE, argValue, gitHead, openPage, redactor, sleep, under, waitFor, webviewProfile } from "./cdp-harness.mjs";
+import { WEB_STAGE } from "./msp-verdict-matrix.mjs";
 
 const PHASE = process.argv[2];
 const CONTINUE = process.argv.includes("--continue");
@@ -74,12 +101,15 @@ const OUT = argValue("--out", "docs/evidence/2026-10-05-roadmap-closure/m0-05-06
 const EXE = argValue("--exe", "G:\\muse-build\\cool-rubin-target\\debug\\muse-desktop.exe");
 const PID_FILE = argValue("--pid-file", join(BASE, "app.pid"));
 const MATRIX = "docs/evidence/2026-10-05-roadmap-closure/m0-06-verdict-matrix-1.4.2.json";
+const APPROVALS = "docs/evidence/2026-10-05-roadmap-closure/m0-05-06-approvals.json";
+const MSP = argValue("--msp", "docs/evidence/2026-10-05-roadmap-closure/m0-06-junction-network-1.4.2.json");
+const TEST_DATA = argValue("--test-data", null);
 const STATE = join(BASE, "harness-state.json");
-const ROOTS = { A: join(BASE, "a"), B: join(BASE, "b"), network: join(BASE, "net"), elevated: join(BASE, "elev") };
-const NAMES = { A: "m05-approvals-a", B: "m05-approvals-b" };
+const ROOTS = { A: join(BASE, "a"), B: join(BASE, "b"), N: join(BASE, "n"), network: join(BASE, "net"), elevated: join(BASE, "elev") };
+const NAMES = { A: "m05-approvals-a", B: "m05-approvals-b", N: "m06-network-n" };
 const OUTSIDE = join(BASE, "outside");
-const redact = redactor([[ROOTS.A, "<project A>"], [ROOTS.B, "<project B>"], [ROOTS.network, "<project net>"],
-  [ROOTS.elevated, "<project elev>"], [OUTSIDE, "<outside>"], [BASE, "<proof>"]]);
+const redact = redactor([[ROOTS.A, "<project A>"], [ROOTS.B, "<project B>"], [ROOTS.N, "<project N>"], [ROOTS.network, "<project net>"],
+  [ROOTS.elevated, "<project elev>"], [OUTSIDE, "<outside>"], [BASE, "<proof>"], ...(TEST_DATA ? [[TEST_DATA, "<test data>"]] : [])]);
 const PENDING_KEY = "muse-desktop.pending-approvals.v1";
 const POSTURE_LABEL = { ask: "Ask for approval", workspace: "Ask only for more access", yolo: "YOLO" };
 const recipe = (tag) =>
@@ -118,7 +148,12 @@ const state = () => readJson(STATE, {});
 const saveState = (patch) => writeFileSync(STATE, JSON.stringify({ ...state(), ...patch }, null, 2));
 
 function merge(phaseResult) {
-  const record = readJson(OUT, {
+  const record = readJson(OUT, TEST_DATA ? {
+    schema: "muse-desktop.m0-06-policy-in-force.v1",
+    tickets: ["M0-06"],
+    platform: "Windows 11 (26200), debug build with embedded frontend, isolated test mode (ADR 0003), WebView2 over CDP",
+    phases: {},
+  } : {
     schema: "muse-desktop.m0-05-06-approvals.v1",
     tickets: ["M0-05", "M0-06"],
     platform: "Windows 11 (26200), debug build with embedded frontend, WebView2 over CDP",
@@ -445,7 +480,7 @@ async function setup(app) {
   result.userPosture = before.posture;
   result.userIsolation = before.isolation;
   const ids = {};
-  for (const key of ["A", "B"]) {
+  for (const key of argValue("--projects", "A,B").split(",")) {
     const existing = before.projects.find((p) => p.name === NAMES[key]);
     if (existing) { ids[key] = existing.id; continue; }
     await app.ev(page("const b = q('button.sidebar-manage').find((n) => /Manage projects/.test(n.innerText)); if (b) b.click(); return !!b;"));
@@ -870,6 +905,20 @@ const openProjectRow = (app, name) => app.ev(page(`
   return true;
 `));
 
+/** One project preference ({ label: "Project sandbox", value: "full" }), set in the project's row. */
+async function setOverride(app, name, override) {
+  if (!(await openProjectRow(app, name))) throw new Error(`project ${name} row not found`);
+  return app.ev(page(`
+    const row = q('li.project-item').find((li) => li.querySelector('.project-name')?.innerText.trim() === ${JSON.stringify(name)});
+    const sel = row && row.querySelector(${JSON.stringify(`select[aria-label^="${override.label}"]`)});
+    if (!sel) return { select: false };
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(sel, ${JSON.stringify(override.value)});
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    return { select: true, value: sel.value };
+  `));
+}
+
 /**
  * One more folder for test project B, and one override, set through B's row in
  * the Projects panel (the projects list is capped at 5). Each folder runs its
@@ -892,15 +941,7 @@ async function ensureRoot(app, key, override) {
       return true;
     `));
   }
-  const set = await app.ev(page(`
-    const row = q('li.project-item').find((li) => li.querySelector('.project-name')?.innerText.trim() === ${JSON.stringify(NAMES.B)});
-    const sel = row && row.querySelector(${JSON.stringify(`select[aria-label^="${override.label}"]`)});
-    if (!sel) return { select: false };
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(sel, ${JSON.stringify(override.value)});
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 500));
-    return { select: true, value: sel.value };
-  `));
+  const set = await setOverride(app, NAMES.B, override);
   const project = await find();
   const index = roots(project).indexOf(ROOTS[key]);
   if (index < 0) throw new Error(`folder ${key} not added to project B`);
@@ -1181,13 +1222,410 @@ async function restore(app) {
       projectBRestored: projectB?.roots === 1 && Object.keys(projectB?.settings ?? {}).length === 0 } };
 }
 
-const PHASES = { setup, reject, allow, restart, reload, two, forged, posture, isolation, d1, wire, texts, restore };
+// ---- M0-06, policy in force: the isolated app -----------------------------
+
+/** The app's engines as the OS runs them (its `serve` children): pid -> argv, the exe redacted. */
+function engines() {
+  if (!TEST_DATA) return {};
+  const pid = Number(readFileSync(join(TEST_DATA, "test-mode.pid"), "utf8").trim());
+  const out = execFileSync("powershell", ["-NoProfile", "-Command",
+    `Get-CimInstance Win32_Process -Filter "ParentProcessId=${pid}" | Where-Object { $_.CommandLine -match ' serve( |$)' } | ForEach-Object { [string]$_.ProcessId + '|' + $_.CommandLine }`],
+  { encoding: "utf8" });
+  return Object.fromEntries(out.split(/\r?\n/).filter(Boolean).map((line) => {
+    const [id, cmd] = line.split("|");
+    return [id, cmd.replace(/^("[^"]*"|\S+)/, "<engine>")];
+  }));
+}
+
+/** The engine a start spawned, or the reuse of a running one. */
+const engineSince = (before) => {
+  const fresh = Object.entries(engines()).filter(([id]) => !(id in before)).map(([, argv]) => argv);
+  return fresh.length > 0 ? fresh.join(" | ") : "reused a running engine";
+};
+
+/** The project's row > "New conversation here": a conversation, no message, no turn. */
+async function startBare(app, key) {
+  const before = (await ipc(app, "start_session")).length;
+  const running = engines();
+  if (!(await openProjectRow(app, NAMES[key]))) throw new Error(`project ${key} row not found`);
+  const clicked = await app.ev(page(`
+    const row = q('li.project-item').find((li) => li.querySelector('.project-name')?.innerText.trim() === ${JSON.stringify(NAMES[key])});
+    const b = row && button('New conversation here', row);
+    if (!b || b.disabled) return false;
+    b.click();
+    return true;
+  `));
+  if (!clicked) throw new Error(`no "New conversation here" in project ${key}`);
+  const started = await waitFor(async () => {
+    const calls = await ipc(app, "start_session");
+    return calls.length > before && calls.at(-1).result !== undefined ? calls.at(-1) : null;
+  }, 90_000);
+  let meta = null;
+  try { meta = JSON.parse(started?.result ?? "null"); } catch { /* an error string */ }
+  return {
+    ok: Boolean(started?.ok), sessionId: meta?.session_id ?? null,
+    requested: { authorizationMode: started?.args?.authorizationMode ?? null, sandboxMode: started?.args?.sandboxMode ?? null },
+    hostApprovalMode: meta?.approval_mode ?? null,
+    engine: engineSince(running),
+    ...(started?.ok ? {} : { error: String(meta ?? started?.result ?? "no answer").slice(0, 300) }),
+  };
+}
+
+/**
+ * (M0-06) Which Isolation a project conversation really gets, with no turn.
+ * A keeps the default project preferences (Sandbox "Project", Network "Ask"),
+ * N allows network. Then A asks for Elevated while its engine runs Workspace
+ * only: the running engine keeps its posture.
+ */
+async function scope(app) {
+  await app.ev(INSTALL_IPC_TRACE);
+  const result = { liveTurns: 0, cases: [] };
+  result.overrideN = await setOverride(app, NAMES.N, { label: "Project network", value: "allow" });
+  for (const [isolation, key] of [["Workspace and network", "A"], ["Workspace and network", "N"], ["Elevated access", "A"], ["Elevated access", "N"]]) {
+    const set = await setIsolation(app, isolation);
+    result.cases.push({ isolation, project: key, stored: set.stored?.mode ?? null, ...(await startBare(app, key)) });
+  }
+  // Still under Elevated access: A's preferences now allow it, A's engine runs Workspace only.
+  result.overrideA = await setOverride(app, NAMES.A, { label: "Project sandbox", value: "full" });
+  result.change = { isolation: "Elevated access", project: "A (Sandbox Full access)", ...(await startBare(app, "A")) };
+  result.resetA = await setOverride(app, NAMES.A, { label: "Project sandbox", value: "workspace" });
+  result.restored = await setIsolation(app, "Workspace only");
+  const mode = (isolation, key) => result.cases.find((c) => c.isolation === isolation && c.project === key)?.requested.sandboxMode;
+  result.verdict = {
+    defaultProjectStaysWorkspace: mode("Workspace and network", "A") === "workspace" && mode("Elevated access", "A") === "workspace",
+    networkProjectGetsNetwork: mode("Workspace and network", "N") === "network" && mode("Elevated access", "N") === "network",
+    engineArgvMatches: result.cases.every((c) => c.engine === "reused a running engine"
+      || c.engine.includes(c.requested.sandboxMode === "network" ? "--sandbox-network enabled" : "--sandbox-network restricted")),
+    runningEngineKeepsItsPosture: !result.change.ok && /restart the workspace host/.test(result.change.error ?? ""),
+  };
+  return result;
+}
+
+/** One write outside the folder, then one HTTPS call; each prints its own outcome. */
+const policyCommand = (file) => `$p = '${file}'; try { Set-Content -Path $p -Value 'm06' -ErrorAction Stop; 'write=ok' } catch { 'write=' + $_.Exception.GetType().Name }; ` +
+  "$u = 'https://example.com'; try { 'net=' + (Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 15).StatusCode } catch { 'net=' + $_.Exception.Status }";
+
+/**
+ * (M0-06) The middle posture in a test project: workspace = the default
+ * Isolation in project A; elevated = "Elevated access" in project B, whose
+ * Sandbox is "Full access" (the scope phase shows why). The first card is read
+ * in the DOM against the host's choices (no client rule button, no rules list).
+ */
+async function policy(app) {
+  await app.ev(INSTALL_IPC_TRACE);
+  const kind = TAG === "elevated" ? "elevated" : "workspace";
+  const key = kind === "elevated" ? "B" : "A";
+  const result = { liveTurns: 1, kind, project: key };
+  result.setIsolation = await setIsolation(app, kind === "elevated" ? "Elevated access" : "Workspace only");
+  if (kind === "elevated") result.override = await setOverride(app, NAMES.B, { label: "Project sandbox", value: "full" });
+  result.setPosture = await setPosture(app, "workspace");
+  mkdirSync(OUTSIDE, { recursive: true });
+  const marker = join(OUTSIDE, `${kind}-${Date.now().toString(36)}.txt`);
+  result.command = policyCommand(marker);
+  const running = engines();
+  const { sid, startSession } = await startIn(app, state().projects[key],
+    `Use your PowerShell tool to run exactly this one command, unchanged, a single time, then answer in one short line: ${result.command}`);
+  saveState({ policySids: { ...(state().policySids ?? {}), [kind]: sid } });
+  result.startSession = startSession;
+  result.engine = engineSince(running);
+  const card = await waitCard(app, sid);
+  if (card) {
+    result.card = {
+      msToCard: card.msToCard,
+      hostChoices: card.snap.approvals[0].choices,
+      dom: card.ui.cards[0],
+      panel: await app.ev(page(`const p = q('.approvals')[0]; return p ? { text: p.innerText.replace(/\\s+/g, ' ').slice(0, 800),
+        controls: [...p.querySelectorAll('button, input, select, a[href]')].map((n) => n.tagName.toLowerCase() + ':' + (n.innerText || n.getAttribute('aria-label') || '').trim()) } : null;`)),
+      shot: await shot(app, `m0-06-card-${kind}`),
+    };
+  }
+  result.run = await allowUntilIdle(app, sid);
+  const log = (await fullLog(app, sid)).filter((e) => e.role !== "user");
+  result.transcript = log.slice(-8).map((e) => ({ role: e.role, text: e.text.slice(0, 260) }));
+  // Assistant entries only: the command's echo (a tool entry) also holds "write=" and "net=".
+  const said = log.filter((e) => e.role === "assistant").map((e) => e.text).join("\n");
+  result.write = said.match(/write=(\w+)/)?.[1] ?? null;
+  result.net = said.match(/net=(\w+)/)?.[1] ?? null;
+  result.outsideFile = existsSync(marker) ? readFileSync(marker, "utf8").trim() : null;
+  if (existsSync(marker)) rmSync(marker);
+  result.cell = {
+    posture: "Ask only for more access (onRequest)", isolation: kind, project: key,
+    hostSandboxMode: startSession.sandboxMode, hostApprovalMode: startSession.hostApprovalMode, engine: result.engine,
+    asked: result.run.stages.length > 0, stages: result.run.stages.length,
+    writeOutside: result.outsideFile === "m06" ? "completed" : "failed", writeError: result.write === "ok" ? null : result.write,
+    network: result.net === "200" ? "completed" : "failed", networkStage: result.net === "200" ? "ok" : WEB_STAGE[result.net] ?? result.net,
+  };
+  const labels = (result.card?.hostChoices ?? []).map((c) => c.label);
+  result.verdict = {
+    startedUnderMiddlePosture: startSession.authorizationMode === "workspace" && startSession.hostApprovalMode === "onRequest",
+    startedWithIsolation: startSession.sandboxMode === kind,
+    turnTerminal: result.run.idle,
+    cardButtonsAreTheHostChoices: Boolean(result.card) && JSON.stringify(result.card.dom.buttons.map((b) => b.text)) === JSON.stringify(labels),
+    cardHasNoOtherControl: Boolean(result.card?.panel) && result.card.panel.controls.length === labels.length,
+    cardHasNoClientRule: Boolean(result.card?.panel) && !/allow in workspace|authorization rules|\brules?\b/i.test(result.card.panel.text),
+  };
+  return result;
+}
+
+/**
+ * Each sentence Settings (and the composer's posture menu) shows, by exact
+ * text, with what it claims and the measured cells behind it. A sentence
+ * that changes must be mapped again here: an unmapped one fails the phase.
+ * `e` holds the evidence: msp (this campaign's matrix), m05 and appr (the
+ * 05/10 matrix and in-app records), rec (this record's phases).
+ */
+const SENTENCES = [
+  { text: "Muse asks before any action the engine's own rules do not allow.",
+    claim: "under promptUnmatched nothing outside the engine's rules runs without a card",
+    check: (e) => {
+      const shell = [...e.m05Cells("workspace", "promptUnmatched"), ...e.mspCells(null, "promptUnmatched", "writeThroughJunction")];
+      const writeFile = e.mspCells(null, "promptUnmatched", "writeThroughJunction").map((c) => c.landedOutsideRoot);
+      return { measured: [...shell.map((c) => `${c.src} ${c.action}: asked=${c.approvalRequested}`),
+        ...writeFile.map((l) => `msp write_file outside the root: refused by the engine, landed=${l.writeFileThroughJunction || l.writeFileThroughPrivateJunction}`)],
+      contradiction: shell.some((c) => !c.approvalRequested) || writeFile.some((l) => l.writeFileThroughJunction || l.writeFileThroughPrivateJunction) };
+    } },
+  { text: "The engine's sandbox decides when Muse asks.",
+    claim: "the middle posture is the host's own onRequest mode",
+    check: (e) => {
+      const modes = [...["workspace", "elevated"].map((k) => `app policy-${k}: session/start approvalMode=${e.rec[`policy-${k}`]?.startSession?.hostApprovalMode}`),
+        ...e.mspModes("onRequest").map((m) => `${m.src}: setApprovalMode effective=${m.modeSet?.effectiveMode}`)];
+      return { measured: modes, contradiction: modes.length === 0 || modes.some((m) => !m.endsWith("onRequest")) };
+    } },
+  { text: "On Windows it asks for shell commands.",
+    claim: "every shell command under onRequest raised a card",
+    check: (e) => {
+      const cells = [...e.mspCells(null, "onRequest", null), ...e.m05Cells("workspace", "onRequest"), ...e.m05Cells("elevated", "onRequest")];
+      const app = ["workspace", "elevated"].map((k) => e.rec[`policy-${k}`]?.cell).filter(Boolean);
+      return { measured: [`msp and 05/10 matrix, onRequest: ${cells.filter((c) => c.approvalRequested).length}/${cells.length} asked`,
+        ...app.map((c) => `app policy-${c.isolation}: asked=${c.asked}, stages=${c.stages}`)],
+      contradiction: cells.some((c) => !c.approvalRequested) || app.some((c) => !c.asked) };
+    } },
+  { text: "Muse never asks.",
+    claim: "allowAll raised no card",
+    check: (e) => {
+      const cells = [...e.m05Cells("workspace", "allowAll"), ...e.m05OffProfile("allowAll")];
+      return { measured: [...cells.map((c) => `${c.src} ${c.action}: asked=${c.approvalRequested}`), `05/10 app d1: card=${!e.appr?.phases?.d1?.verdict?.noCard}`],
+        contradiction: cells.some((c) => c.approvalRequested) || e.appr?.phases?.d1?.verdict?.noCard === false };
+    } },
+  { text: "Your Isolation setting still limits what an action can reach.",
+    claim: "under allowAll the sandbox still blocked an out-of-root write and the network",
+    check: (e) => {
+      const cells = e.m05Cells("workspace", "allowAll").filter((c) => c.action !== "writeInsideRoot");
+      return { measured: cells.map((c) => `${c.src} ${c.action}: ${c.outcome}`), contradiction: cells.length === 0 || cells.some((c) => c.outcome === "completed") };
+    } },
+  // Isolation levels, 05/10 wording (read before the change).
+  { text: "Writes stay inside the conversation's folder, with no network.",
+    claim: "no write outside the folder and no network at all",
+    check: (e) => {
+      const w = e.writesOutside();
+      const net = e.mspNetwork("workspace");
+      return { measured: [...w.measured, ...net.map((n) => `msp restricted: dns=${n.dns}, tcp 80/443=${n.tcp_80}/${n.tcp_443}`)],
+        contradiction: w.landed || net.some((n) => n.dns === "ok"), why: "names resolve: DNS is network, so 'no network' overstates it" };
+    } },
+  { text: "Reads can reach other folders.",
+    claim: "a read outside the folder, and through a junction, succeeds",
+    check: (e) => {
+      const cells = [...e.m05Cells("workspace", "promptUnmatched"), ...e.m05Cells("workspace", "onRequest")].filter((c) => /^read/.test(c.action));
+      return { measured: cells.map((c) => `${c.src} ${c.action}: ${c.outcome}`), contradiction: !cells.some((c) => c.outcome === "completed") };
+    } },
+  { text: "Also asks the engine to allow outbound network: package installs, API calls, downloads.",
+    claim: "package installs, API calls and downloads (HTTPS) get through",
+    check: (e) => {
+      const net = e.mspNetwork("network");
+      return { measured: net.map((n) => `msp enabled: https iwr=${n.iwr_https}, curl=${n.curl_https} (${n.curl_https_detail})`),
+        contradiction: net.length === 0 ? null : net.some((n) => n.iwr_https !== "ok" || n.curl_https !== "ok"), why: "HTTPS fails at the TLS stage" };
+    } },
+  { text: "Adds files and commands outside the folder.",
+    claim: "an approved write outside the folder lands, with the sandbox off",
+    check: (e) => {
+      const c = e.rec["policy-elevated"]?.cell;
+      return { measured: [`app policy-elevated: writeOutside=${c?.writeOutside}, engine ${c?.engine}`],
+        contradiction: !c ? null : c.writeOutside !== "completed" || !/--disable-sandbox/.test(c.engine) };
+    } },
+  { text: "Grant it to a workspace you trust.",
+    claim: "it is granted per project: only a project whose Sandbox is Full access gets it",
+    check: (e) => {
+      const a = e.scopeCase("Elevated access", "A");
+      const b = e.rec["policy-elevated"];
+      return { measured: [`app scope: project A (default Sandbox) under Elevated access -> ${a?.requested.sandboxMode}`,
+        `app policy-elevated: project B (Sandbox Full access) -> ${b?.startSession?.sandboxMode}`],
+      contradiction: !a || !b ? null : a.requested.sandboxMode !== "workspace" || b.startSession.sandboxMode !== "elevated" };
+    } },
+  // Isolation note.
+  { text: "How far Muse's engine can reach.",
+    claim: "the level is the engine's own sandbox flags",
+    check: (e) => {
+      const argv = [...e.rec.scope?.cases ?? [], { requested: e.rec["policy-elevated"]?.startSession, engine: e.rec["policy-elevated"]?.engine }]
+        .filter((c) => c.engine && c.engine !== "reused a running engine").map((c) => `${c.requested?.sandboxMode}: ${c.engine}`);
+      const flags = { workspace: "--sandbox-network restricted", network: "--sandbox-network enabled", elevated: "--disable-sandbox --sandbox-network enabled" };
+      return { measured: argv.map((a) => `app engine argv, ${a}`),
+        contradiction: argv.length === 0 || argv.some((a) => !a.includes(flags[a.split(":")[0]])) };
+    } },
+  { text: "Applied when a new engine starts: a running conversation keeps its own until it is restarted.",
+    claim: "a running engine keeps its flags; another posture for its folder is refused until a restart",
+    check: (e) => {
+      const change = e.rec.scope?.change;
+      return { measured: [`app scope: Elevated access asked for folder A while its engine runs Workspace only -> ${change?.ok ? "started" : change?.error}`],
+        contradiction: !change ? null : change.ok || !/restart the workspace host/.test(change.error ?? "") };
+    } },
+  { text: "On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work.",
+    claim: "relative PowerShell writes fail in the sandbox; absolute paths and write_file work in the folder",
+    check: (e) => {
+      const rel = [...e.m05Cells("workspace", "promptUnmatched"), ...e.m05Cells("workspace", "onRequest")].filter((c) => c.action === "writeInsideRoot");
+      const d1 = e.appr?.phases?.d1?.verdict;
+      return { measured: [...rel.map((c) => `${c.src} writeInsideRoot (relative): ${c.outcome}`),
+        `05/10 app d1: absolutePathWorks=${d1?.absolutePathWorks}, writeFileToolWorks=${d1?.writeFileToolWorks}`],
+      contradiction: rel.some((c) => c.outcome === "completed") || !d1?.absolutePathWorks || !d1?.writeFileToolWorks };
+    } },
+  { text: "The sandboxed shell got no network at either level, Workspace and network included; only Elevated access reached it.",
+    claim: "no connection at all under Workspace and network",
+    check: (e) => {
+      const net = e.mspNetwork("network");
+      return { measured: net.map((n) => `msp enabled: tcp 80/443=${n.tcp_80}/${n.tcp_443}, http iwr=${n.iwr_http}, curl=${n.curl_http}`),
+        contradiction: net.length === 0 ? null : net.some((n) => n.tcp_443 === "ok" || n.iwr_http === "ok"), why: "connections open and plain HTTP works" };
+    } },
+  // 06/10 wording, written from the cells above and below.
+  { text: "Writes stay inside the conversation's folder, and commands cannot connect out.",
+    claim: "no write outside the folder (junctions included, either tool); every connect refused",
+    check: (e) => {
+      const w = e.writesOutside();
+      const net = e.mspNetwork("workspace");
+      const app = e.rec["policy-workspace"]?.cell;
+      const connects = (n) => [n.tcp_80, n.tcp_443, n.iwr_http, n.iwr_https, n.tnc_443];
+      return { measured: [...w.measured, ...net.map((n) => `msp restricted: tcp 80/443=${n.tcp_80}/${n.tcp_443}, iwr http/https=${n.iwr_http}/${n.iwr_https}, tnc=${n.tnc_443}`),
+        `app policy-workspace: https=${app?.networkStage}`],
+      contradiction: w.landed || net.length === 0 || net.some((n) => connects(n).includes("ok")) || app?.network !== "failed" };
+    } },
+  { text: "Also lets commands connect out.",
+    claim: "connects succeed under --sandbox-network enabled",
+    check: (e) => {
+      const net = e.mspNetwork("network");
+      return { measured: net.map((n) => `msp enabled: tcp 80/443=${n.tcp_80}/${n.tcp_443}, tnc=${n.tnc_443}, http iwr=${n.iwr_http}`),
+        contradiction: net.length === 0 ? null : net.some((n) => n.tcp_80 !== "ok" || n.tcp_443 !== "ok") };
+    } },
+  { text: "In a project, its preferences must allow it too: networkDefault Allow for network, sandbox Full access for Elevated access.",
+    claim: "a project conversation gets network only with networkDefault Allow, Elevated access only with sandbox Full access",
+    check: (e) => {
+      const cases = e.rec.scope?.cases ?? [];
+      const b = e.rec["policy-elevated"];
+      const got = (c) => `app scope: ${c.isolation}, project ${c.project} -> ${c.requested.sandboxMode}`;
+      const expect = { A: "workspace", N: "network" };
+      return { measured: [...cases.map(got), `app policy-elevated: Elevated access, project B (sandbox Full access) -> ${b?.startSession?.sandboxMode}`],
+        contradiction: cases.length === 0 || !b ? null : cases.some((c) => c.requested.sandboxMode !== expect[c.project]) || b.startSession.sandboxMode !== "elevated" };
+    } },
+  { text: "Under Workspace only, names still resolve.",
+    claim: "DNS answers under --sandbox-network restricted",
+    check: (e) => {
+      const net = e.mspNetwork("workspace");
+      return { measured: net.map((n) => `msp restricted: dns=${n.dns}, tnc dns resolved=${n.tnc_443 !== "dns"}`),
+        contradiction: net.length === 0 ? null : net.some((n) => n.dns !== "ok") };
+    } },
+  { text: "Under Workspace and network, HTTPS fails in Windows' TLS layer (PowerShell, curl.exe); plain HTTP works.",
+    claim: "with --sandbox-network enabled, HTTPS stops at TLS for PowerShell and curl.exe while HTTP gets its 200",
+    check: (e) => {
+      const net = e.mspNetwork("network");
+      return { measured: net.map((n) => `msp enabled: https iwr=${n.iwr_https}, curl=${n.curl_https} (${n.curl_https_detail}); http iwr=${n.iwr_http}, curl=${n.curl_http}`),
+        contradiction: net.length === 0 ? null : net.some((n) => n.iwr_https !== "tls" || n.curl_https !== "tls" || n.iwr_http !== "ok" || n.curl_http !== "ok") };
+    } },
+  { text: "Elevated access reaches HTTPS.",
+    claim: "an HTTPS call returns 200 with the sandbox off",
+    check: (e) => {
+      const c = e.rec["policy-elevated"]?.cell;
+      return { measured: [`app policy-elevated: https=${c?.networkStage} (${e.rec["policy-elevated"]?.net}), engine ${c?.engine}`],
+        contradiction: !c ? null : c.network !== "completed" };
+    } },
+];
+
+/**
+ * (M0-06) Every sentence of the posture and Isolation texts, read from the
+ * running app, against its measured cells.
+ */
+async function sentences(app) {
+  await openSettings(app);
+  await sleep(1_200);
+  const ui = await app.ev(page(`
+    const read = (group) => q('[role="radiogroup"][aria-label="' + group + '"] label').map((l) => ({
+      label: l.querySelector('strong')?.innerText.trim(), text: l.querySelector('.authorization-mode-copy > span')?.innerText.trim() }));
+    const note = (h) => q('.settings-group').find((g) => g.querySelector('h3')?.innerText.trim() === h)?.querySelector('.settings-note')?.innerText.replace(/\\s+/g, ' ').trim() || null;
+    return { postures: read('Global authorization mode'), isolation: read('Isolation'), isolationNote: note('Isolation'),
+      headings: q('.settings-group h3').map((h) => h.innerText.trim()),
+      ruleControls: q('button, h3, label').map((n) => n.innerText.trim()).filter((t) => /allow in workspace|authorization rules/i.test(t)) };
+  `));
+  // The composer's posture menu: rendered (closed) with the welcome composer.
+  await app.ev(page("const n = q('.primary-nav button[aria-label=\"New conversation\"]')[0]; if (n) n.click(); return !!n;"));
+  await sleep(1_200);
+  ui.composer = await app.ev(page(`return [...document.querySelectorAll('button[role="menuitemradio"]')].map((b) => ({ label: b.querySelector('strong')?.textContent.trim(), text: b.querySelector('small')?.textContent.trim() }));`));
+
+  const msp = readJson(MSP, null);
+  const m05 = readJson(MATRIX, null);
+  const tag = (src) => (c) => ({ ...c, src });
+  const e = {
+    msp, m05, appr: readJson(APPROVALS, null), rec: readJson(OUT, { phases: {} }).phases,
+    mspCells: (posture, mode, action) => (msp?.runs ?? []).filter((r) => !posture || r.posture === posture)
+      .flatMap((r) => r.modes.filter((m) => !mode || m.mode === mode).flatMap((m) => m.cells.map(tag(`msp ${r.posture}/${m.mode}`))))
+      .filter((c) => !action || c.action === action),
+    mspModes: (mode) => (msp?.runs ?? []).flatMap((r) => r.modes.filter((m) => m.mode === mode).map((m) => ({ ...m, src: `msp ${r.posture}/${m.mode}` }))),
+    mspNetwork: (posture) => (msp?.runs ?? []).filter((r) => r.posture === posture).flatMap((r) => r.modes.flatMap((m) => m.cells)).map((c) => c.network).filter(Boolean),
+    m05Cells: (posture, mode) => (m05?.runs.find((r) => r.posture === posture)?.modes.find((m) => m.mode === mode)?.cells ?? []).map(tag(`05/10 matrix ${posture}/${mode}`)),
+    m05OffProfile: (mode) => (m05?.workspaceOutsideProfile?.cells ?? []).filter((c) => c.mode === mode).map((c) => ({ ...c.cell, src: `05/10 matrix off-profile/${mode}` })),
+    scopeCase: (isolation, key) => readJson(OUT, { phases: {} }).phases.scope?.cases.find((c) => c.isolation === isolation && c.project === key),
+  };
+  // Shell writes outside the folder: this campaign's junction cells (both levels), the app run, the 05/10 temp-folder cells.
+  e.writesOutside = () => {
+    const cells = e.mspCells(null, null, "writeThroughJunction");
+    const app = e.rec["policy-workspace"]?.cell;
+    const temp = [...e.m05Cells("workspace", "promptUnmatched"), ...e.m05Cells("workspace", "onRequest")].filter((c) => c.action === "writeOutsideRoot");
+    return {
+      measured: [...cells.map((c) => `${c.src} junction cell: landed outside=${Object.entries(c.landedOutsideRoot).filter(([, v]) => v).map(([k]) => k).join(",") || "none"}`),
+        `app policy-workspace: write outside=${app?.writeOutside} (${app?.writeError})`, ...temp.map((c) => `${c.src} writeOutsideRoot: ${c.outcome}`)],
+      landed: cells.some((c) => Object.values(c.landedOutsideRoot).some(Boolean)) || app?.writeOutside === "completed" || temp.some((c) => c.outcome === "completed"),
+    };
+  };
+
+  const split = (text) => (text ?? "").split(/(?<=[.!?])\s+(?=[A-Z])/).map((s) => s.trim()).filter(Boolean);
+  const shown = [
+    ...ui.postures.flatMap((p) => split(p.text).map((s) => ({ where: `posture ${p.label}`, sentence: s }))),
+    ...ui.composer.flatMap((p) => split(p.text).map((s) => ({ where: `composer ${p.label}`, sentence: s }))),
+    ...ui.isolation.flatMap((p) => split(p.text).map((s) => ({ where: `isolation ${p.label}`, sentence: s }))),
+    ...split(ui.isolationNote).map((s) => ({ where: "isolation note", sentence: s })),
+  ];
+  const rows = shown.map(({ where, sentence }) => {
+    const entry = SENTENCES.find((x) => x.text === sentence);
+    if (!entry) return { where, sentence, unmapped: true, contradiction: null };
+    const { measured, contradiction, why } = entry.check(e);
+    return { where, sentence, claim: entry.claim, measured, contradiction, ...(contradiction ? { why } : {}) };
+  });
+  return {
+    liveTurns: 0, ui, rows,
+    contradictions: rows.filter((r) => r.contradiction === true).length,
+    unmapped: rows.filter((r) => r.unmapped).length,
+    unmeasured: rows.filter((r) => !r.unmapped && r.contradiction === null).length,
+    verdict: {
+      everySentenceMapped: rows.every((r) => !r.unmapped),
+      noContradiction: rows.every((r) => r.contradiction === false),
+      noClientRuleInSettings: ui.ruleControls.length === 0 && !ui.headings.some((h) => /rules/i.test(h)),
+    },
+  };
+}
+
+const PHASES = { setup, reject, allow, restart, reload, two, forged, posture, isolation, d1, wire, texts, restore, scope, policy, sentences };
 if (!PHASES[PHASE]) {
   process.stderr.write(`usage: cdp-m0-05-06-approvals.mjs <${Object.keys(PHASES).join("|")}> [--base dir] [--replay-stale]\n`);
   process.exit(1);
 }
+// These phases change Isolation and project preferences: never on a real profile.
+if (["scope", "policy", "sentences"].includes(PHASE) && !TEST_DATA) {
+  process.stderr.write(`${PHASE} runs on the isolated app only: pass --test-data <its MUSE_DESKTOP_TEST_DATA_DIR>\n`);
+  process.exit(1);
+}
 mkdirSync(BASE, { recursive: true });
 const app = await openPage();
+// Before driving anything: the WebView2 browser on this port runs on the test profile.
+if (TEST_DATA && !under(webviewProfile(), TEST_DATA)) {
+  app.close();
+  process.stderr.write(`the WebView2 browser on CDP is not on the profile under ${TEST_DATA}: stopped before driving the app\n`);
+  process.exit(1);
+}
 try {
   const result = await PHASES[PHASE](app);
   result.consoleErrors ??= app.errors.slice(0, 10);
