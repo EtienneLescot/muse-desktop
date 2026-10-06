@@ -337,21 +337,25 @@ export function dropLog(sessionId: string): void {
   removeStorageKey(logKey(sessionId));
 }
 
-const PENDING_APPROVALS_KEY = "muse-desktop.pending-approvals.v1";
+const PENDING_CARD_KEYS = {
+  approval: "muse-desktop.pending-approvals.v1",
+  input: "muse-desktop.pending-inputs.v1",
+} as const;
 
 /**
- * Conversations that had an approval card open, read back at the next boot.
- * The engine cancels an open approval when the app that owns it exits (stdin
- * EOF, measured on 1.4.2), so the next app can only report it. Written in the
- * same tick as the "Approval requested" log entry, so it is as durable.
+ * Conversations that had an approval or question card open, read back at the
+ * next boot. The card's engine ends with the app that owns it (the engine
+ * cancels an open approval on stdin EOF, measured on 1.4.2), so the next app
+ * can only report it. Written in the same tick as the "... requested" log
+ * entry, so it is as durable.
  */
-export function loadPendingApprovalSessions(): string[] {
-  const raw = read<unknown>(PENDING_APPROVALS_KEY, []);
+export function loadPendingCardSessions(kind: keyof typeof PENDING_CARD_KEYS): string[] {
+  const raw = read<unknown>(PENDING_CARD_KEYS[kind], []);
   return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string" && id.length > 0) : [];
 }
 
-export function savePendingApprovalSessions(sessionIds: string[]): void {
-  write(PENDING_APPROVALS_KEY, [...new Set(sessionIds)]);
+export function savePendingCardSessions(kind: keyof typeof PENDING_CARD_KEYS, sessionIds: string[]): void {
+  write(PENDING_CARD_KEYS[kind], [...new Set(sessionIds)]);
 }
 
 export function loadWorkspace(): string | null {

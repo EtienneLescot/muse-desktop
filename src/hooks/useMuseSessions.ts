@@ -14,7 +14,7 @@ import {
   loadGitTurnSnapshot,
   loadLog,
   loadOutbox,
-  loadPendingApprovalSessions,
+  loadPendingCardSessions,
   loadProjects,
   loadSessions,
   loadThreadProjects,
@@ -27,7 +27,7 @@ import {
   saveGitTurnSnapshot,
   saveLog,
   saveOutbox,
-  savePendingApprovalSessions,
+  savePendingCardSessions,
   saveProjects,
   saveSessions,
   saveThreadProjects,
@@ -1576,9 +1576,9 @@ export function useMuseSessions(): UseMuseSessions {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   // M0-05: conversations whose card was open when the app last closed, read
   // during render so the write-through below cannot clear it first.
-  const bootPendingApprovalsRef = useRef<string[] | null>(null);
-  if (bootPendingApprovalsRef.current === null) {
-    bootPendingApprovalsRef.current = loadPendingApprovalSessions();
+  const bootPendingCardsRef = useRef<Record<"approval" | "input", string[]> | null>(null);
+  if (bootPendingCardsRef.current === null) {
+    bootPendingCardsRef.current = { approval: loadPendingCardSessions("approval"), input: loadPendingCardSessions("input") };
   }
   // M0-02: keep a live heartbeat separate from the transcript. Persisted
   // entries can be old after a restart and must never masquerade as current
@@ -1781,6 +1781,11 @@ export function useMuseSessions(): UseMuseSessions {
   const [inputRequests, setInputRequests] = useState<InputRequest[]>([]);
   // M0-05: questions already in the transcript; the host delivers each twice.
   const loggedInputsRef = useRef(new Set<string>());
+  // M0-05: questions answered or skipped, or being: one answer each. A second
+  // Ctrl+Enter, or a click before input_settled removes the card, would be
+  // refused by the host and raise a false error. Released when the host
+  // refuses the answer: the card stays for a corrected one.
+  const answeredInputsRef = useRef(new Set<string>());
   // M0-05: conversations whose engine runs no turn of theirs: being resumed,
   // or resumed idle until their next turn starts (see reconnectSession).
   const noLiveTurnRef = useRef(new Set<string>());
@@ -2238,14 +2243,17 @@ export function useMuseSessions(): UseMuseSessions {
       try {
         const restored = await invoke<BackendSessionMeta[]>("restore_sessions");
         if (cancelled) return;
-        // A card open when the app closed died with its host: the engine
-        // aborts it on stdin EOF and lists nothing pending afterwards. A
-        // window reload keeps the host, so its card comes back below instead.
+        // A card open when the app closed died with its host (the engine
+        // aborts an approval on stdin EOF): the transcript says so, once per
+        // kind of card. A window reload keeps the host, so its card comes
+        // back below instead.
         const served = new Set(restored.map((s) => s.session_id));
-        for (const id of new Set(bootPendingApprovalsRef.current ?? [])) {
-          if (served.has(id) || tombstoned.current?.has(id) || !stored.some((s) => s.session_id === id)) continue;
-          const text = statusLogText("approval_cancelled_by_restart");
-          if (text !== null) pushLog(id, [{ id: newId(), ts: Date.now(), role: "system", text }]);
+        for (const kind of ["approval", "input"] as const) {
+          for (const id of new Set(bootPendingCardsRef.current?.[kind] ?? [])) {
+            if (served.has(id) || tombstoned.current?.has(id) || !stored.some((s) => s.session_id === id)) continue;
+            const text = statusLogText(`${kind}_cancelled_by_restart`);
+            if (text !== null) pushLog(id, [{ id: newId(), ts: Date.now(), role: "system", text }]);
+          }
         }
         // Listed is not loaded: a conversation the host has not loaded stays
         // disconnected (no posture target) until resume-on-open loads it.
@@ -2412,8 +2420,11 @@ export function useMuseSessions(): UseMuseSessions {
 
   // M0-05: which conversations have a card open, for the next boot's notice.
   useEffect(() => {
-    savePendingApprovalSessions(approvals.map((a) => a.session_id));
+    savePendingCardSessions("approval", approvals.map((a) => a.session_id));
   }, [approvals]);
+  useEffect(() => {
+    savePendingCardSessions("input", inputRequests.map((r) => r.session_id));
+  }, [inputRequests]);
 
   // US-3 + US-30 write-through persistence (best-effort, cf. persist.ts).
   // M0-02: same hydration guard as sessions above — the loaded value (which may
@@ -7070,6 +7081,9 @@ export function useMuseSessions(): UseMuseSessions {
 
   const answerInput = useCallback(
     async (sessionId: string, inputId: string, answers: InputAnswer[]) => {
+      const key = `${sessionId}:${inputId}`;
+      if (answeredInputsRef.current.has(key)) return;
+      answeredInputsRef.current.add(key);
       try {
         setError(null);
         await invoke("answer_input", {
@@ -7086,6 +7100,7 @@ export function useMuseSessions(): UseMuseSessions {
         markResumePending(sessionId, "input");
         kickPoll();
       } catch (e) {
+        answeredInputsRef.current.delete(key);
         setError(`answer_input failed: ${String(e)}`);
       }
     },
@@ -7093,10 +7108,14 @@ export function useMuseSessions(): UseMuseSessions {
   );
 
   const cancelInput = useCallback(async (sessionId: string, inputId: string) => {
+    const key = `${sessionId}:${inputId}`;
+    if (answeredInputsRef.current.has(key)) return;
+    answeredInputsRef.current.add(key);
     try {
       setError(null);
       await invoke("cancel_input", { sessionId, userInputId: inputId });
     } catch (e) {
+      answeredInputsRef.current.delete(key);
       setError(`cancel_input failed: ${String(e)}`);
     }
   }, []);

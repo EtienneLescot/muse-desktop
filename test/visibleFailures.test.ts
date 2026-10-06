@@ -24,6 +24,10 @@
  *   back, and every answer was refused (-32057, then -32603 after a restart).
  * - M0-05: each question was written twice to the transcript (the host's
  *   userInput/request and its userInput/requested twin).
+ * - M0-05: a double-click on Send answer answered twice; the host refused
+ *   the second answer and the banner said the answer had failed.
+ * - M0-05: a question left open when the app closed left no line after the
+ *   restart, where an approval said it was cancelled.
  * - M2-05: every window.confirm question was skipped in the app: the dialog
  *   plugin's replacement calls a command the plugin no longer has, and its
  *   Promise read as a yes.
@@ -34,6 +38,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { isConnectorError } from "../src/lib/errorCopy.ts";
+import { statusLogText } from "../src/lib/statusLog.ts";
 
 const read = (relative: string): string =>
   readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -165,5 +170,37 @@ describe("visible failures", () => {
     const block = hook.slice(start, hook.indexOf('if (kind === "input_settled")', start));
     const known = block.indexOf("if (loggedInputsRef.current.has(logged)) return;");
     assert.ok(known > 0 && known < block.indexOf("Input requested:"), "a question already written returns before its line");
+  });
+
+  it("sends one answer per question card, however often it is pressed", () => {
+    // M0-05: a double-click on Send answer (or Ctrl+Enter twice) answered
+    // twice; the host refused the second answer and the banner said it failed.
+    const panel = read("../src/components/InputPanel.tsx").replaceAll("\r\n", "\n");
+    for (const action of ["submit();", "onSkip(request.session_id, request.input_id);\n"]) {
+      const click = panel.lastIndexOf("onClick={(e) => {", panel.lastIndexOf(action));
+      assert.ok(click > 0, `${action.trim()} is a button's click`);
+      assert.match(panel.slice(click), /^onClick=\{\(e\) => \{\s*if \(e\.detail > 1\) return;/, `${action.trim()}: a double-click acts once`);
+    }
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    for (const [name, command] of [["answerInput", "answer_input"], ["cancelInput", "cancel_input"]]) {
+      const start = hook.indexOf(`const ${name} = useCallback(`);
+      const body = hook.slice(start, hook.indexOf(" = useCallback(", start + 30));
+      const once = body.indexOf("if (answeredInputsRef.current.has(key)) return;");
+      assert.ok(once > 0 && once < body.indexOf("answeredInputsRef.current.add(key);"), `${name}: a question answered or being answered is not sent again`);
+      assert.ok(body.indexOf("answeredInputsRef.current.add(key);") < body.indexOf(`invoke("${command}"`), `${name}: marked before the call`);
+      // Released only when the host refuses: the card stays for a corrected answer.
+      assert.match(body, /catch \(e\) \{\s*answeredInputsRef\.current\.delete\(key\);/, `${name}: released on refusal`);
+    }
+  });
+
+  it("says a question left open when the app closed was cancelled, as for an approval", () => {
+    // M0-05: the boot line covered approvals only.
+    assert.equal(statusLogText("input_cancelled_by_restart"), "Input cancelled: Muse closed before you answered.");
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    assert.match(hook, /savePendingCardSessions\("input", inputRequests\.map\(\(r\) => r\.session_id\)\)/, "open questions are written for the next boot");
+    const start = hook.indexOf('await invoke<BackendSessionMeta[]>("restore_sessions")');
+    const boot = hook.slice(start, hook.indexOf("connectedRestoredIds(restored)", start));
+    assert.match(boot, /for \(const kind of \["approval", "input"\] as const\)/, "the boot reads both kinds");
+    assert.match(boot, /statusLogText\(`\$\{kind\}_cancelled_by_restart`\)/);
   });
 });
