@@ -4,7 +4,8 @@
 //! none of this can switch on in a shipped app, nor on macOS or Linux, where
 //! it would lift the single-instance guard without moving the webview store.
 //! `MUSE_DESKTOP_TEST_DATA_DIR` turns it on. That folder then holds the app
-//! data and the WebView2 profile, the single-instance guard and the OS wake-up
+//! data and the WebView2 profile, the computer-use service gets a pipe named
+//! after it (`computer::endpoint`), the single-instance guard and the OS wake-up
 //! task are skipped, and every local engine is `MUSE_DESKTOP_TEST_SIDECAR`, a
 //! JSON argv such as `["node", "scripts/muse-fixture.mjs"]`. A remote target
 //! (`ssh://`) that the test profile itself configured is reached over the
