@@ -7,6 +7,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { projectOfFolder, type Project } from "../src/lib/projects.ts";
 
 const read = (relative: string): string =>
   readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -37,7 +38,7 @@ describe("project isolation wiring", () => {
     const start = hook.indexOf("const reconnectSession = useCallback(");
     const body = hook.slice(start, hook.indexOf('invoke<BackendSessionMeta>("resume_session"', start) + 200);
     assert.match(body, /const resumedFolder = session\.host_workspace \?\? session\.workspace;/);
-    assert.match(body, /host = \{ workspace: resumedFolder, sandbox: sandboxConfig \};/);
+    assert.match(body, /host = \{ workspace: resumedFolder, sandbox: sandboxConfig(, projectId: [^}]+)? \};/);
     assert.match(body, /workspacePath: resumedFolder,/);
   });
 
@@ -50,5 +51,22 @@ describe("project isolation wiring", () => {
     assert.doesNotMatch(panel, /project-global|onSetGlobal|hideGlobalSettings/, "the hidden defaults editor drove nothing");
     assert.doesNotMatch(panel, / g:/);
     assert.match(panel, /<small> Default: \{formatSetting\(settingKey, globalValue\)\}<\/small>/);
+  });
+
+  it("restarts a project's folder and retries a project's start with that project's request", () => {
+    // Settings' restart applied the global posture to a folder a project owns,
+    // and the sidecar panel's Retry started in the default folder, no project.
+    const projects: Project[] = [{ id: "p", name: "p", createdAt: 1, workspace: "G:\\work\\proj", settings: { sandbox: "read-only" } }];
+    assert.equal(projectOfFolder(projects, "\\\\?\\G:\\work\\proj\\")?.id, "p", "native spelling");
+    assert.equal(projectOfFolder(projects, "g:/WORK/proj")?.id, "p", "separators and case");
+    assert.equal(projectOfFolder(projects, "G:\\work\\other"), undefined);
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const restart = hook.slice(hook.indexOf("const restartHost = useCallback("), hook.indexOf("const projectPosture = useCallback("));
+    assert.match(restart, /requested \?\? hostSandboxConfigForProject\(sandbox, projectOfFolder\(projects, target\)\)/);
+    assert.match(hook, /host = \{ workspace: ws, sandbox: sandboxConfig, projectId: project\?\.id \};/);
+    const app = read("../src/App.tsx");
+    const retry = app.slice(app.indexOf("onRetry={() => {"), app.indexOf("onPickWorkspace={setWorkspace}"));
+    assert.match(retry, /const failed = errorHost;/);
+    assert.match(retry, /startSessionInWorkspace\(\s*failed\.workspace,[\s\S]*failed\.projectId,\s*\)/);
   });
 });

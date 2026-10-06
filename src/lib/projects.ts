@@ -18,6 +18,7 @@ import {
   normalizeReasoningEffort,
   type ReasoningEffort,
 } from "./reasoning.ts";
+import { pathKey } from "./paths.ts";
 import { isRemoteWorkspace } from "./remoteSsh.ts";
 
 /** One project: a named thread group with a shared folder and settings. */
@@ -364,6 +365,12 @@ export function attachThread(
     return next;
   }
   return { ...attached, [sessionId]: projectId };
+}
+
+/** The project whose roots include `folder`, whatever its spelling (`pathKey`). */
+export function projectOfFolder(projects: Project[], folder: string): Project | undefined {
+  const key = pathKey(folder);
+  return projects.find((project) => projectWorkspaces(project).some((root) => pathKey(root) === key));
 }
 
 /** Project id a thread is attached to (null = ungrouped). */

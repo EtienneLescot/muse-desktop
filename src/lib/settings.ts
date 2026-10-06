@@ -121,6 +121,8 @@ export function hostSandboxConfigForProject(
 export interface HostRequest {
   workspace: string;
   sandbox: HostSandboxConfig;
+  /** The project it was for: a retry starts in that project again. */
+  projectId?: string;
 }
 
 /**

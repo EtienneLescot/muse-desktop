@@ -193,6 +193,7 @@ import {
   createProject as createProjectRow,
   DEFAULT_PROJECT_SETTINGS,
   deleteProject as deleteProjectRow,
+  projectOfFolder,
   resolveProjectSettings,
   setProjectOverride as setProjectOverrideRow,
   updateProject as updateProjectRow,
@@ -856,7 +857,8 @@ interface UseMuseSessions {
   setSandbox: (next: SandboxSettings) => void;
   /**
    * M2-02: explicitly restart a workspace host after a posture change; the
-   * default folder and the global posture unless told otherwise.
+   * default folder, at the posture of the project that owns it (the global
+   * one otherwise), unless told otherwise.
    */
   restartHost: (workspacePath?: string | null, sandbox?: HostSandboxConfig) => Promise<boolean>;
   /** Global tool-authorization posture (persisted locally). */
@@ -4157,7 +4159,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   const restartHost = useCallback(async (
     workspacePath?: string | null,
-    posture: HostSandboxConfig = hostSandboxConfigForProject(sandbox),
+    requested?: HostSandboxConfig,
   ): Promise<boolean> => {
     if (!isTauriRuntime()) {
       setError("Restarting a Muse host is available in the desktop app.");
@@ -4168,6 +4170,8 @@ export function useMuseSessions(): UseMuseSessions {
       setError("Pick a workspace folder before restarting the Muse host.");
       return false;
     }
+    // A folder a project owns restarts at that project's posture, not the global one.
+    const posture = requested ?? hostSandboxConfigForProject(sandbox, projectOfFolder(projects, target));
     try {
       setError(null);
       await invoke("restart_host", {
@@ -4184,7 +4188,7 @@ export function useMuseSessions(): UseMuseSessions {
       );
       return false;
     }
-  }, [sandbox, workspace]);
+  }, [projects, sandbox, workspace]);
 
   // A posture picked before the session joined connectedIds still lands.
   const projectPosture = useCallback((sessionId: string, effective?: unknown) =>
@@ -4384,7 +4388,7 @@ export function useMuseSessions(): UseMuseSessions {
         return null;
       }
       const sandboxConfig = hostSandboxConfigForProject(sandbox, project);
-      host = { workspace: ws, sandbox: sandboxConfig };
+      host = { workspace: ws, sandbox: sandboxConfig, projectId: project?.id };
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
         authorizationMode: authorizationModeRef.current,
@@ -4592,7 +4596,7 @@ export function useMuseSessions(): UseMuseSessions {
       // where its turns ran; the supervisor checks that folder again. The
       // error banner's restart restarts the folder resumed, not the other.
       const resumedFolder = session.host_workspace ?? session.workspace;
-      host = { workspace: resumedFolder, sandbox: sandboxConfig };
+      host = { workspace: resumedFolder, sandbox: sandboxConfig, projectId: threadProjects[id] };
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
         workspacePath: resumedFolder,

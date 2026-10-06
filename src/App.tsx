@@ -630,8 +630,17 @@ export default function App() {
       message={error}
       triedPaths={extractTriedPaths(error)}
       onRetry={() => {
-        void probeStartup(workspace);
-        void startSession();
+        // The failed request again, in its folder and project: not a new
+        // conversation in the default folder at the global posture.
+        const failed = errorHost;
+        void probeStartup(failed?.workspace ?? workspace);
+        void (failed === null
+          ? startSession()
+          : startSessionInWorkspace(
+              failed.workspace,
+              failed.projectId === undefined ? undefined : settingsFor(failed.projectId),
+              failed.projectId,
+            ));
       }}
       onPickWorkspace={setWorkspace}
       startupProbe={startupProbe}
