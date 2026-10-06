@@ -208,3 +208,64 @@ jobs:
           path: ci-rust-test-report.log
           if-no-files-found: ignore
           retention-days: 7
+
+  e2e-windows:
+    name: E2E on the Muse fixture (Windows)
+    # The debug app in its isolated test mode, driven over CDP (ADR 0003):
+    # approvals in two projects and a send to a host that dies.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Provide CI sidecar placeholder
+        shell: bash
+        run: |
+          # tauri-build only checks that each externalBin file exists. In test
+          # mode every engine is the fixture, so this file never runs.
+          printf 'CI placeholder\n' > src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe
+      - name: Build the debug app
+        shell: bash
+        run: |
+          set +e
+          cargo build --manifest-path src-tauri/Cargo.toml > ci-e2e-build.log 2>&1
+          status=$?
+          tail -n 300 ci-e2e-build.log \
+            | sed -E 's#(/home/runner|/Users|[A-Za-z]:[\\/]+(Users|a)[\\/])[^ ]*#<ci-path>#g; s#(token|password|api[_-]?key|authorization)[=:][^ ]+#\1=<redacted>#gi' \
+            > ci-e2e-build-report.log
+          exit "$status"
+      - name: Run the E2E
+        # The runner's watchdog prints the verdict and fails at 6 minutes.
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          set +e
+          npm run e2e:fixture > ci-e2e-run.log 2>&1
+          status=$?
+          tail -n 250 ci-e2e-run.log \
+            | sed -E 's#(/home/runner|/Users|[A-Za-z]:[\\/]+(Users|a)[\\/])[^ ]*#<ci-path>#g; s#(token|password|api[_-]?key|authorization)[=:][^ ]+#\1=<redacted>#gi' \
+            > ci-e2e-run-report.log
+          # The verdict is masked and bounded: show it in the job log too.
+          cat ci-e2e-run-report.log
+          exit "$status"
+      - name: Upload E2E diagnostics on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: muse-ci-e2e-windows-diagnostics-${{ github.run_id }}
+          path: ci-e2e-*-report.log
+          if-no-files-found: ignore
+          retention-days: 7
