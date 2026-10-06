@@ -7,8 +7,10 @@
  * under --base and one test conversation; every phase refuses to act unless
  * that conversation is the active one and runs under --base.
  *
- * Phases, in order, on one app instance this harness started:
- *   launch      start the CDP-enabled build (refused if another instance runs).
+ * Phases, in order, on one app instance this harness started (recorded on
+ * 05/10/2026 on the user's profile; the harness now starts the isolated
+ * test mode only, see below):
+ *   launch      start the CDP-enabled build.
  *   setup       no turn. Test repository (initial commit, files rewritten by
  *               Git). The test conversation: every UI start needs a project
  *               root or the global default folder, and the profile holds the
@@ -48,21 +50,65 @@
  * Utilities: `stop` closes this harness's instance between builds (no
  * record); `rederive` rechecks stored verdicts without the app.
  *
+ * Complement (06/10/2026), phases `c-*`, recorded in m2-05-handoff-complement.json.
+ * Two conversations in one test repository: A, started from the welcome
+ * screen, and C, A's "Fork conversation" in Local, or a direct start_session
+ * (declared in the record) when the host refuses the fork.
+ *   c-launch    the isolated instance (below), a fresh data folder.
+ *   c-setup     no turn. The test repository; the profile is empty.
+ *   c-start     1 turn. A starts in Local with a shell step; while its card
+ *               waits, A's Move action is read and clicked. Then the fork, C.
+ *   c-send-during-move  no turn. A moves to a worktree with bulk files to keep
+ *               the move busy; meanwhile A's composer is read and C sends
+ *               through the real composer (refused or queued, never a turn).
+ *   c-file-tools  1 turn. A, in the worktree: shell, read_file on a file that
+ *               differs between the two folders, write_file of a new file.
+ *               While its first card waits: A's own Move, a direct
+ *               handoff_move, and C's Move to worktree through the UI.
+ *   c-held-tracked / c-held-untracked  no turn. C moves Local to a new
+ *               worktree while another process holds a Local file open
+ *               (FileShare.Read, no delete): a tracked file Git must rewrite,
+ *               or an untracked file it must delete. Both folders watched.
+ *   c-conflict  no turn. A's Move back to local refused on a conflict, in the
+ *               UI and through a direct handoff_move, both folders watched.
+ *   c-stop      the instance closed from its window.
+ *   c-rehearse-start  rehearsal only, no turn: A and C by a direct
+ *               start_session each, adopted on a reload.
+ * --rehearse refuses send_input in the page in c-send-during-move; --as <key>
+ * records a phase under another key (a run on another build).
+ *
+ * Every phase runs on the isolated test mode (ADR 0003): a fresh data folder
+ * per launch under --base, no WEBVIEW2_* variable, the staged engine
+ * (--engine) as the only local engine, CDP on MUSE_CDP_PORT (9333). The
+ * harness refuses an exe without the switch, stops an app that writes no
+ * test-mode.pid, and stops before driving anything unless the WebView2
+ * profile lies under the data folder. It never attaches to an app it did
+ * not start.
+ *
  * Usage:
  *   node scripts/cdp-m2-05-handoff.mjs <phase> [--base G:\muse-proofs\m2-05]
- *     [--exe <muse-desktop.exe>] [--out docs/evidence/2026-10-05-roadmap-closure/m2-05-handoff.json]
- * Each phase merges its path-free result into --out.
+ *     [--exe <muse-desktop.exe>] [--engine <muse exe>] [--out <record>] [--as <key>]
+ * Each phase merges its path-free result into --out (m2-05-handoff.json, or
+ * m2-05-handoff-complement.json for the c-* phases).
  */
 import { execFileSync, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
-import { INSTALL_IPC_TRACE, argValue, gitHead, openPage, redactor, sleep, waitFor } from "./cdp-harness.mjs";
+import { release } from "node:os";
+import { basename, join, relative, resolve } from "node:path";
+
+// The isolated instance's own port: 9222 is a developer's app, 9334 and 9335 other proofs'.
+process.env.MUSE_CDP_PORT ??= "9333";
+const { INSTALL_IPC_TRACE, PORT, argValue, gitHead, openPage, redactor, sleep, under, waitFor, webviewProfile } = await import("./cdp-harness.mjs");
 
 const PHASE = process.argv[2];
-const BASE = argValue("--base", "G:\\muse-proofs\\m2-05");
-const OUT = argValue("--out", "docs/evidence/2026-10-05-roadmap-closure/m2-05-handoff.json");
-const EXE = argValue("--exe", "G:\\muse-build\\cool-rubin-target\\debug\\muse-desktop.exe");
+const COMPLEMENT = String(PHASE).startsWith("c-");
+const BASE = argValue("--base", COMPLEMENT ? "G:\\muse-proofs\\m2-05b\\run" : "G:\\muse-proofs\\m2-05");
+const OUT = argValue("--out", `docs/evidence/2026-10-05-roadmap-closure/${COMPLEMENT ? "m2-05-handoff-complement" : "m2-05-handoff"}.json`);
+const EXE = resolve(argValue("--exe", "G:\\muse-build\\cool-rubin-target\\debug\\muse-desktop.exe"));
+const ENGINE = resolve(argValue("--engine", join("src-tauri", "binaries", "muse-x86_64-pc-windows-msvc.exe")));
+const AS = argValue("--as", PHASE);
+const REHEARSE = process.argv.includes("--rehearse");
 const REPO = join(BASE, "repo");
 const STATE = join(BASE, "harness-state.json");
 const CODE_WORD = "TANGERINE-205";
@@ -80,7 +126,7 @@ function redact(value) {
   // Worktree paths come back canonical (`\\?\G:\…`) and are shown without the
   // prefix: the plain form matches both (the redactor eats an optional prefix).
   const pairs = [[REPO, "<local>"], [BASE, "<proof>"]];
-  for (const [key, label] of [["w0", "<worktree 0>"], ["w1", "<worktree 1>"], ["w2", "<worktree 2>"]]) {
+  for (const [key, label] of [["w0", "<worktree 0>"], ["w1", "<worktree 1>"], ["w2", "<worktree 2>"], ["w3", "<worktree 3>"], ["wc", "<worktree c>"]]) {
     if (s[key]) pairs.unshift([s[key].replace(/^\\\\\?\\/, ""), label]);
   }
   return redactor(pairs)(value);
@@ -88,13 +134,21 @@ function redact(value) {
 
 function engineVersion() {
   try {
-    return execFileSync(join("src-tauri", "binaries", "muse-x86_64-pc-windows-msvc.exe"), ["--version"],
-      { encoding: "utf8", env: { ...process.env, MUSE_NO_AUTO_UPDATE: "1" } }).trim();
+    return execFileSync(ENGINE, ["--version"], { encoding: "utf8", env: { ...process.env, MUSE_NO_AUTO_UPDATE: "1" } }).trim();
   } catch { return null; }
 }
 
+const exeSha256 = () => createHash("sha256").update(readFileSync(EXE)).digest("hex");
+/** No uncommitted change outside the harnesses and the docs: the exe can be rebuilt from `commit`. */
+const productTreeClean = () => execFileSync("git", ["status", "--porcelain", "--", ".", ":(exclude)scripts", ":(exclude)docs"], { encoding: "utf8" }).trim() === "";
+
 function merge(result) {
-  const record = readJson(OUT, {
+  const record = readJson(OUT, COMPLEMENT ? {
+    schema: "muse-desktop.m2-05-handoff-complement.v1",
+    ticket: "M2-05",
+    complements: "m2-05-handoff.json",
+    phases: {},
+  } : {
     schema: "muse-desktop.m2-05-handoff.v1",
     ticket: "M2-05",
     platform: "Windows 11 (26200), debug build with embedded frontend, WebView2 over CDP",
@@ -104,10 +158,11 @@ function merge(result) {
   record.date = new Date().toISOString().slice(0, 10);
   record.engine = engineVersion();
   record.git = execFileSync("git", ["--version"], { encoding: "utf8" }).trim();
-  record.phases[PHASE] = redact({ commit: record.commit, ...result });
+  if (COMPLEMENT) record.platform = `win32 ${release()}, debug build in its isolated test mode (ADR 0003), WebView2 over CDP`;
+  record.phases[AS] = redact({ commit: record.commit, productTreeClean: productTreeClean(), exeSha256: exeSha256(), ...result });
   record.liveTurns = Object.values(record.phases).reduce((n, p) => n + (p.liveTurns ?? 0), 0);
   writeFileSync(OUT, `${JSON.stringify(record, null, 2)}\n`);
-  return record.phases[PHASE];
+  return record.phases[AS];
 }
 
 // ---- disk and Git, read outside the app ----------------------------------------
@@ -128,14 +183,24 @@ function hashTree(root) {
     }
   };
   walk(root);
-  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : 1)));
+  return bulked(Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : 1))));
+}
+
+/** The complement's bulk/ files (thousands) as one entry: their count and a hash of every path and hash. */
+function bulked(files) {
+  const bulk = Object.entries(files).filter(([path]) => path.startsWith("bulk/"));
+  if (bulk.length === 0) return files;
+  const rest = Object.fromEntries(Object.entries(files).filter(([path]) => !path.startsWith("bulk/")));
+  return { ...rest, [`bulk/ (${bulk.length} files)`]: sha(bulk.map(([p, h]) => `${p}:${h}`).join("\n")) };
 }
 
 /** What one checkout holds: porcelain status, index vs HEAD, branch, bytes. */
 function side(dir) {
+  const status = lines(git(dir, ["status", "--porcelain=v1", "-uall"]));
+  const bulk = status.filter((l) => l.slice(3).startsWith("bulk/"));
   return {
     branch: git(dir, ["rev-parse", "--abbrev-ref", "HEAD"]).trim(),
-    status: lines(git(dir, ["status", "--porcelain=v1", "-uall"])),
+    status: bulk.length === 0 ? status : [...status.filter((l) => !bulk.includes(l)), `${[...new Set(bulk.map((l) => l.slice(0, 2)))].join("|")} bulk/ (${bulk.length} files)`],
     staged: lines(git(dir, ["diff", "--cached", "--name-status"])),
     files: hashTree(dir),
   };
@@ -160,19 +225,54 @@ function appPids() {
 }
 const alive = (pid) => appPids().includes(Number(pid));
 
-/** Started the way a user does, from PowerShell, with the proof environment. */
-function launchApp() {
-  const pid = execFileSync("powershell", ["-NoProfile", "-Command",
-    `$env:MUSE_NO_AUTO_UPDATE='1'; $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'; (Start-Process -FilePath '${EXE}' -PassThru).Id`],
-  { encoding: "utf8" }).trim();
-  saveState({ pid: Number(pid) });
-  return Number(pid);
+const forceKill = (pid) => { try { execFileSync("taskkill", ["/F", "/T", "/PID", String(pid)], { stdio: "ignore" }); } catch { /* gone */ } };
+
+/**
+ * The isolated test mode (ADR 0003), started from PowerShell: no WEBVIEW2_*
+ * variable, a fresh data folder per launch, the staged engine as the only
+ * local engine, CDP through the WebView2 options. Refused for an exe without
+ * the switch; stopped when no test-mode.pid names it within 10 s.
+ */
+async function launchApp({ restart = false } = {}) {
+  if (!readFileSync(EXE).includes("MUSE_DESKTOP_TEST_DATA_DIR")) throw new Error("the exe has no test mode (release build?): refusing to start it");
+  if (await fetch(`http://127.0.0.1:${PORT}/json/version`, { signal: AbortSignal.timeout(5_000) }).then(() => true, (error) => error?.name === "TimeoutError")) {
+    throw new Error(`CDP port ${PORT} is already taken: refusing to drive another app`);
+  }
+  // A restart reopens the same profile; any other launch takes a fresh one.
+  const launches = (state().launches ?? 0) + (restart ? 0 : 1);
+  const data = join(BASE, `appdata-${launches}`);
+  if (!restart && existsSync(data)) throw new Error(`${data} exists: every launch takes a fresh data folder`);
+  mkdirSync(data, { recursive: true });
+  const pid = Number(execFileSync("powershell", ["-NoProfile", "-Command", [
+    "Get-ChildItem env: | Where-Object { $_.Name -like 'WEBVIEW2_*' } | ForEach-Object { Remove-Item -LiteralPath ('env:' + $_.Name) }",
+    `$env:MUSE_DESKTOP_TEST_DATA_DIR = '${data}'`,
+    `$env:MUSE_DESKTOP_TEST_SIDECAR = '${J([ENGINE.replaceAll("\\", "/")])}'`,
+    `$env:MUSE_DESKTOP_TEST_CDP_PORT = '${PORT}'`,
+    "$env:MUSE_NO_AUTO_UPDATE = '1'",
+    `(Start-Process -FilePath '${EXE}' -WorkingDirectory '${BASE}' -PassThru).Id`,
+  ].join("; ")], { encoding: "utf8" }).trim());
+  saveState({ pid, data, launches });
+  const entered = await waitFor(() => { try { return readFileSync(join(data, "test-mode.pid"), "utf8").trim() === String(pid); } catch { return false; } }, 10_000, 100);
+  if (!entered) {
+    forceKill(pid);
+    saveState({ pid: null });
+    throw new Error("no test-mode.pid with the app's pid within 10 s: not in test mode, stopped");
+  }
+  return pid;
 }
 
+/** CDP on this harness's instance only: its WebView2 profile must lie under its data folder. */
 async function attach() {
   let app = null;
-  await waitFor(async () => { try { app = await openPage(); return true; } catch { return false; } }, 60_000, 1_000);
+  await waitFor(async () => { try { app = await openPage(); return true; } catch { return false; } }, 120_000, 1_000);
   if (!app) throw new Error("the app page never reached CDP");
+  const { data, pid } = state();
+  if (!data || !under(webviewProfile(), data)) {
+    app.close();
+    if (pid) forceKill(pid);
+    saveState({ pid: null });
+    throw new Error("the WebView2 browser is not on the test profile: stopped before driving the app");
+  }
   await waitFor(() => app.ev("Boolean(document.querySelector('.primary-nav'))"), 60_000, 500);
   await app.ev(INSTALL_IPC_TRACE);
   return app;
@@ -310,13 +410,12 @@ async function select(app, sid) {
  * Refuse to act unless the test conversation is the active one, its folder
  * under --base and, when given, `workspace`. Returns its stored row.
  */
-async function guard(app, workspace) {
-  const s = state();
-  if (!s.sid) throw new Error("no test conversation: run setup first");
-  if (!(await app.ev(page(`return Boolean(row(${J(s.sid)}));`)))) throw new Error("refusing: the test conversation is not in the sidebar");
-  if ((await app.ev(page("return activeSid();"))) !== s.sid) await select(app, s.sid);
-  const r = await app.ev(page(`const s = stored(${J(s.sid)}); return { active: activeSid(), workspace: s?.workspace ?? null, host: s?.host_workspace ?? null };`));
-  if (r.active !== s.sid) throw new Error("refusing: the active conversation is not the test conversation");
+async function guard(app, workspace, sid = state().sid) {
+  if (!sid) throw new Error("no test conversation: run setup first");
+  if (!(await app.ev(page(`return Boolean(row(${J(sid)}));`)))) throw new Error("refusing: the test conversation is not in the sidebar");
+  if ((await app.ev(page("return activeSid();"))) !== sid) await select(app, sid);
+  const r = await app.ev(page(`const s = stored(${J(sid)}); return { active: activeSid(), workspace: s?.workspace ?? null, host: s?.host_workspace ?? null };`));
+  if (r.active !== sid) throw new Error("refusing: the active conversation is not the test conversation");
   if (!underBase(r.workspace)) throw new Error("refusing: the test conversation does not run under the proof folder");
   if (workspace && pathKey(r.workspace) !== pathKey(workspace)) throw new Error(`refusing: the test conversation is not in the expected folder (${pathKey(r.workspace)})`);
   return r;
@@ -438,7 +537,7 @@ async function pendingChoices(app, sid) {
 }
 
 /** Send through the composer, answer approval cards with the narrowest allow, wait for the end. */
-async function liveTurn(app, sid, prompt) {
+async function liveTurn(app, sid, prompt, options = {}) {
   const before = await app.ev(page(`return (store('muse-desktop.log.v1.' + ${J(sid)}, '[]') || []).length;`));
   const sends = (await ipc(app, "send_input")).length;
   const sent = await app.ev(page(`
@@ -452,9 +551,19 @@ async function liveTurn(app, sid, prompt) {
     return { sent: true };
   `));
   if (!sent.sent) throw new Error(`turn not sent: ${sent.reason}`);
+  return waitTurn(app, sid, { prompt, before, sends, ...options });
+}
+
+/**
+ * Until the turn of `sid` ends, answering its cards. `onCard` runs once, when
+ * the first card shows and before it is answered (the turn is running and
+ * waits for the user); the conversation is selected again after it.
+ */
+async function waitTurn(app, sid, { prompt, before, sends, onCard = null }) {
   const t0 = Date.now();
   const approvals = [];
   let sawRunning = false;
+  let hooked = false;
   const done = await waitFor(async () => {
     const v = await app.ev(page(`
       const log = store('muse-desktop.log.v1.' + ${J(sid)}, '[]') || [];
@@ -462,6 +571,12 @@ async function liveTurn(app, sid, prompt) {
         assistant: log.slice(${before}).some((e) => e.role === 'assistant' && String(e.text || '').trim()) };
     `));
     if (v.running === "true") sawRunning = true;
+    if (v.cards > 0 && onCard && !hooked) {
+      hooked = true;
+      await onCard();
+      await select(app, sid);
+      return null;
+    }
     if (v.cards > 0) {
       const choices = (await pendingChoices(app, sid))[0] ?? [];
       const allow = choices.filter((c) => !/^(abort|denied)/.test(String(c.decision)));
@@ -477,7 +592,7 @@ async function liveTurn(app, sid, prompt) {
   }, 300_000, 1_000);
   const call = (await ipc(app, "send_input")).slice(sends)[0] ?? null;
   const entries = await app.ev(page(`return (store('muse-desktop.log.v1.' + ${J(sid)}, '[]') || []).slice(${before}).map((e) => ({ role: e.role, text: String(e.text || '').slice(0, 1500) }));`));
-  return { prompt, sendInput: call ? { sessionId: call.args?.sessionId ?? null, ok: call.ok } : null, finished: Boolean(done), ms: Date.now() - t0, approvals, entries };
+  return { prompt, sendInput: call ? { sessionId: call.args?.sessionId ?? null, ok: call.ok } : null, finished: Boolean(done), ms: Date.now() - t0, approvals, cardHookRan: hooked, entries };
 }
 
 /**
@@ -514,12 +629,13 @@ const shellIn = (cwd, place) => cwd.reported.some((r) => r.from === "shell" && r
 // ---- phases ------------------------------------------------------------------------
 
 async function launch() {
-  const foreign = appPids();
-  if (foreign.length > 0) throw new Error(`blocked: ${foreign.length} muse-desktop process(es) not started by this harness are running`);
+  // Other isolated instances may run (test mode skips the single-instance
+  // guard): only this harness's port and pid are ever used.
+  if (state().pid && alive(state().pid)) throw new Error("this harness's instance is still running: run c-stop first");
   mkdirSync(BASE, { recursive: true });
-  const pid = launchApp();
+  const pid = await launchApp();
   const app = await attach();
-  return { app, result: { started: true, pidRecorded: Boolean(pid) } };
+  return { app, result: { started: true, pidRecorded: Boolean(pid), isolation: { testModeMarker: true, webviewProfileUnderTestFolder: true, dataFolder: state().data, cdpPort: PORT } } };
 }
 
 const INITIAL = {
@@ -741,7 +857,7 @@ async function restart(app) {
   await app.ev(page("q('.primary-nav button[aria-label=\"New conversation\"]')[0]?.click(); await pause(800); return localStorage.getItem('muse-desktop.active.v1');"));
   const close = await closeApp(app);
   await sleep(3_000);
-  launchApp();
+  await launchApp({ restart: true });
   const next = await attach();
   await waitFor(() => next.ev(page(`return Boolean(row(${J(s.sid)}));`)), 60_000, 1_000);
   const storedAtBoot = await next.ev(page(`const r = stored(${J(s.sid)}); return r ? { workspace: r.workspace, host_workspace: r.host_workspace ?? null } : null;`));
@@ -967,9 +1083,498 @@ async function cleanup(app) {
   return result;
 }
 
+// ---- complement (06/10/2026): isolated test mode, conversations A and C ---------
+
+const TOKEN_FILE = "docs/item1.txt";
+const NEW_FILE = "item1-written.txt";
+const C_INITIAL = { ...INITIAL, [TOKEN_FILE]: "item 1, the version both folders share\n" };
+const BULK_FILES = Number(argValue("--bulk", "2000"));
+const T1 = "M2-05 complement, step 1. Run Get-Location with your shell tool now, then reply with only the exact path it printed.";
+const T2 = (s) => `M2-05 complement, step 2. Do exactly these three steps, in this order, once each. 1) Run Get-Location with your shell tool. 2) Use your read_file tool, not the shell, to read ${TOKEN_FILE} in your current workspace. 3) Use your write_file tool, not the shell, to create ${NEW_FILE} in your current workspace with exactly this one line: WRITTEN-${s.written}. Then reply with only the line of ${TOKEN_FILE} that starts with ONLY-IN-WORKTREE, or NONE if it has no such line.`;
+const SEND_3B = "M2-05 complement: sent while conversation A moves this folder's work. It must not start a turn.";
+
+/**
+ * fs.watch (recursive) on `root` until stop(): every event, timed, with its
+ * path relative to `root`. A nameless event is libuv's overflow report
+ * (events were lost): recorded as OVERFLOW.
+ */
+const OVERFLOW = "<no name: events lost>";
+function watchTree(root) {
+  const events = [];
+  const t0 = Date.now();
+  const watcher = watch(root, { recursive: true }, (type, name) => {
+    events.push({ atMs: Date.now() - t0, type, path: name ? String(name).replaceAll("\\", "/") : OVERFLOW });
+  });
+  return { stop: async (quietMs = 1_500) => { await sleep(quietMs); watcher.close(); return events; } };
+}
+
+/**
+ * Local's own files only: one non-recursive watcher per folder, .git and
+ * .muse left out, so a burst of Git object writes cannot overflow it. For a
+ * step that deletes no folder (a watched folder cannot go while watched).
+ */
+function watchWorkingTree(root) {
+  const dirs = [root];
+  for (let i = 0; i < dirs.length; i++) {
+    for (const entry of readdirSync(dirs[i], { withFileTypes: true })) {
+      if (entry.isDirectory() && !(dirs[i] === root && (entry.name === ".git" || entry.name === ".muse"))) dirs.push(join(dirs[i], entry.name));
+    }
+  }
+  const events = [];
+  const t0 = Date.now();
+  const watchers = dirs.map((dir) => watch(dir, (type, name) => {
+    events.push({ atMs: Date.now() - t0, type, path: name ? [relative(root, dir), String(name)].filter(Boolean).join("/").replaceAll("\\", "/") : OVERFLOW });
+  }));
+  return { folders: dirs.length, stop: async (quietMs = 1_500) => { await sleep(quietMs); for (const w of watchers) w.close(); return events; } };
+}
+
+/** Where an event under Local landed: Local's files, a worktree (`names` labels them), Git, the app's .muse. */
+function placeOf(path, names = {}) {
+  if (path === OVERFLOW) return "overflow";
+  if (path === ".git" || path.startsWith(".git/")) return "git";
+  const inWorktree = path.match(/^\.muse\/worktrees\/([^/]+)\/(.+)$/);
+  if (inWorktree) return inWorktree[2] === ".git" ? "git" : names[inWorktree[1]] ?? `worktree ${inWorktree[1]}`;
+  if (path === ".muse" || path.startsWith(".muse/")) return "app";
+  return "local";
+}
+
+function summarize(events, place) {
+  const by = {};
+  for (const event of events) {
+    const where = place(event.path);
+    by[where] ??= { count: 0, paths: new Set() };
+    by[where].count += 1;
+    by[where].paths.add(event.path);
+  }
+  return {
+    total: events.length,
+    byPlace: Object.fromEntries(Object.entries(by).map(([where, v]) => [where, { count: v.count, paths: [...v.paths].sort().slice(0, 40), morePaths: Math.max(0, v.paths.size - 40) }])),
+    first: events.slice(0, 80).map((event) => ({ ...event, place: place(event.path) })),
+  };
+}
+const eventsAt = (summary, where) => summary?.byPlace?.[where]?.count ?? 0;
+
+const composerState = (app) => app.ev(page(`
+  const field = document.querySelector('textarea[aria-label="Message Muse"]');
+  const send = document.querySelector('button.send');
+  return field ? { active: activeSid(), disabled: field.disabled, placeholder: field.placeholder, sendDisabled: send ? send.disabled : null } : { active: activeSid(), found: false };
+`));
+
+const logStats = (app, sid) => app.ev(page(`
+  const log = store('muse-desktop.log.v1.' + ${J(sid)}, '[]') || [];
+  return { entries: log.length, user: log.filter((e) => e.role === 'user').length, assistant: log.filter((e) => e.role === 'assistant').length, running: running(${J(sid)}) };
+`));
+
+/** The Move action as the Actions dialog shows it; clicked (a disabled button ignores it); the dialog closed. */
+async function moveButtonState(app, sid) {
+  const previews = (await ipc(app, "handoff_preview")).length;
+  const button = await app.ev(page(`
+    const actions = row(${J(sid)})?.querySelector("button[aria-label^='Actions for']");
+    if (!actions) return { found: false, reason: 'no actions button' };
+    actions.click();
+    await pause(500);
+    const dialog = document.querySelector('dialog[open]');
+    const b = dialog ? [...dialog.querySelectorAll('button')].find((n) => /^(Move to worktree|Move back to local)$/.test((n.innerText || '').trim())) : null;
+    const out = b ? { found: true, label: (b.innerText || '').trim(), disabled: b.disabled, title: b.title || null } : { found: false, reason: 'no move action' };
+    if (b && b.disabled) b.click();
+    await pause(400);
+    document.querySelector('dialog[open] button[aria-label="Close"]')?.click();
+    await pause(300);
+    return out;
+  `));
+  await sleep(1_500);
+  return { ...button, previewCalls: (await ipc(app, "handoff_preview")).length - previews };
+}
+
+/** Welcome screen -> "New project from a folder…" (the folder dialog answered) -> first message -> Start. */
+async function startViaWelcome(app, folder, message) {
+  const before = (await ipc(app, "start_session")).length;
+  await app.ev(`(window.__baselineIpc.dialogQueue.push(${J(folder)}), true)`);
+  const outcome = await app.ev(page(`
+    q('.primary-nav button[aria-label="New conversation"]')[0]?.click();
+    let picker = null;
+    for (let i = 0; i < 50 && !picker; i++) { picker = document.querySelector('details.project-picker-control'); if (!picker) await pause(100); }
+    if (!picker) return { started: false, reason: 'no project picker' };
+    picker.open = true;
+    await pause(300);
+    const add = document.querySelector('.project-option-new');
+    if (!add) return { started: false, reason: 'no new-project option' };
+    add.click();
+    let note = '';
+    for (let i = 0; i < 80; i++) { note = text(document.querySelector('.welcome-project-note')) || ''; if (note.includes(${J(basename(folder))})) break; await pause(100); }
+    if (!note.includes(${J(basename(folder))})) return { started: false, reason: 'project not selected: ' + note };
+    setValue(document.querySelector('textarea[aria-label="Your first message"]'), ${J(message)});
+    await pause(300);
+    const start = document.querySelector('button.welcome-send');
+    if (!start || start.disabled) return { started: false, reason: 'start disabled' };
+    start.click();
+    return { started: true, note };
+  `));
+  if (!outcome.started) throw new Error(`could not start from the welcome screen: ${outcome.reason}`);
+  const call = await nextIpc(app, "start_session", before, 90_000);
+  const meta = parse(call?.result);
+  if (!call?.ok || !meta?.session_id) throw new Error(`start_session failed: ${J(call?.result ?? null)}`);
+  return { sid: meta.session_id, note: outcome.note, startSession: { ok: call.ok, workspacePath: call.args?.workspacePath ?? null,
+    authorizationMode: call.args?.authorizationMode ?? null, sandboxMode: call.args?.sandboxMode ?? null, hostApprovalMode: meta.approval_mode ?? null } };
+}
+
+/** Local's own uncommitted work (items 2 and 4): line 3 changed otherwise than A's, a staged change, a deletion, a binary edit, an untracked note. */
+function ensureLocalWork() {
+  const lines10 = C_INITIAL["src/app.txt"].split("\n").filter(Boolean);
+  lines10[2] = "line 3 changed differently in Local";
+  mkdirSync(join(REPO, "notes"), { recursive: true });
+  for (const [path, content] of [["src/app.txt", `${lines10.join("\n")}\n`], ["notes/local.md", "- [ ] Local's own note, untracked\n"]]) {
+    if (!existsSync(join(REPO, path)) || readFileSync(join(REPO, path), "utf8") !== content) writeFileSync(join(REPO, path), content);
+  }
+  if (readFileSync(join(REPO, "staged.txt"), "utf8") !== "staged v3, Local's own\n") writeFileSync(join(REPO, "staged.txt"), "staged v3, Local's own\n");
+  git(REPO, ["add", "--", "staged.txt"]);
+  rmSync(join(REPO, "deleted.txt"), { force: true });
+  if (!readFileSync(join(REPO, "assets/blob.bin")).equals(BLOB_V2)) writeFileSync(join(REPO, "assets/blob.bin"), BLOB_V2);
+}
+
+async function cSetup(app) {
+  if (existsSync(REPO)) throw new Error(`${BASE} already holds a repository; pass another --base`);
+  for (const dir of ["src", "assets", "docs"]) mkdirSync(join(REPO, dir), { recursive: true });
+  git(REPO, ["init", "-q", "-b", "main"]);
+  git(REPO, ["config", "user.name", "m2-05 proof"]);
+  git(REPO, ["config", "user.email", "m2-05@localhost"]);
+  for (const [path, content] of Object.entries(C_INITIAL)) writeFileSync(join(REPO, path), content);
+  writeFileSync(join(REPO, "assets/blob.bin"), BLOB_V1);
+  git(REPO, ["add", "-A"]);
+  git(REPO, ["commit", "-q", "-m", "initial"]);
+  // Every tracked file rewritten by Git: Local and a fresh worktree hold the same bytes.
+  for (const path of lines(git(REPO, ["ls-files"]))) rmSync(join(REPO, path));
+  git(REPO, ["checkout", "--", "."]);
+  const local = side(REPO);
+  let autocrlf = null;
+  try { autocrlf = git(REPO, ["config", "--get", "core.autocrlf"]).trim(); } catch { /* unset */ }
+  saveState({ cleanMap: local.files, token: randomBytes(4).toString("hex").toUpperCase(), written: randomBytes(4).toString("hex").toUpperCase() });
+  const profile = await app.ev(page("return { projects: (store('muse-desktop.projects.v1', '[]') || []).length, sessions: (store('muse-desktop.sessions.v1', '[]') || []).length, posture: localStorage.getItem('muse-desktop.authorization-mode.v1') };"));
+  return { repo: { autocrlf, local }, profile, verdict: { repoClean: local.status.length === 0, emptyProfile: profile.projects === 0 && profile.sessions === 0 } };
+}
+
+/** Rehearsal only: A and C by a direct start_session each (no turn), adopted on a reload. */
+async function cRehearseStart(app) {
+  if (state().a) throw new Error("conversations already exist under this --base");
+  const user = await readUser(app);
+  const a = await startTestConversation(app, user);
+  const aSid = state().sid;
+  const c = await startTestConversation(app, user);
+  saveState({ a: aSid, c: state().sid, sid: aSid, forgedStart: true });
+  await select(app, aSid);
+  return { forged: "A and C started by a direct start_session each (no turn), adopted on a reload", a: a.view.stored, c: c.view.stored,
+    verdict: { bothInLocal: [a, c].every((x) => pathKey(x.view.stored?.workspace) === pathKey(REPO)) } };
+}
+
+async function cStart(app) {
+  if (state().a) throw new Error("conversation A already exists under this --base");
+  // A dry run (--rehearse) refuses the first message in the page: no turn, no card.
+  await app.ev(`(window.__baselineIpc.block = ${REHEARSE ? "['send_input']" : "[]"}, true)`);
+  const sends = (await ipc(app, "send_input")).length;
+  const started = await startViaWelcome(app, REPO, T1);
+  const a = started.sid;
+  saveState({ a, sid: a });
+  let whileRunning = null;
+  const readWhileRunning = async () => {
+    whileRunning = { running: await app.ev(page(`return running(${J(a)});`)), composer: await composerState(app), move: await moveButtonState(app, a) };
+  };
+  const turn = REHEARSE
+    ? (await sleep(5_000), await readWhileRunning(), { finished: false, entries: [], rehearsal: true })
+    : await waitTurn(app, a, { prompt: T1, before: 0, sends, onCard: readWhileRunning });
+  const cwd = reportedCwd(turn);
+  const view = await sessionView(app, a);
+  // C: A's own "Fork conversation" once the turn is over (no turn).
+  const forks = (await ipc(app, "fork_session")).length;
+  const click = await clickAction(app, a, "Fork conversation");
+  const fork = click.clicked ? await nextIpc(app, "fork_session", forks, 60_000) : null;
+  let c = parse(fork?.result)?.session_id ?? null;
+  let fallback = null;
+  if (c) saveState({ c });
+  else if (!REHEARSE) {
+    // Declared fallback: C by a direct start_session (no turn), adopted on a reload.
+    await startTestConversation(app, await readUser(app));
+    c = state().sid;
+    saveState({ c, sid: a, forgedStart: true });
+    fallback = "the fork failed: C started by a direct start_session (no turn), adopted on a reload";
+  }
+  await sleep(1_500);
+  const cView = c ? await sessionView(app, c) : null;
+  await select(app, a);
+  const result = { liveTurns: REHEARSE ? 0 : 1, welcome: { note: started.note, startSession: started.startSession }, turn, cwd, whileRunning, view,
+    fork: { click, ok: fork?.ok ?? null, result: fork?.ok ? null : fork?.result ?? null, fallback, c: cView } };
+  result.verdict = {
+    turnFinished: turn.finished,
+    startedInLocal: pathKey(started.startSession.workspacePath) === pathKey(REPO) && pathKey(view.stored?.workspace) === pathKey(REPO),
+    modelCwdLocal: shellIn(cwd, "local"),
+    moveRefusedWhileRunning: whileRunning?.running === "true" && whileRunning.move.found === true && whileRunning.move.disabled === true && whileRunning.move.previewCalls === 0,
+    refusalSaysWhy: /respond/i.test(whileRunning?.move.title ?? ""),
+    forkInLocal: Boolean(c) && pathKey(cView?.stored?.workspace) === pathKey(REPO),
+  };
+  return result;
+}
+
+/**
+ * Item 3, second half: A moves its work (bulk files keep Git busy) while C,
+ * idle in the same folder, sends through its composer. No IPC block, except
+ * send_input in a rehearsal; the send goes only while the move is seen running.
+ */
+async function cSendDuringMove(app) {
+  const s = state();
+  if (!s.c) throw new Error("no conversation C: run c-start first");
+  await guard(app, REPO, s.a);
+  // 1. A's work in Local: the line only the worktree will hold (item 1), line 3
+  //    (item 4), a staged change, an ignored file, bulk files.
+  const lines10 = C_INITIAL["src/app.txt"].split("\n").filter(Boolean);
+  lines10[2] = "line 3 changed in Local, moved with A";
+  writeFileSync(join(REPO, "src/app.txt"), `${lines10.join("\n")}\n`);
+  writeFileSync(join(REPO, TOKEN_FILE), `${C_INITIAL[TOKEN_FILE]}ONLY-IN-WORKTREE-${s.token}\n`);
+  writeFileSync(join(REPO, "staged.txt"), "staged v2, moved with A\n");
+  git(REPO, ["add", "--", "staged.txt"]);
+  mkdirSync(join(REPO, "bulk"), { recursive: true });
+  for (let i = 0; i < BULK_FILES; i++) writeFileSync(join(REPO, "bulk", `f${String(i).padStart(5, "0")}.txt`), `bulk ${i} ${s.token}\n`);
+  writeFileSync(join(REPO, "build.log"), "ignored, stays in Local\n");
+  const before = { local: side(REPO), refs: handoffRefs() };
+  const cBefore = await logStats(app, s.c);
+  await app.ev(`(window.__baselineIpc.block = ${REHEARSE ? "['send_input']" : "[]"}, true)`);
+  // 2. A's Move to worktree, answered OK; while it runs, C sends.
+  const n = { move: (await ipc(app, "handoff_move")).length, send: (await ipc(app, "send_input")).length };
+  const moveCall = async () => (await ipc(app, "handoff_move")).slice(n.move)[0] ?? null;
+  const click = await clickAction(app, s.a, "Move to worktree");
+  if (!click.clicked) throw new Error(`Move to worktree: ${J(click)}`);
+  // The question waits for the preview: one new loose object per bulk file, ~65 ms each on the proof machine.
+  const dialog = await nativeDialog(s.pid, "OK", 600_000);
+  const started = await waitFor(moveCall, 60_000, 100);
+  const tStart = Date.now();
+  const composerA = await composerState(app);
+  const send = { attempted: false };
+  if (started && (await moveCall()).result === undefined) {
+    await app.ev(page(`const b = row(${J(s.c)})?.querySelector('button.session-select'); if (b) b.click(); return !!b;`));
+    await waitFor(() => app.ev(page(`return activeSid() === ${J(s.c)} && Boolean(document.querySelector('textarea[aria-label="Message Muse"]'));`)), 10_000, 100);
+    send.composerC = await composerState(app);
+    if ((await moveCall()).result !== undefined) send.reason = "the move ended before C's composer was ready";
+    else if (send.composerC?.disabled !== false) send.reason = "C's composer is not usable";
+    else {
+      send.attempted = true;
+      send.click = await app.ev(page(`
+        setValue(document.querySelector('textarea[aria-label="Message Muse"]'), ${J(SEND_3B)});
+        await pause(200);
+        const b = document.querySelector('button.send');
+        if (!b || b.disabled) return { clicked: false };
+        b.click();
+        return { clicked: true };
+      `));
+      const answered = await waitFor(async () => { const c = (await ipc(app, "send_input")).slice(n.send)[0]; return c?.result !== undefined ? c : null; }, 30_000, 100);
+      const moveAtAnswer = await moveCall();
+      send.call = answered ? { sessionId: answered.args?.sessionId ?? null, atMs: answered.atMs, ok: answered.ok, blockedByHarness: answered.blocked, result: parse(answered.result) } : null;
+      send.moveCallAtMs = started.atMs;
+      send.moveStillRunningWhenAnswered = moveAtAnswer?.result === undefined;
+    }
+  } else send.reason = started ? "the move ended before the send" : "no handoff_move call";
+  const moved = await waitFor(async () => { const m = await moveCall(); return m?.result !== undefined ? m : null; }, 300_000, 200);
+  const moveSeenMs = Date.now() - tStart;
+  await waitFor(() => app.ev(page("return !q('button').some((b) => /^(Checking what will move|Creating a worktree|Moving the work|Starting Muse there)/.test((b.innerText || '').trim()));")), 30_000, 400);
+  await sleep(1_500);
+  // 3. C as it shows now; its unsent row is discarded (never retried).
+  const cAfter = await app.ev(page(`
+    return { active: activeSid(), banner: banner(),
+      unsent: q('.pending-send').map((n) => ({ text: text(n.querySelector('.pending-send-text')), error: text(n.querySelector('.pending-send-error')) })) };
+  `));
+  cAfter.log = await logStats(app, s.c);
+  cAfter.discarded = cAfter.active === s.c && cAfter.unsent.length > 0
+    ? await app.ev(page("const b = q('.pending-send button').find((n) => n.innerText.trim() === 'Discard'); if (b) b.click(); await pause(600); return { clicked: Boolean(b), left: q('.pending-send').length };"))
+    : null;
+  await select(app, s.a);
+  const w1 = moved?.ok ? parse(moved.result)?.target ?? null : null;
+  if (w1) saveState({ w1 });
+  const after = { local: side(REPO), w1: w1 ? side(w1) : null, refs: handoffRefs() };
+  const view = await sessionView(app, s.a);
+  const result = { bulkFiles: BULK_FILES, rehearsal: REHEARSE, before: { local: before.local, refs: before.refs.length },
+    action: { click, dialog, move: moved ? { atMs: moved.atMs, ok: moved.ok, result: parse(moved.result) } : null, moveSeenRunningMs: moveSeenMs },
+    composerA, send, cBefore, cAfter, after: { local: after.local, w1: after.w1, refs: after.refs.length }, view };
+  result.verdict = {
+    moved: moved?.ok === true && after.w1 !== null,
+    composerARefusesWithReason: composerA?.active === s.a && composerA.disabled === true && /folder is being moved: send once the move is done/.test(composerA.placeholder ?? ""),
+    sendDuringTheMove: send.attempted === true && send.moveStillRunningWhenAnswered === true && send.call?.atMs > send.moveCallAtMs,
+    sendRefusedHonestly: send.call?.ok === false && send.call.blockedByHarness === false
+      && /this conversation's folder is being moved: send again once the move is done/.test(String(send.call.result)),
+    keptAsUnsent: cAfter.unsent.some((u) => /being moved/.test(u.error ?? "")),
+    noTurnInC: cAfter.log.assistant === cBefore.assistant && cAfter.log.running !== "true",
+    worktreeHoldsTheWork: after.w1 !== null && sameMap(after.w1.files, without(before.local.files, ["build.log"])),
+    localClean: after.local.status.length === 0 && sameMap(after.local.files, { ...s.cleanMap, "build.log": before.local.files["build.log"] }),
+    snapshotRef: after.refs.length === before.refs.length + 2,
+    conversationFollowed: pathKey(view.stored?.workspace) === pathKey(w1),
+  };
+  return result;
+}
+
+/** Items 1 and 3: A's file tools in its worktree; while its first card waits, every way to move. */
+async function cFileTools(app) {
+  const s = state();
+  if (!s.w1 || !s.c) throw new Error("run c-send-during-move first");
+  await guard(app, s.w1, s.a);
+  mkdirSync(join(REPO, "notes"), { recursive: true });
+  writeFileSync(join(REPO, "notes/cross.md"), "Local's own work while A answers in its worktree\n");
+  const item1 = () => {
+    const local = readFileSync(join(REPO, TOKEN_FILE));
+    const worktree = readFileSync(join(s.w1, TOKEN_FILE));
+    return { local: sha(local), worktree: sha(worktree), localHasToken: local.includes(s.token), worktreeHasToken: worktree.includes(s.token) };
+  };
+  const before = { local: side(REPO), w1: side(s.w1), refs: handoffRefs(), item1: item1() };
+  await app.ev("(window.__baselineIpc.block = [], true)");
+  let whileRunning = null;
+  const turn = await liveTurn(app, s.a, T2(s), { onCard: async () => {
+    const out = { running: await app.ev(page(`return running(${J(s.a)});`)), card: await app.ev(page("return text(q('.approvals .approval')[0]);")) };
+    out.self = await moveButtonState(app, s.a);
+    // The supervisor, called directly: A cannot move while it answers.
+    out.direct = await app.ev(`(async () => { try { return { ok: true, value: await window.__TAURI_INTERNALS__.invoke('handoff_move', { sessionId: ${J(s.a)}, target: ${J(REPO)} }) }; } catch (e) { return { ok: false, error: String(e) }; } })()`);
+    // C, idle in Local (A's host folder), moves through the real UI.
+    const watcher = watchTree(REPO);
+    await select(app, s.c);
+    out.cMove = await moveThroughUi(app, s.c, "Move to worktree");
+    const events = await watcher.stop();
+    const wc = out.cMove.move?.target ?? null;
+    if (wc) saveState({ wc });
+    out.cEvents = summarize(events, (p) => placeOf(p, wc ? { [basename(wc)]: "c's new worktree" } : {}));
+    out.cWorktree = wc && existsSync(wc) ? side(wc) : null;
+    out.cView = await sessionView(app, s.c);
+    whileRunning = out;
+  } });
+  const after = { local: side(REPO), w1: side(s.w1), refs: handoffRefs(), item1: item1() };
+  const written = existsSync(join(s.w1, NEW_FILE)) ? readFileSync(join(s.w1, NEW_FILE), "utf8") : null;
+  const tools = turn.entries.filter((e) => e.role === "tool").map((e) => e.text.slice(0, 400));
+  const answer = turn.entries.filter((e) => e.role === "assistant").at(-1)?.text ?? "";
+  const cwd = reportedCwd(turn);
+  const result = { liveTurns: 1, before: { item1: before.item1, local: before.local, w1: before.w1, refs: before.refs.length }, turn, cwd, tools, answer,
+    written: written === null ? null : { sha: sha(written), text: written }, whileRunning,
+    after: { item1: after.item1, local: after.local, w1: after.w1, refs: after.refs.length } };
+  result.verdict = {
+    turnFinished: turn.finished,
+    sameSession: turn.sendInput?.sessionId === s.a,
+    modelCwdWorktree: shellIn(cwd, "worktree 1"),
+    readFileUsed: tools.some((t) => /^read_file\b/.test(t) && t.includes("item1")),
+    readSawTheWorktreeVersion: answer.includes(`ONLY-IN-WORKTREE-${s.token}`) && !before.item1.localHasToken && before.item1.worktreeHasToken,
+    writeFileUsed: tools.some((t) => /^write_file\b/.test(t) && t.includes(NEW_FILE)),
+    newFileInWorktreeOnly: written?.replace(/\r?\n$/, "") === `WRITTEN-${s.written}` && !existsSync(join(REPO, NEW_FILE)),
+    localUntouched: sameMap(after.local, before.local),
+    worktreeGainedOnlyTheNewFile: NEW_FILE in after.w1.files && sameMap(without(after.w1.files, [NEW_FILE]), before.w1.files),
+    // Item 3, while the turn waited on its first card.
+    selfMoveRefused: whileRunning?.running === "true" && whileRunning.self.disabled === true && whileRunning.self.previewCalls === 0,
+    selfRefusalSaysWhy: /respond/i.test(whileRunning?.self.title ?? ""),
+    supervisorRefusesWhileRunning: whileRunning?.direct.ok === false && /still responding/.test(whileRunning.direct.error ?? ""),
+    otherConversationRefused: whileRunning?.cMove.move?.ok === false && /still responding in this folder/.test(J(whileRunning.cMove.move.result)),
+    refusalShown: /^The conversation was not moved: a conversation is still responding/.test(whileRunning?.cMove.banner ?? ""),
+    refusedMoveTouchedNoLocalFile: eventsAt(whileRunning?.cEvents, "local") === 0 && eventsAt(whileRunning?.cEvents, "overflow") === 0
+      && pathKey(whileRunning?.cView.stored?.workspace) === pathKey(REPO),
+  };
+  return result;
+}
+
+/**
+ * Item 2: C moves Local to a new worktree while another process holds a Local
+ * file open (FileShare.Read, no delete): a tracked file Git must rewrite, or an
+ * untracked one it must delete. Local watched, the new worktree included.
+ */
+async function cHeld(app, untracked) {
+  const s = state();
+  if (!s.c) throw new Error("no conversation C");
+  await guard(app, REPO, s.c);
+  await app.ev("(window.__baselineIpc.block = ['send_input'], true)");
+  ensureLocalWork();
+  const held = untracked ? "notes/local.md" : "src/app.txt";
+  const before = { local: side(REPO), refs: handoffRefs() };
+  const viewBefore = await sessionView(app, s.c);
+  const lock = await holdOpen(join(REPO, ...held.split("/")));
+  if (!lock.ready) throw new Error("the lock holder did not start");
+  const watcher = watchTree(REPO);
+  let action;
+  let events;
+  try {
+    action = await moveThroughUi(app, s.c, "Move to worktree");
+  } finally {
+    events = await watcher.stop();
+  }
+  const released = await lock.release();
+  const target = action.move?.target ?? null;
+  if (target) saveState({ [untracked ? "w3" : "w2"]: target });
+  const ev = summarize(events, (p) => placeOf(p, target ? { [basename(target)]: "target" } : {}));
+  const after = { local: side(REPO), target: target && existsSync(target) ? side(target) : null, refs: handoffRefs() };
+  const view = await sessionView(app, s.c);
+  const newRefs = after.refs.filter((r) => !before.refs.includes(r));
+  const result = { conversationC: s.forgedStart ? "started by a direct start_session, no turn (rehearsal)" : "A's Fork conversation, through the UI",
+    held: { path: held, share: "Read (no Delete)", released }, before: { local: before.local, refs: before.refs.length }, action, events: ev,
+    after: { local: after.local, target: after.target, refs: after.refs.length }, newRefs, view };
+  // What a move reported as done left behind in Local, if it was reported done.
+  if (action.move?.ok === true) result.leftInSource = Object.keys(after.local.files).filter((p) => !(p in s.cleanMap) && p !== "build.log");
+  result.verdict = {
+    confirmAsked: action.dialog?.found === true && action.dialog.answer === "OK" && Boolean(action.dialog.clicked),
+    targetReceivedTheWork: (ev.byPlace.target?.paths ?? []).some((p) => p.endsWith("notes/local.md")),
+    moveFailed: action.move?.ok === false,
+    honestMessage: (untracked
+      ? /^The conversation was not moved: the source could not be cleaned; both sides were restored as they were: .*notes\/local\.md/
+      : /^The conversation was not moved: the source could not be cleaned; both sides were restored as they were: .*unable to unlink old 'src\/app\.txt'/).test(action.banner ?? ""),
+    localByteIdentical: sameMap(after.local, before.local),
+    targetBackToItsCheckout: after.target !== null && after.target.status.length === 0 && sameMap(after.target.files, s.cleanMap),
+    snapshotKept: newRefs.length === 2,
+    heldFileUnchanged: after.local.files[held] === before.local.files[held],
+    conversationStays: pathKey(view.stored?.workspace) === pathKey(REPO) && view.logEntries === viewBefore.logEntries,
+    noEventLost: eventsAt(ev, "overflow") === 0,
+  };
+  return result;
+}
+
+/** Item 4: A's way back refused on a conflict, in the UI and directly; both folders watched. */
+async function cConflict(app) {
+  const s = state();
+  await guard(app, s.w1, s.a);
+  await app.ev("(window.__baselineIpc.block = ['send_input'], true)");
+  ensureLocalWork();
+  const before = { local: side(REPO), w1: side(s.w1), refs: handoffRefs() };
+  // Local's folders one by one (Git's object writes in .git overflowed a
+  // recursive watcher on Local in the rehearsal), the worktree recursively
+  // (its Git data lives in Local's .git), and Local's .git for the record.
+  // The root watcher also sees the .git and .muse folders' own entries change.
+  const placeLocal = (p) => placeOf(p);
+  const placeWorktree = (p) => (p === OVERFLOW ? "overflow" : p === ".git" ? "git" : "worktree 1");
+  const placeGit = (p) => (p === OVERFLOW ? "overflow" : "git");
+  const watched = async (act) => {
+    const local = watchWorkingTree(REPO);
+    const worktree = watchTree(s.w1);
+    const gitDir = watchTree(join(REPO, ".git"));
+    const outcome = await act();
+    return { outcome, localFolders: local.folders, events: { local: summarize(await local.stop(), placeLocal), worktree: summarize(await worktree.stop(0), placeWorktree), git: summarize(await gitDir.stop(0), placeGit) } };
+  };
+  const ui = await watched(() => moveThroughUi(app, s.a, "Move back to local", { answer: "Cancel", expectMove: false, dialogMs: 10_000 }));
+  const direct = await watched(() => app.ev(`(async () => { try { return { ok: true, value: await window.__TAURI_INTERNALS__.invoke('handoff_move', { sessionId: ${J(s.a)}, target: ${J(REPO)} }) }; } catch (e) { return { ok: false, error: String(e) }; } })()`));
+  const after = { local: side(REPO), w1: side(s.w1), refs: handoffRefs() };
+  const view = await sessionView(app, s.a);
+  // The user's files on both sides; a lost-event report on either counts against.
+  const userFiles = (e) => eventsAt(e.local, "local") + eventsAt(e.local, "overflow") + eventsAt(e.worktree, "worktree 1") + eventsAt(e.worktree, "overflow");
+  const result = { before: { local: before.local, w1: before.w1, refs: before.refs.length }, localFoldersWatched: ui.localFolders, ui: ui.outcome, uiEvents: ui.events, direct: direct.outcome, directEvents: direct.events,
+    after: { local: after.local, w1: after.w1, refs: after.refs.length }, view };
+  result.verdict = {
+    previewConflict: (ui.outcome.preview?.result?.conflicts ?? []).includes("src/app.txt"),
+    refusedBeforeTheQuestion: ui.outcome.dialog?.found === false && ui.outcome.moveCalls === 0 && /^Nothing was moved: \d+ files? would conflict in Local \(.*src\/app\.txt/.test(ui.outcome.banner ?? ""),
+    supervisorRefuses: direct.outcome.ok === false && /nothing was moved: \d+ file\(s\) would conflict in the target: .*src\/app\.txt/.test(direct.outcome.error ?? ""),
+    noFileEventUi: userFiles(ui.events) === 0,
+    noFileEventDirect: userFiles(direct.events) === 0,
+    localUnchanged: sameMap(after.local, before.local),
+    worktreeUnchanged: sameMap(after.w1, before.w1),
+    noSnapshotRef: after.refs.length === before.refs.length,
+    conversationStays: pathKey(view.stored?.workspace) === pathKey(s.w1),
+  };
+  return result;
+}
+
+async function cStop(app) {
+  const close = await closeApp(app);
+  return { close, verdict: { closedGracefully: close.graceful, exited: close.exited } };
+}
+
 // ---- main ---------------------------------------------------------------------------
 
-const PHASES = { setup, "confirm-defect": confirmDefect, "turn-local": turnLocal, move, "turn-worktree": turnWorktree, back, conflict, failure, final: finalMove, "ignored-count": ignoredCount, cleanup };
+const PHASES = { setup, "confirm-defect": confirmDefect, "turn-local": turnLocal, move, "turn-worktree": turnWorktree, back, conflict, failure, final: finalMove, "ignored-count": ignoredCount, cleanup,
+  "c-setup": cSetup, "c-rehearse-start": cRehearseStart, "c-start": cStart, "c-send-during-move": cSendDuringMove, "c-file-tools": cFileTools,
+  "c-held-tracked": (app) => cHeld(app, false), "c-held-untracked": (app) => cHeld(app, true), "c-conflict": cConflict, "c-stop": cStop };
 if (PHASE === "rederive") {
   // Recheck the stored turns with the current classifier: no app, no turn.
   // The live reading (with the `\\?\` flag the redaction removes) stays in `cwd`.
@@ -1005,14 +1610,16 @@ if (PHASE === "stop") {
   process.stdout.write(`${JSON.stringify(await closeApp(null))}\n`);
   process.exit(0);
 }
-if (PHASE !== "launch" && PHASE !== "restart" && !PHASES[PHASE]) {
-  process.stderr.write("usage: cdp-m2-05-handoff.mjs <launch|stop|setup|confirm-defect|turn-local|move|turn-worktree|restart|back|conflict|failure|final|ignored-count|cleanup|rederive> [--base dir] [--exe path] [--out file]\n");
+if (PHASE !== "launch" && PHASE !== "c-launch" && PHASE !== "restart" && !PHASES[PHASE]) {
+  process.stderr.write("usage: cdp-m2-05-handoff.mjs <launch|stop|setup|confirm-defect|turn-local|move|turn-worktree|restart|back|conflict|failure|final|ignored-count|cleanup|rederive"
+    + "|c-launch|c-setup|c-rehearse-start|c-start|c-send-during-move|c-file-tools|c-held-tracked|c-held-untracked|c-conflict|c-stop>"
+    + " [--base dir] [--exe path] [--engine path] [--out file] [--as key] [--bulk n] [--rehearse]\n");
   process.exit(1);
 }
 let app = null;
 try {
   let result;
-  if (PHASE === "launch") {
+  if (PHASE === "launch" || PHASE === "c-launch") {
     ({ app, result } = await launch());
   } else {
     if (!state().pid || !alive(state().pid)) throw new Error("the harness's app instance is not running: run launch first");
@@ -1020,7 +1627,7 @@ try {
     if (PHASE === "restart") ({ app, result } = await restart(app));
     else result = await PHASES[PHASE](app);
   }
-  if (PHASE !== "cleanup" && app) {
+  if (PHASE !== "cleanup" && PHASE !== "c-stop" && app) {
     await app.ev("(window.__baselineIpc.block = [], true)");
     result.consoleErrors = app.errors.slice(0, 20);
   }

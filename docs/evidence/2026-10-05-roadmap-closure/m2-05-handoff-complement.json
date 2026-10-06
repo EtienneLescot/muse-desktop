@@ -1,0 +1,4963 @@
+{
+  "schema": "muse-desktop.m2-05-handoff-complement.v1",
+  "ticket": "M2-05",
+  "complements": "m2-05-handoff.json",
+  "date": "2026-10-06",
+  "commit": "4e08e2a",
+  "platform": "win32 10.0.26200, debug build in its isolated test mode (ADR 0003), WebView2 over CDP",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "git": "git version 2.48.1.windows.1",
+  "liveTurns": 2,
+  "handWritten": {
+    "note": "Written by hand after the runs, from the phases below; the harness writes everything else (merge() in scripts/cdp-m2-05-handoff.mjs). Each phase records its commit, whether the product tree was clean, and the exe's SHA-256.",
+    "summary": "Complement to m2-05-handoff.json on Muse 1.4.2, in the app's isolated test mode, 2 live turns. All four open points hold on the fixed build (4e08e2a): the model's file tools follow the move; a move whose source cleanup fails after the target received the work leaves both sides byte-identical with an honest message; a move is refused while a turn runs and a send is refused while a move runs, with their reasons; a conflict is refused with no event on either side's files. Two defects found and fixed: a file Git cannot delete made the move report success (8dca438), and the Move action was disabled with no reason while Muse responds (4e08e2a).",
+    "items": {
+      "1 file tools after a move": "c-file-tools: after Move to worktree, read_file on docs/item1.txt returned the worktree version (line 2 ONLY-IN-WORKTREE-<token>, absent from Local's file: hashes differ, before and after) and the model answered with that line; write_file wrote item1-written.txt (17 bytes) in the worktree; Local byte-identical, the worktree gained only that file.",
+      "2 both-sides undo": "c-held-tracked: src/app.txt held open in Local (FileShare.Read, no delete); the new worktree received the work (74 events there), then Git failed on 'unable to unlink old src/app.txt'; both sides restored (Local's files, status and index identical; the worktree back to its checkout), 2 snapshot refs kept, held file never written, conversation stays. c-held-untracked (fixed build): notes/local.md held; refused the same way with 'Git could not delete notes/local.md (in use by another program?)'. Before the fix (c-held-untracked-before-fix, a9ffff2): Git only warned and exited 0, the move reported 'Moved 4 changed files and 1 untracked file … This conversation now runs there' while Local still held notes/local.md.",
+      "3 turn/move lock": "c-start and c-file-tools, while the turn waits on its first card: the Move action is disabled with 'Muse is still responding: stop the response before moving this conversation.' and a click calls nothing; a direct handoff_move is refused ('a conversation is still responding in this folder: stop it before moving'); C, idle in Local (A's host folder), asks through the UI: question, OK, new worktree, then the same refusal on screen, no event on Local's files. c-send-during-move, no IPC block: A's composer is disabled with 'This conversation's folder is being moved: send once the move is done.'; C's send through its composer, 463 ms into the move, is refused by the supervisor ('this conversation's folder is being moved: send again once the move is done') while the move still runs, kept as an unsent row; no turn in C.",
+      "4 conflict before any write": "c-conflict: Move back to local with src/app.txt and staged.txt changed on both sides: refused in the UI before the question and by a direct handoff_move; 0 events on Local's files (its 5 folders watched one by one) and in the worktree (recursive) during each refusal; both sides byte-identical, no ref. Git's own .git saw about 1300 events per refusal: existing loose objects freshened by the snapshots, a few new snapshot objects, an index lock.",
+      "5 earlier record": "m2-05-handoff.json: fixes[0].insufficient corrected (dialog:allow-confirm exists in tauri-plugin-dialog 2.7.3 as a deprecated alias of allow-message, already granted); its hand-written fields listed in handWritten.",
+      "6 SPEC": "docs/SPEC.md: the M2-05 paragraph describes handoff_preview and handoff_move instead of the removed buildHandoffPlan."
+    },
+    "fixes": [
+      {
+        "commit": "8dca438",
+        "defect": "Git only warns when it cannot delete a file (on Windows, one another program holds open without delete sharing) and exits 0. A moved untracked file held in the source stayed there while the move reported success and the conversation followed; a deletion the target could not apply was lost on both sides.",
+        "after": "handoff_move checks, after writing the target and after cleaning the source, that every file to delete is gone; otherwise the step fails and both sides are restored, the message naming the file. Tests (Windows): handoff_undoes_a_move_that_left_a_moved_file_in_the_source, handoff_undoes_a_move_that_could_not_delete_a_file_in_the_target, both failing without the fix. Live: c-held-untracked-before-fix vs c-held-untracked."
+      },
+      {
+        "commit": "4e08e2a",
+        "defect": "While Muse responds, the Move action was disabled with no reason (its title only covered remote conversations).",
+        "after": "moveBlockedReason (src/lib/handoff.ts) gives the reason, shown as the action's title. Test: handoff.test.ts, failing without the fix. Live: c-start and c-file-tools."
+      }
+    ],
+    "forgedInputs": [
+      "C was started by a direct start_session (no turn) and adopted on a reload: the host refused A's Fork conversation after a finished turn (MSP -32023 forkBoundaryInvalid WriteFailed, the known upstream Windows defect, docs/upstream). Same in the rehearsal that recorded c-held-untracked-before-fix, where A was started that way too.",
+      "The TaskDialog's buttons are pressed with TDM_CLICK_BUTTON, as in the earlier record.",
+      "Direct native calls only to show refusals: handoff_move while A responds (c-file-tools) and during the conflict (c-conflict).",
+      "Held files: a separate PowerShell process opens them with FileShare.Read and no delete sharing, as an editor or viewer does."
+    ],
+    "limits": [
+      "A refused or failed move to a new worktree leaves that new, clean worktree and its muse/ branch (listed in the app's worktrees); the message does not mention it (<worktree c>, <worktree 2>, <worktree 3>).",
+      "The preview writes one loose object per new untracked file. In the rehearsal, 3000 new files took about 200 s before the question showed; outside the app, 200 new blobs took 13 to 18 s with or without core.fsync on this machine. The move itself took about 7 s for 2000 files (moveSeenRunningMs).",
+      "A recursive fs.watch on Local overflows during Git's bursts in .git (libuv reports nameless events, recorded as overflow): item 4 watches Local's folders one by one; item 2's recursive watcher lost none.",
+      "The model's shell still reports the folder in the \\\\?\\ form (#88)."
+    ],
+    "liveTurnsDetail": [
+      "c-start: A's first message from the welcome screen, shell Get-Location in Local (one card, Allow once).",
+      "c-file-tools: A in its worktree, shell Get-Location, read_file, write_file (two cards, Allow once)."
+    ]
+  },
+  "phases": {
+    "c-held-untracked-before-fix": {
+      "commit": "a9ffff2",
+      "productTreeClean": true,
+      "exeSha256": "c864bedd648bc3c3b0f5d60ad33813b90997d9046e0bc8434cc1fff5038489f5",
+      "conversationC": "started by a direct start_session, no turn (rehearsal)",
+      "held": {
+        "path": "notes/local.md",
+        "share": "Read (no Delete)",
+        "released": true
+      },
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            "M  staged.txt",
+            "?? notes/local.md"
+          ],
+          "staged": [
+            "M\tstaged.txt"
+          ],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "a0de622643324c73",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/local.md": "dc44a0fe1ed703cc",
+            "src/app.txt": "f91dc591f250b366",
+            "staged.txt": "ec5344ddcfe2b592"
+          }
+        },
+        "refs": 4
+      },
+      "action": {
+        "label": "Move to worktree",
+        "click": {
+          "clicked": true
+        },
+        "dialog": {
+          "clicked": "OK",
+          "found": true,
+          "answer": "OK",
+          "texts": [
+            "Move all the uncommitted work in this folder to a new worktree, including changes made outside this conversation?\n\n• 4 changed files (staged changes arrive unstaged)\n• 1 untracked file\n• 1 ignored item left where they are\n\nThe conversation moves with them: its next message runs there."
+          ],
+          "buttons": [
+            "OK",
+            "Annuler"
+          ],
+          "title": "Muse-Desktop"
+        },
+        "preview": {
+          "target": null,
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 1,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<local>",
+            "target": null,
+            "tracked": 4,
+            "untracked": 1
+          }
+        },
+        "move": {
+          "target": "<worktree 3>",
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 1,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": "refs/muse/handoff/1791278905642",
+            "source": "<local>",
+            "target": "<worktree 3>",
+            "tracked": 4,
+            "untracked": 1
+          }
+        },
+        "moveCalls": 1,
+        "confirmCalls": [],
+        "worktreeCreated": [
+          {
+            "ok": true,
+            "result": {
+              "repoRoot": "<local>",
+              "path": "<worktree 3>",
+              "branch": "muse/repo-h7jtg",
+              "base": "HEAD",
+              "createdAt": 1791278903822
+            }
+          }
+        ],
+        "ms": 5702,
+        "banner": null
+      },
+      "events": {
+        "total": 274,
+        "byPlace": {
+          "git": {
+            "count": 192,
+            "paths": [
+              ".git",
+              ".git/index",
+              ".git/index.lock",
+              ".git/logs/refs/heads/muse",
+              ".git/logs/refs/heads/muse/repo-h7jtg",
+              ".git/objects/2d",
+              ".git/objects/2d/810930009506a797d615add3a5d99b28838045",
+              ".git/objects/2d/tmp_obj_IKtUnp",
+              ".git/objects/47",
+              ".git/objects/47/8add306015ec9abb2fa395ffb56d0b869fc774",
+              ".git/objects/47/tmp_obj_QdErVp",
+              ".git/objects/4b/e59ae8dc80d76591ea9f57a7073e58a92db047",
+              ".git/objects/67",
+              ".git/objects/67/939b5ec0b399382b7ef7edd071793ce6ad6c38",
+              ".git/objects/67/tmp_obj_BUjPeG",
+              ".git/objects/71/f95084eee8d9a14d0e3f95ab7ffdaa6b09c5e2",
+              ".git/objects/75/74b624c0282ba9a9f18bcc836950b5ad414a39",
+              ".git/objects/79",
+              ".git/objects/79/80e4528804751cac108a1861c4b3d9ccc9d282",
+              ".git/objects/79/tmp_obj_AhuzwJ",
+              ".git/objects/a3/bfc5ffbbdb1c856031f09df40264f0990c826b",
+              ".git/objects/a4/f0306fd5b20ff6554878f3d1b923b9b83587c2",
+              ".git/objects/ab/00680a9fc1b90b9a666fb0d93b3b867fd58131",
+              ".git/objects/c9",
+              ".git/objects/c9/6ded5a6091586d5b5644d6b898c036f0f08af5",
+              ".git/objects/c9/tmp_obj_tjIEcY",
+              ".git/objects/cf/ec55e3f7a334ea3a8ce7098575d835acc4f63e",
+              ".git/objects/fd",
+              ".git/objects/fd/7c57eabb0166863b343b5f0cc81a684e0e05b7",
+              ".git/objects/fd/tmp_obj_purd8h",
+              ".git/packed-refs.lock",
+              ".git/refs/heads/muse",
+              ".git/refs/heads/muse/repo-h7jtg",
+              ".git/refs/heads/muse/repo-h7jtg.lock",
+              ".git/refs/muse/handoff",
+              ".git/refs/muse/handoff/1791278905642",
+              ".git/refs/muse/handoff/1791278905642/source",
+              ".git/refs/muse/handoff/1791278905642/source.lock",
+              ".git/refs/muse/handoff/1791278905642/target",
+              ".git/refs/muse/handoff/1791278905642/target.lock"
+            ],
+            "morePaths": 16
+          },
+          "app": {
+            "count": 15,
+            "paths": [
+              ".muse/worktrees",
+              ".muse/worktrees/repo-h7jtg"
+            ],
+            "morePaths": 0
+          },
+          "target": {
+            "count": 52,
+            "paths": [
+              ".muse/worktrees/repo-h7jtg/.gitignore",
+              ".muse/worktrees/repo-h7jtg/README.md",
+              ".muse/worktrees/repo-h7jtg/assets",
+              ".muse/worktrees/repo-h7jtg/assets/blob.bin",
+              ".muse/worktrees/repo-h7jtg/crlf.txt",
+              ".muse/worktrees/repo-h7jtg/deleted.txt",
+              ".muse/worktrees/repo-h7jtg/docs",
+              ".muse/worktrees/repo-h7jtg/docs/item1.txt",
+              ".muse/worktrees/repo-h7jtg/notes",
+              ".muse/worktrees/repo-h7jtg/notes/local.md",
+              ".muse/worktrees/repo-h7jtg/src",
+              ".muse/worktrees/repo-h7jtg/src/app.txt",
+              ".muse/worktrees/repo-h7jtg/staged.txt"
+            ],
+            "morePaths": 0
+          },
+          "local": {
+            "count": 15,
+            "paths": [
+              "assets",
+              "assets/blob.bin",
+              "deleted.txt",
+              "src",
+              "src/app.txt",
+              "staged.txt"
+            ],
+            "morePaths": 0
+          }
+        },
+        "first": [
+          {
+            "atMs": 700,
+            "type": "rename",
+            "path": ".git/index.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 700,
+            "type": "change",
+            "path": ".git",
+            "place": "git"
+          },
+          {
+            "atMs": 700,
+            "type": "rename",
+            "path": ".git/index.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 743,
+            "type": "change",
+            "path": ".git",
+            "place": "git"
+          },
+          {
+            "atMs": 825,
+            "type": "change",
+            "path": ".git/objects/4b/e59ae8dc80d76591ea9f57a7073e58a92db047",
+            "place": "git"
+          },
+          {
+            "atMs": 826,
+            "type": "change",
+            "path": ".git/objects/4b/e59ae8dc80d76591ea9f57a7073e58a92db047",
+            "place": "git"
+          },
+          {
+            "atMs": 827,
+            "type": "change",
+            "path": ".git/objects/4b/e59ae8dc80d76591ea9f57a7073e58a92db047",
+            "place": "git"
+          },
+          {
+            "atMs": 827,
+            "type": "change",
+            "path": ".git/objects/cf/ec55e3f7a334ea3a8ce7098575d835acc4f63e",
+            "place": "git"
+          },
+          {
+            "atMs": 828,
+            "type": "change",
+            "path": ".git/objects/cf/ec55e3f7a334ea3a8ce7098575d835acc4f63e",
+            "place": "git"
+          },
+          {
+            "atMs": 829,
+            "type": "change",
+            "path": ".git/objects/cf/ec55e3f7a334ea3a8ce7098575d835acc4f63e",
+            "place": "git"
+          },
+          {
+            "atMs": 830,
+            "type": "change",
+            "path": ".git/objects/a4/f0306fd5b20ff6554878f3d1b923b9b83587c2",
+            "place": "git"
+          },
+          {
+            "atMs": 830,
+            "type": "change",
+            "path": ".git/objects/a4/f0306fd5b20ff6554878f3d1b923b9b83587c2",
+            "place": "git"
+          },
+          {
+            "atMs": 831,
+            "type": "change",
+            "path": ".git/objects/a4/f0306fd5b20ff6554878f3d1b923b9b83587c2",
+            "place": "git"
+          },
+          {
+            "atMs": 907,
+            "type": "change",
+            "path": ".git/objects/71/f95084eee8d9a14d0e3f95ab7ffdaa6b09c5e2",
+            "place": "git"
+          },
+          {
+            "atMs": 908,
+            "type": "change",
+            "path": ".git/objects/71/f95084eee8d9a14d0e3f95ab7ffdaa6b09c5e2",
+            "place": "git"
+          },
+          {
+            "atMs": 908,
+            "type": "change",
+            "path": ".git/objects/71/f95084eee8d9a14d0e3f95ab7ffdaa6b09c5e2",
+            "place": "git"
+          },
+          {
+            "atMs": 909,
+            "type": "change",
+            "path": ".git/objects/75/74b624c0282ba9a9f18bcc836950b5ad414a39",
+            "place": "git"
+          },
+          {
+            "atMs": 910,
+            "type": "change",
+            "path": ".git/objects/75/74b624c0282ba9a9f18bcc836950b5ad414a39",
+            "place": "git"
+          },
+          {
+            "atMs": 911,
+            "type": "change",
+            "path": ".git/objects/75/74b624c0282ba9a9f18bcc836950b5ad414a39",
+            "place": "git"
+          },
+          {
+            "atMs": 912,
+            "type": "change",
+            "path": ".git/objects/ab/00680a9fc1b90b9a666fb0d93b3b867fd58131",
+            "place": "git"
+          },
+          {
+            "atMs": 912,
+            "type": "change",
+            "path": ".git/objects/ab/00680a9fc1b90b9a666fb0d93b3b867fd58131",
+            "place": "git"
+          },
+          {
+            "atMs": 913,
+            "type": "change",
+            "path": ".git/objects/ab/00680a9fc1b90b9a666fb0d93b3b867fd58131",
+            "place": "git"
+          },
+          {
+            "atMs": 914,
+            "type": "change",
+            "path": ".git/objects/a3/bfc5ffbbdb1c856031f09df40264f0990c826b",
+            "place": "git"
+          },
+          {
+            "atMs": 914,
+            "type": "change",
+            "path": ".git/objects/a3/bfc5ffbbdb1c856031f09df40264f0990c826b",
+            "place": "git"
+          },
+          {
+            "atMs": 915,
+            "type": "change",
+            "path": ".git/objects/a3/bfc5ffbbdb1c856031f09df40264f0990c826b",
+            "place": "git"
+          },
+          {
+            "atMs": 1026,
+            "type": "rename",
+            "path": ".git/objects/fd/tmp_obj_purd8h",
+            "place": "git"
+          },
+          {
+            "atMs": 1026,
+            "type": "change",
+            "path": ".git/objects/fd/tmp_obj_purd8h",
+            "place": "git"
+          },
+          {
+            "atMs": 1055,
+            "type": "change",
+            "path": ".git/objects/fd",
+            "place": "git"
+          },
+          {
+            "atMs": 1055,
+            "type": "rename",
+            "path": ".git/objects/fd/tmp_obj_purd8h",
+            "place": "git"
+          },
+          {
+            "atMs": 1056,
+            "type": "rename",
+            "path": ".git/objects/fd/7c57eabb0166863b343b5f0cc81a684e0e05b7",
+            "place": "git"
+          },
+          {
+            "atMs": 1057,
+            "type": "change",
+            "path": ".git/objects/fd",
+            "place": "git"
+          },
+          {
+            "atMs": 1117,
+            "type": "rename",
+            "path": ".git/objects/79/tmp_obj_AhuzwJ",
+            "place": "git"
+          },
+          {
+            "atMs": 1118,
+            "type": "change",
+            "path": ".git/objects/79/tmp_obj_AhuzwJ",
+            "place": "git"
+          },
+          {
+            "atMs": 1155,
+            "type": "change",
+            "path": ".git/objects/79",
+            "place": "git"
+          },
+          {
+            "atMs": 1155,
+            "type": "rename",
+            "path": ".git/objects/79/tmp_obj_AhuzwJ",
+            "place": "git"
+          },
+          {
+            "atMs": 1156,
+            "type": "rename",
+            "path": ".git/objects/79/80e4528804751cac108a1861c4b3d9ccc9d282",
+            "place": "git"
+          },
+          {
+            "atMs": 1157,
+            "type": "change",
+            "path": ".git/objects/79",
+            "place": "git"
+          },
+          {
+            "atMs": 2000,
+            "type": "rename",
+            "path": ".git/refs/heads/muse/repo-h7jtg.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 2001,
+            "type": "change",
+            "path": ".git/refs/heads/muse/repo-h7jtg.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 2002,
+            "type": "change",
+            "path": ".git/logs/refs/heads/muse",
+            "place": "git"
+          },
+          {
+            "atMs": 2003,
+            "type": "rename",
+            "path": ".git/logs/refs/heads/muse/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2005,
+            "type": "change",
+            "path": ".git/logs/refs/heads/muse/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2006,
+            "type": "change",
+            "path": ".git/refs/heads/muse",
+            "place": "git"
+          },
+          {
+            "atMs": 2006,
+            "type": "rename",
+            "path": ".git/refs/heads/muse/repo-h7jtg.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 2006,
+            "type": "rename",
+            "path": ".git/refs/heads/muse/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2007,
+            "type": "change",
+            "path": ".git/refs/heads/muse",
+            "place": "git"
+          },
+          {
+            "atMs": 2020,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2021,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg/locked",
+            "place": "git"
+          },
+          {
+            "atMs": 2022,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg/locked",
+            "place": "git"
+          },
+          {
+            "atMs": 2023,
+            "type": "change",
+            "path": ".git/worktrees",
+            "place": "git"
+          },
+          {
+            "atMs": 2023,
+            "type": "rename",
+            "path": ".muse/worktrees/repo-h7jtg",
+            "place": "app"
+          },
+          {
+            "atMs": 2023,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2024,
+            "type": "change",
+            "path": ".muse/worktrees",
+            "place": "app"
+          },
+          {
+            "atMs": 2024,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg/gitdir",
+            "place": "git"
+          },
+          {
+            "atMs": 2025,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2026,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg/gitdir",
+            "place": "git"
+          },
+          {
+            "atMs": 2026,
+            "type": "rename",
+            "path": ".muse/worktrees/repo-h7jtg/.git",
+            "place": "git"
+          },
+          {
+            "atMs": 2027,
+            "type": "change",
+            "path": ".muse/worktrees/repo-h7jtg",
+            "place": "app"
+          },
+          {
+            "atMs": 2027,
+            "type": "change",
+            "path": ".muse/worktrees/repo-h7jtg/.git",
+            "place": "git"
+          },
+          {
+            "atMs": 2027,
+            "type": "change",
+            "path": ".muse/worktrees/repo-h7jtg/.git",
+            "place": "git"
+          },
+          {
+            "atMs": 2028,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg/commondir",
+            "place": "git"
+          },
+          {
+            "atMs": 2028,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg/commondir",
+            "place": "git"
+          },
+          {
+            "atMs": 2029,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2029,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg/refs",
+            "place": "git"
+          },
+          {
+            "atMs": 2030,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2030,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg/HEAD.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 2030,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg/HEAD.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 2030,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2031,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg/logs",
+            "place": "git"
+          },
+          {
+            "atMs": 2031,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg/logs/HEAD",
+            "place": "git"
+          },
+          {
+            "atMs": 2034,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg/logs/HEAD",
+            "place": "git"
+          },
+          {
+            "atMs": 2034,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2034,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg/HEAD.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 2035,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg/HEAD",
+            "place": "git"
+          },
+          {
+            "atMs": 2035,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2036,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg/logs",
+            "place": "git"
+          },
+          {
+            "atMs": 2057,
+            "type": "rename",
+            "path": ".git/worktrees/repo-h7jtg/index.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 2057,
+            "type": "change",
+            "path": ".git/worktrees/repo-h7jtg",
+            "place": "git"
+          },
+          {
+            "atMs": 2060,
+            "type": "rename",
+            "path": ".muse/worktrees/repo-h7jtg/.gitignore",
+            "place": "target"
+          },
+          {
+            "atMs": 2061,
+            "type": "change",
+            "path": ".muse/worktrees/repo-h7jtg/.gitignore",
+            "place": "target"
+          }
+        ]
+      },
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [
+            "?? notes/local.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/local.md": "dc44a0fe1ed703cc",
+            "src/app.txt": "29d5b932a04f02da",
+            "staged.txt": "104801b22caabc34"
+          }
+        },
+        "target": {
+          "branch": "muse/repo-h7jtg",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? notes/local.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "a0de622643324c73",
+            "crlf.txt": "b016a092caa32c59",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/local.md": "dc44a0fe1ed703cc",
+            "src/app.txt": "f91dc591f250b366",
+            "staged.txt": "ec5344ddcfe2b592"
+          }
+        },
+        "refs": 6
+      },
+      "newRefs": [
+        "refs/muse/handoff/1791278905642/source",
+        "refs/muse/handoff/1791278905642/target"
+      ],
+      "view": {
+        "active": "01a11079-fe09-7022-ba05-7d11c22c6cc7",
+        "sessions": 2,
+        "stored": {
+          "workspace": "<worktree 3>",
+          "host_workspace": "<local>"
+        },
+        "header": {
+          "eyebrow": "repo-h7jtg / CONVERSATION",
+          "path": "<worktree 3>",
+          "branch": null,
+          "connection": "Connected"
+        },
+        "logEntries": 1,
+        "lastSystemNotes": [
+          "Moved 4 changed files and 1 untracked file to <worktree 3>; 1 ignored item stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791278905642."
+        ]
+      },
+      "leftInSource": [
+        "notes/local.md"
+      ],
+      "verdict": {
+        "confirmAsked": true,
+        "targetReceivedTheWork": true,
+        "moveFailed": false,
+        "honestMessage": false,
+        "localByteIdentical": false,
+        "targetBackToItsCheckout": false,
+        "snapshotKept": true,
+        "heldFileUnchanged": true,
+        "conversationStays": false,
+        "noEventLost": true
+      },
+      "consoleErrors": []
+    },
+    "c-launch": {
+      "commit": "4e08e2a",
+      "productTreeClean": true,
+      "exeSha256": "10ee37b4c992f3d4d6cdb12baba00d4285d59dc670e7fcfcb4bf28b0c1f2646e",
+      "started": true,
+      "pidRecorded": true,
+      "isolation": {
+        "testModeMarker": true,
+        "webviewProfileUnderTestFolder": true,
+        "dataFolder": "<proof>\\appdata-1",
+        "cdpPort": 9333
+      },
+      "consoleErrors": []
+    },
+    "c-setup": {
+      "commit": "4e08e2a",
+      "productTreeClean": true,
+      "exeSha256": "10ee37b4c992f3d4d6cdb12baba00d4285d59dc670e7fcfcb4bf28b0c1f2646e",
+      "repo": {
+        "autocrlf": "true",
+        "local": {
+          "branch": "main",
+          "status": [],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "86bc5059cb681798",
+            "src/app.txt": "29d5b932a04f02da",
+            "staged.txt": "104801b22caabc34"
+          }
+        }
+      },
+      "profile": {
+        "projects": 0,
+        "sessions": 0,
+        "posture": "ask"
+      },
+      "verdict": {
+        "repoClean": true,
+        "emptyProfile": true
+      },
+      "consoleErrors": []
+    },
+    "c-start": {
+      "commit": "4e08e2a",
+      "productTreeClean": true,
+      "exeSha256": "10ee37b4c992f3d4d6cdb12baba00d4285d59dc670e7fcfcb4bf28b0c1f2646e",
+      "liveTurns": 1,
+      "welcome": {
+        "note": "Runs in repo. The agent reads the rules of that folder.",
+        "startSession": {
+          "ok": true,
+          "workspacePath": "<local>",
+          "authorizationMode": "ask",
+          "sandboxMode": "workspace",
+          "hostApprovalMode": "promptUnmatched"
+        }
+      },
+      "turn": {
+        "prompt": "M2-05 complement, step 1. Run Get-Location with your shell tool now, then reply with only the exact path it printed.",
+        "sendInput": {
+          "sessionId": "01a11095-6350-7b33-8938-e529bfa24327",
+          "ok": true
+        },
+        "finished": true,
+        "ms": 27915,
+        "approvals": [
+          {
+            "choices": [
+              "Allow once [approved/once]",
+              "Always allow in this workspace: Get-Location ... [approvedPolicyAmendment/localPersistent]",
+              "Reject [abort/once]"
+            ],
+            "clicked": "Allow once",
+            "ok": true
+          }
+        ],
+        "cardHookRan": true,
+        "entries": [
+          {
+            "role": "user",
+            "text": "M2-05 complement, step 1. Run Get-Location with your shell tool now, then reply with only the exact path it printed."
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "Approval requested: powershell: Get-Location"
+          },
+          {
+            "role": "assistant",
+            "text": "\r\nPath                                                                    \r\n----                                                                    \r\nMicrosoft.PowerShell.Core\\FileSystem::<local>\r\n\r\n\r\n"
+          },
+          {
+            "role": "tool",
+            "text": "powershell · Print current working directory"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "thinking",
+            "text": "Extracting the exact printed path string from the tool output while omitting extra formatting."
+          },
+          {
+            "role": "assistant",
+            "text": "Microsoft.PowerShell.Core\\FileSystem::<local>"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          }
+        ]
+      },
+      "cwd": {
+        "toolRows": 2,
+        "reported": [
+          {
+            "from": "shell",
+            "place": "local",
+            "extendedPrefix": true
+          },
+          {
+            "from": "answer",
+            "place": "local",
+            "extendedPrefix": true
+          }
+        ],
+        "answer": "Microsoft.PowerShell.Core\\FileSystem::<local>",
+        "codeWord": false
+      },
+      "whileRunning": {
+        "running": "true",
+        "composer": {
+          "active": "01a11095-6350-7b33-8938-e529bfa24327",
+          "disabled": false,
+          "placeholder": "Ask Muse to continue…",
+          "sendDisabled": true
+        },
+        "move": {
+          "found": true,
+          "label": "Move to worktree",
+          "disabled": true,
+          "title": "Muse is still responding: stop the response before moving this conversation.",
+          "previewCalls": 0
+        }
+      },
+      "view": {
+        "active": "01a11095-6350-7b33-8938-e529bfa24327",
+        "sessions": 1,
+        "stored": {
+          "workspace": "<local>",
+          "host_workspace": null
+        },
+        "header": {
+          "eyebrow": "repo / CONVERSATION",
+          "path": "<local>",
+          "branch": "main",
+          "connection": "Connected"
+        },
+        "logEntries": 12,
+        "lastSystemNotes": []
+      },
+      "fork": {
+        "click": {
+          "clicked": true
+        },
+        "ok": false,
+        "result": "\"MSP error -32023: invalid fork boundary for session 01a11095-6350-7b33-8938-e529bfa24327: WriteFailed [forkBoundaryInvalid] [retryable=false]\"",
+        "fallback": "the fork failed: C started by a direct start_session (no turn), adopted on a reload",
+        "c": {
+          "active": "01a11095-d8c2-7c62-aa60-4ebf91613138",
+          "sessions": 2,
+          "stored": {
+            "workspace": "<local>",
+            "host_workspace": null
+          },
+          "header": {
+            "eyebrow": "repo / CONVERSATION",
+            "path": "<local>",
+            "branch": null,
+            "connection": "Connected"
+          },
+          "logEntries": 0,
+          "lastSystemNotes": []
+        }
+      },
+      "verdict": {
+        "turnFinished": true,
+        "startedInLocal": true,
+        "modelCwdLocal": true,
+        "moveRefusedWhileRunning": true,
+        "refusalSaysWhy": true,
+        "forkInLocal": true
+      },
+      "consoleErrors": []
+    },
+    "c-send-during-move": {
+      "commit": "4e08e2a",
+      "productTreeClean": true,
+      "exeSha256": "10ee37b4c992f3d4d6cdb12baba00d4285d59dc670e7fcfcb4bf28b0c1f2646e",
+      "bulkFiles": 2000,
+      "rehearsal": false,
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M docs/item1.txt",
+            " M src/app.txt",
+            "M  staged.txt",
+            "?? bulk/ (2000 files)"
+          ],
+          "staged": [
+            "M\tstaged.txt"
+          ],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "93da8c4b803e557b",
+            "src/app.txt": "7d0ac43a64571677",
+            "staged.txt": "d63509f9170fd865",
+            "bulk/ (2000 files)": "38ee41c957ce2e51"
+          }
+        },
+        "refs": 0
+      },
+      "action": {
+        "click": {
+          "clicked": true
+        },
+        "dialog": {
+          "clicked": "OK",
+          "found": true,
+          "answer": "OK",
+          "texts": [
+            "Move all the uncommitted work in this folder to a new worktree, including changes made outside this conversation?\n\n• 3 changed files (staged changes arrive unstaged)\n• 2000 untracked files\n• 1 ignored item left where they are\n\nThe conversation moves with them: its next message runs there."
+          ],
+          "buttons": [
+            "OK",
+            "Annuler"
+          ],
+          "title": "Muse-Desktop"
+        },
+        "move": {
+          "atMs": 155171,
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 1,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": "refs/muse/handoff/1791279784185",
+            "source": "<local>",
+            "target": "<worktree 1>",
+            "tracked": 3,
+            "untracked": 2000
+          }
+        },
+        "moveSeenRunningMs": 7350
+      },
+      "composerA": {
+        "active": "01a11095-6350-7b33-8938-e529bfa24327",
+        "disabled": true,
+        "placeholder": "This conversation's folder is being moved: send once the move is done.",
+        "sendDisabled": true
+      },
+      "send": {
+        "attempted": true,
+        "composerC": {
+          "active": "01a11095-d8c2-7c62-aa60-4ebf91613138",
+          "disabled": false,
+          "placeholder": "Ask Muse to continue…",
+          "sendDisabled": true
+        },
+        "click": {
+          "clicked": true
+        },
+        "call": {
+          "sessionId": "01a11095-d8c2-7c62-aa60-4ebf91613138",
+          "atMs": 155634,
+          "ok": false,
+          "blockedByHarness": false,
+          "result": "this conversation's folder is being moved: send again once the move is done"
+        },
+        "moveCallAtMs": 155171,
+        "moveStillRunningWhenAnswered": true
+      },
+      "cBefore": {
+        "entries": 0,
+        "user": 0,
+        "assistant": 0,
+        "running": "false"
+      },
+      "cAfter": {
+        "active": "01a11095-d8c2-7c62-aa60-4ebf91613138",
+        "banner": "Your message could not be sent. — this conversation's folder is being moved: send again once the move is done",
+        "unsent": [
+          {
+            "text": "Unsent message: M2-05 complement: sent while conversation A moves this folder's work. It must no…",
+            "error": "send_input failed: this conversation's folder is being moved: send again once the move is done"
+          }
+        ],
+        "log": {
+          "entries": 1,
+          "user": 1,
+          "assistant": 0,
+          "running": "false"
+        },
+        "discarded": {
+          "clicked": true,
+          "left": 0
+        }
+      },
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "86bc5059cb681798",
+            "src/app.txt": "29d5b932a04f02da",
+            "staged.txt": "104801b22caabc34"
+          }
+        },
+        "w1": {
+          "branch": "muse/repo-hqbwb",
+          "status": [
+            " M docs/item1.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? bulk/ (2000 files)"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "93da8c4b803e557b",
+            "src/app.txt": "7d0ac43a64571677",
+            "staged.txt": "d63509f9170fd865",
+            "bulk/ (2000 files)": "38ee41c957ce2e51"
+          }
+        },
+        "refs": 2
+      },
+      "view": {
+        "active": "01a11095-6350-7b33-8938-e529bfa24327",
+        "sessions": 2,
+        "stored": {
+          "workspace": "<worktree 1>",
+          "host_workspace": "<local>"
+        },
+        "header": {
+          "eyebrow": "repo-hqbwb / CONVERSATION",
+          "path": "<worktree 1>",
+          "branch": null,
+          "connection": "Connected"
+        },
+        "logEntries": 13,
+        "lastSystemNotes": [
+          "Moved 3 changed files and 2000 untracked files to <worktree 1>; 1 ignored item stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791279784185."
+        ]
+      },
+      "verdict": {
+        "moved": true,
+        "composerARefusesWithReason": true,
+        "sendDuringTheMove": true,
+        "sendRefusedHonestly": true,
+        "keptAsUnsent": true,
+        "noTurnInC": true,
+        "worktreeHoldsTheWork": true,
+        "localClean": true,
+        "snapshotRef": true,
+        "conversationFollowed": true
+      },
+      "consoleErrors": []
+    },
+    "c-file-tools": {
+      "commit": "4e08e2a",
+      "productTreeClean": true,
+      "exeSha256": "10ee37b4c992f3d4d6cdb12baba00d4285d59dc670e7fcfcb4bf28b0c1f2646e",
+      "liveTurns": 1,
+      "before": {
+        "item1": {
+          "local": "86bc5059cb681798",
+          "worktree": "93da8c4b803e557b",
+          "localHasToken": false,
+          "worktreeHasToken": true
+        },
+        "local": {
+          "branch": "main",
+          "status": [
+            "?? notes/cross.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/cross.md": "4209a4f4eb2a9198",
+            "src/app.txt": "29d5b932a04f02da",
+            "staged.txt": "104801b22caabc34"
+          }
+        },
+        "w1": {
+          "branch": "muse/repo-hqbwb",
+          "status": [
+            " M docs/item1.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? bulk/ (2000 files)"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "93da8c4b803e557b",
+            "src/app.txt": "7d0ac43a64571677",
+            "staged.txt": "d63509f9170fd865",
+            "bulk/ (2000 files)": "38ee41c957ce2e51"
+          }
+        },
+        "refs": 2
+      },
+      "turn": {
+        "prompt": "M2-05 complement, step 2. Do exactly these three steps, in this order, once each. 1) Run Get-Location with your shell tool. 2) Use your read_file tool, not the shell, to read docs/item1.txt in your current workspace. 3) Use your write_file tool, not the shell, to create item1-written.txt in your current workspace with exactly this one line: WRITTEN-1A91F4E2. Then reply with only the line of docs/item1.txt that starts with ONLY-IN-WORKTREE, or NONE if it has no such line.",
+        "sendInput": {
+          "sessionId": "01a11095-6350-7b33-8938-e529bfa24327",
+          "ok": true
+        },
+        "finished": true,
+        "ms": 43804,
+        "approvals": [
+          {
+            "choices": [
+              "Allow once [approved/once]",
+              "Always allow in this workspace: Get-Location ... [approvedPolicyAmendment/localPersistent]",
+              "Reject [abort/once]"
+            ],
+            "clicked": "Allow once",
+            "ok": true
+          },
+          {
+            "choices": [
+              "Allow once [approved/once]",
+              "Reject [abort/once]"
+            ],
+            "clicked": "Allow once",
+            "ok": true
+          }
+        ],
+        "cardHookRan": true,
+        "entries": [
+          {
+            "role": "user",
+            "text": "M2-05 complement, step 2. Do exactly these three steps, in this order, once each. 1) Run Get-Location with your shell tool. 2) Use your read_file tool, not the shell, to read docs/item1.txt in your current workspace. 3) Use your write_file tool, not the shell, to create item1-written.txt in your current workspace with exactly this one line: WRITTEN-1A91F4E2. Then reply with only the line of docs/item1.txt that starts with ONLY-IN-WORKTREE, or NONE if it has no such line."
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "Approval requested: powershell: Get-Location"
+          },
+          {
+            "role": "assistant",
+            "text": "\r\nPath                                                                                               \r\n----                                                                                               \r\nMicrosoft.PowerShell.Core\\FileSystem::<worktree 1>\r\n\r\n\r\n"
+          },
+          {
+            "role": "tool",
+            "text": "powershell · Print current working directory"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "read_file · docs/item1.txt\nRead text file `docs/item1.txt`.\n1|item 1, the version both folders share\n2|ONLY-IN-WORKTREE-8BBBAD7C"
+          },
+          {
+            "role": "thinking",
+            "text": "Resolving write_file content newline ambiguity for a single-line output."
+          },
+          {
+            "role": "tool",
+            "text": "Approval requested: write_file: <worktree 1>\\item1-written.txt"
+          },
+          {
+            "role": "assistant",
+            "text": "ONLY-IN-WORKTREE-8BBBAD7C"
+          },
+          {
+            "role": "tool",
+            "text": "write_file · item1-written.txt\nwrote 17 bytes to <worktree 1>\\item1-written.txt"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          }
+        ]
+      },
+      "cwd": {
+        "toolRows": 5,
+        "reported": [
+          {
+            "from": "shell",
+            "place": "worktree 1",
+            "extendedPrefix": true
+          },
+          {
+            "from": "tool",
+            "place": "other",
+            "extendedPrefix": true
+          }
+        ],
+        "answer": "ONLY-IN-WORKTREE-8BBBAD7C",
+        "codeWord": false
+      },
+      "tools": [
+        "Approval requested: powershell: Get-Location",
+        "powershell · Print current working directory",
+        "read_file · docs/item1.txt\nRead text file `docs/item1.txt`.\n1|item 1, the version both folders share\n2|ONLY-IN-WORKTREE-8BBBAD7C",
+        "Approval requested: write_file: <worktree 1>\\item1-written.txt",
+        "write_file · item1-written.txt\nwrote 17 bytes to <worktree 1>\\item1-written.txt"
+      ],
+      "answer": "ONLY-IN-WORKTREE-8BBBAD7C",
+      "written": {
+        "sha": "b8cdccbf23e18c88",
+        "text": "WRITTEN-1A91F4E2\n"
+      },
+      "whileRunning": {
+        "running": "true",
+        "card": "powershell Review command Get-Location scope: once · localPersistent Allow once Always allow in this workspace: Get-Location ... Reject",
+        "self": {
+          "found": true,
+          "label": "Move back to local",
+          "disabled": true,
+          "title": "Muse is still responding: stop the response before moving this conversation.",
+          "previewCalls": 0
+        },
+        "direct": {
+          "ok": false,
+          "error": "a conversation is still responding in this folder: stop it before moving"
+        },
+        "cMove": {
+          "label": "Move to worktree",
+          "click": {
+            "clicked": true
+          },
+          "dialog": {
+            "clicked": "OK",
+            "found": true,
+            "answer": "OK",
+            "texts": [
+              "Move all the uncommitted work in this folder to a new worktree, including changes made outside this conversation?\n\n• 0 changed files (staged changes arrive unstaged)\n• 1 untracked file\n• 1 ignored item left where they are\n\nThe conversation moves with them: its next message runs there."
+            ],
+            "buttons": [
+              "OK",
+              "Annuler"
+            ],
+            "title": "Muse-Desktop"
+          },
+          "preview": {
+            "target": null,
+            "ok": true,
+            "result": {
+              "conflicts": [],
+              "ignored": 1,
+              "partlyStaged": [],
+              "sameSession": true,
+              "snapshot": null,
+              "source": "<local>",
+              "target": null,
+              "tracked": 0,
+              "untracked": 1
+            }
+          },
+          "move": {
+            "target": "<worktree c>",
+            "ok": false,
+            "result": "a conversation is still responding in this folder: stop it before moving"
+          },
+          "moveCalls": 1,
+          "confirmCalls": [],
+          "worktreeCreated": [
+            {
+              "ok": true,
+              "result": {
+                "repoRoot": "<local>",
+                "path": "<worktree c>",
+                "branch": "muse/repo-hrebz",
+                "base": "HEAD",
+                "createdAt": 1791279829743
+              }
+            }
+          ],
+          "ms": 3068,
+          "banner": "The conversation was not moved: a conversation is still responding in this folder: stop it before moving"
+        },
+        "cEvents": {
+          "total": 149,
+          "byPlace": {
+            "git": {
+              "count": 116,
+              "paths": [
+                ".git",
+                ".git/index",
+                ".git/index.lock",
+                ".git/logs/refs/heads",
+                ".git/logs/refs/heads/muse",
+                ".git/logs/refs/heads/muse/repo-hrebz",
+                ".git/objects/2d",
+                ".git/objects/2d/e435f3a156328aa1bd279c0076ca5ca702baff",
+                ".git/objects/2d/tmp_obj_uZCsRe",
+                ".git/objects/46",
+                ".git/objects/46/af3abf08f79181d27ab9f34f2acf322f6afbee",
+                ".git/objects/46/tmp_obj_UKIUv0",
+                ".git/objects/48",
+                ".git/objects/48/0b4222116f2aa56ef80deb36d9426f9907ca69",
+                ".git/objects/48/tmp_obj_wpU7y5",
+                ".git/objects/98",
+                ".git/objects/98/799af5842ee968d0ffab681d242b786da14d6e",
+                ".git/objects/98/tmp_obj_m2GqyE",
+                ".git/objects/c1",
+                ".git/objects/c1/2de789330142f69cd661ce2e0d009535e7d336",
+                ".git/objects/c1/tmp_obj_HGs3FB",
+                ".git/objects/cd/e61088e842326c98a983eb12e49120474ff8f8",
+                ".git/packed-refs.lock",
+                ".git/refs/heads/muse",
+                ".git/refs/heads/muse/repo-hrebz",
+                ".git/refs/heads/muse/repo-hrebz.lock",
+                ".git/worktrees",
+                ".git/worktrees/repo-hrebz",
+                ".git/worktrees/repo-hrebz/AUTO_MERGE.lock",
+                ".git/worktrees/repo-hrebz/HEAD",
+                ".git/worktrees/repo-hrebz/HEAD.lock",
+                ".git/worktrees/repo-hrebz/ORIG_HEAD",
+                ".git/worktrees/repo-hrebz/ORIG_HEAD.lock",
+                ".git/worktrees/repo-hrebz/commondir",
+                ".git/worktrees/repo-hrebz/gitdir",
+                ".git/worktrees/repo-hrebz/index",
+                ".git/worktrees/repo-hrebz/index.lock",
+                ".git/worktrees/repo-hrebz/locked",
+                ".git/worktrees/repo-hrebz/logs",
+                ".git/worktrees/repo-hrebz/logs/HEAD"
+              ],
+              "morePaths": 2
+            },
+            "app": {
+              "count": 11,
+              "paths": [
+                ".muse/worktrees",
+                ".muse/worktrees/repo-hrebz"
+              ],
+              "morePaths": 0
+            },
+            "c's new worktree": {
+              "count": 22,
+              "paths": [
+                ".muse/worktrees/repo-hrebz/.gitignore",
+                ".muse/worktrees/repo-hrebz/README.md",
+                ".muse/worktrees/repo-hrebz/assets",
+                ".muse/worktrees/repo-hrebz/assets/blob.bin",
+                ".muse/worktrees/repo-hrebz/crlf.txt",
+                ".muse/worktrees/repo-hrebz/deleted.txt",
+                ".muse/worktrees/repo-hrebz/docs",
+                ".muse/worktrees/repo-hrebz/docs/item1.txt",
+                ".muse/worktrees/repo-hrebz/src",
+                ".muse/worktrees/repo-hrebz/src/app.txt",
+                ".muse/worktrees/repo-hrebz/staged.txt"
+              ],
+              "morePaths": 0
+            }
+          },
+          "first": [
+            {
+              "atMs": 1463,
+              "type": "rename",
+              "path": ".git/index.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 1464,
+              "type": "change",
+              "path": ".git",
+              "place": "git"
+            },
+            {
+              "atMs": 1465,
+              "type": "change",
+              "path": ".git/objects/cd/e61088e842326c98a983eb12e49120474ff8f8",
+              "place": "git"
+            },
+            {
+              "atMs": 1465,
+              "type": "change",
+              "path": ".git/objects/cd/e61088e842326c98a983eb12e49120474ff8f8",
+              "place": "git"
+            },
+            {
+              "atMs": 1466,
+              "type": "change",
+              "path": ".git/objects/cd/e61088e842326c98a983eb12e49120474ff8f8",
+              "place": "git"
+            },
+            {
+              "atMs": 1466,
+              "type": "change",
+              "path": ".git/index.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 1466,
+              "type": "rename",
+              "path": ".git/index",
+              "place": "git"
+            },
+            {
+              "atMs": 1466,
+              "type": "rename",
+              "path": ".git/index.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 1466,
+              "type": "rename",
+              "path": ".git/index",
+              "place": "git"
+            },
+            {
+              "atMs": 1467,
+              "type": "change",
+              "path": ".git",
+              "place": "git"
+            },
+            {
+              "atMs": 1601,
+              "type": "rename",
+              "path": ".git/objects/c1/tmp_obj_HGs3FB",
+              "place": "git"
+            },
+            {
+              "atMs": 1601,
+              "type": "change",
+              "path": ".git/objects/c1/tmp_obj_HGs3FB",
+              "place": "git"
+            },
+            {
+              "atMs": 1631,
+              "type": "change",
+              "path": ".git/objects/c1",
+              "place": "git"
+            },
+            {
+              "atMs": 1631,
+              "type": "rename",
+              "path": ".git/objects/c1/tmp_obj_HGs3FB",
+              "place": "git"
+            },
+            {
+              "atMs": 1632,
+              "type": "rename",
+              "path": ".git/objects/c1/2de789330142f69cd661ce2e0d009535e7d336",
+              "place": "git"
+            },
+            {
+              "atMs": 1632,
+              "type": "change",
+              "path": ".git/objects/c1",
+              "place": "git"
+            },
+            {
+              "atMs": 1709,
+              "type": "rename",
+              "path": ".git/objects/46/tmp_obj_UKIUv0",
+              "place": "git"
+            },
+            {
+              "atMs": 1709,
+              "type": "change",
+              "path": ".git/objects/46/tmp_obj_UKIUv0",
+              "place": "git"
+            },
+            {
+              "atMs": 1742,
+              "type": "change",
+              "path": ".git/objects/46",
+              "place": "git"
+            },
+            {
+              "atMs": 1742,
+              "type": "rename",
+              "path": ".git/objects/46/tmp_obj_UKIUv0",
+              "place": "git"
+            },
+            {
+              "atMs": 1743,
+              "type": "rename",
+              "path": ".git/objects/46/af3abf08f79181d27ab9f34f2acf322f6afbee",
+              "place": "git"
+            },
+            {
+              "atMs": 1743,
+              "type": "change",
+              "path": ".git/objects/46",
+              "place": "git"
+            },
+            {
+              "atMs": 1759,
+              "type": "rename",
+              "path": ".git/objects/98/tmp_obj_m2GqyE",
+              "place": "git"
+            },
+            {
+              "atMs": 1760,
+              "type": "change",
+              "path": ".git/objects/98/tmp_obj_m2GqyE",
+              "place": "git"
+            },
+            {
+              "atMs": 1792,
+              "type": "change",
+              "path": ".git/objects/98",
+              "place": "git"
+            },
+            {
+              "atMs": 1792,
+              "type": "rename",
+              "path": ".git/objects/98/tmp_obj_m2GqyE",
+              "place": "git"
+            },
+            {
+              "atMs": 1793,
+              "type": "rename",
+              "path": ".git/objects/98/799af5842ee968d0ffab681d242b786da14d6e",
+              "place": "git"
+            },
+            {
+              "atMs": 1793,
+              "type": "change",
+              "path": ".git/objects/98",
+              "place": "git"
+            },
+            {
+              "atMs": 1842,
+              "type": "rename",
+              "path": ".git/objects/2d/tmp_obj_uZCsRe",
+              "place": "git"
+            },
+            {
+              "atMs": 1843,
+              "type": "change",
+              "path": ".git/objects/2d/tmp_obj_uZCsRe",
+              "place": "git"
+            },
+            {
+              "atMs": 1876,
+              "type": "change",
+              "path": ".git/objects/2d",
+              "place": "git"
+            },
+            {
+              "atMs": 1876,
+              "type": "rename",
+              "path": ".git/objects/2d/tmp_obj_uZCsRe",
+              "place": "git"
+            },
+            {
+              "atMs": 1876,
+              "type": "rename",
+              "path": ".git/objects/2d/e435f3a156328aa1bd279c0076ca5ca702baff",
+              "place": "git"
+            },
+            {
+              "atMs": 1877,
+              "type": "change",
+              "path": ".git/objects/2d",
+              "place": "git"
+            },
+            {
+              "atMs": 1926,
+              "type": "rename",
+              "path": ".git/objects/48/tmp_obj_wpU7y5",
+              "place": "git"
+            },
+            {
+              "atMs": 1927,
+              "type": "change",
+              "path": ".git/objects/48/tmp_obj_wpU7y5",
+              "place": "git"
+            },
+            {
+              "atMs": 1959,
+              "type": "change",
+              "path": ".git/objects/48",
+              "place": "git"
+            },
+            {
+              "atMs": 1959,
+              "type": "rename",
+              "path": ".git/objects/48/tmp_obj_wpU7y5",
+              "place": "git"
+            },
+            {
+              "atMs": 1959,
+              "type": "rename",
+              "path": ".git/objects/48/0b4222116f2aa56ef80deb36d9426f9907ca69",
+              "place": "git"
+            },
+            {
+              "atMs": 1960,
+              "type": "change",
+              "path": ".git/objects/48",
+              "place": "git"
+            },
+            {
+              "atMs": 2543,
+              "type": "rename",
+              "path": ".git/refs/heads/muse/repo-hrebz.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 2544,
+              "type": "change",
+              "path": ".git/refs/heads/muse/repo-hrebz.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 2545,
+              "type": "change",
+              "path": ".git/logs/refs/heads/muse",
+              "place": "git"
+            },
+            {
+              "atMs": 2546,
+              "type": "rename",
+              "path": ".git/logs/refs/heads/muse/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2547,
+              "type": "change",
+              "path": ".git/logs/refs/heads/muse/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2548,
+              "type": "change",
+              "path": ".git/refs/heads/muse",
+              "place": "git"
+            },
+            {
+              "atMs": 2548,
+              "type": "rename",
+              "path": ".git/refs/heads/muse/repo-hrebz.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 2549,
+              "type": "rename",
+              "path": ".git/refs/heads/muse/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2550,
+              "type": "change",
+              "path": ".git/refs/heads/muse",
+              "place": "git"
+            },
+            {
+              "atMs": 2551,
+              "type": "change",
+              "path": ".git/logs/refs/heads",
+              "place": "git"
+            },
+            {
+              "atMs": 2551,
+              "type": "rename",
+              "path": ".git/worktrees/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2552,
+              "type": "rename",
+              "path": ".git/worktrees/repo-hrebz/locked",
+              "place": "git"
+            },
+            {
+              "atMs": 2553,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz/locked",
+              "place": "git"
+            },
+            {
+              "atMs": 2554,
+              "type": "rename",
+              "path": ".muse/worktrees/repo-hrebz",
+              "place": "app"
+            },
+            {
+              "atMs": 2554,
+              "type": "change",
+              "path": ".muse/worktrees",
+              "place": "app"
+            },
+            {
+              "atMs": 2554,
+              "type": "change",
+              "path": ".git/worktrees",
+              "place": "git"
+            },
+            {
+              "atMs": 2555,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2556,
+              "type": "rename",
+              "path": ".git/worktrees/repo-hrebz/gitdir",
+              "place": "git"
+            },
+            {
+              "atMs": 2556,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz/gitdir",
+              "place": "git"
+            },
+            {
+              "atMs": 2557,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2557,
+              "type": "rename",
+              "path": ".muse/worktrees/repo-hrebz/.git",
+              "place": "git"
+            },
+            {
+              "atMs": 2558,
+              "type": "change",
+              "path": ".muse/worktrees/repo-hrebz",
+              "place": "app"
+            },
+            {
+              "atMs": 2558,
+              "type": "change",
+              "path": ".muse/worktrees/repo-hrebz/.git",
+              "place": "git"
+            },
+            {
+              "atMs": 2559,
+              "type": "change",
+              "path": ".muse/worktrees/repo-hrebz/.git",
+              "place": "git"
+            },
+            {
+              "atMs": 2560,
+              "type": "rename",
+              "path": ".git/worktrees/repo-hrebz/commondir",
+              "place": "git"
+            },
+            {
+              "atMs": 2560,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2561,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz/commondir",
+              "place": "git"
+            },
+            {
+              "atMs": 2561,
+              "type": "rename",
+              "path": ".git/worktrees/repo-hrebz/refs",
+              "place": "git"
+            },
+            {
+              "atMs": 2562,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2562,
+              "type": "rename",
+              "path": ".git/worktrees/repo-hrebz/HEAD.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 2562,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz/HEAD.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 2562,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2563,
+              "type": "rename",
+              "path": ".git/worktrees/repo-hrebz/logs",
+              "place": "git"
+            },
+            {
+              "atMs": 2563,
+              "type": "rename",
+              "path": ".git/worktrees/repo-hrebz/logs/HEAD",
+              "place": "git"
+            },
+            {
+              "atMs": 2564,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz/logs/HEAD",
+              "place": "git"
+            },
+            {
+              "atMs": 2564,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2564,
+              "type": "rename",
+              "path": ".git/worktrees/repo-hrebz/HEAD.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 2565,
+              "type": "rename",
+              "path": ".git/worktrees/repo-hrebz/HEAD",
+              "place": "git"
+            },
+            {
+              "atMs": 2565,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz",
+              "place": "git"
+            },
+            {
+              "atMs": 2566,
+              "type": "change",
+              "path": ".git/worktrees/repo-hrebz/logs",
+              "place": "git"
+            }
+          ]
+        },
+        "cWorktree": {
+          "branch": "muse/repo-hrebz",
+          "status": [],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "86bc5059cb681798",
+            "src/app.txt": "29d5b932a04f02da",
+            "staged.txt": "104801b22caabc34"
+          }
+        },
+        "cView": {
+          "active": "01a11095-d8c2-7c62-aa60-4ebf91613138",
+          "sessions": 2,
+          "stored": {
+            "workspace": "<local>",
+            "host_workspace": null
+          },
+          "header": {
+            "eyebrow": "repo / CONVERSATION",
+            "path": "<local>",
+            "branch": null,
+            "connection": "Connected"
+          },
+          "logEntries": 1,
+          "lastSystemNotes": [
+            "Unsent message discarded."
+          ]
+        }
+      },
+      "after": {
+        "item1": {
+          "local": "86bc5059cb681798",
+          "worktree": "93da8c4b803e557b",
+          "localHasToken": false,
+          "worktreeHasToken": true
+        },
+        "local": {
+          "branch": "main",
+          "status": [
+            "?? notes/cross.md"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/cross.md": "4209a4f4eb2a9198",
+            "src/app.txt": "29d5b932a04f02da",
+            "staged.txt": "104801b22caabc34"
+          }
+        },
+        "w1": {
+          "branch": "muse/repo-hqbwb",
+          "status": [
+            " M docs/item1.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? item1-written.txt",
+            "?? bulk/ (2000 files)"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "93da8c4b803e557b",
+            "item1-written.txt": "b8cdccbf23e18c88",
+            "src/app.txt": "7d0ac43a64571677",
+            "staged.txt": "d63509f9170fd865",
+            "bulk/ (2000 files)": "38ee41c957ce2e51"
+          }
+        },
+        "refs": 2
+      },
+      "verdict": {
+        "turnFinished": true,
+        "sameSession": true,
+        "modelCwdWorktree": true,
+        "readFileUsed": true,
+        "readSawTheWorktreeVersion": true,
+        "writeFileUsed": true,
+        "newFileInWorktreeOnly": true,
+        "localUntouched": true,
+        "worktreeGainedOnlyTheNewFile": true,
+        "selfMoveRefused": true,
+        "selfRefusalSaysWhy": true,
+        "supervisorRefusesWhileRunning": true,
+        "otherConversationRefused": true,
+        "refusalShown": true,
+        "refusedMoveTouchedNoLocalFile": true
+      },
+      "consoleErrors": []
+    },
+    "c-held-tracked": {
+      "commit": "4e08e2a",
+      "productTreeClean": true,
+      "exeSha256": "10ee37b4c992f3d4d6cdb12baba00d4285d59dc670e7fcfcb4bf28b0c1f2646e",
+      "conversationC": "started by a direct start_session, no turn (rehearsal)",
+      "held": {
+        "path": "src/app.txt",
+        "share": "Read (no Delete)",
+        "released": true
+      },
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            "M  staged.txt",
+            "?? notes/cross.md",
+            "?? notes/local.md"
+          ],
+          "staged": [
+            "M\tstaged.txt"
+          ],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "a0de622643324c73",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/cross.md": "4209a4f4eb2a9198",
+            "notes/local.md": "dc44a0fe1ed703cc",
+            "src/app.txt": "f91dc591f250b366",
+            "staged.txt": "ec5344ddcfe2b592"
+          }
+        },
+        "refs": 2
+      },
+      "action": {
+        "label": "Move to worktree",
+        "click": {
+          "clicked": true
+        },
+        "dialog": {
+          "clicked": "OK",
+          "found": true,
+          "answer": "OK",
+          "texts": [
+            "Move all the uncommitted work in this folder to a new worktree, including changes made outside this conversation?\n\n• 4 changed files (staged changes arrive unstaged)\n• 2 untracked files\n• 1 ignored item left where they are\n\nThe conversation moves with them: its next message runs there."
+          ],
+          "buttons": [
+            "OK",
+            "Annuler"
+          ],
+          "title": "Muse-Desktop"
+        },
+        "preview": {
+          "target": null,
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 1,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<local>",
+            "target": null,
+            "tracked": 4,
+            "untracked": 2
+          }
+        },
+        "move": {
+          "target": "<worktree 2>",
+          "ok": false,
+          "result": "the source could not be cleaned; both sides were restored as they were: error: unable to unlink old 'src/app.txt': Invalid argument"
+        },
+        "moveCalls": 1,
+        "confirmCalls": [],
+        "worktreeCreated": [
+          {
+            "ok": true,
+            "result": {
+              "repoRoot": "<local>",
+              "path": "<worktree 2>",
+              "branch": "muse/repo-ht670",
+              "base": "HEAD",
+              "createdAt": 1791279912507
+            }
+          }
+        ],
+        "ms": 5808,
+        "banner": "The conversation was not moved: the source could not be cleaned; both sides were restored as they were: error: unable to unlink old 'src/app.txt': Invalid argument"
+      },
+      "events": {
+        "total": 345,
+        "byPlace": {
+          "git": {
+            "count": 224,
+            "paths": [
+              ".git",
+              ".git/index",
+              ".git/index.lock",
+              ".git/logs/refs/heads/muse/repo-ht670",
+              ".git/objects/4b",
+              ".git/objects/4b/e59ae8dc80d76591ea9f57a7073e58a92db047",
+              ".git/objects/4b/tmp_obj_vDMH51",
+              ".git/objects/6c",
+              ".git/objects/6c/ef620d35461f2181b31de263520a8c82624af5",
+              ".git/objects/6c/tmp_obj_vkldYM",
+              ".git/objects/71",
+              ".git/objects/71/f95084eee8d9a14d0e3f95ab7ffdaa6b09c5e2",
+              ".git/objects/71/tmp_obj_EyFFIp",
+              ".git/objects/7b",
+              ".git/objects/7b/6a559445d03c060612c94a62ef93a6c67b77ed",
+              ".git/objects/7b/tmp_obj_fw0P04",
+              ".git/objects/a4",
+              ".git/objects/a4/f0306fd5b20ff6554878f3d1b923b9b83587c2",
+              ".git/objects/a4/tmp_obj_pIDbXb",
+              ".git/objects/a7",
+              ".git/objects/a7/271590785048ba54a2bbe90c53a19b1c54e941",
+              ".git/objects/a7/tmp_obj_H8xVEE",
+              ".git/objects/ab",
+              ".git/objects/ab/00680a9fc1b90b9a666fb0d93b3b867fd58131",
+              ".git/objects/ab/tmp_obj_TNhK9c",
+              ".git/objects/b9",
+              ".git/objects/b9/09f2675fdefe8104e754cbf303bae6ef63da23",
+              ".git/objects/b9/8f8004e3d50f22424581d50764a93a0fa18e34",
+              ".git/objects/b9/tmp_obj_Elzo8i",
+              ".git/objects/b9/tmp_obj_lTph8x",
+              ".git/objects/bd",
+              ".git/objects/bd/eb414b6f9fefaa05745c55462e007b6567d1a3",
+              ".git/objects/bd/tmp_obj_6DBUTp",
+              ".git/objects/c1/2de789330142f69cd661ce2e0d009535e7d336",
+              ".git/objects/c8",
+              ".git/objects/c8/7fe013b57495ccf7b0ab101756a9c88ab24a89",
+              ".git/objects/c8/tmp_obj_u7jGVu",
+              ".git/objects/cf",
+              ".git/objects/cf/ec55e3f7a334ea3a8ce7098575d835acc4f63e",
+              ".git/objects/cf/tmp_obj_ClghXD"
+            ],
+            "morePaths": 32
+          },
+          "app": {
+            "count": 17,
+            "paths": [
+              ".muse/worktrees",
+              ".muse/worktrees/repo-ht670"
+            ],
+            "morePaths": 0
+          },
+          "target": {
+            "count": 74,
+            "paths": [
+              ".muse/worktrees/repo-ht670/.gitignore",
+              ".muse/worktrees/repo-ht670/README.md",
+              ".muse/worktrees/repo-ht670/assets",
+              ".muse/worktrees/repo-ht670/assets/blob.bin",
+              ".muse/worktrees/repo-ht670/crlf.txt",
+              ".muse/worktrees/repo-ht670/deleted.txt",
+              ".muse/worktrees/repo-ht670/docs",
+              ".muse/worktrees/repo-ht670/docs/item1.txt",
+              ".muse/worktrees/repo-ht670/notes",
+              ".muse/worktrees/repo-ht670/notes/cross.md",
+              ".muse/worktrees/repo-ht670/notes/local.md",
+              ".muse/worktrees/repo-ht670/src",
+              ".muse/worktrees/repo-ht670/src/app.txt",
+              ".muse/worktrees/repo-ht670/staged.txt"
+            ],
+            "morePaths": 0
+          },
+          "local": {
+            "count": 30,
+            "paths": [
+              "assets",
+              "assets/blob.bin",
+              "deleted.txt",
+              "notes",
+              "notes/cross.md",
+              "notes/local.md",
+              "staged.txt"
+            ],
+            "morePaths": 0
+          }
+        },
+        "first": [
+          {
+            "atMs": 643,
+            "type": "rename",
+            "path": ".git/index.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 644,
+            "type": "change",
+            "path": ".git",
+            "place": "git"
+          },
+          {
+            "atMs": 659,
+            "type": "rename",
+            "path": ".git/objects/fd/tmp_obj_6HcB99",
+            "place": "git"
+          },
+          {
+            "atMs": 660,
+            "type": "change",
+            "path": ".git/objects/fd/tmp_obj_6HcB99",
+            "place": "git"
+          },
+          {
+            "atMs": 695,
+            "type": "change",
+            "path": ".git/objects/fd",
+            "place": "git"
+          },
+          {
+            "atMs": 695,
+            "type": "rename",
+            "path": ".git/objects/fd/tmp_obj_6HcB99",
+            "place": "git"
+          },
+          {
+            "atMs": 696,
+            "type": "rename",
+            "path": ".git/objects/fd/2bfacab9e73f20936624604cb88cd576a34340",
+            "place": "git"
+          },
+          {
+            "atMs": 697,
+            "type": "change",
+            "path": ".git/objects/fd",
+            "place": "git"
+          },
+          {
+            "atMs": 697,
+            "type": "change",
+            "path": ".git/index.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 697,
+            "type": "rename",
+            "path": ".git/index",
+            "place": "git"
+          },
+          {
+            "atMs": 697,
+            "type": "rename",
+            "path": ".git/index.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 697,
+            "type": "rename",
+            "path": ".git/index",
+            "place": "git"
+          },
+          {
+            "atMs": 698,
+            "type": "change",
+            "path": ".git",
+            "place": "git"
+          },
+          {
+            "atMs": 794,
+            "type": "change",
+            "path": ".git/objects/c1/2de789330142f69cd661ce2e0d009535e7d336",
+            "place": "git"
+          },
+          {
+            "atMs": 795,
+            "type": "change",
+            "path": ".git/objects/c1/2de789330142f69cd661ce2e0d009535e7d336",
+            "place": "git"
+          },
+          {
+            "atMs": 796,
+            "type": "change",
+            "path": ".git/objects/c1/2de789330142f69cd661ce2e0d009535e7d336",
+            "place": "git"
+          },
+          {
+            "atMs": 817,
+            "type": "rename",
+            "path": ".git/objects/4b/tmp_obj_vDMH51",
+            "place": "git"
+          },
+          {
+            "atMs": 818,
+            "type": "change",
+            "path": ".git/objects/4b/tmp_obj_vDMH51",
+            "place": "git"
+          },
+          {
+            "atMs": 851,
+            "type": "change",
+            "path": ".git/objects/4b",
+            "place": "git"
+          },
+          {
+            "atMs": 851,
+            "type": "rename",
+            "path": ".git/objects/4b/tmp_obj_vDMH51",
+            "place": "git"
+          },
+          {
+            "atMs": 852,
+            "type": "rename",
+            "path": ".git/objects/4b/e59ae8dc80d76591ea9f57a7073e58a92db047",
+            "place": "git"
+          },
+          {
+            "atMs": 852,
+            "type": "change",
+            "path": ".git/objects/4b",
+            "place": "git"
+          },
+          {
+            "atMs": 867,
+            "type": "rename",
+            "path": ".git/objects/cf/tmp_obj_ClghXD",
+            "place": "git"
+          },
+          {
+            "atMs": 868,
+            "type": "change",
+            "path": ".git/objects/cf/tmp_obj_ClghXD",
+            "place": "git"
+          },
+          {
+            "atMs": 912,
+            "type": "change",
+            "path": ".git/objects/cf",
+            "place": "git"
+          },
+          {
+            "atMs": 912,
+            "type": "rename",
+            "path": ".git/objects/cf/tmp_obj_ClghXD",
+            "place": "git"
+          },
+          {
+            "atMs": 913,
+            "type": "rename",
+            "path": ".git/objects/cf/ec55e3f7a334ea3a8ce7098575d835acc4f63e",
+            "place": "git"
+          },
+          {
+            "atMs": 913,
+            "type": "change",
+            "path": ".git/objects/cf",
+            "place": "git"
+          },
+          {
+            "atMs": 934,
+            "type": "rename",
+            "path": ".git/objects/a4/tmp_obj_pIDbXb",
+            "place": "git"
+          },
+          {
+            "atMs": 935,
+            "type": "change",
+            "path": ".git/objects/a4/tmp_obj_pIDbXb",
+            "place": "git"
+          },
+          {
+            "atMs": 962,
+            "type": "change",
+            "path": ".git/objects/a4",
+            "place": "git"
+          },
+          {
+            "atMs": 962,
+            "type": "rename",
+            "path": ".git/objects/a4/tmp_obj_pIDbXb",
+            "place": "git"
+          },
+          {
+            "atMs": 963,
+            "type": "rename",
+            "path": ".git/objects/a4/f0306fd5b20ff6554878f3d1b923b9b83587c2",
+            "place": "git"
+          },
+          {
+            "atMs": 964,
+            "type": "change",
+            "path": ".git/objects/a4",
+            "place": "git"
+          },
+          {
+            "atMs": 1042,
+            "type": "rename",
+            "path": ".git/objects/71/tmp_obj_EyFFIp",
+            "place": "git"
+          },
+          {
+            "atMs": 1042,
+            "type": "change",
+            "path": ".git/objects/71/tmp_obj_EyFFIp",
+            "place": "git"
+          },
+          {
+            "atMs": 1070,
+            "type": "change",
+            "path": ".git/objects/71",
+            "place": "git"
+          },
+          {
+            "atMs": 1071,
+            "type": "rename",
+            "path": ".git/objects/71/tmp_obj_EyFFIp",
+            "place": "git"
+          },
+          {
+            "atMs": 1071,
+            "type": "rename",
+            "path": ".git/objects/71/f95084eee8d9a14d0e3f95ab7ffdaa6b09c5e2",
+            "place": "git"
+          },
+          {
+            "atMs": 1072,
+            "type": "change",
+            "path": ".git/objects/71",
+            "place": "git"
+          },
+          {
+            "atMs": 1092,
+            "type": "rename",
+            "path": ".git/objects/a7/tmp_obj_H8xVEE",
+            "place": "git"
+          },
+          {
+            "atMs": 1093,
+            "type": "change",
+            "path": ".git/objects/a7/tmp_obj_H8xVEE",
+            "place": "git"
+          },
+          {
+            "atMs": 1129,
+            "type": "change",
+            "path": ".git/objects/a7",
+            "place": "git"
+          },
+          {
+            "atMs": 1129,
+            "type": "rename",
+            "path": ".git/objects/a7/tmp_obj_H8xVEE",
+            "place": "git"
+          },
+          {
+            "atMs": 1130,
+            "type": "rename",
+            "path": ".git/objects/a7/271590785048ba54a2bbe90c53a19b1c54e941",
+            "place": "git"
+          },
+          {
+            "atMs": 1131,
+            "type": "change",
+            "path": ".git/objects/a7",
+            "place": "git"
+          },
+          {
+            "atMs": 1154,
+            "type": "rename",
+            "path": ".git/objects/ab/tmp_obj_TNhK9c",
+            "place": "git"
+          },
+          {
+            "atMs": 1155,
+            "type": "change",
+            "path": ".git/objects/ab/tmp_obj_TNhK9c",
+            "place": "git"
+          },
+          {
+            "atMs": 1178,
+            "type": "change",
+            "path": ".git/objects/ab",
+            "place": "git"
+          },
+          {
+            "atMs": 1178,
+            "type": "rename",
+            "path": ".git/objects/ab/tmp_obj_TNhK9c",
+            "place": "git"
+          },
+          {
+            "atMs": 1179,
+            "type": "rename",
+            "path": ".git/objects/ab/00680a9fc1b90b9a666fb0d93b3b867fd58131",
+            "place": "git"
+          },
+          {
+            "atMs": 1180,
+            "type": "change",
+            "path": ".git/objects/ab",
+            "place": "git"
+          },
+          {
+            "atMs": 1200,
+            "type": "rename",
+            "path": ".git/objects/bd/tmp_obj_6DBUTp",
+            "place": "git"
+          },
+          {
+            "atMs": 1201,
+            "type": "change",
+            "path": ".git/objects/bd/tmp_obj_6DBUTp",
+            "place": "git"
+          },
+          {
+            "atMs": 1228,
+            "type": "change",
+            "path": ".git/objects/bd",
+            "place": "git"
+          },
+          {
+            "atMs": 1228,
+            "type": "rename",
+            "path": ".git/objects/bd/tmp_obj_6DBUTp",
+            "place": "git"
+          },
+          {
+            "atMs": 1229,
+            "type": "rename",
+            "path": ".git/objects/bd/eb414b6f9fefaa05745c55462e007b6567d1a3",
+            "place": "git"
+          },
+          {
+            "atMs": 1230,
+            "type": "change",
+            "path": ".git/objects/bd",
+            "place": "git"
+          },
+          {
+            "atMs": 1283,
+            "type": "rename",
+            "path": ".git/objects/c8/tmp_obj_u7jGVu",
+            "place": "git"
+          },
+          {
+            "atMs": 1284,
+            "type": "change",
+            "path": ".git/objects/c8/tmp_obj_u7jGVu",
+            "place": "git"
+          },
+          {
+            "atMs": 1320,
+            "type": "change",
+            "path": ".git/objects/c8",
+            "place": "git"
+          },
+          {
+            "atMs": 1320,
+            "type": "rename",
+            "path": ".git/objects/c8/tmp_obj_u7jGVu",
+            "place": "git"
+          },
+          {
+            "atMs": 1321,
+            "type": "rename",
+            "path": ".git/objects/c8/7fe013b57495ccf7b0ab101756a9c88ab24a89",
+            "place": "git"
+          },
+          {
+            "atMs": 1322,
+            "type": "change",
+            "path": ".git/objects/c8",
+            "place": "git"
+          },
+          {
+            "atMs": 1375,
+            "type": "rename",
+            "path": ".git/objects/7b/tmp_obj_fw0P04",
+            "place": "git"
+          },
+          {
+            "atMs": 1376,
+            "type": "change",
+            "path": ".git/objects/7b/tmp_obj_fw0P04",
+            "place": "git"
+          },
+          {
+            "atMs": 1404,
+            "type": "change",
+            "path": ".git/objects/7b",
+            "place": "git"
+          },
+          {
+            "atMs": 1404,
+            "type": "rename",
+            "path": ".git/objects/7b/tmp_obj_fw0P04",
+            "place": "git"
+          },
+          {
+            "atMs": 1405,
+            "type": "rename",
+            "path": ".git/objects/7b/6a559445d03c060612c94a62ef93a6c67b77ed",
+            "place": "git"
+          },
+          {
+            "atMs": 1405,
+            "type": "change",
+            "path": ".git/objects/7b",
+            "place": "git"
+          },
+          {
+            "atMs": 2033,
+            "type": "rename",
+            "path": ".git/refs/heads/muse/repo-ht670.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 2034,
+            "type": "change",
+            "path": ".git/refs/heads/muse/repo-ht670.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 2035,
+            "type": "rename",
+            "path": ".git/logs/refs/heads/muse/repo-ht670",
+            "place": "git"
+          },
+          {
+            "atMs": 2036,
+            "type": "change",
+            "path": ".git/logs/refs/heads/muse/repo-ht670",
+            "place": "git"
+          },
+          {
+            "atMs": 2036,
+            "type": "change",
+            "path": ".git/refs/heads/muse",
+            "place": "git"
+          },
+          {
+            "atMs": 2036,
+            "type": "rename",
+            "path": ".git/refs/heads/muse/repo-ht670.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 2037,
+            "type": "rename",
+            "path": ".git/refs/heads/muse/repo-ht670",
+            "place": "git"
+          },
+          {
+            "atMs": 2037,
+            "type": "change",
+            "path": ".git/refs/heads/muse",
+            "place": "git"
+          },
+          {
+            "atMs": 2042,
+            "type": "rename",
+            "path": ".git/worktrees/repo-ht670",
+            "place": "git"
+          },
+          {
+            "atMs": 2043,
+            "type": "rename",
+            "path": ".git/worktrees/repo-ht670/locked",
+            "place": "git"
+          }
+        ]
+      },
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            "M  staged.txt",
+            "?? notes/cross.md",
+            "?? notes/local.md"
+          ],
+          "staged": [
+            "M\tstaged.txt"
+          ],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "a0de622643324c73",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/cross.md": "4209a4f4eb2a9198",
+            "notes/local.md": "dc44a0fe1ed703cc",
+            "src/app.txt": "f91dc591f250b366",
+            "staged.txt": "ec5344ddcfe2b592"
+          }
+        },
+        "target": {
+          "branch": "muse/repo-ht670",
+          "status": [],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "86bc5059cb681798",
+            "src/app.txt": "29d5b932a04f02da",
+            "staged.txt": "104801b22caabc34"
+          }
+        },
+        "refs": 4
+      },
+      "newRefs": [
+        "refs/muse/handoff/1791279913875/source",
+        "refs/muse/handoff/1791279913875/target"
+      ],
+      "view": {
+        "active": "01a11095-d8c2-7c62-aa60-4ebf91613138",
+        "sessions": 2,
+        "stored": {
+          "workspace": "<local>",
+          "host_workspace": null
+        },
+        "header": {
+          "eyebrow": "repo / CONVERSATION",
+          "path": "<local>",
+          "branch": null,
+          "connection": "Connected"
+        },
+        "logEntries": 1,
+        "lastSystemNotes": [
+          "Unsent message discarded."
+        ]
+      },
+      "verdict": {
+        "confirmAsked": true,
+        "targetReceivedTheWork": true,
+        "moveFailed": true,
+        "honestMessage": true,
+        "localByteIdentical": true,
+        "targetBackToItsCheckout": true,
+        "snapshotKept": true,
+        "heldFileUnchanged": true,
+        "conversationStays": true,
+        "noEventLost": true
+      },
+      "consoleErrors": []
+    },
+    "c-held-untracked": {
+      "commit": "4e08e2a",
+      "productTreeClean": true,
+      "exeSha256": "10ee37b4c992f3d4d6cdb12baba00d4285d59dc670e7fcfcb4bf28b0c1f2646e",
+      "conversationC": "started by a direct start_session, no turn (rehearsal)",
+      "held": {
+        "path": "notes/local.md",
+        "share": "Read (no Delete)",
+        "released": true
+      },
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            "M  staged.txt",
+            "?? notes/cross.md",
+            "?? notes/local.md"
+          ],
+          "staged": [
+            "M\tstaged.txt"
+          ],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "a0de622643324c73",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/cross.md": "4209a4f4eb2a9198",
+            "notes/local.md": "dc44a0fe1ed703cc",
+            "src/app.txt": "f91dc591f250b366",
+            "staged.txt": "ec5344ddcfe2b592"
+          }
+        },
+        "refs": 4
+      },
+      "action": {
+        "label": "Move to worktree",
+        "click": {
+          "clicked": true
+        },
+        "dialog": {
+          "clicked": "OK",
+          "found": true,
+          "answer": "OK",
+          "texts": [
+            "Move all the uncommitted work in this folder to a new worktree, including changes made outside this conversation?\n\n• 4 changed files (staged changes arrive unstaged)\n• 2 untracked files\n• 1 ignored item left where they are\n\nThe conversation moves with them: its next message runs there."
+          ],
+          "buttons": [
+            "OK",
+            "Annuler"
+          ],
+          "title": "Muse-Desktop"
+        },
+        "preview": {
+          "target": null,
+          "ok": true,
+          "result": {
+            "conflicts": [],
+            "ignored": 1,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<local>",
+            "target": null,
+            "tracked": 4,
+            "untracked": 2
+          }
+        },
+        "move": {
+          "target": "<worktree 3>",
+          "ok": false,
+          "result": "the source could not be cleaned; both sides were restored as they were: Git could not delete notes/local.md (in use by another program?)"
+        },
+        "moveCalls": 1,
+        "confirmCalls": [],
+        "worktreeCreated": [
+          {
+            "ok": true,
+            "result": {
+              "repoRoot": "<local>",
+              "path": "<worktree 3>",
+              "branch": "muse/repo-htgt1",
+              "base": "HEAD",
+              "createdAt": 1791279926261
+            }
+          }
+        ],
+        "ms": 5303,
+        "banner": "The conversation was not moved: the source could not be cleaned; both sides were restored as they were: Git could not delete notes/local.md (in use by another program?)"
+      },
+      "events": {
+        "total": 317,
+        "byPlace": {
+          "git": {
+            "count": 195,
+            "paths": [
+              ".git",
+              ".git/index",
+              ".git/index.lock",
+              ".git/logs/refs/heads/muse",
+              ".git/logs/refs/heads/muse/repo-htgt1",
+              ".git/objects/14",
+              ".git/objects/14/bdbfc5cee3d862379b54cb3fc31db836d04fbd",
+              ".git/objects/14/tmp_obj_9AeC2M",
+              ".git/objects/4b/e59ae8dc80d76591ea9f57a7073e58a92db047",
+              ".git/objects/5e",
+              ".git/objects/5e/e92112f8e4d0d0f176b47995ba7aeea7dbe8bf",
+              ".git/objects/5e/tmp_obj_jwLGTm",
+              ".git/objects/71/f95084eee8d9a14d0e3f95ab7ffdaa6b09c5e2",
+              ".git/objects/72",
+              ".git/objects/72/b1300386a3b68b7cddc2d97eb7257481a9cf72",
+              ".git/objects/72/tmp_obj_9r9DAO",
+              ".git/objects/90",
+              ".git/objects/90/f5c74da8d0d934cb8e5bc28a2f613c7a31d17a",
+              ".git/objects/90/tmp_obj_PL7V9G",
+              ".git/objects/a4/f0306fd5b20ff6554878f3d1b923b9b83587c2",
+              ".git/objects/a7/271590785048ba54a2bbe90c53a19b1c54e941",
+              ".git/objects/ab/00680a9fc1b90b9a666fb0d93b3b867fd58131",
+              ".git/objects/ae",
+              ".git/objects/ae/2a2b372d855ebd4f92efbbceda6ff2b0cb2a1b",
+              ".git/objects/ae/tmp_obj_IhiFaq",
+              ".git/objects/bd/eb414b6f9fefaa05745c55462e007b6567d1a3",
+              ".git/objects/c1/2de789330142f69cd661ce2e0d009535e7d336",
+              ".git/objects/cf/ec55e3f7a334ea3a8ce7098575d835acc4f63e",
+              ".git/objects/db",
+              ".git/objects/db/1e416fd1e2c7609100cb64be30d279b5882172",
+              ".git/objects/db/tmp_obj_gZbcsu",
+              ".git/packed-refs.lock",
+              ".git/refs/heads/muse",
+              ".git/refs/heads/muse/repo-htgt1",
+              ".git/refs/heads/muse/repo-htgt1.lock",
+              ".git/refs/muse/handoff",
+              ".git/refs/muse/handoff/1791279927648",
+              ".git/refs/muse/handoff/1791279927648/source",
+              ".git/refs/muse/handoff/1791279927648/source.lock",
+              ".git/refs/muse/handoff/1791279927648/target"
+            ],
+            "morePaths": 17
+          },
+          "app": {
+            "count": 17,
+            "paths": [
+              ".muse/worktrees",
+              ".muse/worktrees/repo-htgt1"
+            ],
+            "morePaths": 0
+          },
+          "target": {
+            "count": 74,
+            "paths": [
+              ".muse/worktrees/repo-htgt1/.gitignore",
+              ".muse/worktrees/repo-htgt1/README.md",
+              ".muse/worktrees/repo-htgt1/assets",
+              ".muse/worktrees/repo-htgt1/assets/blob.bin",
+              ".muse/worktrees/repo-htgt1/crlf.txt",
+              ".muse/worktrees/repo-htgt1/deleted.txt",
+              ".muse/worktrees/repo-htgt1/docs",
+              ".muse/worktrees/repo-htgt1/docs/item1.txt",
+              ".muse/worktrees/repo-htgt1/notes",
+              ".muse/worktrees/repo-htgt1/notes/cross.md",
+              ".muse/worktrees/repo-htgt1/notes/local.md",
+              ".muse/worktrees/repo-htgt1/src",
+              ".muse/worktrees/repo-htgt1/src/app.txt",
+              ".muse/worktrees/repo-htgt1/staged.txt"
+            ],
+            "morePaths": 0
+          },
+          "local": {
+            "count": 31,
+            "paths": [
+              "assets",
+              "assets/blob.bin",
+              "deleted.txt",
+              "notes",
+              "notes/cross.md",
+              "src",
+              "src/app.txt",
+              "staged.txt"
+            ],
+            "morePaths": 0
+          }
+        },
+        "first": [
+          {
+            "atMs": 639,
+            "type": "rename",
+            "path": ".git/index.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 639,
+            "type": "change",
+            "path": ".git",
+            "place": "git"
+          },
+          {
+            "atMs": 639,
+            "type": "rename",
+            "path": ".git/index.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 667,
+            "type": "change",
+            "path": ".git",
+            "place": "git"
+          },
+          {
+            "atMs": 731,
+            "type": "change",
+            "path": ".git/objects/c1/2de789330142f69cd661ce2e0d009535e7d336",
+            "place": "git"
+          },
+          {
+            "atMs": 731,
+            "type": "change",
+            "path": ".git/objects/c1/2de789330142f69cd661ce2e0d009535e7d336",
+            "place": "git"
+          },
+          {
+            "atMs": 732,
+            "type": "change",
+            "path": ".git/objects/c1/2de789330142f69cd661ce2e0d009535e7d336",
+            "place": "git"
+          },
+          {
+            "atMs": 732,
+            "type": "change",
+            "path": ".git/objects/4b/e59ae8dc80d76591ea9f57a7073e58a92db047",
+            "place": "git"
+          },
+          {
+            "atMs": 733,
+            "type": "change",
+            "path": ".git/objects/4b/e59ae8dc80d76591ea9f57a7073e58a92db047",
+            "place": "git"
+          },
+          {
+            "atMs": 734,
+            "type": "change",
+            "path": ".git/objects/4b/e59ae8dc80d76591ea9f57a7073e58a92db047",
+            "place": "git"
+          },
+          {
+            "atMs": 735,
+            "type": "change",
+            "path": ".git/objects/cf/ec55e3f7a334ea3a8ce7098575d835acc4f63e",
+            "place": "git"
+          },
+          {
+            "atMs": 735,
+            "type": "change",
+            "path": ".git/objects/cf/ec55e3f7a334ea3a8ce7098575d835acc4f63e",
+            "place": "git"
+          },
+          {
+            "atMs": 736,
+            "type": "change",
+            "path": ".git/objects/cf/ec55e3f7a334ea3a8ce7098575d835acc4f63e",
+            "place": "git"
+          },
+          {
+            "atMs": 736,
+            "type": "change",
+            "path": ".git/objects/a4/f0306fd5b20ff6554878f3d1b923b9b83587c2",
+            "place": "git"
+          },
+          {
+            "atMs": 737,
+            "type": "change",
+            "path": ".git/objects/a4/f0306fd5b20ff6554878f3d1b923b9b83587c2",
+            "place": "git"
+          },
+          {
+            "atMs": 737,
+            "type": "change",
+            "path": ".git/objects/a4/f0306fd5b20ff6554878f3d1b923b9b83587c2",
+            "place": "git"
+          },
+          {
+            "atMs": 795,
+            "type": "change",
+            "path": ".git/objects/71/f95084eee8d9a14d0e3f95ab7ffdaa6b09c5e2",
+            "place": "git"
+          },
+          {
+            "atMs": 796,
+            "type": "change",
+            "path": ".git/objects/71/f95084eee8d9a14d0e3f95ab7ffdaa6b09c5e2",
+            "place": "git"
+          },
+          {
+            "atMs": 796,
+            "type": "change",
+            "path": ".git/objects/71/f95084eee8d9a14d0e3f95ab7ffdaa6b09c5e2",
+            "place": "git"
+          },
+          {
+            "atMs": 797,
+            "type": "change",
+            "path": ".git/objects/a7/271590785048ba54a2bbe90c53a19b1c54e941",
+            "place": "git"
+          },
+          {
+            "atMs": 798,
+            "type": "change",
+            "path": ".git/objects/a7/271590785048ba54a2bbe90c53a19b1c54e941",
+            "place": "git"
+          },
+          {
+            "atMs": 798,
+            "type": "change",
+            "path": ".git/objects/a7/271590785048ba54a2bbe90c53a19b1c54e941",
+            "place": "git"
+          },
+          {
+            "atMs": 799,
+            "type": "change",
+            "path": ".git/objects/ab/00680a9fc1b90b9a666fb0d93b3b867fd58131",
+            "place": "git"
+          },
+          {
+            "atMs": 800,
+            "type": "change",
+            "path": ".git/objects/ab/00680a9fc1b90b9a666fb0d93b3b867fd58131",
+            "place": "git"
+          },
+          {
+            "atMs": 800,
+            "type": "change",
+            "path": ".git/objects/ab/00680a9fc1b90b9a666fb0d93b3b867fd58131",
+            "place": "git"
+          },
+          {
+            "atMs": 801,
+            "type": "change",
+            "path": ".git/objects/bd/eb414b6f9fefaa05745c55462e007b6567d1a3",
+            "place": "git"
+          },
+          {
+            "atMs": 801,
+            "type": "change",
+            "path": ".git/objects/bd/eb414b6f9fefaa05745c55462e007b6567d1a3",
+            "place": "git"
+          },
+          {
+            "atMs": 802,
+            "type": "change",
+            "path": ".git/objects/bd/eb414b6f9fefaa05745c55462e007b6567d1a3",
+            "place": "git"
+          },
+          {
+            "atMs": 853,
+            "type": "rename",
+            "path": ".git/objects/db/tmp_obj_gZbcsu",
+            "place": "git"
+          },
+          {
+            "atMs": 853,
+            "type": "change",
+            "path": ".git/objects/db/tmp_obj_gZbcsu",
+            "place": "git"
+          },
+          {
+            "atMs": 890,
+            "type": "change",
+            "path": ".git/objects/db",
+            "place": "git"
+          },
+          {
+            "atMs": 890,
+            "type": "rename",
+            "path": ".git/objects/db/tmp_obj_gZbcsu",
+            "place": "git"
+          },
+          {
+            "atMs": 891,
+            "type": "rename",
+            "path": ".git/objects/db/1e416fd1e2c7609100cb64be30d279b5882172",
+            "place": "git"
+          },
+          {
+            "atMs": 891,
+            "type": "change",
+            "path": ".git/objects/db",
+            "place": "git"
+          },
+          {
+            "atMs": 944,
+            "type": "rename",
+            "path": ".git/objects/5e/tmp_obj_jwLGTm",
+            "place": "git"
+          },
+          {
+            "atMs": 945,
+            "type": "change",
+            "path": ".git/objects/5e/tmp_obj_jwLGTm",
+            "place": "git"
+          },
+          {
+            "atMs": 982,
+            "type": "change",
+            "path": ".git/objects/5e",
+            "place": "git"
+          },
+          {
+            "atMs": 982,
+            "type": "rename",
+            "path": ".git/objects/5e/tmp_obj_jwLGTm",
+            "place": "git"
+          },
+          {
+            "atMs": 982,
+            "type": "rename",
+            "path": ".git/objects/5e/e92112f8e4d0d0f176b47995ba7aeea7dbe8bf",
+            "place": "git"
+          },
+          {
+            "atMs": 983,
+            "type": "change",
+            "path": ".git/objects/5e",
+            "place": "git"
+          },
+          {
+            "atMs": 1535,
+            "type": "rename",
+            "path": ".git/refs/heads/muse/repo-htgt1.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 1535,
+            "type": "change",
+            "path": ".git/refs/heads/muse/repo-htgt1.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 1536,
+            "type": "change",
+            "path": ".git/logs/refs/heads/muse",
+            "place": "git"
+          },
+          {
+            "atMs": 1538,
+            "type": "rename",
+            "path": ".git/logs/refs/heads/muse/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1539,
+            "type": "change",
+            "path": ".git/logs/refs/heads/muse/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1540,
+            "type": "change",
+            "path": ".git/refs/heads/muse",
+            "place": "git"
+          },
+          {
+            "atMs": 1540,
+            "type": "rename",
+            "path": ".git/refs/heads/muse/repo-htgt1.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 1540,
+            "type": "rename",
+            "path": ".git/refs/heads/muse/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1541,
+            "type": "change",
+            "path": ".git/refs/heads/muse",
+            "place": "git"
+          },
+          {
+            "atMs": 1545,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1546,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1/locked",
+            "place": "git"
+          },
+          {
+            "atMs": 1547,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1/locked",
+            "place": "git"
+          },
+          {
+            "atMs": 1547,
+            "type": "rename",
+            "path": ".muse/worktrees/repo-htgt1",
+            "place": "app"
+          },
+          {
+            "atMs": 1548,
+            "type": "change",
+            "path": ".muse/worktrees",
+            "place": "app"
+          },
+          {
+            "atMs": 1548,
+            "type": "change",
+            "path": ".git/worktrees",
+            "place": "git"
+          },
+          {
+            "atMs": 1549,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1549,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1/gitdir",
+            "place": "git"
+          },
+          {
+            "atMs": 1550,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1551,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1/gitdir",
+            "place": "git"
+          },
+          {
+            "atMs": 1551,
+            "type": "rename",
+            "path": ".muse/worktrees/repo-htgt1/.git",
+            "place": "git"
+          },
+          {
+            "atMs": 1552,
+            "type": "change",
+            "path": ".muse/worktrees/repo-htgt1",
+            "place": "app"
+          },
+          {
+            "atMs": 1552,
+            "type": "change",
+            "path": ".muse/worktrees/repo-htgt1/.git",
+            "place": "git"
+          },
+          {
+            "atMs": 1553,
+            "type": "change",
+            "path": ".muse/worktrees/repo-htgt1/.git",
+            "place": "git"
+          },
+          {
+            "atMs": 1553,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1/commondir",
+            "place": "git"
+          },
+          {
+            "atMs": 1553,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1/commondir",
+            "place": "git"
+          },
+          {
+            "atMs": 1554,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1554,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1/refs",
+            "place": "git"
+          },
+          {
+            "atMs": 1555,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1555,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1/HEAD.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 1555,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1/HEAD.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 1555,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1555,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1/logs",
+            "place": "git"
+          },
+          {
+            "atMs": 1556,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1/logs/HEAD",
+            "place": "git"
+          },
+          {
+            "atMs": 1557,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1/logs/HEAD",
+            "place": "git"
+          },
+          {
+            "atMs": 1557,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1557,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1/HEAD.lock",
+            "place": "git"
+          },
+          {
+            "atMs": 1558,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1/HEAD",
+            "place": "git"
+          },
+          {
+            "atMs": 1558,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1",
+            "place": "git"
+          },
+          {
+            "atMs": 1559,
+            "type": "change",
+            "path": ".git/worktrees/repo-htgt1/logs",
+            "place": "git"
+          },
+          {
+            "atMs": 1567,
+            "type": "rename",
+            "path": ".git/worktrees/repo-htgt1/index.lock",
+            "place": "git"
+          }
+        ]
+      },
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            "M  staged.txt",
+            "?? notes/cross.md",
+            "?? notes/local.md"
+          ],
+          "staged": [
+            "M\tstaged.txt"
+          ],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "a0de622643324c73",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/cross.md": "4209a4f4eb2a9198",
+            "notes/local.md": "dc44a0fe1ed703cc",
+            "src/app.txt": "f91dc591f250b366",
+            "staged.txt": "ec5344ddcfe2b592"
+          }
+        },
+        "target": {
+          "branch": "muse/repo-htgt1",
+          "status": [],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "86bc5059cb681798",
+            "src/app.txt": "29d5b932a04f02da",
+            "staged.txt": "104801b22caabc34"
+          }
+        },
+        "refs": 6
+      },
+      "newRefs": [
+        "refs/muse/handoff/1791279927648/source",
+        "refs/muse/handoff/1791279927648/target"
+      ],
+      "view": {
+        "active": "01a11095-d8c2-7c62-aa60-4ebf91613138",
+        "sessions": 2,
+        "stored": {
+          "workspace": "<local>",
+          "host_workspace": null
+        },
+        "header": {
+          "eyebrow": "repo / CONVERSATION",
+          "path": "<local>",
+          "branch": null,
+          "connection": "Connected"
+        },
+        "logEntries": 1,
+        "lastSystemNotes": [
+          "Unsent message discarded."
+        ]
+      },
+      "verdict": {
+        "confirmAsked": true,
+        "targetReceivedTheWork": true,
+        "moveFailed": true,
+        "honestMessage": true,
+        "localByteIdentical": true,
+        "targetBackToItsCheckout": true,
+        "snapshotKept": true,
+        "heldFileUnchanged": true,
+        "conversationStays": true,
+        "noEventLost": true
+      },
+      "consoleErrors": []
+    },
+    "c-conflict": {
+      "commit": "4e08e2a",
+      "productTreeClean": true,
+      "exeSha256": "10ee37b4c992f3d4d6cdb12baba00d4285d59dc670e7fcfcb4bf28b0c1f2646e",
+      "before": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            "M  staged.txt",
+            "?? notes/cross.md",
+            "?? notes/local.md"
+          ],
+          "staged": [
+            "M\tstaged.txt"
+          ],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "a0de622643324c73",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/cross.md": "4209a4f4eb2a9198",
+            "notes/local.md": "dc44a0fe1ed703cc",
+            "src/app.txt": "f91dc591f250b366",
+            "staged.txt": "ec5344ddcfe2b592"
+          }
+        },
+        "w1": {
+          "branch": "muse/repo-hqbwb",
+          "status": [
+            " M docs/item1.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? item1-written.txt",
+            "?? bulk/ (2000 files)"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "93da8c4b803e557b",
+            "item1-written.txt": "b8cdccbf23e18c88",
+            "src/app.txt": "7d0ac43a64571677",
+            "staged.txt": "d63509f9170fd865",
+            "bulk/ (2000 files)": "38ee41c957ce2e51"
+          }
+        },
+        "refs": 6
+      },
+      "localFoldersWatched": 5,
+      "ui": {
+        "label": "Move back to local",
+        "click": {
+          "clicked": true
+        },
+        "dialog": {
+          "found": false
+        },
+        "preview": {
+          "target": "<local>",
+          "ok": true,
+          "result": {
+            "conflicts": [
+              "src/app.txt",
+              "staged.txt"
+            ],
+            "ignored": 0,
+            "partlyStaged": [],
+            "sameSession": true,
+            "snapshot": null,
+            "source": "<worktree 1>",
+            "target": "<local>",
+            "tracked": 3,
+            "untracked": 2001
+          }
+        },
+        "move": null,
+        "moveCalls": 0,
+        "confirmCalls": [],
+        "worktreeCreated": [],
+        "ms": 17416,
+        "banner": "Nothing was moved: 2 files would conflict in Local (src/app.txt, staged.txt). Commit, discard or move them there first."
+      },
+      "uiEvents": {
+        "local": {
+          "total": 2,
+          "byPlace": {
+            "git": {
+              "count": 2,
+              "paths": [
+                ".git"
+              ],
+              "morePaths": 0
+            }
+          },
+          "first": [
+            {
+              "atMs": 3452,
+              "type": "change",
+              "path": ".git",
+              "place": "git"
+            },
+            {
+              "atMs": 3479,
+              "type": "change",
+              "path": ".git",
+              "place": "git"
+            }
+          ]
+        },
+        "worktree": {
+          "total": 0,
+          "byPlace": {},
+          "first": []
+        },
+        "git": {
+          "total": 1362,
+          "byPlace": {
+            "git": {
+              "count": 1319,
+              "paths": [
+                "index.lock",
+                "objects/01",
+                "objects/01/0cb6f3a7cf2fd363813f6eaba821b7d29dad32",
+                "objects/01/48c5957acf0d2bbae3715df90a83884ae630cc",
+                "objects/01/62b73c352d5f4f1a1afec158e9b27bc41a1551",
+                "objects/01/tmp_obj_X4DXmK",
+                "objects/03/22803263f92b83e301d3efd7595602c66b3994",
+                "objects/03/76cd340469be7da6d04554685193da6f2c9c8f",
+                "objects/03/aea817fc76020c143839303969db7efb6ef736",
+                "objects/04/546f0f4f1c458df23d4627793d850efda8d76d",
+                "objects/05/d8cd074372fba52d980b8f4e95fbbbccb2c930",
+                "objects/07/7e108dfe935f7c5278ce72c3fcf1b8ca438ee9",
+                "objects/07/d1f80496f7d3ca4dd318547452f8b999072a1c",
+                "objects/08/a21c648d40a752383ea0c9fd2025aad522f8d6",
+                "objects/09/05cebaaeb8633f6170bd5fa69f9960aa37efdd",
+                "objects/09/4a5a8e0f3407d8488fd8f7a2b3d885715c63b2",
+                "objects/0a/71c48ce025df21be18aafc8e83729102a297d8",
+                "objects/0b",
+                "objects/0b/02a3c1a6d992d3c2fec9ec4d34e193098814da",
+                "objects/0b/41ac2a1734be4caa97f433d971bf5d30080dea",
+                "objects/0b/56be707e3183cee09ec5729a7ac43b7c727ca7",
+                "objects/0b/bbe9aaf2fb2b31501e40956a3b13324d4f4ecf",
+                "objects/0b/tmp_obj_WZOhLD",
+                "objects/0c/6a6d932d03fec97a457ba0b2e77464ab73fe88",
+                "objects/0c/92ef1a5193ecf550f709f5989889790c85babd",
+                "objects/0c/9e07e1d1683a14dbb61e9947887fd38ba7e938",
+                "objects/0d/6dfd24ea6a88e26b0cf624e866024dc6ea07d5",
+                "objects/0d/d019a2c2d32a7591baa11574a8f332c37c30b7",
+                "objects/0e/22e0bbd90bab19c934d15bedf38fe74e1de507",
+                "objects/0e/c9746acbe439600cb968987e7b57e5392ffbd6",
+                "objects/0f/2a03f25f6e0049558a3c5a901f02f3a7256ec5",
+                "objects/0f/7d8cf78f9bdafde2a2aa9fa547f7ad42990ca3",
+                "objects/0f/f194094ceb5d6759883e626a6e2a4ce7595780",
+                "objects/10/ab687ed36345d8d695cee5c688c435a0bd33f4",
+                "objects/11/701e8c29e6c2a4fc0b11ff15cf55cf43f09e78",
+                "objects/11/e8963071ec1f871f33364839e0f579692297ec",
+                "objects/12/7acb7ff9b0a1166d70457354f705c92f53cf2b",
+                "objects/13/2c39577eb14c1c3a2e7dc83e99c65442d06be7",
+                "objects/13/6902b4197bfc9997a5764a3f115f13b634a85c",
+                "objects/13/84dd4dfe7d37f4f6ca55fc776cac860f626787"
+              ],
+              "morePaths": 428
+            },
+            "overflow": {
+              "count": 43,
+              "paths": [
+                "<no name: events lost>"
+              ],
+              "morePaths": 0
+            }
+          },
+          "first": [
+            {
+              "atMs": 696,
+              "type": "rename",
+              "path": "worktrees/repo-hqbwb/index.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 696,
+              "type": "change",
+              "path": "worktrees/repo-hqbwb",
+              "place": "git"
+            },
+            {
+              "atMs": 696,
+              "type": "rename",
+              "path": "worktrees/repo-hqbwb/index.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 725,
+              "type": "change",
+              "path": "worktrees/repo-hqbwb",
+              "place": "git"
+            },
+            {
+              "atMs": 796,
+              "type": "change",
+              "path": "objects/b8/374cb82850c1f1d6bae92bca86c384419bcd84",
+              "place": "git"
+            },
+            {
+              "atMs": 797,
+              "type": "change",
+              "path": "objects/b8/374cb82850c1f1d6bae92bca86c384419bcd84",
+              "place": "git"
+            },
+            {
+              "atMs": 798,
+              "type": "change",
+              "path": "objects/b8/374cb82850c1f1d6bae92bca86c384419bcd84",
+              "place": "git"
+            },
+            {
+              "atMs": 798,
+              "type": "change",
+              "path": "objects/47/45b00d050ab9fc711a82a99619a0b3f3b3bb9a",
+              "place": "git"
+            },
+            {
+              "atMs": 799,
+              "type": "change",
+              "path": "objects/47/45b00d050ab9fc711a82a99619a0b3f3b3bb9a",
+              "place": "git"
+            },
+            {
+              "atMs": 800,
+              "type": "change",
+              "path": "objects/47/45b00d050ab9fc711a82a99619a0b3f3b3bb9a",
+              "place": "git"
+            },
+            {
+              "atMs": 801,
+              "type": "change",
+              "path": "objects/a0/8539ab05de5da11a80d37c175686d5ecf7eaf5",
+              "place": "git"
+            },
+            {
+              "atMs": 802,
+              "type": "change",
+              "path": "objects/a0/8539ab05de5da11a80d37c175686d5ecf7eaf5",
+              "place": "git"
+            },
+            {
+              "atMs": 803,
+              "type": "change",
+              "path": "objects/a0/8539ab05de5da11a80d37c175686d5ecf7eaf5",
+              "place": "git"
+            },
+            {
+              "atMs": 803,
+              "type": "change",
+              "path": "objects/75/382e106e4fd74570234b621f4086b63c08fd4a",
+              "place": "git"
+            },
+            {
+              "atMs": 804,
+              "type": "change",
+              "path": "objects/75/382e106e4fd74570234b621f4086b63c08fd4a",
+              "place": "git"
+            },
+            {
+              "atMs": 805,
+              "type": "change",
+              "path": "objects/75/382e106e4fd74570234b621f4086b63c08fd4a",
+              "place": "git"
+            },
+            {
+              "atMs": 806,
+              "type": "change",
+              "path": "objects/19/6d186d03492df0f1a465c4c4ddac0bb231897f",
+              "place": "git"
+            },
+            {
+              "atMs": 807,
+              "type": "change",
+              "path": "objects/19/6d186d03492df0f1a465c4c4ddac0bb231897f",
+              "place": "git"
+            },
+            {
+              "atMs": 808,
+              "type": "change",
+              "path": "objects/19/6d186d03492df0f1a465c4c4ddac0bb231897f",
+              "place": "git"
+            },
+            {
+              "atMs": 809,
+              "type": "change",
+              "path": "objects/8b/e80caa71cb1f5dc534398296544a7a718473ed",
+              "place": "git"
+            },
+            {
+              "atMs": 810,
+              "type": "change",
+              "path": "objects/8b/e80caa71cb1f5dc534398296544a7a718473ed",
+              "place": "git"
+            },
+            {
+              "atMs": 810,
+              "type": "change",
+              "path": "objects/8b/e80caa71cb1f5dc534398296544a7a718473ed",
+              "place": "git"
+            },
+            {
+              "atMs": 811,
+              "type": "change",
+              "path": "objects/01/0cb6f3a7cf2fd363813f6eaba821b7d29dad32",
+              "place": "git"
+            },
+            {
+              "atMs": 812,
+              "type": "change",
+              "path": "objects/01/0cb6f3a7cf2fd363813f6eaba821b7d29dad32",
+              "place": "git"
+            },
+            {
+              "atMs": 813,
+              "type": "change",
+              "path": "objects/01/0cb6f3a7cf2fd363813f6eaba821b7d29dad32",
+              "place": "git"
+            },
+            {
+              "atMs": 813,
+              "type": "change",
+              "path": "objects/ba/29b0a62c4c67f508adc981a5c11a51bcd834f4",
+              "place": "git"
+            },
+            {
+              "atMs": 814,
+              "type": "change",
+              "path": "objects/ba/29b0a62c4c67f508adc981a5c11a51bcd834f4",
+              "place": "git"
+            },
+            {
+              "atMs": 815,
+              "type": "change",
+              "path": "objects/ba/29b0a62c4c67f508adc981a5c11a51bcd834f4",
+              "place": "git"
+            },
+            {
+              "atMs": 816,
+              "type": "change",
+              "path": "objects/af/c8381d8a6539ec32ea39180db95be68ced95e8",
+              "place": "git"
+            },
+            {
+              "atMs": 817,
+              "type": "change",
+              "path": "objects/af/c8381d8a6539ec32ea39180db95be68ced95e8",
+              "place": "git"
+            },
+            {
+              "atMs": 817,
+              "type": "change",
+              "path": "objects/af/c8381d8a6539ec32ea39180db95be68ced95e8",
+              "place": "git"
+            },
+            {
+              "atMs": 818,
+              "type": "change",
+              "path": "objects/2e/a19a2eebe10cbf706b3350c20a81a712783316",
+              "place": "git"
+            },
+            {
+              "atMs": 818,
+              "type": "change",
+              "path": "objects/2e/a19a2eebe10cbf706b3350c20a81a712783316",
+              "place": "git"
+            },
+            {
+              "atMs": 819,
+              "type": "change",
+              "path": "objects/2e/a19a2eebe10cbf706b3350c20a81a712783316",
+              "place": "git"
+            },
+            {
+              "atMs": 819,
+              "type": "change",
+              "path": "<no name: events lost>",
+              "place": "overflow"
+            },
+            {
+              "atMs": 820,
+              "type": "change",
+              "path": "objects/76/841689f008f9b60cafc2f6ed330ce1dd40fc48",
+              "place": "git"
+            },
+            {
+              "atMs": 821,
+              "type": "change",
+              "path": "objects/76/841689f008f9b60cafc2f6ed330ce1dd40fc48",
+              "place": "git"
+            },
+            {
+              "atMs": 821,
+              "type": "change",
+              "path": "objects/76/841689f008f9b60cafc2f6ed330ce1dd40fc48",
+              "place": "git"
+            },
+            {
+              "atMs": 822,
+              "type": "change",
+              "path": "objects/ea/40ec60525f948af9ace2964ea4519a039d596a",
+              "place": "git"
+            },
+            {
+              "atMs": 823,
+              "type": "change",
+              "path": "objects/ea/40ec60525f948af9ace2964ea4519a039d596a",
+              "place": "git"
+            },
+            {
+              "atMs": 823,
+              "type": "change",
+              "path": "objects/ea/40ec60525f948af9ace2964ea4519a039d596a",
+              "place": "git"
+            },
+            {
+              "atMs": 824,
+              "type": "change",
+              "path": "objects/fa/9a0fcf323a72866ed1310e70cecf829f76f95f",
+              "place": "git"
+            },
+            {
+              "atMs": 825,
+              "type": "change",
+              "path": "objects/fa/9a0fcf323a72866ed1310e70cecf829f76f95f",
+              "place": "git"
+            },
+            {
+              "atMs": 826,
+              "type": "change",
+              "path": "objects/fa/9a0fcf323a72866ed1310e70cecf829f76f95f",
+              "place": "git"
+            },
+            {
+              "atMs": 826,
+              "type": "change",
+              "path": "objects/bb/f42e844844a5c386e560524258739ed8bd6912",
+              "place": "git"
+            },
+            {
+              "atMs": 827,
+              "type": "change",
+              "path": "objects/bb/f42e844844a5c386e560524258739ed8bd6912",
+              "place": "git"
+            },
+            {
+              "atMs": 827,
+              "type": "change",
+              "path": "objects/bb/f42e844844a5c386e560524258739ed8bd6912",
+              "place": "git"
+            },
+            {
+              "atMs": 828,
+              "type": "change",
+              "path": "objects/b0/c77d6a08d85d8ab1241f19bf6d33da034ef700",
+              "place": "git"
+            },
+            {
+              "atMs": 828,
+              "type": "change",
+              "path": "objects/b0/c77d6a08d85d8ab1241f19bf6d33da034ef700",
+              "place": "git"
+            },
+            {
+              "atMs": 829,
+              "type": "change",
+              "path": "objects/b0/c77d6a08d85d8ab1241f19bf6d33da034ef700",
+              "place": "git"
+            },
+            {
+              "atMs": 829,
+              "type": "change",
+              "path": "objects/36/04ecc181d331604da9098c2155e3453106d90c",
+              "place": "git"
+            },
+            {
+              "atMs": 830,
+              "type": "change",
+              "path": "objects/36/04ecc181d331604da9098c2155e3453106d90c",
+              "place": "git"
+            },
+            {
+              "atMs": 831,
+              "type": "change",
+              "path": "objects/36/04ecc181d331604da9098c2155e3453106d90c",
+              "place": "git"
+            },
+            {
+              "atMs": 832,
+              "type": "change",
+              "path": "objects/bd/4c03698e213c13798e7627eef9cfeb6f350a98",
+              "place": "git"
+            },
+            {
+              "atMs": 832,
+              "type": "change",
+              "path": "objects/bd/4c03698e213c13798e7627eef9cfeb6f350a98",
+              "place": "git"
+            },
+            {
+              "atMs": 833,
+              "type": "change",
+              "path": "objects/bd/4c03698e213c13798e7627eef9cfeb6f350a98",
+              "place": "git"
+            },
+            {
+              "atMs": 834,
+              "type": "change",
+              "path": "objects/71/4dd6fa291b5aa2e88afc07398617a3b79b9065",
+              "place": "git"
+            },
+            {
+              "atMs": 834,
+              "type": "change",
+              "path": "<no name: events lost>",
+              "place": "overflow"
+            },
+            {
+              "atMs": 835,
+              "type": "change",
+              "path": "objects/42/f422dfacdec20956bc1067a324b50ead575237",
+              "place": "git"
+            },
+            {
+              "atMs": 836,
+              "type": "change",
+              "path": "objects/42/f422dfacdec20956bc1067a324b50ead575237",
+              "place": "git"
+            },
+            {
+              "atMs": 837,
+              "type": "change",
+              "path": "objects/42/f422dfacdec20956bc1067a324b50ead575237",
+              "place": "git"
+            },
+            {
+              "atMs": 837,
+              "type": "change",
+              "path": "objects/0f/7d8cf78f9bdafde2a2aa9fa547f7ad42990ca3",
+              "place": "git"
+            },
+            {
+              "atMs": 838,
+              "type": "change",
+              "path": "objects/0f/7d8cf78f9bdafde2a2aa9fa547f7ad42990ca3",
+              "place": "git"
+            },
+            {
+              "atMs": 839,
+              "type": "change",
+              "path": "objects/0f/7d8cf78f9bdafde2a2aa9fa547f7ad42990ca3",
+              "place": "git"
+            },
+            {
+              "atMs": 840,
+              "type": "change",
+              "path": "objects/77/493d687b2ab3c17c22d1772f2db08e1d47f133",
+              "place": "git"
+            },
+            {
+              "atMs": 841,
+              "type": "change",
+              "path": "objects/77/493d687b2ab3c17c22d1772f2db08e1d47f133",
+              "place": "git"
+            },
+            {
+              "atMs": 842,
+              "type": "change",
+              "path": "objects/77/493d687b2ab3c17c22d1772f2db08e1d47f133",
+              "place": "git"
+            },
+            {
+              "atMs": 842,
+              "type": "change",
+              "path": "objects/6f/cb60eba4ea09eddcefe5fde2b2f6c5ad01b4dd",
+              "place": "git"
+            },
+            {
+              "atMs": 843,
+              "type": "change",
+              "path": "objects/6f/cb60eba4ea09eddcefe5fde2b2f6c5ad01b4dd",
+              "place": "git"
+            },
+            {
+              "atMs": 844,
+              "type": "change",
+              "path": "objects/6f/cb60eba4ea09eddcefe5fde2b2f6c5ad01b4dd",
+              "place": "git"
+            },
+            {
+              "atMs": 845,
+              "type": "change",
+              "path": "objects/d0/1c8e5839099cff97c24784d8f4c9bf8741b67b",
+              "place": "git"
+            },
+            {
+              "atMs": 846,
+              "type": "change",
+              "path": "objects/d0/1c8e5839099cff97c24784d8f4c9bf8741b67b",
+              "place": "git"
+            },
+            {
+              "atMs": 846,
+              "type": "change",
+              "path": "objects/d0/1c8e5839099cff97c24784d8f4c9bf8741b67b",
+              "place": "git"
+            },
+            {
+              "atMs": 847,
+              "type": "change",
+              "path": "objects/46/45eb0095f9424795770984cb75d8c7f8a876db",
+              "place": "git"
+            },
+            {
+              "atMs": 848,
+              "type": "change",
+              "path": "objects/46/45eb0095f9424795770984cb75d8c7f8a876db",
+              "place": "git"
+            },
+            {
+              "atMs": 849,
+              "type": "change",
+              "path": "objects/46/45eb0095f9424795770984cb75d8c7f8a876db",
+              "place": "git"
+            },
+            {
+              "atMs": 849,
+              "type": "change",
+              "path": "objects/13/e31fd3597aedfa638c6e8f0148b6ee2c999658",
+              "place": "git"
+            },
+            {
+              "atMs": 850,
+              "type": "change",
+              "path": "objects/13/e31fd3597aedfa638c6e8f0148b6ee2c999658",
+              "place": "git"
+            },
+            {
+              "atMs": 851,
+              "type": "change",
+              "path": "objects/13/e31fd3597aedfa638c6e8f0148b6ee2c999658",
+              "place": "git"
+            },
+            {
+              "atMs": 852,
+              "type": "change",
+              "path": "objects/cf/8972e032c9e53f378549453fd8308ed10eaeec",
+              "place": "git"
+            }
+          ]
+        }
+      },
+      "direct": {
+        "ok": false,
+        "error": "nothing was moved: 2 file(s) would conflict in the target: src/app.txt, staged.txt"
+      },
+      "directEvents": {
+        "local": {
+          "total": 2,
+          "byPlace": {
+            "git": {
+              "count": 2,
+              "paths": [
+                ".git"
+              ],
+              "morePaths": 0
+            }
+          },
+          "first": [
+            {
+              "atMs": 4247,
+              "type": "change",
+              "path": ".git",
+              "place": "git"
+            },
+            {
+              "atMs": 4504,
+              "type": "change",
+              "path": ".git",
+              "place": "git"
+            }
+          ]
+        },
+        "worktree": {
+          "total": 0,
+          "byPlace": {},
+          "first": []
+        },
+        "git": {
+          "total": 1336,
+          "byPlace": {
+            "git": {
+              "count": 1288,
+              "paths": [
+                "index.lock",
+                "objects/01/0cb6f3a7cf2fd363813f6eaba821b7d29dad32",
+                "objects/03/aea817fc76020c143839303969db7efb6ef736",
+                "objects/04/6a763830cbac835f717bb90c7502d98e3033d7",
+                "objects/04/c87c96993cefdde846f254eb09515dd4519694",
+                "objects/04/cbc73f8baa9df6f213ce40e38e7cff521e6bee",
+                "objects/04/eec9235237449a0ec717face3d6bf74e2c971f",
+                "objects/05/d8cd074372fba52d980b8f4e95fbbbccb2c930",
+                "objects/06/03c4e705d7e21c1e7a76d2722907a910bc8191",
+                "objects/06/888ebf44bb897eae0f7b631a686d00fb0e52b4",
+                "objects/07/360c04db4ed370b46fa8f1660f4c25d7c0e200",
+                "objects/07/d1f80496f7d3ca4dd318547452f8b999072a1c",
+                "objects/08/a21c648d40a752383ea0c9fd2025aad522f8d6",
+                "objects/0a/58592571b0446a0d3d0efc0b63bfdead87961e",
+                "objects/0a/71c48ce025df21be18aafc8e83729102a297d8",
+                "objects/0a/bcbfb552fec2cdaee617032e6159909657c5a7",
+                "objects/0b/41ac2a1734be4caa97f433d971bf5d30080dea",
+                "objects/0c/9e07e1d1683a14dbb61e9947887fd38ba7e938",
+                "objects/0c/f635e259f8309b385da6eb8d38c7b16594ece4",
+                "objects/0e/d0d36ea45ae0a764fddb023637d60a07b1588a",
+                "objects/0f/0498b309a244994d13e727a873d3a6837f5183",
+                "objects/0f/7d8cf78f9bdafde2a2aa9fa547f7ad42990ca3",
+                "objects/0f/f194094ceb5d6759883e626a6e2a4ce7595780",
+                "objects/11/701e8c29e6c2a4fc0b11ff15cf55cf43f09e78",
+                "objects/11/edd9a3346f054e3c669014820fca0ef58ceb8a",
+                "objects/12/7acb7ff9b0a1166d70457354f705c92f53cf2b",
+                "objects/12/d3fe0d1fdda92822fd9ee74f8e15e294e2eb51",
+                "objects/15/0df2e0507e4b5502cc990790514bf5f1642813",
+                "objects/15/5d7c4a65aafd70e366dd40a806a1334b34d827",
+                "objects/15/ba7707c61a4178a2d549f622e7c13a9b895020",
+                "objects/16/24333372d75b81bccc21abab42784d1774fd75",
+                "objects/16/3a009f560bbc08fdf54a670daa864b78e65cd8",
+                "objects/17/cd59ba1e9718b5e28a0013a18ca069cafb3f0e",
+                "objects/18/753e93bfe38af1c5b610cbef557b038e7a6df0",
+                "objects/19/6d186d03492df0f1a465c4c4ddac0bb231897f",
+                "objects/19/fe533f8b137c439d16cc40ed6b112adadbcb69",
+                "objects/1c/d5ad927540e7c743b75e54ed12e9c9b220f890",
+                "objects/1c/e17c4b86f11e50ecbb26237bd435406d3a968e",
+                "objects/1d/d5f9f08d2cfaeb77df87059efaaf45e48404ef",
+                "objects/1d/faaecb55526799a3b6b22b17a34b80342998b5"
+              ],
+              "morePaths": 416
+            },
+            "overflow": {
+              "count": 48,
+              "paths": [
+                "<no name: events lost>"
+              ],
+              "morePaths": 0
+            }
+          },
+          "first": [
+            {
+              "atMs": 449,
+              "type": "rename",
+              "path": "worktrees/repo-hqbwb/index.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 450,
+              "type": "change",
+              "path": "worktrees/repo-hqbwb",
+              "place": "git"
+            },
+            {
+              "atMs": 450,
+              "type": "rename",
+              "path": "worktrees/repo-hqbwb/index.lock",
+              "place": "git"
+            },
+            {
+              "atMs": 488,
+              "type": "change",
+              "path": "worktrees/repo-hqbwb",
+              "place": "git"
+            },
+            {
+              "atMs": 654,
+              "type": "change",
+              "path": "objects/b8/374cb82850c1f1d6bae92bca86c384419bcd84",
+              "place": "git"
+            },
+            {
+              "atMs": 655,
+              "type": "change",
+              "path": "objects/b8/374cb82850c1f1d6bae92bca86c384419bcd84",
+              "place": "git"
+            },
+            {
+              "atMs": 656,
+              "type": "change",
+              "path": "objects/b8/374cb82850c1f1d6bae92bca86c384419bcd84",
+              "place": "git"
+            },
+            {
+              "atMs": 657,
+              "type": "change",
+              "path": "objects/47/45b00d050ab9fc711a82a99619a0b3f3b3bb9a",
+              "place": "git"
+            },
+            {
+              "atMs": 658,
+              "type": "change",
+              "path": "objects/47/45b00d050ab9fc711a82a99619a0b3f3b3bb9a",
+              "place": "git"
+            },
+            {
+              "atMs": 659,
+              "type": "change",
+              "path": "objects/47/45b00d050ab9fc711a82a99619a0b3f3b3bb9a",
+              "place": "git"
+            },
+            {
+              "atMs": 660,
+              "type": "change",
+              "path": "objects/a0/8539ab05de5da11a80d37c175686d5ecf7eaf5",
+              "place": "git"
+            },
+            {
+              "atMs": 661,
+              "type": "change",
+              "path": "objects/a0/8539ab05de5da11a80d37c175686d5ecf7eaf5",
+              "place": "git"
+            },
+            {
+              "atMs": 662,
+              "type": "change",
+              "path": "objects/a0/8539ab05de5da11a80d37c175686d5ecf7eaf5",
+              "place": "git"
+            },
+            {
+              "atMs": 663,
+              "type": "change",
+              "path": "objects/75/382e106e4fd74570234b621f4086b63c08fd4a",
+              "place": "git"
+            },
+            {
+              "atMs": 664,
+              "type": "change",
+              "path": "objects/75/382e106e4fd74570234b621f4086b63c08fd4a",
+              "place": "git"
+            },
+            {
+              "atMs": 664,
+              "type": "change",
+              "path": "objects/75/382e106e4fd74570234b621f4086b63c08fd4a",
+              "place": "git"
+            },
+            {
+              "atMs": 665,
+              "type": "change",
+              "path": "objects/19/6d186d03492df0f1a465c4c4ddac0bb231897f",
+              "place": "git"
+            },
+            {
+              "atMs": 666,
+              "type": "change",
+              "path": "objects/19/6d186d03492df0f1a465c4c4ddac0bb231897f",
+              "place": "git"
+            },
+            {
+              "atMs": 667,
+              "type": "change",
+              "path": "objects/19/6d186d03492df0f1a465c4c4ddac0bb231897f",
+              "place": "git"
+            },
+            {
+              "atMs": 668,
+              "type": "change",
+              "path": "objects/8b/e80caa71cb1f5dc534398296544a7a718473ed",
+              "place": "git"
+            },
+            {
+              "atMs": 669,
+              "type": "change",
+              "path": "objects/8b/e80caa71cb1f5dc534398296544a7a718473ed",
+              "place": "git"
+            },
+            {
+              "atMs": 670,
+              "type": "change",
+              "path": "objects/8b/e80caa71cb1f5dc534398296544a7a718473ed",
+              "place": "git"
+            },
+            {
+              "atMs": 672,
+              "type": "change",
+              "path": "objects/01/0cb6f3a7cf2fd363813f6eaba821b7d29dad32",
+              "place": "git"
+            },
+            {
+              "atMs": 673,
+              "type": "change",
+              "path": "objects/01/0cb6f3a7cf2fd363813f6eaba821b7d29dad32",
+              "place": "git"
+            },
+            {
+              "atMs": 674,
+              "type": "change",
+              "path": "objects/01/0cb6f3a7cf2fd363813f6eaba821b7d29dad32",
+              "place": "git"
+            },
+            {
+              "atMs": 675,
+              "type": "change",
+              "path": "objects/ba/29b0a62c4c67f508adc981a5c11a51bcd834f4",
+              "place": "git"
+            },
+            {
+              "atMs": 675,
+              "type": "change",
+              "path": "<no name: events lost>",
+              "place": "overflow"
+            },
+            {
+              "atMs": 684,
+              "type": "change",
+              "path": "objects/80/79bf69923e2dc88898c1d57f4d45ba61914c13",
+              "place": "git"
+            },
+            {
+              "atMs": 686,
+              "type": "change",
+              "path": "objects/80/79bf69923e2dc88898c1d57f4d45ba61914c13",
+              "place": "git"
+            },
+            {
+              "atMs": 687,
+              "type": "change",
+              "path": "objects/80/79bf69923e2dc88898c1d57f4d45ba61914c13",
+              "place": "git"
+            },
+            {
+              "atMs": 688,
+              "type": "change",
+              "path": "objects/e1/93fb048dd20761fe0265596db4ff688984954a",
+              "place": "git"
+            },
+            {
+              "atMs": 689,
+              "type": "change",
+              "path": "objects/e1/93fb048dd20761fe0265596db4ff688984954a",
+              "place": "git"
+            },
+            {
+              "atMs": 690,
+              "type": "change",
+              "path": "objects/e1/93fb048dd20761fe0265596db4ff688984954a",
+              "place": "git"
+            },
+            {
+              "atMs": 691,
+              "type": "change",
+              "path": "objects/18/753e93bfe38af1c5b610cbef557b038e7a6df0",
+              "place": "git"
+            },
+            {
+              "atMs": 692,
+              "type": "change",
+              "path": "objects/18/753e93bfe38af1c5b610cbef557b038e7a6df0",
+              "place": "git"
+            },
+            {
+              "atMs": 693,
+              "type": "change",
+              "path": "objects/18/753e93bfe38af1c5b610cbef557b038e7a6df0",
+              "place": "git"
+            },
+            {
+              "atMs": 694,
+              "type": "change",
+              "path": "objects/fc/0369fc68bd64b78ab263464ab2bdf5805a926b",
+              "place": "git"
+            },
+            {
+              "atMs": 695,
+              "type": "change",
+              "path": "objects/fc/0369fc68bd64b78ab263464ab2bdf5805a926b",
+              "place": "git"
+            },
+            {
+              "atMs": 696,
+              "type": "change",
+              "path": "objects/fc/0369fc68bd64b78ab263464ab2bdf5805a926b",
+              "place": "git"
+            },
+            {
+              "atMs": 697,
+              "type": "change",
+              "path": "objects/12/d3fe0d1fdda92822fd9ee74f8e15e294e2eb51",
+              "place": "git"
+            },
+            {
+              "atMs": 698,
+              "type": "change",
+              "path": "objects/12/d3fe0d1fdda92822fd9ee74f8e15e294e2eb51",
+              "place": "git"
+            },
+            {
+              "atMs": 701,
+              "type": "change",
+              "path": "objects/12/d3fe0d1fdda92822fd9ee74f8e15e294e2eb51",
+              "place": "git"
+            },
+            {
+              "atMs": 702,
+              "type": "change",
+              "path": "objects/2a/1e68e929cb01954d550f3ba0c232fb35d937a6",
+              "place": "git"
+            },
+            {
+              "atMs": 706,
+              "type": "change",
+              "path": "objects/2a/1e68e929cb01954d550f3ba0c232fb35d937a6",
+              "place": "git"
+            },
+            {
+              "atMs": 707,
+              "type": "change",
+              "path": "objects/2a/1e68e929cb01954d550f3ba0c232fb35d937a6",
+              "place": "git"
+            },
+            {
+              "atMs": 708,
+              "type": "change",
+              "path": "objects/fb/a9c852391dd45be0ede8714de225781b72c8b0",
+              "place": "git"
+            },
+            {
+              "atMs": 712,
+              "type": "change",
+              "path": "objects/fb/a9c852391dd45be0ede8714de225781b72c8b0",
+              "place": "git"
+            },
+            {
+              "atMs": 713,
+              "type": "change",
+              "path": "objects/fb/a9c852391dd45be0ede8714de225781b72c8b0",
+              "place": "git"
+            },
+            {
+              "atMs": 714,
+              "type": "change",
+              "path": "objects/ec/ff8968e996e96c37c56b661ff3336a202667aa",
+              "place": "git"
+            },
+            {
+              "atMs": 716,
+              "type": "change",
+              "path": "objects/ec/ff8968e996e96c37c56b661ff3336a202667aa",
+              "place": "git"
+            },
+            {
+              "atMs": 716,
+              "type": "change",
+              "path": "<no name: events lost>",
+              "place": "overflow"
+            },
+            {
+              "atMs": 718,
+              "type": "change",
+              "path": "objects/9e/42aed1259d63e40d3ea87c49295f4093bc4715",
+              "place": "git"
+            },
+            {
+              "atMs": 720,
+              "type": "change",
+              "path": "objects/ac/f4aadb049026bf107b4558ab128e4db61e3849",
+              "place": "git"
+            },
+            {
+              "atMs": 721,
+              "type": "change",
+              "path": "objects/ac/f4aadb049026bf107b4558ab128e4db61e3849",
+              "place": "git"
+            },
+            {
+              "atMs": 723,
+              "type": "change",
+              "path": "objects/ac/f4aadb049026bf107b4558ab128e4db61e3849",
+              "place": "git"
+            },
+            {
+              "atMs": 724,
+              "type": "change",
+              "path": "objects/ee/12443b0953242bf5b17cef734fa63e52b48010",
+              "place": "git"
+            },
+            {
+              "atMs": 725,
+              "type": "change",
+              "path": "objects/ee/12443b0953242bf5b17cef734fa63e52b48010",
+              "place": "git"
+            },
+            {
+              "atMs": 727,
+              "type": "change",
+              "path": "objects/ee/12443b0953242bf5b17cef734fa63e52b48010",
+              "place": "git"
+            },
+            {
+              "atMs": 728,
+              "type": "change",
+              "path": "objects/ec/d151809ac1974bec8c6d9a09e65134c8eebf6b",
+              "place": "git"
+            },
+            {
+              "atMs": 728,
+              "type": "change",
+              "path": "objects/ec/d151809ac1974bec8c6d9a09e65134c8eebf6b",
+              "place": "git"
+            },
+            {
+              "atMs": 730,
+              "type": "change",
+              "path": "objects/ec/d151809ac1974bec8c6d9a09e65134c8eebf6b",
+              "place": "git"
+            },
+            {
+              "atMs": 731,
+              "type": "change",
+              "path": "objects/df/46137900532b58eb65888dd97217a281c97373",
+              "place": "git"
+            },
+            {
+              "atMs": 731,
+              "type": "change",
+              "path": "objects/df/46137900532b58eb65888dd97217a281c97373",
+              "place": "git"
+            },
+            {
+              "atMs": 732,
+              "type": "change",
+              "path": "objects/df/46137900532b58eb65888dd97217a281c97373",
+              "place": "git"
+            },
+            {
+              "atMs": 733,
+              "type": "change",
+              "path": "objects/2a/a84575bb488296024681ae6858170c77b4b844",
+              "place": "git"
+            },
+            {
+              "atMs": 734,
+              "type": "change",
+              "path": "objects/2a/a84575bb488296024681ae6858170c77b4b844",
+              "place": "git"
+            },
+            {
+              "atMs": 735,
+              "type": "change",
+              "path": "objects/2a/a84575bb488296024681ae6858170c77b4b844",
+              "place": "git"
+            },
+            {
+              "atMs": 736,
+              "type": "change",
+              "path": "objects/b3/61cfeb9a130ee3ef419f16964558de9b06a8f8",
+              "place": "git"
+            },
+            {
+              "atMs": 737,
+              "type": "change",
+              "path": "objects/b3/61cfeb9a130ee3ef419f16964558de9b06a8f8",
+              "place": "git"
+            },
+            {
+              "atMs": 738,
+              "type": "change",
+              "path": "objects/b3/61cfeb9a130ee3ef419f16964558de9b06a8f8",
+              "place": "git"
+            },
+            {
+              "atMs": 739,
+              "type": "change",
+              "path": "objects/07/360c04db4ed370b46fa8f1660f4c25d7c0e200",
+              "place": "git"
+            },
+            {
+              "atMs": 741,
+              "type": "change",
+              "path": "objects/07/360c04db4ed370b46fa8f1660f4c25d7c0e200",
+              "place": "git"
+            },
+            {
+              "atMs": 742,
+              "type": "change",
+              "path": "objects/07/360c04db4ed370b46fa8f1660f4c25d7c0e200",
+              "place": "git"
+            },
+            {
+              "atMs": 743,
+              "type": "change",
+              "path": "objects/df/e3acb8e467ff62f39beaf8be179bd91f4e25f4",
+              "place": "git"
+            },
+            {
+              "atMs": 744,
+              "type": "change",
+              "path": "objects/df/e3acb8e467ff62f39beaf8be179bd91f4e25f4",
+              "place": "git"
+            },
+            {
+              "atMs": 745,
+              "type": "change",
+              "path": "objects/df/e3acb8e467ff62f39beaf8be179bd91f4e25f4",
+              "place": "git"
+            },
+            {
+              "atMs": 746,
+              "type": "change",
+              "path": "objects/77/11137c4caacef54e088abc044628a3a03a9140",
+              "place": "git"
+            },
+            {
+              "atMs": 746,
+              "type": "change",
+              "path": "objects/77/11137c4caacef54e088abc044628a3a03a9140",
+              "place": "git"
+            },
+            {
+              "atMs": 748,
+              "type": "change",
+              "path": "objects/77/11137c4caacef54e088abc044628a3a03a9140",
+              "place": "git"
+            },
+            {
+              "atMs": 749,
+              "type": "change",
+              "path": "objects/77/68597d8f8bd4cdcba9cab32fcfbc1556b25a07",
+              "place": "git"
+            }
+          ]
+        }
+      },
+      "after": {
+        "local": {
+          "branch": "main",
+          "status": [
+            " M assets/blob.bin",
+            " D deleted.txt",
+            " M src/app.txt",
+            "M  staged.txt",
+            "?? notes/cross.md",
+            "?? notes/local.md"
+          ],
+          "staged": [
+            "M\tstaged.txt"
+          ],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "a0de622643324c73",
+            "build.log": "3d8c2c24d7e7c53a",
+            "crlf.txt": "b016a092caa32c59",
+            "docs/item1.txt": "86bc5059cb681798",
+            "notes/cross.md": "4209a4f4eb2a9198",
+            "notes/local.md": "dc44a0fe1ed703cc",
+            "src/app.txt": "f91dc591f250b366",
+            "staged.txt": "ec5344ddcfe2b592"
+          }
+        },
+        "w1": {
+          "branch": "muse/repo-hqbwb",
+          "status": [
+            " M docs/item1.txt",
+            " M src/app.txt",
+            " M staged.txt",
+            "?? item1-written.txt",
+            "?? bulk/ (2000 files)"
+          ],
+          "staged": [],
+          "files": {
+            ".gitignore": "875cf5087260f2a5",
+            "README.md": "437fcb3f27165b5e",
+            "assets/blob.bin": "4c457b8525c10356",
+            "crlf.txt": "b016a092caa32c59",
+            "deleted.txt": "88024beed298aad7",
+            "docs/item1.txt": "93da8c4b803e557b",
+            "item1-written.txt": "b8cdccbf23e18c88",
+            "src/app.txt": "7d0ac43a64571677",
+            "staged.txt": "d63509f9170fd865",
+            "bulk/ (2000 files)": "38ee41c957ce2e51"
+          }
+        },
+        "refs": 6
+      },
+      "view": {
+        "active": "01a11095-6350-7b33-8938-e529bfa24327",
+        "sessions": 2,
+        "stored": {
+          "workspace": "<worktree 1>",
+          "host_workspace": "<local>"
+        },
+        "header": {
+          "eyebrow": "repo-hqbwb / CONVERSATION",
+          "path": "<worktree 1>",
+          "branch": null,
+          "connection": "Connected"
+        },
+        "logEntries": 30,
+        "lastSystemNotes": [
+          "Moved 3 changed files and 2000 untracked files to <worktree 1>; 1 ignored item stayed behind. This conversation now runs there. Both folders as they were before the move: refs/muse/handoff/1791279784185."
+        ]
+      },
+      "verdict": {
+        "previewConflict": true,
+        "refusedBeforeTheQuestion": true,
+        "supervisorRefuses": true,
+        "noFileEventUi": true,
+        "noFileEventDirect": true,
+        "localUnchanged": true,
+        "worktreeUnchanged": true,
+        "noSnapshotRef": true,
+        "conversationStays": true
+      },
+      "consoleErrors": []
+    },
+    "c-stop": {
+      "commit": "4e08e2a",
+      "productTreeClean": true,
+      "exeSha256": "10ee37b4c992f3d4d6cdb12baba00d4285d59dc670e7fcfcb4bf28b0c1f2646e",
+      "close": {
+        "graceful": true,
+        "exited": true
+      },
+      "verdict": {
+        "closedGracefully": true,
+        "exited": true
+      }
+    }
+  }
+}

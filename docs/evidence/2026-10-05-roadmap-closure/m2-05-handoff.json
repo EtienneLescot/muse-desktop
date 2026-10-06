@@ -7,6 +7,10 @@
   "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
   "git": "git version 2.48.1.windows.1",
   "liveTurns": 3,
+  "handWritten": {
+    "fields": ["summary", "method", "forgedInputs", "fixes", "limits", "history", "phases.setup.confirmProbe"],
+    "note": "Written by hand after the runs: the harness never writes these fields. Every other field is the harness's output (merge() in scripts/cdp-m2-05-handoff.mjs); platform is a constant of that harness, not a measurement. Corrected on 06/10/2026: fixes[0].insufficient. Complement of 06/10/2026: m2-05-handoff-complement.json."
+  },
   "summary": "M2-05 proved natively on Windows with Muse 1.4.2: a conversation moved Local -> worktree -> Local in the same session (3 live turns), restarted in the worktree, a deliberate conflict refused before any write, and a move failing after it had started writing (a Local file held open by another process) undone on both sides with an honest message. Two defects found and fixed on the way: the move never asked its question (fixed in 6dc62cf after an insufficient 7cc4c55), and the question counted the app's .muse entries as the user's ignored files (fixed in a3f0fca).",
   "method": [
     "Real webview over CDP: the conversation's Actions menu (Move to worktree / Move back to local), the composer, the work panel (Changes, Files, Terminal), Delete.",
@@ -26,7 +30,7 @@
     {
       "defect": "The move never asked its question. In the app, window.confirm is the dialog plugin's replacement; plugin 2.7 has no confirm command (only open, save, message), so the call always failed, and read without await its Promise counted as a yes. Same for Delete of an archived conversation and both host restarts.",
       "before": "confirm-defect (pre-fix code): no question shown, plugin:dialog|confirm refused ('dialog.confirm not allowed. Command not found'), the work moved to a worktree and back anyway.",
-      "insufficient": "7cc4c55 (await + dialog:allow-confirm, a permission that does not exist): measured on that build, the move asked nothing and stopped on the banner 'dialog.confirm not allowed. Command not found'; nothing moved.",
+      "insufficient": "7cc4c55 (await + dialog:allow-confirm): in tauri-plugin-dialog 2.7.3, allow-confirm exists as a deprecated alias of allow-message (commands.allow = [\"message\"]), which the app already granted, so adding it changed nothing; the diagnosis stands: the plugin has no confirm command (open, save, message), hence 'Command not found'. Measured on that build: the move asked nothing and stopped on the banner 'dialog.confirm not allowed. Command not found'; nothing moved.",
       "after": "6dc62cf: confirmAction asks through the plugin's confirm() (an OK/Cancel box on the allowed message command). move: the question shows with the counts; Cancel moves nothing; OK moves. Locked by test/visibleFailures.test.ts."
     },
     {
