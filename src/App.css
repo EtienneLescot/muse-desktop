@@ -946,6 +946,9 @@ body.dark .avatar {
   align-items: center;
   gap: 10px;
   min-height: 20px;
+  /* Chrome, not message text: a drag across two entries copied the first
+     one's timestamp, which the desktop layout hides until hover. */
+  user-select: none;
 }
 
 .msg-fork {
