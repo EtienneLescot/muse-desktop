@@ -4588,12 +4588,14 @@ export function useMuseSessions(): UseMuseSessions {
         sandbox,
         projects.find((project) => project.id === threadProjects[id]),
       );
-      host = { workspace: session.workspace, sandbox: sandboxConfig };
+      // M2-05: a moved conversation resumes on its host's folder and names
+      // where its turns ran; the supervisor checks that folder again. The
+      // error banner's restart restarts the folder resumed, not the other.
+      const resumedFolder = session.host_workspace ?? session.workspace;
+      host = { workspace: resumedFolder, sandbox: sandboxConfig };
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
-        // M2-05: a moved conversation resumes on its host's folder and names
-        // where its turns ran; the supervisor checks that folder again.
-        workspacePath: session.host_workspace ?? session.workspace,
+        workspacePath: resumedFolder,
         effectiveWorkspace: session.host_workspace !== undefined ? session.workspace : undefined,
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,

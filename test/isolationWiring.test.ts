@@ -29,4 +29,15 @@ describe("project isolation wiring", () => {
     assert.match(body, /attachThreadRow\(threadProjectsRef\.current, projectsRef\.current, meta\.session_id, sourceProject\)/);
     assert.ok(body.indexOf("setThreadProjects(next)") > 0, "the attachment is kept");
   });
+
+  it("records the folder a reconnect resumed, for the banner's restart", () => {
+    // A moved conversation resumed on its host's folder while the banner kept
+    // the other one, so "Restart workspace host" restarted the wrong folder.
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const start = hook.indexOf("const reconnectSession = useCallback(");
+    const body = hook.slice(start, hook.indexOf('invoke<BackendSessionMeta>("resume_session"', start) + 200);
+    assert.match(body, /const resumedFolder = session\.host_workspace \?\? session\.workspace;/);
+    assert.match(body, /host = \{ workspace: resumedFolder, sandbox: sandboxConfig \};/);
+    assert.match(body, /workspacePath: resumedFolder,/);
+  });
 });
