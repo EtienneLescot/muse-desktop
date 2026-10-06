@@ -69,7 +69,8 @@ pub fn open_devtools<R: tauri::Runtime>(context: &mut tauri::Context<R>) {
     }
 }
 
-/// The engine argv. Fails closed: a test instance never starts a real engine.
+/// The argv of every local engine. Fails closed: a test instance never starts a
+/// real local engine; a configured ssh:// target goes over the system ssh.
 pub fn sidecar_argv() -> Result<Vec<String>, String> {
     parse_argv(&std::env::var("MUSE_DESKTOP_TEST_SIDECAR").unwrap_or_default())
 }

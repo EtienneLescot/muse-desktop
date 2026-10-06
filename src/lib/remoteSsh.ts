@@ -7,7 +7,7 @@
  * Design rules shared with `computer.rs`:
  * - the argv is never built in the renderer: this module only *proposes* the
  *   canonical argv and validates the fields; the Rust side rebuilds it from
- *   the validated fields (`remote_ssh_exec`), so a compromised renderer
+ *   the validated fields (`ssh_argv` in `remote_ssh.rs`), so a compromised renderer
  *   cannot inject arguments — values are charset-checked, and the remote
  *   command travels after a literal `--` separator, never through a shell;
  * - no secret is stored or displayed: authentication rides the user's
@@ -15,7 +15,7 @@
  *   password field to leak. The identity file is displayed as a file name
  *   only.
  * The remote half (a live host answering) is deliberately out of scope here:
- * `remote_ssh_exec` drives the real binary, and whether a specific host
+ * `remote_ssh.rs` drives the real binary, and whether a specific host
  * accepts the connection is a property of that host, not of this code.
  */
 import { readStorageJson, removeStorageKey, writeStorageJson } from "./storage.ts";
@@ -25,7 +25,7 @@ export const SSH_CONNECT_TIMEOUT = 10;
 export const SSH_EXEC_TIMEOUT_MIN = 1;
 export const SSH_EXEC_TIMEOUT_MAX = 120;
 export const SSH_EXEC_TIMEOUT_DEFAULT = 30;
-/** Output bound per stream, enforced Rust-side before anything crosses IPC. */
+/** Output bound per stream. */
 export const SSH_OUTPUT_LIMIT = 64 * 1024;
 
 export interface RemoteSshTarget {

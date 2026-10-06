@@ -3008,32 +3008,6 @@ fn computer_mcp_server(grant_state: String) -> Option<Value> {
     computer::mcp_server_json(grant_state.trim())
 }
 
-/// M4-07: run one command on a remote host through the **system `ssh`
-/// binary**. The renderer passes validated fields, never argv: the binary
-/// resolution, the argv and the output bounds live in `remote_ssh.rs`.
-#[tauri::command]
-async fn remote_ssh_exec(
-    host: String,
-    port: Option<u16>,
-    user: Option<String>,
-    identity_file: Option<String>,
-    command: String,
-    timeout_secs: Option<u64>,
-) -> Result<Value, String> {
-    tokio::task::spawn_blocking(move || {
-        remote_ssh::remote_ssh_exec(
-            host.trim(),
-            port.unwrap_or(22),
-            user.as_deref().map(str::trim).unwrap_or(""),
-            identity_file.as_deref().map(str::trim).unwrap_or(""),
-            &command,
-            timeout_secs,
-        )
-    })
-    .await
-    .map_err(|e| format!("remote ssh task failed: {e}"))?
-}
-
 /// Claim the native scheduler lease for this app process. The renderer keeps
 /// the schedule/run ledger as its SSOT; this command only arbitrates which
 /// process may perform the due-occurrence check.
@@ -9851,7 +9825,6 @@ fn main() {
             computer_disable,
             computer_set_attach,
             computer_mcp_server,
-            remote_ssh_exec,
             secure_store_remove,
             mcp_local_start,
             mcp_local_refresh,

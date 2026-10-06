@@ -235,7 +235,8 @@ jobs:
         shell: bash
         run: |
           # tauri-build only checks that each externalBin file exists. In test
-          # mode every engine is the fixture, so this file never runs.
+          # mode every local engine is the fixture and a configured ssh://
+          # target goes over the system ssh, so this file never runs.
           printf 'CI placeholder\n' > src-tauri/binaries/muse-x86_64-pc-windows-msvc.exe
       - name: Build the debug app
         shell: bash
