@@ -1837,6 +1837,21 @@ fn back_up(side: &Side, written: &str) -> Result<PathBuf, String> {
     Ok(backup)
 }
 
+/// Fails when a file that writing `written` over `tree` deletes is still in
+/// `dir`. Git only warns when it cannot delete one (on Windows, a file another
+/// program holds open without delete sharing) and exits 0: the move would
+/// then report a file it left behind, or lose a deletion.
+fn deleted_as_written(dir: &Path, tree: &str, written: &str) -> Result<(), String> {
+    let left: Vec<String> = tree_diff(dir, tree, written, "D")?
+        .into_iter()
+        .filter(|path| dir.join(path).symlink_metadata().is_ok_and(|meta| !meta.is_dir()))
+        .collect();
+    if left.is_empty() {
+        return Ok(());
+    }
+    Err(format!("Git could not delete {} (in use by another program?)", left.join(", ")))
+}
+
 /// Write the merged tree into the target, then give the files that come
 /// unchanged from the source their exact bytes back from its backup.
 fn receive(from: &Side, to: &Side, merged: &str) -> Result<(), String> {
@@ -1844,6 +1859,7 @@ fn receive(from: &Side, to: &Side, merged: &str) -> Result<(), String> {
     // the moved change would then be in neither folder.
     let args = ["read-tree", "-m", "-u", "--no-sparse-checkout", &to.tree, merged];
     git_with_index(&to.dir, &to.scratch, &args, None)?;
+    deleted_as_written(&to.dir, &to.tree, merged)?;
     let combined: HashSet<String> = tree_diff(&from.dir, &from.tree, merged, "")?.into_iter().collect();
     let source = from.scratch.with_extension("files");
     for path in tree_diff(&to.dir, &to.tree, merged, "d")? {
@@ -2033,6 +2049,7 @@ fn handoff_move_with(
                 None,
             )
         })
+        .and_then(|_| deleted_as_written(&from.dir, &from.tree, &from.head))
         .and_then(|_| git_command(&from.dir, &["reset", "-q", &from.head, "--", "."]))
         .and_then(|_| {
             // Re-stat the rewritten files: a line-ending conversion changes
@@ -2930,6 +2947,53 @@ mod tests {
         assert_eq!(bytes(), before_bytes);
         assert!(!wt.join("new.txt").exists());
         assert!(!root.join("package.json").exists());
+    }
+
+    /// Open as an editor or a viewer holds a file on Windows: reads shared,
+    /// no delete sharing. Git then only warns that it cannot delete it.
+    #[cfg(windows)]
+    fn hold_open(path: &Path) -> fs::File {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 1;
+        fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ).open(path).unwrap()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn handoff_undoes_a_move_that_left_a_moved_file_in_the_source() {
+        // Native proof, 06/10/2026: the move said it moved the file and the
+        // conversation followed, while Local still held it.
+        let (root, wt) = worktree_fixture();
+        fs::write(root.join("main.txt"), "one\nlocal\n").unwrap();
+        fs::write(root.join("new.txt"), "untracked\n").unwrap();
+        let target_main = fs::read(wt.join("main.txt")).unwrap();
+        let held = hold_open(&root.join("new.txt"));
+        let error = handoff_move(&root, &wt).unwrap_err();
+        drop(held);
+        assert!(error.contains("source could not be cleaned") && error.contains("restored as they were") && error.contains("new.txt"), "{error}");
+        assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "one\nlocal\n");
+        assert_eq!(fs::read_to_string(root.join("new.txt")).unwrap(), "untracked\n");
+        assert_eq!(fs::read(wt.join("main.txt")).unwrap(), target_main);
+        assert!(!wt.join("new.txt").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn handoff_undoes_a_move_that_could_not_delete_a_file_in_the_target() {
+        // Without the check the source got the file back and the deletion was
+        // lost on both sides.
+        let (root, wt) = worktree_fixture();
+        fs::remove_file(root.join("package.json")).unwrap();
+        fs::write(root.join("main.txt"), "one\nlocal\n").unwrap();
+        let target_main = fs::read(wt.join("main.txt")).unwrap();
+        let held = hold_open(&wt.join("package.json"));
+        let error = handoff_move(&root, &wt).unwrap_err();
+        drop(held);
+        assert!(error.contains("target could not receive") && error.contains("package.json"), "{error}");
+        assert!(!root.join("package.json").exists());
+        assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "one\nlocal\n");
+        assert!(wt.join("package.json").is_file());
+        assert_eq!(fs::read(wt.join("main.txt")).unwrap(), target_main);
     }
 
     #[test]

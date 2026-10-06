@@ -7,6 +7,7 @@
  */
 
 import { displayPath, pathKey } from "./paths.ts";
+import { worktreeUnavailableReason } from "./remoteSsh.ts";
 
 /** `handoff_preview`, or the outcome of `handoff_move`. */
 export interface HandoffPreview {
@@ -115,6 +116,15 @@ export function describeHandoffResult(result: HandoffPreview): string {
       : `This conversation stays here${result.sessionError ? ` (it could not follow: ${contextValue(result.sessionError, "unknown error")})` : ""}; the work continues in a new conversation there.`,
     result.snapshot !== null ? `Both folders as they were before the move: ${result.snapshot}.` : "",
   ].filter((line) => line.length > 0).join(" ");
+}
+
+/**
+ * Why the conversation's Move action is off, shown on it, or null. A
+ * responding conversation never moves: the supervisor refuses it too.
+ */
+export function moveBlockedReason(session: { workspace: string; running?: boolean }): string | null {
+  return worktreeUnavailableReason(session.workspace)
+    ?? (session.running === true ? "Muse is still responding: stop the response before moving this conversation." : null);
 }
 
 /**

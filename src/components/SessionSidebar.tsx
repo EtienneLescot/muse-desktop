@@ -8,7 +8,7 @@ import {
   selectArchivedThreads,
 } from "../lib/threads";
 import type { Project, ThreadProjectMap } from "../lib/projects";
-import { worktreeUnavailableReason } from "../lib/remoteSsh";
+import { moveBlockedReason } from "../lib/handoff";
 import { insideWorktree } from "../lib/worktrees";
 
 interface Props {
@@ -488,8 +488,8 @@ export function SessionSidebar({
             )}
             {selected && !selected.archived && onMoveFolder && (
               <button
-                disabled={movingFolder !== null || selected.running || worktreeUnavailableReason(selected.workspace) !== null}
-                title={worktreeUnavailableReason(selected.workspace) ?? undefined}
+                disabled={movingFolder !== null || moveBlockedReason(selected) !== null}
+                title={moveBlockedReason(selected) ?? undefined}
                 onClick={() => {
                   onMoveFolder(selected.session_id);
                   closeActions();
