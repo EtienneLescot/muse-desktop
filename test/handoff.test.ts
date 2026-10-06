@@ -1,155 +1,115 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
-  formatWorktreeContinuationNote, buildHandoffPlan, formatHandoffContext, isHandoffPlanStale } from "../src/lib/handoff.ts";
+  describeHandoffResult,
+  describeWorkspaceFallback,
+  formatHandoffContext,
+  handoffQuestion,
+  moveBlockedReason,
+  userShellBlocked,
+  type HandoffPreview,
+} from "../src/lib/handoff.ts";
 
-const base = {
-  direction: "local-to-worktree" as const,
-  sourceWorkspace: "C:/repo",
-  sourceBranch: "main",
-  sourceChangedFiles: 0,
-  sourceConflictedFiles: 0,
-  targetPath: "C:/repo/.muse/worktrees/task-one",
-  targetBranch: "task-one",
-  targetExists: true,
+const preview: HandoffPreview = {
+  source: "\\\\?\\C:\\repo",
+  target: "\\\\?\\C:\\repo\\.muse\\worktrees\\task-one",
+  tracked: 2,
+  untracked: 1,
+  ignored: 3,
+  partlyStaged: [],
+  conflicts: [],
+  snapshot: null,
+  sameSession: true,
 };
 
-describe("M2-05 handoff planner", () => {
-  it("keeps an unobserved target cautious and ready for review", () => {
-    const plan = buildHandoffPlan(base);
-    assert.equal(plan.ready, true);
-    assert.equal(plan.checks.find((item) => item.id === "target-status")?.status, "warn");
-    assert.equal(plan.direction, "local-to-worktree");
-    assert.equal(plan.steps.length, 4);
+describe("M2-05 handoff wording", () => {
+  it("blocks a move that would conflict and names the files", () => {
+    const question = handoffQuestion({ ...preview, conflicts: ["src/a.ts", "b.txt"] }, "Local");
+    assert.equal(question.blocked, true);
+    assert.match(question.text, /Nothing was moved: 2 files would conflict in Local \(src\/a\.ts, b\.txt\)/);
   });
 
-  it("blocks missing targets and source conflicts", () => {
-    const plan = buildHandoffPlan({
-      ...base,
-      targetExists: false,
-      sourceConflictedFiles: 2,
-    });
-    assert.equal(plan.ready, false);
-    assert.equal(plan.checks.filter((item) => item.status === "blocked").length, 2);
+  it("asks with the counts, the ignored files left behind and what the conversation does", () => {
+    const same = handoffQuestion(preview, "a new worktree");
+    assert.equal(same.blocked, false);
+    assert.match(same.text, /all the uncommitted work in this folder/);
+    assert.match(same.text, /2 changed files/);
+    assert.match(same.text, /1 untracked file\b/);
+    assert.match(same.text, /3 ignored items left where they are/);
+    assert.match(same.text, /The conversation moves with them/);
+    const old = handoffQuestion({ ...preview, sameSession: false }, "a new worktree");
+    assert.match(old.text, /cannot move a conversation: a new one opens there/);
   });
 
-  it("blocks a dirty or already-used target", () => {
-    const plan = buildHandoffPlan({
-      ...base,
-      targetDirty: true,
-      targetBranchInUse: true,
-    });
-    assert.equal(plan.ready, false);
-    assert.match(
-      plan.checks.find((item) => item.id === "target-status")?.detail ?? "",
-      /uncommitted/,
-    );
-    assert.match(
-      plan.checks.find((item) => item.id === "branch-lock")?.detail ?? "",
-      /already checked out/,
-    );
+  it("names the files whose staged version will not move", () => {
+    assert.doesNotMatch(handoffQuestion(preview, "Local").text, /after staging/);
+    const question = handoffQuestion({ ...preview, partlyStaged: ["src/a.ts"] }, "Local");
+    assert.equal(question.blocked, false);
+    assert.match(question.text, /1 file changed again after staging \(src\/a\.ts\): the file moves as it is now; the staged version stays only in the snapshot/);
   });
 
-  it("warns when source changes need an explicit snapshot", () => {
-    const plan = buildHandoffPlan({ ...base, sourceChangedFiles: 3 });
-    assert.equal(plan.ready, true);
-    assert.equal(plan.checks.find((item) => item.id === "source-dirty")?.status, "warn");
+  it("records the move without claiming an old host moved the conversation", () => {
+    const moved = describeHandoffResult({ ...preview, snapshot: "refs/muse/handoff/1" });
+    assert.match(moved, /to C:\\repo\\\.muse\\worktrees\\task-one/);
+    assert.match(moved, /now runs there/);
+    assert.match(moved, /refs\/muse\/handoff\/1/);
+    const stayed = describeHandoffResult({ ...preview, sameSession: false });
+    assert.match(stayed, /This conversation stays here/);
+    assert.doesNotMatch(stayed, /now runs there/);
   });
 
-  it("keeps ignored target artifacts visible without blocking the plan", () => {
-    const plan = buildHandoffPlan({ ...base, targetIgnoredFiles: 2 });
-    assert.equal(plan.ready, true);
-    assert.equal(plan.checks.find((item) => item.id === "target-ignored")?.status, "warn");
-    assert.match(
-      plan.checks.find((item) => item.id === "target-ignored")?.detail ?? "",
-      /2 ignored/,
-    );
-  });
-
-  it("keeps the reverse direction explicit in the transfer steps", () => {
-    const plan = buildHandoffPlan({
-      ...base,
-      direction: "worktree-to-local",
-      sourceWorkspace: base.targetPath,
-      sourceBranch: base.targetBranch,
-      targetPath: base.sourceWorkspace,
-      targetBranch: base.sourceBranch,
-    });
-    assert.equal(plan.direction, "worktree-to-local");
-    assert.match(plan.steps.at(-1) ?? "", /Local/);
-    assert.equal(plan.snapshot.direction, "worktree-to-local");
-  });
-
-  it("captures the inspected target state and detects a changed source", () => {
-    const plan = buildHandoffPlan({
-      ...base,
-      targetDirty: false,
-      targetIgnoredFiles: 1,
-      targetBranchInUse: false,
-    });
-    assert.equal(plan.snapshot.targetDirty, false);
-    assert.equal(plan.snapshot.targetIgnoredFiles, 1);
-    assert.equal(plan.snapshot.targetBranchInUse, false);
-    assert.equal(isHandoffPlanStale(plan, {
-      ...base,
-      targetDirty: false,
-      targetIgnoredFiles: 1,
-      targetBranchInUse: false,
-    }), false);
-    assert.equal(isHandoffPlanStale(plan, {
-      ...base,
-      sourceChangedFiles: 1,
-      targetDirty: false,
-      targetIgnoredFiles: 1,
-      targetBranchInUse: false,
-    }), true);
-  });
-
-  it("formats a bounded, explicit context note without claiming a host transfer", () => {
-    const context = formatHandoffContext(buildHandoffPlan(base));
-    assert.match(context, /locally reviewed context note/);
-    assert.match(context, /Local → Worktree/);
-    assert.match(context, /C:\/repo/);
-    assert.ok(context.length <= 4_000);
-  });
-
-  it("includes only a bounded user and Muse excerpt in the handoff note", () => {
-    const context = formatHandoffContext(buildHandoffPlan(base), [
+  it("opens a new conversation with a bounded note and only user and Muse lines", () => {
+    const context = formatHandoffContext({ ...preview, sameSession: false }, [
       { role: "system", text: "internal protocol payload must stay local" },
       { role: "user", text: "Please inspect the release pipeline." },
       { role: "assistant", text: "I found the installer manifest and will verify it." },
+      ...Array.from({ length: 40 }, () => ({ role: "user", text: "x".repeat(400) })),
     ]);
-    assert.match(context, /Conversation context \(local excerpt/);
-    assert.match(context, /You: Please inspect the release pipeline\./);
-    assert.match(context, /Muse: I found the installer manifest/);
+    assert.match(context, /previous conversation was not moved/);
+    assert.match(context, /From: C:\\repo\n/);
     assert.doesNotMatch(context, /internal protocol payload/);
+    assert.ok(context.length <= 4_000);
   });
 
-  it("treats a newly observed target as a stale plan", () => {
-    const plan = buildHandoffPlan(base);
-    assert.equal(isHandoffPlanStale(plan, { ...base, targetDirty: false }), true);
+  it("reports the files as moved when only the conversation could not follow", () => {
+    const text = describeHandoffResult({ ...preview, sameSession: false, sessionError: "conversation metadata is unavailable" });
+    assert.match(text, /^Moved 2 changed files/);
+    assert.match(text, /could not follow: conversation metadata is unavailable/);
+    assert.match(text, /new conversation there/);
   });
-});
 
-describe("worktree continuation note", () => {
-  it("states what happened without borrowing a plan's authority", () => {
-    const note = formatWorktreeContinuationNote(
-      "C:\\repos\\openscreen",
-      "C:\\repos\\openscreen\\.muse\\worktrees\\openscreen-4f2a1",
-      "muse/openscreen-4f2a1",
+  it("says on the Move action why a responding conversation cannot move", () => {
+    // Native proof, 06/10/2026: the action was greyed out with no reason.
+    assert.match(moveBlockedReason({ workspace: "C:\\repo", running: true }) ?? "", /still responding: stop the response before moving/);
+    assert.equal(moveBlockedReason({ workspace: "C:\\repo", running: false }), null);
+    assert.match(moveBlockedReason({ workspace: "ssh://box:22/srv/app" }) ?? "", /^Not available for remote conversations/);
+    const sidebar = readFileSync(new URL("../src/components/SessionSidebar.tsx", import.meta.url), "utf8");
+    assert.match(sidebar, /disabled=\{movingFolder !== null \|\| moveBlockedReason\(selected\) !== null\}\s*title=\{moveBlockedReason\(selected\) \?\? undefined\}/);
+  });
+
+  it("tells the supervisor which worktree the move created, so a move that does not happen removes it", () => {
+    // Native proof, 06/10/2026: refused or failed moves left that worktree behind, unannounced.
+    const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    assert.match(app, /handoffConversation\(sessionId, target, local === null\)/);
+    const hook = readFileSync(new URL("../src/hooks/useMuseSessions.ts", import.meta.url), "utf8");
+    assert.match(hook, /invoke<HandoffPreview>\("handoff_move", \{ sessionId, target, newWorktree \}\)/);
+  });
+
+  it("turns Run in Muse off only while the conversation is away from its host's folder", () => {
+    const host = "\\\\?\\C:\\repo";
+    const moved = userShellBlocked({ workspace: "\\\\?\\C:\\repo\\.muse\\worktrees\\x", host_workspace: host });
+    assert.match(moved ?? "", /runs it in C:\\repo, the folder this conversation moved from/);
+    assert.equal(userShellBlocked({ workspace: "C:\\repo\\", host_workspace: host }), null);
+    assert.equal(userShellBlocked({ workspace: "C:\\repo" }), null);
+  });
+
+  it("says why a resumed conversation came back to its first folder", () => {
+    const text = describeWorkspaceFallback(
+      "\\\\?\\C:\\repo\\.muse\\worktrees\\gone",
+      "\\\\?\\C:\\repo",
+      "cannot resolve the folder",
     );
-    // The one claim that must never appear: that the session moved.
-    assert.match(note, /was not moved or emptied/);
-    assert.match(note, /new conversation in a copy/);
-    assert.match(note, /muse\/openscreen-4f2a1/);
-    assert.doesNotMatch(note, /transferred automatically/);
-    assert.ok(note.length < 800, "a context note stays small enough to read");
-  });
-
-  it("survives empty values instead of printing blanks", () => {
-    const note = formatWorktreeContinuationNote("", "", "");
-    assert.match(note, /unknown path/);
-    assert.match(note, /unknown workspace/);
-    assert.match(note, /no branch/);
+    assert.match(text, /runs in C:\\repo again: C:\\repo\\\.muse\\worktrees\\gone could not be used \(cannot resolve the folder\)/);
   });
 });

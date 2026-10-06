@@ -424,6 +424,15 @@ export function listConnectorTools(registry: ConnectorEntry[]): ConnectorTool[] 
   return out;
 }
 
+/**
+ * Whether anything backs this entry: a remote endpoint, or a local server
+ * with a command to start. A curated catalog entry has neither, so adding it
+ * only lists tools that nothing serves (M0-13 audit, 05/10/2026).
+ */
+export function connectorReachable(entry: ConnectorEntry): boolean {
+  return entry.kind === "remote" || (entry.command ?? "").trim().length > 0;
+}
+
 /** Tool names present in `after` but not `before` (and vice versa). */
 export function diffTools(
   before: ConnectorTool[],
@@ -437,7 +446,43 @@ export function diffTools(
   };
 }
 
-/** True when `url` is an https URL on a plausibly public host. */
+/** A dotted IPv4 address outside the public internet (RFC 6890 special ranges). */
+function isPrivateIpv4(a: number, b: number): boolean {
+  return a === 0 || a === 10 || a === 127 || a >= 224
+    || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168)
+    || (a === 198 && (b === 18 || b === 19));
+}
+
+/**
+ * An IPv6 literal (URL.hostname form, brackets removed) outside the public
+ * internet: loopback, unspecified, unique and link or site local, multicast,
+ * and an IPv4 address carried as IPv4-mapped (`::ffff:a.b.c.d`), compatible
+ * (`::a.b.c.d`) or NAT64 (`64:ff9b::a.b.c.d`), judged as that IPv4.
+ */
+function isPrivateIpv6(literal: string): boolean {
+  const [head, tail = ""] = literal.split("::");
+  const groups = (part: string): number[] => (part ? part.split(":").map((group) => parseInt(group, 16)) : []);
+  const left = groups(head);
+  const right = literal.includes("::") ? groups(tail) : [];
+  const words = [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill(0), ...right];
+  if (words.length !== 8 || words.some((word) => !Number.isInteger(word) || word < 0 || word > 0xffff)) return true;
+  const [first] = words;
+  if (words.slice(0, 7).every((word) => word === 0) && words[7] <= 1) return true;
+  if ((first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80 || (first & 0xffc0) === 0xfec0 || (first & 0xff00) === 0xff00) return true;
+  const embedsIpv4 = (words.slice(0, 5).every((word) => word === 0) && (words[5] === 0 || words[5] === 0xffff))
+    || (first === 0x64 && words[1] === 0xff9b && words.slice(2, 6).every((word) => word === 0));
+  return embedsIpv4 && isPrivateIpv4(words[6] >> 8, words[6] & 0xff);
+}
+
+/**
+ * True when `url` is an https URL on a plausibly public host. URL.hostname is
+ * already normalized (IPv4 numbers in any base as dotted decimal, IPv6
+ * compressed hex); a trailing dot names the same host (`localhost.`), and a
+ * single label (`metadata`, `intranet`) is never a public name.
+ */
 export function isPublicHttpUrl(url: string): boolean {
   const trimmed = url.trim();
   if (!/^https:\/\//i.test(trimmed)) return false;
@@ -445,49 +490,40 @@ export function isPublicHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(trimmed);
     if (parsed.username || parsed.password) return false;
-    host = parsed.hostname.toLowerCase();
+    host = parsed.hostname.toLowerCase().replace(/\.+$/, "");
   } catch {
     return false;
   }
   if (host.length === 0) return false;
-  if (host === "localhost") return false;
-  if (
-    host.endsWith(".local") ||
-    host.endsWith(".internal") ||
-    host.endsWith(".lan") ||
-    host.endsWith(".localhost") ||
-    host === "localhost"
-  ) {
+  if (host.startsWith("[") && host.endsWith("]")) return !isPrivateIpv6(host.slice(1, -1));
+  const ipv4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
+  if (ipv4) return !isPrivateIpv4(Number(ipv4[1]), Number(ipv4[2]));
+  if (!host.includes(".")) return false;
+  // `.internal` covers the cloud metadata names (metadata.google.internal).
+  return ![".local", ".internal", ".lan", ".localhost", ".home.arpa"].some((suffix) => host.endsWith(suffix));
+}
+
+/**
+ * ADR 0003 test mode only: the one loopback origin (`http://127.0.0.1:<port>`)
+ * where the native M3-02 proof runs its MCP server, named by the Rust side
+ * (`test_remote_mcp_origin`). Null in every other build.
+ */
+let testRemoteMcpOrigin: string | null = null;
+
+export function allowTestRemoteMcpOrigin(origin: string | null): void {
+  testRemoteMcpOrigin = origin;
+}
+
+/** A remote connector URL: public HTTPS, or the test instance's loopback origin. */
+export function isRemoteMcpUrlAllowed(url: string): boolean {
+  if (isPublicHttpUrl(url)) return true;
+  if (testRemoteMcpOrigin === null) return false;
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.origin === testRemoteMcpOrigin && !parsed.username && !parsed.password;
+  } catch {
     return false;
   }
-  // URL.hostname keeps IPv6 brackets. Reject loopback, unspecified,
-  // link-local and unique-local ranges before any DNS lookup is attempted.
-  if (host.startsWith("[") && host.endsWith("]")) {
-    const ipv6 = host.slice(1, -1);
-    if (
-      ipv6 === "::1" ||
-      ipv6 === "::" ||
-      ipv6.startsWith("fc") ||
-      ipv6.startsWith("fd") ||
-      ipv6.startsWith("fe8") ||
-      ipv6.startsWith("fe9") ||
-      ipv6.startsWith("fea") ||
-      ipv6.startsWith("feb")
-    ) {
-      return false;
-    }
-  }
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
-    if (host.startsWith("10.")) return false;
-    if (host.startsWith("192.168.")) return false;
-    const second = Number(host.split(".")[1]);
-    if (host.startsWith("172.") && second >= 16 && second <= 31) return false;
-    if (host.startsWith("127.")) return false;
-    if (host.startsWith("169.254.")) return false;
-    if (host === "0.0.0.0") return false;
-    if (host.startsWith("100.") && Number(host.split(".")[1]) >= 64 && Number(host.split(".")[1]) <= 127) return false;
-  }
-  return true;
 }
 
 export type RemoteGuardCode = "remote-limit" | "private-network";
@@ -515,7 +551,7 @@ export function requestRemoteConnector(
   if (existingRemote !== null) {
     return { ok: false, registry, code: "remote-limit", message: REMOTE_LIMIT_MESSAGE };
   }
-  if (!isPublicHttpUrl(spec.url)) {
+  if (!isRemoteMcpUrlAllowed(spec.url)) {
     return { ok: false, registry, code: "private-network", message: VPN_FAILURE_MESSAGE };
   }
   const entry: ConnectorEntry = {
@@ -551,7 +587,7 @@ export function registerRemoteConnector(
   const id = spec.id.trim();
   const name = spec.name.trim();
   const url = spec.url.trim();
-  if (!id || !name || !isPublicHttpUrl(url) || !Array.isArray(spec.tools)) return null;
+  if (!id || !name || !isRemoteMcpUrlAllowed(url) || !Array.isArray(spec.tools)) return null;
   const tools = spec.tools
     .map((tool) => ({ name: tool.name.trim(), description: tool.description.trim() }))
     .filter((tool) => tool.name.length > 0 && tool.name.length <= 200);

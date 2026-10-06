@@ -45,6 +45,7 @@ mod scheduler_wakeup;
 mod notification_ledger;
 mod outbox_ledger;
 mod workspace_watch;
+mod test_mode;
 use hosts::Hosts;
 
 use base64::Engine as _;
@@ -74,8 +75,8 @@ pub struct SessionMeta {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_durability: Option<String>,
     /// The host's effective approval projection when the session API returns
-    /// one. This is advisory renderer metadata; automatic decisions still
-    /// require an explicit per-session confirmation in the hook.
+    /// one. This is advisory renderer metadata; the client never decides an
+    /// approval from it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_mode: Option<String>,
     /// Capabilities granted by the workspace-owned host at initialize time.
@@ -105,6 +106,18 @@ pub struct SessionMeta {
     /// conversation" or "Session 01a0…" while the host knew it as "yo".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// M2-05: set once the conversation moved between Local and a worktree.
+    /// The MSP session stays owned by the host it started in (it cannot
+    /// migrate between host processes, and `session/resume` checks the
+    /// durable `workspaceRoot`), so this is that host's folder, while
+    /// `workspace` is where turns now run through `turn/start.workspaceRoots`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_workspace: Option<String>,
+    /// M0-13: the posture the conversation's host was started with, which
+    /// Muse fixes at `serve`. What it refuses is said from this, not from the
+    /// project's current settings, which only a restart applies.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox: Option<HostSandboxPolicy>,
 }
 
 /// Host title, trimmed, without control characters (a live title carried a
@@ -119,8 +132,9 @@ fn session_title(session: &Value) -> Option<String> {
 /// Sandbox posture selected when a workspace-owned Muse host is spawned.
 /// Muse fixes this posture for the lifetime of `muse serve`; it cannot be
 /// changed through MSP for an already running host.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum HostSandboxMode {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HostSandboxMode {
     Workspace,
     Network,
     Elevated,
@@ -156,8 +170,10 @@ impl HostSandboxMode {
 
 /// Concrete flags for one workspace-owned host. Project settings are folded
 /// into this value before spawn; the running host cannot mutate them later.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct HostSandboxPolicy {
+/// Serialized as the renderer's `HostSandboxConfig`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostSandboxPolicy {
     mode: HostSandboxMode,
     disable_write: bool,
     disable_shell: bool,
@@ -199,29 +215,31 @@ impl HostSandboxPolicy {
         args
     }
 
-    /// Stable, user-facing summary used when a workspace host cannot satisfy
-    /// a different project posture without being restarted.
+    /// The posture in the words Settings and the project preferences use, for
+    /// a host that cannot take another posture without being restarted.
     fn summary(&self) -> String {
         let mode = match self.mode {
-            HostSandboxMode::Workspace => "workspace",
-            HostSandboxMode::Network => "network",
-            HostSandboxMode::Elevated => "elevated",
+            HostSandboxMode::Workspace => "Workspace only",
+            HostSandboxMode::Network => "Workspace and network",
+            HostSandboxMode::Elevated => "Elevated access",
         };
         let mut restrictions = Vec::new();
         if self.disable_write {
-            restrictions.push("read-only writes");
+            restrictions.push("no writes");
         }
         if self.disable_shell {
-            restrictions.push("shell disabled");
+            restrictions.push("no commands");
         }
         if restrictions.is_empty() {
             mode.to_string()
         } else {
-            format!("{mode} ({})", restrictions.join(", "))
+            format!("{mode}, {}", restrictions.join(", "))
         }
     }
 }
 
+/// A host is per folder, a project's or not. `conflictRestart` in
+/// `src/lib/settings.ts` recognizes the refusal by "restart it to apply".
 fn sandbox_policy_conflict(
     current: &HostSandboxPolicy,
     requested: &HostSandboxPolicy,
@@ -230,7 +248,7 @@ fn sandbox_policy_conflict(
         return None;
     }
     Some(format!(
-        "workspace host already uses sandbox posture {}; restart the workspace host before starting this conversation with {}",
+        "This folder's engine is running with {}; restart it to apply {}.",
         current.summary(),
         requested.summary(),
     ))
@@ -422,6 +440,8 @@ struct AppState {
     /// Capabilities are fixed for a connection lifetime and never inferred
     /// from the renderer's authorization posture.
     host_capabilities: Mutex<HashMap<PathBuf, Vec<String>>>,
+    /// Engine version and schema fingerprint per workspace host (diagnostics).
+    host_engines: Mutex<HashMap<PathBuf, HostEngine>>,
     approvals: Mutex<HashMap<(String, String), PendingApproval>>,
     /// (session_id, item_id) -> MSP item kind (`agentMessage`, `subagent`,
     /// ...). Selects the UI lane for `item/delta`, which carries no kind of
@@ -443,6 +463,8 @@ struct AppState {
     /// Serializes host creation: check-spawn-insert must be atomic or two
     /// concurrent `start_session` calls spawn two hosts.
     host_mutex: tokio::sync::Mutex<()>,
+    /// M2-05: canonical folders a handoff is moving files in (`claim_handoff`).
+    handoffs: tokio::sync::RwLock<Vec<PathBuf>>,
     event_seq: Mutex<u64>,
     event_buffer: Mutex<std::collections::VecDeque<DrainedEvent>>,
     terminals: terminal::TerminalRegistry,
@@ -482,6 +504,10 @@ pub struct NativeDiagnosticsSnapshot {
     pub running_session_count: usize,
     pub pending_approval_count: usize,
     pub event_buffer_count: usize,
+    /// Last engine seen per workspace host (kept after the host exits), sorted; no workspace path.
+    pub host_engines: Vec<HostEngine>,
+    /// The M0-14 isolated test mode is on (`test_mode`): fixture engines, test profile.
+    pub test_mode: bool,
 }
 
 const DIAGNOSTIC_MAX_LINES: usize = 20;
@@ -675,7 +701,7 @@ async fn open_native_browser(app: AppHandle, url: String, session_id: String) ->
             .map_err(|e| format!("could not focus native browser: {e}"))?;
         return Ok("reused".to_string());
     }
-    WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         &app,
         &label,
         WebviewUrl::External(parsed),
@@ -683,9 +709,13 @@ async fn open_native_browser(app: AppHandle, url: String, session_id: String) ->
     .title(format!("Muse Browser · {}", session.chars().take(8).collect::<String>()))
     .incognito(true)
     .inner_size(1180.0, 800.0)
-    .min_inner_size(720.0, 480.0)
-    .build()
-    .map_err(|e| format!("could not open native browser: {e}"))?;
+    .min_inner_size(720.0, 480.0);
+    if let Some(args) = test_mode::browser_args() {
+        builder = builder.additional_browser_args(&args);
+    }
+    builder
+        .build()
+        .map_err(|e| format!("could not open native browser: {e}"))?;
     Ok("opened".to_string())
 }
 
@@ -731,37 +761,20 @@ fn is_subagent_item_kind(kind: &str) -> bool {
 /// replaces the available choices for the next stage. Keep the normalization
 /// in one place so requested and updated payloads reach the same UI lane.
 fn approval_payload(p: &Value, approval_id: &str, updated: bool) -> Value {
+    let subject = p.get("subject");
     let tool = p
         .get("toolName")
         .or_else(|| p.get("tool_name"))
+        .or_else(|| subject.and_then(|s| s.get("toolName")))
         .and_then(Value::as_str)
+        // 1.4.2 sends no toolName with `approval/updated`: "tool" lets the
+        // card keep the name its request gave ("powershell"), where a guess
+        // from the subject renamed it "bash" from stage 1 on.
         .or_else(|| {
-            p.get("subject")
-                .and_then(|s| s.get("kind"))
-                .and_then(Value::as_str)
-                .and_then(|kind| (kind == "shell").then_some("bash"))
+            let shell = subject.and_then(|s| s.get("kind")).and_then(Value::as_str) == Some("shell");
+            (shell && !updated).then_some("bash")
         })
         .unwrap_or("tool");
-    let summary = p
-        .get("rawArgs")
-        .or_else(|| p.get("raw_args"))
-        .and_then(Value::as_str)
-        .or_else(|| {
-            p.get("subject")
-                .and_then(|s| s.get("command").or_else(|| s.get("rawCommand")))
-                .and_then(Value::as_str)
-        })
-        .or_else(|| {
-            p.get("approvalSubject")
-                .and_then(|s| s.get("raw_command"))
-                .and_then(Value::as_str)
-        })
-        .unwrap_or("");
-    let summary = if summary.is_empty() {
-        String::new()
-    } else {
-        format!("{}: {}", tool, truncate(summary, 200))
-    };
     let choices: Vec<Value> = p
         .get("availableChoices")
         .or_else(|| p.get("available_choices"))
@@ -792,12 +805,36 @@ fn approval_payload(p: &Value, approval_id: &str, updated: bool) -> Value {
         "request_id": approval_id,
         "approvalId": approval_id,
         "toolName": tool,
-        "summary": summary,
+        "summary": approval_subject_text(p),
         "choices": choices,
         "itemId": p.get("itemId"),
         "currentRequirementId": p.get("currentRequirementId"),
         "updated": updated,
     })
+}
+
+/// What an approval asks for, as the host words it: the subject's command,
+/// path or target; the card names the tool itself. `rawArgs` is the tool's
+/// JSON input, so only a readable field of it is used, never the JSON (M0-05:
+/// stage 0 read `powershell: {"command":…}`).
+/// ponytail: args with none of these keys leave only the tool name; flatten
+/// scalar args if such a tool ever needs approving.
+fn approval_subject_text(p: &Value) -> String {
+    fn field<'a>(value: Option<&'a Value>, keys: &[&str]) -> Option<&'a str> {
+        let value = value?;
+        keys.iter().find_map(|key| {
+            value.get(*key).and_then(Value::as_str).map(str::trim).filter(|text| !text.is_empty())
+        })
+    }
+    let raw_args = p.get("rawArgs").or_else(|| p.get("raw_args")).and_then(Value::as_str);
+    let args = raw_args.and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+    field(p.get("subject"), &["command", "rawCommand", "path", "target", "host"])
+        .or_else(|| field(p.get("approvalSubject"), &["raw_command"]))
+        .or_else(|| field(args.as_ref(), &["command", "path", "url", "query", "description"]))
+        // Plain-text args (not JSON) are already words.
+        .or_else(|| raw_args.filter(|_| args.is_none()).map(str::trim))
+        .map(|text| truncate(text, 200))
+        .unwrap_or_default()
 }
 
 fn approval_terminal(result: &Value) -> bool {
@@ -815,20 +852,36 @@ fn approval_terminal(result: &Value) -> bool {
 
 /// Map the product-facing posture to the host's closed MSP enum. Keeping this
 /// translation in Rust means every wire write is validated even if a stale or
-/// malformed renderer invokes the command directly.
+/// malformed renderer invokes the command directly. It follows the host's own
+/// meanings: `promptUnmatched` prompts for anything no rule matches,
+/// `onRequest` runs tools sandboxed and prompts only on explicit permission
+/// requests, `allowAll` never prompts.
 fn host_approval_mode(mode: &str) -> Option<&'static str> {
     match mode {
-        "ask" => Some("onRequest"),
-        "workspace" => Some("promptUnmatched"),
+        "ask" => Some("promptUnmatched"),
+        "workspace" => Some("onRequest"),
         "yolo" => Some("allowAll"),
         _ => None,
     }
 }
 
+/// Engine identity announced by a host's `initialize`, kept per workspace for
+/// the diagnostics export (M0-08 version matrix). Version, fingerprint and
+/// OS only: no path or credential leaves through this struct.
+#[derive(Debug, Serialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub struct HostEngine {
+    pub server_version: String,
+    pub schema_fingerprint: String,
+    /// `platformOs`: a remote engine (M4-07) runs on another OS than this one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+}
+
 /// Validate the minimum initialize contract before the host accepts any
 /// session. Unknown additive fields remain allowed, while a missing identity
 /// or unsupported schema version produces a startup error with remediation.
-fn validate_initialize_result(result: &Value) -> Result<(), String> {
+fn validate_initialize_result(result: &Value) -> Result<HostEngine, String> {
     let server = result
         .get("serverInfo")
         .ok_or_else(|| "incompatible Muse host: initialize response has no serverInfo".to_string())?;
@@ -863,11 +916,14 @@ fn validate_initialize_result(result: &Value) -> Result<(), String> {
         .and_then(Value::as_str)
         .filter(|f| f.starts_with("sha256:") && f.len() > "sha256:".len())
         .ok_or_else(|| "incompatible Muse host: schema.fingerprint is missing or invalid".to_string())?;
-    let _ = fingerprint;
-    Ok(())
+    Ok(HostEngine {
+        server_version: truncate(version, 64),
+        schema_fingerprint: truncate(fingerprint, 80),
+        platform: result.get("platformOs").and_then(Value::as_str).map(|os| truncate(os, 32)),
+    })
 }
 
-fn emit(app: &AppHandle, _event: &str, session_id: &str, kind: &str, payload: String) {
+fn emit<R: tauri::Runtime>(app: &AppHandle<R>, _event: &str, session_id: &str, kind: &str, payload: String) {
     // Poll transport: buffer the event with a sequence number. The UI drains
     // via `poll_events`. (`event` is kept for log readability.)
     let state: State<AppState> = app.state();
@@ -1144,6 +1200,9 @@ fn listed_in_workspace(root: &Path, session: &Value) -> bool {
     let Some(raw) = session.get("workspaceRoot").and_then(Value::as_str) else {
         return true;
     };
+    if let Some(remote) = remote_ssh::remote_engine(root) {
+        return remote.names_workspace(raw);
+    }
     resume::host_path(raw)
         .canonicalize()
         .is_ok_and(|listed| listed == root)
@@ -1154,6 +1213,7 @@ fn session_meta_from_list_row(
     session: &Value,
     session_durability: Option<String>,
     granted_capabilities: Option<Vec<String>>,
+    sandbox: Option<HostSandboxPolicy>,
 ) -> Option<SessionMeta> {
     let session_id = session
         .get("sessionId")
@@ -1171,6 +1231,8 @@ fn session_meta_from_list_row(
         model_id: session_model_id(session),
         loaded: session_loaded(session),
         title: session_title(session),
+        host_workspace: None,
+        sandbox,
     })
 }
 
@@ -1282,6 +1344,16 @@ fn session_granted_capabilities(
 ) -> Result<Option<Vec<String>>, String> {
     Ok(state
         .host_capabilities
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(root)
+        .cloned())
+}
+
+/// The posture `root`'s live host was spawned with (`ensure_host` records it).
+fn host_posture(state: &AppState, root: &Path) -> Result<Option<HostSandboxPolicy>, String> {
+    Ok(state
+        .host_sandbox
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
         .get(root)
@@ -1448,19 +1520,24 @@ async fn ensure_host(
                 }),
             )
             .await?;
-        validate_initialize_result(&initialized)?;
+        let engine = validate_initialize_result(&initialized)?;
         client.notify("initialized", Value::Null).await?;
-        Ok::<Value, String>(initialized)
+        Ok::<(Value, HostEngine), String>((initialized, engine))
     };
-    let initialized = match handshake.await {
+    let (initialized, engine) = match handshake.await {
         Ok(value) => value,
         Err(e) => {
             state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.remove(&client);
             client.shutdown().await;
-            return Err(format!(
-                "MSP handshake failed ({e}). Host stderr: {}",
-                tail_of(&stderr_tail)
-            ));
+            let stderr = tail_of(&stderr_tail);
+            // A remote failure is ssh's, not the local sidecar's: say which
+            // step refused, without the wording that opens the sidecar panel.
+            return Err(match remote_ssh::remote_engine(root) {
+                Some(remote) => remote.explain_failure(&e, &stderr).unwrap_or_else(|| {
+                    format!("the remote Muse at {} failed the MSP handshake ({e}). ssh stderr: {stderr}", remote.key())
+                }),
+                None => format!("MSP handshake failed ({e}). Host stderr: {stderr}"),
+            });
         }
     };
 
@@ -1485,6 +1562,12 @@ async fn ensure_host(
         .lock()
         .map_err(|e| format!("state lock: {e}"))?;
     cache_initialize_granted_capabilities(&mut host_capabilities, &root, &initialized);
+
+    state
+        .host_engines
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .insert(root.clone(), engine);
 
     Ok(client)
 }
@@ -1552,6 +1635,7 @@ async fn restart_host(
         &root,
         &old_client,
         "Muse host restarted; reconnect the conversation to continue.",
+        None,
     )
     .await?;
     // `ensure_host` owns the creation mutex. Do not hold a lock across this
@@ -1584,12 +1668,14 @@ async fn restart_host(
 
 /// Detach a workspace host from every route, tell its conversations they
 /// are disconnected, and stop the process. Returns the detached session ids.
-async fn retire_host(
-    app: &AppHandle,
+/// `resumed` is resumed in the replacement at once and is not told.
+async fn retire_host<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     state: &State<'_, AppState>,
     root: &PathBuf,
     old_client: &std::sync::Arc<MspClient>,
     message: &str,
+    resumed: Option<&str>,
 ) -> Result<Vec<String>, String> {
     let session_ids = state
         .hosts
@@ -1610,10 +1696,8 @@ async fn retire_host(
     if let Ok(mut capabilities) = state.host_capabilities.lock() {
         capabilities.remove(root);
     }
-
-    for session_id in &session_ids {
-        mark_running(state, session_id, false);
-        emit(app, "status", session_id, "host_exited", message.to_string());
+    if let Ok(mut engines) = state.host_engines.lock() {
+        engines.remove(root);
     }
 
     // Pending approvals and item tables belong to the old process. The
@@ -1640,10 +1724,24 @@ async fn retire_host(
     if let Ok(mut events) = state.event_buffer.lock() {
         events.retain(|event| !session_ids.contains(&event.session_id));
     }
+    // Told after the purge: emitted before it, host_exited was dropped with
+    // the stale events, and after "Restart workspace host" a conversation
+    // stayed Connected with no route, its next send refused (06/10/2026). The
+    // routes are gone, so the old host can add nothing after it.
+    for session_id in &session_ids {
+        mark_running(state, session_id, false);
+        if resumed != Some(session_id.as_str()) {
+            emit(app, "status", session_id, "host_exited", message.to_string());
+        }
+    }
 
-    old_client.shutdown().await;
+    old_client.stop(HOST_STOP_GRACE).await;
     Ok(session_ids)
 }
+
+/// How long a host whose stdin was closed gets to exit on its own before it
+/// is killed. An idle Muse 1.4.2 host exits in about 0.1 s.
+const HOST_STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// A Muse 1.3 host keeps at most 32 sessions loaded and never unloads an idle
 /// one, and MSP has no client unload (measured: 32 idle sessions, half of them
@@ -1658,9 +1756,13 @@ fn is_host_full(error: &str) -> bool {
 const HOST_RECYCLED_MESSAGE: &str =
     "Muse closed this conversation to make room for another. It reconnects when you open it.";
 
+/// Sent with `host_exited` when a host is replaced to apply the current
+/// connectors or posture to one of its conversations.
+const HOST_RELOADED_MESSAGE: &str =
+    "Muse restarted this folder's host to apply new settings to another conversation. It reconnects when you open it.";
+
 /// Replace a full workspace host with a fresh process, so the number of
 /// conversations a user keeps is not bounded by what one host can load.
-/// Refused while any of its conversations is working: that would kill the turn.
 async fn recycle_full_host(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -1669,6 +1771,31 @@ async fn recycle_full_host(
     sandbox_disable_write: Option<bool>,
     sandbox_disable_shell: Option<bool>,
 ) -> Result<std::sync::Arc<MspClient>, String> {
+    replace_idle_host(
+        app,
+        state,
+        root,
+        (sandbox_mode, sandbox_disable_write, sandbox_disable_shell),
+        "Muse already has 32 conversations open in this folder and one of them is still working. Try again when it finishes.",
+        HOST_RECYCLED_MESSAGE,
+        None,
+    )
+    .await
+}
+
+/// Replace `root`'s host with a fresh process started with `sandbox`.
+/// Refused with `busy_message` while any of its conversations is working:
+/// that would kill the turn. `resumed`: see `retire_host`.
+async fn replace_idle_host(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    root: &PathBuf,
+    sandbox: (Option<&str>, Option<bool>, Option<bool>),
+    busy_message: &str,
+    message: &str,
+    resumed: Option<&str>,
+) -> Result<std::sync::Arc<MspClient>, String> {
+    let (sandbox_mode, sandbox_disable_write, sandbox_disable_shell) = sandbox;
     let old_client = state
         .hosts
         .lock()
@@ -1688,9 +1815,9 @@ async fn recycle_full_host(
             running.iter().any(|id| hosts.owns(id, &old_client))
         };
         if busy {
-            return Err("Muse already has 32 conversations open in this folder and one of them is still working. Try again when it finishes.".into());
+            return Err(busy_message.to_string());
         }
-        retire_host(app, state, root, &old_client, HOST_RECYCLED_MESSAGE).await?;
+        retire_host(app, state, root, &old_client, message, resumed).await?;
     }
     ensure_host(app, state, root, sandbox_mode, sandbox_disable_write, sandbox_disable_shell).await
 }
@@ -1849,6 +1976,31 @@ fn spawn_sidecar(
     root: &PathBuf,
     sandbox: &HostSandboxPolicy,
 ) -> Result<(tauri::async_runtime::Receiver<CommandEvent>, CommandChild), String> {
+    if let Some(remote) = remote_ssh::remote_engine(root) {
+        // M4-07: the same host on another machine, over the system ssh. The
+        // stdout pump and `MspClient` downstream cannot tell the difference.
+        // Checked before test mode: a remote target the test profile itself
+        // configured is reached for real (ADR 0003).
+        let argv = remote.serve_command(&sandbox.cli_args())?;
+        return app
+            .shell()
+            .command(&argv[0])
+            .args(&argv[1..])
+            .spawn()
+            .map_err(|e| format!("could not start ssh to {}: {e}", remote.key()));
+    }
+    // M0-14 isolated test mode: every local engine is the fixture, never a real one.
+    if test_mode::data_dir().is_some() {
+        let argv = test_mode::sidecar_argv()?;
+        return app
+            .shell()
+            .command(&argv[0])
+            .args(&argv[1..])
+            .args(sandbox.cli_args())
+            .current_dir(root)
+            .spawn()
+            .map_err(|e| format!("could not spawn sidecar `{}` in {}: {e}", argv[0], root.display()));
+    }
     let bin = resolve_sidecar()?;
     let cmd = app
         .shell()
@@ -2372,11 +2524,14 @@ where
                 }
             }
             if item_terminal {
+                // M0-13: the status says whether the host refused the item
+                // ("failed"); without it a refused write or command closed as
+                // an ordinary row.
                 emit_fn(
                     "status",
                     sid,
                     "item_done",
-                    json!({"itemId": item_id, "turnId": turn_id}).to_string(),
+                    json!({"itemId": item_id, "turnId": turn_id, "status": item.and_then(|i| i.get("status"))}).to_string(),
                 );
             }
         }
@@ -2389,23 +2544,18 @@ where
                 .get("currentRequirementId")
                 .or_else(|| p.get("current_requirement_id"))
                 .cloned();
+            let mut updated = method == "approval/updated";
             if let Ok(mut approvals) = state.approvals.lock() {
                 let key = (sid.to_string(), approval_id.to_string());
-                if method == "approval/updated" {
-                    if let Some(pending) = approvals.get_mut(&key) {
-                        // Metadata-only updates are legal; keep the last
-                        // usable token when no replacement is supplied.
-                        if let Some(next) = requirement.clone() {
-                            pending.requirement_id = next;
-                        }
-                    } else {
-                        approvals.insert(
-                            key,
-                            PendingApproval {
-                                session_id: sid.to_string(),
-                                requirement_id: requirement.clone().unwrap_or(Value::Null),
-                            },
-                        );
+                if let Some(pending) = approvals.get_mut(&key) {
+                    // A known id is an update even when it arrives as a
+                    // request: the server-request twin re-delivers it, and a
+                    // compound command's next stage re-requests it after a
+                    // non-terminal decide. Metadata-only updates are legal;
+                    // keep the last usable token when no replacement is supplied.
+                    updated = true;
+                    if let Some(next) = requirement {
+                        pending.requirement_id = next;
                     }
                 } else {
                     approvals.insert(
@@ -2420,7 +2570,7 @@ where
             emit_fn("tool_request",
                 sid,
                 "tool_request",
-                approval_payload(p, approval_id, method == "approval/updated").to_string(),
+                approval_payload(p, approval_id, updated).to_string(),
             );
         }
         "approval/resolved" => {
@@ -2463,15 +2613,20 @@ where
                 payload.to_string(),
             );
         }
-        "turn/started" => emit_fn("status",
-            sid,
-            "started",
-            json!({
-                "turnId": p.get("turnId"),
-                "commandId": p.get("commandId"),
-            })
-            .to_string(),
-        ),
+        "turn/started" => {
+            // The host also starts turns by itself (its queue, a retry); the
+            // handoff guard must see those as running too.
+            mark_running(state, sid, true);
+            emit_fn("status",
+                sid,
+                "started",
+                json!({
+                    "turnId": p.get("turnId"),
+                    "commandId": p.get("commandId"),
+                })
+                .to_string(),
+            )
+        }
         "turn/completed" => {
             let terminal = p.get("terminal").and_then(Value::as_str).unwrap_or("completed");
             mark_running(state, sid, false);
@@ -2516,6 +2671,9 @@ where
             );
         }
         "turn/unqueued" | "turn/retryScheduled" => {
+            if method == "turn/retryScheduled" {
+                mark_running(state, sid, true);
+            }
             emit_fn("status", sid, method, p.to_string())
         }
         "userInput/requested" => {
@@ -2680,22 +2838,29 @@ fn workspace_for_inspection(state: &State<'_, AppState>, session_id: &str) -> Re
     if session_id.is_empty() {
         return Err("sessionId must not be empty".to_string());
     }
-    if let Ok(root) = state
-        .hosts
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?
-        .session_workspace(session_id)
-    {
-        return Ok(root);
-    }
-    state
+    // The conversation's own workspace first: after a handoff it differs from
+    // the host's root, and Git, files and the terminal follow the turns.
+    let own = state
         .sessions
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
         .get(session_id)
         .map(|meta| PathBuf::from(&meta.workspace))
-        .filter(|root| !root.as_os_str().is_empty())
-        .ok_or_else(|| "conversation workspace is unavailable".to_string())
+        .filter(|root| !root.as_os_str().is_empty());
+    let root = match own {
+        Some(root) => root,
+        None => state
+            .hosts
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .session_workspace(session_id)?,
+    };
+    // Git, files, the terminal and the scope check read this computer's disk;
+    // a remote conversation's folder is on another host.
+    if remote_ssh::remote_engine(&root).is_some() {
+        return Err("Not available for remote conversations.".to_string());
+    }
+    Ok(root)
 }
 
 
@@ -2812,6 +2977,14 @@ fn collect_diagnostics(state: State<'_, AppState>) -> Result<NativeDiagnosticsSn
         .lock()
         .map_err(|e| format!("event diagnostics lock: {e}"))?
         .len();
+    let mut host_engines: Vec<HostEngine> = state
+        .host_engines
+        .lock()
+        .map_err(|e| format!("engine diagnostics lock: {e}"))?
+        .values()
+        .cloned()
+        .collect();
+    host_engines.sort();
     Ok(NativeDiagnosticsSnapshot {
         schema: "muse-desktop.native-diagnostics.v1".to_string(),
         workspace_configured,
@@ -2820,28 +2993,32 @@ fn collect_diagnostics(state: State<'_, AppState>) -> Result<NativeDiagnosticsSn
         running_session_count,
         pending_approval_count,
         event_buffer_count,
+        host_engines,
+        test_mode: test_mode::data_dir().is_some(),
     })
 }
 
+/// App data, or the isolated test instance's folder (`test_mode`).
+fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    match test_mode::data_dir() {
+        Some(dir) => Ok(dir),
+        None => app
+            .path()
+            .app_data_dir()
+            .map_err(|error| format!("cannot resolve app data directory: {error}")),
+    }
+}
+
 fn scheduler_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|path| path.join("scheduler"))
-        .map_err(|error| format!("cannot resolve scheduler data directory: {error}"))
+    app_data_dir(app).map(|path| path.join("scheduler"))
 }
 
 fn notification_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|path| path.join("notifications"))
-        .map_err(|error| format!("cannot resolve notification data directory: {error}"))
+    app_data_dir(app).map(|path| path.join("notifications"))
 }
 
 fn computer_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|path| path.join("computer-use"))
-        .map_err(|error| format!("cannot resolve computer-use data directory: {error}"))
+    app_data_dir(app).map(|path| path.join("computer-use"))
 }
 
 /// Computer use: what is installed, what is granted, and whether the grant is
@@ -2899,32 +3076,6 @@ async fn computer_set_attach(app: AppHandle, attach: bool) -> Result<Value, Stri
 #[tauri::command]
 fn computer_mcp_server(grant_state: String) -> Option<Value> {
     computer::mcp_server_json(grant_state.trim())
-}
-
-/// M4-07: run one command on a remote host through the **system `ssh`
-/// binary**. The renderer passes validated fields, never argv: the binary
-/// resolution, the argv and the output bounds live in `remote_ssh.rs`.
-#[tauri::command]
-async fn remote_ssh_exec(
-    host: String,
-    port: Option<u16>,
-    user: Option<String>,
-    identity_file: Option<String>,
-    command: String,
-    timeout_secs: Option<u64>,
-) -> Result<Value, String> {
-    tokio::task::spawn_blocking(move || {
-        remote_ssh::remote_ssh_exec(
-            host.trim(),
-            port.unwrap_or(22),
-            user.as_deref().map(str::trim).unwrap_or(""),
-            identity_file.as_deref().map(str::trim).unwrap_or(""),
-            &command,
-            timeout_secs,
-        )
-    })
-    .await
-    .map_err(|e| format!("remote ssh task failed: {e}"))?
 }
 
 /// Claim the native scheduler lease for this app process. The renderer keeps
@@ -3059,10 +3210,7 @@ fn scheduler_runs_write(app: AppHandle, payload: String) -> Result<(), String> {
 }
 
 fn outbox_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|path| path.join("outbox"))
-        .map_err(|error| format!("cannot resolve outbox data directory: {error}"))
+    app_data_dir(app).map(|path| path.join("outbox"))
 }
 
 /// Read the renderer-owned schedule definitions from app data. The native
@@ -3086,6 +3234,10 @@ fn scheduler_wakeup_sync(
     app: AppHandle,
     wake_at: Option<u64>,
 ) -> Result<scheduler_wakeup::WakeupResponse, String> {
+    // The wake-up task is one per user account: a test instance leaves it alone.
+    if test_mode::data_dir().is_some() {
+        return Err("native wake-up is off in test mode".to_string());
+    }
     let data_dir = scheduler_data_dir(&app)?;
     let executable = std::env::current_exe()
         .map_err(|error| format!("cannot resolve Muse executable: {error}"))?;
@@ -3406,6 +3558,219 @@ async fn git_worktree_remove(workspace: String, path: String, force: bool) -> Re
         .map_err(|e| format!("worktree remove task failed: {e}"))?
 }
 
+/// M2-05: `turn/start.workspaceRoots` first shipped in Muse 1.4.2; the 1.3.0
+/// schema has no such member.
+fn accepts_workspace_roots(version: &str) -> bool {
+    let core = version.split(['-', '+']).next().unwrap_or_default();
+    let mut parts = core.split('.').map(|part| part.parse::<u64>().unwrap_or(0));
+    let mut next = || parts.next().unwrap_or(0);
+    (next(), next(), next()) >= (1, 4, 2)
+}
+
+fn host_accepts_workspace_roots(state: &AppState, session_id: &str) -> Result<bool, String> {
+    let root = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(session_id)?;
+    Ok(state
+        .host_engines
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&root)
+        .is_some_and(|engine| accepts_workspace_roots(&engine.server_version)))
+}
+
+/// Point a live conversation's turns at `workspace`. The session itself stays
+/// on the host it started in (see `SessionMeta::host_workspace`).
+fn move_session_workspace(
+    state: &AppState,
+    session_id: &str,
+    workspace: &Path,
+) -> Result<SessionMeta, String> {
+    let host_root = state
+        .hosts
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .session_workspace(session_id)?;
+    let mut sessions = state.sessions.lock().map_err(|e| format!("state lock: {e}"))?;
+    let meta = sessions
+        .get_mut(session_id)
+        .ok_or_else(|| "conversation metadata is unavailable".to_string())?;
+    meta.host_workspace = Some(host_root.display().to_string());
+    meta.workspace = workspace.display().to_string();
+    Ok(meta.clone())
+}
+
+fn with_same_session(preview: git::HandoffPreview, same_session: bool) -> Result<Value, String> {
+    let mut value = serde_json::to_value(preview).map_err(|e| e.to_string())?;
+    value["sameSession"] = json!(same_session);
+    Ok(value)
+}
+
+/// M2-05: what moving the uncommitted work of this conversation's folder
+/// would do. `target` is Local or a worktree; none previews a worktree about
+/// to be created.
+#[tauri::command]
+async fn handoff_preview(
+    state: State<'_, AppState>,
+    session_id: String,
+    target: Option<String>,
+) -> Result<Value, String> {
+    let source = workspace_for_inspection(&state, &session_id)?;
+    let same_session = host_accepts_workspace_roots(&state, &session_id)?;
+    preview_handoff(&state, source, target.map(|t| PathBuf::from(t.trim())), same_session).await
+}
+
+/// Refused as the move itself would be, so neither the question nor a new
+/// worktree comes before that refusal.
+async fn preview_handoff(
+    state: &AppState,
+    source: PathBuf,
+    target: Option<PathBuf>,
+    same_session: bool,
+) -> Result<Value, String> {
+    let folders: Vec<PathBuf> = std::iter::once(&source)
+        .chain(&target)
+        .filter_map(|folder| folder.canonicalize().ok())
+        .collect();
+    handoff_refused(state, &state.handoffs.read().await, &folders)?;
+    let preview = tokio::task::spawn_blocking(move || git::handoff_preview(&source, target.as_deref()))
+        .await
+        .map_err(|e| format!("handoff preview task failed: {e}"))??;
+    with_same_session(preview, same_session)
+}
+
+/// M2-05: move the uncommitted work of this conversation's folder to
+/// `target`, Local or a worktree of the same repository. On a host with
+/// `workspaceRoots` the conversation follows and its next turn runs there;
+/// otherwise only the files move, and `sameSession: false` tells the renderer
+/// to open a new conversation in the target. `newWorktree`: the renderer
+/// created `target` for this move.
+#[tauri::command]
+async fn handoff_move(
+    state: State<'_, AppState>,
+    session_id: String,
+    target: String,
+    new_worktree: Option<bool>,
+) -> Result<Value, String> {
+    let source = workspace_for_inspection(&state, &session_id)?;
+    let same_session = host_accepts_workspace_roots(&state, &session_id)?;
+    let target = PathBuf::from(target.trim());
+    move_handoff(&state, &session_id, source, target, same_session, new_worktree == Some(true)).await
+}
+
+async fn move_handoff(
+    state: &AppState,
+    session_id: &str,
+    source: PathBuf,
+    target: PathBuf,
+    same_session: bool,
+    new_worktree: bool,
+) -> Result<Value, String> {
+    let (source, target) = tokio::task::spawn_blocking(move || git::handoff_pair(&source, &target))
+        .await
+        .map_err(|e| format!("handoff task failed: {e}"))??;
+    let folders = [source.clone(), target.clone()];
+    let moved = match claim_handoff(state, &folders).await {
+        Ok(()) => {
+            // The conversation follows before the claim ends, so no turn
+            // starts in the folder it just left.
+            let (from, to) = (source.clone(), target.clone());
+            let moved = tokio::task::spawn_blocking(move || git::handoff_move(&from, &to))
+                .await
+                .map_err(|e| format!("handoff task failed: {e}"))
+                .and_then(|moved| moved)
+                .and_then(|moved| follow_handoff(state, session_id, moved, same_session));
+            state.handoffs.write().await.retain(|folder| !folders.contains(folder));
+            moved
+        }
+        Err(error) => Err(error),
+    };
+    match moved {
+        // A worktree made for a move that did not happen goes, or is named.
+        Err(error) if new_worktree => Err(tokio::task::spawn_blocking(move || {
+            git::discard_new_worktree(&source, &target, error)
+        })
+        .await
+        .map_err(|e| format!("handoff task failed: {e}"))?),
+        moved => moved,
+    }
+}
+
+/// The files have moved; the conversation follows when it can. Failing that
+/// is not a failed move: `sameSession: false` opens a new conversation there,
+/// and `sessionError` says why this one stayed.
+fn follow_handoff(
+    state: &AppState,
+    session_id: &str,
+    moved: git::HandoffPreview,
+    same_session: bool,
+) -> Result<Value, String> {
+    let target = PathBuf::from(moved.target.clone().unwrap_or_default());
+    let followed = if same_session {
+        move_session_workspace(state, session_id, &target).map(|_| ())
+    } else {
+        Ok(())
+    };
+    let mut value = with_same_session(moved, same_session && followed.is_ok())?;
+    if let Err(error) = followed {
+        value["sessionError"] = json!(error);
+    }
+    Ok(value)
+}
+
+/// Canonical folders a conversation's turns may touch: its own, and for a
+/// moved one the host's.
+fn session_folders(meta: &SessionMeta) -> Vec<PathBuf> {
+    std::iter::once(&meta.workspace)
+        .chain(meta.host_workspace.as_ref())
+        .filter_map(|folder| Path::new(folder).canonicalize().ok())
+        .collect()
+}
+
+/// Whether a turn in one folder can touch the other's files: one holds the
+/// other, except the app's own checkouts under `.muse/`, which a handoff of
+/// the folder around them leaves alone.
+fn folders_overlap(a: &Path, b: &Path) -> bool {
+    let inside = |inner: &Path, outer: &Path| inner.starts_with(outer) && !inner.starts_with(outer.join(".muse"));
+    inside(a, b) || inside(b, a)
+}
+
+/// M2-05: claim `folders` for a handoff, refused while a turn runs in one of
+/// them, whichever conversation it belongs to. A turn starts under the read
+/// lock, held until it counts as running, so none slips past this check.
+async fn claim_handoff(state: &AppState, folders: &[PathBuf]) -> Result<(), String> {
+    let mut handoffs = state.handoffs.write().await;
+    handoff_refused(state, &handoffs, folders)?;
+    handoffs.extend_from_slice(folders);
+    Ok(())
+}
+
+/// Why no handoff of `folders` may start now: one of them is being moved
+/// (`claimed`), or a turn runs in one of them.
+fn handoff_refused(state: &AppState, claimed: &[PathBuf], folders: &[PathBuf]) -> Result<(), String> {
+    if claimed.iter().any(|folder| folders.contains(folder)) {
+        return Err("another move is already under way in this folder".to_string());
+    }
+    let running: Vec<SessionMeta> = state
+        .sessions
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .values()
+        .filter(|meta| meta.running)
+        .cloned()
+        .collect();
+    if running
+        .iter()
+        .flat_map(session_folders)
+        .any(|folder| folders.iter().any(|moved| folders_overlap(&folder, moved)))
+    {
+        return Err("a conversation is still responding in this folder: stop it before moving".to_string());
+    }
+    Ok(())
+}
+
 
 
 
@@ -3466,6 +3831,13 @@ fn secure_store_get(key: String) -> Result<Option<String>, String> {
 #[tauri::command]
 fn secure_store_remove(key: String) -> Result<(), String> {
     secret_store::remove(&key)
+}
+
+/// ADR 0003: the loopback origin a test instance may use as a remote MCP
+/// endpoint (`test_mode::remote_mcp_origin`); `null` in every other build.
+#[tauri::command]
+fn test_remote_mcp_origin() -> Option<String> {
+    test_mode::remote_mcp_origin()
 }
 
 /// Report which Muse credential is in effect, so the UI can tell the user.
@@ -4067,7 +4439,7 @@ fn check_scope(state: State<'_, AppState>, path: String, session_id: Option<Stri
         return Err("empty path".to_string());
     }
     let root = if let Some(sid) = session_id {
-        state.hosts.lock().map_err(|e| format!("state lock: {e}"))?.session_workspace(&sid)?
+        workspace_for_inspection(&state, &sid)?
     } else { state
         .workspace
         .lock()
@@ -4113,6 +4485,11 @@ fn resolve_workspace(
                 "no workspace selected — pick a folder first (arg present: {arg_present})"
             )
         })?;
+    // M4-07: a remote engine is keyed by its canonical `ssh://` target. It is
+    // not a folder here, so it is neither checked nor made the default one.
+    if let Some(remote) = root.to_str().and_then(remote_ssh::RemoteEngine::parse) {
+        return remote.map(|remote| PathBuf::from(remote.key()));
+    }
     if !root.is_dir() {
         return Err(format!("workspace is not a directory: {}", root.display()));
     }
@@ -4264,8 +4641,10 @@ async fn start_session_at_workspace(
     let mut params = json!({
         "commandId": new_command_id(),
         // The host runs the agent's shell there: PowerShell shows the canonical
-        // `\\?\G:\…` form verbatim and some tools refuse it.
-        "workspaceRoot": rules::display_path(&root),
+        // `\\?\G:\…` form verbatim and some tools refuse it. A remote
+        // engine gets its folder as that host spells it.
+        "workspaceRoot": remote_ssh::remote_engine(&root)
+            .map_or_else(|| rules::display_path(&root), |remote| remote.workspace),
     });
     if let Some(mode) = authorization_mode.as_deref() {
         let wire_mode = host_approval_mode(mode)
@@ -4316,6 +4695,8 @@ async fn start_session_at_workspace(
         model_id: session_model_id(session),
         loaded: session_loaded(session),
         title: None,
+        host_workspace: None,
+        sandbox: host_posture(&state, &root)?,
     };
     state
         .sessions
@@ -4339,8 +4720,8 @@ async fn request_session_start(
         Err(error) if authorization_mode.is_some() && is_approval_mode_ceiling(&error) => {
             // A persisted local preference must not make a new conversation
             // unusable when this host advertises a stricter ceiling. Start
-            // with the host default, expose its effective projection below,
-            // and let the renderer keep automatic decisions fail-closed.
+            // with the host default and expose its effective projection below
+            // so the renderer reports the posture the host kept.
             if let Some(object) = params.as_object_mut() {
                 object.remove("approvalMode");
             }
@@ -4440,7 +4821,7 @@ async fn fork_session(
         .get("status")
         .and_then(Value::as_str)
         .is_some_and(|status| status == "running");
-    let meta = SessionMeta {
+    let mut meta = SessionMeta {
         session_id: fork_id.clone(),
         workspace: root.display().to_string(),
         running,
@@ -4455,12 +4836,16 @@ async fn fork_session(
         model_id: session_model_id(session),
         loaded: session_loaded(session),
         title: None,
+        host_workspace: None,
+        sandbox: host_posture(&state, &root)?,
     };
-    state
-        .sessions
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?
-        .insert(fork_id, meta.clone());
+    let mut sessions = state.sessions.lock().map_err(|e| format!("state lock: {e}"))?;
+    // A fork of a moved conversation runs where its source runs.
+    if let Some(source) = sessions.get(&source_id).filter(|s| s.host_workspace.is_some()) {
+        meta.workspace = source.workspace.clone();
+        meta.host_workspace = source.host_workspace.clone();
+    }
+    sessions.insert(fork_id, meta.clone());
     Ok(meta)
 }
 
@@ -4542,6 +4927,8 @@ async fn resume_session_with_client(
             .and_then(session_loaded)
             .or_else(|| session_loaded(&read)),
         title: read.get("session").and_then(session_title),
+        host_workspace: None,
+        sandbox: host_posture(state, &root)?,
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     if let Err(error) = state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client) {
@@ -4574,6 +4961,24 @@ async fn resume_session_with_client(
     }
 }
 
+/// What this app holds for a conversation already attached to the requested
+/// workspace's live host, or None while it still needs `session/resume`.
+/// restore_sessions routes every conversation a live host lists, loaded or
+/// not (window reload), and one the host has not loaded refuses session
+/// commands (-32024 on setApprovalMode) until it is resumed.
+fn attached_session(state: &AppState, session_id: &str, root: &Path) -> Result<Option<SessionMeta>, String> {
+    if session_client(state, session_id).is_err() {
+        return Ok(None);
+    }
+    let owner_root = state.hosts.lock().map_err(|e| e.to_string())?.session_workspace(session_id)?;
+    if owner_root != root {
+        return Err("conversation belongs to a different workspace".into());
+    }
+    let meta = state.sessions.lock().map_err(|e| e.to_string())?.get(session_id).cloned()
+        .ok_or_else(|| "conversation metadata is unavailable".to_string())?;
+    Ok((meta.loaded != Some(false)).then_some(meta))
+}
+
 async fn resume_session_inner(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -4583,14 +4988,30 @@ async fn resume_session_inner(
     sandbox_disable_write: Option<bool>,
     sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
+    reload: bool,
 ) -> Result<SessionMeta, String> {
     let _resume = state.resume_mutex.lock().await;
     let root = resolve_workspace(state, Some(workspace_path))?;
-    if session_client(state, &session_id).is_ok() {
-        let owner_root = state.hosts.lock().map_err(|e| e.to_string())?.session_workspace(&session_id)?;
-        if owner_root != root { return Err("conversation belongs to a different workspace".into()); }
-        return state.sessions.lock().map_err(|e| e.to_string())?.get(&session_id).cloned()
-            .ok_or_else(|| "conversation metadata is unavailable".into());
+    if let Some(meta) = attached_session(state, &session_id, &root)? {
+        if !reload {
+            return Ok(meta);
+        }
+        // M0-13: a loaded conversation keeps what its host started it with:
+        // 1.4.2 refuses another MCP config on it (`session_configuration_conflict`,
+        // measured 06/10/2026) and fixes the posture at `serve`. In a fresh host
+        // it is not loaded, and its resume takes the current ones. retire_host
+        // drops the buffered events of the host's conversations and tells the
+        // others it left: this one, resumed below, is not told.
+        replace_idle_host(
+            app,
+            state,
+            &root,
+            (sandbox_mode.as_deref(), sandbox_disable_write, sandbox_disable_shell),
+            "A conversation in this folder is still working: try again when it finishes.",
+            HOST_RELOADED_MESSAGE,
+            Some(&session_id),
+        )
+        .await?;
     }
     let client = ensure_host(
         app,
@@ -4627,17 +5048,58 @@ async fn resume_session(
     sandbox_disable_write: Option<bool>,
     sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
-) -> Result<SessionMeta, String> {
-    resume_session_inner(
+    effective_workspace: Option<String>,
+    reload: Option<bool>,
+) -> Result<Value, String> {
+    let meta = resume_session_inner(
         &app,
         &state,
-        session_id,
+        session_id.clone(),
         workspace_path,
         sandbox_mode,
         sandbox_disable_write,
         sandbox_disable_shell,
         mcp_servers,
-    ).await
+        reload == Some(true),
+    ).await?;
+    match effective_workspace.filter(|w| !w.trim().is_empty()) {
+        Some(workspace) => resume_in_workspace(&state, &session_id, meta, workspace).await,
+        None => serde_json::to_value(meta).map_err(|e| e.to_string()),
+    }
+}
+
+/// M2-05: `workspace_path` is the host's root; a moved conversation also
+/// names where it ran, and goes back there. A folder that is gone or no longer
+/// a checkout of the repository, or a host without `workspaceRoots`, leaves it
+/// in the host's root, and `workspace_notice` says why.
+async fn resume_in_workspace(
+    state: &AppState,
+    session_id: &str,
+    meta: SessionMeta,
+    workspace: String,
+) -> Result<Value, String> {
+    let (meta, notice) = if host_accepts_workspace_roots(state, session_id)? {
+        let host_root = state
+            .hosts
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .session_workspace(session_id)?;
+        let repo = host_root.clone();
+        let checked = tokio::task::spawn_blocking(move || git::attached_checkout(&repo, Path::new(workspace.trim())))
+            .await
+            .map_err(|e| format!("workspace check failed: {e}"))?;
+        let target = checked.as_ref().unwrap_or(&host_root);
+        (move_session_workspace(state, session_id, target)?, checked.err())
+    } else if Path::new(workspace.trim()) == Path::new(&meta.workspace) {
+        (meta, None)
+    } else {
+        (meta, Some("this Muse engine runs a conversation only in its own folder".to_string()))
+    };
+    let mut value = serde_json::to_value(meta).map_err(|e| e.to_string())?;
+    if let Some(notice) = notice {
+        value["workspace_notice"] = json!(notice);
+    }
+    Ok(value)
 }
 
 /// Read the folded durable item history for an attached conversation.
@@ -4751,9 +5213,17 @@ async fn list_pending_requests(
 ) -> Result<Value, String> {
     let session_id = require_non_empty(&session_id, "sessionId")?;
     let client = session_client(&state, &session_id)?;
-    let result = client
-        .request("approval/listPending", json!({"sessionId": session_id}))
-        .await?;
+    // Best effort: without the session's running turn, nothing is filtered.
+    let read = client
+        .request("session/read", json!({"sessionId": session_id, "excludeItems": true}))
+        .await
+        .ok();
+    let result = live_pending(
+        client
+            .request("approval/listPending", json!({"sessionId": session_id}))
+            .await?,
+        read.as_ref().and_then(|r| r.get("session")),
+    );
     // Rebuild the supervisor's opaque requirement registry from the same
     // point-in-time fold that feeds the renderer. Without this step a card
     // recovered after reconnect would render but its approval click would be
@@ -4788,7 +5258,42 @@ async fn list_pending_requests(
             );
         }
     }
-    Ok(result)
+    Ok(pending_snapshot_payload(&result))
+}
+
+/// M0-05: a question or an approval waits inside its turn, so only the rows of
+/// the session's running turn (`activeTurnId`, null when idle) can be answered.
+/// Muse 1.4.2 keeps listing those of a turn its killed engine left behind,
+/// next to the running turn's, and refuses every answer to them (-32057
+/// invalid_target). A host that folds no `activeTurnId`, or a row without
+/// `turnId`, leaves the rows as listed.
+fn live_pending(mut result: Value, session: Option<&Value>) -> Value {
+    let Some(active) = session.and_then(|s| s.get("activeTurnId")).cloned() else {
+        return result;
+    };
+    for key in ["approvals", "userInputs"] {
+        if let Some(rows) = result.get_mut(key).and_then(Value::as_array_mut) {
+            rows.retain(|row| row.get("turnId").map_or(true, |turn| *turn == active));
+        }
+    }
+    result
+}
+
+/// `approval/listPending` rows are the raw `approval/request` and
+/// `userInput/request` params. Give them the same shape as the live events
+/// (`tool_request`, `input_request`): the renderer parses one shape, so a card
+/// rebuilt after a restart keeps its choices and its questions.
+fn pending_snapshot_payload(result: &Value) -> Value {
+    let rows = |key: &str| result.get(key).and_then(Value::as_array).cloned().unwrap_or_default();
+    let approvals: Vec<Value> = rows("approvals")
+        .iter()
+        .filter_map(|p| {
+            let id = p.get("approvalId").and_then(Value::as_str)?;
+            Some(approval_payload(p, id, false))
+        })
+        .collect();
+    let inputs: Vec<Value> = rows("userInputs").iter().filter_map(build_input_request_payload).collect();
+    json!({"approvals": approvals, "userInputs": inputs})
 }
 
 /// Drain backend events after `since` (None = head cursor only, no replay).
@@ -4831,6 +5336,7 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
             .get(&root)
             .cloned();
         let granted_capabilities = session_granted_capabilities(&state, &root)?;
+        let sandbox = host_posture(&state, &root)?;
         let mut cursor = None;
         let mut seen_cursors = HashSet::new();
         let mut seen_sessions = HashSet::new();
@@ -4868,6 +5374,7 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
                         s,
                         session_durability.clone(),
                         granted_capabilities.clone(),
+                        sandbox.clone(),
                     ) else {
                         continue;
                     };
@@ -4877,6 +5384,9 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
                         .map_err(|e| format!("state lock: {e}"))?;
                     let meta = if let Some(existing) = sessions.get_mut(sid) {
                         existing.running = listed.running;
+                        // The row is the host's word on whether it holds the
+                        // conversation now; a stale `true` hid a -32024.
+                        existing.loaded = listed.loaded.or(existing.loaded);
                         if listed.approval_mode.is_some() {
                             existing.approval_mode = listed.approval_mode.clone();
                         }
@@ -4885,6 +5395,9 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
                         }
                         if listed.granted_capabilities.is_some() {
                             existing.granted_capabilities = listed.granted_capabilities.clone();
+                        }
+                        if listed.sandbox.is_some() {
+                            existing.sandbox = listed.sandbox.clone();
                         }
                         existing.clone()
                     } else {
@@ -5127,20 +5640,45 @@ async fn send_input_for_state(
     }
     let input = input_parts.unwrap_or_else(|| json!([{ "type": "text", "text": text }]));
     validate_turn_input_parts(&input)?;
+    // M2-05: no turn starts in a folder a handoff is moving; see `claim_handoff`.
+    let handoffs = state.handoffs.read().await;
+    if !handoffs.is_empty() {
+        let meta = state
+            .sessions
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?
+            .get(&session_id)
+            .cloned();
+        if meta
+            .iter()
+            .flat_map(session_folders)
+            .any(|folder| handoffs.iter().any(|claimed| folders_overlap(&folder, claimed)))
+        {
+            return Err("this conversation's folder is being moved: send again once the move is done".to_string());
+        }
+    }
     let client = session_client(&state, &session_id)?;
-    let result = client
-        .request(
-            "turn/start",
-            json!({
-                // The frontend persists this id before the request starts.
-                // Reusing it makes an ambiguous retry idempotent at the
-                // supervisor boundary instead of admitting a second turn.
-                "commandId": command_id,
-                "sessionId": session_id,
-                "input": input,
-            }),
-        )
-        .await?;
+    let mut params = json!({
+        // The frontend persists this id before the request starts.
+        // Reusing it makes an ambiguous retry idempotent at the
+        // supervisor boundary instead of admitting a second turn.
+        "commandId": command_id,
+        "sessionId": session_id,
+        "input": input,
+    });
+    // M2-05: a moved conversation names its root on every turn. The host keeps
+    // the replacement, but repeating it also covers a host that restarted.
+    if let Some(root) = state
+        .sessions
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&session_id)
+        .filter(|meta| meta.host_workspace.is_some())
+        .map(|meta| meta.workspace.clone())
+    {
+        params["workspaceRoots"] = json!([root]);
+    }
+    let result = client.request("turn/start", params).await?;
     mark_running(&state, &session_id, true);
     Ok(result)
 }
@@ -5182,6 +5720,18 @@ async fn user_shell_for_state(
     command_text: String,
 ) -> Result<Value, String> {
     let payload = user_shell_payload(&session_id, &command_id, &command_text)?;
+    // M2-05: the host runs it in its own folder, which a moved conversation
+    // left; probed on 1.4.2, it stays there even after a turn that set
+    // `workspaceRoots`.
+    if state
+        .sessions
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(&session_id)
+        .is_some_and(|meta| meta.host_workspace.as_deref().is_some_and(|host| Path::new(host) != Path::new(&meta.workspace)))
+    {
+        return Err("Run in Muse would run in the folder this conversation moved from: use the terminal instead".to_string());
+    }
     let client = session_client(state, &session_id)?;
     let root = state
         .hosts
@@ -5379,12 +5929,39 @@ fn validate_turn_input_parts(input: &Value) -> Result<(), String> {
     Ok(())
 }
 
+/// The requirement a decision targets: the one on the card the user clicked,
+/// when the renderer sends it. The registry already holds the next stage once
+/// `approval/updated` lands, so falling back to it would let a late click on
+/// the previous card satisfy a stage the user never saw; the pinned token
+/// makes the host refuse it (-32053) instead.
+fn decision_requirement(pinned: Option<Value>, current: &Value) -> Value {
+    pinned.filter(|v| !v.is_null()).unwrap_or_else(|| current.clone())
+}
+
+/// `approval/decide`, retried once with the same commandId when the host says
+/// its failure is retryable. Muse 1.4.2 answered -32603 "approval ledger
+/// durability fence … [retryable=true]" to a decision it had applied: the
+/// command ran (final Windows smoke, 06/10/2026). "Already resolved" (-32051)
+/// on the retry then means the first decision was settled.
+async fn decide(client: &MspClient, params: Value) -> Result<Value, String> {
+    match client.request("approval/decide", params.clone()).await {
+        Err(error) if error.ends_with("[retryable=true]") => {
+            match client.request("approval/decide", params).await {
+                Err(again) if again.starts_with("MSP error -32051") => Ok(json!({ "terminal": true })),
+                other => other,
+            }
+        }
+        other => other,
+    }
+}
+
 #[tauri::command]
 async fn approve(
     state: State<'_, AppState>,
     session_id: String,
     approval_id: String,
     choice_id: String,
+    requirement_id: Option<Value>,
 ) -> Result<bool, String> {
     let requirement_id = {
         let approvals = state
@@ -5402,23 +5979,22 @@ async fn approve(
                 "approval {approval_id} belongs to a different session"
             ));
         }
-        pending.requirement_id.clone()
+        decision_requirement(requirement_id, &pending.requirement_id)
     };
     let client = session_client(&state, &session_id)?;
     // A stale requirementId is rejected by the host (-32053) and surfaces as
     // this command's error: a decision can never silently satisfy a new stage.
-    let res = client
-        .request(
-            "approval/decide",
-            json!({
-                "commandId": new_command_id(),
-                "sessionId": session_id,
-                "approvalId": approval_id,
-                "choiceId": choice_id,
-                "requirementId": requirement_id,
-            }),
-        )
-        .await?;
+    let res = decide(
+        &client,
+        json!({
+            "commandId": new_command_id(),
+            "sessionId": session_id,
+            "approvalId": approval_id,
+            "choiceId": choice_id,
+            "requirementId": requirement_id,
+        }),
+    )
+    .await?;
     // Multi-stage approvals stay pending (terminal=false) for further
     // decisions; a terminal decision retires the cached token so a repeated
     // decide cannot replay it. The bool is returned to the UI so it keeps a
@@ -5916,24 +6492,24 @@ mod tests {
     }
 
     #[test]
-    fn sandbox_policy_summary_explains_restart_conflicts_without_raw_debug() {
+    fn sandbox_policy_summary_speaks_the_settings_words() {
         let workspace = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
-        assert_eq!(workspace.summary(), "workspace");
+        assert_eq!(workspace.summary(), "Workspace only");
         let read_only = HostSandboxPolicy::parse(Some("workspace"), Some(true), Some(true)).unwrap();
-        assert_eq!(read_only.summary(), "workspace (read-only writes, shell disabled)");
+        assert_eq!(read_only.summary(), "Workspace only, no writes, no commands");
         let elevated = HostSandboxPolicy::parse(Some("elevated"), None, None).unwrap();
-        assert_eq!(elevated.summary(), "elevated");
+        assert_eq!(elevated.summary(), "Elevated access");
     }
 
     #[test]
-    fn sandbox_policy_conflict_is_stable_and_allows_matching_hosts() {
-        let current = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
-        let same = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
+    fn sandbox_policy_conflict_says_what_runs_and_what_a_restart_applies() {
+        let current = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
+        let same = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
         assert_eq!(sandbox_policy_conflict(&current, &same), None);
-        let requested = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
+        let requested = HostSandboxPolicy::parse(Some("elevated"), None, None).unwrap();
         assert_eq!(
             sandbox_policy_conflict(&current, &requested).as_deref(),
-            Some("workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with network")
+            Some("This folder's engine is running with Workspace and network; restart it to apply Elevated access.")
         );
     }
 
@@ -6003,7 +6579,9 @@ mod tests {
 
                 loaded: None,
                 title: None,
+                host_workspace: None,
                 granted_capabilities: None,
+                sandbox: None,
             },
         );
     }
@@ -6018,6 +6596,7 @@ mod tests {
             host_durability: Mutex::new(HashMap::new()),
             host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
+            host_engines: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -6025,6 +6604,7 @@ mod tests {
             item_deltas_seen: Mutex::new(HashSet::new()),
             item_fallback_emitted: Mutex::new(HashSet::new()),
             host_mutex: tokio::sync::Mutex::new(()),
+            handoffs: tokio::sync::RwLock::new(Vec::new()),
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
             terminals: terminal::TerminalRegistry::default(),
@@ -6133,6 +6713,38 @@ mod tests {
         assert_eq!(events.iter().filter(|e| e.0 == "tool_request").count(), 2);
     }
 
+    #[test]
+    fn repeated_approval_request_is_forwarded_as_an_update() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        // Notification + server-request twin, or the next stage of a compound
+        // command: same approvalId, delivered as a request again.
+        for requirement in ["req-1", "req-2"] {
+            route_notification_with_emit(
+                &state,
+                "approval/requested",
+                &json!({
+                    "sessionId": "session-a",
+                    "approvalId": "a1",
+                    "currentRequirementId": requirement,
+                    "subject": {"kind":"shell","command":"echo a && echo b"}
+                }),
+                &mut emit,
+            );
+        }
+        let updated: Vec<Value> = events
+            .iter()
+            .filter(|e| e.0 == "tool_request")
+            .map(|e| serde_json::from_str::<Value>(&e.3).unwrap()["updated"].clone())
+            .collect();
+        assert_eq!(updated, vec![json!(false), json!(true)]);
+        let approvals = state.approvals.lock().unwrap();
+        assert_eq!(approvals[&(String::from("session-a"), String::from("a1"))].requirement_id, json!("req-2"));
+    }
+
     #[tokio::test]
     async fn send_input_keeps_session_routes_and_correlates_out_of_order_replies() {
         let state = Arc::new(empty_state());
@@ -6220,6 +6832,221 @@ mod tests {
         assert!(!state.sessions.lock().unwrap()["session-a"].running);
     }
 
+    #[test]
+    fn workspace_roots_need_muse_1_4_2() {
+        assert!(!accepts_workspace_roots("1.3.0-R3401.1"));
+        assert!(!accepts_workspace_roots("1.4.1"));
+        assert!(accepts_workspace_roots("1.4.2-R4684.1"));
+        assert!(accepts_workspace_roots("2.0.0"));
+    }
+
+    #[tokio::test]
+    async fn a_moved_conversation_names_its_root_on_every_turn() {
+        let state = Arc::new(empty_state());
+        let (client, mut frames) = fixture_client(false);
+        register_fixture_session(state.as_ref(), "session-a", "fixture-a", client.clone());
+        let turn = |command: &'static str| {
+            let state = state.clone();
+            tokio::spawn(async move {
+                send_input_for_state(state.as_ref(), "session-a".into(), command.into(), "go".into(), None)
+                    .await
+            })
+        };
+        let reply = |frame: Value| json!({"jsonrpc": "2.0", "id": frame["id"], "result": {"status": "accepted"}});
+
+        let before = turn("command-1");
+        let frame = fixture_frame(&mut frames).await;
+        assert!(frame["params"].get("workspaceRoots").is_none());
+        client.ingest(reply(frame)).await;
+        before.await.unwrap().unwrap();
+
+        let moved = move_session_workspace(&state, "session-a", Path::new("fixture-a/.muse/worktrees/wt"))
+            .unwrap();
+        assert_eq!(moved.host_workspace.as_deref(), Some("fixture-a"));
+        let after = turn("command-2");
+        let frame = fixture_frame(&mut frames).await;
+        assert_eq!(frame["params"]["workspaceRoots"], json!([moved.workspace]));
+        client.ingest(reply(frame)).await;
+        after.await.unwrap().unwrap();
+
+        // The host would run it in the folder the conversation left.
+        let shell = user_shell_for_state(&state, "session-a".into(), "command-3".into(), "git status".into())
+            .await
+            .unwrap_err();
+        assert!(shell.contains("moved from"), "{shell}");
+
+        // Back in the host's folder, it runs where the conversation is.
+        move_session_workspace(&state, "session-a", Path::new("fixture-a")).unwrap();
+        let shell = {
+            let state = state.clone();
+            tokio::spawn(async move {
+                user_shell_for_state(state.as_ref(), "session-a".into(), "command-4".into(), "git status".into())
+                    .await
+            })
+        };
+        let frame = fixture_frame(&mut frames).await;
+        assert_eq!(frame["method"], "session/userShell");
+        client.ingest(reply(frame)).await;
+        shell.await.unwrap().unwrap();
+    }
+
+    #[test]
+    fn a_moved_conversation_that_cannot_follow_still_reports_the_move() {
+        let moved = git::HandoffPreview {
+            source: "a".into(),
+            target: Some("b".into()),
+            tracked: 1,
+            untracked: 0,
+            ignored: 0,
+            partly_staged: Vec::new(),
+            conflicts: Vec::new(),
+            snapshot: Some("refs/muse/handoff/1".into()),
+        };
+        let value = follow_handoff(&empty_state(), "unknown-session", moved, true).unwrap();
+        assert_eq!(value["sameSession"], json!(false));
+        assert_eq!(value["snapshot"], json!("refs/muse/handoff/1"));
+        assert!(value["sessionError"].is_string(), "{value}");
+    }
+
+    #[tokio::test]
+    async fn a_resume_says_why_the_conversation_left_its_folder() {
+        let root = std::env::temp_dir().join(format!("muse-resume-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        assert!(std::process::Command::new("git").args(["init", "--quiet"]).current_dir(&root).status().unwrap().success());
+        let root = root.canonicalize().unwrap();
+        let state = empty_state();
+        let (client, _frames) = fixture_client(false);
+        register_fixture_session(&state, "session-a", &root.display().to_string(), client);
+        let engine = HostEngine { server_version: "1.4.2".into(), schema_fingerprint: String::new(), platform: None };
+        state.host_engines.lock().unwrap().insert(root.clone(), engine);
+        let meta = || state.sessions.lock().unwrap()["session-a"].clone();
+
+        let gone = root.join(".muse/worktrees/gone").display().to_string();
+        let value = resume_in_workspace(&state, "session-a", meta(), gone).await.unwrap();
+        assert_eq!(value["workspace"], json!(root.display().to_string()));
+        assert!(value["workspace_notice"].is_string(), "{value}");
+
+        // Back home is not a fallback.
+        let home = root.display().to_string();
+        let value = resume_in_workspace(&state, "session-a", meta(), home).await.unwrap();
+        assert!(value.get("workspace_notice").is_none(), "{value}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn a_handoff_waits_for_running_turns_and_holds_new_ones_back() {
+        let state = empty_state();
+        let folder = std::env::temp_dir().canonicalize().unwrap();
+        let (client, mut frames) = fixture_client(false);
+        register_fixture_session(&state, "session-a", &folder.display().to_string(), client.clone());
+        register_fixture_session(&state, "session-b", &folder.display().to_string(), client);
+        state.sessions.lock().unwrap().get_mut("session-b").unwrap().running = true;
+        let error = claim_handoff(&state, &[folder.clone()]).await.unwrap_err();
+        assert!(error.contains("still responding"), "{error}");
+
+        state.sessions.lock().unwrap().get_mut("session-b").unwrap().running = false;
+        claim_handoff(&state, &[folder.clone()]).await.unwrap();
+        let error = send_input_for_state(&state, "session-a".into(), "command-1".into(), "go".into(), None)
+            .await
+            .unwrap_err();
+        assert!(error.contains("being moved"), "{error}");
+        assert!(frames.try_recv().is_err());
+    }
+
+    /// A repository with one commit, as `git init` + `git commit` leave it.
+    fn committed_repo(prefix: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("{prefix}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let git = |args: &[&str]| {
+            assert!(std::process::Command::new("git").args(args).current_dir(&root).status().unwrap().success());
+        };
+        git(&["init", "--quiet"]);
+        std::fs::write(root.join("a.txt"), "a\n").unwrap();
+        git(&["add", "a.txt"]);
+        git(&["-c", "user.name=t", "-c", "user.email=t@localhost", "commit", "--quiet", "-m", "one"]);
+        root.canonicalize().unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_move_is_refused_before_its_question_while_the_folder_answers() {
+        // Native proof, 06/10/2026: C's move was asked, created its worktree,
+        // and only then refused because A was responding in the same folder.
+        let root = committed_repo("muse-preview-lock");
+        let state = empty_state();
+        let (client, _frames) = fixture_client(false);
+        register_fixture_session(&state, "session-a", &root.display().to_string(), client);
+        state.sessions.lock().unwrap().get_mut("session-a").unwrap().running = true;
+        let error = preview_handoff(&state, root.clone(), None, true).await.unwrap_err();
+        assert!(error.contains("still responding"), "{error}");
+        state.sessions.lock().unwrap().get_mut("session-a").unwrap().running = false;
+        assert!(preview_handoff(&state, root.clone(), None, true).await.is_ok());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn a_refused_move_removes_the_worktree_made_for_it() {
+        // A turn that starts while the question is open still refuses the move.
+        let root = committed_repo("muse-refused-move");
+        let created = git::create_worktree(&root, "muse/refused", ".muse/worktrees/refused", "HEAD").unwrap();
+        let worktree = PathBuf::from(&created.path);
+        let state = empty_state();
+        let (client, _frames) = fixture_client(false);
+        register_fixture_session(&state, "session-a", &root.display().to_string(), client);
+        state.sessions.lock().unwrap().get_mut("session-a").unwrap().running = true;
+        // Not created for this move: refused, kept, and nothing said about it.
+        let error = move_handoff(&state, "session-c", root.clone(), worktree.clone(), true, false).await.unwrap_err();
+        assert_eq!(error, "a conversation is still responding in this folder: stop it before moving");
+        assert!(worktree.is_dir());
+        let error = move_handoff(&state, "session-c", root.clone(), worktree.clone(), true, true).await.unwrap_err();
+        assert!(error.starts_with("a conversation is still responding") && error.contains("removed with its branch muse/refused"), "{error}");
+        assert!(!worktree.exists());
+        let branches = std::process::Command::new("git").args(["branch", "--list", "muse/*"]).current_dir(&root).output().unwrap();
+        assert!(branches.stdout.is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn a_turn_the_host_starts_by_itself_blocks_a_handoff() {
+        let state = empty_state();
+        let folder = std::env::temp_dir().canonicalize().unwrap();
+        let (client, _frames) = fixture_client(false);
+        register_fixture_session(&state, "session-b", &folder.display().to_string(), client);
+        // The host's queue starts the next turn right after the last one ends.
+        for method in ["turn/completed", "turn/started"] {
+            route_notification_with_emit(&state, method, &json!({"sessionId": "session-b"}), |_, _, _, _| {});
+        }
+        let error = claim_handoff(&state, &[folder]).await.unwrap_err();
+        assert!(error.contains("still responding"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_handoff_counts_turns_in_a_subfolder_but_not_in_its_worktrees() {
+        let root = std::env::temp_dir().join(format!("muse-overlap-{}", uuid::Uuid::new_v4()));
+        let (sub, worktree) = (root.join("frontend"), root.join(".muse/worktrees/wt"));
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::create_dir_all(&worktree).unwrap();
+        let root = root.canonicalize().unwrap();
+        let state = empty_state();
+        let (client, mut frames) = fixture_client(false);
+        register_fixture_session(&state, "session-b", &sub.display().to_string(), client.clone());
+        register_fixture_session(&state, "session-c", &worktree.display().to_string(), client);
+        for id in ["session-b", "session-c"] {
+            state.sessions.lock().unwrap().get_mut(id).unwrap().running = true;
+        }
+        let error = claim_handoff(&state, &[root.clone()]).await.unwrap_err();
+        assert!(error.contains("still responding"), "{error}");
+
+        // A worktree under `.muse/` is not part of the folder a handoff moves.
+        state.sessions.lock().unwrap().get_mut("session-b").unwrap().running = false;
+        claim_handoff(&state, &[root.clone()]).await.unwrap();
+        let error = send_input_for_state(&state, "session-b".into(), "command-1".into(), "go".into(), None)
+            .await
+            .unwrap_err();
+        assert!(error.contains("being moved"), "{error}");
+        assert!(frames.try_recv().is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[tokio::test]
     async fn interrupt_ack_keeps_session_running_until_terminal_notification() {
         let state = Arc::new(empty_state());
@@ -6275,7 +7102,9 @@ mod tests {
 
                 loaded: None,
                 title: None,
+                host_workspace: None,
                 granted_capabilities: None,
+                sandbox: None,
             },
         );
         let mut events = Vec::new();
@@ -6338,7 +7167,9 @@ mod tests {
 
                 loaded: None,
                 title: None,
+                host_workspace: None,
                 granted_capabilities: None,
+                sandbox: None,
             },
         );
         let mut events = Vec::new();
@@ -6400,7 +7231,9 @@ mod tests {
 
                 loaded: None,
                 title: None,
+                host_workspace: None,
                 granted_capabilities: None,
+                sandbox: None,
             },
         );
         let mut events = Vec::new();
@@ -6740,7 +7573,9 @@ mod tests {
         assert_eq!(requested["sessionId"], json!(session_id));
         assert_eq!(requested["turnId"], json!(turn_id));
         let approval_id = requested["approvalId"].as_str().expect("approval id").to_string();
-        let requirement_id = requested["currentRequirementId"].as_str().expect("requirement id").to_string();
+        // 1.4.2's token: an object naming the approval and its stage.
+        let requirement_id = requested["currentRequirementId"].clone();
+        assert_eq!(requirement_id, json!({"approvalId": approval_id, "sourceIndex": 0}));
 
         let resumed = client
             .request("session/resume", json!({"sessionId": session_id}))
@@ -6751,7 +7586,7 @@ mod tests {
         let decided = client
             .request(
                 "approval/decide",
-                json!({"commandId": "pump-cmd-2", "sessionId": session_id, "approvalId": approval_id, "requirementId": requirement_id, "choiceId": "allow-once"}),
+                json!({"commandId": "pump-cmd-2", "sessionId": session_id, "approvalId": approval_id, "requirementId": requirement_id, "choiceId": "allow_once"}),
             )
             .await
             .expect("fixture approval decide");
@@ -6958,6 +7793,61 @@ mod tests {
         assert!(state.inner().sessions.lock().unwrap()["session-a"].running);
     }
 
+    /// Restart workspace host: the old host's buffered events are dropped, but
+    /// each of its conversations is told it left, except one resumed at once.
+    #[test]
+    fn retire_host_tells_its_conversations_after_dropping_their_stale_events() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let state = app.state::<AppState>();
+        let (client, _frames) = fixture_client(false);
+        register_fixture_session(state.inner(), "session-a", "fixture-a", client.clone());
+        register_fixture_session(state.inner(), "session-b", "fixture-a", client.clone());
+        push_event(state.inner(), "session-a", "output", "stale".into());
+
+        let retired = tauri::async_runtime::block_on(retire_host(
+            app.handle(),
+            &state,
+            &PathBuf::from("fixture-a"),
+            &client,
+            "restarted",
+            Some("session-b"),
+        ))
+        .unwrap();
+
+        assert_eq!(retired.len(), 2);
+        let events: Vec<_> = state.event_buffer.lock().unwrap().iter()
+            .map(|e| (e.session_id.clone(), e.kind.clone(), e.payload.clone()))
+            .collect();
+        assert_eq!(events, vec![("session-a".to_string(), "host_exited".to_string(), "restarted".to_string())]);
+        assert!(state.hosts.lock().unwrap().session("session-a").is_err());
+    }
+
+    /// A retryable decide failure is retried once with the same commandId,
+    /// and "already resolved" then settles it.
+    #[tokio::test]
+    async fn a_retryable_decide_failure_is_retried_once_and_already_resolved_settles_it() {
+        let (client, mut frames) = fixture_client(false);
+        let host = client.clone();
+        let responder = tokio::spawn(async move {
+            let first = fixture_frame(&mut frames).await;
+            host.ingest(json!({"jsonrpc": "2.0", "id": first["id"], "error": {"code": -32603,
+                "message": "approval decide settlement failed", "data": {"kind": "internal", "retryable": true}}})).await;
+            let second = fixture_frame(&mut frames).await;
+            host.ingest(json!({"jsonrpc": "2.0", "id": second["id"], "error": {"code": -32051,
+                "message": "approval already resolved", "data": {"retryable": false}}})).await;
+            (first["params"]["commandId"].clone(), second["params"]["commandId"].clone())
+        });
+
+        let res = decide(&client, json!({"commandId": "decide-1", "approvalId": "a1"})).await;
+        let (first, second) = responder.await.unwrap();
+
+        assert_eq!(first, second);
+        assert!(approval_terminal(&res.expect("the retry settles the decision")));
+    }
+
     #[test]
     fn generated_tauri_invoke_routes_user_shell_through_granted_host_capability() {
         let app = tauri::test::mock_builder()
@@ -7024,6 +7914,68 @@ mod tests {
 
         responder.join().expect("fixture responder should finish");
         assert_eq!(response["status"], "accepted");
+    }
+
+    #[test]
+    fn a_listed_but_unloaded_conversation_is_not_returned_as_attached() {
+        // M0-06: after a window reload restore_sessions routes every
+        // conversation a live host lists; resume_session returned that route
+        // without `session/resume`, and setApprovalMode met -32024.
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .invoke_handler(tauri::generate_handler![restore_sessions])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("mock webview should build");
+        let workspace = std::env::current_dir().unwrap().canonicalize().unwrap().display().to_string();
+        let root = PathBuf::from(&workspace);
+        let (client, mut frames) = fixture_client(false);
+        let state = app.state::<AppState>();
+        register_fixture_session(state.inner(), "session-cold", &workspace, client.clone());
+        // Held once: attached, no resume.
+        state.inner().sessions.lock().unwrap().get_mut("session-cold").unwrap().loaded = Some(true);
+        assert!(attached_session(state.inner(), "session-cold", &root).unwrap().is_some());
+
+        let row = json!({"sessionId": "session-cold", "path": "durable.jsonl", "workspaceRoot": workspace, "status": "notLoaded"});
+        let responder = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async move {
+                let frame = fixture_frame(&mut frames).await;
+                assert_eq!(frame["method"], "session/list");
+                client
+                    .ingest(json!({"jsonrpc": "2.0", "id": frame["id"], "result": {"sessions": [row]}}))
+                    .await;
+            });
+        });
+        let restored = tauri::test::get_ipc_response(
+            &webview,
+            tauri::webview::InvokeRequest {
+                cmd: "restore_sessions".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: if cfg!(any(windows, target_os = "android")) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
+                body: tauri::ipc::InvokeBody::Json(json!({})),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .expect("restore_sessions invoke should succeed")
+        .deserialize::<Value>()
+        .expect("restore_sessions response should be JSON");
+        responder.join().expect("fixture responder should finish");
+
+        // The list row wins over the stale flag, and resume_session must now
+        // call session/resume instead of returning the route as attached.
+        assert_eq!(restored[0]["loaded"], false);
+        assert!(attached_session(state.inner(), "session-cold", &root).unwrap().is_none());
+        assert!(attached_session(state.inner(), "session-cold", Path::new("elsewhere")).is_err());
     }
 
     #[test]
@@ -7652,6 +8604,7 @@ mod tests {
             }),
             Some("durable".to_string()),
             Some(vec!["userShell".to_string()]),
+            Some(HostSandboxPolicy::parse(Some("workspace"), Some(true), Some(true)).unwrap()),
         )
         .unwrap();
         assert_eq!(meta.session_id, "session-restored");
@@ -7660,7 +8613,28 @@ mod tests {
         assert_eq!(meta.session_durability.as_deref(), Some("durable"));
         assert_eq!(meta.approval_mode.as_deref(), Some("promptUnmatched"));
         assert_eq!(meta.granted_capabilities, Some(vec!["userShell".to_string()]));
-        assert!(session_meta_from_list_row(Path::new("C:/workspace"), &json!({}), None, None).is_none());
+        assert!(session_meta_from_list_row(Path::new("C:/workspace"), &json!({}), None, None, None).is_none());
+    }
+
+    /// M0-13: the renderer says what a conversation's host refuses from the
+    /// posture it was spawned with, in its own `HostSandboxConfig` shape.
+    #[test]
+    fn session_metadata_carries_the_host_posture_for_the_renderer() {
+        let policy = HostSandboxPolicy::parse(Some("network"), Some(true), Some(false)).unwrap();
+        let meta = session_meta_from_list_row(
+            Path::new("C:/workspace"),
+            &json!({"sessionId": "s"}),
+            None,
+            None,
+            Some(policy),
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(&meta).unwrap()["sandbox"],
+            json!({"mode": "network", "disableWrite": true, "disableShell": false}),
+        );
+        let unknown = session_meta_from_list_row(Path::new("C:/workspace"), &json!({"sessionId": "s"}), None, None, None).unwrap();
+        assert!(serde_json::to_value(&unknown).unwrap().get("sandbox").is_none(), "no host, no posture claimed");
     }
 
     #[test]
@@ -7987,6 +8961,32 @@ mod tests {
         }));
     }
 
+    /// M0-13: a refused item closes as refused. Measured on 1.4.2 with
+    /// `--disable-shell`: the userShell item completes `failed`.
+    #[test]
+    fn a_refused_item_closes_with_its_failed_status() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        let refused = json!({
+            "sessionId": "session-a",
+            "item": {
+                "itemId": "shell-refused",
+                "kind": "userShell",
+                "commandText": "echo m0-13",
+                "visibleOutput": "tool failed: tool policy denied shell execution",
+                "status": "failed"
+            }
+        });
+        route_notification_with_emit(&state, "item/completed", &refused, &mut emit);
+        let done = events.iter().find(|(_, _, kind, _)| kind == "item_done").unwrap();
+        let payload: Value = serde_json::from_str(&done.3).unwrap();
+        assert_eq!(payload["itemId"], "shell-refused");
+        assert_eq!(payload["status"], "failed");
+    }
+
     #[test]
     fn completed_reasoning_without_delta_uses_the_thinking_lane() {
         let state = empty_state();
@@ -8189,8 +9189,8 @@ mod tests {
 
     #[test]
     fn product_authorization_modes_map_to_closed_host_values() {
-        assert_eq!(host_approval_mode("ask"), Some("onRequest"));
-        assert_eq!(host_approval_mode("workspace"), Some("promptUnmatched"));
+        assert_eq!(host_approval_mode("ask"), Some("promptUnmatched"));
+        assert_eq!(host_approval_mode("workspace"), Some("onRequest"));
         assert_eq!(host_approval_mode("yolo"), Some("allowAll"));
         assert_eq!(host_approval_mode("deny"), None);
     }
@@ -8289,6 +9289,64 @@ mod tests {
         assert!(validate_initialize_result(&result).is_ok());
     }
 
+    /// M0-08 engine matrix. Anonymised shapes: the fingerprints are
+    /// placeholders, the hosts were not run to capture them.
+    #[test]
+    fn engine_matrix_fixtures_pass_the_handshake_and_reach_diagnostics() {
+        let app = tauri::test::mock_builder()
+            .manage(empty_state())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app should build");
+        let state = app.state::<AppState>();
+        for (root, fixture, version) in [
+            ("a", include_str!("../tests/fixtures/initialize-1.3.0-R3401.1.json"), "1.3.0"),
+            ("b", include_str!("../tests/fixtures/initialize-1.4.2-R4684.1.json"), "1.4.2"),
+        ] {
+            let result: Value = serde_json::from_str(fixture).unwrap();
+            let engine = validate_initialize_result(&result).unwrap();
+            assert_eq!(engine.server_version, version);
+            assert!(engine.schema_fingerprint.starts_with("sha256:"));
+            assert_eq!(engine.platform.as_deref(), Some("windows"));
+            assert_eq!(
+                initialize_granted_capabilities(&result).unwrap(),
+                vec!["userShell".to_string(), "sessionMcp".to_string()]
+            );
+            state.host_engines.lock().unwrap().insert(PathBuf::from(root), engine);
+        }
+        let snapshot = serde_json::to_value(collect_diagnostics(app.state::<AppState>()).unwrap()).unwrap();
+        let versions: Vec<&str> = snapshot["hostEngines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|engine| engine["serverVersion"].as_str().unwrap())
+            .collect();
+        assert_eq!(versions, vec!["1.3.0", "1.4.2"]);
+        assert!(snapshot["hostEngines"][1]["schemaFingerprint"].as_str().unwrap().starts_with("sha256:"));
+        assert!(snapshot["testMode"].is_boolean());
+    }
+
+    #[test]
+    fn unknown_additive_notifications_are_ignored_and_routing_continues() {
+        let state = empty_state();
+        let mut events = Vec::new();
+        let mut emit = |event: &str, sid: &str, kind: &str, payload: String| {
+            events.push((event.to_string(), sid.to_string(), kind.to_string(), payload));
+        };
+        // 1.4.2 emits these; this build does not know them.
+        for method in ["session/todoListChanged", "session/goalChanged"] {
+            route_notification_with_emit(&state, method, &json!({"sessionId":"s","todos":[{"x":1}],"goal":null}), &mut emit);
+        }
+        route_notification_with_emit(
+            &state,
+            "item/delta",
+            &json!({"sessionId":"s","itemId":"i","delta":"still routed"}),
+            &mut emit,
+        );
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0].0, "output");
+        assert!(events[0].3.contains("still routed"));
+    }
+
     #[test]
     fn initialize_compatibility_rejects_missing_or_unsupported_metadata() {
         let missing = json!({"serverInfo": {"name": "muse", "version": "1.3.0"}});
@@ -8381,13 +9439,97 @@ mod tests {
         });
         let payload = approval_payload(&updated, "approval-1", true);
         assert_eq!(payload["updated"], true);
-        assert_eq!(payload["toolName"], "bash");
-        assert_eq!(payload["summary"], "bash: echo hello");
+        // No toolName on an update: the card keeps the one its request gave.
+        assert_eq!(payload["toolName"], "tool");
+        assert_eq!(payload["summary"], "echo hello");
         assert_eq!(payload["choices"][0]["choiceId"], "allow_once");
         assert_eq!(payload["currentRequirementId"]["sourceIndex"], 1);
         assert!(!approval_terminal(&json!({"terminal": false})));
         assert!(!approval_terminal(&json!({"result": {"terminal": false}})));
         assert!(approval_terminal(&json!({"status": "accepted"})));
+    }
+
+    #[test]
+    fn an_approval_card_reads_the_subject_never_the_raw_json_args() {
+        // M0-05, 1.4.2 stage 0: `rawArgs` is the tool's JSON input and the
+        // card read `powershell: {"command":…}`.
+        let command = "$m = 'm05-allow'; Set-Content -Path probe.txt -Value $m";
+        let requested = json!({
+            "approvalId": "a",
+            "toolName": "powershell",
+            "rawArgs": json!({"command": command, "description": "Write probe marker file"}).to_string(),
+            "subject": {"kind": "shell", "command": command}
+        });
+        let stage0 = approval_payload(&requested, "a", false);
+        assert_eq!(stage0["toolName"], "powershell");
+        assert_eq!(stage0["summary"], command);
+        // Without a subject, a readable field of the args, else nothing.
+        let args_only = json!({"toolName": "write_file", "rawArgs": "{\"path\":\"src/a.ts\",\"content\":\"{}\"}"});
+        assert_eq!(approval_payload(&args_only, "b", false)["summary"], "src/a.ts");
+        let opaque = json!({"toolName": "mcp__x__y", "rawArgs": "{\"n\":1}"});
+        assert_eq!(approval_payload(&opaque, "c", false)["summary"], "");
+    }
+
+    #[test]
+    fn pending_rows_of_a_turn_that_is_not_running_are_dropped() {
+        // Muse 1.4.2 after its engine was killed mid-question, then a new turn.
+        let listed = json!({
+            "approvals": [{"approvalId": "a-dead", "turnId": "dead"}],
+            "userInputs": [
+                {"userInputId": "q-dead", "turnId": "dead"},
+                {"userInputId": "q-live", "turnId": "live"},
+                {"userInputId": "q-unknown"}
+            ]
+        });
+        let ids = |v: &Value, key: &str, id: &str| -> Vec<String> {
+            v[key].as_array().unwrap().iter().map(|r| r[id].as_str().unwrap().to_string()).collect()
+        };
+        let running = live_pending(listed.clone(), Some(&json!({"activeTurnId": "live"})));
+        assert_eq!(ids(&running, "userInputs", "userInputId"), ["q-live", "q-unknown"]);
+        assert!(ids(&running, "approvals", "approvalId").is_empty());
+        let idle = live_pending(listed.clone(), Some(&json!({"activeTurnId": null})));
+        assert_eq!(ids(&idle, "userInputs", "userInputId"), ["q-unknown"]);
+        // No running-turn fact (older host, failed read): nothing to judge by.
+        assert_eq!(live_pending(listed.clone(), Some(&json!({"status": "idle"}))), listed);
+        assert_eq!(live_pending(listed.clone(), None), listed);
+    }
+
+    #[test]
+    fn pending_snapshot_rows_get_the_live_event_shape() {
+        // A 1.4.2 `approval/listPending` result: raw request params.
+        let snapshot = json!({
+            "approvals": [{
+                "approvalId": "approval-1",
+                "currentRequirementId": {"approvalId": "approval-1", "sourceIndex": 0},
+                "availableChoices": [
+                    {"choiceId": "allow_once", "label": "Allow once", "decision": "approved", "scope": "once"},
+                    {"choiceId": "abort", "label": "Reject", "decision": "abort", "scope": "once"}
+                ],
+                "rawArgs": "{\"command\":\"Set-Content probe.txt\"}",
+                "subject": {"kind": "shell", "command": "Set-Content probe.txt"},
+                "toolName": "powershell"
+            }, {"availableChoices": []}],
+            "userInputs": [sample_prompt()]
+        });
+        let out = pending_snapshot_payload(&snapshot);
+        let card = &out["approvals"][0];
+        assert_eq!(out["approvals"].as_array().map(Vec::len), Some(1), "a row without an id is dropped");
+        assert_eq!(card["request_id"], "approval-1");
+        assert_eq!(card["toolName"], "powershell");
+        assert_eq!(card["choices"][1]["label"], "Reject");
+        assert_eq!(card["choices"][1]["decision"], "abort");
+        assert_eq!(card["currentRequirementId"]["sourceIndex"], 0);
+        assert_eq!(out["userInputs"][0], build_input_request_payload(&sample_prompt()).unwrap());
+        assert_eq!(pending_snapshot_payload(&json!({})), json!({"approvals": [], "userInputs": []}));
+    }
+
+    #[test]
+    fn a_decision_targets_the_requirement_of_the_clicked_card() {
+        let current = json!({"approvalId": "a", "sourceIndex": 1});
+        let clicked = json!({"approvalId": "a", "sourceIndex": 0});
+        assert_eq!(decision_requirement(Some(clicked.clone()), &current), clicked);
+        assert_eq!(decision_requirement(None, &current), current);
+        assert_eq!(decision_requirement(Some(Value::Null), &current), current);
     }
 
     fn sample_prompt() -> Value {
@@ -8797,6 +9939,8 @@ mod tests {
             model_id: None,
             loaded: Some(false),
             title: None,
+            host_workspace: None,
+            sandbox: None,
         };
         apply_resumed_session(
             &mut meta,
@@ -8889,15 +10033,21 @@ fn main() {
     }
     #[cfg(target_os = "macos")]
     login_env::adopt_login_shell_path();
-    tauri::Builder::default()
-        // M2/M3 follow-up (measured 27/09): the automation wake task relaunches
-        // this executable while the user's instance may still run — two
-        // instances then clobber the shared WebView2 profile and their durable
-        // ledgers. The first-registered plugin must stay first: the second
-        // instance exits after forwarding its argv to this callback, which
-        // focuses the primary window (the scheduler re-checks on focus) and
-        // re-emits the wake so a due automation dispatches at once.
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+    let mut context = tauri::generate_context!();
+    test_mode::open_devtools(&mut context);
+    let builder = tauri::Builder::default();
+    // M2/M3 follow-up (measured 27/09): the automation wake task relaunches
+    // this executable while the user's instance may still run — two
+    // instances then clobber the shared WebView2 profile and their durable
+    // ledgers. The first-registered plugin must stay first: the second
+    // instance exits after forwarding its argv to this callback, which
+    // focuses the primary window (the scheduler re-checks on focus) and
+    // re-emits the wake so a due automation dispatches at once. An isolated
+    // test instance shares neither, so it runs beside the user's own.
+    let builder = if test_mode::enter() {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             let is_wake = args.iter().any(|arg| arg == "--automation-wakeup");
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -8909,6 +10059,8 @@ fn main() {
                 let _ = app.emit("automation-wakeup", ());
             }
         }))
+    };
+    builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
@@ -8921,6 +10073,7 @@ fn main() {
             host_durability: Mutex::new(HashMap::new()),
             host_sandbox: Mutex::new(HashMap::new()),
             host_capabilities: Mutex::new(HashMap::new()),
+            host_engines: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             item_kinds: Mutex::new(HashMap::new()),
             item_output_refs: Mutex::new(HashMap::new()),
@@ -8928,6 +10081,7 @@ fn main() {
             item_deltas_seen: Mutex::new(HashSet::new()),
             item_fallback_emitted: Mutex::new(HashSet::new()),
             host_mutex: tokio::sync::Mutex::new(()),
+            handoffs: tokio::sync::RwLock::new(Vec::new()),
             event_seq: Mutex::new(0),
             event_buffer: Mutex::new(std::collections::VecDeque::new()),
             terminals: terminal::TerminalRegistry::default(),
@@ -8985,6 +10139,8 @@ fn main() {
             git_worktree_readiness,
             git_worktree_inspect,
             git_worktree_remove,
+            handoff_preview,
+            handoff_move,
             mcp_local_probe,
             mcp_local_call,
             mcp_package_install,
@@ -8999,8 +10155,8 @@ fn main() {
             computer_disable,
             computer_set_attach,
             computer_mcp_server,
-            remote_ssh_exec,
             secure_store_remove,
+            test_remote_mcp_origin,
             mcp_local_start,
             mcp_local_refresh,
             mcp_local_poll,
@@ -9053,11 +10209,11 @@ fn main() {
             open_native_browser,
             close_native_browser,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("failed to build muse-desktop app")
         .run(|app, event| {
-            // Clean shutdown: kill every workspace sidecar so no `muse`
-            // process survives app exit.
+            // Clean shutdown: stop every workspace sidecar (stdin closed,
+            // killed if still running) so no `muse` process survives app exit.
             if let RunEvent::Exit = event {
                 let state: State<AppState> = app.state();
                 state.terminals.close_all();
@@ -9067,7 +10223,9 @@ fn main() {
                     }
                 }
                 let clients = state.hosts.lock().map(|mut h| h.drain()).unwrap_or_default();
-                for client in clients { tauri::async_runtime::block_on(client.shutdown()); }
+                tauri::async_runtime::block_on(futures_util::future::join_all(
+                    clients.iter().map(|client| client.stop(HOST_STOP_GRACE)),
+                ));
                 if let Ok(mut servers) = state.mcp_servers.lock() {
                     servers.clear();
                 };

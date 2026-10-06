@@ -1,0 +1,860 @@
+{
+  "schema": "muse-desktop.final-smoke-windows.v1",
+  "purpose": "Last check before closing the Windows roadmap: M0-13 gap 2 on the merged build, a clean host stop with live events across the merged features, a graceful close.",
+  "date": "2026-10-06",
+  "commit": "b77e1997c97b89154bc9d8ff894607a738749c56",
+  "build": {
+    "commit": "933ead3d274985290048d3f693da2136d855e6b6",
+    "productUnchangedSinceBuild": true,
+    "productTreeClean": true,
+    "exe": "muse-desktop-933ead3.exe",
+    "exeSha256": "23f85628897489dc88a79dfc7818d4a953f9e730c7811701e315fa36e3276d25",
+    "kind": "debug build with the embedded frontend (npm run build, then cargo build), run from a copy"
+  },
+  "engine": {
+    "version": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+    "sha256": "39a97806d315ece0fc5cdbb88c903ef5bc77655f32e66dc22d267a212c5030ba",
+    "role": "MUSE_DESKTOP_TEST_SIDECAR: every local engine of this instance"
+  },
+  "platform": "Windows 11 (10.0.26200), isolated test mode (ADR 0003), WebView2 over CDP",
+  "harness": "scripts/cdp-final-smoke.mjs",
+  "rehearsal": false,
+  "liveTurns": 2,
+  "isolation": {
+    "testModeMarker": true,
+    "webviewProfileUnderTestFolder": true,
+    "cdpPort": 9333,
+    "testMode": true,
+    "computerUse": {
+      "grantState": "stopped",
+      "driversUnderTheApp": 0,
+      "off": true
+    }
+  },
+  "consoleErrors": [],
+  "checks": {
+    "1 Read only project, one live write (M0-13 gap 2)": {
+      "verdict": "pass",
+      "criteria": {
+        "projectReadOnly": true,
+        "engineArgvReadOnly": true,
+        "liveTurnSent": true,
+        "turnEndedOnScreen": true,
+        "replyOrRefusalShown": true,
+        "notLeftOnThinking": true,
+        "fileAbsent": true,
+        "runInMuseDisabledWithItsReason": true,
+        "postureNotePresent": true
+      },
+      "shown": {
+        "reply": "Muse Filesystem writes are disabled for this session, so I cannot create smoke-readonly.txt. 16:35:45",
+        "refusal": true
+      },
+      "measured": {
+        "project": {
+          "stored": {
+            "settings": {
+              "sandbox": "read-only"
+            }
+          },
+          "preferences": [
+            {
+              "label": "Isolation",
+              "selected": "Read only, no commands"
+            },
+            {
+              "label": "Network",
+              "selected": "Follow Settings (Workspace only)"
+            },
+            {
+              "label": "Reasoning effort Default: High",
+              "selected": "High"
+            }
+          ]
+        },
+        "start": {
+          "clicked": true,
+          "ok": true,
+          "error": null,
+          "sid": "01a111a4-21d3-7d82-8cd7-f72e6e4271a3",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "workspace",
+            "disableWrite": true,
+            "disableShell": true
+          },
+          "host": {
+            "approvalMode": "promptUnmatched",
+            "grantedCapabilities": [
+              "userShell",
+              "sessionMcp"
+            ]
+          },
+          "engineStarted": [
+            {
+              "pid": 41084,
+              "argv": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+            }
+          ]
+        },
+        "beforeTheTurn": {
+          "connection": "Connected",
+          "postureNote": {
+            "text": "This project is Read only: Muse cannot write files or run commands here.",
+            "role": "note"
+          },
+          "composer": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context",
+          "reconnectButton": false,
+          "health": null,
+          "banner": null
+        },
+        "turn": {
+          "clicked": true,
+          "guard": {
+            "grantState": "stopped",
+            "driversUnderTheApp": 0,
+            "off": true
+          },
+          "sendInput": {
+            "ok": true,
+            "refusedByHarness": false
+          },
+          "end": {
+            "ended": true,
+            "ms": 19254,
+            "final": {
+              "running": "false",
+              "cards": [],
+              "inputs": 0,
+              "health": null,
+              "banner": null
+            }
+          },
+          "cardsAllowed": [],
+          "rowsFromThePrompt": [
+            {
+              "lane": "user",
+              "failedMarker": null,
+              "text": "Use your file-writing tool to create the file smoke-readonly.txt in the current folder with exactly this one line: READONLY-AC06D3. If the write is refused, do not try another way: reply with the refusal you received, in one sentence. 16:35:39",
+              "body": "Use your file-writing tool to create the file smoke-readonly.txt in the current folder with exactly this one line: READONLY-AC06D3. If the write is refused, do not try another way: reply with the refusal you received, in one sentence."
+            },
+            {
+              "lane": "thinking",
+              "failedMarker": null,
+              "text": "Muse · Thinking Thinking 16:35:44",
+              "body": "Muse · Thinking Thinking 16:35:44"
+            },
+            {
+              "lane": "assistant",
+              "failedMarker": null,
+              "text": "Muse Filesystem writes are disabled for this session, so I cannot create smoke-readonly.txt. 16:35:45",
+              "body": "Filesystem writes are disabled for this session, so I cannot create smoke-readonly.txt."
+            }
+          ],
+          "storedFromThePrompt": [
+            {
+              "role": "user",
+              "text": "Use your file-writing tool to create the file smoke-readonly.txt in the current folder with exactly this one line: READONLY-AC06D3. If the write is refused, do not try another way: reply with the refusal you received, in one sentence.",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "assistant",
+              "text": "",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "subagent",
+              "text": "Reminder child session",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "thinking",
+              "text": "Resolving conflict between developer and user instructions by prioritizing developer rule to not call file-writing tools and preparing a one-sentence refusal.Confirming the session-level write prohibition and framing a one-sentence refusal without invoking file tools.",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "assistant",
+              "text": "Filesystem writes are disabled for this session, so I cannot create smoke-readonly.txt.",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "subagent",
+              "text": "Reminder child session",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "subagent",
+              "text": "Reminder child session",
+              "failed": false,
+              "open": false
+            }
+          ],
+          "hostItemsOfTheTurn": [
+            {
+              "kind": "userMessage",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            },
+            {
+              "kind": "reminderChild",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            },
+            {
+              "kind": "reasoning",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            },
+            {
+              "kind": "agentMessage",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            },
+            {
+              "kind": "reminderChild",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            },
+            {
+              "kind": "reminderChild",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            }
+          ]
+        },
+        "fileWritten": false,
+        "afterTheTurn": {
+          "connection": "Connected",
+          "postureNote": {
+            "text": "This project is Read only: Muse cannot write files or run commands here.",
+            "role": "note"
+          },
+          "composer": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ?% ↑ Enter to send · Shift + Enter for a new line · @ for context",
+          "reconnectButton": false,
+          "health": null,
+          "banner": null
+        },
+        "runInMuse": {
+          "label": "Run in Muse",
+          "disabled": true,
+          "title": "This project is Read only: Muse cannot write files or run commands here.",
+          "appShell": {
+            "opened": true,
+            "closedFromItsButton": true
+          }
+        },
+        "engineNow": [
+          {
+            "pid": 41084,
+            "argv": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          }
+        ]
+      }
+    },
+    "2 follows Settings, reload, Restart host, a live approval": {
+      "verdict": "fail",
+      "criteria": {
+        "askPosture": true,
+        "projectFollowsSettings": true,
+        "engineArgvNetworkEnabled": true,
+        "windowReloaded": true,
+        "restartedFromTheUi": true,
+        "oldHostStoppedCleanly": true,
+        "hostExitedReachedTheScreen": true,
+        "newEngineArgvNetworkEnabled": true,
+        "reconnected": true,
+        "liveTurnSent": true,
+        "approvalCardShown": true,
+        "cardShowsTheHostChoices": true,
+        "allowAccepted": false,
+        "turnEnded": true,
+        "eventsReachedTheScreen": true,
+        "noErrorBanner": false,
+        "viewHealthy": true
+      },
+      "measured": {
+        "isolation": {
+          "clicked": true,
+          "stored": {
+            "mode": "network",
+            "networkAllowed": true,
+            "elevatedAllowed": false
+          },
+          "current": "Current isolation: Workspace and network"
+        },
+        "project": {
+          "stored": {
+            "settings": {}
+          },
+          "preferences": [
+            {
+              "label": "Isolation",
+              "selected": "Follow Settings (Workspace and network)"
+            },
+            {
+              "label": "Network",
+              "selected": "Follow Settings (Workspace and network)"
+            },
+            {
+              "label": "Reasoning effort Default: High",
+              "selected": "High"
+            }
+          ]
+        },
+        "postureStored": "ask",
+        "start": {
+          "clicked": true,
+          "ok": true,
+          "error": null,
+          "sid": "01a111a4-a888-72b2-b877-883dd08c16b0",
+          "requested": {
+            "authorizationMode": "ask",
+            "sandboxMode": "network",
+            "disableWrite": false,
+            "disableShell": false
+          },
+          "host": {
+            "approvalMode": "promptUnmatched",
+            "grantedCapabilities": [
+              "userShell",
+              "sessionMcp"
+            ]
+          },
+          "engineStarted": [
+            {
+              "pid": 10476,
+              "argv": "serve --sandbox-network enabled --trust-workspace"
+            }
+          ]
+        },
+        "beforeReload": {
+          "connection": "Connected",
+          "postureNote": null,
+          "composer": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context",
+          "reconnectButton": false,
+          "health": null,
+          "banner": null
+        },
+        "reload": {
+          "reloaded": true,
+          "msToNav": 2013,
+          "tapInstalled": true,
+          "after": {
+            "connection": "Connected",
+            "postureNote": null,
+            "composer": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context",
+            "reconnectButton": false,
+            "health": null,
+            "banner": null
+          },
+          "enginesAfter": [
+            {
+              "pid": 41084,
+              "argv": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+            },
+            {
+              "pid": 10476,
+              "argv": "serve --sandbox-network enabled --trust-workspace"
+            }
+          ],
+          "sameEngine": true
+        },
+        "restart": {
+          "eventsOnScreen": [
+            {
+              "atMs": 5792,
+              "kind": "host_exited",
+              "payload": "Muse host restarted; reconnect the conversation to continue."
+            }
+          ],
+          "journalSinceTheClick": {
+            "viewStatus": "healthy",
+            "viewRecordStillInJournal": true,
+            "records": 26,
+            "lastRecords": [
+              null,
+              "session_end",
+              "metadata",
+              "session_resumed"
+            ],
+            "since": [
+              "session_end",
+              "metadata",
+              "session_resumed"
+            ]
+          },
+          "autoResume": {
+            "ok": true,
+            "sandboxMode": "network",
+            "reload": false
+          },
+          "folder": {
+            "clicked": true,
+            "shown": "ask-muws5zv7",
+            "isTheProjectFolder": true
+          },
+          "clicked": true,
+          "confirmAnsweredByHarness": 1,
+          "restartHost": {
+            "ok": true,
+            "requested": {
+              "sandboxMode": "network",
+              "disableWrite": false,
+              "disableShell": false
+            },
+            "result": {
+              "workspace": "<ask project>",
+              "restarted": true,
+              "disconnectedSessions": 1
+            }
+          },
+          "oldEngine": {
+            "pid": 10476,
+            "exited": true,
+            "msFromClickToExit": 56,
+            "stopGraceMs": 3000
+          },
+          "newEngine": [
+            {
+              "pid": 46940,
+              "argv": "serve --sandbox-network enabled --trust-workspace"
+            }
+          ],
+          "statusShown": "Host restarted. Reconnect any durable conversations to continue."
+        },
+        "reconnect": {
+          "before": {
+            "connection": "Connected",
+            "postureNote": null,
+            "composer": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context",
+            "reconnectButton": false,
+            "health": null,
+            "banner": null,
+            "callsOnOpen": [
+              {
+                "cmd": "list_models",
+                "ok": true
+              }
+            ],
+            "journal": {
+              "viewStatus": "healthy",
+              "viewRecordStillInJournal": true,
+              "records": 26,
+              "lastRecords": [
+                null,
+                "session_end",
+                "metadata",
+                "session_resumed"
+              ]
+            },
+            "hostAnswersARead": true,
+            "transcriptNotices": [
+              "Muse stopped because the host process ended. Reconnect to continue."
+            ]
+          },
+          "reconnectClicked": false,
+          "resumeSession": null,
+          "connected": true,
+          "hostAnswersARead": true,
+          "after": {
+            "connection": "Connected",
+            "postureNote": null,
+            "composer": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ↑ Enter to send · Shift + Enter for a new line · @ for context",
+            "reconnectButton": false,
+            "health": null,
+            "banner": null
+          }
+        },
+        "enginesBeforeTheTurn": [
+          {
+            "pid": 41084,
+            "argv": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          },
+          {
+            "pid": 46940,
+            "argv": "serve --sandbox-network enabled --trust-workspace"
+          }
+        ],
+        "turn": {
+          "clicked": true,
+          "guard": {
+            "grantState": "stopped",
+            "driversUnderTheApp": 0,
+            "off": true
+          },
+          "sendInput": {
+            "ok": true,
+            "refusedByHarness": false
+          },
+          "stages": [
+            {
+              "card": {
+                "title": "powershell",
+                "command": "$m = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m",
+                "buttons": [
+                  "Allow once",
+                  "Reject"
+                ]
+              },
+              "hostChoices": [
+                {
+                  "choiceId": "allow_once",
+                  "label": "Allow once",
+                  "decision": "approved"
+                },
+                {
+                  "choiceId": "abort",
+                  "label": "Reject",
+                  "decision": "abort"
+                }
+              ],
+              "cardShowsTheHostChoices": true,
+              "clicked": "Allow once",
+              "approve": {
+                "ok": false,
+                "result": "\"MSP error -32603: approval decide settlement failed: approval ledger durability fence: background task failed: retained acknowledgement fence left records unflushed (failed=0, pending=2) [internal] ["
+              }
+            }
+          ],
+          "retries": [],
+          "cardWithoutHostApproval": 0,
+          "end": {
+            "ended": true,
+            "ms": 28696,
+            "final": {
+              "running": "false",
+              "cards": [],
+              "inputs": 0,
+              "health": null,
+              "banner": "Your response could not be submitted. — MSP error -32603: approval decide settlement failed: approval ledger durability fence: background task failed: retained acknowledgement fence left records unflushed (failed=0, pending=2) [internal] [retryable=true]"
+            }
+          },
+          "rowsFromThePrompt": [
+            {
+              "lane": "user",
+              "failedMarker": null,
+              "text": "Use your PowerShell tool to run EXACTLY this command, unchanged, once: $m = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m 16:36:26",
+              "body": "Use your PowerShell tool to run EXACTLY this command, unchanged, once: $m = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m"
+            },
+            {
+              "lane": "tool",
+              "failedMarker": null,
+              "text": "Approval requested: powershell: $m = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m 16:36:28",
+              "body": "Approval requested: powershell: $m = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m"
+            },
+            {
+              "lane": "assistant",
+              "failedMarker": null,
+              "text": "Muse Set-Content : Un objet � l'emplacement sp�cifi� Microsoft.PowerShell.Core\\FileSystem::\\?\\<ask project>\\probe.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 15 ... = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') ... Code Copy ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ CategoryInfo : Ob",
+              "body": "Set-Content : Un objet � l'emplacement sp�cifi� Microsoft.PowerShell.Core\\FileSystem::\\?\\<ask project>\\probe.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 15 ... = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') ... Code Copy ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ CategoryInfo : ObjectN"
+            },
+            {
+              "lane": "tool",
+              "failedMarker": "Failed",
+              "text": "Failed powershell · Write smoke probe file 16:36:29",
+              "body": "Failed powershell · Write smoke probe file"
+            },
+            {
+              "lane": "assistant",
+              "failedMarker": null,
+              "text": "Muse Command ran and failed with exit code 1. Set-Content reports the probe.txt path was not found or was filtered. 16:36:32",
+              "body": "Command ran and failed with exit code 1. Set-Content reports the probe.txt path was not found or was filtered."
+            }
+          ],
+          "storedFromThePrompt": [
+            {
+              "role": "user",
+              "text": "Use your PowerShell tool to run EXACTLY this command, unchanged, once: $m = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "assistant",
+              "text": "",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "subagent",
+              "text": "",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "tool",
+              "text": "Approval requested: powershell: $m = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "assistant",
+              "text": "Set-Content : Un objet � l'emplacement sp�cifi� Microsoft.PowerShell.Core\\FileSystem::<ask project>\\probe.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 15 + ... = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'pro",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "tool",
+              "text": "powershell · Write smoke probe file",
+              "failed": true,
+              "open": false
+            },
+            {
+              "role": "assistant",
+              "text": "Command ran and failed with exit code 1. `Set-Content` reports the `probe.txt` path was not found or was filtered.",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "subagent",
+              "text": "Reminder child session",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "subagent",
+              "text": "Reminder child session",
+              "failed": false,
+              "open": false
+            },
+            {
+              "role": "subagent",
+              "text": "Reminder child session",
+              "failed": false,
+              "open": false
+            }
+          ],
+          "hostItemsOfTheTurn": [
+            {
+              "kind": "userMessage",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            },
+            {
+              "kind": "reminderChild",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            },
+            {
+              "kind": "toolCall",
+              "status": "failed",
+              "tool": "powershell",
+              "output": "Set-Content : Un objet � l'emplacement sp�cifi� Microsoft.PowerShell.Core\\FileSystem::<ask project>\\probe.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 15 + ... = 'smoke'; Set-Content -Path (Join-Path (Get-Location) 'pro",
+              "failureReason": "process exited with code 1"
+            },
+            {
+              "kind": "agentMessage",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            },
+            {
+              "kind": "reminderChild",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            },
+            {
+              "kind": "reminderChild",
+              "status": "completed",
+              "tool": null,
+              "output": null,
+              "failureReason": null
+            }
+          ],
+          "eventsOnScreenAfterTheRestart": {
+            "count": 38,
+            "byKind": {
+              "started": 1,
+              "item_started": 9,
+              "item_done": 6,
+              "subagent_event": 6,
+              "token_usage": 2,
+              "tool_request": 2,
+              "approval/resolved": 1,
+              "output": 10,
+              "completed": 1
+            },
+            "sequence": [
+              "started",
+              "item_started",
+              "item_done",
+              "subagent_event",
+              "item_started",
+              "token_usage",
+              "tool_request",
+              "approval/resolved",
+              "item_started",
+              "output",
+              "item_done",
+              "item_started",
+              "output",
+              "item_done",
+              "token_usage",
+              "subagent_event",
+              "item_started",
+              "subagent_event",
+              "item_started",
+              "subagent_event",
+              "item_done",
+              "item_started",
+              "subagent_event",
+              "item_done",
+              "item_started",
+              "subagent_event",
+              "item_done",
+              "completed"
+            ],
+            "approvalRequest": "{\"approvalId\":\"01a111a5-0040-7590-adf0-4bb2f9068d92\",\"choices\":[{\"choiceId\":\"allow_once\",\"decision\":\"approved\",\"label\":\"Allow once\",\"scope\":\"once\"},{\"choiceId\":\"abort\",\"decision\":\"abort\",\"label\":\"Reject\",\"scope\":\"once\"}],\"currentRequirementId\":{\"approvalId\":\"01a111a5-0040-7590-adf0-4bb2f9068d92\",\"sourceIndex\":0},\"itemId\":\"01a111a5-0040-7590-adf0-4bb2f9068d92\",\"request_id\":\"01a111a5-0040-7590-adf0-"
+          }
+        },
+        "probeFile": null,
+        "journalAfterTheTurn": {
+          "viewStatus": "healthy",
+          "viewRecordStillInJournal": true,
+          "records": 134,
+          "lastRecords": [
+            "run",
+            "run",
+            "run",
+            "run"
+          ]
+        },
+        "afterTheTurn": {
+          "connection": "Connected",
+          "postureNote": null,
+          "composer": "＋ Attach Voice Ask for approval ✦ Effort High muse-spark-1.3-contributor ?% ↑ Enter to send · Shift + Enter for a new line · @ for context",
+          "reconnectButton": false,
+          "health": null,
+          "banner": "Your response could not be submitted. — MSP error -32603: approval decide settlement failed: approval ledger durability fence: background task failed: retained acknowledgement fence left records unflushed (failed=0, pending=2) [internal] [retryable=true]"
+        }
+      }
+    },
+    "3 graceful close": {
+      "verdict": "pass",
+      "criteria": {
+        "closedFromItsOwnButton": true,
+        "enginesRanUntilTheClose": true,
+        "noProcessOfThisInstanceLeft": true,
+        "hostsEndedTheirConversations": true
+      },
+      "measured": {
+        "processesAtClose": {
+          "count": 12,
+          "byName": {
+            "muse-desktop-933ead3.exe": 1,
+            "conhost.exe": 3,
+            "msedgewebview2.exe": 6,
+            "muse-x86_64-pc-windows-msvc.exe": 2
+          }
+        },
+        "enginesAtClose": [
+          {
+            "pid": 41084,
+            "argv": "serve --sandbox-network restricted --disable-write --disable-shell --trust-workspace"
+          },
+          {
+            "pid": 46940,
+            "argv": "serve --sandbox-network enabled --trust-workspace"
+          }
+        ],
+        "steps": [
+          {
+            "step": "Close window (the app's own control)",
+            "clicked": true,
+            "exited": true,
+            "ms": 418
+          }
+        ],
+        "leftovers": {
+          "ofThisInstance": [],
+          "enginesOfTheApp": 0,
+          "appImageRunning": 0,
+          "webview2OnTheTestProfile": 0
+        },
+        "journals": {
+          "readOnly": {
+            "viewStatus": "healthy",
+            "viewRecordStillInJournal": true,
+            "records": 96,
+            "lastRecords": [
+              "run",
+              "run",
+              "run",
+              "session_end"
+            ]
+          },
+          "restart": {
+            "viewStatus": "healthy",
+            "viewRecordStillInJournal": true,
+            "records": 135,
+            "lastRecords": [
+              "run",
+              "run",
+              "run",
+              "session_end"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "verdicts": {
+    "1 Read only project, one live write (M0-13 gap 2)": "pass",
+    "2 follows Settings, reload, Restart host, a live approval": "fail",
+    "3 graceful close": "pass"
+  },
+  "beforeFix": {
+    "run": "this harness with --rehearse (send_input refused in the page, no model turn) on the merged build before the fix",
+    "commit": "7bda04201c1200e088c1d769c3ccedf1d535fb11",
+    "exeSha256": "ff521016096d2dc0e25be650fd0be6e0eaa1eda509c9065cdf1eba846aeac6a0",
+    "date": "2026-10-06",
+    "restartHost": {
+      "workspace": "<ask project>",
+      "restarted": true,
+      "disconnectedSessions": 1
+    },
+    "eventsOfTheConversationOnScreenDuringTheRestart": [],
+    "conversationAfterTheRestart": {
+      "connection": "Connected",
+      "reconnectOffered": false,
+      "readThroughItsRoute": "conversation engine is unavailable — start or restore the conversation first",
+      "journalLastRecords": [
+        null,
+        null,
+        null,
+        "session_end"
+      ]
+    }
+  },
+  "disclosedForgeries": [
+    "Clicks are DOM clicks on the real control in the real webview (HTMLElement.click()), except Allow once on the approval card, a real mouse press and release through CDP Input; typing sets the value through the native setter and fires input, a select fires change.",
+    "The OS folder dialogs (Choose project folders, Settings' default folder) are answered by the harness (window.__baselineIpc.dialogQueue: plugin:dialog|open never reaches the OS); so is the OK/Cancel box of Restart workspace host (messageQueue, answered OK).",
+    "The window reload is CDP Page.reload, with the IPC trace and a poll_events tap installed before the app's scripts: the tap only reads what the renderer receives.",
+    "computer_status, collect_diagnostics, list_pending_requests and read_session_history are invoked over IPC to measure state; list_pending_requests also re-pins the app's approval registry from the host's read (what a boot does). No action is performed through IPC."
+  ],
+  "method": "One launch of the debug build in test mode from a copy: a fresh data folder and WebView2 profile, started from PowerShell with no WEBVIEW2_* variable, the staged native engine pinned by MUSE_DESKTOP_TEST_SIDECAR, MUSE_NO_AUTO_UPDATE=1, CDP through the WebView2 options. Isolation is checked before driving (test-mode.pid, --user-data-dir under the test folder). Effects are measured outside the click: Win32_Process argv, parents and start times, files in the project folders, the engine's own journal and MSP view of each conversation (read only), IPC results traced on window.fetch, the events the renderer receives (poll_events tap), the painted rows and the stored transcript. The instance is closed with its own Close window button."
+}

@@ -232,7 +232,12 @@ function InputCard({
           type="button"
           className="approve"
           title={`Send answer (${primaryModifier()}+Enter)`}
-          onClick={submit}
+          // The second click of a double-click (detail 2) would answer again,
+          // refused by the host once the first answer is in. Same on Skip.
+          onClick={(e) => {
+            if (e.detail > 1) return;
+            submit();
+          }}
         >
           Send answer
         </button>
@@ -240,7 +245,10 @@ function InputCard({
           type="button"
           className="deny"
           title="Skip this request (Escape)"
-          onClick={() => onSkip(request.session_id, request.input_id)}
+          onClick={(e) => {
+            if (e.detail > 1) return;
+            onSkip(request.session_id, request.input_id);
+          }}
         >
           Skip
         </button>

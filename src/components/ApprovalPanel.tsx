@@ -1,11 +1,7 @@
 import { useEffect, useRef } from "react";
-import type {
-  AllowDecision,
-  AllowRule,
-  ApprovalRequest,
-  ResolvedApproval,
-} from "../hooks/useMuseSessions";
+import type { ApprovalRequest } from "../hooks/useMuseSessions";
 import { choiceIndexForKey, trapTabIndex } from "../lib/a11y";
+import { isApprovalDecisionAccepted } from "../lib/approvalResolution";
 
 interface Props {
   approvals: ApprovalRequest[];
@@ -14,48 +10,18 @@ interface Props {
   onAuthorizationModeChange?: (
     mode: import("../lib/authorization").AuthorizationMode,
   ) => void;
-  /** US-15 persisted rules (pattern + scope → allow/prompt/forbidden). */
-  rules: AllowRule[];
   onDecision: (sessionId: string, approvalId: string, choiceId: string) => void;
-  /** Approve, then memorize an allow rule for this command + scope. */
-  onRemember: (approval: ApprovalRequest, choiceId: string) => void;
-  /** Effective allowlist decision for one pending request (badge). */
-  decisionFor: (approval: ApprovalRequest) => ResolvedApproval;
-  onRevoke: (id: string) => void;
-  onRuleDecision: (id: string, decision: AllowDecision) => void;
-}
-
-const NEXT_DECISION: Record<AllowDecision, AllowDecision> = {
-  allow: "prompt",
-  prompt: "forbidden",
-  forbidden: "allow",
-};
-
-function badgeText(resolved: ResolvedApproval): string {
-  if (resolved.networkDefaultDeny) return "network: no rule — denied";
-  if (resolved.rule === null) return "no rule — prompt";
-  return `rule: ${resolved.rule.decision}`;
 }
 
 /**
  * Pending tool-approval requests for the active session. Each request carries
- * the host's own choices (label + scope); the decision is forwarded verbatim
- * via approval/decide. While one is pending, the blocked tool call waits.
+ * the host's own choices (label + scope), persistent ones included when the
+ * host offers them; the decision is forwarded verbatim via approval/decide.
+ * While one is pending, the blocked tool call waits.
  *
- * US-15: each request shows its effective allowlist badge (most-restrictive
- * match, network default-deny), offers "toujours autoriser" (approve +
- * memorize command pattern + scope), and the stored rules can be switched
- * (allow/prompt/forbidden) or revoked below.
+ * No client-side rule: the host alone decides what prompts (decision 05/10).
  */
-export function ApprovalPanel({
-  approvals,
-  rules,
-  onDecision,
-  onRemember,
-  decisionFor,
-  onRevoke,
-  onRuleDecision,
-}: Props) {
+export function ApprovalPanel({ approvals, onDecision }: Props) {
   // US-32: focus the first decision button when a new approval arrives,
   // and trap Tab inside the panel while a decision is pending.
   const sectionRef = useRef<HTMLElement>(null);
@@ -128,15 +94,12 @@ export function ApprovalPanel({
         </div>
       </header>
       {approvals.map((a) => {
-        const resolved = decisionFor(a);
-        const allowChoice = a.choices.find((c) => !c.decision.startsWith("denied"));
         const scopes = [...new Set(a.choices.map((c) => c.scope).filter((s) => s !== ""))];
         return (
           <div
             key={`${a.session_id}:${a.request_id}`}
             className="approval"
             role="group"
-            data-decision={resolved.decision}
             aria-label={`Action needs attention${a.toolName !== "tool" ? ` for ${a.toolName}` : ""}`}
           >
             <div className="approval-text">
@@ -144,23 +107,13 @@ export function ApprovalPanel({
                 <strong>
                   {a.toolName !== "tool" ? a.toolName : "Tool action"}
                 </strong>
-                <span
-                  className={`rule-badge rule-${resolved.decision}`}
-                  title={
-                    resolved.rule !== null
-                      ? `Pattern ${resolved.rule.scope !== "" ? `${resolved.rule.pattern} · ${resolved.rule.scope}` : resolved.rule.pattern}`
-                      : resolved.networkDefaultDeny
-                        ? "Network scope without an allow rule: effectively denied"
-                        : "No matching allowlist rule"
-                  }
-                >
-                  {badgeText(resolved)}
-                </span>
               </div>
-              <details className="approval-details" open>
-                <summary>Review command</summary>
-                <pre>{a.summary}</pre>
-              </details>
+              {a.summary !== "" && (
+                <details className="approval-details" open>
+                  <summary>Review command</summary>
+                  <pre>{a.summary}</pre>
+                </details>
+              )}
               {scopes.length > 0 && (
                 <div className="muted approval-scope" title="Host scope">
                   scope: {scopes.join(" · ")}
@@ -176,10 +129,16 @@ export function ApprovalPanel({
                 a.choices.map((c) => (
                   <button
                     key={c.choiceId}
-                    className={c.decision.startsWith("denied") ? "deny" : "approve"}
+                    className={isApprovalDecisionAccepted(c.decision) ? "approve" : "deny"}
                     title={`${c.scope} (←/→ to move, Enter to choose)`.trim()}
                     aria-label={`${c.label}${c.scope !== "" ? `, scope ${c.scope}` : ""}`}
-                    onClick={() => onDecision(a.session_id, a.request_id, c.choiceId)}
+                    // The second click of a double-click (detail 2) would be a
+                    // second decision: on this card, or on the next stage's
+                    // card if it has already replaced this one.
+                    onClick={(e) => {
+                      if (e.detail > 1) return;
+                      onDecision(a.session_id, a.request_id, c.choiceId);
+                    }}
                   >
                     {c.label}
                   </button>
@@ -187,54 +146,10 @@ export function ApprovalPanel({
               ) : (
                 <span className="muted">No choices supplied by host.</span>
               )}
-              {allowChoice !== undefined && (
-                <button
-                  className="remember"
-                  title={`Approve and remember: pattern "${allowChoice.scope !== "" ? `${a.toolName} · ${allowChoice.scope}` : a.toolName}" as allow`}
-                  onClick={() => onRemember(a, allowChoice.choiceId)}
-                >
-                  Allow in workspace
-                </button>
-              )}
             </div>
           </div>
         );
       })}
-      {rules.length > 0 && (
-        <details className="allowlist">
-          <summary className="allowlist-title">
-            Saved authorization rules ({rules.length})
-          </summary>
-          <ul className="allowlist-rows">
-            {rules.map((r) => (
-              <li key={r.id} className="allowlist-row">
-                <button
-                  className={`rule-badge rule-${r.decision}`}
-                  title="Cycle decision (allow → prompt → forbidden)"
-                  onClick={() => onRuleDecision(r.id, NEXT_DECISION[r.decision])}
-                >
-                  {r.decision}
-                </button>
-                <code className="allowlist-pattern" title="Remembered pattern">
-                  {r.pattern}
-                </code>
-                {r.scope !== "" && (
-                  <span className="muted allowlist-scope" title="Remembered scope">
-                    {r.scope}
-                  </span>
-                )}
-                <button
-                  className="allowlist-revoke"
-                  title="Revoke this rule"
-                  onClick={() => onRevoke(r.id)}
-                >
-                  Revoke
-                </button>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
     </section>
   );
 }

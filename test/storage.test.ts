@@ -292,6 +292,8 @@ describe("defensive storage facade", () => {
     assert.equal(storageDataKind("muse-desktop.sessions.v1"), "durable");
     assert.equal(storageDataKind("muse-desktop.log.v1.session-1"), "durable");
     assert.equal(storageDataKind("muse-desktop.active.v1"), "ui");
+    assert.equal(storageDataKind("muse-desktop.pending-approvals.v1"), "ui");
+    assert.equal(storageDataKind("muse-desktop.pending-inputs.v1"), "ui");
     assert.equal(storageDataKind("muse-desktop.draft.session-1"), "ui");
     assert.equal(storageDataKind("muse-desktop.scheduler-lease.v1"), "ui");
     assert.equal(storageDataKind("muse-desktop.stream-position.v1"), "ui");

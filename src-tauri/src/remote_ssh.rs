@@ -2,31 +2,22 @@
 //! of 29/09/2026 — no crypto crate, the user's existing keys and agent).
 //!
 //! This module owns everything the renderer must not: the binary resolution
-//! (PATH, then the canonical install locations), the argv construction, and
-//! the output bounds. The renderer passes validated *fields* (host, port,
-//! user, identity path, command); this module rebuilds the argv from them, so
-//! a compromised renderer cannot inject an argument — every field is
-//! charset-checked and the remote command travels after a literal `--`
-//! separator, never through a shell. There is no password path at all:
-//! authentication rides the user's existing key agent.
+//! (PATH, then the canonical install locations) and the argv construction.
+//! The renderer passes only the `ssh://` workspace key; this module parses it
+//! into validated fields and rebuilds the argv from them, so a compromised
+//! renderer cannot inject an argument — every field is charset-checked and the
+//! remote command travels after a literal `--` separator. There is no password
+//! path at all: authentication rides the user's existing key agent.
 //!
 //! Whether a given remote host accepts the connection is a property of that
 //! host, not of this code: a refused connection still proves the binary was
 //! driven with the right argv, which is the part this app owns.
 
-use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::time::Duration;
 
 const HOST_CHARS: &str = "^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$";
 const NAME_CHARS: &str = "^[A-Za-z0-9._-]+$";
-const PATH_CHARS: &str = "^[A-Za-z0-9 ._\\\\/:()-]+$";
 const CONNECT_TIMEOUT: u64 = 10;
-const EXEC_TIMEOUT_MIN: u64 = 1;
-const EXEC_TIMEOUT_MAX: u64 = 120;
-const EXEC_TIMEOUT_DEFAULT: u64 = 30;
-const OUTPUT_LIMIT: usize = 64 * 1024;
 
 /// Where `ssh` lives: the PATH the app was started with, then the canonical
 /// install locations (Windows' optional OpenSSH feature, then the Unix ones).
@@ -68,37 +59,32 @@ fn matches(value: &str, pattern: &str, max: usize) -> bool {
         && regex_is_match(pattern, value)
 }
 
-/// A minimal anchored matcher for the three closed character classes above —
+/// A minimal anchored matcher for the two closed character classes above —
 /// no regex crate, the classes are fixed and simple.
 fn regex_is_match(pattern: &str, value: &str) -> bool {
     match pattern {
         HOST_CHARS => {
-            let body = &value[1..value.len() - 1];
-            (value.as_bytes()[0].is_ascii_alphanumeric())
-                && (value.as_bytes()[value.len() - 1].is_ascii_alphanumeric())
-                && body.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+            // Bytes, not str slices: a 1-char or multibyte host must not panic.
+            let bytes = value.as_bytes();
+            matches!((bytes.first(), bytes.last()), (Some(f), Some(l)) if f.is_ascii_alphanumeric() && l.is_ascii_alphanumeric())
+                && bytes.iter().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-'))
         }
         NAME_CHARS => value
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')),
-        PATH_CHARS => value
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b' ' | b'.' | b'_' | b'\\' | b'/' | b':' | b'(' | b')' | b'-')),
         _ => false,
     }
 }
 
-/// The pure gate the command runs before anything is spawned. `Err` carries
+/// The pure gate a remote key passes before anything is spawned. `Err` carries
 /// the field name: the renderer shows it, the log never carries values.
-fn validate(host: &str, port: u16, user: &str, identity_file: &str, command: &str) -> Result<(), String> {
+fn validate(host: &str, port: u16, user: &str, command: &str) -> Result<(), String> {
     if !matches(host, HOST_CHARS, 255) {
         return Err("invalid ssh host".to_string());
     }
-    if !user.is_empty() && !matches(user, NAME_CHARS, 64) {
+    // A dash-leading user would make `user@host` an ssh option (`-E…` writes a log file).
+    if !user.is_empty() && (!matches(user, NAME_CHARS, 64) || user.starts_with('-')) {
         return Err("invalid ssh user".to_string());
-    }
-    if !identity_file.is_empty() && !matches(identity_file, PATH_CHARS, 400) {
-        return Err("invalid ssh identity path".to_string());
     }
     let command = command.trim();
     if command.is_empty() || command.len() > 8_000 || command.chars().any(|c| c == '\0') {
@@ -108,18 +94,12 @@ fn validate(host: &str, port: u16, user: &str, identity_file: &str, command: &st
     Ok(())
 }
 
-/// The canonical argv, rebuilt here from the validated fields. Mirrors
-/// `buildSshArgv` in `src/lib/remoteSsh.ts`; both are tested so a drift is a
-/// failing test, not a surprise.
-fn ssh_argv(ssh: &PathBuf, host: &str, port: u16, user: &str, identity_file: &str, command: &str) -> Vec<String> {
+/// The canonical argv, rebuilt here from the validated fields.
+fn ssh_argv(ssh: &PathBuf, host: &str, port: u16, user: &str, command: &str) -> Vec<String> {
     let mut argv = vec![ssh.display().to_string()];
     if port != 22 {
         argv.push("-p".to_string());
         argv.push(port.to_string());
-    }
-    if !identity_file.is_empty() {
-        argv.push("-i".to_string());
-        argv.push(identity_file.to_string());
     }
     argv.push("-o".to_string());
     argv.push("BatchMode=yes".to_string());
@@ -131,68 +111,209 @@ fn ssh_argv(ssh: &PathBuf, host: &str, port: u16, user: &str, identity_file: &st
     argv
 }
 
-fn bounded(mut text: String) -> String {
-    if text.len() > OUTPUT_LIMIT {
-        text.truncate(OUTPUT_LIMIT);
-        text.push('…');
-    }
-    text
+/// The remote Muse binary when the target does not name one: where the
+/// official installer puts it.
+pub const DEFAULT_REMOTE_MUSE: &str = "~/.local/bin/muse";
+/// Keepalive for the long-lived engine link: after `SERVER_ALIVE_COUNT_MAX`
+/// unanswered probes the *local* ssh exits, so the pump reports the host as
+/// gone instead of a conversation hanging forever. The remote `muse serve`
+/// is sshd's to end: it lives until sshd notices the dead link and closes
+/// its stdin (ADR 0002).
+const SERVER_ALIVE_INTERVAL: u64 = 15;
+/// Pinned on the command line so a `~/.ssh/config` value cannot unbound it.
+const SERVER_ALIVE_COUNT_MAX: u64 = 3;
+
+/// M4-07 remote engine: `muse serve` started on another host through the
+/// system ssh, its stdio carrying MSP exactly like the local sidecar's.
+///
+/// The whole target is the workspace key the conversation is stored under,
+/// `ssh://[user@]host:port/abs/path[?muse=<binary>]`, so a reconnect needs
+/// nothing but the conversation record and a remote host never collides with
+/// a local folder. The key is parsed and rebuilt here, never trusted as-is;
+/// `remoteWorkspaceUri` in `src/lib/remoteSsh.ts` builds the same string.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteEngine {
+    pub user: String,
+    pub host: String,
+    pub port: u16,
+    /// Remote binary: absolute, or `~/`-relative (the remote shell expands it).
+    pub muse: String,
+    /// Remote folder: the engine's working directory and the session's
+    /// `workspaceRoot`, a path on that host.
+    pub workspace: String,
 }
 
-/// Run one command on the remote host. Returns the bounded stdout/stderr and
-/// the exit code; a spawn failure or a timeout is an `Err`, everything the
-/// binary itself reports is a value.
-pub fn remote_ssh_exec(host: &str, port: u16, user: &str, identity_file: &str, command: &str, timeout_secs: Option<u64>) -> Result<Value, String> {
-    let timeout = timeout_secs.unwrap_or(EXEC_TIMEOUT_DEFAULT).clamp(EXEC_TIMEOUT_MIN, EXEC_TIMEOUT_MAX);
-    validate(host, port, user, identity_file, command)?;
-    let ssh = ssh_binary().ok_or_else(|| "no ssh binary found; install the system OpenSSH client".to_string())?;
-    let argv = ssh_argv(&ssh, host, port, user, identity_file, command);
-    let mut child = Command::new(&argv[0])
-        .args(&argv[1..])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("cannot start ssh: {error}"))?;
-    let started = std::time::Instant::now();
-    let deadline = Duration::from_secs(timeout);
-    let mut timed_out = false;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let mut stdout = String::new();
-                let mut stderr = String::new();
-                if let Some(mut out) = child.stdout.take() {
-                    let _ = std::io::Read::read_to_string(&mut out, &mut stdout);
-                }
-                if let Some(mut err) = child.stderr.take() {
-                    let _ = std::io::Read::read_to_string(&mut err, &mut stderr);
-                }
-                return Ok(json!({
-                    "exitCode": status.code(),
-                    "timedOut": false,
-                    "stdout": bounded(stdout),
-                    "stderr": bounded(stderr),
-                    "elapsedMs": started.elapsed().as_millis() as u64,
-                }));
-            }
-            Ok(None) if started.elapsed() >= deadline => {
-                timed_out = true;
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-            Err(error) => return Err(format!("ssh wait failed: {error}")),
+/// The remote engine a host key names; `None` for a local folder.
+pub fn remote_engine(root: &std::path::Path) -> Option<RemoteEngine> {
+    root.to_str().and_then(RemoteEngine::parse).and_then(Result::ok)
+}
+
+/// A remote path reaches the remote login shell (ssh joins the command words
+/// with spaces), so it must be one plain word: absolute, or `~/`-relative
+/// where `home` allows it, with no space, quote, `$` or other metacharacter.
+/// The same class keeps the `?` of the key unambiguous.
+fn remote_path(value: &str, home: bool) -> bool {
+    let rest = match (value.strip_prefix('/'), value.strip_prefix("~/")) {
+        (Some(rest), _) => rest,
+        (None, Some(rest)) if home => rest,
+        _ => return false,
+    };
+    value.len() <= 400
+        && rest
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'/' | b'-'))
+}
+
+impl RemoteEngine {
+    /// `None` when `raw` is not an `ssh://` key, `Some(Err)` when it is one
+    /// that does not validate: a remote key is never taken for a local path.
+    pub fn parse(raw: &str) -> Option<Result<Self, String>> {
+        let rest = raw.strip_prefix("ssh://")?;
+        Some(Self::parse_target(rest))
+    }
+
+    fn parse_target(rest: &str) -> Result<Self, String> {
+        let slash = rest.find('/').ok_or("the remote folder must be an absolute path")?;
+        let (authority, path) = rest.split_at(slash);
+        let (workspace, muse) = match path.split_once('?') {
+            None => (path, DEFAULT_REMOTE_MUSE),
+            Some((path, query)) => (path, query.strip_prefix("muse=").ok_or("unsupported remote option")?),
+        };
+        let (who, port) = match authority.rsplit_once(':') {
+            Some((who, port)) => (who, port.parse::<u16>().ok().filter(|p| *p != 0).ok_or("invalid ssh port")?),
+            None => (authority, 22),
+        };
+        let (user, host) = who.split_once('@').unwrap_or(("", who));
+        validate(host, port, user, muse)?;
+        if !remote_path(workspace, false) {
+            return Err("invalid remote folder".to_string());
         }
-        if timed_out {
-            return Ok(json!({
-                "exitCode": null,
-                "timedOut": true,
-                "stdout": "",
-                "stderr": "",
-                "elapsedMs": started.elapsed().as_millis() as u64,
-            }));
+        if !remote_path(muse, true) {
+            return Err("invalid remote Muse path".to_string());
         }
+        Ok(Self {
+            user: user.to_string(),
+            host: host.to_string(),
+            port,
+            muse: muse.to_string(),
+            workspace: workspace.to_string(),
+        })
+    }
+
+    fn destination(&self) -> String {
+        if self.user.is_empty() { self.host.clone() } else { format!("{}@{}", self.user, self.host) }
+    }
+
+    /// Whether a host-reported `workspaceRoot` is this folder. It does not
+    /// exist here, so it is compared as that host spells it.
+    pub fn names_workspace(&self, raw: &str) -> bool {
+        raw.trim_end_matches('/') == self.workspace.trim_end_matches('/')
+    }
+
+    /// The canonical key: the default binary is left implicit.
+    pub fn key(&self) -> String {
+        let mut key = format!("ssh://{}:{}{}", self.destination(), self.port, self.workspace);
+        if self.muse != DEFAULT_REMOTE_MUSE {
+            key.push_str("?muse=");
+            key.push_str(&self.muse);
+        }
+        key
+    }
+
+    /// `ssh -T -a -x … [user@]host -- cd <workspace> && exec env
+    /// MUSE_NO_AUTO_UPDATE=1 MUSE_LOGIN=0 <muse> serve <posture>`: no pty
+    /// (MSP is a byte stream), never a prompt, and what the local spawn does:
+    /// the folder as working directory (`current_dir`), the same posture.
+    /// The command line beats `~/.ssh/config`, so a host entry can neither
+    /// forward the user's agent, X11 or ports to the engine nor replace its
+    /// command (`RemoteCommand`). The local sidecar is a frozen binary; the
+    /// default remote one is the self-updating launcher, which must neither
+    /// update nor ask for a sign-in mid-handshake: the same two variables as
+    /// the startup probe (`startup.rs`).
+    fn serve_argv(&self, ssh: &PathBuf, posture: &[&str]) -> Vec<String> {
+        let command = ["cd", self.workspace.as_str(), "&&", "exec", "env", "MUSE_NO_AUTO_UPDATE=1", "MUSE_LOGIN=0", self.muse.as_str()]
+            .into_iter()
+            .chain(posture.iter().copied())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut argv = ssh_argv(ssh, &self.host, self.port, &self.user, &command);
+        argv.splice(
+            1..1,
+            [
+                "-T".to_string(),
+                "-a".to_string(),
+                "-x".to_string(),
+                "-o".to_string(),
+                "ClearAllForwardings=yes".to_string(),
+                "-o".to_string(),
+                "RemoteCommand=none".to_string(),
+                "-o".to_string(),
+                format!("ServerAliveInterval={SERVER_ALIVE_INTERVAL}"),
+                "-o".to_string(),
+                format!("ServerAliveCountMax={SERVER_ALIVE_COUNT_MAX}"),
+            ],
+        );
+        argv
+    }
+
+    pub fn serve_command(&self, posture: &[&str]) -> Result<Vec<String>, String> {
+        let ssh = ssh_binary().ok_or_else(|| "no ssh binary found; install the system OpenSSH client".to_string())?;
+        Ok(self.serve_argv(&ssh, posture))
+    }
+
+    /// One actionable sentence for what ssh (or the remote shell) said on
+    /// stderr when the host ended before replying (`error` is the handshake
+    /// error); `None` when the host did reply, or nothing is recognizable,
+    /// and `error` with the raw tail must do. Stderr also carries noise from
+    /// sessions that worked: a missing `IdentityFile`, a `.bashrc` line.
+    pub fn explain_failure(&self, error: &str, stderr: &str) -> Option<String> {
+        if error != "sidecar dropped the response" && !error.starts_with("sidecar write failed") {
+            return None;
+        }
+        let at = format!("{}:{}", self.host, self.port);
+        let said = stderr.to_ascii_lowercase();
+        if said.contains("host key verification failed") {
+            let port = if self.port == 22 { String::new() } else { format!("-p {} ", self.port) };
+            return Some(format!(
+                "The host key of {at} is not trusted yet, or it changed. Check it once from a terminal: ssh {port}{}",
+                self.destination()
+            ));
+        }
+        if said.contains("permission denied (") {
+            return Some(format!(
+                "{} refused the ssh authentication. Load a key into your ssh agent: the desktop never asks for a password.",
+                self.destination()
+            ));
+        }
+        if said.contains("connection refused") {
+            return Some(format!("{at} refused the connection. Check that an ssh server listens on that port."));
+        }
+        if said.contains("could not resolve hostname") {
+            return Some(format!("{} could not be resolved.", self.host));
+        }
+        if said.contains("timed out") {
+            return Some(format!("{at} did not answer within {CONNECT_TIMEOUT} s."));
+        }
+        // The stderr tail joins its lines with ` | ` (`tail_of`).
+        let lines = || said.split(" | ").flat_map(str::lines);
+        // Every shell says `cd:` on the line naming the folder it could not
+        // enter. Checked before Muse: that line also says "no such file".
+        let folder = self.workspace.to_ascii_lowercase();
+        if lines().any(|line| line.contains("cd:") && line.contains(&folder)) {
+            return Some(format!(
+                "The folder {} was not found on {}, or cannot be opened there. Change the remote folder in Settings.",
+                self.workspace, self.host
+            ));
+        }
+        // The remote shell names the binary as it expanded it: `~/x` → `/home/u/x`.
+        let muse = self.muse.strip_prefix('~').unwrap_or(&self.muse).to_ascii_lowercase();
+        if lines().any(|line| line.contains(&muse) && (line.contains("not found") || line.contains("no such file"))) {
+            return Some(format!(
+                "Muse was not found at {} on {}. Install it there, or change the remote Muse path in Settings.",
+                self.muse, self.host
+            ));
+        }
+        None
     }
 }
 
@@ -200,22 +321,23 @@ pub fn remote_ssh_exec(host: &str, port: u16, user: &str, identity_file: &str, c
 mod tests {
     use super::*;
 
+    /// The handshake error of a host that ended before replying.
+    const DIED: &str = "sidecar dropped the response";
+
     #[test]
     fn the_gate_refuses_what_argv_cannot_carry() {
-        assert!(validate("example.com", 22, "", "", "uptime").is_ok());
-        assert!(validate("bad host", 22, "", "", "uptime").is_err(), "space is not a host character");
-        assert!(validate("-leading-dash", 22, "", "", "uptime").is_err(), "an option-shaped host is refused");
-        assert!(validate("example.com", 22, "bad user", "", "uptime").is_err());
-        assert!(validate("example.com", 22, "", "C:\\keys\\id_ed25519", "uptime").is_ok());
-        assert!(validate("example.com", 22, "", "bad\npath", "uptime").is_err());
-        assert!(validate("example.com", 22, "", "", "").is_err(), "an empty command is refused");
-        assert!(validate("example.com", 22, "", "", &"x".repeat(8_001)).is_err());
+        assert!(validate("example.com", 22, "", "uptime").is_ok());
+        assert!(validate("bad host", 22, "", "uptime").is_err(), "space is not a host character");
+        assert!(validate("-leading-dash", 22, "", "uptime").is_err(), "an option-shaped host is refused");
+        assert!(validate("example.com", 22, "bad user", "uptime").is_err());
+        assert!(validate("example.com", 22, "", "").is_err(), "an empty command is refused");
+        assert!(validate("example.com", 22, "", &"x".repeat(8_001)).is_err());
     }
 
     #[test]
     fn the_argv_carries_the_command_after_a_literal_separator() {
         let ssh = PathBuf::from("C:\\Windows\\System32\\OpenSSH\\ssh.exe");
-        let argv = ssh_argv(&ssh, "example.com", 22, "", "", "uptime");
+        let argv = ssh_argv(&ssh, "example.com", 22, "", "uptime");
         assert_eq!(
             argv,
             vec![
@@ -231,10 +353,114 @@ mod tests {
         );
         // A dash-leading remote command still lands after `--`: it is a
         // positional, not an option of ssh.
-        let sneaky = ssh_argv(&ssh, "example.com", 2222, "ops", "C:\\keys\\id", "-oProxyCommand=evil");
+        let sneaky = ssh_argv(&ssh, "example.com", 2222, "ops", "-oProxyCommand=evil");
         assert_eq!(&sneaky[sneaky.len() - 2], "--");
         assert_eq!(&sneaky[sneaky.len() - 1], "-oProxyCommand=evil");
         assert!(sneaky.contains(&"2222".to_string()));
+    }
+
+    #[test]
+    fn one_char_and_multibyte_hosts_do_not_panic() {
+        assert!(validate("a", 22, "", "uptime").is_ok());
+        assert!(validate("-", 22, "", "uptime").is_err());
+        assert!(validate("é", 22, "", "uptime").is_err());
+    }
+
+    #[test]
+    fn a_remote_key_round_trips_and_never_names_a_local_folder() {
+        assert!(RemoteEngine::parse("C:\\work\\proj").is_none());
+        assert!(RemoteEngine::parse("/home/ops/proj").is_none());
+        let remote = RemoteEngine::parse("ssh://ops@127.0.0.1:2222/home/ops/proj").unwrap().unwrap();
+        assert_eq!(
+            (remote.user.as_str(), remote.host.as_str(), remote.port, remote.muse.as_str(), remote.workspace.as_str()),
+            ("ops", "127.0.0.1", 2222, DEFAULT_REMOTE_MUSE, "/home/ops/proj")
+        );
+        // The same strings as `remoteWorkspaceUri` in test/remoteSsh.test.ts.
+        assert_eq!(remote.key(), "ssh://ops@127.0.0.1:2222/home/ops/proj");
+        let custom = RemoteEngine::parse("ssh://box/srv/app?muse=/opt/muse/bin/muse").unwrap().unwrap();
+        assert_eq!(custom.key(), "ssh://box:22/srv/app?muse=/opt/muse/bin/muse");
+        assert_eq!(remote_engine(std::path::Path::new(&remote.key())), Some(remote));
+    }
+
+    #[test]
+    fn hostile_remote_keys_are_refused() {
+        for raw in [
+            "ssh://-oProxyCommand=evil:22/srv",
+            "ssh://-Elog@box:22/srv",
+            "ssh://ops@box:0/srv",
+            "ssh://ops@box:99999/srv",
+            "ssh://ops@box:22",
+            "ssh://ops@box:22/srv/a b",
+            "ssh://ops@box:22/srv;reboot",
+            "ssh://ops@box:22/srv?muse=$(reboot)",
+            "ssh://ops@box:22/srv?muse=muse;reboot",
+            "ssh://ops@box:22/srv?muse=relative/muse",
+            "ssh://ops@box:22/srv?proxy=evil",
+        ] {
+            assert!(matches!(RemoteEngine::parse(raw), Some(Err(_))), "{raw}");
+        }
+    }
+
+    #[test]
+    fn the_serve_argv_is_the_local_posture_after_the_separator() {
+        let remote = RemoteEngine::parse("ssh://ops@127.0.0.1:2222/home/ops/proj").unwrap().unwrap();
+        let argv = remote.serve_argv(&PathBuf::from("/usr/bin/ssh"), &["serve", "--sandbox-network", "restricted", "--trust-workspace"]);
+        // `-a -x ClearAllForwardings RemoteCommand=none`: a `~/.ssh/config`
+        // host entry cannot forward the agent, X11 or ports, nor replace the
+        // command (`ssh -G` resolves the command line first). The engine
+        // starts in the folder, as the local sidecar does.
+        assert_eq!(
+            argv,
+            [
+                "/usr/bin/ssh", "-T", "-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "RemoteCommand=none",
+                "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
+                "-p", "2222", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "ops@127.0.0.1", "--",
+                "cd /home/ops/proj && exec env MUSE_NO_AUTO_UPDATE=1 MUSE_LOGIN=0 ~/.local/bin/muse serve --sandbox-network restricted --trust-workspace",
+            ]
+            .map(String::from)
+        );
+    }
+
+    #[test]
+    fn ssh_failures_become_one_actionable_sentence() {
+        let remote = RemoteEngine::parse("ssh://ops@127.0.0.1:2222/home/ops/proj").unwrap().unwrap();
+        let host_key = remote
+            .explain_failure(DIED, "No ED25519 host key is known for [127.0.0.1]:2222 and you have requested strict checking.\nHost key verification failed.")
+            .unwrap();
+        assert!(host_key.ends_with("ssh -p 2222 ops@127.0.0.1"), "{host_key}");
+        assert!(remote.explain_failure(DIED, "ops@127.0.0.1: Permission denied (publickey).").unwrap().contains("ssh agent"));
+        assert!(remote.explain_failure(DIED, "ssh: connect to host 127.0.0.1 port 2222: Connection refused").unwrap().contains("refused the connection"));
+        assert!(remote.explain_failure(DIED, "sh: 1: /home/ops/.local/bin/muse: not found").unwrap().starts_with("Muse was not found"));
+        // What `env` says when the binary it should run is missing.
+        assert!(remote
+            .explain_failure(DIED, "env: '/home/ops/.local/bin/muse': No such file or directory")
+            .unwrap()
+            .starts_with("Muse was not found"));
+        // A missing folder, as bash, dash and zsh say it.
+        for said in [
+            "bash: line 1: cd: /home/ops/proj: No such file or directory",
+            "sh: 1: cd: can't cd to /home/ops/proj",
+            "zsh:cd:1: no such file or directory: /home/ops/proj",
+        ] {
+            let folder = remote.explain_failure(DIED, said).unwrap();
+            assert!(folder.starts_with("The folder /home/ops/proj was not found on 127.0.0.1"), "{folder}");
+        }
+        // The production tail: one line per stderr line, joined by ` | `. A
+        // `.bashrc` cd error and a Muse line naming the folder are not one line.
+        assert_eq!(
+            remote.explain_failure(DIED, "bash: line 3: cd: /old: No such file or directory | error: cannot trust /home/ops/proj"),
+            None
+        );
+        assert_eq!(remote.explain_failure(DIED, "thread 'main' panicked"), None);
+    }
+
+    #[test]
+    fn stderr_noise_never_hides_the_real_handshake_error() {
+        let remote = RemoteEngine::parse("ssh://ops@127.0.0.1:2222/home/ops/proj").unwrap().unwrap();
+        let noise = "no such identity: /home/me/.ssh/id_x: No such file or directory
+bash: rbenv: command not found";
+        assert_eq!(remote.explain_failure("incompatible Muse host: unsupported MSP schema version", noise), None);
+        assert_eq!(remote.explain_failure(DIED, noise), None);
     }
 
     #[cfg(windows)]

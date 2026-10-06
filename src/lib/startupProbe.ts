@@ -1,5 +1,7 @@
 /** Shared first-launch prerequisite types and presentation helpers. */
 
+import { safeSlice } from "./diagnostics.ts";
+
 export interface StartupCheck {
   status: "ready" | "missing" | "blocked" | "unknown";
   detail: string;
@@ -31,12 +33,13 @@ export function sanitizeStartupText(value: string, maxChars = 240): string {
   const normalized = nulCount >= 2 && nulCount * 4 >= raw.length
     ? raw.replace(/\u0000/g, "")
     : raw;
-  return Array.from(normalized)
+  const cleaned = Array.from(normalized)
     .map((character) => (INVISIBLE_STARTUP_MARKERS.test(character) ? " " : character))
     .join("")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxChars);
+    .trim();
+  // M0-07: a plain slice split an emoji at the bound into a lone surrogate.
+  return safeSlice(cleaned, maxChars);
 }
 
 /** Stable text for the check state; colour remains a secondary cue. */

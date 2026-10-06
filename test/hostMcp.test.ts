@@ -1,6 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildHostMcpServers, tokenizeMcpCommand } from "../src/lib/hostMcp.ts";
+import {
+  buildHostMcpServers,
+  conversationsHoldingRemote,
+  heldBearerLine,
+  heldBearerNotice,
+  hostMcpConfig,
+  tokenizeMcpCommand,
+} from "../src/lib/hostMcp.ts";
 import type { ConnectorEntry } from "../src/lib/connectors.ts";
 
 const local = (overrides: Partial<ConnectorEntry> = {}): ConnectorEntry => ({
@@ -90,5 +97,25 @@ describe("host MCP session configuration", () => {
       mode: "optional",
     }]);
     assert.deepEqual(buildHostMcpServers([remote]), []);
+  });
+
+  // M3-02 proof (06/10/2026) and check (F2): Forget token left the bearer with
+  // every conversation already started with Use in Muse, and said nothing.
+  it("knows which open conversations were handed a remote's bearer, and tells them", () => {
+    const remote = local({ id: "remote-test", name: "Acme", kind: "remote", command: undefined, url: "https://mcp.example.test/mcp" });
+    const session = { url: "https://mcp.example.test/mcp", token: "t", sessionId: null, protocolVersion: "2025-06-18", nextRequestId: 3 };
+    assert.deepEqual(hostMcpConfig([local(), remote], { "remote-test": session }).remoteIds, ["remote-test"]);
+    assert.deepEqual(hostMcpConfig([local(), remote], {}).remoteIds, [], "not connected: nothing handed");
+    assert.deepEqual(hostMcpConfig([{ ...remote, useInMuse: false }], { "remote-test": session }).remoteIds, []);
+
+    const handed = { a: ["remote-test"], b: ["remote-test"], c: [] };
+    assert.deepEqual(conversationsHoldingRemote(handed, ["a", "c"], "remote-test"), ["a"], "b is no longer open");
+    const line = heldBearerLine("Acme", "its token was forgotten");
+    assert.match(line, /^Acme: its token was forgotten in Extensions, but this conversation's Muse host still has its token/);
+    assert.match(line, /until you use "Reconnect with current connectors" or close the conversation/);
+    assert.match(line, /a tool already allowed here keeps working without asking/);
+    assert.equal(heldBearerNotice(0), null);
+    assert.match(heldBearerNotice(1) ?? "", /^1 open conversation still has its token: it keeps using it until/);
+    assert.match(heldBearerNotice(2) ?? "", /^2 open conversations still have its token: they keep using it/);
   });
 });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   MSP_ERROR_APPROVAL_REQUIREMENT_STALE,
+  MSP_ERROR_SESSION_NOT_LOADED,
   MSP_ERROR_USER_INPUT_ANSWER_INVALID,
   MSP_METHODS_SENT,
   MSP_NOTIFICATIONS_HANDLED,
@@ -62,6 +63,18 @@ describe("msp conformance surface", () => {
     }
   });
 
+  it("registers every RPC the Rust bridge sends (a new request must join the registry)", () => {
+    const main = readFileSync(new URL("../src-tauri/src/main.rs", import.meta.url), "utf8");
+    const sent = [...main.matchAll(/\.request\(\s*"([^"]+)"/g)].map((match) => match[1]);
+    assert.ok(sent.length > 10, "the scan found the bridge's requests");
+    for (const method of sent) {
+      assert.ok(
+        (MSP_METHODS_SENT as readonly string[]).includes(method),
+        `sent but not registered: ${method}`,
+      );
+    }
+  });
+
   it("handles a fixed set of SDK-known notifications, no duplicates", () => {
     assert.ok(MSP_NOTIFICATIONS_HANDLED.length > 0);
     assert.ok(unique(MSP_NOTIFICATIONS_HANDLED));
@@ -84,5 +97,6 @@ describe("msp conformance surface", () => {
   it("pins the interpreted host error codes", () => {
     assert.equal(MSP_ERROR_APPROVAL_REQUIREMENT_STALE, -32053);
     assert.equal(MSP_ERROR_USER_INPUT_ANSWER_INVALID, -32057);
+    assert.equal(MSP_ERROR_SESSION_NOT_LOADED, -32024);
   });
 });

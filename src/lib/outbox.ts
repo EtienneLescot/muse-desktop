@@ -10,8 +10,11 @@
  * an entry must verify the server conversation by identifier before retransmitting, so
  * one logical send can never become two accepted turns.
  *
- * Pure and dependency-free, unit-tested in test/outbox.test.ts.
+ * Pure (its only import is the diagnostics redaction), unit-tested in
+ * test/outbox.test.ts.
  */
+
+import { redactDiagnostic } from "./diagnostics.ts";
 
 export type OutboxState = "sending" | "accepted" | "failed";
 
@@ -92,17 +95,24 @@ export interface SendResult {
   clientMessageId: string | null;
   /** Failure reason; null on success. */
   error: string | null;
+  /** Host turn named by the admission ack, when the host reports one. */
+  turnId?: string;
 }
 
-export function sendAccepted(clientMessageId: string): SendResult {
-  return { ok: true, clientMessageId, error: null };
+export function sendAccepted(clientMessageId: string, turnId?: string): SendResult {
+  return { ok: true, clientMessageId, error: null, ...(turnId ? { turnId } : {}) };
 }
 
+/**
+ * M0-07: a failure reason can carry the engine's own error text, which is
+ * unbounded and may hold a credential. It reaches the composer, the run ledger
+ * and the stored outbox, so it leaves here bounded, code-point safe and masked.
+ */
 export function sendFailed(
   clientMessageId: string | null,
   error: string,
 ): SendResult {
-  return { ok: false, clientMessageId, error };
+  return { ok: false, clientMessageId, error: redactDiagnostic(error) ?? error };
 }
 
 export function createOutboxEntry(init: {
@@ -169,7 +179,8 @@ export function markFailed(
   now: number,
   ambiguous: boolean,
 ): OutboxEntry {
-  return { ...entry, state: "failed", error, ambiguous, updatedAt: now };
+  // M0-07: stored (localStorage and the native mirror) and shown on the unsent row.
+  return { ...entry, state: "failed", error: redactDiagnostic(error) ?? error, ambiguous, updatedAt: now };
 }
 
 /** Insert or replace by clientMessageId (newest last). */

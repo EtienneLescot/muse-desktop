@@ -6,9 +6,9 @@
  *   2. project posture switch (workspace) + "Restart workspace host" -> the
  *      respawned host carries `--sandbox-network restricted`;
  *   3. posture raised to elevated while the host runs workspace -> a new
- *      conversation in the same project hits the explicit refusal
- *      ("workspace host already uses sandbox posture workspace; request a
- *      restart") with the Restart action;
+ *      conversation in the same project hits the explicit refusal ("This
+ *      folder's engine is running with Workspace only; restart it to apply
+ *      Elevated access.") with the Restart action;
  *   4. after the restart the host runs `--disable-sandbox --sandbox-network
  *      enabled`;
  *   5. durability: `taskkill /F` the host, resume the conversation -> the
@@ -207,7 +207,7 @@ await evaluate(`document.querySelector("button.welcome-send")?.click()`);
 await sleep(6000);
 const refusal = await evaluate(`(() => {
   const text = (document.body.innerText || "");
-  const m = text.match(/workspace host already uses sandbox posture[^\\n]*/i);
+  const m = text.match(/This folder's engine is running with[^\\n]*/i);
   return { found: !!m, message: m ? m[0].slice(0, 140) : null, restartOffered: /Restart workspace host/i.test(text) };
 })()`);
 step("refusal-on-posture-switch", refusal);

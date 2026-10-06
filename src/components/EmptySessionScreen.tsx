@@ -13,6 +13,7 @@ import {
 import { AuthorizationModeControl } from "./AuthorizationModeControl";
 import { userFacingError } from "../lib/errorCopy";
 import { displayPath } from "../lib/paths";
+import { isRemoteWorkspace } from "../lib/remoteSsh";
 import {
   buildTurnInputParts,
   maxAttachmentsFor,
@@ -101,7 +102,15 @@ export function EmptySessionScreen({
   }, [draft]);
   const [starting, setStarting] = useState(false);
   const startAttempted = useRef(false);
-  const [worktree, setWorktree] = useState(false);
+  // Where the conversation runs is kept with the draft: a failed start
+  // remounts this screen, and the choice used to fall back to the default
+  // folder while the draft stayed, so a retry ran elsewhere (M2-01, 05/10/2026).
+  const welcomeEnvironmentKey = "muse-desktop.welcome-environment";
+  const welcomeWorktreeKey = "muse-desktop.welcome-worktree";
+  const [worktree, setWorktree] = useState(() => readSessionStorageString(welcomeWorktreeKey) === "1");
+  useEffect(() => {
+    writeSessionStorageString(welcomeWorktreeKey, worktree ? "1" : "");
+  }, [worktree]);
   const [initialAttachmentDraft] = useState(() => loadAttachmentDraft("welcome"));
   const [attachments, setAttachments] = useState<ComposerAttachment[]>(
     initialAttachmentDraft.attachments,
@@ -116,11 +125,18 @@ export function EmptySessionScreen({
   useEffect(() => {
     saveAttachmentDraft("welcome", attachments);
   }, [attachments]);
-  const [environmentId, setEnvironmentId] = useState("default");
+  const [environmentId, setEnvironmentId] = useState(
+    () => readSessionStorageString(welcomeEnvironmentKey) || "default",
+  );
+  useEffect(() => {
+    writeSessionStorageString(welcomeEnvironmentKey, environmentId);
+  }, [environmentId]);
   const selectedEnvironment = environmentOptions.find(
     (option) => option.optionId === environmentId,
   );
   const selectedWorkspace = selectedEnvironment?.workspace ?? workspace;
+  // A worktree is a local git copy; a remote folder (M4-07) has none.
+  const worktreeAvailable = selectedWorkspace !== null && !isRemoteWorkspace(selectedWorkspace);
   // Computed as a set: a folder is appended only where it distinguishes the row.
   const projectLabels = projectOptionLabels(environmentOptions);
   useEffect(() => {
@@ -192,7 +208,7 @@ export function EmptySessionScreen({
           // The choice is made here, before the conversation exists: starting in
           // a worktree is a decision about the next conversation, not a move of
           // an existing one.
-          worktree,
+          worktree: worktree && worktreeAvailable,
         },
       );
       if (sent) {
@@ -200,6 +216,8 @@ export function EmptySessionScreen({
         // in the next conversation's composer and was sent twice.
         setDraft("");
         removeSessionStorageKey(welcomeDraftKey);
+        removeSessionStorageKey(welcomeEnvironmentKey);
+        removeSessionStorageKey(welcomeWorktreeKey);
         setAttachments([]);
       }
     } finally {
@@ -256,7 +274,7 @@ export function EmptySessionScreen({
             role="switch"
             checked={worktree}
             onChange={(event) => setWorktree(event.target.checked)}
-            disabled={selectedWorkspace === null}
+            disabled={!worktreeAvailable}
           />
           <span>Worktree</span>
         </label>
@@ -264,7 +282,7 @@ export function EmptySessionScreen({
       <p className="welcome-project-note">
         {selectedWorkspace === null
           ? "Choose a project folder: a project is a folder, and its name comes from it."
-          : worktree
+          : worktree && worktreeAvailable
             ? `Runs in a copy of ${folderName(selectedWorkspace)} on a new branch, leaving it untouched.`
             : selectedEnvironment
               ? `Runs in ${folderName(selectedEnvironment.workspace)}. The agent reads the rules of that folder.`

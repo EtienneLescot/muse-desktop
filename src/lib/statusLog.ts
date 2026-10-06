@@ -9,6 +9,10 @@ export function statusLogText(kind: string, _payload = ""): string | null {
   switch (kind) {
     case "host_exited":
       return "Muse stopped because the host process ended. Reconnect to continue.";
+    case "approval_cancelled_by_restart":
+      return "Approval cancelled: Muse closed before you answered, so the action did not run.";
+    case "input_cancelled_by_restart":
+      return "Input cancelled: Muse closed before you answered.";
     case "turn/retracted":
       return "Muse retracted the last turn.";
     case "turn/retryScheduled":
@@ -20,4 +24,24 @@ export function statusLogText(kind: string, _payload = ""): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * M0-05: an exited host takes its open approvals and questions with it, so
+ * the cards of its session go and the transcript says what was cancelled,
+ * as after an app restart. One notice per kind of card the session had open.
+ */
+export function hostExitNotices(
+  sessionId: string,
+  approvals: readonly { session_id: string }[],
+  inputs: readonly { session_id: string }[],
+): string[] {
+  const notices: string[] = [];
+  if (approvals.some((a) => a.session_id === sessionId)) {
+    notices.push("Approval cancelled: Muse stopped before you answered, so the action did not run.");
+  }
+  if (inputs.some((r) => r.session_id === sessionId)) {
+    notices.push("Input cancelled: Muse stopped before you answered.");
+  }
+  return notices;
 }

@@ -428,7 +428,6 @@ small {
 
 /* Visible focus on decision controls, reusing the existing blue token. */
 .approval-actions button:focus-visible,
-.allowlist-row button:focus-visible,
 .session-sidebar button:focus-visible,
 .composer-actions button:focus-visible,
 .mention-chip-remove:focus-visible {
@@ -914,6 +913,10 @@ body.dark .avatar {
   content-visibility: auto;
   contain: layout paint style;
   contain-intrinsic-size: 0 112px;
+  /* A skipped entry has no content height left to hold it: as an item of the
+     stream's flex column it shrank to its padding (8 px measured), then grew
+     back once in view, so End and "Latest messages" stopped short of the end. */
+  flex-shrink: 0;
 }
 
 .msg .role {
@@ -943,6 +946,9 @@ body.dark .avatar {
   align-items: center;
   gap: 10px;
   min-height: 20px;
+  /* Chrome, not message text: a drag across two entries copied the first
+     one's timestamp, which the desktop layout hides until hover. */
+  user-select: none;
 }
 
 .msg-fork {
@@ -1105,6 +1111,12 @@ body.dark .avatar {
   border-radius: 999px;
   color: var(--muted);
   font-family: var(--font-code);
+  font-size: 0.72rem;
+}
+
+/* M0-13: a tool call or command the host refused. */
+.tool-failed {
+  color: var(--danger);
   font-size: 0.72rem;
 }
 
@@ -1661,10 +1673,6 @@ body.dark .avatar {
   box-shadow: 0 4px 16px #233f6409;
 }
 
-.approval[data-decision="forbidden"] {
-  border-left-color: var(--danger);
-}
-
 .approval-text {
   min-width: 0;
 }
@@ -1690,13 +1698,11 @@ body.dark .avatar {
   list-style: none;
 }
 
-.approval-details summary::-webkit-details-marker,
-.allowlist-title::-webkit-details-marker {
+.approval-details summary::-webkit-details-marker {
   display: none;
 }
 
-.approval-details summary::before,
-.allowlist-title::before {
+.approval-details summary::before {
   content: "›";
   display: inline-block;
   color: var(--blue);
@@ -1705,8 +1711,7 @@ body.dark .avatar {
   transition: transform 0.15s ease;
 }
 
-.approval-details[open] summary::before,
-.allowlist[open] .allowlist-title::before {
+.approval-details[open] summary::before {
   transform: rotate(90deg);
 }
 
@@ -1871,99 +1876,10 @@ body.dark .approval-actions .deny {
   background: var(--bg);
 }
 
-/* ---- US-15 allowlist badges + rules ---- */
-
-.rule-badge {
-  display: inline-block;
-  font-size: 0.78rem;
-  font-weight: 600;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 6px;
-  white-space: nowrap;
-}
-
-.rule-allow {
-  color: var(--green);
-  border-color: var(--green);
-}
-
-.rule-prompt {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.rule-forbidden {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-
 .approval-scope {
   font-size: 0.78rem;
   margin-top: 2px;
   word-break: break-word;
-}
-
-.approval-actions .remember {
-  border: 1px solid var(--line);
-  color: var(--text);
-  background: transparent;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.allowlist {
-  border-top: 1px solid var(--line);
-  padding-top: 9px;
-}
-
-.allowlist-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.78rem;
-  list-style: none;
-}
-
-.allowlist-rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.allowlist-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.allowlist-pattern {
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 0.85rem;
-  background: var(--code-bg);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 6px;
-}
-
-.allowlist-scope {
-  font-size: 0.78rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-.allowlist-revoke {
-  margin-left: auto;
-  flex-shrink: 0;
 }
 
 /* ---- Composer ---- */
@@ -3488,22 +3404,6 @@ body.dark .composer textarea::placeholder {
   background: var(--bg);
   border-radius: 10px;
   padding: 5px 9px;
-}
-
-.project-global {
-  border-top: 1px solid var(--line);
-  padding-top: 6px;
-}
-
-.project-global summary {
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.project-global .project-settings {
-  border-top: none;
-  margin-top: 6px;
 }
 
 .project-diff {
@@ -5941,6 +5841,15 @@ body.dark .composer textarea::placeholder {
    signal, since the same paragraph also carries the word "priority". */
 .settings-note-warning {
   color: var(--warning, #d89024);
+}
+
+/* M0-13: above the composer, what a Read only project's engine refuses. */
+.posture-note {
+  margin: 0 0 6px;
+}
+
+.posture-restart {
+  margin-left: 8px;
 }
 
 .notification-show-more {

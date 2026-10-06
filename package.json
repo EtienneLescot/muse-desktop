@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "test": "node --experimental-strip-types --test --test-concurrency=1 \"test/**/*.test.ts\"",
     "smoke:native": "node scripts/native-smoke.mjs",
+    "e2e:fixture": "node scripts/e2e-fixture.mjs",
     "build:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1",
     "build:macos": "sh scripts/build-macos.sh",
     "release:update": "node scripts/release-update.mjs",

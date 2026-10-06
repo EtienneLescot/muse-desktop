@@ -78,6 +78,11 @@ test("startup probe display text removes invisible and replacement characters", 
   assert.equal(startupProbeRows(probe)[0]?.check.detail, "WSL output");
 });
 
+test("M0-07: startup text never ends on half of an emoji split by the bound", () => {
+  assert.equal(sanitizeStartupText(`${"x".repeat(3_999)}😀tail`, 4_000), "x".repeat(3_999));
+  assert.equal(sanitizeStartupText(`${"x".repeat(3_998)}😀tail`, 4_000), `${"x".repeat(3_998)}😀`);
+});
+
 test("startup probe display text repairs legacy interleaved UTF-16 NULs", () => {
   assert.equal(
     sanitizeStartupText("D\u0000e\u0000f\u0000a\u0000u\u0000l\u0000t\u0000: Ubuntu"),

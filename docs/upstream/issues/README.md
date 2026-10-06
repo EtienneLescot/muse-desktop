@@ -101,3 +101,73 @@ clients can only show a recovery message.
       stop-during-tool and the M1-06 "Run in Muse" flows (#57), and
       **M1-09's fork creation** (#55 — re-run
       `scripts/cdp-m1-files-fork.mjs` and the direct `fork_session` probe).
+
+## Follow-up of 5 October 2026 (host 1.4.2-R4684.1)
+
+The maintainer answered on 01–02/10 and asked for a 1.4.2 re-test of #56. The re-tests were posted
+on 05/10, with Étienne's approval. The measurements are in
+[`docs/evidence/2026-10-05-roadmap-closure/`](../../evidence/2026-10-05-roadmap-closure/).
+
+- **#56, approvals: answered** ([comment](https://github.com/meta-models/muse-code-sdk/issues/56#issuecomment-5999607360)).
+  - The host raises approvals for a dynamic-argv write command in both `onRequest` and
+    `promptUnmatched`.
+  - The two-stage decide works, and so do abort, stale (`-32053`) and already-resolved (`-32051`).
+  - The 1.3.0 "ceiling" reading had two causes: the probes asked for `echo`, which `onRequest`
+    runs without asking, and a live-delivery bug that the maintainer says was fixed in 1.4.0.
+    File 1 above is superseded.
+  - **Closed by the maintainer on 05/10** ([comment](https://github.com/meta-models/muse-code-sdk/issues/56#issuecomment-6003421351)):
+    fixed in 1.4.0 and later, no SDK update needed. Reopen with the version and steps if it
+    comes back on 1.4.2 or later.
+- **#55, fork: commented** ([comment](https://github.com/meta-models/muse-code-sdk/issues/55#issuecomment-5999607722)).
+  - The defect is still present on 1.4.2 native Windows with the echo provider: `InvalidCut` with
+    a cut point, `WriteFailed` without.
+  - It is the same defect as [#31](https://github.com/meta-models/muse-code-sdk/issues/31), which
+    the maintainer confirmed on 01/10.
+  - The sub-agent-lane correlation of File 3 does not hold.
+- **#88, new issue: the sandboxed shell starts in a verbatim location** ([#88](https://github.com/meta-models/muse-code-sdk/issues/88)).
+  - Under `--sandbox-network restricted` on 1.4.2, the model's PowerShell starts in
+    `Microsoft.PowerShell.Core\FileSystem::\\?\G:\…`, so cmdlets with relative paths fail.
+  - Absolute paths, `write_file` and `--disable-sandbox` work.
+  - Related: #26, the shell starting in `System32` for workspaces under the profile.
+## Follow-up of 6 October 2026
+
+Étienne asked for the relevant findings to be posted in his name.
+
+- **#57, powershell hangs under the sandbox: commented** ([comment](https://github.com/meta-models/muse-code-sdk/issues/57#issuecomment-6012103614)).
+  The 1.3.0 hang does not reproduce on 1.4.2: more than 25 live turns with the sandboxed
+  `powershell` tool all reached `turn/completed`. The comment says it can be closed.
+- **#91, new issue: HTTPS fails under `--sandbox-network enabled`** ([#91](https://github.com/meta-models/muse-code-sdk/issues/91)).
+  - Schannel has no credentials for the sandbox account (`muse-sbx-u1`,
+    `SEC_E_NO_CREDENTIALS 0x8009030E`), for `Invoke-WebRequest` and `curl.exe` alike.
+  - DNS, raw TCP and plain HTTP work, and the same probe outside the sandbox passes.
+  - Measured on 06/10 in [m0-06-junction-network-1.4.2.json](../../evidence/2026-10-05-roadmap-closure/m0-06-junction-network-1.4.2.json).
+    The 05/10 reading, "no network at all", is superseded.
+- **#92, new issue: a question orphaned by a lost engine** ([#92](https://github.com/meta-models/muse-code-sdk/issues/92)).
+  - A `request_user_input` question from a turn lost with its engine stays in
+    `approval/listPending` and is re-sent after `session/resume`, which reports the session idle.
+  - Every answer is refused with `-32057`. The client filters questions on
+    `session/read.activeTurnId` meanwhile (9771bdb).
+  - Recorded in [m0-05-questions.json](../../evidence/2026-10-05-roadmap-closure/m0-05-questions.json),
+    phase `msp-orphan-head`.
+- **#93, new issue: `userShell` granted under `--disable-shell`** ([#93](https://github.com/meta-models/muse-code-sdk/issues/93)).
+  - Started with `--disable-write --disable-shell`, the host still grants `userShell` and
+    `sessionMcp` at `initialize`.
+  - `session/userShell` is accepted, then its item fails with "tool policy denied shell
+    execution". The client now disables "Run in Muse" for a read-only project itself.
+  - The issue also asks whether `sessionMcp` should be granted under `--disable-write`.
+  - Recorded in [m0-13-click-effect-isolated.json](../../evidence/2026-10-05-roadmap-closure/m0-13-click-effect-isolated.json)
+    (M0-13 proof, 06/10).
+- **#94, new issue: records lost when a host is killed** ([#94](https://github.com/meta-models/muse-code-sdk/issues/94)).
+  - A host killed 1.5 s after reporting a record had not yet written it to the session journal in
+    2 of 3 runs. It lost the record.
+  - At the next resume the view store was ahead of the journal, and the session view became
+    `unavailable`.
+  - From then on the host sent no `item/*` event for that session: the conversation is silent, and
+    a client has no way to detect it.
+  - Closing stdin instead lets the host write the record and `session_end`, then exit in 78 to
+    90 ms (3 of 3). The app now stops hosts that way (ed1e03d), but it cannot prevent a crash.
+  - Measured on 06/10 in [m0-13-msp-host-stop-1.4.2.json](../../evidence/2026-10-05-roadmap-closure/m0-13-msp-host-stop-1.4.2.json).
+  - It supersedes the unposted "draft 2" note: a conversation resumed about 1 s after its engine
+    was killed had stopped publishing events, seen once. #94 is the raw MSP re-run that note
+    asked for.
+- **Not posted:** French-locale PowerShell output is mis-decoded. It is a side note in #88.

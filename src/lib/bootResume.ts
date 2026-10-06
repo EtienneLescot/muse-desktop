@@ -43,6 +43,19 @@ function isResumeEligible(
   return true;
 }
 
+/**
+ * The restored conversations that count as connected. After a window reload
+ * the live hosts list every conversation they can read, loaded or not, and
+ * one they have not loaded refuses session commands (-32024 on
+ * setApprovalMode, M0-06). Only a loaded one is connected; resume-on-open
+ * loads the others. No status (older host) keeps the old behaviour.
+ */
+export function connectedRestoredIds(
+  restored: readonly { session_id: string; loaded?: boolean }[],
+): string[] {
+  return restored.filter((meta) => meta.loaded !== false).map((meta) => meta.session_id);
+}
+
 /** The open conversation, when it still needs a silent resume; otherwise null. */
 export function selectResumeOnOpen(input: ResumeInput): string | null {
   if (typeof input.activeId !== "string" || input.activeId.length === 0) return null;

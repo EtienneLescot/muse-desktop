@@ -31,9 +31,10 @@ import {
   type TranscriptHit,
 } from "../lib/transcriptSearch";
 import { streamEntryA11y, streamWindowAnnouncement } from "../lib/streamA11y";
-import { streamNavigationTarget } from "../lib/streamNavigation";
+import { streamNavigationTarget, streamScrollBehavior } from "../lib/streamNavigation";
 import { subagentStatusLabel } from "../lib/subagent";
 import { officePreviewForFile, type OfficePreview } from "../lib/officePreview";
+import { needsWindowsSandboxSetup } from "../lib/sidecarError";
 import { MessageContent } from "./MessageContent";
 import { Icon } from "./Icon";
 import { loadStreamPosition, saveStreamPosition } from "../lib/streamPosition";
@@ -223,6 +224,8 @@ interface Props {
   onRetryFailedTurn?: (entry: LogEntry) => Promise<void>;
   /** `authRequired` failures: sign in to Muse, then the app replays the turn. */
   onSignInForFailedTurn?: (entry: LogEntry) => void;
+  /** `authRequired` failures the app cannot sign in for: what to do instead. */
+  signInHint?: string;
   /** Start a server-side branch from this completed turn. */
   onForkFromEntry?: (turnId: string) => void;
   /** Open a verified workspace output with the system default application. */
@@ -296,6 +299,7 @@ export function StreamView({
   onForceStop,
   onRetryFailedTurn,
   onSignInForFailedTurn,
+  signInHint,
   onForkFromEntry,
   onOpenWorkspacePath,
   controls,
@@ -327,6 +331,9 @@ export function StreamView({
   const [findQuery, setFindQuery] = useState("");
   const [findTarget, setFindTarget] = useState<number | null>(null);
   const [findSelection, setFindSelection] = useState<number | null>(null);
+  // Position of the last hit jumped to, announced by the finder's status: focus
+  // stays in the search box so ArrowUp/Down and Enter keep walking the results.
+  const [findRevealed, setFindRevealed] = useState<string | null>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const [now, setNow] = useState(() => Date.now());
   const [windowStart, setWindowStart] = useState(() =>
@@ -554,10 +561,14 @@ export function StreamView({
   }, [safeWindowEnd, safeWindowStart, streamWindowed, windowPadding.bottom, windowPadding.top]);
 
   useLayoutEffect(() => {
-    if (!streamWindowed) return;
     const stream = streamRef.current;
     if (stream === null || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver((observations) => {
+      // An entry mounted away from the viewport keeps its placeholder height
+      // until it is shown: a long last answer grew by ~5,000 px after End had
+      // landed. A reader at the end stays at the end while entries settle.
+      if (stickRef.current) stream.scrollTop = stream.scrollHeight;
+      if (!streamWindowed) return;
       const updates = new Map<number, number>();
       for (const observation of observations) {
         const node = observation.target as HTMLElement;
@@ -594,7 +605,8 @@ export function StreamView({
       if (target === null || target === undefined) return;
       // A search hit inside folded steps must be shown, not scrolled to blind.
       target.closest<HTMLDetailsElement>("details.work-group")?.setAttribute("open", "");
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+      target.scrollIntoView({ block: "center", behavior: streamScrollBehavior(reducedMotion) });
       target.classList.add("stream-find-target");
       window.setTimeout(() => target.classList.remove("stream-find-target"), 1200);
       setFindTarget(null);
@@ -602,10 +614,17 @@ export function StreamView({
     return () => window.cancelAnimationFrame(frame);
   }, [findTarget, safeWindowStart, windowStart]);
 
+  // Decided at commit, before the first resize pin can fire: sticking first
+  // would scroll the restored window to its end, where onScroll swaps it for
+  // the tail, and a viewport saved at the top of a long history reopened on
+  // the blank top spacer of the last window.
+  useLayoutEffect(() => {
+    stickRef.current = (scrollTopsRef.current[sessionId ?? ""] ?? loadStreamPosition(sessionId)?.scrollTop) === undefined;
+  }, [sessionId]);
+
   useEffect(() => {
-    stickRef.current = true;
-    setAwayFromBottom(false);
     const savedTop = scrollTopsRef.current[sessionId ?? ""];
+    setAwayFromBottom(false);
     const frame = window.requestAnimationFrame(() => {
       const stream = streamRef.current;
       if (!stream || savedTop === undefined) return;
@@ -666,6 +685,8 @@ export function StreamView({
   }
 
   function revealHit(hit: TranscriptHit): void {
+    // Leaving the end on purpose: the resize pin must not pull the reader back.
+    stickRef.current = false;
     const visible = hit.index >= safeWindowStart && hit.index < safeWindowStart + visibleEntries.length;
     if (!visible && streamWindowed) {
       const next = Math.min(Math.max(0, hit.index - 12), maxWindowStart);
@@ -673,6 +694,7 @@ export function StreamView({
       setWindowStart(next);
     }
     setFindTarget(hit.index);
+    setFindRevealed(streamEntryA11y(hit.role, hit.index, entries.length).label);
   }
 
   function onScroll(e: React.UIEvent<HTMLDivElement>): void {
@@ -892,7 +914,10 @@ export function StreamView({
               ref={findInputRef}
               type="search"
               value={findQuery}
-              onChange={(event) => setFindQuery(event.target.value)}
+              onChange={(event) => {
+                setFindQuery(event.target.value);
+                setFindRevealed(null);
+              }}
               placeholder="Search messages…"
               aria-label="Search messages"
               aria-controls="conversation-search-results"
@@ -925,7 +950,7 @@ export function StreamView({
             <span className="stream-find-count" role="status">
               {findQuery.trim() === ""
                 ? "Type to search the full conversation"
-                : `${findHits.length}${findHits.length === 80 ? "+" : ""} match${findHits.length === 1 ? "" : "es"}`}
+                : `${findHits.length}${findHits.length === 80 ? "+" : ""} match${findHits.length === 1 ? "" : "es"}${findRevealed === null ? "" : ` · ${findRevealed}`}`}
             </span>
             <button
               type="button"
@@ -1213,6 +1238,8 @@ export function StreamView({
             aria-label={entryA11y.label}
           >
             <span className="role">{roleLabel(e)}</span>
+            {/* M0-13: the host refused this tool call or command. */}
+            {e.role === "tool" && e.failed === true && <strong className="tool-failed">Failed</strong>}
             {e.engineError ? (
               <details className="engine-error" open>
                 <summary>
@@ -1237,6 +1264,9 @@ export function StreamView({
                   >
                     Sign in with Meta
                   </button>
+                )}
+                {e.engineError.kind === "authRequired" && signInHint && (
+                  <p className="engine-error-reason">{signInHint}</p>
                 )}
                 {e.engineError.retryable && onRetryFailedTurn && (
                   <button
@@ -1265,8 +1295,9 @@ export function StreamView({
             ) : e.role === "tool" && e.text.includes("\n") ? (
               // The host's tool text is a one-line summary ("Read text file
               // `README.md`.") followed by the raw output. Show the summary and
-              // keep the output one click away instead of a 100-line dump.
-              <details className="tool-call">
+              // keep the output one click away instead of a 100-line dump. A
+              // refusal is shown open: its reason is the output.
+              <details className="tool-call" open={e.failed === true}>
                 <summary>
                   {e.text.slice(0, e.text.indexOf("\n")).split(/(`[^`]+`)/g).map((part, i) =>
                     part.startsWith("`") ? <code key={i}>{part.slice(1, -1)}</code> : part,
@@ -1285,6 +1316,13 @@ export function StreamView({
                   <span className="caret" aria-hidden="true" />
                 )}
               </pre>
+            )}
+            {e.role === "tool" && needsWindowsSandboxSetup(e.text) && (
+              // M0-10: the first-launch prerequisite, shown where the shell failed.
+              <p className="muted">
+                Windows sandbox setup required: open a terminal as administrator, run{" "}
+                <code>muse sandbox windows setup</code> once, then run the command again.
+              </p>
             )}
             {e.richContent && e.richContent.length > 0 && (
               <div className="rich-content-list" aria-label="Rich output">
@@ -1398,7 +1436,10 @@ export function StreamView({
       };
       // Two or more tool calls in a row fold into one line: what is running
       // now, how many steps, how long. The steps stay one click away.
-      return workRuns(visibleEntries).map((run) => {
+      // flatMap keeps one flat keyed list: nested per-run arrays were matched
+      // by position, so a window that dropped its first entry remounted every
+      // entry, and the reader's text moved with each new message.
+      return workRuns(visibleEntries).flatMap((run) => {
         const rendered = run.entries.map((e, offset) => renderEntry(e, run.start + offset));
         if (run.tools < 2) return rendered;
         const tools = run.entries.filter((e) => e.role === "tool");

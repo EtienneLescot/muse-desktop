@@ -1,13 +1,14 @@
 import { useState } from "react";
 import {
   CURATED_CONNECTORS,
+  connectorReachable,
   localConnectorIdForName,
   type ConnectorEntry,
   type ConnectorTool,
   type LocalMcpCallResult,
   type LocalMcpProbeResult,
 } from "../lib/connectors";
-import type { RemoteMcpCallResult, RemoteMcpProbeResult } from "../lib/remoteMcp.ts";
+import { reconnectToken, type RemoteMcpCallResult, type RemoteMcpProbeResult } from "../lib/remoteMcp.ts";
 import {
   authorizationModeLabel,
   connectorCallRequiresApproval,
@@ -135,6 +136,9 @@ export function ConnectorPanel({
   const [remoteName, setRemoteName] = useState("");
   const [remoteUrl, setRemoteUrl] = useState("");
   const [remoteToken, setRemoteToken] = useState("");
+  // The URL the form showed when the token was typed: a row's Reconnect sends
+  // the token there only (M3-02 check, 06/10/2026).
+  const [remoteTokenUrl, setRemoteTokenUrl] = useState("");
   const [remoteProbe, setRemoteProbe] = useState<RemoteMcpProbeResult | null>(null);
   const [remoteCall, setRemoteCall] = useState<RemoteMcpCallResult | null>(null);
   const [remoteTool, setRemoteTool] = useState("");
@@ -212,11 +216,12 @@ export function ConnectorPanel({
     void executeLocalCall(call.command, call.connectorId, call.toolName, call.argumentsText);
   }
 
+  const remoteId = `remote-${remoteName.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
+
   function requestRemoteCall(): void {
-    const id = `remote-${remoteName.trim().toLowerCase().replace(/[\s_]+/g, "-")}`;
     const call = {
       transport: "remote" as const,
-      connectorId: id,
+      connectorId: remoteId,
       toolName: remoteTool,
       argumentsText: remoteArgs,
     };
@@ -229,11 +234,14 @@ export function ConnectorPanel({
 
   async function reconnectRemote(entry: ConnectorEntry): Promise<void> {
     if (entry.kind !== "remote" || !entry.url || remoteBusy !== null) return;
+    const token = reconnectToken(remoteTokenUrl, remoteToken, entry.url);
     setRemoteName(entry.name);
     setRemoteUrl(entry.url);
+    // Used once: a typed token never waits in the field for another probe.
+    setRemoteToken("");
     setRemoteBusy("probe");
     setRemoteCall(null);
-    const result = await onProbeRemote(entry.name, entry.url, remoteToken);
+    const result = await onProbeRemote(entry.name, entry.url, token);
     setRemoteProbe(result);
     setRemoteTool(result?.tools[0]?.name ?? "");
     setRemoteBusy(null);
@@ -254,7 +262,8 @@ export function ConnectorPanel({
           <div>
             <strong>Active conversation</strong>
             <p className="muted">
-              Connector opt-ins apply to new sessions by default. Reconnect this conversation to apply the current configuration now.
+              Connector opt-ins apply to new sessions by default. Reconnect this conversation to apply the current configuration now:
+              Muse restarts this folder's host, and its other conversations will need to reconnect.
             </p>
           </div>
           <button
@@ -420,7 +429,7 @@ export function ConnectorPanel({
                 </small>
               </span>
               {done ? (
-                <span className="integration-flag">configured</span>
+                <span className="integration-flag">added</span>
               ) : (
                 <button type="button" onClick={() => onInstall(c.id)}>
                   Add
@@ -444,6 +453,12 @@ export function ConnectorPanel({
                     {e.name}
                     {e.kind === "remote" && <small> (remote)</small>}
                   </strong>
+                  {!connectorReachable(e) && (
+                    <CapabilityBadge
+                      status="unavailable"
+                      reason="Catalog entry only: no server command is set, so Muse cannot call these tools."
+                    />
+                  )}
                   <small className="muted">
                     {e.status === "disabled"
                       ? "disabled"
@@ -628,8 +643,9 @@ export function ConnectorPanel({
       )}
       <h4>Remote MCP connector (one maximum)</h4>
       <p className="muted">
-        Connect to a public HTTPS MCP endpoint. The bearer token stays in
-        memory and is cleared when you disconnect or close the app.
+        Connect to a public HTTPS MCP endpoint. The bearer token is saved in
+        your system's credential store, so Reconnect works after a restart;
+        Forget token deletes it.
       </p>
       <form
         className="integration-form"
@@ -643,10 +659,12 @@ export function ConnectorPanel({
             return;
           setRemoteBusy("probe");
           setRemoteCall(null);
+          const token = remoteToken;
+          setRemoteToken("");
           const result = await onProbeRemote(
             remoteName.trim(),
             remoteUrl.trim(),
-            remoteToken,
+            token,
           );
           setRemoteProbe(result);
           setRemoteTool(result?.tools[0]?.name ?? "");
@@ -673,13 +691,18 @@ export function ConnectorPanel({
           aria-label="Remote MCP bearer token"
           value={remoteToken}
           autoComplete="off"
-          onChange={(ev) => setRemoteToken(ev.target.value)}
+          onChange={(ev) => {
+            setRemoteToken(ev.target.value);
+            setRemoteTokenUrl(remoteUrl);
+          }}
         />
         <button type="submit" disabled={remoteBusy !== null}>
           {remoteBusy === "probe" ? "Connecting…" : "Connect and list tools"}
         </button>
       </form>
-      {remoteProbe && (
+      {/* Only while connected: a failed call disconnects the session, and the
+          old "Connected to …" block stayed beside "Disconnected" (05/10/2026). */}
+      {remoteProbe && remoteConnectedIds.includes(remoteId) && (
         <div className="local-mcp-result" aria-label="Remote MCP connection result">
           <p className="integration-notice" role="status">
             Connected to {remoteProbe.serverName} {remoteProbe.serverVersion} · {remoteProbe.tools.length} tool(s) · {remoteProbe.durationMs} ms
@@ -755,6 +778,8 @@ export function ConnectorPanel({
               <button
                 type="button"
                 className="integration-action"
+                // A probe finishing after Forget saved the token again (M3-02 check).
+                disabled={remoteBusy !== null}
                 onClick={() => void onForgetRemoteCredential(entry.id)}
               >
                 Forget token
@@ -774,6 +799,7 @@ export function ConnectorPanel({
               <button
                 type="button"
                 className="integration-action"
+                disabled={remoteBusy !== null}
                 onClick={() => void onForgetRemoteCredential(entry.id)}
               >
                 Forget token

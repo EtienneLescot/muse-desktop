@@ -112,12 +112,34 @@ pub fn split_lines(buf: &mut Vec<u8>, chunk: &[u8]) -> Vec<String> {
 }
 
 /// Route one parsed frame: responses complete a pending request by id,
-/// notifications go to the event channel.
+/// notifications go to the event channel. A server-initiated request
+/// (`method` and `id`) is forwarded like its notification twin and returns
+/// the reply frame the caller must write back to the host.
 pub fn route_frame(
     frame: Value,
     pending: &mut HashMap<String, oneshot::Sender<Result<Value, RpcError>>>,
     notify_tx: &mpsc::UnboundedSender<(String, Value)>,
-) {
+) -> Option<String> {
+    if let (Some(method), Some(id)) = (frame.get("method").and_then(Value::as_str), frame.get("id")) {
+        // SS5.3.3: `approval/request` and `userInput/request` share their
+        // params with `approval/requested` / `userInput/requested`. The empty
+        // receipt only acknowledges presentation; the decision travels as
+        // `approval/decide` / `userInput/answer`. The id is the host's, so it
+        // never touches the client's pending map.
+        let twin = match method {
+            "approval/request" => "approval/requested",
+            "userInput/request" => "userInput/requested",
+            _ => {
+                return Some(
+                    json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": format!("method not found: {method}")}})
+                        .to_string(),
+                )
+            }
+        };
+        let params = frame.get("params").cloned().unwrap_or(Value::Null);
+        let _ = notify_tx.send((twin.to_string(), params));
+        return Some(json!({"jsonrpc": "2.0", "id": id, "result": {}}).to_string());
+    }
     if let Some(id) = frame.get("id") {
         let key = id.to_string();
         if let Some(tx) = pending.remove(&key) {
@@ -149,12 +171,13 @@ pub fn route_frame(
             };
             let _ = tx.send(out);
         }
-        return;
+        return None;
     }
     if let Some(method) = frame.get("method").and_then(Value::as_str) {
         let params = frame.get("params").cloned().unwrap_or(Value::Null);
         let _ = notify_tx.send((method.to_string(), params));
     }
+    None
 }
 
 /// The small child-process surface used by the MSP transport.
@@ -166,6 +189,12 @@ pub fn route_frame(
 pub trait ChildTransport: Send {
     fn write(&mut self, buf: &[u8]) -> Result<(), String>;
     fn kill(self: Box<Self>) -> Result<(), String>;
+    /// Close the child's stdin and return its pid, so the caller can let it
+    /// exit on its own. A double without a process is killed at once.
+    fn close_stdin(self: Box<Self>) -> Option<u32> {
+        let _ = self.kill();
+        None
+    }
 }
 
 impl ChildTransport for CommandChild {
@@ -176,6 +205,35 @@ impl ChildTransport for CommandChild {
     fn kill(self: Box<Self>) -> Result<(), String> {
         CommandChild::kill(*self).map_err(|e| e.to_string())
     }
+
+    fn close_stdin(self: Box<Self>) -> Option<u32> {
+        let pid = self.pid();
+        // Dropping the child drops its stdin writer: the host reads EOF.
+        drop(self);
+        Some(pid)
+    }
+}
+
+/// Kill a process and what it started, by pid.
+fn kill_process_tree(pid: u32) {
+    #[cfg(windows)]
+    let mut command = {
+        use std::os::windows::process::CommandExt;
+        let mut command = std::process::Command::new("taskkill");
+        command.args(["/T", "/F", "/PID", &pid.to_string()]).creation_flags(0x0800_0000);
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut command = std::process::Command::new("kill");
+        command.args(["-9", &pid.to_string()]);
+        command
+    };
+    let _ = command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
 }
 
 /// The sidecar child, shared between the request writer (needs `&mut` for
@@ -210,10 +268,15 @@ impl MspClient {
     }
 
     /// Feed one parsed frame from the host's stdout into response routing
-    /// (by id) or the notification channel (by method).
+    /// (by id) or the notification channel (by method), answering
+    /// server-initiated requests on the host's stdin.
     pub async fn ingest(&self, frame: Value) {
-        let mut pending = self.pending.lock().await;
-        route_frame(frame, &mut pending, &self.notify_tx);
+        let reply = route_frame(frame, &mut *self.pending.lock().await, &self.notify_tx);
+        if let Some(line) = reply {
+            // A failed receipt leaves the request pending host-side; it is
+            // re-issued on the next subscribe (SS5.6).
+            let _ = self.write_line(line).await;
+        }
     }
 
     async fn remove_pending(&self, key: &str) {
@@ -259,6 +322,24 @@ impl MspClient {
                 Err(format!("MSP request timed out: {method}"))
             }
         }
+    }
+
+    /// Stop a live host the way `muse serve` ends cleanly: close its stdin so
+    /// it ends its sessions and exits, and kill it only if it still runs after
+    /// `grace`. Killed outright, Muse 1.4.2 can lose session records it has
+    /// already reported; the conversation's view then stays "unavailable" and
+    /// no live event of it reaches any later host (measured:
+    /// docs/evidence/2026-10-05-roadmap-closure/m0-13-msp-host-stop-1.4.2.json).
+    pub async fn stop(&self, grace: std::time::Duration) {
+        let child = self.child.lock().await.take();
+        if let Some(pid) = child.and_then(|child| child.close_stdin()) {
+            // The event pump calls `shutdown` once the process has exited.
+            let mut closed = self.closed.subscribe();
+            if tokio::time::timeout(grace, closed.wait_for(|closed| *closed)).await.is_err() {
+                let _ = tokio::task::spawn_blocking(move || kill_process_tree(pid)).await;
+            }
+        }
+        self.shutdown().await;
     }
 
     /// Kill the host process. One-way door: the owner builds a fresh client
@@ -341,6 +422,94 @@ mod tests {
         assert!(*a.closed_receiver().borrow());
     }
 
+    /// A host whose stdin closes; `pid` is what `close_stdin` reports.
+    struct StdinChild {
+        closed_stdin: Arc<AtomicBool>,
+        killed: Arc<AtomicBool>,
+        pid: u32,
+    }
+
+    impl ChildTransport for StdinChild {
+        fn write(&mut self, _: &[u8]) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn kill(self: Box<Self>) -> Result<(), String> {
+            self.killed.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn close_stdin(self: Box<Self>) -> Option<u32> {
+            self.closed_stdin.store(true, Ordering::SeqCst);
+            Some(self.pid)
+        }
+    }
+
+    fn stdin_client(pid: u32) -> (Arc<MspClient>, Arc<AtomicBool>, Arc<AtomicBool>) {
+        let closed_stdin = Arc::new(AtomicBool::new(false));
+        let killed = Arc::new(AtomicBool::new(false));
+        let child = StdinChild { closed_stdin: closed_stdin.clone(), killed: killed.clone(), pid };
+        let (notify_tx, _) = mpsc::unbounded_channel();
+        let client = Arc::new(MspClient::new(Arc::new(Mutex::new(Some(Box::new(child)))), notify_tx));
+        (client, closed_stdin, killed)
+    }
+
+    #[tokio::test]
+    async fn stopping_a_host_closes_its_stdin_and_waits_for_its_own_exit() {
+        // u32::MAX is never a live pid: a kill by pid would be a no-op here.
+        let (client, closed_stdin, killed) = stdin_client(u32::MAX);
+        // The event pump: the process exits once its stdin is closed.
+        let pump = client.clone();
+        let eof = closed_stdin.clone();
+        tokio::spawn(async move {
+            while !eof.load(Ordering::SeqCst) {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            pump.shutdown().await;
+        });
+        let started = std::time::Instant::now();
+        client.stop(std::time::Duration::from_secs(10)).await;
+        assert!(closed_stdin.load(Ordering::SeqCst), "the host reads EOF");
+        assert!(!killed.load(Ordering::SeqCst), "a host that exits on its own is not killed");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "stop returns at the exit, not after the grace");
+        assert!(*client.closed_receiver().borrow());
+    }
+
+    #[tokio::test]
+    async fn a_host_still_running_after_the_grace_is_killed() {
+        // A process that ignores stdin: only the kill ends it.
+        #[cfg(windows)]
+        let mut process = std::process::Command::new("ping");
+        #[cfg(windows)]
+        process.args(["-n", "30", "127.0.0.1"]);
+        #[cfg(not(windows))]
+        let mut process = std::process::Command::new("sleep");
+        #[cfg(not(windows))]
+        process.arg("30");
+        let mut process = process
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn a long process");
+        let (client, closed_stdin, _) = stdin_client(process.id());
+        client.stop(std::time::Duration::from_millis(300)).await;
+        assert!(closed_stdin.load(Ordering::SeqCst));
+        let mut exited = None;
+        for _ in 0..50 {
+            exited = process.try_wait().expect("try_wait");
+            if exited.is_some() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        if exited.is_none() {
+            let _ = process.kill();
+        }
+        assert!(exited.is_some(), "the host is killed once the grace is over");
+        assert!(*client.closed_receiver().borrow());
+    }
+
     #[test]
     fn command_ids_look_like_uuidv7() {
         let a = new_command_id();
@@ -420,6 +589,36 @@ mod tests {
         let (m, p) = nrx.recv().await.unwrap();
         assert_eq!(m, "turn/completed");
         assert_eq!(p["terminal"], "cancelled");
+    }
+
+    #[tokio::test]
+    async fn server_request_is_answered_forwarded_and_leaves_pending_alone() {
+        let (tx, mut rx) = oneshot::channel();
+        let mut pending = HashMap::new();
+        pending.insert("7".to_string(), tx);
+        let (ntx, mut nrx) = mpsc::unbounded_channel();
+        let reply = route_frame(
+            json!({"jsonrpc":"2.0","id":7,"method":"approval/request","params":{"approvalId":"a1"}}),
+            &mut pending,
+            &ntx,
+        )
+        .expect("a server-initiated request must be answered");
+        let reply: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(reply, json!({"jsonrpc":"2.0","id":7,"result":{}}));
+        let (m, p) = nrx.recv().await.unwrap();
+        assert_eq!(m, "approval/requested");
+        assert_eq!(p["approvalId"], "a1");
+        assert!(pending.contains_key("7"), "host id must not resolve a client request");
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn ingest_writes_the_receipt_on_host_stdin() {
+        let (client, mut writes, _) = test_client();
+        client
+            .ingest(json!({"jsonrpc":"2.0","id":"s-1","method":"userInput/request","params":{}}))
+            .await;
+        assert_eq!(next_frame(&mut writes).await, json!({"jsonrpc":"2.0","id":"s-1","result":{}}));
     }
 
     #[tokio::test]

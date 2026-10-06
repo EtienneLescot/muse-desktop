@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
 import {
   initialStreamWindowStart,
   maxStreamWindowStart,
@@ -76,5 +77,22 @@ describe("bounded transcript window", () => {
       top: 0,
       bottom: 0,
     });
+  });
+});
+
+describe("transcript entry styles", () => {
+  const css = readFileSync(new URL("../src/App.css", import.meta.url), "utf8");
+  const rule = (selector: string) => css.match(new RegExp(`\\n${selector.replace(/[.>]/g, "\\$&")} \\{([^}]*)\\}`))?.[1] ?? "";
+
+  it("keep skipped entries at their size in the stream's flex column", () => {
+    // content-visibility: auto leaves a skipped entry no content height: a
+    // shrinkable flex item collapsed to its padding and End stopped short.
+    assert.match(rule(".stream > .msg"), /content-visibility:\s*auto/);
+    assert.match(rule(".stream > .msg"), /flex-shrink:\s*0/);
+  });
+
+  it("keep the footer out of a text selection", () => {
+    // The timestamp is hidden until hover; a drag across two entries copied it.
+    assert.match(rule(".msg-footer"), /user-select:\s*none/);
   });
 });

@@ -10,6 +10,12 @@ const INVALID_ANCHOR = /(?:cutpoint|lastturnid|fork.?boundary|invalid.*(?:turn|a
  */
 export function forkFailureMessage(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
+  // The host reports its own failed branch write as `WriteFailed
+  // [forkBoundaryInvalid]` (upstream Windows defect): the anchor is fine, so
+  // the header fork would fail the same way.
+  if (/WriteFailed/i.test(detail)) {
+    return "The Muse host could not write the branch; nothing was created.";
+  }
   if (INVALID_ANCHOR.test(detail)) {
     return "That turn is no longer available on the host. Use Fork conversation in the header to branch from the latest completed turn.";
   }

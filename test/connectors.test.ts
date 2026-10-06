@@ -8,11 +8,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  allowTestRemoteMcpOrigin,
   CURATED_CONNECTORS,
+  connectorReachable,
   diffTools,
   findCurated,
   installConnector,
   isPublicHttpUrl,
+  isRemoteMcpUrlAllowed,
   listConnectorTools,
   loadConnectors,
   REMOTE_LIMIT_MESSAGE,
@@ -380,6 +383,44 @@ describe("remote guard (US-26: single remote + public internet)", () => {
     assert.equal(isPublicHttpUrl("not a url"), false);
   });
 
+  // M3-02 check (F5), 06/10/2026: each of these passed the guard.
+  it("isPublicHttpUrl refuses private hosts however they are spelled", () => {
+    const refused = [
+      "https://localhost./x", "https://LOCALHOST/x", "https://foo.local./x", "https://metadata.google.internal./x",
+      "https://metadata/x", "https://intranet/x", "https://printer.home.arpa/x", "https://app.localhost/x",
+      "https://0.0.0.1/x", "https://0.0.0.0/x", "https://2130706433/x", "https://0x7f.1/x", "https://10.1.2.3/x",
+      "https://100.64.0.1/x", "https://172.16.0.1/x", "https://192.168.1.1/x", "https://198.18.0.1/x",
+      "https://224.0.0.1/x", "https://255.255.255.255/x", "https://169.254.169.254/latest/meta-data",
+      "https://[::]/x", "https://[::1]/x", "https://[::ffff:127.0.0.1]/x", "https://[::ffff:192.168.1.1]/x",
+      "https://[::127.0.0.1]/x", "https://[::ffff:169.254.169.254]/x", "https://[64:ff9b::10.0.0.1]/x",
+      "https://[fc00::1]/x", "https://[fe80::1]/x", "https://[fec0::1]/x", "https://[ff02::1]/x",
+    ];
+    for (const url of refused) assert.equal(isPublicHttpUrl(url), false, url);
+    const accepted = [
+      "https://mcp.acme.com/rpc", "https://mcp.acme.com./rpc", "https://8.8.8.8/x", "https://100.128.0.1/x",
+      "https://172.32.0.1/x", "https://[2606:4700::1111]/x", "https://[::ffff:8.8.8.8]/x", "https://[64:ff9b::8.8.8.8]/x",
+    ];
+    for (const url of accepted) assert.equal(isPublicHttpUrl(url), true, url);
+  });
+
+  it("accepts the test instance's loopback origin only once named, and only it", () => {
+    const url = "http://127.0.0.1:47123/mcp";
+    assert.equal(isRemoteMcpUrlAllowed(url), false);
+    allowTestRemoteMcpOrigin("http://127.0.0.1:47123");
+    try {
+      assert.equal(isRemoteMcpUrlAllowed(url), true);
+      assert.equal(requestRemoteConnector([], { id: "r", name: "R", url }).ok, true);
+      for (const other of ["http://127.0.0.1:47124/mcp", "http://localhost:47123/mcp", "https://127.0.0.1:47123/mcp", "http://user:pw@127.0.0.1:47123/mcp"]) {
+        assert.equal(isRemoteMcpUrlAllowed(other), false, other);
+      }
+      assert.equal(isRemoteMcpUrlAllowed("https://mcp.acme.com/rpc"), true);
+      assert.equal(isPublicHttpUrl(url), false, "the public rule itself is unchanged");
+    } finally {
+      allowTestRemoteMcpOrigin(null);
+    }
+    assert.equal(isRemoteMcpUrlAllowed(url), false);
+  });
+
   it("registers a remote only after a verified tool catalogue", () => {
     const r = registerRemoteConnector([], {
       id: "remote-acme",
@@ -441,5 +482,25 @@ describe("remote guard (US-26: single remote + public internet)", () => {
 describe("persistence", () => {
   it("loads [] without localStorage (node:test has none)", () => {
     assert.deepEqual(loadConnectors(), []);
+  });
+});
+
+describe("connectorReachable (M0-13: a listed tool needs a server)", () => {
+  it("a curated catalog entry has nothing behind it", () => {
+    const [entry] = installed("local-sqlite");
+    assert.equal(connectorReachable(entry), false);
+  });
+
+  it("a local server with a command and a remote endpoint are reachable", () => {
+    const local = registerLocalConnector([], {
+      id: "local-mcp-demo",
+      name: "Demo",
+      command: "node server.js",
+      tools: [{ name: "demo.read", description: "" }],
+    });
+    assert.ok(local);
+    assert.equal(connectorReachable(local.entry), true);
+    assert.equal(connectorReachable({ ...local.entry, command: "   " }), false);
+    assert.equal(connectorReachable({ ...local.entry, kind: "remote", command: undefined }), true);
   });
 });

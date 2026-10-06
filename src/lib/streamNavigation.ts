@@ -31,3 +31,8 @@ export function streamNavigationTarget(
     Math.max(0, safeCurrent + (key === "PageDown" ? page : -page)),
   );
 }
+
+/** Scroll behaviour for a programmatic jump: instant under reduced motion (M0-12). */
+export function streamScrollBehavior(reducedMotion: boolean): "auto" | "smooth" {
+  return reducedMotion ? "auto" : "smooth";
+}

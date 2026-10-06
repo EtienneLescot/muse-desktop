@@ -46,4 +46,15 @@ describe("M0-07 diagnostics", () => {
     assert.equal(redactDiagnostic("password: 'hidden'"), "password: [redacted]");
     assert.ok((diagnosticsJson(input).match(/\n/g) ?? []).length > 3);
   });
+
+  it("truncates code-point safely, stays bounded and masks secrets", () => {
+    const at = (error: string) => buildDiagnosticsSnapshot({ ...input, error }).lastError ?? "";
+    const straddling = at(`${"x".repeat(499)}😀tail`);
+    assert.equal(straddling, `${"x".repeat(499)}…`);
+    assert.equal(/\p{Cs}/u.test(straddling), false);
+    const long = at(`token=SYNTH-SECRET ${"e".repeat(5_000)}`);
+    assert.ok(long.length <= 501);
+    assert.ok(long.startsWith("token=[redacted] "));
+    assert.equal(long.includes("SYNTH-SECRET"), false);
+  });
 });

@@ -174,6 +174,17 @@ describe("send results", () => {
       error: "empty",
     });
   });
+
+  it("M0-07: a long engine rejection is kept bounded, masked and code-point safe", () => {
+    // The emoji straddles the 500-unit bound, as in the native forged rejection.
+    const engine = `send_input failed: MSP error -32000: token=SYNTH-SECRET ${"x".repeat(445)}😀 ${"y".repeat(5_000)} token=SYNTH-SECRET`;
+    for (const error of [sendFailed("id-1", engine).error ?? "", markFailed(entry(), engine, 2000, false).error ?? ""]) {
+      assert.ok(error.endsWith(`${"x".repeat(445)}…`));
+      assert.equal(error.includes("SYNTH-SECRET"), false);
+      assert.ok(error.includes("token=[redacted]"));
+      assert.equal(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(error), false);
+    }
+  });
 });
 
 describe("outbox persistence", () => {

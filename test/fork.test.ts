@@ -10,6 +10,13 @@ describe("server fork failure guidance", () => {
     );
   });
 
+  it("reports a host write failure honestly instead of blaming the anchor", () => {
+    assert.equal(
+      forkFailureMessage(new Error("MSP error -32023: invalid fork boundary: WriteFailed [forkBoundaryInvalid] [retryable=false]")),
+      "The Muse host could not write the branch; nothing was created.",
+    );
+  });
+
   it("preserves unrelated host errors", () => {
     assert.equal(forkFailureMessage(new Error("workspace is offline")), "Fork failed: workspace is offline");
   });
