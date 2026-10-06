@@ -778,7 +778,7 @@ export default function App() {
         if (target === null) return;
       }
       setMovingConversation("Moving the work…");
-      const result = await handoffConversation(sessionId, target);
+      const result = await handoffConversation(sessionId, target, local === null);
       if (result === null || result.sameSession) return;
       setMovingConversation("Starting Muse there…");
       const project = projectForSession(sessionId);

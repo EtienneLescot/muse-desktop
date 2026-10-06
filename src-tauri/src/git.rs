@@ -2072,6 +2072,42 @@ fn handoff_move_with(
     Ok(preview)
 }
 
+/// `error`, the reason a move into a worktree created for it did not happen,
+/// followed by what became of that worktree: removed with its branch when
+/// both are still as created, otherwise kept, and why.
+pub fn discard_new_worktree(source: &Path, target: &Path, error: String) -> String {
+    let name = target.strip_prefix(source).unwrap_or(target).display().to_string();
+    let outcome = remove_pristine_worktree(source, target)
+        .unwrap_or_else(|why| format!("the new worktree {name} was kept: {why}"));
+    format!("{error}; {outcome}")
+}
+
+/// Removes `target` and its branch only while nothing is in its folder but
+/// its checkout (ignored files included) and the branch holds no commit that
+/// Local's HEAD does not.
+fn remove_pristine_worktree(source: &Path, target: &Path) -> Result<String, String> {
+    let dir = ensure_confined_worktree(source, &target.display().to_string())?;
+    let root = source.canonicalize().map_err(|e| format!("cannot resolve Local: {e}"))?;
+    let name = dir.strip_prefix(&root).map_err(|_| "it is not one of Local's worktrees".to_string())?;
+    let name = name.display().to_string();
+    let branch = git_command(&dir, &["symbolic-ref", "--short", "HEAD"])
+        .map(oid)
+        .map_err(|_| "it is on no branch".to_string())?;
+    if !git_command(&dir, &["status", "--porcelain", "--ignored", "-uall"])?.is_empty() {
+        return Err(format!("it holds files that are not in its checkout (branch {branch})"));
+    }
+    let tip = format!("refs/heads/{branch}");
+    if !git_output(source, &["merge-base", "--is-ancestor", &tip, "HEAD"], None, None)?.status.success() {
+        return Err(format!("its branch {branch} holds commits Local does not have"));
+    }
+    git_command(source, &["worktree", "remove", &name])
+        .map_err(|e| format!("it could not be removed (branch {branch}): {e}"))?;
+    Ok(match git_command(source, &["branch", "-d", &branch]) {
+        Ok(_) => format!("the new worktree {name} was removed with its branch {branch}, as nothing was left in it"),
+        Err(e) => format!("the new worktree {name} was removed, its branch {branch} kept: {e}"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2994,6 +3030,40 @@ mod tests {
         assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "one\nlocal\n");
         assert!(wt.join("package.json").is_file());
         assert_eq!(fs::read(wt.join("main.txt")).unwrap(), target_main);
+    }
+
+    #[test]
+    fn a_move_that_did_not_happen_removes_the_worktree_made_for_it() {
+        // Native proof, 06/10/2026: refused or failed moves left their new
+        // worktree and its muse/ branch behind, unannounced.
+        let root = fixture_repo().canonicalize().unwrap();
+        let wt = PathBuf::from(create_worktree(&root, "muse/new", ".muse/worktrees/new", "HEAD").unwrap().path);
+        fs::write(root.join("main.txt"), "one\nlocal\n").unwrap();
+        let error = handoff_move_with(&root, &wt, || Err("injected failure".to_string())).unwrap_err();
+        let said = discard_new_worktree(&root, &wt, error);
+        assert!(said.contains("injected failure") && said.contains("was removed with its branch muse/new"), "{said}");
+        assert!(!wt.exists());
+        assert!(git_command(&root, &["branch", "--list", "muse/new"]).unwrap().is_empty());
+        assert_eq!(fs::read_to_string(root.join("main.txt")).unwrap(), "one\nlocal\n");
+    }
+
+    #[test]
+    fn a_worktree_made_for_a_move_stays_while_it_holds_anything() {
+        let root = fixture_repo().canonicalize().unwrap();
+        fs::write(root.join(".git/info/exclude"), "*.log\n").unwrap();
+        let wt = PathBuf::from(create_worktree(&root, "muse/kept", ".muse/worktrees/kept", "HEAD").unwrap().path);
+        // Ignored: `git worktree remove` alone would delete it.
+        fs::write(wt.join("build.log"), "precious\n").unwrap();
+        let said = discard_new_worktree(&root, &wt, "refused".into());
+        assert!(said.starts_with("refused; ") && said.contains("was kept: it holds files that are not in its checkout"), "{said}");
+        assert_eq!(fs::read_to_string(wt.join("build.log")).unwrap(), "precious\n");
+        fs::remove_file(wt.join("build.log")).unwrap();
+        fs::write(wt.join("main.txt"), "one\nbranch\n").unwrap();
+        run_git(&wt, &["commit", "--quiet", "-am", "own"]);
+        let said = discard_new_worktree(&root, &wt, "refused".into());
+        assert!(said.contains("was kept: its branch muse/kept holds commits Local does not have"), "{said}");
+        assert!(wt.join("main.txt").is_file());
+        assert!(!git_command(&root, &["branch", "--list", "muse/kept"]).unwrap().is_empty());
     }
 
     #[test]

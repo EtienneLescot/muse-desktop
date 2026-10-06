@@ -88,6 +88,14 @@ describe("M2-05 handoff wording", () => {
     assert.match(sidebar, /disabled=\{movingFolder !== null \|\| moveBlockedReason\(selected\) !== null\}\s*title=\{moveBlockedReason\(selected\) \?\? undefined\}/);
   });
 
+  it("tells the supervisor which worktree the move created, so a move that does not happen removes it", () => {
+    // Native proof, 06/10/2026: refused or failed moves left that worktree behind, unannounced.
+    const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    assert.match(app, /handoffConversation\(sessionId, target, local === null\)/);
+    const hook = readFileSync(new URL("../src/hooks/useMuseSessions.ts", import.meta.url), "utf8");
+    assert.match(hook, /invoke<HandoffPreview>\("handoff_move", \{ sessionId, target, newWorktree \}\)/);
+  });
+
   it("turns Run in Muse off only while the conversation is away from its host's folder", () => {
     const host = "\\\\?\\C:\\repo";
     const moved = userShellBlocked({ workspace: "\\\\?\\C:\\repo\\.muse\\worktrees\\x", host_workspace: host });

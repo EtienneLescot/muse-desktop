@@ -3551,11 +3551,25 @@ async fn handoff_preview(
 ) -> Result<Value, String> {
     let source = workspace_for_inspection(&state, &session_id)?;
     let same_session = host_accepts_workspace_roots(&state, &session_id)?;
-    let preview = tokio::task::spawn_blocking(move || {
-        git::handoff_preview(&source, target.as_deref().map(|t| Path::new(t.trim())))
-    })
-    .await
-    .map_err(|e| format!("handoff preview task failed: {e}"))??;
+    preview_handoff(&state, source, target.map(|t| PathBuf::from(t.trim())), same_session).await
+}
+
+/// Refused as the move itself would be, so neither the question nor a new
+/// worktree comes before that refusal.
+async fn preview_handoff(
+    state: &AppState,
+    source: PathBuf,
+    target: Option<PathBuf>,
+    same_session: bool,
+) -> Result<Value, String> {
+    let folders: Vec<PathBuf> = std::iter::once(&source)
+        .chain(&target)
+        .filter_map(|folder| folder.canonicalize().ok())
+        .collect();
+    handoff_refused(state, &state.handoffs.read().await, &folders)?;
+    let preview = tokio::task::spawn_blocking(move || git::handoff_preview(&source, target.as_deref()))
+        .await
+        .map_err(|e| format!("handoff preview task failed: {e}"))??;
     with_same_session(preview, same_session)
 }
 
@@ -3563,30 +3577,57 @@ async fn handoff_preview(
 /// `target`, Local or a worktree of the same repository. On a host with
 /// `workspaceRoots` the conversation follows and its next turn runs there;
 /// otherwise only the files move, and `sameSession: false` tells the renderer
-/// to open a new conversation in the target.
+/// to open a new conversation in the target. `newWorktree`: the renderer
+/// created `target` for this move.
 #[tauri::command]
 async fn handoff_move(
     state: State<'_, AppState>,
     session_id: String,
     target: String,
+    new_worktree: Option<bool>,
 ) -> Result<Value, String> {
     let source = workspace_for_inspection(&state, &session_id)?;
     let same_session = host_accepts_workspace_roots(&state, &session_id)?;
-    let (source, target) =
-        tokio::task::spawn_blocking(move || git::handoff_pair(&source, Path::new(target.trim())))
-            .await
-            .map_err(|e| format!("handoff task failed: {e}"))??;
-    let folders = [source.clone(), target.clone()];
-    claim_handoff(&state, &folders).await?;
-    // The conversation follows before the claim ends, so no turn starts in
-    // the folder it just left.
-    let moved = tokio::task::spawn_blocking(move || git::handoff_move(&source, &target))
+    let target = PathBuf::from(target.trim());
+    move_handoff(&state, &session_id, source, target, same_session, new_worktree == Some(true)).await
+}
+
+async fn move_handoff(
+    state: &AppState,
+    session_id: &str,
+    source: PathBuf,
+    target: PathBuf,
+    same_session: bool,
+    new_worktree: bool,
+) -> Result<Value, String> {
+    let (source, target) = tokio::task::spawn_blocking(move || git::handoff_pair(&source, &target))
         .await
-        .map_err(|e| format!("handoff task failed: {e}"))
-        .and_then(|moved| moved)
-        .and_then(|moved| follow_handoff(&state, &session_id, moved, same_session));
-    state.handoffs.write().await.retain(|folder| !folders.contains(folder));
-    moved
+        .map_err(|e| format!("handoff task failed: {e}"))??;
+    let folders = [source.clone(), target.clone()];
+    let moved = match claim_handoff(state, &folders).await {
+        Ok(()) => {
+            // The conversation follows before the claim ends, so no turn
+            // starts in the folder it just left.
+            let (from, to) = (source.clone(), target.clone());
+            let moved = tokio::task::spawn_blocking(move || git::handoff_move(&from, &to))
+                .await
+                .map_err(|e| format!("handoff task failed: {e}"))
+                .and_then(|moved| moved)
+                .and_then(|moved| follow_handoff(state, session_id, moved, same_session));
+            state.handoffs.write().await.retain(|folder| !folders.contains(folder));
+            moved
+        }
+        Err(error) => Err(error),
+    };
+    match moved {
+        // A worktree made for a move that did not happen goes, or is named.
+        Err(error) if new_worktree => Err(tokio::task::spawn_blocking(move || {
+            git::discard_new_worktree(&source, &target, error)
+        })
+        .await
+        .map_err(|e| format!("handoff task failed: {e}"))?),
+        moved => moved,
+    }
 }
 
 /// The files have moved; the conversation follows when it can. Failing that
@@ -3633,7 +3674,15 @@ fn folders_overlap(a: &Path, b: &Path) -> bool {
 /// lock, held until it counts as running, so none slips past this check.
 async fn claim_handoff(state: &AppState, folders: &[PathBuf]) -> Result<(), String> {
     let mut handoffs = state.handoffs.write().await;
-    if handoffs.iter().any(|folder| folders.contains(folder)) {
+    handoff_refused(state, &handoffs, folders)?;
+    handoffs.extend_from_slice(folders);
+    Ok(())
+}
+
+/// Why no handoff of `folders` may start now: one of them is being moved
+/// (`claimed`), or a turn runs in one of them.
+fn handoff_refused(state: &AppState, claimed: &[PathBuf], folders: &[PathBuf]) -> Result<(), String> {
+    if claimed.iter().any(|folder| folders.contains(folder)) {
         return Err("another move is already under way in this folder".to_string());
     }
     let running: Vec<SessionMeta> = state
@@ -3647,11 +3696,10 @@ async fn claim_handoff(state: &AppState, folders: &[PathBuf]) -> Result<(), Stri
     if running
         .iter()
         .flat_map(session_folders)
-        .any(|folder| folders.iter().any(|claimed| folders_overlap(&folder, claimed)))
+        .any(|folder| folders.iter().any(|moved| folders_overlap(&folder, moved)))
     {
         return Err("a conversation is still responding in this folder: stop it before moving".to_string());
     }
-    handoffs.extend_from_slice(folders);
     Ok(())
 }
 
@@ -6782,6 +6830,58 @@ mod tests {
             .unwrap_err();
         assert!(error.contains("being moved"), "{error}");
         assert!(frames.try_recv().is_err());
+    }
+
+    /// A repository with one commit, as `git init` + `git commit` leave it.
+    fn committed_repo(prefix: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("{prefix}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let git = |args: &[&str]| {
+            assert!(std::process::Command::new("git").args(args).current_dir(&root).status().unwrap().success());
+        };
+        git(&["init", "--quiet"]);
+        std::fs::write(root.join("a.txt"), "a\n").unwrap();
+        git(&["add", "a.txt"]);
+        git(&["-c", "user.name=t", "-c", "user.email=t@localhost", "commit", "--quiet", "-m", "one"]);
+        root.canonicalize().unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_move_is_refused_before_its_question_while_the_folder_answers() {
+        // Native proof, 06/10/2026: C's move was asked, created its worktree,
+        // and only then refused because A was responding in the same folder.
+        let root = committed_repo("muse-preview-lock");
+        let state = empty_state();
+        let (client, _frames) = fixture_client(false);
+        register_fixture_session(&state, "session-a", &root.display().to_string(), client);
+        state.sessions.lock().unwrap().get_mut("session-a").unwrap().running = true;
+        let error = preview_handoff(&state, root.clone(), None, true).await.unwrap_err();
+        assert!(error.contains("still responding"), "{error}");
+        state.sessions.lock().unwrap().get_mut("session-a").unwrap().running = false;
+        assert!(preview_handoff(&state, root.clone(), None, true).await.is_ok());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn a_refused_move_removes_the_worktree_made_for_it() {
+        // A turn that starts while the question is open still refuses the move.
+        let root = committed_repo("muse-refused-move");
+        let created = git::create_worktree(&root, "muse/refused", ".muse/worktrees/refused", "HEAD").unwrap();
+        let worktree = PathBuf::from(&created.path);
+        let state = empty_state();
+        let (client, _frames) = fixture_client(false);
+        register_fixture_session(&state, "session-a", &root.display().to_string(), client);
+        state.sessions.lock().unwrap().get_mut("session-a").unwrap().running = true;
+        // Not created for this move: refused, kept, and nothing said about it.
+        let error = move_handoff(&state, "session-c", root.clone(), worktree.clone(), true, false).await.unwrap_err();
+        assert_eq!(error, "a conversation is still responding in this folder: stop it before moving");
+        assert!(worktree.is_dir());
+        let error = move_handoff(&state, "session-c", root.clone(), worktree.clone(), true, true).await.unwrap_err();
+        assert!(error.starts_with("a conversation is still responding") && error.contains("removed with its branch muse/refused"), "{error}");
+        assert!(!worktree.exists());
+        let branches = std::process::Command::new("git").args(["branch", "--list", "muse/*"]).current_dir(&root).output().unwrap();
+        assert!(branches.stdout.is_empty());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[tokio::test]

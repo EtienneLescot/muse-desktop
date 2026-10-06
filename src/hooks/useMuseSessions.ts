@@ -1048,8 +1048,11 @@ interface UseMuseSessions {
   closeTerminal: (sessionId: string) => Promise<void>;
   /** M2-05: what moving this conversation's uncommitted work would do; null target = a new worktree. */
   previewHandoff: (sessionId: string, target: string | null) => Promise<HandoffPreview | null>;
-  /** M2-05: move the work to Local or a worktree; the conversation follows on hosts that allow it. */
-  handoffConversation: (sessionId: string, target: string) => Promise<HandoffPreview | null>;
+  /**
+   * M2-05: move the work to Local or a worktree; the conversation follows on hosts that allow it.
+   * `newWorktree`: `target` was created for this move, and goes again if the move does not happen.
+   */
+  handoffConversation: (sessionId: string, target: string, newWorktree?: boolean) => Promise<HandoffPreview | null>;
   /** Add a bounded, attributed terminal snapshot to the next prompt. */
   prepareTerminalContext: (sessionId: string) => boolean;
   /** M1-07: session-scoped real filesystem listing and bounded preview. */
@@ -7887,11 +7890,11 @@ export function useMuseSessions(): UseMuseSessions {
    * outcome goes into the transcript either way.
    */
   const handoffConversation = useCallback(
-    async (sessionId: string, target: string): Promise<HandoffPreview | null> => {
+    async (sessionId: string, target: string, newWorktree = false): Promise<HandoffPreview | null> => {
       let result: HandoffPreview;
       try {
         setError(null);
-        result = await invoke<HandoffPreview>("handoff_move", { sessionId, target });
+        result = await invoke<HandoffPreview>("handoff_move", { sessionId, target, newWorktree });
       } catch (e) {
         setError(`The conversation was not moved: ${e instanceof Error ? e.message : String(e)}`);
         return null;
