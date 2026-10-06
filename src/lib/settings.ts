@@ -117,6 +117,53 @@ export function hostSandboxConfigForProject(
   return { mode: SANDBOX_ORDER[level], disableWrite: readOnly, disableShell: readOnly };
 }
 
+/**
+ * M0-13: what a conversation's host refuses, said before anything is tried.
+ * Muse 1.4.2 still grants `userShell` under `--disable-shell` and refuses each
+ * command afterwards (measured 06/10/2026), so the posture is the only
+ * advance notice. Null when the host refuses nothing.
+ */
+export function postureRefusal(config: HostSandboxConfig): string | null {
+  const refused = refusedActions(config);
+  return refused === null ? null : `This project is Read only: Muse cannot ${refused} here.`;
+}
+
+function refusedActions(config: HostSandboxConfig): string | null {
+  const refused = [
+    config.disableWrite ? "write files" : null,
+    config.disableShell ? "run commands" : null,
+  ].filter((part) => part !== null);
+  return refused.length === 0 ? null : refused.join(" or ");
+}
+
+/**
+ * M0-13: the note above the composer and why Run in Muse is off (`blocked`),
+ * from the posture the conversation's host was started with (`running`, a
+ * host fact) and not from the project's settings (`wanted`, what the next
+ * start asks for): switched to Read only while live, a project said "Muse
+ * cannot write files" while its host still could (06/10/2026). Muse fixes
+ * the posture at `serve`, so `restart` says when only a restart applies the
+ * settings. No live host known: the next start asks for `wanted`.
+ */
+export function hostPostureNotice(
+  running: HostSandboxConfig | undefined,
+  wanted: HostSandboxConfig,
+): { note: string | null; blocked: string | null; restart: boolean } {
+  const host = running ?? wanted;
+  const restart = host.mode !== wanted.mode
+    || host.disableWrite !== wanted.disableWrite
+    || host.disableShell !== wanted.disableShell;
+  const refused = refusedActions(host);
+  const note = !restart
+    ? postureRefusal(host)
+    : refused !== null
+      ? `This conversation's Muse host was started Read only: Muse cannot ${refused} here until its host restarts with this project's settings.`
+      : wanted.disableWrite || wanted.disableShell
+        ? "This project is now Read only, but this conversation's Muse host was started before: Muse can still write files and run commands here until its host restarts with this project's settings."
+        : "The sandbox settings changed since this conversation's Muse host started: they apply once its host restarts.";
+  return { note, blocked: host.disableShell ? note : null, restart };
+}
+
 /** The host a start or reconnect asked for: its workspace key and posture. */
 export interface HostRequest {
   workspace: string;

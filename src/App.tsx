@@ -6,7 +6,7 @@ import { cycleThreadId, selectActiveThreads } from "./lib/threads";
 import { SidecarErrorPanel } from "./components/SidecarErrorPanel";
 import { MuseSetupScreen } from "./components/MuseSetupScreen";
 import { isMacPlatform } from "./lib/platform";
-import { conflictRestart, hostSandboxConfigForProject } from "./lib/settings";
+import { conflictRestart, hostPostureNotice, hostSandboxConfigForProject } from "./lib/settings";
 import { useMuseSessions } from "./hooks/useMuseSessions";
 import { useDismissablePopovers, usePopoverExpandedState } from "./hooks/useDismissablePopovers";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -146,6 +146,7 @@ export default function App() {
     reconcilingId,
     connectedIds,
     userShellAvailableForSession,
+    hostSandboxForSession,
     sessionLoadedForSession,
     evtCount,
     sendInput,
@@ -500,6 +501,15 @@ export default function App() {
     active === null ? null : projectForSession(active.session_id);
   const activeProjectSettings =
     activeProject === null ? globalSettings : settingsFor(activeProject.id);
+  // M0-13: what this conversation's host refuses (a Read only project), from
+  // the posture its host was started with, said before the click; and whether
+  // the project's settings changed since, which only a restart applies.
+  const activePosture = active === null
+    ? null
+    : hostPostureNotice(
+        hostSandboxForSession(active.session_id),
+        hostSandboxConfigForProject(sandbox, activeProject),
+      );
   // M0-03: retryable sends of the viewed conversation only — a retry never
   // routes by this view, it goes to the entry's own sessionId.
   const activePendingSends =
@@ -1289,7 +1299,7 @@ export default function App() {
                     !backendMissing &&
                     active.session_durability?.toLowerCase() !== "ephemeral"
                   }
-                  onReconnectActive={(sessionId) => reconnectSession(sessionId)}
+                  onReconnectActive={(sessionId) => reconnectSession(sessionId, { reload: true })}
                   onInstall={(dirId) => installConnectorById(dirId)}
                   onUninstall={(id) => uninstallConnectorById(id)}
                   onToggle={(id, enabled) =>
@@ -1711,6 +1721,24 @@ export default function App() {
                       </button>
                     </div>
                   ))}
+                  {activePosture?.note != null && (
+                    <p className="settings-note settings-note-warning posture-note" role="note">
+                      {activePosture.note}
+                      {activePosture.restart && (
+                        <button
+                          type="button"
+                          className="posture-restart"
+                          disabled={reconnectingId !== null || active.running}
+                          onClick={async () => {
+                            if (!(await confirmAction("Restart this folder's Muse host with the project's settings? Its other conversations will need to reconnect."))) return;
+                            void reconnectSession(active.session_id, { reload: true });
+                          }}
+                        >
+                          Restart host
+                        </button>
+                      )}
+                    </p>
+                  )}
                   <Composer
                     key={active.session_id}
                     draftKey={active.session_id}
@@ -1871,7 +1899,7 @@ export default function App() {
                           onClose={closeTerminal}
                           canRunThroughMuse={userShellAvailableForSession(active.session_id)}
                           sessionLoaded={sessionLoadedForSession(active.session_id)}
-                          runThroughMuseBlocked={userShellBlocked(active)}
+                          runThroughMuseBlocked={userShellBlocked(active) ?? activePosture?.blocked ?? null}
                           onRunThroughMuse={runUserShell}
                           onInsertContext={prepareTerminalContext}
                         />

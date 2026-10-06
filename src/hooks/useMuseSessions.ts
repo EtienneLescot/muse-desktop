@@ -367,6 +367,7 @@ import { forkFailureMessage, inheritedForkLog } from "../lib/fork";
 // w-integrations (US-24/US-26): curated connector directory + remote guard
 // (pure, unit-tested). Hot-listing re-reads the registry, no restart.
 import {
+  allowTestRemoteMcpOrigin,
   findConnector,
   installConnector,
   listConnectorTools,
@@ -392,7 +393,13 @@ import {
   parseMcpbArchive,
   type ParsedMcpPackage,
 } from "../lib/mcpPackage.ts";
-import { buildHostMcpServers, type HostMcpStdioServer } from "../lib/hostMcp";
+import {
+  conversationsHoldingRemote,
+  heldBearerLine,
+  heldBearerNotice,
+  hostMcpConfig,
+  type HostMcpStdioServer,
+} from "../lib/hostMcp";
 import { isRemoteWorkspace } from "../lib/remoteSsh";
 import {
   parseComputerStatus,
@@ -402,8 +409,14 @@ import {
 import {
   callRemoteMcp as callRemoteMcpTransport,
   isRemoteMcpAuthenticationError,
+  isRemoteMcpSessionExpired,
   probeRemoteMcp as probeRemoteMcpTransport,
+  bearerTokenProblem,
+  encodeStoredBearer,
   remoteMcpCredentialKey,
+  remoteMcpFailureMessage,
+  storedBearerFor,
+  type NoTokenReason,
   type RemoteMcpCallResult,
   type RemoteMcpProbeResult,
   type RemoteMcpSession,
@@ -909,7 +922,7 @@ interface UseMuseSessions {
   /** M1-09: create a server-side branch from completed conversation turns. */
   /** Fork at the latest completed turn, or at an explicit MSP turn anchor. */
   forkSession: (sessionId: string, lastTurnId?: string) => Promise<string | null>;
-  reconnectSession: (id: string, options?: { silent?: boolean }) => Promise<void>;
+  reconnectSession: (id: string, options?: { silent?: boolean; reload?: boolean }) => Promise<void>;
   reconnectingId: string | null;
   /** M0-02: reconcile durable history and pending actions without a restart. */
   reconcileSession: (id: string, options?: { silent?: boolean }) => Promise<void>;
@@ -917,6 +930,8 @@ interface UseMuseSessions {
   connectedIds: string[];
   /** M1-06: capability negotiated with each workspace host. */
   userShellAvailableForSession: (sessionId: string) => boolean;
+  /** M0-13: the posture this conversation's live host was started with; `undefined` = no live host known. */
+  hostSandboxForSession: (sessionId: string) => HostSandboxConfig | undefined;
   /** M1-06: whether the host has this conversation loaded; `undefined` = unreported. */
   sessionLoadedForSession: (sessionId: string) => boolean | undefined;
   /**
@@ -1335,6 +1350,8 @@ interface BackendSessionMeta {
   host_workspace?: string;
   /** M2-05, `resume_session` only: why the conversation left the folder it had moved to. */
   workspace_notice?: string;
+  /** M0-13: the posture its host was started with, when one runs. */
+  sandbox?: HostSandboxConfig;
 }
 
 /** A placeholder title ("Session 01a0…" or none) gives way to the host title. */
@@ -1718,8 +1735,18 @@ export function useMuseSessions(): UseMuseSessions {
   // store for an explicit reconnect; they never enter the registry or
   // localStorage.
   const remoteSessionsRef = useRef<Record<string, RemoteMcpSession>>({});
+  // M3-02: the remote connectors whose bearer each conversation's host was
+  // handed (Use in Muse), so Forget and the like can say who still has it.
+  // ponytail: a window reload forgets it while the hosts keep the tokens;
+  // persist it if that case matters.
+  const remoteHandedRef = useRef<Record<string, string[]>>({});
   const [remoteConnectedIds, setRemoteConnectedIds] = useState<string[]>([]);
   const [remoteNotice, setRemoteNotice] = useState<string | null>(null);
+  useEffect(() => {
+    // ADR 0003: only a test instance names a loopback origin (M3-02 proof server).
+    if (!isTauriRuntime()) return;
+    invoke<string | null>("test_remote_mcp_origin").then(allowTestRemoteMcpOrigin, () => undefined);
+  }, []);
   // w-integrations US-25: skills, builtins merged over stored overrides.
   const [skills, setSkills] = useState<Skill[]>(() => mergeBuiltinSkills(loadSkills()));
   // Latest skills for the render-detached `/skill` path inside sendInput.
@@ -1903,10 +1930,17 @@ export function useMuseSessions(): UseMuseSessions {
   // TEMPORARY dev diagnosis: counts backend events received by this window.
   const [evtCount, setEvtCount] = useState(0);
   const [connectedIds, setConnectedIds] = useState<string[]>([]);
+  const connectedIdsRef = useRef<string[]>([]);
+  connectedIdsRef.current = connectedIds;
   // M1-06: initialize grants are host facts. Keep them separate from the
   // authorization posture and from persisted session metadata.
   const [grantedCapabilitiesBySession, setGrantedCapabilitiesBySession] = useState<
     Record<string, string[] | undefined>
+  >({});
+  // M0-13: the posture each conversation's host was started with (a host
+  // fact, recorded by main.rs at spawn), not the project's current settings.
+  const [hostSandboxBySession, setHostSandboxBySession] = useState<
+    Record<string, HostSandboxConfig | undefined>
   >({});
   // M1-06: whether the host has each conversation loaded. `session/list` calls
   // every persisted session `notLoaded` after a restart, and `session/userShell`
@@ -2271,6 +2305,10 @@ export function useMuseSessions(): UseMuseSessions {
           }
           return next;
         });
+        setHostSandboxBySession((cur) => ({
+          ...cur,
+          ...Object.fromEntries(restored.map((meta) => [meta.session_id, meta.sandbox])),
+        }));
         setSessionLoadedBySession((cur) => {
           const next = { ...cur };
           for (const meta of restored) {
@@ -3111,7 +3149,7 @@ export function useMuseSessions(): UseMuseSessions {
     [],
   );
 
-  function closeOpenBlocks(sessionId: string, itemId?: string, turnId?: string): void {
+  function closeOpenBlocks(sessionId: string, itemId?: string, turnId?: string, failed = false): void {
     setLogs((cur) => {
       const log = cur[sessionId];
       if (!log || !log.some((e) => e.open)) return cur;
@@ -3119,7 +3157,7 @@ export function useMuseSessions(): UseMuseSessions {
       // streaming into their own entries. Without one (turn end), close all.
       const next = log.map((e) =>
         e.open && (itemId === undefined || e.itemId === itemId)
-          ? { ...e, open: false, ...(turnId ? { turnId } : {}) }
+          ? { ...e, open: false, ...(turnId ? { turnId } : {}), ...(failed && e.role === "tool" ? { failed: true } : {}) }
           : e,
       );
       saveLog(sessionId, next);
@@ -3432,6 +3470,9 @@ export function useMuseSessions(): UseMuseSessions {
         delete next[sid];
         return next;
       });
+      // Its posture and the tokens it was handed went with the host.
+      setHostSandboxBySession((cur) => ({ ...cur, [sid]: undefined }));
+      delete remoteHandedRef.current[sid];
       setConnectionState(sid, "disconnected");
       clearStopping(sid);
       clearRetryScheduled(sid);
@@ -3743,14 +3784,18 @@ export function useMuseSessions(): UseMuseSessions {
       ensureSessionRow(sid, null);
       let itemId: string | undefined;
       let turnId: string | undefined;
+      let failed = false;
       try {
         const obj = JSON.parse(payload) as Record<string, unknown>;
         if (typeof obj.itemId === "string" && obj.itemId.length > 0) itemId = obj.itemId;
         if (typeof obj.turnId === "string" && obj.turnId.length > 0) turnId = obj.turnId;
+        // M0-13: a refused item says so (`status: "failed"`, e.g. a write in
+        // a Read only project), instead of closing as an ordinary row.
+        failed = itemId !== undefined && obj.status === "failed";
       } catch {
         // unparseable payload: close all, as before
       }
-      closeOpenBlocks(sid, itemId, turnId);
+      closeOpenBlocks(sid, itemId, turnId, failed);
       // w-collab US-27: a turn end (item_done without item id) refreshes
       // the auto snapshot; per-item completions never do (no spam).
       if (itemId === undefined) refreshAutoShare(sid);
@@ -4413,18 +4458,21 @@ export function useMuseSessions(): UseMuseSessions {
       }
       const sandboxConfig = hostSandboxConfigForProject(sandbox, project);
       host = { workspace: ws, sandbox: sandboxConfig, projectId: project?.id };
+      // Connectors and computer use live on this machine: a remote engine
+      // (M4-07) would launch them on its own host, where they do not exist.
+      const mcp = isRemoteWorkspace(ws)
+        ? null
+        : hostMcpConfig(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current);
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
         authorizationMode: authorizationModeRef.current,
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
         sandboxDisableShell: sandboxConfig.disableShell,
-        // Connectors and computer use live on this machine: a remote engine
-        // (M4-07) would launch them on its own host, where they do not exist.
-        mcpServers: isRemoteWorkspace(ws)
-          ? undefined
-          : buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
+        mcpServers: mcp?.servers,
       });
+      remoteHandedRef.current[meta.session_id] = mcp?.remoteIds ?? [];
+      setHostSandboxBySession((cur) => ({ ...cur, [meta.session_id]: meta.sandbox }));
       const requestedModelId = projectSettings?.model.trim();
       const record: MuseSession = {
         session_id: meta.session_id,
@@ -4588,7 +4636,13 @@ export function useMuseSessions(): UseMuseSessions {
     resumeReconcileTimersRef.current = {};
   }, [settleServerCompaction]);
 
-  const reconnectSession = useCallback(async (id: string, options?: { silent?: boolean }) => {
+  /**
+   * `reload`: the user asked for the current connectors and posture (Extensions,
+   * "Reconnect with current connectors"). A conversation its host has loaded
+   * keeps what it started with (1.4.2 refuses another MCP config on it), so
+   * the folder's host is replaced first (main.rs resume_session_inner).
+   */
+  const reconnectSession = useCallback(async (id: string, options?: { silent?: boolean; reload?: boolean }) => {
     const session = sessions.find((s) => s.session_id === id);
     if (!session || !isTauriRuntime()) return;
     const silent = options?.silent === true;
@@ -4621,6 +4675,10 @@ export function useMuseSessions(): UseMuseSessions {
       // error banner's restart restarts the folder resumed, not the other.
       const resumedFolder = session.host_workspace ?? session.workspace;
       host = { workspace: resumedFolder, sandbox: sandboxConfig, projectId: threadProjects[id] };
+      const reload = options?.reload === true;
+      const mcp = isRemoteWorkspace(resumedFolder)
+        ? null
+        : hostMcpConfig(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current);
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
         workspacePath: resumedFolder,
@@ -4628,16 +4686,21 @@ export function useMuseSessions(): UseMuseSessions {
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
         sandboxDisableShell: sandboxConfig.disableShell,
-        mcpServers: isRemoteWorkspace(session.workspace)
-          ? undefined
-          : buildHostMcpServers(connectorsRef.current, remoteSessionsRef.current, computerServerRef.current),
+        mcpServers: mcp?.servers,
+        reload,
       });
       if (tombstoned.current?.has(id)) return;
       if (meta.running) noLiveTurnRef.current.delete(id);
+      // A conversation its live host had already loaded kept what it was
+      // handed: without a reload, add to the record, never drop from it.
+      remoteHandedRef.current[id] = reload
+        ? mcp?.remoteIds ?? []
+        : [...new Set([...(remoteHandedRef.current[id] ?? []), ...(mcp?.remoteIds ?? [])])];
       setGrantedCapabilitiesBySession((cur) => ({
         ...cur,
         [id]: meta.granted_capabilities,
       }));
+      setHostSandboxBySession((cur) => ({ ...cur, [id]: meta.sandbox }));
       // `resume_session` is what loads a persisted conversation on the host, and
       // the terminal refuses "Run in Muse" while `loaded` is false. The restored
       // value is only a snapshot from boot, so the resumed one has to be written
@@ -4839,6 +4902,9 @@ export function useMuseSessions(): UseMuseSessions {
         };
         setConnectedIds((current) => [...new Set([...current, meta.session_id])]);
         setConnectionState(meta.session_id, "connected");
+        // Same host as its source: same posture; counted as handed what the source was.
+        setHostSandboxBySession((current) => ({ ...current, [meta.session_id]: meta.sandbox }));
+        remoteHandedRef.current[meta.session_id] = [...(remoteHandedRef.current[sourceId] ?? [])];
         setSessions((current) => [
           ...current.filter((session) => session.session_id !== meta.session_id),
           record,
@@ -4896,7 +4962,8 @@ export function useMuseSessions(): UseMuseSessions {
     setConnectors(r.registry);
   }, []);
 
-  const disconnectRemoteMcp = useCallback((id: string): void => {
+  /** Drop the app's own session with a remote connector; hosts keep what they were handed. */
+  const dropRemoteSession = useCallback((id: string): void => {
     delete remoteSessionsRef.current[id];
     setRemoteConnectedIds((current) => current.filter((item) => item !== id));
     setConnectors((current) => current.map((entry) => {
@@ -4909,18 +4976,40 @@ export function useMuseSessions(): UseMuseSessions {
     }));
   }, []);
 
+  /**
+   * M3-02: Forget token, Disconnect, Disable, Remove and Use in Muse off cannot
+   * take a bearer back from a conversation whose host was handed it (Use in
+   * Muse): each such conversation is told in its transcript, and the panel
+   * gets the count (null when none holds it).
+   */
+  const noteHeldBearer = useCallback((id: string, action: string): string | null => {
+    const holders = conversationsHoldingRemote(remoteHandedRef.current, connectedIdsRef.current, id);
+    const name = findConnector(connectorsRef.current, id)?.name ?? id.replace(/^remote-/, "");
+    for (const sessionId of holders) {
+      pushLog(sessionId, [{ id: newId(), ts: Date.now(), role: "system", text: heldBearerLine(name, action) }]);
+    }
+    return heldBearerNotice(holders.length);
+  }, []);
+
+  const disconnectRemoteMcp = useCallback((id: string): void => {
+    dropRemoteSession(id);
+    setRemoteNotice(noteHeldBearer(id, "disconnected"));
+  }, [dropRemoteSession, noteHeldBearer]);
+
   const forgetRemoteMcpCredential = useCallback(async (id: string): Promise<void> => {
-    disconnectRemoteMcp(id);
+    dropRemoteSession(id);
+    const held = noteHeldBearer(id, "its token was forgotten");
+    const say = (text: string): void => setRemoteNotice(held === null ? text : `${text} ${held}`);
     if (isTauriRuntime()) {
       try {
         await invoke("secure_store_remove", { key: remoteMcpCredentialKey(id) });
       } catch {
-        setRemoteNotice("The remote session was disconnected, but its native credential could not be removed.");
+        say("The remote session was disconnected, but its native credential could not be removed.");
         return;
       }
     }
-    setRemoteNotice("Remote credential forgotten. Reconnect will require a new token.");
-  }, [disconnectRemoteMcp]);
+    say("Remote credential forgotten. Reconnect will require a new token.");
+  }, [dropRemoteSession, noteHeldBearer]);
 
   const uninstallConnectorById = useCallback(async (id: string): Promise<void> => {
     clearConnectorError();
@@ -4934,7 +5023,8 @@ export function useMuseSessions(): UseMuseSessions {
         return;
       }
     }
-    if (remoteConnectedIds.includes(id)) disconnectRemoteMcp(id);
+    if (remoteConnectedIds.includes(id)) dropRemoteSession(id);
+    const held = entry?.kind === "remote" ? noteHeldBearer(id, "removed") : null;
     setConnectors((cur) => uninstallConnector(cur, id).registry);
     if (entry?.source === "package" && entry.package && isTauriRuntime()) {
       await invoke("mcp_package_remove", {
@@ -4945,7 +5035,8 @@ export function useMuseSessions(): UseMuseSessions {
     if (entry?.kind === "remote" && isTauriRuntime()) {
       await invoke("secure_store_remove", { key: remoteMcpCredentialKey(id) }).catch(() => undefined);
     }
-  }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
+    if (held !== null) setRemoteNotice(held);
+  }, [dropRemoteSession, mcpRunningIds, noteHeldBearer, remoteConnectedIds]);
 
   const setConnectorEnabledById = useCallback((id: string, enabled: boolean): void => {
     clearConnectorError();
@@ -4962,13 +5053,17 @@ export function useMuseSessions(): UseMuseSessions {
           setError(`local MCP disable failed to stop server: ${e instanceof Error ? e.message : String(e)}`);
         });
     }
-    if (!enabled && remoteConnectedIds.includes(id)) disconnectRemoteMcp(id);
-  }, [disconnectRemoteMcp, mcpRunningIds, remoteConnectedIds]);
+    if (!enabled && remoteConnectedIds.includes(id)) dropRemoteSession(id);
+    const held = enabled ? null : noteHeldBearer(id, "disabled");
+    if (held !== null) setRemoteNotice(held);
+  }, [dropRemoteSession, mcpRunningIds, noteHeldBearer, remoteConnectedIds]);
 
   const setConnectorUseInMuseById = useCallback((id: string, enabled: boolean): void => {
     clearConnectorError();
     setConnectors((current) => setConnectorUseInMuse(current, id, enabled));
-  }, []);
+    const held = enabled ? null : noteHeldBearer(id, "Use in Muse turned off");
+    if (held !== null) setRemoteNotice(held);
+  }, [noteHeldBearer]);
 
   const probeRemoteMcp = useCallback(
     async (
@@ -4992,21 +5087,27 @@ export function useMuseSessions(): UseMuseSessions {
           return null;
         }
       }
-      setRemoteNotice(null);
+      // Refused before any request: a token no conversation or store can take.
+      const tooLong = token.trim() ? bearerTokenProblem(endpoint, token) : null;
+      setRemoteNotice(tooLong);
+      if (tooLong !== null) return null;
+      let effectiveToken = token;
+      let noToken: NoTokenReason = "none";
+      const key = remoteMcpCredentialKey(id);
       try {
-        let effectiveToken = token;
         // Reconnects may be initiated from a persisted connector row, where
         // the token input is intentionally empty. Retrieve it only through
-        // the native credential boundary; it never enters localStorage.
-        if (!effectiveToken.trim() && existing?.kind === "remote" && isTauriRuntime()) {
+        // the native credential boundary; it never enters localStorage. The
+        // stored bearer goes to the URL it was saved for only.
+        if (!effectiveToken.trim() && isTauriRuntime()) {
           try {
-            effectiveToken = (await invoke<string | null>("secure_store_get", {
-              key: remoteMcpCredentialKey(id),
-            })) ?? "";
+            const stored = storedBearerFor(await invoke<string | null>("secure_store_get", { key }), endpoint);
+            effectiveToken = stored.token;
+            noToken = stored.reason ?? "none";
           } catch {
-            // A missing/unavailable store leaves the explicit reconnect path
-            // usable; the result below remains a normal auth failure.
-            effectiveToken = "";
+            // An unavailable store leaves the explicit reconnect path usable;
+            // the result below remains a normal auth failure, and says why.
+            noToken = "unreadable";
           }
         }
         const result = await probeRemoteMcpTransport(endpoint, effectiveToken);
@@ -5031,22 +5132,29 @@ export function useMuseSessions(): UseMuseSessions {
         };
         setConnectors(registered.registry);
         setRemoteConnectedIds((current) => [...new Set([...current, id])]);
-        if (effectiveToken.trim() && isTauriRuntime()) {
+        // A typed token is saved with its URL; one read back from the store already is.
+        if (token.trim() && isTauriRuntime()) {
           try {
-            await invoke("secure_store_set", {
-              key: remoteMcpCredentialKey(id),
-              secret: effectiveToken,
-            });
+            await invoke("secure_store_set", { key, secret: encodeStoredBearer(endpoint, token) });
           } catch {
-            setRemoteNotice("Connected, but the native secure store is unavailable; reconnect after restart will require the token again.");
+            // What stays stored is bound to its own URL; drop it anyway, and
+            // say what Reconnect can still do.
+            const removed = await invoke("secure_store_remove", { key }).then(() => true, () => false);
+            setRemoteNotice(removed
+              ? "Connected, but the system's credential store could not save the token: Reconnect will need it typed again."
+              : "Connected, but the system's credential store could not save this token, nor remove the one it held before (that one is only ever sent to the URL it was saved for).");
           }
+        } else if (!effectiveToken.trim() && existing?.kind === "remote" && existing.url !== endpoint && isTauriRuntime()) {
+          // Moved to another URL without a token: the stored one was the old URL's.
+          await invoke("secure_store_remove", { key }).catch(() => undefined);
         }
         return result;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = remoteMcpFailureMessage(error instanceof Error ? error.message : String(error), effectiveToken, noToken);
         setRemoteNotice(message);
+        // A failed probe of another URL leaves the registered endpoint as it was.
         setConnectors((current) => current.map((entry) =>
-          entry.id === id && entry.kind === "remote"
+          entry.id === id && entry.kind === "remote" && entry.url === endpoint
             ? { ...entry, status: "error", guardMessage: message }
             : entry,
         ));
@@ -5083,11 +5191,12 @@ export function useMuseSessions(): UseMuseSessions {
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (isRemoteMcpAuthenticationError(message) && session.token.trim()) {
-          // A 401/403 can mean that only the MCP session expired. Re-run the
-          // initialize/tools-list handshake once with the in-memory bearer
-          // token, then retry the call exactly once. Network timeouts and
-          // ambiguous tool outcomes remain non-retryable.
+        if (isRemoteMcpSessionExpired(message) || (isRemoteMcpAuthenticationError(message) && session.token.trim())) {
+          // The server ended the MCP session (404), or a 401/403 that can mean
+          // only the session expired. Re-run the initialize/tools-list
+          // handshake once with the in-memory bearer token, then retry the
+          // call exactly once. Network timeouts and ambiguous tool outcomes
+          // remain non-retryable.
           const entry = findConnector(connectorsRef.current, id);
           const name = entry?.kind === "remote" ? entry.name : id.replace(/^remote-/, "");
           try {
@@ -5122,11 +5231,11 @@ export function useMuseSessions(): UseMuseSessions {
           }
         }
         setRemoteNotice(message);
-        disconnectRemoteMcp(id);
+        dropRemoteSession(id);
         return null;
       }
     },
-    [connectorsRef, disconnectRemoteMcp],
+    [connectorsRef, dropRemoteSession],
   );
 
   const setSkillEnabledByName = useCallback((name: string, enabled: boolean): void => {
@@ -5998,6 +6107,19 @@ export function useMuseSessions(): UseMuseSessions {
   const [computerUse, setComputerUse] = useState<ComputerStatus | null>(null);
   const computerServerRef = useRef<HostMcpStdioServer | null>(null);
   const [computerBusy, setComputerBusy] = useState(false);
+  // M0-13: the failure the last computer-use action raised. The next action
+  // clears it, so a revoke or another level no longer shows an old failure;
+  // another surface's failure stays.
+  const computerErrorRef = useRef<string | null>(null);
+  const clearComputerError = (): void => {
+    const last = computerErrorRef.current;
+    computerErrorRef.current = null;
+    if (last !== null) setErrorMessage((current) => (current === last ? null : current));
+  };
+  const setComputerError = (message: string): void => {
+    computerErrorRef.current = message;
+    setError(message);
+  };
 
   const refreshComputerUse = useCallback(async () => {
     if (!isTauriRuntime()) return null;
@@ -6021,16 +6143,20 @@ export function useMuseSessions(): UseMuseSessions {
     }
   }, []);
 
+  // After a failure the panel shows the service as it is: a failed level
+  // change stops the previous service first, and the panel kept "Granted".
   const setComputerLevel = useCallback(
     async (level: ComputerLevel) => {
       if (!isTauriRuntime()) return;
       setComputerBusy(true);
+      clearComputerError();
       try {
         const raw = await invoke<unknown>("computer_enable", { level });
         setComputerUse(parseComputerStatus(raw));
         await refreshComputerUse();
       } catch (error) {
-        setError(userFacingError(error, "Computer use could not be enabled."));
+        setComputerError(userFacingError(error, "Computer use could not be enabled."));
+        await refreshComputerUse();
       } finally {
         setComputerBusy(false);
       }
@@ -6042,12 +6168,14 @@ export function useMuseSessions(): UseMuseSessions {
     async (attach: boolean) => {
       if (!isTauriRuntime()) return;
       setComputerBusy(true);
+      clearComputerError();
       try {
         const raw = await invoke<unknown>("computer_set_attach", { attach });
         setComputerUse(parseComputerStatus(raw));
         await refreshComputerUse();
       } catch (error) {
-        setError(userFacingError(error, "The browser consent could not be changed."));
+        setComputerError(userFacingError(error, "The browser consent could not be changed."));
+        await refreshComputerUse();
       } finally {
         setComputerBusy(false);
       }
@@ -6058,16 +6186,18 @@ export function useMuseSessions(): UseMuseSessions {
   const disableComputerUse = useCallback(async () => {
     if (!isTauriRuntime()) return;
     setComputerBusy(true);
+    clearComputerError();
     try {
       const raw = await invoke<unknown>("computer_disable");
       setComputerUse(parseComputerStatus(raw));
       computerServerRef.current = null;
     } catch (error) {
-      setError(userFacingError(error, "Computer use could not be turned off."));
+      setComputerError(userFacingError(error, "Computer use could not be turned off."));
+      await refreshComputerUse();
     } finally {
       setComputerBusy(false);
     }
-  }, []);
+  }, [refreshComputerUse]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -7956,6 +8086,11 @@ export function useMuseSessions(): UseMuseSessions {
     [grantedCapabilitiesBySession],
   );
 
+  const hostSandboxForSession = useCallback(
+    (sessionId: string): HostSandboxConfig | undefined => hostSandboxBySession[sessionId],
+    [hostSandboxBySession],
+  );
+
   /**
    * Whether the host currently has this conversation loaded.
    *
@@ -8257,6 +8392,7 @@ export function useMuseSessions(): UseMuseSessions {
     reconcilingId,
     connectedIds,
     userShellAvailableForSession,
+    hostSandboxForSession,
     sessionLoadedForSession,
     sendInput,
     steerInput,

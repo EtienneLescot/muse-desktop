@@ -22,6 +22,7 @@ import {
   canSelectMode,
   conflictRestart,
   effectiveSandboxMode,
+  hostPostureNotice,
   hostSandboxConfigForProject,
   isOutsideWorkspace,
   isRelaxedSandbox,
@@ -32,6 +33,7 @@ import {
   parseProviderId,
   parseProviderMap,
   parseSandboxSettings,
+  postureRefusal,
   providerById,
   providerForProject,
   type HostRequest,
@@ -173,6 +175,42 @@ describe("sandbox settings", () => {
     const merged = { model: "default", sandbox: "workspace", networkDefault: "prompt", autoCompact: true, reasoningEffort: "high" };
     assert.equal(hostSandboxConfigForProject(elevated, merged as never).mode, "elevated");
     assert.equal(hostSandboxConfigForProject(elevated, { settings: { sandbox: "workspace" } }).mode, "network");
+  });
+
+  it("says what a Read only project's host refuses, and nothing otherwise", () => {
+    // M0-13: 1.4.2 still grants userShell under --disable-shell (06/10/2026).
+    const readOnly = hostSandboxConfigForProject(DEFAULT_SANDBOX, { settings: { sandbox: "read-only", networkDefault: "prompt" } });
+    assert.equal(postureRefusal(readOnly), "This project is Read only: Muse cannot write files or run commands here.");
+    assert.equal(postureRefusal({ mode: "workspace", disableWrite: false, disableShell: true }), "This project is Read only: Muse cannot run commands here.");
+    assert.equal(postureRefusal(hostSandboxConfigForProject(DEFAULT_SANDBOX, { settings: { sandbox: "workspace", networkDefault: "prompt" } })), null);
+    assert.equal(postureRefusal(hostSandboxConfigForProject(DEFAULT_SANDBOX)), null);
+  });
+
+  // M0-13 check, 06/10/2026: a live conversation's project switched to Read
+  // only said "Muse cannot write files" while its host, started without
+  // --disable-write, still could.
+  it("says what the running host refuses, and that a restart applies changed settings", () => {
+    const readOnly = hostSandboxConfigForProject(DEFAULT_SANDBOX, { settings: { sandbox: "read-only", networkDefault: "prompt" } });
+    const writable = hostSandboxConfigForProject(DEFAULT_SANDBOX, { settings: { sandbox: "workspace", networkDefault: "prompt" } });
+    const refusal = "This project is Read only: Muse cannot write files or run commands here.";
+    // Unchanged since the start, or no live host (the next start asks for the settings).
+    assert.deepEqual(hostPostureNotice(readOnly, readOnly), { note: refusal, blocked: refusal, restart: false });
+    assert.deepEqual(hostPostureNotice(undefined, readOnly), { note: refusal, blocked: refusal, restart: false });
+    assert.deepEqual(hostPostureNotice(writable, writable), { note: null, blocked: null, restart: false });
+    // Switched to Read only while live: the host still writes; Run in Muse stays on.
+    const late = hostPostureNotice(writable, readOnly);
+    assert.equal(late.restart, true);
+    assert.match(late.note ?? "", /now Read only, but this conversation's Muse host was started before: Muse can still write files and run commands here until its host restarts/);
+    assert.doesNotMatch(late.note ?? "", /cannot/);
+    assert.equal(late.blocked, null);
+    // Read only lifted while live: the host still refuses; Run in Muse stays off.
+    const lifted = hostPostureNotice(readOnly, writable);
+    assert.match(lifted.note ?? "", /host was started Read only: Muse cannot write files or run commands here until its host restarts/);
+    assert.equal(lifted.blocked, lifted.note);
+    // Another change (network): nothing refused, a restart still needed.
+    const network = hostPostureNotice(writable, { ...writable, mode: "network" });
+    assert.match(network.note ?? "", /settings changed since this conversation's Muse host started/);
+    assert.equal(network.blocked, null);
   });
 
   it("restarts the host a posture conflict refused, with the posture it asked for", () => {

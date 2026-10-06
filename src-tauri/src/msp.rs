@@ -189,6 +189,12 @@ pub fn route_frame(
 pub trait ChildTransport: Send {
     fn write(&mut self, buf: &[u8]) -> Result<(), String>;
     fn kill(self: Box<Self>) -> Result<(), String>;
+    /// Close the child's stdin and return its pid, so the caller can let it
+    /// exit on its own. A double without a process is killed at once.
+    fn close_stdin(self: Box<Self>) -> Option<u32> {
+        let _ = self.kill();
+        None
+    }
 }
 
 impl ChildTransport for CommandChild {
@@ -199,6 +205,35 @@ impl ChildTransport for CommandChild {
     fn kill(self: Box<Self>) -> Result<(), String> {
         CommandChild::kill(*self).map_err(|e| e.to_string())
     }
+
+    fn close_stdin(self: Box<Self>) -> Option<u32> {
+        let pid = self.pid();
+        // Dropping the child drops its stdin writer: the host reads EOF.
+        drop(self);
+        Some(pid)
+    }
+}
+
+/// Kill a process and what it started, by pid.
+fn kill_process_tree(pid: u32) {
+    #[cfg(windows)]
+    let mut command = {
+        use std::os::windows::process::CommandExt;
+        let mut command = std::process::Command::new("taskkill");
+        command.args(["/T", "/F", "/PID", &pid.to_string()]).creation_flags(0x0800_0000);
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut command = std::process::Command::new("kill");
+        command.args(["-9", &pid.to_string()]);
+        command
+    };
+    let _ = command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
 }
 
 /// The sidecar child, shared between the request writer (needs `&mut` for
@@ -289,6 +324,24 @@ impl MspClient {
         }
     }
 
+    /// Stop a live host the way `muse serve` ends cleanly: close its stdin so
+    /// it ends its sessions and exits, and kill it only if it still runs after
+    /// `grace`. Killed outright, Muse 1.4.2 can lose session records it has
+    /// already reported; the conversation's view then stays "unavailable" and
+    /// no live event of it reaches any later host (measured:
+    /// docs/evidence/2026-10-05-roadmap-closure/m0-13-msp-host-stop-1.4.2.json).
+    pub async fn stop(&self, grace: std::time::Duration) {
+        let child = self.child.lock().await.take();
+        if let Some(pid) = child.and_then(|child| child.close_stdin()) {
+            // The event pump calls `shutdown` once the process has exited.
+            let mut closed = self.closed.subscribe();
+            if tokio::time::timeout(grace, closed.wait_for(|closed| *closed)).await.is_err() {
+                let _ = tokio::task::spawn_blocking(move || kill_process_tree(pid)).await;
+            }
+        }
+        self.shutdown().await;
+    }
+
     /// Kill the host process. One-way door: the owner builds a fresh client
     /// on respawn, so a killed client is never reused.
     pub async fn shutdown(&self) {
@@ -367,6 +420,94 @@ mod tests {
         assert!(*closed_a.borrow());
         assert!(!*closed_b.borrow());
         assert!(*a.closed_receiver().borrow());
+    }
+
+    /// A host whose stdin closes; `pid` is what `close_stdin` reports.
+    struct StdinChild {
+        closed_stdin: Arc<AtomicBool>,
+        killed: Arc<AtomicBool>,
+        pid: u32,
+    }
+
+    impl ChildTransport for StdinChild {
+        fn write(&mut self, _: &[u8]) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn kill(self: Box<Self>) -> Result<(), String> {
+            self.killed.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn close_stdin(self: Box<Self>) -> Option<u32> {
+            self.closed_stdin.store(true, Ordering::SeqCst);
+            Some(self.pid)
+        }
+    }
+
+    fn stdin_client(pid: u32) -> (Arc<MspClient>, Arc<AtomicBool>, Arc<AtomicBool>) {
+        let closed_stdin = Arc::new(AtomicBool::new(false));
+        let killed = Arc::new(AtomicBool::new(false));
+        let child = StdinChild { closed_stdin: closed_stdin.clone(), killed: killed.clone(), pid };
+        let (notify_tx, _) = mpsc::unbounded_channel();
+        let client = Arc::new(MspClient::new(Arc::new(Mutex::new(Some(Box::new(child)))), notify_tx));
+        (client, closed_stdin, killed)
+    }
+
+    #[tokio::test]
+    async fn stopping_a_host_closes_its_stdin_and_waits_for_its_own_exit() {
+        // u32::MAX is never a live pid: a kill by pid would be a no-op here.
+        let (client, closed_stdin, killed) = stdin_client(u32::MAX);
+        // The event pump: the process exits once its stdin is closed.
+        let pump = client.clone();
+        let eof = closed_stdin.clone();
+        tokio::spawn(async move {
+            while !eof.load(Ordering::SeqCst) {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            pump.shutdown().await;
+        });
+        let started = std::time::Instant::now();
+        client.stop(std::time::Duration::from_secs(10)).await;
+        assert!(closed_stdin.load(Ordering::SeqCst), "the host reads EOF");
+        assert!(!killed.load(Ordering::SeqCst), "a host that exits on its own is not killed");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "stop returns at the exit, not after the grace");
+        assert!(*client.closed_receiver().borrow());
+    }
+
+    #[tokio::test]
+    async fn a_host_still_running_after_the_grace_is_killed() {
+        // A process that ignores stdin: only the kill ends it.
+        #[cfg(windows)]
+        let mut process = std::process::Command::new("ping");
+        #[cfg(windows)]
+        process.args(["-n", "30", "127.0.0.1"]);
+        #[cfg(not(windows))]
+        let mut process = std::process::Command::new("sleep");
+        #[cfg(not(windows))]
+        process.arg("30");
+        let mut process = process
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn a long process");
+        let (client, closed_stdin, _) = stdin_client(process.id());
+        client.stop(std::time::Duration::from_millis(300)).await;
+        assert!(closed_stdin.load(Ordering::SeqCst));
+        let mut exited = None;
+        for _ in 0..50 {
+            exited = process.try_wait().expect("try_wait");
+            if exited.is_some() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        if exited.is_none() {
+            let _ = process.kill();
+        }
+        assert!(exited.is_some(), "the host is killed once the grace is over");
+        assert!(*client.closed_receiver().borrow());
     }
 
     #[test]
