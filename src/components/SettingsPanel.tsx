@@ -123,9 +123,14 @@ const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }[] = [
   {
     mode: "elevated",
     label: "Elevated access",
-    detail: "Adds files and commands outside the folder. Grant it to a workspace you trust.",
+    detail: "Adds files and commands outside the folder. It reaches every project that does not restrict it.",
   },
 ];
+
+/** An Isolation level as Settings names it, never its stored key. */
+export function sandboxModeLabel(mode: SandboxMode): string {
+  return SANDBOX_MODES.find((level) => level.mode === mode)?.label ?? mode;
+}
 
 export function SettingsPanel({
   workspace,
@@ -523,9 +528,8 @@ export function SettingsPanel({
         <h3>Isolation</h3>
         <p className="settings-note">
           How far Muse's engine can reach. Applied when a new engine starts: a
-          running conversation keeps its own until it is restarted. In a
-          project, its preferences must allow it too: networkDefault Allow for
-          network, sandbox Full access for Elevated access.
+          running conversation keeps its own until it is restarted. A project
+          follows this level unless its own preferences restrict it.
           {hostPlatform() === "windows" && (
             // Decision D1 (05/10/2026): keep the default and state the limit,
             // as measured in docs/evidence/2026-10-05-roadmap-closure/
@@ -560,7 +564,7 @@ export function SettingsPanel({
           ))}
         </div>
         <p className="settings-note authorization-status" role="status">
-          Current isolation: <strong>{effective}</strong>
+          Current isolation: <strong>{sandboxModeLabel(effective)}</strong>
         </p>
         {onRestartHost !== undefined && workspace !== null && (
           <div className="settings-host-restart">

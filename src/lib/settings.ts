@@ -87,45 +87,42 @@ export function effectiveSandboxMode(s: SandboxSettings): SandboxMode {
   return s.mode;
 }
 
+/** Isolation levels from the narrowest to the widest. */
+const SANDBOX_ORDER: SandboxMode[] = ["workspace", "network", "elevated"];
+
 /**
- * Resolve the global permission gate and the project override once, before a
- * host is spawned. A project can tighten the global posture (read-only or
- * deny network); it can relax it only when the corresponding global toggle
- * has already granted permission. This keeps the hook as the SSOT while the
- * Rust bridge receives only concrete startup flags.
+ * The posture a project's host starts with: the level chosen in Settings,
+ * which the project's own preferences can only restrict. It takes the project
+ * itself: only its sparse override counts, and an absent key follows
+ * Settings. Settings merged with defaults have no `settings` and are refused
+ * by the type: a default filled in would cap every project.
+ * Sandbox `read-only` means Workspace only with no writes and no shell,
+ * `workspace` stops at Workspace and network, network `deny` at Workspace
+ * only; `full`, `allow` and `prompt` restrict nothing. The Rust bridge
+ * receives only these concrete startup flags.
  */
 export function hostSandboxConfigForProject(
   global: SandboxSettings,
-  project?: ProjectSandboxPreferences,
+  project?: { settings?: Partial<ProjectSandboxPreferences> } | null,
 ): HostSandboxConfig {
-  const globalMode = effectiveSandboxMode(global);
-  if (project === undefined) {
-    return {
-      mode: globalMode,
-      disableWrite: false,
-      disableShell: false,
-    };
-  }
-  const preferences = project;
-  const networkEnabled =
-    preferences.networkDefault === "allow" && globalMode !== "workspace";
-  const mode: SandboxMode =
-    preferences.sandbox === "full" && globalMode === "elevated"
-      ? "elevated"
-      : networkEnabled
-        ? "network"
-        : "workspace";
-  return {
-    mode,
-    disableWrite: preferences.sandbox === "read-only",
-    disableShell: preferences.sandbox === "read-only",
-  };
+  const override = project?.settings;
+  const readOnly = override?.sandbox === "read-only";
+  const cap: SandboxMode = readOnly || override?.networkDefault === "deny"
+    ? "workspace"
+    : override?.sandbox === "workspace" ? "network" : "elevated";
+  const level = Math.min(
+    SANDBOX_ORDER.indexOf(effectiveSandboxMode(global)),
+    SANDBOX_ORDER.indexOf(cap),
+  );
+  return { mode: SANDBOX_ORDER[level], disableWrite: readOnly, disableShell: readOnly };
 }
 
 /** The host a start or reconnect asked for: its workspace key and posture. */
 export interface HostRequest {
   workspace: string;
   sandbox: HostSandboxConfig;
+  /** The project it was for: a retry starts in that project again. */
+  projectId?: string;
 }
 
 /**
@@ -133,10 +130,11 @@ export interface HostRequest {
  * conflict is solved by the refused request's own host and posture: a remote
  * `ssh://` key or a project folder is not the default folder, and a project
  * override is not the global posture. Null when the error asks for no restart
- * or its request is unknown, so no other host is restarted in its place.
+ * or its request is unknown, so no other host is restarted in its place. The
+ * refusal is `sandbox_policy_conflict` in main.rs ("…; restart it to apply …").
  */
 export function conflictRestart(error: string | null, request: HostRequest | null): HostRequest | null {
-  return request !== null && error !== null && error.toLowerCase().includes("restart the workspace host")
+  return request !== null && error !== null && error.toLowerCase().includes("restart it to apply")
     ? request
     : null;
 }

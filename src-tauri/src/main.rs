@@ -207,29 +207,31 @@ impl HostSandboxPolicy {
         args
     }
 
-    /// Stable, user-facing summary used when a workspace host cannot satisfy
-    /// a different project posture without being restarted.
+    /// The posture in the words Settings and the project preferences use, for
+    /// a host that cannot take another posture without being restarted.
     fn summary(&self) -> String {
         let mode = match self.mode {
-            HostSandboxMode::Workspace => "workspace",
-            HostSandboxMode::Network => "network",
-            HostSandboxMode::Elevated => "elevated",
+            HostSandboxMode::Workspace => "Workspace only",
+            HostSandboxMode::Network => "Workspace and network",
+            HostSandboxMode::Elevated => "Elevated access",
         };
         let mut restrictions = Vec::new();
         if self.disable_write {
-            restrictions.push("read-only writes");
+            restrictions.push("no writes");
         }
         if self.disable_shell {
-            restrictions.push("shell disabled");
+            restrictions.push("no commands");
         }
         if restrictions.is_empty() {
             mode.to_string()
         } else {
-            format!("{mode} ({})", restrictions.join(", "))
+            format!("{mode}, {}", restrictions.join(", "))
         }
     }
 }
 
+/// A host is per folder, a project's or not. `conflictRestart` in
+/// `src/lib/settings.ts` recognizes the refusal by "restart it to apply".
 fn sandbox_policy_conflict(
     current: &HostSandboxPolicy,
     requested: &HostSandboxPolicy,
@@ -238,7 +240,7 @@ fn sandbox_policy_conflict(
         return None;
     }
     Some(format!(
-        "workspace host already uses sandbox posture {}; restart the workspace host before starting this conversation with {}",
+        "This folder's engine is running with {}; restart it to apply {}.",
         current.summary(),
         requested.summary(),
     ))
@@ -3006,32 +3008,6 @@ async fn computer_set_attach(app: AppHandle, attach: bool) -> Result<Value, Stri
 #[tauri::command]
 fn computer_mcp_server(grant_state: String) -> Option<Value> {
     computer::mcp_server_json(grant_state.trim())
-}
-
-/// M4-07: run one command on a remote host through the **system `ssh`
-/// binary**. The renderer passes validated fields, never argv: the binary
-/// resolution, the argv and the output bounds live in `remote_ssh.rs`.
-#[tauri::command]
-async fn remote_ssh_exec(
-    host: String,
-    port: Option<u16>,
-    user: Option<String>,
-    identity_file: Option<String>,
-    command: String,
-    timeout_secs: Option<u64>,
-) -> Result<Value, String> {
-    tokio::task::spawn_blocking(move || {
-        remote_ssh::remote_ssh_exec(
-            host.trim(),
-            port.unwrap_or(22),
-            user.as_deref().map(str::trim).unwrap_or(""),
-            identity_file.as_deref().map(str::trim).unwrap_or(""),
-            &command,
-            timeout_secs,
-        )
-    })
-    .await
-    .map_err(|e| format!("remote ssh task failed: {e}"))?
 }
 
 /// Claim the native scheduler lease for this app process. The renderer keeps
@@ -6348,24 +6324,24 @@ mod tests {
     }
 
     #[test]
-    fn sandbox_policy_summary_explains_restart_conflicts_without_raw_debug() {
+    fn sandbox_policy_summary_speaks_the_settings_words() {
         let workspace = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
-        assert_eq!(workspace.summary(), "workspace");
+        assert_eq!(workspace.summary(), "Workspace only");
         let read_only = HostSandboxPolicy::parse(Some("workspace"), Some(true), Some(true)).unwrap();
-        assert_eq!(read_only.summary(), "workspace (read-only writes, shell disabled)");
+        assert_eq!(read_only.summary(), "Workspace only, no writes, no commands");
         let elevated = HostSandboxPolicy::parse(Some("elevated"), None, None).unwrap();
-        assert_eq!(elevated.summary(), "elevated");
+        assert_eq!(elevated.summary(), "Elevated access");
     }
 
     #[test]
-    fn sandbox_policy_conflict_is_stable_and_allows_matching_hosts() {
-        let current = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
-        let same = HostSandboxPolicy::parse(Some("workspace"), None, None).unwrap();
+    fn sandbox_policy_conflict_says_what_runs_and_what_a_restart_applies() {
+        let current = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
+        let same = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
         assert_eq!(sandbox_policy_conflict(&current, &same), None);
-        let requested = HostSandboxPolicy::parse(Some("network"), None, None).unwrap();
+        let requested = HostSandboxPolicy::parse(Some("elevated"), None, None).unwrap();
         assert_eq!(
             sandbox_policy_conflict(&current, &requested).as_deref(),
-            Some("workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with network")
+            Some("This folder's engine is running with Workspace and network; restart it to apply Elevated access.")
         );
     }
 
@@ -9851,7 +9827,6 @@ fn main() {
             computer_disable,
             computer_set_attach,
             computer_mcp_server,
-            remote_ssh_exec,
             secure_store_remove,
             mcp_local_start,
             mcp_local_refresh,

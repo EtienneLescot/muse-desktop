@@ -193,6 +193,7 @@ import {
   createProject as createProjectRow,
   DEFAULT_PROJECT_SETTINGS,
   deleteProject as deleteProjectRow,
+  projectOfFolder,
   resolveProjectSettings,
   setProjectOverride as setProjectOverrideRow,
   updateProject as updateProjectRow,
@@ -856,7 +857,8 @@ interface UseMuseSessions {
   setSandbox: (next: SandboxSettings) => void;
   /**
    * M2-02: explicitly restart a workspace host after a posture change; the
-   * default folder and the global posture unless told otherwise.
+   * default folder, at the posture of the project that owns it (the global
+   * one otherwise), unless told otherwise.
    */
   restartHost: (workspacePath?: string | null, sandbox?: HostSandboxConfig) => Promise<boolean>;
   /** Global tool-authorization posture (persisted locally). */
@@ -4178,7 +4180,7 @@ export function useMuseSessions(): UseMuseSessions {
 
   const restartHost = useCallback(async (
     workspacePath?: string | null,
-    posture: HostSandboxConfig = hostSandboxConfigForProject(sandbox),
+    requested?: HostSandboxConfig,
   ): Promise<boolean> => {
     if (!isTauriRuntime()) {
       setError("Restarting a Muse host is available in the desktop app.");
@@ -4189,6 +4191,8 @@ export function useMuseSessions(): UseMuseSessions {
       setError("Pick a workspace folder before restarting the Muse host.");
       return false;
     }
+    // A folder a project owns restarts at that project's posture, not the global one.
+    const posture = requested ?? hostSandboxConfigForProject(sandbox, projectOfFolder(projects, target));
     try {
       setError(null);
       await invoke("restart_host", {
@@ -4205,7 +4209,7 @@ export function useMuseSessions(): UseMuseSessions {
       );
       return false;
     }
-  }, [sandbox, workspace]);
+  }, [projects, sandbox, workspace]);
 
   // A posture picked before the session joined connectedIds still lands.
   const projectPosture = useCallback((sessionId: string, effective?: unknown) =>
@@ -4390,7 +4394,8 @@ export function useMuseSessions(): UseMuseSessions {
     async (
       workspaceOverride?: string,
       projectSettings?: ProjectSettings,
-      projectSandboxSettings?: ProjectSettings,
+      // The project itself: Isolation follows Settings unless its own preferences restrict it.
+      project?: Project,
     ): Promise<string | null> => {
     let host: HostRequest | null = null;
     try {
@@ -4403,8 +4408,8 @@ export function useMuseSessions(): UseMuseSessions {
         setError("Pick a workspace folder first.");
         return null;
       }
-      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSandboxSettings);
-      host = { workspace: ws, sandbox: sandboxConfig };
+      const sandboxConfig = hostSandboxConfigForProject(sandbox, project);
+      host = { workspace: ws, sandbox: sandboxConfig, projectId: project?.id };
       const meta = await invoke<BackendSessionMeta>("start_session", {
         workspacePath: ws,
         authorizationMode: authorizationModeRef.current,
@@ -4604,16 +4609,18 @@ export function useMuseSessions(): UseMuseSessions {
     noLiveTurnRef.current.add(id);
     let host: HostRequest | null = null;
     try {
-      const projectSettings = threadProjects[id] !== undefined
-        ? settingsForThread(globalSettings, projects, threadProjects, id)
-        : undefined;
-      const sandboxConfig = hostSandboxConfigForProject(sandbox, projectSettings);
-      host = { workspace: session.workspace, sandbox: sandboxConfig };
+      const sandboxConfig = hostSandboxConfigForProject(
+        sandbox,
+        projects.find((project) => project.id === threadProjects[id]),
+      );
+      // M2-05: a moved conversation resumes on its host's folder and names
+      // where its turns ran; the supervisor checks that folder again. The
+      // error banner's restart restarts the folder resumed, not the other.
+      const resumedFolder = session.host_workspace ?? session.workspace;
+      host = { workspace: resumedFolder, sandbox: sandboxConfig, projectId: threadProjects[id] };
       const meta = await invoke<BackendSessionMeta>("resume_session", {
         sessionId: id,
-        // M2-05: a moved conversation resumes on its host's folder and names
-        // where its turns ran; the supervisor checks that folder again.
-        workspacePath: session.host_workspace ?? session.workspace,
+        workspacePath: resumedFolder,
         effectiveWorkspace: session.host_workspace !== undefined ? session.workspace : undefined,
         sandboxMode: sandboxConfig.mode,
         sandboxDisableWrite: sandboxConfig.disableWrite,
@@ -4733,7 +4740,7 @@ export function useMuseSessions(): UseMuseSessions {
     } finally {
       setReconnectingId(null);
     }
-  }, [globalSettings, projects, projectPosture, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, recordConnectionFailure, sandbox]);
+  }, [projects, projectPosture, readHistoryEntries, refreshHostSkills, sessions, threadProjects, kickPoll, refreshModels, reconcileQueueSnapshot, setConnectionState, recordConnectionFailure, sandbox]);
 
   // Resume on open: `restore_sessions` only admits sessions for
   // already-connected hosts, and hosts do not survive an app restart. Once
@@ -4770,7 +4777,7 @@ export function useMuseSessions(): UseMuseSessions {
       const sessionId = await startSessionRow(
         workspacePath,
         sessionSettings,
-        projectSettings,
+        projectsRef.current.find((project) => project.id === projectId),
       );
       if (sessionId === null || projectId === undefined) return sessionId;
       // Attach before the caller can send the first turn. The ref is updated
@@ -4835,6 +4842,14 @@ export function useMuseSessions(): UseMuseSessions {
         ]);
         setLogs((current) => ({ ...current, [meta.session_id]: inherited }));
         if (inherited.length > 0) appendLog(meta.session_id, inherited);
+        // The branch runs in its source's project: without it, every later
+        // reconnect resumed it at the global posture in that project's folder.
+        const sourceProject = threadProjectsRef.current[sourceId];
+        if (sourceProject !== undefined) {
+          const next = attachThreadRow(threadProjectsRef.current, projectsRef.current, meta.session_id, sourceProject);
+          threadProjectsRef.current = next;
+          setThreadProjects(next);
+        }
         setActiveId(meta.session_id);
         // A fork is a new host session, so the renderer-side copy of the
         // requested model must be applied through the same session/setModel
@@ -6496,7 +6511,7 @@ export function useMuseSessions(): UseMuseSessions {
           ...capturedSettings,
           ...(item.model?.trim() ? { model: item.model.trim() } : {}),
         };
-        const fresh = await startSessionRow(item.workspace, settings);
+        const fresh = await startSessionRow(item.workspace, settings, capturedProject);
         if (fresh === null) {
           failRun("could not start target conversation", false);
           return false;

@@ -35,6 +35,8 @@ import {
   providerById,
   providerForProject,
   type HostRequest,
+  type ProjectSandboxPreferences,
+  type SandboxMode,
   type SandboxSettings,
 } from "../src/lib/settings.ts";
 import { reconnectErrorMessage } from "../src/lib/errorCopy.ts";
@@ -121,44 +123,62 @@ describe("sandbox settings", () => {
     assert.equal(isSandboxMode(null), false);
   });
 
-  it("projects global permission gates and project overrides into host flags", () => {
-    assert.deepEqual(
-      hostSandboxConfigForProject({ mode: "network", networkAllowed: true, elevatedAllowed: false }),
-      { mode: "network", disableWrite: false, disableShell: false },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(DEFAULT_SANDBOX, {
-        sandbox: "read-only",
-        networkDefault: "allow",
-      }),
-      { mode: "workspace", disableWrite: true, disableShell: true },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(
-        { mode: "network", networkAllowed: true, elevatedAllowed: false },
-        { sandbox: "workspace", networkDefault: "allow" },
-      ),
-      { mode: "network", disableWrite: false, disableShell: false },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(
-        { mode: "elevated", networkAllowed: true, elevatedAllowed: true },
-        { sandbox: "full", networkDefault: "deny" },
-      ),
-      { mode: "elevated", disableWrite: false, disableShell: false },
-    );
-    assert.deepEqual(
-      hostSandboxConfigForProject(
-        { mode: "network", networkAllowed: true, elevatedAllowed: false },
-        { sandbox: "full", networkDefault: "allow" },
-      ),
-      { mode: "network", disableWrite: false, disableShell: false },
-    );
+  it("a project follows the Settings level unless its own preferences restrict it", () => {
+    const levels: SandboxMode[] = ["workspace", "network", "elevated"];
+    const settings = (mode: SandboxMode): SandboxSettings =>
+      ({ mode, networkAllowed: mode !== "workspace", elevatedAllowed: mode === "elevated" });
+    // The project's sparse override -> its mode at Workspace only, Workspace and network, Elevated access.
+    const table: [Partial<ProjectSandboxPreferences> | undefined, SandboxMode[]][] = [
+      [undefined, ["workspace", "network", "elevated"]],
+      [{}, ["workspace", "network", "elevated"]],
+      [{ sandbox: "full", networkDefault: "allow" }, ["workspace", "network", "elevated"]],
+      [{ networkDefault: "prompt" }, ["workspace", "network", "elevated"]],
+      [{ sandbox: "workspace" }, ["workspace", "network", "network"]],
+      [{ networkDefault: "deny" }, ["workspace", "workspace", "workspace"]],
+      [{ sandbox: "full", networkDefault: "deny" }, ["workspace", "workspace", "workspace"]],
+    ];
+    for (const [override, modes] of table) {
+      levels.forEach((level, i) => assert.deepEqual(
+        hostSandboxConfigForProject(settings(level), { settings: override }),
+        { mode: modes[i], disableWrite: false, disableShell: false },
+        `${level} ${JSON.stringify(override)}`,
+      ));
+    }
+    for (const level of levels) {
+      assert.equal(hostSandboxConfigForProject(settings(level)).mode, level, "no project");
+      assert.deepEqual(
+        hostSandboxConfigForProject(settings(level), { settings: { sandbox: "read-only", networkDefault: "allow" } }),
+        { mode: "workspace", disableWrite: true, disableShell: true },
+      );
+    }
+    // Never above the level in force, an ungranted one included.
+    for (const sandbox of [undefined, "read-only", "workspace", "full"] as const) {
+      for (const networkDefault of [undefined, "allow", "prompt", "deny"] as const) {
+        for (const level of levels) {
+          const { mode } = hostSandboxConfigForProject(settings(level), { settings: { sandbox, networkDefault } });
+          assert.ok(levels.indexOf(mode) <= levels.indexOf(level), `${level} ${sandbox} ${networkDefault}`);
+        }
+        assert.equal(hostSandboxConfigForProject(
+          { mode: "elevated", networkAllowed: false, elevatedAllowed: false },
+          { settings: { sandbox, networkDefault } },
+        ).mode, "workspace");
+      }
+    }
+  });
+
+  it("reads only the project's own override, never settings merged with defaults", () => {
+    const elevated: SandboxSettings = { mode: "elevated", networkAllowed: true, elevatedAllowed: true };
+    // Merged settings carry the default sandbox "workspace": read as an
+    // override, they would cap every project at Workspace and network.
+    const merged = { model: "default", sandbox: "workspace", networkDefault: "prompt", autoCompact: true, reasoningEffort: "high" };
+    assert.equal(hostSandboxConfigForProject(elevated, merged as never).mode, "elevated");
+    assert.equal(hostSandboxConfigForProject(elevated, { settings: { sandbox: "workspace" } }).mode, "network");
   });
 
   it("restarts the host a posture conflict refused, with the posture it asked for", () => {
-    // ensure_host's refusal (main.rs sandbox_policy_conflict), as start and reconnect show it.
-    const refusal = "workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with network";
+    // ensure_host's refusal (main.rs sandbox_policy_conflict), as start and
+    // reconnect show it: in the words of Settings, no raw posture key.
+    const refusal = "This folder's engine is running with Workspace only; restart it to apply Workspace and network.";
     const remote: HostRequest = {
       workspace: "ssh://ops@box:22/srv/app",
       sandbox: { mode: "network", disableWrite: false, disableShell: false },

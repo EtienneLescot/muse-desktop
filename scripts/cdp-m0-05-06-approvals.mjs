@@ -35,9 +35,10 @@
  *                  saved user posture (YOLO by default): card not decided; then
  *                  decided; the next action follows the new posture.
  *   isolation      1 turn. --tag network|elevated: the middle posture in a test
- *                  project whose Isolation is "Workspace and network" (network
- *                  call) or "Elevated access" (write outside the folder, then a
- *                  network call); every card answered Allow once.
+ *                  project that restricts nothing, so it follows Settings'
+ *                  "Workspace and network" (network call) or "Elevated access"
+ *                  (write outside the folder, then a network call); every card
+ *                  answered Allow once.
  *   d1             1 turn. YOLO, default isolation: Muse's write_file tool and a
  *                  PowerShell write with an absolute in-root path (decision D1).
  *   wire           no turn. After a relaunch: resume of conversations started
@@ -50,16 +51,17 @@
  *
  * M0-06, policy in force, on the isolated app only (test mode, ADR 0003; pass
  * --test-data: the run stops unless the WebView2 profile lies in that folder):
- *   setup --projects A,B,N   no turn. Three test projects; N will allow network.
+ *   setup --projects A,B,N,F   no turn. Four test projects; N will restrict its
+ *                  network, F restricts nothing (A and B stay for policy).
  *   scope          no turn. A conversation with no message per case: which
  *                  Isolation a project conversation really gets, from the
  *                  start_session posture and the engine argv the OS runs;
  *                  then a posture change against a running engine.
  *   policy         1 turn. --tag workspace|elevated: the middle posture, one
  *                  PowerShell write outside the folder and one HTTPS call,
- *                  under the default Isolation (project A) or Elevated access
- *                  (project B, Sandbox "Full access"). The first card is read
- *                  in the DOM against the host's choices, and shot.
+ *                  under Workspace only (project A) or Elevated access
+ *                  (project B), each project following Settings. The first card
+ *                  is read in the DOM against the host's choices, and shot.
  *   sentences      no turn. Every posture and Isolation sentence read from
  *                  Settings, each with its measured cells (this record, the
  *                  --msp report of msp-verdict-matrix.mjs, the 05/10 matrix and
@@ -105,10 +107,10 @@ const APPROVALS = "docs/evidence/2026-10-05-roadmap-closure/m0-05-06-approvals.j
 const MSP = argValue("--msp", "docs/evidence/2026-10-05-roadmap-closure/m0-06-junction-network-1.4.2.json");
 const TEST_DATA = argValue("--test-data", null);
 const STATE = join(BASE, "harness-state.json");
-const ROOTS = { A: join(BASE, "a"), B: join(BASE, "b"), N: join(BASE, "n"), network: join(BASE, "net"), elevated: join(BASE, "elev") };
-const NAMES = { A: "m05-approvals-a", B: "m05-approvals-b", N: "m06-network-n" };
+const ROOTS = { A: join(BASE, "a"), B: join(BASE, "b"), N: join(BASE, "n"), F: join(BASE, "f"), network: join(BASE, "net"), elevated: join(BASE, "elev") };
+const NAMES = { A: "m05-approvals-a", B: "m05-approvals-b", N: "m06-network-n", F: "m06-follows-f" };
 const OUTSIDE = join(BASE, "outside");
-const redact = redactor([[ROOTS.A, "<project A>"], [ROOTS.B, "<project B>"], [ROOTS.N, "<project N>"], [ROOTS.network, "<project net>"],
+const redact = redactor([[ROOTS.A, "<project A>"], [ROOTS.B, "<project B>"], [ROOTS.N, "<project N>"], [ROOTS.F, "<project F>"], [ROOTS.network, "<project net>"],
   [ROOTS.elevated, "<project elev>"], [OUTSIDE, "<outside>"], [BASE, "<proof>"], ...(TEST_DATA ? [[TEST_DATA, "<test data>"]] : [])]);
 const PENDING_KEY = "muse-desktop.pending-approvals.v1";
 const POSTURE_LABEL = { ask: "Ask for approval", workspace: "Ask only for more access", yolo: "YOLO" };
@@ -905,7 +907,10 @@ const openProjectRow = (app, name) => app.ev(page(`
   return true;
 `));
 
-/** One project preference ({ label: "Project sandbox", value: "full" }), set in the project's row. */
+/**
+ * One project preference, set in the project's row: { label: "Project network",
+ * value: "deny" } restricts, value "" follows Settings ("Project isolation" alike).
+ */
 async function setOverride(app, name, override) {
   if (!(await openProjectRow(app, name))) throw new Error(`project ${name} row not found`);
   return app.ev(page(`
@@ -953,17 +958,15 @@ const NETWORK_COMMAND = "$u = 'https://example.com'; Invoke-WebRequest -Uri $u -
 const CURL_COMMAND = "$u = 'https://example.com'; curl.exe -s -o NUL -w '%{http_code}' $u";
 
 /**
- * (M0-06) The middle posture under a wider Isolation, measured in the app:
- * network = a project allowing network under the user's "Workspace and
- * network"; elevated = a "Full access" project under "Elevated access".
+ * (M0-06) The middle posture under a wider Isolation, measured in the app: a
+ * project that restricts nothing follows the user's "Workspace and network"
+ * (network) or "Elevated access" (elevated).
  */
 async function isolation(app) {
   await app.ev(INSTALL_IPC_TRACE);
   const kind = TAG?.startsWith("elevated") ? "elevated" : "network";
   const result = { liveTurns: 1, kind };
-  result.project = await ensureRoot(app, kind, kind === "network"
-    ? { label: "Project network", value: "allow" }
-    : { label: "Project sandbox", value: "full" });
+  result.project = await ensureRoot(app, kind, { label: kind === "network" ? "Project network" : "Project isolation", value: "" });
   if (kind === "elevated") {
     result.isolationBefore = await app.ev(page("return store('muse-desktop.settings.v1', 'null');"));
     result.setElevated = await setIsolation(app, "Elevated access");
@@ -1199,11 +1202,11 @@ async function restore(app) {
   if (!(await openProjectRow(app, NAMES.B))) throw new Error("project B row not found");
   await app.ev(page(`
     const row = q('li.project-item').find((li) => li.querySelector('.project-name')?.innerText.trim() === ${JSON.stringify(NAMES.B)});
-    for (const prefix of ['Project network', 'Project sandbox']) {
+    // "" is "Follow Settings": the project restricts nothing.
+    for (const prefix of ['Project network', 'Project isolation']) {
       const sel = row.querySelector('select[aria-label^="' + prefix + '"]');
-      const global = sel && (sel.getAttribute('aria-label').match(/global ([^)]+)\\)/) || [])[1];
-      if (!global || sel.value === global) continue;
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(sel, global);
+      if (!sel || sel.value === '') continue;
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(sel, '');
       sel.dispatchEvent(new Event('change', { bubbles: true }));
       await new Promise((r) => setTimeout(r, 400));
     }
@@ -1273,30 +1276,29 @@ async function startBare(app, key) {
 
 /**
  * (M0-06) Which Isolation a project conversation really gets, with no turn.
- * A keeps the default project preferences (Sandbox "Project", Network "Ask"),
- * N allows network. Then A asks for Elevated while its engine runs Workspace
- * only: the running engine keeps its posture.
+ * F restricts nothing and follows Settings; N restricts its network ("No
+ * network"). Then F asks for Elevated access while its engine runs Workspace
+ * and network: the running engine keeps its posture. A and B are left alone:
+ * the policy phase starts their engines.
  */
 async function scope(app) {
   await app.ev(INSTALL_IPC_TRACE);
   const result = { liveTurns: 0, cases: [] };
-  result.overrideN = await setOverride(app, NAMES.N, { label: "Project network", value: "allow" });
-  for (const [isolation, key] of [["Workspace and network", "A"], ["Workspace and network", "N"], ["Elevated access", "A"], ["Elevated access", "N"]]) {
+  result.overrideN = await setOverride(app, NAMES.N, { label: "Project network", value: "deny" });
+  for (const [isolation, key] of [["Workspace and network", "F"], ["Workspace and network", "N"], ["Elevated access", "N"]]) {
     const set = await setIsolation(app, isolation);
     result.cases.push({ isolation, project: key, stored: set.stored?.mode ?? null, ...(await startBare(app, key)) });
   }
-  // Still under Elevated access: A's preferences now allow it, A's engine runs Workspace only.
-  result.overrideA = await setOverride(app, NAMES.A, { label: "Project sandbox", value: "full" });
-  result.change = { isolation: "Elevated access", project: "A (Sandbox Full access)", ...(await startBare(app, "A")) };
-  result.resetA = await setOverride(app, NAMES.A, { label: "Project sandbox", value: "workspace" });
+  // Still under Elevated access: F follows it, F's engine runs Workspace and network.
+  result.change = { isolation: "Elevated access", project: "F (no restriction)", ...(await startBare(app, "F")) };
   result.restored = await setIsolation(app, "Workspace only");
   const mode = (isolation, key) => result.cases.find((c) => c.isolation === isolation && c.project === key)?.requested.sandboxMode;
+  const flag = { workspace: "--sandbox-network restricted", network: "--sandbox-network enabled", elevated: "--disable-sandbox" };
   result.verdict = {
-    defaultProjectStaysWorkspace: mode("Workspace and network", "A") === "workspace" && mode("Elevated access", "A") === "workspace",
-    networkProjectGetsNetwork: mode("Workspace and network", "N") === "network" && mode("Elevated access", "N") === "network",
-    engineArgvMatches: result.cases.every((c) => c.engine === "reused a running engine"
-      || c.engine.includes(c.requested.sandboxMode === "network" ? "--sandbox-network enabled" : "--sandbox-network restricted")),
-    runningEngineKeepsItsPosture: !result.change.ok && /restart the workspace host/.test(result.change.error ?? ""),
+    projectFollowsSettings: mode("Workspace and network", "F") === "network" && result.change.requested.sandboxMode === "elevated",
+    noNetworkProjectStaysWorkspace: mode("Workspace and network", "N") === "workspace" && mode("Elevated access", "N") === "workspace",
+    engineArgvMatches: result.cases.every((c) => c.engine === "reused a running engine" || c.engine.includes(flag[c.requested.sandboxMode])),
+    runningEngineKeepsItsPosture: !result.change.ok && /restart it to apply/.test(result.change.error ?? ""),
   };
   return result;
 }
@@ -1306,10 +1308,11 @@ const policyCommand = (file) => `$p = '${file}'; try { Set-Content -Path $p -Val
   "$u = 'https://example.com'; try { 'net=' + (Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 15).StatusCode } catch { 'net=' + $_.Exception.Status }";
 
 /**
- * (M0-06) The middle posture in a test project: workspace = the default
- * Isolation in project A; elevated = "Elevated access" in project B, whose
- * Sandbox is "Full access" (the scope phase shows why). The first card is read
- * in the DOM against the host's choices (no client rule button, no rules list).
+ * (M0-06) The middle posture in a test project: workspace = "Workspace only"
+ * in project A; elevated = "Elevated access" in project B, which restricts
+ * nothing and so follows it (the scope phase shows the rule). The first card
+ * is read in the DOM against the host's choices (no client rule button, no
+ * rules list).
  */
 async function policy(app) {
   await app.ev(INSTALL_IPC_TRACE);
@@ -1317,7 +1320,7 @@ async function policy(app) {
   const key = kind === "elevated" ? "B" : "A";
   const result = { liveTurns: 1, kind, project: key };
   result.setIsolation = await setIsolation(app, kind === "elevated" ? "Elevated access" : "Workspace only");
-  if (kind === "elevated") result.override = await setOverride(app, NAMES.B, { label: "Project sandbox", value: "full" });
+  if (kind === "elevated") result.override = await setOverride(app, NAMES.B, { label: "Project isolation", value: "" });
   result.setPosture = await setPosture(app, "workspace");
   mkdirSync(OUTSIDE, { recursive: true });
   const marker = join(OUTSIDE, `${kind}-${Date.now().toString(36)}.txt`);
@@ -1442,14 +1445,14 @@ const SENTENCES = [
       return { measured: [`app policy-elevated: writeOutside=${c?.writeOutside}, engine ${c?.engine}`],
         contradiction: !c ? null : c.writeOutside !== "completed" || !/--disable-sandbox/.test(c.engine) };
     } },
-  { text: "Grant it to a workspace you trust.",
-    claim: "it is granted per project: only a project whose Sandbox is Full access gets it",
+  { text: "It reaches every project that does not restrict it.",
+    claim: "it reaches every project that does not restrict it",
     check: (e) => {
-      const a = e.scopeCase("Elevated access", "A");
+      const f = e.rec.scope?.change;
       const b = e.rec["policy-elevated"];
-      return { measured: [`app scope: project A (default Sandbox) under Elevated access -> ${a?.requested.sandboxMode}`,
-        `app policy-elevated: project B (Sandbox Full access) -> ${b?.startSession?.sandboxMode}`],
-      contradiction: !a || !b ? null : a.requested.sandboxMode !== "workspace" || b.startSession.sandboxMode !== "elevated" };
+      return { measured: [`app scope: project F (no restriction) under Elevated access -> ${f?.requested?.sandboxMode}`,
+        `app policy-elevated: project B (no restriction) -> ${b?.startSession?.sandboxMode}`],
+      contradiction: !f || !b ? null : f.requested.sandboxMode !== "elevated" || b.startSession.sandboxMode !== "elevated" };
     } },
   // Isolation note.
   { text: "How far Muse's engine can reach.",
@@ -1465,8 +1468,8 @@ const SENTENCES = [
     claim: "a running engine keeps its flags; another posture for its folder is refused until a restart",
     check: (e) => {
       const change = e.rec.scope?.change;
-      return { measured: [`app scope: Elevated access asked for folder A while its engine runs Workspace only -> ${change?.ok ? "started" : change?.error}`],
-        contradiction: !change ? null : change.ok || !/restart the workspace host/.test(change.error ?? "") };
+      return { measured: [`app scope: Elevated access asked for folder F while its engine runs Workspace and network -> ${change?.ok ? "started" : change?.error}`],
+        contradiction: !change ? null : change.ok || !/restart it to apply/.test(change.error ?? "") };
     } },
   { text: "On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work.",
     claim: "relative PowerShell writes fail in the sandbox; absolute paths and write_file work in the folder",
@@ -1503,15 +1506,16 @@ const SENTENCES = [
       return { measured: net.map((n) => `msp enabled: tcp 80/443=${n.tcp_80}/${n.tcp_443}, tnc=${n.tnc_443}, http iwr=${n.iwr_http}`),
         contradiction: net.length === 0 ? null : net.some((n) => n.tcp_80 !== "ok" || n.tcp_443 !== "ok") };
     } },
-  { text: "In a project, its preferences must allow it too: networkDefault Allow for network, sandbox Full access for Elevated access.",
-    claim: "a project conversation gets network only with networkDefault Allow, Elevated access only with sandbox Full access",
+  // Replaced on 06/10 the sentence that projects had to allow a level (m0-06-project-follows-global.json).
+  { text: "A project follows this level unless its own preferences restrict it.",
+    claim: "a project that restricts nothing gets the Settings level; No network keeps one at Workspace only",
     check: (e) => {
       const cases = e.rec.scope?.cases ?? [];
-      const b = e.rec["policy-elevated"];
-      const got = (c) => `app scope: ${c.isolation}, project ${c.project} -> ${c.requested.sandboxMode}`;
-      const expect = { A: "workspace", N: "network" };
-      return { measured: [...cases.map(got), `app policy-elevated: Elevated access, project B (sandbox Full access) -> ${b?.startSession?.sandboxMode}`],
-        contradiction: cases.length === 0 || !b ? null : cases.some((c) => c.requested.sandboxMode !== expect[c.project]) || b.startSession.sandboxMode !== "elevated" };
+      const f = e.rec.scope?.change;
+      const expect = { F: "network", N: "workspace" };
+      return { measured: [...cases.map((c) => `app scope: ${c.isolation}, project ${c.project} -> ${c.requested.sandboxMode}`),
+        `app scope: Elevated access, project F -> ${f?.requested?.sandboxMode}`],
+      contradiction: cases.length === 0 || !f ? null : cases.some((c) => c.requested.sandboxMode !== expect[c.project]) || f.requested.sandboxMode !== "elevated" };
     } },
   { text: "Under Workspace only, names still resolve.",
     claim: "DNS answers under --sandbox-network restricted",
@@ -1568,7 +1572,6 @@ async function sentences(app) {
     mspNetwork: (posture) => (msp?.runs ?? []).filter((r) => r.posture === posture).flatMap((r) => r.modes.flatMap((m) => m.cells)).map((c) => c.network).filter(Boolean),
     m05Cells: (posture, mode) => (m05?.runs.find((r) => r.posture === posture)?.modes.find((m) => m.mode === mode)?.cells ?? []).map(tag(`05/10 matrix ${posture}/${mode}`)),
     m05OffProfile: (mode) => (m05?.workspaceOutsideProfile?.cells ?? []).filter((c) => c.mode === mode).map((c) => ({ ...c.cell, src: `05/10 matrix off-profile/${mode}` })),
-    scopeCase: (isolation, key) => readJson(OUT, { phases: {} }).phases.scope?.cases.find((c) => c.isolation === isolation && c.project === key),
   };
   // Shell writes outside the folder: this campaign's junction cells (both levels), the app run, the 05/10 temp-folder cells.
   e.writesOutside = () => {

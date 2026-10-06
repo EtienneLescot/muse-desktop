@@ -400,7 +400,14 @@ export function newId(): string {
  */
 const PROJECTS_KEY = "muse-desktop.projects.v1";
 const THREAD_PROJECTS_KEY = "muse-desktop.thread-projects.v1";
-const GLOBAL_SETTINGS_KEY = "muse-desktop.settings.v1";
+/**
+ * Until 06/10/2026 the project defaults were written to the Isolation
+ * setting's key (`SETTINGS_KEY`, muse-desktop.settings.v1): each save of one
+ * erased the other. That key stays Isolation's; it is read here only until the
+ * defaults have their own copy.
+ */
+const GLOBAL_SETTINGS_KEY = "muse-desktop.project-defaults.v1";
+const SHARED_SETTINGS_KEY = "muse-desktop.settings.v1";
 const WORKTREES_KEY = "muse-desktop.worktrees.v1";
 
 function isValidProjectRow(p: unknown): p is Project {
@@ -481,7 +488,8 @@ function isValidGlobalSettings(s: unknown): s is ProjectSettings {
 export function loadGlobalSettings(
   fallback: ProjectSettings,
 ): ProjectSettings {
-  const raw = read<unknown>(GLOBAL_SETTINGS_KEY, null);
+  // One-time migration: defaults left in the shared key by an older build.
+  const raw = read<unknown>(GLOBAL_SETTINGS_KEY, null) ?? read<unknown>(SHARED_SETTINGS_KEY, null);
   if (!isValidGlobalSettings(raw)) return fallback;
   return {
     ...fallback,

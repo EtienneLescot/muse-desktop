@@ -38,6 +38,8 @@ import {
   saveProjects,
   saveThreadProjects,
 } from "../src/lib/persist.ts";
+import { parseSandboxSettings, SETTINGS_KEY } from "../src/lib/settings.ts";
+import { readStorageJson, writeStorageJson } from "../src/lib/storage.ts";
 
 function fakeStorage(): void {
   const m = new Map<string, string>();
@@ -274,6 +276,17 @@ describe("US-30 settings override + diff", () => {
     assert.deepEqual(diffProjectSettings(DEFAULT_PROJECT_SETTINGS, projects[0].settings), []);
   });
 
+  it("isolation keys diverge only when they restrict Settings", () => {
+    let projects = fill(1);
+    // `workspace` equals the stored default yet restricts; `allow` restricts nothing.
+    projects = setProjectOverride(projects, "p0", "sandbox", "workspace");
+    projects = setProjectOverride(projects, "p0", "networkDefault", "allow");
+    assert.deepEqual(
+      diffProjectSettings(DEFAULT_PROJECT_SETTINGS, projects[0].settings).map((d) => d.key),
+      ["sandbox"],
+    );
+  });
+
   it("resolves one conversation from its attached project", () => {
     let projects = fill(2);
     projects = setProjectOverride(projects, "p1", "model", "gpt-5.6");
@@ -425,8 +438,24 @@ describe("US-3/US-30 sanitize + persistence", () => {
     assert.equal(loadGlobalSettings(DEFAULT_PROJECT_SETTINGS).sandbox, "full");
     // Corrupt payloads fall back safely.
     store.setItem("muse-desktop.projects.v1", "not-json");
-    store.setItem("muse-desktop.settings.v1", "{bad");
+    store.setItem("muse-desktop.project-defaults.v1", "{bad");
     assert.deepEqual(loadProjects(), []);
     assert.deepEqual(loadGlobalSettings(DEFAULT_PROJECT_SETTINGS), DEFAULT_PROJECT_SETTINGS);
+  });
+
+  it("keeps the Isolation setting and the project defaults under their own keys", () => {
+    // They shared muse-desktop.settings.v1: a model change erased Isolation,
+    // and the next start's Isolation write erased the model.
+    fakeStorage();
+    const elevated = { mode: "elevated", networkAllowed: true, elevatedAllowed: true };
+    writeStorageJson(SETTINGS_KEY, elevated);
+    saveGlobalSettings({ ...DEFAULT_PROJECT_SETTINGS, model: "gpt-x" });
+    assert.deepEqual(parseSandboxSettings(readStorageJson(SETTINGS_KEY, null)), elevated);
+    assert.equal(loadGlobalSettings(DEFAULT_PROJECT_SETTINGS).model, "gpt-x");
+    // One-time migration: defaults an older build left in the shared key are kept.
+    fakeStorage();
+    writeStorageJson(SETTINGS_KEY, { ...DEFAULT_PROJECT_SETTINGS, model: "gpt-old" });
+    assert.equal(loadGlobalSettings(DEFAULT_PROJECT_SETTINGS).model, "gpt-old");
+    assert.equal(parseSandboxSettings(readStorageJson(SETTINGS_KEY, null)).mode, "workspace");
   });
 });

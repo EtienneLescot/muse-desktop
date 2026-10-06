@@ -18,6 +18,7 @@ import {
   normalizeReasoningEffort,
   type ReasoningEffort,
 } from "./reasoning.ts";
+import { pathKey } from "./paths.ts";
 import { isRemoteWorkspace } from "./remoteSsh.ts";
 
 /** One project: a named thread group with a shared folder and settings. */
@@ -366,6 +367,12 @@ export function attachThread(
   return { ...attached, [sessionId]: projectId };
 }
 
+/** The project whose roots include `folder`, whatever its spelling (`pathKey`). */
+export function projectOfFolder(projects: Project[], folder: string): Project | undefined {
+  const key = pathKey(folder);
+  return projects.find((project) => projectWorkspaces(project).some((root) => pathKey(root) === key));
+}
+
 /** Project id a thread is attached to (null = ungrouped). */
 export function projectOfThread(
   attached: ThreadProjectMap,
@@ -424,8 +431,19 @@ export interface SettingsDiffEntry {
 }
 
 /**
+ * The isolation values that restrict the level chosen in Settings
+ * (`hostSandboxConfigForProject`). Any other stored value (`full`, `allow`,
+ * `prompt`) restricts nothing: the project follows Settings, as when unset.
+ */
+export const ISOLATION_RESTRICTIONS: Partial<Record<keyof ProjectSettings, readonly string[]>> = {
+  sandbox: ["workspace", "read-only"],
+  networkDefault: ["deny"],
+};
+
+/**
  * Global-vs-project diff (US-30 AC): one entry per override key whose
- * value actually diverges from global. Empty = fully inherited.
+ * value actually diverges from global. Empty = fully inherited. Isolation
+ * keys diverge when they restrict Settings, whatever the stored default says.
  */
 export function diffProjectSettings(
   global: ProjectSettings,
@@ -436,7 +454,8 @@ export function diffProjectSettings(
   (Object.keys(override) as (keyof ProjectSettings)[]).forEach((key) => {
     const value = override[key];
     if (value === undefined) return;
-    if (value !== global[key]) {
+    const restrictions = ISOLATION_RESTRICTIONS[key];
+    if (restrictions ? restrictions.includes(String(value)) : value !== global[key]) {
       out.push({ key, global: global[key], project: value });
     }
   });
