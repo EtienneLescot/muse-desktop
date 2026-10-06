@@ -5938,6 +5938,23 @@ fn decision_requirement(pinned: Option<Value>, current: &Value) -> Value {
     pinned.filter(|v| !v.is_null()).unwrap_or_else(|| current.clone())
 }
 
+/// `approval/decide`, retried once with the same commandId when the host says
+/// its failure is retryable. Muse 1.4.2 answered -32603 "approval ledger
+/// durability fence … [retryable=true]" to a decision it had applied: the
+/// command ran (final Windows smoke, 06/10/2026). "Already resolved" (-32051)
+/// on the retry then means the first decision was settled.
+async fn decide(client: &MspClient, params: Value) -> Result<Value, String> {
+    match client.request("approval/decide", params.clone()).await {
+        Err(error) if error.ends_with("[retryable=true]") => {
+            match client.request("approval/decide", params).await {
+                Err(again) if again.starts_with("MSP error -32051") => Ok(json!({ "terminal": true })),
+                other => other,
+            }
+        }
+        other => other,
+    }
+}
+
 #[tauri::command]
 async fn approve(
     state: State<'_, AppState>,
@@ -5967,18 +5984,17 @@ async fn approve(
     let client = session_client(&state, &session_id)?;
     // A stale requirementId is rejected by the host (-32053) and surfaces as
     // this command's error: a decision can never silently satisfy a new stage.
-    let res = client
-        .request(
-            "approval/decide",
-            json!({
-                "commandId": new_command_id(),
-                "sessionId": session_id,
-                "approvalId": approval_id,
-                "choiceId": choice_id,
-                "requirementId": requirement_id,
-            }),
-        )
-        .await?;
+    let res = decide(
+        &client,
+        json!({
+            "commandId": new_command_id(),
+            "sessionId": session_id,
+            "approvalId": approval_id,
+            "choiceId": choice_id,
+            "requirementId": requirement_id,
+        }),
+    )
+    .await?;
     // Multi-stage approvals stay pending (terminal=false) for further
     // decisions; a terminal decision retires the cached token so a repeated
     // decide cannot replay it. The bool is returned to the UI so it keeps a
@@ -7807,6 +7823,29 @@ mod tests {
             .collect();
         assert_eq!(events, vec![("session-a".to_string(), "host_exited".to_string(), "restarted".to_string())]);
         assert!(state.hosts.lock().unwrap().session("session-a").is_err());
+    }
+
+    /// A retryable decide failure is retried once with the same commandId,
+    /// and "already resolved" then settles it.
+    #[tokio::test]
+    async fn a_retryable_decide_failure_is_retried_once_and_already_resolved_settles_it() {
+        let (client, mut frames) = fixture_client(false);
+        let host = client.clone();
+        let responder = tokio::spawn(async move {
+            let first = fixture_frame(&mut frames).await;
+            host.ingest(json!({"jsonrpc": "2.0", "id": first["id"], "error": {"code": -32603,
+                "message": "approval decide settlement failed", "data": {"kind": "internal", "retryable": true}}})).await;
+            let second = fixture_frame(&mut frames).await;
+            host.ingest(json!({"jsonrpc": "2.0", "id": second["id"], "error": {"code": -32051,
+                "message": "approval already resolved", "data": {"retryable": false}}})).await;
+            (first["params"]["commandId"].clone(), second["params"]["commandId"].clone())
+        });
+
+        let res = decide(&client, json!({"commandId": "decide-1", "approvalId": "a1"})).await;
+        let (first, second) = responder.await.unwrap();
+
+        assert_eq!(first, second);
+        assert!(approval_terminal(&res.expect("the retry settles the decision")));
     }
 
     #[test]
