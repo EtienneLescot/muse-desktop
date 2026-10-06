@@ -155,8 +155,19 @@ on 05/10, with Étienne's approval. The measurements are in
   - `session/userShell` is accepted, then its item fails with "tool policy denied shell
     execution". The client now disables "Run in Muse" for a read-only project itself.
   - The issue also asks whether `sessionMcp` should be granted under `--disable-write`.
-  - Recorded in `m0-13-click-effect-isolated.json` (branch of the M0-13 proof, 06/10).
-- **Not posted:**
-  - A conversation resumed within about 1 s of its engine being killed stopped publishing events.
-    It was seen once and never reproduced, so it needs a raw MSP re-run before filing.
-  - French-locale PowerShell output is mis-decoded. It is a side note in #88.
+  - Recorded in [m0-13-click-effect-isolated.json](../../evidence/2026-10-05-roadmap-closure/m0-13-click-effect-isolated.json)
+    (M0-13 proof, 06/10).
+- **#94, new issue: records lost when a host is killed** ([#94](https://github.com/meta-models/muse-code-sdk/issues/94)).
+  - A host killed 1.5 s after reporting a record had not yet written it to the session journal in
+    2 of 3 runs. It lost the record.
+  - At the next resume the view store was ahead of the journal, and the session view became
+    `unavailable`.
+  - From then on the host sent no `item/*` event for that session: the conversation is silent, and
+    a client has no way to detect it.
+  - Closing stdin instead lets the host write the record and `session_end`, then exit in 78 to
+    90 ms (3 of 3). The app now stops hosts that way (ed1e03d), but it cannot prevent a crash.
+  - Measured on 06/10 in [m0-13-msp-host-stop-1.4.2.json](../../evidence/2026-10-05-roadmap-closure/m0-13-msp-host-stop-1.4.2.json).
+  - It supersedes the unposted "draft 2" note: a conversation resumed about 1 s after its engine
+    was killed had stopped publishing events, seen once. #94 is the raw MSP re-run that note
+    asked for.
+- **Not posted:** French-locale PowerShell output is mis-decoded. It is a side note in #88.
