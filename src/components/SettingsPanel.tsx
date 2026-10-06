@@ -105,7 +105,7 @@ type RemoteForm = Record<(typeof REMOTE_FIELDS)[number][0], string>;
  * the same thing twice, and the select fell back to workspace when they
  * disagreed.
  */
-export const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }[] = [
+const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }[] = [
   {
     mode: "workspace",
     label: "Workspace only",
@@ -126,6 +126,11 @@ export const SANDBOX_MODES: { mode: SandboxMode; label: string; detail: string }
     detail: "Adds files and commands outside the folder. Grant it to a workspace you trust.",
   },
 ];
+
+/** An Isolation level as Settings names it, never its stored key. */
+export function sandboxModeLabel(mode: SandboxMode): string {
+  return SANDBOX_MODES.find((level) => level.mode === mode)?.label ?? mode;
+}
 
 export function SettingsPanel({
   workspace,
@@ -559,7 +564,7 @@ export function SettingsPanel({
           ))}
         </div>
         <p className="settings-note authorization-status" role="status">
-          Current isolation: <strong>{effective}</strong>
+          Current isolation: <strong>{sandboxModeLabel(effective)}</strong>
         </p>
         {onRestartHost !== undefined && workspace !== null && (
           <div className="settings-host-restart">

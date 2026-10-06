@@ -13,7 +13,7 @@ import {
   type WorkspaceRootObservation,
 } from "../lib/projects";
 import type { SandboxMode } from "../lib/settings";
-import { SANDBOX_MODES } from "./SettingsPanel";
+import { sandboxModeLabel } from "./SettingsPanel";
 import { userFacingError } from "../lib/errorCopy";
 import {
   describeRules,
@@ -293,7 +293,7 @@ export function ProjectsPanel({
             }
             hasActiveThread={activeSessionId !== null}
             globalSettings={globalSettings}
-            isolationLabel={SANDBOX_MODES.find((level) => level.mode === isolation)?.label ?? isolation}
+            isolationLabel={sandboxModeLabel(isolation)}
             effective={settingsFor(p.id)}
             onDelete={() => onDelete(p.id)}
             onUpdate={(patch) => onUpdate(p.id, patch)}
