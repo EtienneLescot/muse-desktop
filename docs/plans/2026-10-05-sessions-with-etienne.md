@@ -1,29 +1,32 @@
-# What only Étienne can unblock — 5 October 2026
+# What only Étienne can unblock — 5 October 2026, updated 6 October
 
 Everything below needs a person, a device or an outward-facing decision. The agent-reachable work
-of the [closure audit](2026-10-05-roadmap-closure-audit.md) runs without it.
+of the [closure audit](2026-10-05-roadmap-closure-audit.md) runs without it. The four decisions are
+resolved. The Windows session happens when you say so (decision of 06/10).
 
-## Decisions
+## Decisions — resolved on 05/10/2026
 
-| # | Decision | Why it matters | Default if no answer |
-|---|---|---|---|
-| D1 | **Windows workspace isolation is broken on native Muse 1.4.2.** Under `--sandbox-network restricted` the model's shell tool cannot write a file, even inside the root and after approval; network stays blocked. `--disable-sandbox` works. Evidence: [`m0-06-verdict-matrix-1.4.2.json`](../evidence/2026-10-05-roadmap-closure/m0-06-verdict-matrix-1.4.2.json). Options: keep the default and say so in Settings, or default Windows-native projects to the elevated posture until upstream fixes it. | With the default posture, the model cannot change files on Windows native. | Keep the default and state the limit in the UI. |
-| D2 | **Upstream posts** (public, under your account): reply to #56 with the 1.4.2 approval measurements, a new issue for the D1 sandbox write defect, and a link from #55 to #31 (the fork defect is still present on 1.4.2). | The maintainer asked for the 1.4.2 re-test on 02/10. | Drafts kept in `docs/upstream/`, nothing posted. |
-| D3 | **Release:** v0.2.0 was never published (release run 36792792297: the engine draft is no longer found by tag, and the macOS cargo test was red). Options: cut 0.2.1 once CI is green and Codex's installer qualification lands, or retag. | The 0.2.0 notes promise a notarised DMG that does not exist. | Nothing published. |
-| D4 | **Label "Approve on my behalf":** since 05/10 the app approves nothing itself; the engine simply does not ask inside the isolation. Rename (e.g. "Ask only for more access")? | The label describes a behaviour that no longer exists. | Keep it. |
+| # | Question | Outcome (Étienne) |
+|---|---|---|
+| D1 | **Windows workspace isolation on native Muse 1.4.2.** Under `--sandbox-network restricted` the model's shell tool could not write a file inside the root. Keep the default and say so in Settings, or default Windows-native projects to the elevated posture? Evidence: [`m0-06-verdict-matrix-1.4.2.json`](../evidence/2026-10-05-roadmap-closure/m0-06-verdict-matrix-1.4.2.json). | **Resolved: keep the default workspace isolation and document the limit.** The cause is narrower than feared: the sandboxed PowerShell starts in a verbatim `\\?\` folder, so cmdlets with relative paths fail. Absolute paths, `write_file` and `--disable-sandbox` work. Settings states it; upstream [#88](https://github.com/meta-models/muse-code-sdk/issues/88). |
+| D2 | **Upstream posts** (public, under your account): the 1.4.2 re-test on #56, the D1 defect, a link from #55 to #31. | **Resolved: post.** On 05/10: #56 answered (the maintainer closed it: fixed in 1.4.0 and later), #55 linked to #31, #88 filed. On 06/10, with relevant findings posted in your name: #57 commented, #91, #92, #93 and #94 filed. Detail in [`docs/upstream/issues/`](../upstream/issues/README.md). |
+| D3 | **Release:** v0.2.0 was never published. Cut 0.2.1 once CI is green and Codex's installer qualification lands, or retag? | **Resolved: nothing is published for now.** Codex qualifies the 0.2.0 installer. |
+| D4 | **Label "Approve on my behalf":** the app approves nothing itself; the engine simply does not ask inside the isolation. Rename it? | **Resolved: renamed "Ask only for more access".** Settings and the composer show it since 05/10 ([`m0-05-06-approvals.json`](../evidence/2026-10-05-roadmap-closure/m0-05-06-approvals.json), phase `texts-final`). |
 
-## Windows session with you (about 1 h, one sitting)
+## Windows session with you (about 1 h 15, when you say so)
 
 1. **Screen reader, M0-12 and M1-13 (20 min).** NVDA 2026.2 portable is ready on `G:\muse-proofs\nvda\portable` (signed NV Access, SHA-1 checked). NVDA takes the keyboard and the audio: the agent starts it with a logged silent voice, drives the app over CDP, and records every spoken phrase. You only need to say "go" and not type meanwhile.
 2. **Voice, M4-08 (10 min).** You dictate a sentence through the Logitech headset, interrupt mid-sentence, edit before sending. Per the 05/10 decision, audio goes to Microsoft's speech service.
 3. **Second device, M4-06 (5 min).** The share server runs on this PC's LAN address. You open the published link on your phone, then again after revoke: it must give the 404.
-4. **Sleep and lock, M3-07 (20 min).** A "Once" automation is set a few minutes ahead. You lock the session (Win+L), then put the PC to sleep, and wake it after the time. Then you move the clock forward one hour and back. The agent may not change system settings.
-5. **Expired token, M3-02 (5 min, optional).** It needs a bearer-protected MCP endpoint and a token you create, for example a GitHub PAT for the GitHub MCP server.
+4. **Sleep, lock and clock change, M3-07 (20 min).** A "Once" automation is set a few minutes ahead. You lock the session (Win+L), then put the PC to sleep, and wake it after the time. Then you move the clock forward one hour and back. The agent may not change system settings.
+5. **Computer use "Observe and act", M0-13 and M4-04 (20 min).** The agent sets an isolated test instance to "Observe and act" and checks that its service starts on its own pipe. Then one real act turn on a test application: an action that changes it, a refused permission, its window closed meanwhile, you taking the mouse back, and no action after Stop. You watch, hands off unless asked.
+
+The M3-02 expired-token item is no longer needed: it was proved on 06/10 against a local bearer-protected server ([`m3-02-remote-mcp-token.json`](../evidence/2026-10-05-roadmap-closure/m3-02-remote-mcp-token.json)).
 
 ## Infrastructure you own
 
-- **M0-10, clean machine:** a Windows VM or a second PC with no WSL, no Muse and no history, plus a real sign-in.
-- **M4-07, separate host:** the remote-engine proof runs against an sshd in the WSL2 VM on this PC. A real separate machine needs one of your hosts (one of the two non-GitHub entries in your `known_hosts`, or a Tailscale device).
+- **M0-10, clean machine:** a Windows VM or a second PC with no WSL, no Muse and no history, plus a real sign-in. This PC runs Windows Home, which has no Windows Sandbox.
+- **M4-07, separate host (optional):** M4-07 closed on 06/10 against an sshd in the WSL2 VM on this PC, with that limit stated. A real separate machine needs one of your hosts (one of the two non-GitHub entries in your `known_hosts`, or a Tailscale device).
 - **Housekeeping:** in WSL, `~/.ssh/id_ed25519_etiennelescot.fr` is owned by root with mode 0644. ssh refuses such a key. Fix with `chown etienne: … && chmod 600 …`.
 
 ## macOS session (about 3 h 20, on your Mac)
