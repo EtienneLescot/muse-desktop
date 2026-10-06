@@ -60,13 +60,31 @@ pub const SOCKET_NAME: &str = "muse-desktop-computer.sock";
 
 /// The endpoint string handed to `--socket`.
 pub fn endpoint() -> String {
+    // `cargo test` runs where the driver may be installed and the user's own
+    // service live: on their endpoint, `disable` in a test revoked and stopped it.
+    #[cfg(test)]
+    let test_dir = Some(std::env::temp_dir().join("muse-desktop-unit-tests"));
+    #[cfg(not(test))]
+    let test_dir = crate::test_mode::data_dir();
+    endpoint_for(test_dir.as_deref())
+}
+
+/// A test instance (ADR 0003) runs beside the user's app: on the shared pipe
+/// its level change or revoke would stop and replace the user's own service.
+/// It gets an endpoint of its own, named after its data folder so the relay
+/// the engine starts finds the same one.
+fn endpoint_for(test_dir: Option<&Path>) -> String {
+    let suffix = test_dir
+        .map(|dir| format!("-test-{:016x}", fnv1a(dir.to_string_lossy().as_bytes())))
+        .unwrap_or_default();
     #[cfg(windows)]
     {
-        PIPE.to_string()
+        format!("{PIPE}{suffix}")
     }
     #[cfg(not(windows))]
     {
-        std::env::temp_dir().join(SOCKET_NAME).display().to_string()
+        let name = SOCKET_NAME.replace(".sock", &format!("{suffix}.sock"));
+        std::env::temp_dir().join(name).display().to_string()
     }
 }
 
@@ -388,12 +406,21 @@ pub fn run_relay() -> i32 {
     child.wait().ok().and_then(|status| status.code()).unwrap_or(0)
 }
 
-/// Where the relay finds the recorded level: the same directory the app uses
-/// (`app_data_dir/computer-use`), reconstructed from the environment because
-/// the relay runs without a Tauri app handle. The identifier mirrors
-/// `tauri.conf.json`; a miss means no ceiling, and the driver's own policy
-/// still applies.
+/// The level on record, read once by the relay. A miss means no ceiling, and
+/// the driver's own policy still applies.
 fn relay_level() -> Option<&'static str> {
+    recorded_level(&read_manifest(&relay_dir(crate::test_mode::data_dir())?)?)
+}
+
+/// Where the relay finds the recorded level: the same directory the app uses
+/// (`computer_data_dir` in main.rs), reconstructed from the environment
+/// because the relay runs without a Tauri app handle. A test instance's is in
+/// its own data folder, whose variable the engine passes on to the relay. The
+/// identifier mirrors `tauri.conf.json`.
+fn relay_dir(test_dir: Option<PathBuf>) -> Option<PathBuf> {
+    if let Some(dir) = test_dir {
+        return Some(dir.join("computer-use"));
+    }
     #[cfg(windows)]
     let base = std::env::var_os("APPDATA").map(PathBuf::from)?;
     #[cfg(target_os = "macos")]
@@ -403,8 +430,7 @@ fn relay_level() -> Option<&'static str> {
     let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))?;
-    let dir = base.join("com.muse.desktop").join("computer-use");
-    recorded_level(&read_manifest(&dir)?)
+    Some(base.join("com.muse.desktop").join("computer-use"))
 }
 
 /// The relay's level ceiling (M4-03). With the browser attached the driver
@@ -755,15 +781,18 @@ pub fn set_attach(dir: &Path, attach: bool) -> Result<Value, String> {
 /// exact bytes they approved. This mirrors the sha256 the driver reports, but is
 /// computed here so it exists even when the service is down.
 fn manifest_digest(manifest: &Value) -> String {
-    let canonical = serde_json::to_string(manifest).unwrap_or_default();
     // FNV-1a over the canonical JSON: this is a display fingerprint, not a
     // security boundary — the driver holds the real sha256.
+    format!("{:016x}", fnv1a(serde_json::to_string(manifest).unwrap_or_default().as_bytes()))
+}
+
+fn fnv1a(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in canonical.as_bytes() {
+    for byte in bytes {
         hash ^= u64::from(*byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
-    format!("{hash:016x}")
+    hash
 }
 
 /// Everything the UI needs to describe the feature honestly.
@@ -1342,13 +1371,39 @@ mod tests {
         assert_eq!(surface_browser_ids(&plain.to_string()), None);
     }
 
+    /// M0-13: a test instance's level change or revoke must never reach the
+    /// user's own service, so its pipe differs, and stays the same for the
+    /// relay that runs in another process with the same data folder. That
+    /// relay reads its level ceiling from the test folder, not the user's.
+    #[cfg(windows)]
+    #[test]
+    fn a_test_instance_keeps_to_its_own_pipe_and_grant() {
+        let dir = Path::new(r"G:\proofs\appdata-1");
+        assert_eq!(endpoint_for(None), PIPE);
+        let one = endpoint_for(Some(dir));
+        assert_ne!(one, PIPE);
+        assert!(one.starts_with(PIPE));
+        assert_eq!(one, endpoint_for(Some(Path::new(r"G:\proofs\appdata-1"))));
+        assert_ne!(one, endpoint_for(Some(Path::new(r"G:\proofs\appdata-2"))));
+        assert_eq!(relay_dir(Some(dir.to_path_buf())), Some(dir.join("computer-use")));
+    }
+
+    /// The tests here call `disable` and probe the service: with the driver
+    /// installed, on the user's endpoint they revoked and stopped their grant.
+    #[test]
+    fn unit_tests_never_reach_the_users_endpoint() {
+        assert_ne!(endpoint(), endpoint_for(None));
+    }
+
     #[cfg(not(windows))]
     #[test]
     fn the_unix_endpoint_is_a_private_short_socket() {
-        let endpoint = endpoint();
-        assert!(endpoint.ends_with(SOCKET_NAME));
-        assert!(endpoint.len() < 104, "sun_path limit: {endpoint}");
-        assert!(std::path::Path::new(&endpoint).is_absolute());
+        let shipped = endpoint_for(None);
+        assert!(shipped.ends_with(SOCKET_NAME));
+        for endpoint in [shipped, endpoint()] {
+            assert!(endpoint.len() < 104, "sun_path limit: {endpoint}");
+            assert!(std::path::Path::new(&endpoint).is_absolute());
+        }
     }
 
     /// A grant that has lapsed must not be handed to the host: the service is

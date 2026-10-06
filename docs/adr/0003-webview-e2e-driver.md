@@ -15,6 +15,7 @@ On Windows, CI drives the debug build over CDP with the existing harness: `npm r
 The app starts in an isolated test mode, compiled into debug builds on Windows only (`src-tauri/src/test_mode.rs`):
 
 - `MUSE_DESKTOP_TEST_DATA_DIR` turns it on. That folder holds the app data (outbox, scheduler, notifications, computer use, MCP packages) and the WebView2 profile: the app sets `WEBVIEW2_USER_DATA_FOLDER` itself, which overrides the folder Tauri passes to WebView2. The elevated runner honours it; the check verifies it on every run.
+- The computer-use service of a test instance listens on a pipe named after that folder, not on the user's: on the shared pipe, a level change or a revoke would stop and replace the user's own service. The relay the engine starts reads its level ceiling from the same folder.
 - The mode never goes unnoticed: one line on stderr, `testMode: true` in the native diagnostics, and `test-mode.pid` written in the folder at startup.
 - `MUSE_DESKTOP_TEST_SIDECAR`, a JSON argv, replaces every local engine. Missing or malformed, the start fails: a test instance never runs a real local engine. A remote target (`ssh://`, ADR 0002) that the test profile itself configured is reached over the system ssh, as outside test mode; a test that configures no remote target never leaves the fixture, as in CI.
 - `MUSE_DESKTOP_TEST_CDP_PORT` opens CDP through the window's `additionalBrowserArgs`, a WebView2 option, so an elevated host keeps it.
