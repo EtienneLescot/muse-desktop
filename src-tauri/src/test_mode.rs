@@ -56,18 +56,24 @@ pub fn enter() -> bool {
 /// The DevTools port goes through the WebView2 options: an elevated host, as
 /// on a CI runner, ignores `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`.
 pub fn open_devtools<R: tauri::Runtime>(context: &mut tauri::Context<R>) {
-    let Some(port) = data_dir()
-        .and_then(|_| std::env::var("MUSE_DESKTOP_TEST_CDP_PORT").ok())
-        .and_then(|value| value.parse::<u16>().ok())
-    else {
-        return;
-    };
+    let Some(args) = browser_args() else { return };
     for window in &mut context.config_mut().app.windows {
-        // Options replace wry's default arguments: keep them.
-        window.additional_browser_args = Some(format!(
-            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"
-        ));
+        window.additional_browser_args = Some(args.clone());
     }
+}
+
+/// The WebView2 arguments of a test instance, for every webview it opens:
+/// WebView2 refuses a second webview whose options differ, so the native
+/// browser window (opened at run time) needs them too — without, it never
+/// showed while its command answered "opened" (M0-13, 06/10/2026).
+pub fn browser_args() -> Option<String> {
+    let port = data_dir()
+        .and_then(|_| std::env::var("MUSE_DESKTOP_TEST_CDP_PORT").ok())
+        .and_then(|value| value.parse::<u16>().ok())?;
+    // Options replace wry's default arguments: keep them.
+    Some(format!(
+        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"
+    ))
 }
 
 /// The engine argv. Fails closed: a test instance never starts a real engine.

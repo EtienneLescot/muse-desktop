@@ -691,7 +691,7 @@ async fn open_native_browser(app: AppHandle, url: String, session_id: String) ->
             .map_err(|e| format!("could not focus native browser: {e}"))?;
         return Ok("reused".to_string());
     }
-    WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         &app,
         &label,
         WebviewUrl::External(parsed),
@@ -699,9 +699,13 @@ async fn open_native_browser(app: AppHandle, url: String, session_id: String) ->
     .title(format!("Muse Browser · {}", session.chars().take(8).collect::<String>()))
     .incognito(true)
     .inner_size(1180.0, 800.0)
-    .min_inner_size(720.0, 480.0)
-    .build()
-    .map_err(|e| format!("could not open native browser: {e}"))?;
+    .min_inner_size(720.0, 480.0);
+    if let Some(args) = test_mode::browser_args() {
+        builder = builder.additional_browser_args(&args);
+    }
+    builder
+        .build()
+        .map_err(|e| format!("could not open native browser: {e}"))?;
     Ok("opened".to_string())
 }
 

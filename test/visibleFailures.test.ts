@@ -34,6 +34,8 @@
  *   grants userShell) and the host refused the command after the click; the
  *   composer said nothing. A refused command or tool call closed as an
  *   ordinary collapsed row.
+ * - M0-13: a share snapshot of a conversation with no messages created no
+ *   bundle and said nothing.
  *
  * Both are layout/lifecycle facts that the pure-logic tests cannot see.
  */
@@ -195,6 +197,14 @@ describe("visible failures", () => {
     const stream = read("../src/components/StreamView.tsx");
     assert.match(stream, /e\.role === "tool" && e\.failed === true && <strong className="tool-failed">Failed<\/strong>/);
     assert.match(stream, /<details className="tool-call" open=\{e\.failed === true\}>/);
+  });
+
+  it("says why a share snapshot created nothing", () => {
+    const panel = read("../src/components/SharePanel.tsx");
+    assert.equal(panel.match(/onClick=\{\(\) => snapshot\("(?:markdown|json)"\)\}/g)?.length, 2, "both snapshot buttons");
+    assert.match(panel, /const created = onShareSession\(activeSessionId, format\);/);
+    assert.match(panel, /"Nothing to snapshot: this conversation has no messages yet\."/);
+    assert.match(panel, /role="status">\{snapshotRefusal\}/);
   });
 
   it("writes one transcript line per question, though the host delivers it twice", () => {
