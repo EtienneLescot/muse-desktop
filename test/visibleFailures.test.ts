@@ -137,7 +137,7 @@ describe("visible failures", () => {
       assert.equal(text.match(/await confirmAction\(/g)?.length ?? 0, calls, `${file} awaits confirmAction`);
       asked += calls;
     }
-    assert.equal(asked, 4, "the move, the archive delete and both host restarts ask");
+    assert.equal(asked, 5, "the move, the archive delete, both host restarts and the posture restart ask");
 
     const { confirmAction } = await import("../src/lib/env.ts");
     const calls: unknown[] = [];
@@ -193,10 +193,19 @@ describe("visible failures", () => {
 
   it("says before the click what a Read only project's host refuses, and marks a refused item", () => {
     const app = read("../src/App.tsx");
-    assert.match(app, /const activeRefusal =\s*activeProject === null \? null : postureRefusal\(hostSandboxConfigForProject\(sandbox, activeProjectSettings\)\);/);
-    assert.match(app, /runThroughMuseBlocked=\{userShellBlocked\(active\) \?\? activeRefusal\}/, "Run in Muse is off, with the reason");
-    const note = app.indexOf("{activeRefusal !== null && (");
-    assert.ok(note > 0 && note < app.indexOf("<Composer", note) && app.indexOf("<Composer", note) - note < 400, "the note sits right above the composer");
+    // M0-13 check: from the posture the running host was started with, not the
+    // project's current settings, which only a restart applies.
+    assert.match(app, /const activePosture = active === null\s*\? null\s*: hostPostureNotice\(\s*hostSandboxForSession\(active\.session_id\),\s*hostSandboxConfigForProject\(sandbox, activeProject === null \? undefined : activeProjectSettings\),\s*\);/);
+    assert.match(app, /runThroughMuseBlocked=\{userShellBlocked\(active\) \?\? activePosture\?\.blocked \?\? null\}/, "Run in Muse is off, with the reason");
+    const note = app.indexOf("{activePosture?.note != null && (");
+    assert.ok(note > 0 && note < app.indexOf("<Composer", note) && app.indexOf("<Composer", note) - note < 1200, "the note sits right above the composer");
+    assert.match(app.slice(note, app.indexOf("<Composer", note)), /activePosture\.restart && \([\s\S]*reconnectSession\(active\.session_id, \{ reload: true \}\)/, "a changed posture offers the restart that applies it");
+    const hostSide = read("../src/hooks/useMuseSessions.ts");
+    for (const at of ["const meta = await invoke<BackendSessionMeta>(\"start_session\"", "const meta = await invoke<BackendSessionMeta>(\"resume_session\""]) {
+      const from = hostSide.indexOf(at);
+      assert.ok(from > 0, at);
+      assert.match(hostSide.slice(from, from + 1600), /setHostSandboxBySession\(\(cur\) => \(\{ \.\.\.cur, \[(meta\.session_id|id)\]: meta\.sandbox \}\)\);/, `${at} records the host's posture`);
+    }
     const hook = read("../src/hooks/useMuseSessions.ts");
     const done = hook.slice(hook.indexOf('if (kind === "item_done") {'), hook.indexOf("refreshAutoShare(sid);", hook.indexOf('if (kind === "item_done") {')));
     assert.match(done, /failed = itemId !== undefined && obj\.status === "failed";/);
@@ -225,15 +234,68 @@ describe("visible failures", () => {
   it("keeps a remote connector's stored bearer with its URL and says what happened to it", () => {
     const hook = read("../src/hooks/useMuseSessions.ts");
     const probe = hook.slice(hook.indexOf("const probeRemoteMcp = useCallback("), hook.indexOf("const callRemoteMcp = useCallback("));
-    assert.match(probe, /const ownUrl = existing\?\.kind === "remote" && storedBearerApplies\(existing\.url, endpoint\);/);
-    assert.match(probe, /if \(!effectiveToken\.trim\(\) && ownUrl && isTauriRuntime\(\)\) \{\s*try \{\s*effectiveToken = \(await invoke<string \| null>\("secure_store_get"/, "re-read for the registered URL only");
-    assert.match(probe, /\} else if \(existing\?\.kind === "remote" && !ownUrl && isTauriRuntime\(\)\) \{[^}]*secure_store_remove/, "moved without a token: the old bearer goes");
+    // F7: refused before any request.
+    const refused = probe.indexOf("const tooLong = token.trim() ? bearerTokenProblem(endpoint, token) : null;");
+    assert.ok(refused > 0 && refused < probe.indexOf("probeRemoteMcpTransport("), "a token no store or header can take is refused up front");
+    assert.match(probe, /if \(tooLong !== null\) return null;/);
+    // F1: stored with its URL, read for that URL only.
+    assert.match(probe, /const stored = storedBearerFor\(await invoke<string \| null>\("secure_store_get", \{ key \}\), endpoint\);/, "re-read for the URL it was saved with only");
+    assert.match(probe, /if \(token\.trim\(\) && isTauriRuntime\(\)\) \{\s*try \{\s*await invoke\("secure_store_set", \{ key, secret: encodeStoredBearer\(endpoint, token\) \}\);/, "a typed token is saved with its URL");
+    const failedSave = probe.slice(probe.indexOf("secret: encodeStoredBearer("), probe.indexOf("return result;"));
+    assert.match(failedSave, /\} catch \{[\s\S]*const removed = await invoke\("secure_store_remove", \{ key \}\)\.then\(\(\) => true, \(\) => false\);/, "a failed save drops what stays stored");
+    assert.doesNotMatch(probe, /reconnect after restart will require the token again/, "the notice says what Reconnect can still do");
+    assert.match(probe, /\} else if \(!effectiveToken\.trim\(\) && existing\?\.kind === "remote" && existing\.url !== endpoint && isTauriRuntime\(\)\) \{[^}]*secure_store_remove/, "moved without a token: the old bearer goes");
     assert.match(probe, /entry\.id === id && entry\.kind === "remote" && entry\.url === endpoint/, "a failed probe of another URL leaves the entry");
-    assert.match(probe, /const message = remoteMcpFailureMessage\(.*, effectiveToken\);/, "a refusal without a token says so");
+    assert.match(probe, /const message = remoteMcpFailureMessage\(.*, effectiveToken, noToken\);/, "a refusal without a token says so, and why");
     const call = hook.slice(hook.indexOf("const callRemoteMcp = useCallback("), hook.indexOf("const setSkillEnabledByName"));
     assert.match(call, /if \(isRemoteMcpSessionExpired\(message\) \|\| \(isRemoteMcpAuthenticationError\(message\) && session\.token\.trim\(\)\)\) \{/, "an ended session gets the one re-handshake");
+    assert.match(call, /setRemoteNotice\(message\);\s*dropRemoteSession\(id\);/, "a failed call keeps its own message");
     const panel = read("../src/components/ConnectorPanel.tsx");
     assert.doesNotMatch(panel, /stays in\s+memory and is cleared when you disconnect or close the app/, "the bearer is stored, not only in memory");
     assert.match(panel, /saved in\s+your system's credential store/);
+    assert.doesNotMatch(read("../src/lib/remoteMcp.ts"), /bearer tokens and the MCP session id deliberately stay in the\s+caller's memory/);
+  });
+
+  // M3-02 check (F3, F8), 06/10/2026.
+  it("sends a typed token once, to the URL it was typed for, and forgets nothing while a probe runs", () => {
+    const panel = read("../src/components/ConnectorPanel.tsx");
+    const reconnect = panel.slice(panel.indexOf("async function reconnectRemote("), panel.indexOf("return (", panel.indexOf("async function reconnectRemote(")));
+    assert.match(reconnect, /const token = reconnectToken\(remoteTokenUrl, remoteToken, entry\.url\);/);
+    assert.match(reconnect, /setRemoteToken\(""\);[\s\S]*await onProbeRemote\(entry\.name, entry\.url, token\);/, "cleared before the probe, sent once");
+    assert.match(panel, /const token = remoteToken;\s*setRemoteToken\(""\);\s*const result = await onProbeRemote\(/, "the form's probe clears it too");
+    assert.match(panel, /setRemoteToken\(ev\.target\.value\);\s*setRemoteTokenUrl\(remoteUrl\);/, "bound to the URL shown when typed");
+    const forget = panel.match(/<button[^>]*?(?:disabled=\{[^}]*\}[^>]*?)?onClick=\{\(\) => void onForgetRemoteCredential\(entry\.id\)\}/g) ?? [];
+    assert.equal(forget.length, 2, "both Forget token buttons");
+    for (const button of forget) assert.match(button, /disabled=\{remoteBusy !== null\}/, "Forget token waits for the probe");
+  });
+
+  // M3-02 proof and check (F2), 06/10/2026.
+  it("tells the conversations still holding a remote's bearer, whatever took it away in Extensions", () => {
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const body = (head: string): string => {
+      const start = hook.indexOf(head);
+      assert.ok(start > 0, head);
+      return hook.slice(start, hook.indexOf(" = useCallback(", start + head.length));
+    };
+    assert.match(body("const forgetRemoteMcpCredential = useCallback("), /noteHeldBearer\(id, "its token was forgotten"\)/);
+    assert.match(body("const disconnectRemoteMcp = useCallback("), /noteHeldBearer\(id, "disconnected"\)/);
+    assert.match(body("const uninstallConnectorById = useCallback("), /noteHeldBearer\(id, "removed"\)/);
+    assert.match(body("const setConnectorEnabledById = useCallback("), /noteHeldBearer\(id, "disabled"\)/);
+    assert.match(body("const setConnectorUseInMuseById = useCallback("), /noteHeldBearer\(id, "Use in Muse turned off"\)/);
+    assert.match(hook, /remoteHandedRef\.current\[meta\.session_id\] = mcp\?\.remoteIds \?\? \[\];/, "a start records what it handed");
+    assert.match(hook, /remoteHandedRef\.current\[id\] = reload\s*\? mcp\?\.remoteIds \?\? \[\]/, "a reload replaces the record, a plain resume only adds");
+  });
+
+  // M0-13 check, 06/10/2026: "Reconnect with current connectors" returned at
+  // once for a conversation its host had loaded, and applied nothing.
+  it("reloads the conversation's host when asked for the current connectors", () => {
+    const app = read("../src/App.tsx");
+    assert.match(app, /onReconnectActive=\{\(sessionId\) => reconnectSession\(sessionId, \{ reload: true \}\)\}/);
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const resume = hook.slice(hook.indexOf('const meta = await invoke<BackendSessionMeta>("resume_session"'), hook.indexOf("if (tombstoned.current?.has(id)) return;", hook.indexOf('invoke<BackendSessionMeta>("resume_session"')));
+    assert.match(resume, /\s+reload,\s/, "resume_session gets the reload flag");
+    const rust = read("../src-tauri/src/main.rs");
+    const inner = rust.slice(rust.indexOf("async fn resume_session_inner("), rust.indexOf("#[tauri::command]", rust.indexOf("async fn resume_session_inner(")));
+    assert.match(inner, /if let Some\(meta\) = attached_session\(state, &session_id, &root\)\? \{\s*if !reload \{\s*return Ok\(meta\);\s*\}[\s\S]*replace_idle_host\(/, "a loaded conversation gets a fresh host");
   });
 });

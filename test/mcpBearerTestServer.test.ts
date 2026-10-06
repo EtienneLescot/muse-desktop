@@ -85,4 +85,13 @@ describe("M3-02 bearer test server", () => {
     assert.equal(log.find((row) => row.rpc === "tools/call" && row.status === 200)?.nonce, "n-1");
     assert.equal(log.find((row) => row.auth === "none")?.status, 401);
   });
+
+  // M3-02 check (F4), 06/10/2026: the transport followed redirects, bearer included.
+  it("answers /redirect with a 307 the app's transport does not follow", async () => {
+    await admin("/admin/accept", { sha256: sha(TOKEN) });
+    const before = (await admin("/admin/log") as unknown[]).length;
+    await assert.rejects(() => probeRemoteMcp(url.replace(/\/mcp$/, "/redirect"), TOKEN), /redirect: Muse does not follow it/);
+    const rows = (await admin("/admin/log") as Array<Record<string, unknown>>).slice(before);
+    assert.deepEqual(rows.map((row) => `${row.path}:${row.status}`), ["/redirect:307"], "nothing reached /mcp");
+  });
 });

@@ -21,10 +21,15 @@
  * an unknown session id answers 404, as the spec says for an ended session.
  * CORS answers the app's webview origin, including on 401.
  *
+ * Two hostile paths, logged like the rest (M3-02 check, 06/10/2026):
+ *   /redirect   307 to /mcp: a client that follows carries its bearer there;
+ *   /hold       200 text/event-stream, then nothing, the stream left open.
+ *
  * Admin (header x-admin-key, never called by the app):
  *   POST /admin/accept {"sha256": "<hex>"}  the token now accepted
  *   POST /admin/expire                      the accepted token now answers 401 (expired)
  *   POST /admin/drop-sessions               every MCP session ends (next use: 404)
+ *   POST /admin/delay {"ms": <n>}           every /mcp answer waits n ms (0: none)
  *   GET  /admin/log                         the request log
  *   POST /admin/stop                        exit
  */
@@ -49,6 +54,7 @@ const short = (sha256hex) => sha256hex.slice(0, 12);
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
 let accepted = null; // sha256 hex of the one valid token
+let delayMs = 0;
 const expired = new Set();
 const sessions = new Set();
 const log = [];
@@ -159,6 +165,17 @@ async function handleMcp(req, res, path) {
     }
   }
   const rpc = frame && !Array.isArray(frame) ? { rpc: frame.method ?? null, rpcId: frame.id ?? null } : { rpc: Array.isArray(frame) ? "<batch>" : null };
+  if (path === "/redirect") {
+    record({ ...base, ...rpc, status: 307 });
+    return send(res, req, 307, undefined, { location: `http://${req.headers.host}/mcp` });
+  }
+  if (path === "/hold") {
+    record({ ...base, ...rpc, status: 200, held: true });
+    res.writeHead(200, { ...cors(req), "content-type": "text/event-stream" });
+    res.flushHeaders();
+    return undefined;
+  }
+  if (delayMs > 0) await new Promise((done) => setTimeout(done, delayMs));
   if (path !== "/mcp") {
     // Another URL than the one the connector was registered with: whatever
     // reaches it is logged (which bearer?), nothing is served.
@@ -231,6 +248,14 @@ async function handleAdmin(req, res, path) {
     record({ kind: "admin", action: "expire", token: accepted ? short(accepted) : null });
     accepted = null;
     return send(res, req, 200, { expired: [...expired].map(short) });
+  }
+  if (path === "/admin/delay") {
+    let ms = NaN;
+    try { ms = Number(JSON.parse(await readBody(req)).ms); } catch { /* checked below */ }
+    if (!Number.isInteger(ms) || ms < 0 || ms > 120_000) return send(res, req, 400, { error: "ms: 0..120000 required" });
+    delayMs = ms;
+    record({ kind: "admin", action: "delay", ms });
+    return send(res, req, 200, { delayMs });
   }
   if (path === "/admin/drop-sessions") {
     const count = sessions.size;

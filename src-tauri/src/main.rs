@@ -113,6 +113,11 @@ pub struct SessionMeta {
     /// `workspace` is where turns now run through `turn/start.workspaceRoots`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub host_workspace: Option<String>,
+    /// M0-13: the posture the conversation's host was started with, which
+    /// Muse fixes at `serve`. What it refuses is said from this, not from the
+    /// project's current settings, which only a restart applies.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox: Option<HostSandboxPolicy>,
 }
 
 /// Host title, trimmed, without control characters (a live title carried a
@@ -127,8 +132,9 @@ fn session_title(session: &Value) -> Option<String> {
 /// Sandbox posture selected when a workspace-owned Muse host is spawned.
 /// Muse fixes this posture for the lifetime of `muse serve`; it cannot be
 /// changed through MSP for an already running host.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum HostSandboxMode {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HostSandboxMode {
     Workspace,
     Network,
     Elevated,
@@ -164,8 +170,10 @@ impl HostSandboxMode {
 
 /// Concrete flags for one workspace-owned host. Project settings are folded
 /// into this value before spawn; the running host cannot mutate them later.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct HostSandboxPolicy {
+/// Serialized as the renderer's `HostSandboxConfig`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostSandboxPolicy {
     mode: HostSandboxMode,
     disable_write: bool,
     disable_shell: bool,
@@ -1203,6 +1211,7 @@ fn session_meta_from_list_row(
     session: &Value,
     session_durability: Option<String>,
     granted_capabilities: Option<Vec<String>>,
+    sandbox: Option<HostSandboxPolicy>,
 ) -> Option<SessionMeta> {
     let session_id = session
         .get("sessionId")
@@ -1221,6 +1230,7 @@ fn session_meta_from_list_row(
         loaded: session_loaded(session),
         title: session_title(session),
         host_workspace: None,
+        sandbox,
     })
 }
 
@@ -1332,6 +1342,16 @@ fn session_granted_capabilities(
 ) -> Result<Option<Vec<String>>, String> {
     Ok(state
         .host_capabilities
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?
+        .get(root)
+        .cloned())
+}
+
+/// The posture `root`'s live host was spawned with (`ensure_host` records it).
+fn host_posture(state: &AppState, root: &Path) -> Result<Option<HostSandboxPolicy>, String> {
+    Ok(state
+        .host_sandbox
         .lock()
         .map_err(|e| format!("state lock: {e}"))?
         .get(root)
@@ -1722,9 +1742,13 @@ fn is_host_full(error: &str) -> bool {
 const HOST_RECYCLED_MESSAGE: &str =
     "Muse closed this conversation to make room for another. It reconnects when you open it.";
 
+/// Sent with `host_exited` when a host is replaced to apply the current
+/// connectors or posture to one of its conversations.
+const HOST_RELOADED_MESSAGE: &str =
+    "Muse restarted this folder's host to apply new settings to another conversation. It reconnects when you open it.";
+
 /// Replace a full workspace host with a fresh process, so the number of
 /// conversations a user keeps is not bounded by what one host can load.
-/// Refused while any of its conversations is working: that would kill the turn.
 async fn recycle_full_host(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -1733,6 +1757,29 @@ async fn recycle_full_host(
     sandbox_disable_write: Option<bool>,
     sandbox_disable_shell: Option<bool>,
 ) -> Result<std::sync::Arc<MspClient>, String> {
+    replace_idle_host(
+        app,
+        state,
+        root,
+        (sandbox_mode, sandbox_disable_write, sandbox_disable_shell),
+        "Muse already has 32 conversations open in this folder and one of them is still working. Try again when it finishes.",
+        HOST_RECYCLED_MESSAGE,
+    )
+    .await
+}
+
+/// Replace `root`'s host with a fresh process started with `sandbox`.
+/// Refused with `busy_message` while any of its conversations is working:
+/// that would kill the turn.
+async fn replace_idle_host(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    root: &PathBuf,
+    sandbox: (Option<&str>, Option<bool>, Option<bool>),
+    busy_message: &str,
+    message: &str,
+) -> Result<std::sync::Arc<MspClient>, String> {
+    let (sandbox_mode, sandbox_disable_write, sandbox_disable_shell) = sandbox;
     let old_client = state
         .hosts
         .lock()
@@ -1752,9 +1799,9 @@ async fn recycle_full_host(
             running.iter().any(|id| hosts.owns(id, &old_client))
         };
         if busy {
-            return Err("Muse already has 32 conversations open in this folder and one of them is still working. Try again when it finishes.".into());
+            return Err(busy_message.to_string());
         }
-        retire_host(app, state, root, &old_client, HOST_RECYCLED_MESSAGE).await?;
+        retire_host(app, state, root, &old_client, message).await?;
     }
     ensure_host(app, state, root, sandbox_mode, sandbox_disable_write, sandbox_disable_shell).await
 }
@@ -4611,6 +4658,7 @@ async fn start_session_at_workspace(
         loaded: session_loaded(session),
         title: None,
         host_workspace: None,
+        sandbox: host_posture(&state, &root)?,
     };
     state
         .sessions
@@ -4751,6 +4799,7 @@ async fn fork_session(
         loaded: session_loaded(session),
         title: None,
         host_workspace: None,
+        sandbox: host_posture(&state, &root)?,
     };
     let mut sessions = state.sessions.lock().map_err(|e| format!("state lock: {e}"))?;
     // A fork of a moved conversation runs where its source runs.
@@ -4841,6 +4890,7 @@ async fn resume_session_with_client(
             .or_else(|| session_loaded(&read)),
         title: read.get("session").and_then(session_title),
         host_workspace: None,
+        sandbox: host_posture(state, &root)?,
     };
     state.sessions.lock().map_err(|e| e.to_string())?.insert(session_id.clone(), meta.clone());
     if let Err(error) = state.hosts.lock().map_err(|e| e.to_string())?.bind(&session_id, &root, &client) {
@@ -4900,11 +4950,29 @@ async fn resume_session_inner(
     sandbox_disable_write: Option<bool>,
     sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
+    reload: bool,
 ) -> Result<SessionMeta, String> {
     let _resume = state.resume_mutex.lock().await;
     let root = resolve_workspace(state, Some(workspace_path))?;
     if let Some(meta) = attached_session(state, &session_id, &root)? {
-        return Ok(meta);
+        if !reload {
+            return Ok(meta);
+        }
+        // M0-13: a loaded conversation keeps what its host started it with:
+        // 1.4.2 refuses another MCP config on it (`session_configuration_conflict`,
+        // measured 06/10/2026) and fixes the posture at `serve`. In a fresh host
+        // it is not loaded, and its resume takes the current ones. retire_host
+        // drops the buffered events of the host's conversations, its host_exited
+        // included: this one is not told it left.
+        replace_idle_host(
+            app,
+            state,
+            &root,
+            (sandbox_mode.as_deref(), sandbox_disable_write, sandbox_disable_shell),
+            "A conversation in this folder is still working: try again when it finishes.",
+            HOST_RELOADED_MESSAGE,
+        )
+        .await?;
     }
     let client = ensure_host(
         app,
@@ -4942,6 +5010,7 @@ async fn resume_session(
     sandbox_disable_shell: Option<bool>,
     mcp_servers: Option<Value>,
     effective_workspace: Option<String>,
+    reload: Option<bool>,
 ) -> Result<Value, String> {
     let meta = resume_session_inner(
         &app,
@@ -4952,6 +5021,7 @@ async fn resume_session(
         sandbox_disable_write,
         sandbox_disable_shell,
         mcp_servers,
+        reload == Some(true),
     ).await?;
     match effective_workspace.filter(|w| !w.trim().is_empty()) {
         Some(workspace) => resume_in_workspace(&state, &session_id, meta, workspace).await,
@@ -5227,6 +5297,7 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
             .get(&root)
             .cloned();
         let granted_capabilities = session_granted_capabilities(&state, &root)?;
+        let sandbox = host_posture(&state, &root)?;
         let mut cursor = None;
         let mut seen_cursors = HashSet::new();
         let mut seen_sessions = HashSet::new();
@@ -5264,6 +5335,7 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
                         s,
                         session_durability.clone(),
                         granted_capabilities.clone(),
+                        sandbox.clone(),
                     ) else {
                         continue;
                     };
@@ -5284,6 +5356,9 @@ async fn restore_sessions(state: State<'_, AppState>) -> Result<Vec<SessionMeta>
                         }
                         if listed.granted_capabilities.is_some() {
                             existing.granted_capabilities = listed.granted_capabilities.clone();
+                        }
+                        if listed.sandbox.is_some() {
+                            existing.sandbox = listed.sandbox.clone();
                         }
                         existing.clone()
                     } else {
@@ -6451,6 +6526,7 @@ mod tests {
                 title: None,
                 host_workspace: None,
                 granted_capabilities: None,
+                sandbox: None,
             },
         );
     }
@@ -6921,6 +6997,7 @@ mod tests {
                 title: None,
                 host_workspace: None,
                 granted_capabilities: None,
+                sandbox: None,
             },
         );
         let mut events = Vec::new();
@@ -6985,6 +7062,7 @@ mod tests {
                 title: None,
                 host_workspace: None,
                 granted_capabilities: None,
+                sandbox: None,
             },
         );
         let mut events = Vec::new();
@@ -7048,6 +7126,7 @@ mod tests {
                 title: None,
                 host_workspace: None,
                 granted_capabilities: None,
+                sandbox: None,
             },
         );
         let mut events = Vec::new();
@@ -8363,6 +8442,7 @@ mod tests {
             }),
             Some("durable".to_string()),
             Some(vec!["userShell".to_string()]),
+            Some(HostSandboxPolicy::parse(Some("workspace"), Some(true), Some(true)).unwrap()),
         )
         .unwrap();
         assert_eq!(meta.session_id, "session-restored");
@@ -8371,7 +8451,28 @@ mod tests {
         assert_eq!(meta.session_durability.as_deref(), Some("durable"));
         assert_eq!(meta.approval_mode.as_deref(), Some("promptUnmatched"));
         assert_eq!(meta.granted_capabilities, Some(vec!["userShell".to_string()]));
-        assert!(session_meta_from_list_row(Path::new("C:/workspace"), &json!({}), None, None).is_none());
+        assert!(session_meta_from_list_row(Path::new("C:/workspace"), &json!({}), None, None, None).is_none());
+    }
+
+    /// M0-13: the renderer says what a conversation's host refuses from the
+    /// posture it was spawned with, in its own `HostSandboxConfig` shape.
+    #[test]
+    fn session_metadata_carries_the_host_posture_for_the_renderer() {
+        let policy = HostSandboxPolicy::parse(Some("network"), Some(true), Some(false)).unwrap();
+        let meta = session_meta_from_list_row(
+            Path::new("C:/workspace"),
+            &json!({"sessionId": "s"}),
+            None,
+            None,
+            Some(policy),
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(&meta).unwrap()["sandbox"],
+            json!({"mode": "network", "disableWrite": true, "disableShell": false}),
+        );
+        let unknown = session_meta_from_list_row(Path::new("C:/workspace"), &json!({"sessionId": "s"}), None, None, None).unwrap();
+        assert!(serde_json::to_value(&unknown).unwrap().get("sandbox").is_none(), "no host, no posture claimed");
     }
 
     #[test]
@@ -9677,6 +9778,7 @@ mod tests {
             loaded: Some(false),
             title: None,
             host_workspace: None,
+            sandbox: None,
         };
         apply_resumed_session(
             &mut meta,

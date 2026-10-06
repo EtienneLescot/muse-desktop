@@ -383,6 +383,26 @@ describe("remote guard (US-26: single remote + public internet)", () => {
     assert.equal(isPublicHttpUrl("not a url"), false);
   });
 
+  // M3-02 check (F5), 06/10/2026: each of these passed the guard.
+  it("isPublicHttpUrl refuses private hosts however they are spelled", () => {
+    const refused = [
+      "https://localhost./x", "https://LOCALHOST/x", "https://foo.local./x", "https://metadata.google.internal./x",
+      "https://metadata/x", "https://intranet/x", "https://printer.home.arpa/x", "https://app.localhost/x",
+      "https://0.0.0.1/x", "https://0.0.0.0/x", "https://2130706433/x", "https://0x7f.1/x", "https://10.1.2.3/x",
+      "https://100.64.0.1/x", "https://172.16.0.1/x", "https://192.168.1.1/x", "https://198.18.0.1/x",
+      "https://224.0.0.1/x", "https://255.255.255.255/x", "https://169.254.169.254/latest/meta-data",
+      "https://[::]/x", "https://[::1]/x", "https://[::ffff:127.0.0.1]/x", "https://[::ffff:192.168.1.1]/x",
+      "https://[::127.0.0.1]/x", "https://[::ffff:169.254.169.254]/x", "https://[64:ff9b::10.0.0.1]/x",
+      "https://[fc00::1]/x", "https://[fe80::1]/x", "https://[fec0::1]/x", "https://[ff02::1]/x",
+    ];
+    for (const url of refused) assert.equal(isPublicHttpUrl(url), false, url);
+    const accepted = [
+      "https://mcp.acme.com/rpc", "https://mcp.acme.com./rpc", "https://8.8.8.8/x", "https://100.128.0.1/x",
+      "https://172.32.0.1/x", "https://[2606:4700::1111]/x", "https://[::ffff:8.8.8.8]/x", "https://[64:ff9b::8.8.8.8]/x",
+    ];
+    for (const url of accepted) assert.equal(isPublicHttpUrl(url), true, url);
+  });
+
   it("accepts the test instance's loopback origin only once named, and only it", () => {
     const url = "http://127.0.0.1:47123/mcp";
     assert.equal(isRemoteMcpUrlAllowed(url), false);

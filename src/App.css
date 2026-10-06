@@ -5857,6 +5857,10 @@ body.dark .composer textarea::placeholder {
   margin: 0 0 6px;
 }
 
+.posture-restart {
+  margin-left: 8px;
+}
+
 .notification-show-more {
   margin-top: 7px;
   color: var(--blue);
