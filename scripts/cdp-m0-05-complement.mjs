@@ -43,6 +43,30 @@
  *   summary     no app: per-item verdicts derived from the stored phases.
  *   rederive    no app: a-reload's stage verdict from its stored stages.
  *
+ * Final run (m0-05-final.json), conversations A and B in folders a and b:
+ *   pair        2 turns. B asks a bound multi-select question, then A a
+ *               single-select one: both wait at once (2). A's exact
+ *               input_request event is copied into B through a poll_events
+ *               response (1; the host mints a fresh id per question, so a real
+ *               collision cannot be produced). A answered with real clicks
+ *               while B waits; then B: one box, refused -32057, then the
+ *               second box on the same card, no reload, accepted (4). A reload
+ *               drops the forged card at the end.
+ *   skip        1 turn. (3) Two questions in a row in A: Skip clicked once on
+ *               the first, double-clicked on the second; cancel_input counted
+ *               on the transport and through invoke (countInvokes).
+ *   skip-double 1 turn, only if skip got no second question: one question,
+ *               Skip double-clicked.
+ *   q-death     1 turn. (5) A question card, only A's engine killed.
+ *   b-restart   1 turn. (5) A question pending in B, the app closed from its
+ *               window, relaunched (q-restart's steps).
+ *   stale-kill  1 turn. (5) A two-stage approval in A: two single clicks on
+ *               Allow once before the card repaints the next stage, the second
+ *               refused -32053 and said calmly; the card left pending, the
+ *               app force-killed (taskkill /F), relaunched on the same data
+ *               folder, A reopened.
+ *   final-summary  no app: per-item verdicts of the final record.
+ *
  * The isolated test mode (ADR 0003) only: a fresh data folder per launch
  * under --base, no WEBVIEW2_* variable, the staged engine as the only local
  * engine, CDP on MUSE_CDP_PORT (9333). The harness refuses an exe without the
@@ -59,19 +83,24 @@
  * relaunch --exe muse-desktop-b2811dd.exe, q-double --as q-double-2, a-reload,
  * a-death, a-death-trace, stop, relaunch, a-reconnect, stop, rederive, summary.
  *
+ * Final run (06/10/2026), one build, MUSE_CDP_PORT=9335, --base
+ * G:\muse-proofs\m0-05c, --bin G:\muse-proofs\m0-05c\bin, --engine the staged
+ * engine, --out .../m0-05-final.json: launch --exe muse-desktop-final.exe,
+ * probe, pair, skip, q-death, b-restart, stale-kill, stop, final-summary.
+ *
  * Usage:
  *   node scripts/cdp-m0-05-complement.mjs <phase> [--base G:\muse-proofs\m0-05b\run]
  *     [--bin G:\muse-proofs\m0-05b\bin] [--exe <file>] [--build prefix|fixed]
- *     [--as <key>] [--conv p|q]
+ *     [--as <key>] [--conv p|q] [--engine <muse exe>]
  *     [--out docs/evidence/2026-10-05-roadmap-closure/m0-05-complement.json]
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { release } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
-// The isolated instance's own port: 9222 is a developer's app, 9334 and 9335 other proofs'.
+// The isolated instance's own port: 9222 is a developer's app; the final run passed MUSE_CDP_PORT=9335.
 process.env.MUSE_CDP_PORT ??= "9333";
 const { INSTALL_IPC_TRACE, PORT, argValue, gitHead, openPage, redactor, sleep, under, waitFor, webviewProfile } = await import("./cdp-harness.mjs");
 
@@ -81,15 +110,26 @@ const BIN = argValue("--bin", "G:\\muse-proofs\\m0-05b\\bin");
 const OUT = argValue("--out", "docs/evidence/2026-10-05-roadmap-closure/m0-05-complement.json");
 const ENGINE = resolve(argValue("--engine", join("src-tauri", "binaries", "muse-x86_64-pc-windows-msvc.exe")));
 const STATE = join(BASE, "harness-state.json");
-const FOLDERS = { p: join(BASE, "p"), q: join(BASE, "q"), a: join(BASE, "a") };
+const FOLDERS = { p: join(BASE, "p"), q: join(BASE, "q"), a: join(BASE, "a"), b: join(BASE, "b") };
 const J = JSON.stringify;
 
 // The tool takes 2-3 options per question (m0-05-questions.json, stuck).
 const FRUIT = 'Before anything else, call your request_user_input tool exactly once, with one single-select question: id "fruit", header "Fruit", question "Which fruit should I name?", options "Apple", "Banana", "Cherry". After my answer, reply with only the fruit I picked, in capital letters. Use no other tool.';
 // The reliable Ask-posture prompt: a compound command the host cannot clear statically.
 const POWERSHELL = "Use your PowerShell tool to run EXACTLY this command, unchanged, once: $m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m";
+// The bound multi-select question of m0-05-questions.json (answer-b): one box is refused -32057.
+const COLORS = 'Before anything else, call your request_user_input tool exactly once, with one multi-select question: id "colors", header "Colors", question "Pick exactly two colors", options "Red", "Green", "Blue", selection {"mode": "multiple", "min_selections": 2, "max_selections": 2}. After my answer, reply with only the colors I picked, in capital letters, joined by a plus sign. Use no other tool.';
+// Two questions in one turn, the second asked whatever happened to the first.
+const SKIP2 = 'Before anything else, call your request_user_input tool twice, one call after the other, never both questions in one call. First call: one single-select question, id "first", header "First", question "Which fruit comes first?", options "Apple", "Banana", "Cherry". Second call, made even if I skip the first question: one single-select question, id "second", header "Second", question "Which fruit comes second?", options "Apple", "Banana", "Cherry". Then reply with exactly one line, first=X second=Y, where X and Y are the fruits I picked in capital letters, or SKIPPED for a question I skipped. Use no other tool.';
+// skip-double's single question, if skip got no second one.
+const SKIP1 = 'Before anything else, call your request_user_input tool exactly once, with one single-select question: id "only", header "Only", question "Which fruit should I name?", options "Apple", "Banana", "Cherry". Then reply with exactly one line, choice=X, where X is the fruit I picked in capital letters, or SKIPPED if I skipped the question. Use no other tool.';
+// The recipe of m0-05-06-approvals.json (allow-fixed, two, forged): two stages each time.
+const TWO_STAGE = "Use your PowerShell tool to run exactly this command in the workspace, unchanged, once: $m = 'm05-final'; Set-Content -Path probe.txt -Value $m";
 const APPROVAL_LINE = "Approval cancelled: Muse stopped before you answered, so the action did not run.";
+const APPROVAL_RESTART_LINE = "Approval cancelled: Muse closed before you answered, so the action did not run.";
 const INPUT_RESTART_LINE = "Input cancelled: Muse closed before you answered.";
+const INPUT_STOPPED_LINE = "Input cancelled: Muse stopped before you answered.";
+const STALE_NOTICE = "This approval changed before your answer reached Muse; the card now shows the current step.";
 
 // ---- state, record, redaction ------------------------------------------------
 
@@ -101,7 +141,8 @@ const pathKey = (p) => String(p ?? "").replace(/^\\\\\?\\/, "").replaceAll("/", 
 const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
 
 function redact(value) {
-  const pairs = [[FOLDERS.p, "<folder P>"], [FOLDERS.q, "<folder Q>"], [FOLDERS.a, "<folder A>"], [BASE, "<proof>"], [BIN, "<bin>"], [resolve("."), "<repo>"]];
+  const pairs = [[FOLDERS.p, "<folder P>"], [FOLDERS.q, "<folder Q>"], [FOLDERS.a, "<folder A>"], [FOLDERS.b, "<folder B>"], [BASE, "<proof>"], [BIN, "<bin>"],
+    [dirname(ENGINE), "<engine dir>"], [resolve("."), "<repo>"]];
   return redactor(pairs)(value);
 }
 
@@ -119,16 +160,18 @@ function exeFacts() {
 }
 
 function merge(key, result) {
+  const name = basename(OUT, ".json");
   const record = readJson(OUT, {
-    schema: "muse-desktop.m0-05-complement.v1",
+    schema: `muse-desktop.${name}.v1`,
     ticket: "M0-05",
-    complements: ["m0-05-questions.json", "m0-05-06-approvals.json"],
+    complements: ["m0-05-questions.json", "m0-05-06-approvals.json", ...(name === "m0-05-complement" ? [] : ["m0-05-complement.json"])],
     phases: {},
   });
   record.commit = gitHead();
   record.date = new Date().toISOString().slice(0, 10);
   record.platform = `win32 ${release()}, debug build in its isolated test mode (ADR 0003), WebView2 over CDP`;
   record.engine = engineVersion();
+  record.engineSha256 ??= sha256(ENGINE);
   record.phases[key] = redact({ headAtPhase: gitHead(), ...exeFacts(), ...result });
   record.liveTurns = Object.values(record.phases).reduce((n, p) => n + (p.liveTurns ?? 0), 0);
   writeFileSync(OUT, `${JSON.stringify(record, null, 2)}\n`);
@@ -156,9 +199,10 @@ async function launchApp({ restart = false, exe = null } = {}) {
   const file = exe ? resolve(BIN, exe) : restart ? s.exe : "";
   if (!file || !existsSync(file)) throw new Error("no exe: pass --exe <file in --bin>");
   if (!readFileSync(file).includes("MUSE_DESKTOP_TEST_DATA_DIR")) throw new Error("the exe has no test mode (release build?): refusing to start it");
-  if (await fetch(`http://127.0.0.1:${PORT}/json/version`, { signal: AbortSignal.timeout(5_000) }).then(() => true, (error) => error?.name === "TimeoutError")) {
-    throw new Error(`CDP port ${PORT} is already taken: refusing to drive another app`);
-  }
+  const taken = () => fetch(`http://127.0.0.1:${PORT}/json/version`, { signal: AbortSignal.timeout(5_000) }).then(() => true, (error) => error?.name === "TimeoutError");
+  // A force-killed instance's WebView2 browser can hold the port a few seconds.
+  if (restart) await waitFor(async () => !(await taken()), 30_000, 1_000);
+  if (await taken()) throw new Error(`CDP port ${PORT} is already taken: refusing to drive another app`);
   const launches = (s.launches ?? 0) + (restart ? 0 : 1);
   const data = restart ? s.data : join(BASE, `appdata-${launches}`);
   if (!restart && existsSync(data)) throw new Error(`${data} exists: every launch takes a fresh data folder`);
@@ -276,11 +320,13 @@ const H = `
   const fiber = (el) => { const k = Object.keys(el).find((x) => x.startsWith('__reactFiber$')); return k ? el[k] : null; };
   const cardKey = (el) => { let f = fiber(el); while (f && f.key == null) f = f.return; return f ? f.key : null; };
   const inputNodes = () => q('section[aria-label="Pending input"] .approval');
+  const cardNode = (key) => inputNodes().find((c) => cardKey(c) === key) || null;
   const inputCards = () => inputNodes().map((c) => ({
     key: cardKey(c),
     questions: [...c.querySelectorAll('.input-question')].map((g) => ({
       question: g.getAttribute('aria-label'),
       choices: [...g.querySelectorAll('button')].map((b) => ({ label: b.innerText.trim(), pressed: b.getAttribute('aria-pressed') === 'true' })),
+      boxes: [...g.querySelectorAll('label.check')].map((l) => ({ label: text(l), checked: l.querySelector('input').checked })),
     })),
     actions: [...c.querySelectorAll(':scope > .approval-actions button')].map((b) => b.innerText.trim()),
     alert: text(c.querySelector('[role="alert"]')),
@@ -339,7 +385,7 @@ const INSTALL_POLL_TAP = `(() => {
     if (response.headers.get('Tauri-Response') !== 'ok') return response;
     try {
       const body = await response.clone().json();
-      for (const e of body.events || []) tap.events.push({ atMs: Date.now() - tap.t0, sid: e.session_id, kind: e.kind, payload: String(e.payload || '').slice(0, 600) });
+      for (const e of body.events || []) tap.events.push({ atMs: Date.now() - tap.t0, sid: e.session_id, kind: e.kind, payload: String(e.payload || '').slice(0, 2000) });
     } catch { /* a poll the tap cannot read stays the app's */ }
     return response;
   };
@@ -347,6 +393,32 @@ const INSTALL_POLL_TAP = `(() => {
 })()`;
 const tapEvents = (app, sid, from = 0) => app.ev(`window.__m05tap ? window.__m05tap.events.slice(${from}).filter((e) => e.sid === ${J(sid)}) : []`);
 const tapCount = (app) => app.ev("window.__m05tap ? window.__m05tap.events.length : 0");
+
+/**
+ * The pair phase's forgery, on the same path (cdp-m0-05-06-approvals.mjs,
+ * forged): every input_request the bridge delivers is kept whole, and a queued
+ * event is appended to the next poll_events response the app reads.
+ */
+const INSTALL_FORGE = `(() => {
+  const forge = window.__m05forge = window.__m05forge || { installed: false, queue: [], applied: [], seen: [] };
+  if (forge.installed) return 'kept';
+  forge.installed = true;
+  const original = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const url = String(typeof input === 'string' ? input : (input && input.url) || input);
+    if (!/^https?:\\/\\/ipc\\.localhost\\/poll_events/.test(url) || /m05/.test(String((init && init.body) || ''))) return original(input, init);
+    const response = await original(input, init);
+    if (response.headers.get('Tauri-Response') !== 'ok') return response;
+    const body = await response.clone().json();
+    for (const e of body.events || []) if (e.kind === 'input_request') forge.seen.push(JSON.parse(JSON.stringify(e)));
+    if (forge.queue.length === 0) return response;
+    const forged = forge.queue.splice(0);
+    forge.applied.push(...forged.map((e) => ({ session_id: e.session_id, kind: e.kind, seq: e.seq })));
+    body.events = [...(body.events || []), ...forged];
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Tauri-Response': 'ok', 'Content-Type': 'application/json' } });
+  };
+  return 'installed';
+})()`;
 
 /**
  * Counts every call of __TAURI_INTERNALS__.invoke, the function the app's
@@ -366,7 +438,7 @@ async function countInvokes(app) {
   await app.ev("(globalThis.__m05invoke = { t0: Date.now(), polls: 0, calls: [] }, true)");
   const fn = await app.send("Runtime.evaluate", { expression: "window.__TAURI_INTERNALS__.invoke", objectGroup: "m05" });
   const condition = "(function (c, cmd, args) { if (cmd === 'poll_events') c.polls++; else c.calls.push({ cmd: cmd, atMs: Date.now() - c.t0,"
-    + " args: cmd === 'answer_input' || cmd === 'approve' ? JSON.parse(JSON.stringify(args)) : undefined }); return false; })"
+    + " args: cmd === 'answer_input' || cmd === 'cancel_input' || cmd === 'approve' ? JSON.parse(JSON.stringify(args)) : undefined }); return false; })"
     + "(globalThis.__m05invoke || (globalThis.__m05invoke = { t0: Date.now(), polls: 0, calls: [] }), arguments[0], arguments[1])";
   const bp = await app.send("Debugger.setBreakpointOnFunctionCall", { objectId: fn.result.objectId, condition });
   await sleep(1_500);
@@ -374,20 +446,25 @@ async function countInvokes(app) {
   return { wrapperRefused: refused, method: "Debugger.setBreakpointOnFunctionCall (condition records, returns false)", installed: Boolean(bp?.breakpointId), pollsSeenIn1500ms: polls };
 }
 
-/** Every click and double-click the question card's buttons receive, capture phase, before React. */
+/** Every click and double-click the question and approval cards' buttons receive, capture phase, before React. */
 const INSTALL_CLICK_LOG = `(() => {
   const log = window.__m05clicks = window.__m05clicks || { t0: Date.now(), events: [], installed: false };
   if (log.installed) return 'kept';
   log.installed = true;
   for (const type of ['click', 'dblclick']) document.addEventListener(type, (e) => {
     const b = e.target && e.target.closest ? e.target.closest('button') : null;
-    if (!b || !b.closest('section[aria-label="Pending input"]')) return;
+    if (!b || !b.closest('section[aria-label="Pending input"], section[aria-label="Conversation authorization"]')) return;
     log.events.push({ type, detail: e.detail, button: (b.innerText || '').trim(), atMs: Date.now() - log.t0 });
   }, true);
   return 'installed';
 })()`;
 
-/** What the app's own read-only pending command returns for `sid` (9771bdb's filtered read). */
+/**
+ * What the app's list_pending_requests returns for `sid` (9771bdb's filtered
+ * read). Not read-only: the command also rebuilds the app's approval registry
+ * for that conversation from the same read (drops the approvals it does not
+ * list, re-pins the listed ones to their current requirement).
+ */
 async function appPending(app, sid) {
   const res = await app.ev(`window.__TAURI_INTERNALS__.invoke('list_pending_requests', { sessionId: ${J(sid)} })
     .then((r) => r, (e) => ({ error: String(e).slice(0, 300) }))`);
@@ -449,6 +526,10 @@ async function mouse(app, find, count = 1) {
 }
 const inputButton = (label) => `return [...(inputNodes()[0]?.querySelectorAll('button') ?? [])].find((b) => b.innerText.trim() === ${J(label)}) || null;`;
 const approvalButton = (label) => `return q('section[aria-label="Conversation authorization"] .approval-actions button').find((b) => b.innerText.trim() === ${J(label)}) || null;`;
+// A button or a checkbox of the question card keyed `key` ("<session>:<question>").
+const keyButton = (key, label) => `return [...(cardNode(${J(key)})?.querySelectorAll('button') ?? [])].find((b) => b.innerText.trim() === ${J(label)}) || null;`;
+const keyBox = (key, label) => `const l = [...(cardNode(${J(key)})?.querySelectorAll('.input-question label.check') ?? [])].find((n) => text(n) === ${J(label)});
+  return l ? l.querySelector('input') : null;`;
 
 const fullLog = (app, sid) => app.ev(page(`
   return (store('muse-desktop.log.v1.' + ${J(sid)}, '[]') || []).map((e) => ({ role: e.role, text: String(e.text || '').replace(/\\s+/g, ' ') }));
@@ -480,9 +561,11 @@ async function startViaWelcome(app, folder, message) {
     const add = document.querySelector('.project-option-new');
     if (!add) return { started: false, reason: 'no new-project option' };
     add.click();
+    // The note names the selected folder: "Runs in <name>. ..." or "Runs in <name> with ...".
+    const named = (n) => n.includes(${J(`Runs in ${basename(folder)}.`)}) || n.includes(${J(`Runs in ${basename(folder)} with`)});
     let note = '';
-    for (let i = 0; i < 80; i++) { note = text(document.querySelector('.welcome-project-note')) || ''; if (note.includes(${J(basename(folder))})) break; await pause(100); }
-    if (!note.includes(${J(basename(folder))})) return { started: false, reason: 'project not selected: ' + note };
+    for (let i = 0; i < 80; i++) { note = text(document.querySelector('.welcome-project-note')) || ''; if (named(note)) break; await pause(100); }
+    if (!named(note)) return { started: false, reason: 'project not selected: ' + note };
     setValue(document.querySelector('textarea[aria-label="Your first message"]'), ${J(message)});
     await pause(300);
     const start = document.querySelector('button.welcome-send');
@@ -536,13 +619,18 @@ async function waitCard(app, kind, timeoutMs = 240_000) {
   return ui ? { msToCard: Date.now() - t0, view: ui, approvalsAllowedFirst: allowedFirst } : null;
 }
 
-/** Wait until the turn is over: not running, no card, nothing in progress. */
-async function untilIdle(app, sid, timeoutMs = 180_000) {
+/**
+ * Wait until the turn is over: not running, no card, nothing in progress.
+ * `except`: a card key left out (the pair phase's forged card, which keeps
+ * the health line on "Waiting for your answer").
+ */
+async function untilIdle(app, sid, timeoutMs = 180_000, except = null) {
   const t0 = Date.now();
+  const busy = except ? /working|resuming|stopping|retrying/i : /working|resuming|waiting|stopping|retrying/i;
   const done = await waitFor(async () => {
     const s = await app.ev(page(`return { ...view(), running: running(${J(sid)}) };`));
-    return s.running === "false" && s.inputs.length === 0 && s.approvals.length === 0
-      && !/working|resuming|waiting|stopping|retrying/i.test(s.health ?? "") ? s : null;
+    return s.running === "false" && s.inputs.every((c) => c.key === except) && s.approvals.length === 0
+      && !busy.test(s.health ?? "") ? s : null;
   }, timeoutMs, 800);
   return { idle: Boolean(done), msToIdle: done ? Date.now() - t0 : null };
 }
@@ -843,14 +931,24 @@ function stageVerdict(stages) {
   };
 }
 
-/** (3) An approval card open, only A's engine killed with the app open, then Reconnect. */
-async function aDeath(app) {
+/**
+ * (3) An approval card open (q-death, final 5: a question card), only A's
+ * engine killed with the app open, then its reconnection. The keys of a-death's
+ * record are kept for the approval card.
+ */
+async function aDeath(app, { prompt = POWERSHELL, kind = "approvals" } = {}) {
+  const K = kind === "inputs"
+    ? { pending: "questionPendingAtTheKill", says: "transcriptSaysInputCancelled", line: INPUT_STOPPED_LINE, request: "input_request",
+      lines: "inputLines", reissued: "inputRequestsReissuedAfterResume", calls: "answerCallsSinceTheKill", none: "noAnswerSent", cmds: ["answer_input", "cancel_input"] }
+    : { pending: "approvalPendingAtTheKill", says: "transcriptSaysApprovalCancelled", line: APPROVAL_LINE, request: "tool_request",
+      lines: "approvalLines", reissued: "approvalRequestsReissuedAfterResume", calls: "approveCallsSinceTheKill", none: "noDecisionSent", cmds: ["approve"] };
+  const sends = async () => (await Promise.all(K.cmds.map((cmd) => ipc(app, cmd)))).flat().length;
   const sid = state().a;
   await guard(app, sid, FOLDERS.a);
   await app.ev(INSTALL_POLL_TAP);
-  const result = { liveTurns: 1, start: await followUp(app, POWERSHELL) };
-  const asked = await waitCard(app, "approvals");
-  if (!asked) throw new Error(`no approval card within the bound; transcript: ${J(await turnLog(app, sid, POWERSHELL))}`);
+  const result = { liveTurns: 1, start: await followUp(app, prompt) };
+  const asked = await waitCard(app, kind);
+  if (!asked) throw new Error(`no ${kind} card within the bound; transcript: ${J(await turnLog(app, sid, prompt))}`);
   await sleep(1_000);
   const appPid = state().pid;
   const list = engines(appPid);
@@ -860,16 +958,16 @@ async function aDeath(app) {
   const host = await appPending(app, sid);
   result.before = { msToCard: asked.msToCard, view: await app.ev(page("return view();")), appPending: host, engines: enginesView(list),
     victim: { pid: victim[0].pid, parentIsTheApp: true, folder: folderLabel(victim[0].cwd) } };
-  const approvalId = host.approvals[0]?.approvalId ?? null;
+  const pendingId = kind === "inputs" ? host.userInputs?.[0]?.inputId ?? null : host.approvals[0]?.approvalId ?? null;
   const from = await tapCount(app);
-  const decides = (await ipc(app, "approve")).length;
+  const decides = await sends();
   const killAt = await app.ev("Date.now() - window.__baselineIpc.t0");
   execFileSync("taskkill", ["/F", "/PID", String(victim[0].pid)], { stdio: "ignore" });
   const t0 = Date.now();
   const exited = await waitFor(async () => (await tapEvents(app, sid, from)).find((e) => e.kind === "host_exited") ?? null, 30_000, 300);
   result.after = { msToHostExited: exited ? Date.now() - t0 : null };
   await sleep(2_500);
-  const log = await turnLog(app, sid, POWERSHELL);
+  const log = await turnLog(app, sid, prompt);
   Object.assign(result.after, {
     view: await app.ev(page("return view();")),
     appAlive: alive(appPid),
@@ -904,25 +1002,385 @@ async function aDeath(app) {
     view: await app.ev(page("return view();")),
     appPending: await appPending(app, sid),
     eventsAfterResume: (await tapEvents(app, sid, reconnectFrom)).filter((e) => e.kind !== "host_exited").map((e) => ({ kind: e.kind, payload: e.payload.slice(0, 200) })),
-    approveCallsSinceTheKill: (await ipc(app, "approve")).length - decides,
+    [K.calls]: (await sends()) - decides,
     transcriptTail: (await fullLog(app, sid)).slice(-5).map((e) => ({ role: e.role, text: e.text.slice(0, 200) })),
   });
   result.measured = {
-    approvalRequestsReissuedAfterResume: result.reconnect.eventsAfterResume.filter((e) => e.kind === "tool_request").length,
-    approvalLines: log.filter((e) => e.role === "system" && e.text === APPROVAL_LINE).length,
+    [K.reissued]: result.reconnect.eventsAfterResume.filter((e) => e.kind === K.request).length,
+    [K.lines]: log.filter((e) => e.role === "system" && e.text === K.line).length,
   };
   result.verdict = {
-    approvalPendingAtTheKill: Boolean(approvalId) && result.before.view.approvals.length === 1,
+    [K.pending]: Boolean(pendingId) && result.before.view[kind].length === 1,
     onlyAsEngineKilled: !result.after.victimAlive && result.after.appAlive && result.after.otherEnginesAlive === result.after.otherEnginesBefore,
     hostExitedReported: Boolean(exited),
-    cardRemoved: result.after.view.approvals.length === 0,
-    transcriptSaysApprovalCancelled: result.measured.approvalLines === 1,
+    cardRemoved: result.after.view[kind].length === 0,
+    [K.says]: result.measured[K.lines] === 1,
     reconnectWorks: result.reconnect.resumeSession.ok === true && result.reconnect.connection === "Connected" && result.reconnect.newEngineInA,
     noPhantomCard: samples.every((x) => x.approvals === 0 && x.inputs === 0),
-    reissuedRequestsIgnored: result.measured.approvalRequestsReissuedAfterResume > 0 && samples.every((x) => x.approvals === 0),
-    noDecisionSent: result.reconnect.approveCallsSinceTheKill === 0,
+    // A question: the count of re-issued requests is recorded, not required (the engine's call).
+    reissuedRequestsIgnored: (kind === "inputs" || result.measured[K.reissued] > 0) && samples.every((x) => x[kind] === 0),
+    [K.none]: result.reconnect[K.calls] === 0,
   };
   return result;
+}
+
+/** A question as the bridge delivered it (the forge keeps every input_request whole). */
+async function delivered(app, sid, inputId) {
+  const e = await app.ev(`(window.__m05forge ? window.__m05forge.seen : []).find((x) => x.session_id === ${J(sid)} && x.payload.includes(${J(`"inputId":"${inputId}"`)})) || null`);
+  const p = e ? parse(e.payload) : null;
+  return p && { inputId: p.inputId, toolName: p.toolName, questions: (p.questions ?? []).map((x) => ({ id: x.id, mode: x.mode,
+    minSelections: x.minSelections ?? null, maxSelections: x.maxSelections ?? null, options: (x.options ?? []).map((o) => o.label) })) };
+}
+const markers = (app) => app.ev(page("return { inputs: store('muse-desktop.pending-inputs.v1', '[]'), approvals: store('muse-desktop.pending-approvals.v1', '[]') };"));
+const invokeCalls = (app, cmd, from = 0) => app.ev(`globalThis.__m05invoke ? globalThis.__m05invoke.calls.filter((c) => c.cmd === ${J(cmd)}).slice(${from}) : []`);
+const sentLabels = (args) => (args?.answers ?? []).flatMap((a) => a.selectedLabels ?? (a.selectedLabel ? [a.selectedLabel] : []));
+const words = (text) => String(text ?? "").toUpperCase().match(/[A-Z]+/g) ?? [];
+
+/**
+ * (1, 2, 4) B asks a bound multi-select question, then A a single-select one:
+ * both wait at once. A's exact input_request event is copied into B (forge).
+ * A answered with real clicks while B waits; then B's own card: one box,
+ * refused by the host's bound, then the second box on the same card, no
+ * reload, accepted. A reload at the end drops the forged card.
+ */
+async function pair(app) {
+  if (state().a || state().b) throw new Error("conversations A and B already exist: pair needs a fresh data folder");
+  await app.ev(INSTALL_POLL_TAP);
+  await app.ev(INSTALL_FORGE);
+  // Any reload replaces the page and loses this mark.
+  const pageMark = await app.ev("(window.__m05page = window.__m05page || String(Math.random()).slice(2))");
+  const result = { liveTurns: 2 };
+
+  // B first: its question waits through everything A does.
+  const b = await startViaWelcome(app, FOLDERS.b, COLORS);
+  saveState({ b: b.sid });
+  await guard(app, b.sid, FOLDERS.b);
+  const bAsked = await waitCard(app, "inputs");
+  if (!bAsked) throw new Error(`no question card in B within the bound; transcript: ${J(await turnLog(app, b.sid, COLORS))}`);
+  const keyB = bAsked.view.inputs[0].key;
+  const idB = keyB?.split(":")[1] ?? null;
+  result.b = { start: b, msToCard: bAsked.msToCard, approvalsAllowedFirst: bAsked.approvalsAllowedFirst, card: bAsked.view.inputs[0], question: await delivered(app, b.sid, idB) };
+
+  const a = await startViaWelcome(app, FOLDERS.a, FRUIT);
+  saveState({ a: a.sid });
+  await guard(app, a.sid, FOLDERS.a);
+  const aAsked = await waitCard(app, "inputs");
+  if (!aAsked) throw new Error(`no question card in A within the bound; transcript: ${J(await turnLog(app, a.sid, FRUIT))}`);
+  const keyA = aAsked.view.inputs[0].key;
+  const idA = keyA?.split(":")[1] ?? null;
+  result.a = { start: a, msToCard: aAsked.msToCard, approvalsAllowedFirst: aAsked.approvalsAllowedFirst, card: aAsked.view.inputs[0] };
+  await sleep(1_500);
+  result.bothWaiting = { markers: await markers(app), hostA: await appPending(app, a.sid), hostB: await appPending(app, b.sid) };
+
+  // (1) A's input_request, as the bridge delivered it, copied into B: only session_id changes.
+  const live = await waitFor(() => app.ev(`window.__m05forge.seen.find((e) => e.session_id === ${J(a.sid)} && e.payload.includes(${J(`"inputId":"${idA}"`)})) || null`), 10_000, 300);
+  if (!live) throw new Error("A's input_request was not seen on poll_events");
+  await app.ev(`(window.__m05forge.queue.push(Object.assign(JSON.parse(${J(J(live))}), { session_id: ${J(b.sid)} })), true)`);
+  result.forged = { from: "A's input_request event, every field kept but session_id", seq: live.seq, payload: parse(live.payload),
+    applied: Boolean(await waitFor(() => app.ev("window.__m05forge.applied.length > 0"), 10_000, 200)) };
+  await sleep(1_000);
+  await guard(app, b.sid, FOLDERS.b);
+  result.bBefore = await app.ev(page("return view();"));
+  await guard(app, a.sid, FOLDERS.a);
+  result.aBefore = await app.ev(page("return view();"));
+
+  // (1, 2) A answered with real clicks, B waiting.
+  result.invokeCounter = await countInvokes(app);
+  await app.ev(INSTALL_CLICK_LOG);
+  const n = { fetch: (await ipc(app, "answer_input")).length, tap: await tapCount(app) };
+  result.answerA = { pick: await mouse(app, keyButton(keyA, "Banana")) };
+  await sleep(400);
+  result.answerA.send = await mouse(app, keyButton(keyA, "Send answer"));
+  await nextIpc(app, "answer_input", n.fetch, 30_000);
+  result.answerA.end = await untilIdle(app, a.sid);
+  result.answerA.answerInputFetch = (await ipc(app, "answer_input")).slice(n.fetch).map((c) => ({ ok: c.ok, args: c.args }));
+  result.answerA.answerInputInvoke = await invokeCalls(app, "answer_input");
+  result.answerA.transcript = await turnLog(app, a.sid, FRUIT);
+  result.answerA.reply = reply(result.answerA.transcript);
+  const settledSince = async (sid, from) => (await tapEvents(app, sid, from)).filter((e) => e.kind === "input_settled").map((e) => e.payload);
+  result.answerA.settledA = await settledSince(a.sid, n.tap);
+
+  // B after A's answer: both of its cards, its host, its events.
+  await guard(app, b.sid, FOLDERS.b);
+  result.bAfterA = { view: await app.ev(page("return view();")), host: await appPending(app, b.sid), settledB: await settledSince(b.sid, n.tap), markers: await markers(app) };
+
+  // (4) B's own card: one box, refused by the host's bound (min_selections 2).
+  const q0 = result.b.question?.questions?.[0] ?? null;
+  const [one, two] = (q0?.options ?? []).slice(1, 3);
+  await app.ev(page(`cardNode(${J(keyB)}).dataset.m05 = 'before-refusal'; return true;`));
+  const n1 = { fetch: (await ipc(app, "answer_input")).length, invoke: (await invokeCalls(app, "answer_input")).length };
+  result.refused = { pick: await mouse(app, keyBox(keyB, one)) };
+  await sleep(400);
+  result.refused.send = await mouse(app, keyButton(keyB, "Send answer"));
+  const refusedCall = await nextIpc(app, "answer_input", n1.fetch, 30_000);
+  await sleep(1_500);
+  result.refused.call = refusedCall && { ok: refusedCall.ok, args: refusedCall.args, result: String(refusedCall.result ?? "").slice(0, 300) };
+  result.refused.after = { view: await app.ev(page("return view();")), sameCardNode: await app.ev(page(`return cardNode(${J(keyB)})?.dataset.m05 === 'before-refusal';`)),
+    host: await appPending(app, b.sid) };
+  // Then the second box on the same card, no reload: the corrected answer.
+  const n2 = { fetch: (await ipc(app, "answer_input")).length, tap: await tapCount(app) };
+  result.corrected = { pick: await mouse(app, keyBox(keyB, two)) };
+  await sleep(400);
+  result.corrected.atSend = { card: (await app.ev(page("return view();"))).inputs.find((c) => c.key === keyB) ?? null,
+    sameCardNode: await app.ev(page(`return cardNode(${J(keyB)})?.dataset.m05 === 'before-refusal';`)),
+    samePage: (await app.ev("window.__m05page || null")) === pageMark };
+  result.corrected.send = await mouse(app, keyButton(keyB, "Send answer"));
+  const correctedCall = await nextIpc(app, "answer_input", n2.fetch, 30_000);
+  result.corrected.call = correctedCall && { ok: correctedCall.ok, args: correctedCall.args, result: correctedCall.ok ? undefined : String(correctedCall.result ?? "").slice(0, 300) };
+  result.corrected.bannerRightAfter = (await app.ev(page("return view();"))).banner;
+  result.corrected.end = await untilIdle(app, b.sid, 180_000, `${b.sid}:${idA}`);
+  result.corrected.settledB = await settledSince(b.sid, n2.tap);
+  result.corrected.transcript = await turnLog(app, b.sid, COLORS);
+  result.corrected.reply = reply(result.corrected.transcript);
+  result.bAnswersInvoke = (await invokeCalls(app, "answer_input", n1.invoke)).map((c) => c.args);
+  result.bAtTheEnd = await app.ev(page("return view();"));
+
+  // Cleanup: a reload drops the forged card; B's host lives on, so no cancel line either.
+  await tracedReload(app);
+  await guard(app, b.sid, FOLDERS.b);
+  await sleep(3_000);
+  const logB = await fullLog(app, b.sid);
+  result.afterReload = { view: await app.ev(page("return view();")), markers: await markers(app),
+    cancelLines: logB.filter((e) => e.role === "system" && /^Input cancelled/.test(e.text)).length };
+
+  const same = (x, y) => J(x) === J(y);
+  const cardsOf = (v, key) => v.inputs.filter((c) => c.key === key);
+  const fetchA = result.answerA.answerInputFetch;
+  const invokeA = result.answerA.answerInputInvoke;
+  const forgedKey = `${b.sid}:${idA}`;
+  const boxOf = (card, label) => card?.questions?.[0]?.boxes?.find((x) => x.label === label)?.checked ?? null;
+  const refusedCard = cardsOf(result.refused.after.view, keyB)[0];
+  result.verdict = {
+    // (2) two conversations waiting at once
+    bothWaitingTogether: Boolean(idA && idB) && result.bothWaiting.markers.inputs?.includes(a.sid) && result.bothWaiting.markers.inputs?.includes(b.sid)
+      && (result.bothWaiting.hostA.userInputs ?? []).some((u) => u.inputId === idA) && (result.bothWaiting.hostB.userInputs ?? []).some((u) => u.inputId === idB),
+    answerAReachedOnlyA: fetchA.length === 1 && fetchA[0].ok === true && fetchA[0].args?.sessionId === a.sid && fetchA[0].args?.userInputId === idA
+      && invokeA.length === 1 && invokeA[0].args?.sessionId === a.sid,
+    aTurnEndedWithItsAnswer: result.answerA.end.idle && words(result.answerA.reply).includes("BANANA") && !words(result.answerA.reply).some((w) => w === "APPLE" || w === "CHERRY"),
+    bUnchangedWhileAWasAnswered: same(result.bAfterA.view.inputs, result.bBefore.inputs) && (result.bAfterA.host.userInputs ?? []).some((u) => u.inputId === idB)
+      && result.bAfterA.settledB.length === 0 && !result.bAfterA.view.banner,
+    thenBAnswered: result.corrected.call?.ok === true && result.corrected.call.args?.sessionId === b.sid && result.corrected.end.idle,
+    // (1) the same question id in two conversations
+    forgedCardInBHasAsId: result.forged.applied && cardsOf(result.bBefore, forgedKey).length === 1 && cardsOf(result.bBefore, keyB).length === 1,
+    answerCarriedOnlyAsSession: [...fetchA.map((c) => c.args), ...invokeA.map((c) => c.args)].every((x) => x?.sessionId === a.sid),
+    forgedCardInBUntouched: same(cardsOf(result.bAfterA.view, forgedKey), cardsOf(result.bBefore, forgedKey)) && cardsOf(result.bAfterA.view, forgedKey).length === 1,
+    forgedQuestionNeverReachedBsHost: !(result.bAfterA.host.userInputs ?? []).some((u) => u.inputId === idA),
+    forgedCardGoneAfterAReloadWithNoCancelLine: result.afterReload.view.inputs.length === 0 && result.afterReload.cancelLines === 0,
+    // (4) a refused answer, then a corrected one on the same card
+    boundSetByTheModel: q0?.mode === "multiple" && q0?.minSelections === 2,
+    refused32057: result.refused.call?.ok === false && /-32057/.test(result.refused.call.result),
+    refusalShown: /could not be submitted/i.test(result.refused.after.view.banner ?? ""),
+    cardKeptWithTheTick: result.refused.after.sameCardNode === true && boxOf(refusedCard, one) === true,
+    hostStillWaitingAfterTheRefusal: (result.refused.after.host.userInputs ?? []).some((u) => u.inputId === idB),
+    correctedOnTheSameCardWithoutReload: result.corrected.atSend.sameCardNode === true && result.corrected.atSend.samePage === true
+      && boxOf(result.corrected.atSend.card, one) === true && boxOf(result.corrected.atSend.card, two) === true,
+    correctedAnswerAccepted: result.corrected.call?.ok === true && same(sentLabels(result.corrected.call.args).sort(), [one, two].sort())
+      && result.corrected.settledB.some((p) => /"outcome":"answered"/.test(p)),
+    oneCallPerAnswerInB: result.bAnswersInvoke.length === 2 && result.bAnswersInvoke.every((x) => x?.sessionId === b.sid),
+    noBannerAfterTheCorrection: !result.corrected.bannerRightAfter && !result.bAtTheEnd.banner,
+    bTurnContinuedWithBothLabels: result.corrected.end.idle && [one, two].every((l) => words(result.corrected.reply).includes(String(l).toUpperCase()))
+      && !(q0?.options ?? []).filter((l) => l !== one && l !== two).some((l) => words(result.corrected.reply).includes(String(l).toUpperCase())),
+  };
+  return result;
+}
+
+/**
+ * (3) Skip, in A: `counts` gives the clicks per question in order (1: one
+ * click, 2: a real double-click). cancel_input counted on the transport and
+ * through invoke; the click details as the card received them.
+ */
+async function skip(app, prompt, counts) {
+  const sid = state().a;
+  await guard(app, sid, FOLDERS.a);
+  await app.ev(INSTALL_POLL_TAP);
+  const result = { liveTurns: 1, start: await followUp(app, prompt) };
+  result.invokeCounter = await countInvokes(app);
+  await app.ev(INSTALL_CLICK_LOG);
+  result.questions = [];
+  let previous = null;
+  for (const count of counts) {
+    // The next card, or the turn's end without one (no card for 15 s while not running).
+    let quiet = 0;
+    const t0 = Date.now();
+    const next = await waitFor(async () => {
+      const v = await app.ev(page(`return { ...view(), running: running(${J(sid)}) };`));
+      if (v.inputs.length === 0 && v.approvals.length > 0) {
+        // Under Ask, an action the host does not clear asks first: allowed once, as a user would, and recorded.
+        result.approvalsAllowed = [...(result.approvalsAllowed ?? []), { card: v.approvals[0], click: await mouse(app, approvalButton("Allow once")) }];
+        await sleep(1_500);
+        return null;
+      }
+      const card = v.inputs.find((c) => c.key !== previous);
+      if (card) return { card, view: v };
+      quiet = v.running === "false" && v.inputs.length === 0 ? quiet + 1 : 0;
+      return quiet >= 19 ? { none: true, view: v } : null;
+    }, 240_000, 800);
+    if (!next || next.none) {
+      result.questions.push({ asked: false, msWaited: Date.now() - t0, view: next?.view ?? null });
+      break;
+    }
+    await sleep(1_000);
+    const key = next.card.key;
+    const id = key.split(":")[1];
+    const n = { fetch: (await ipc(app, "cancel_input")).length, invoke: (await invokeCalls(app, "cancel_input")).length,
+      answers: (await ipc(app, "answer_input")).length, clicks: await app.ev("window.__m05clicks.events.length"), tap: await tapCount(app) };
+    const entry = { asked: true, msToCard: Date.now() - t0, inputId: id, card: next.card, clicksSent: count, click: await mouse(app, keyButton(key, "Skip"), count) };
+    await sleep(3_000);
+    const fetched = (await ipc(app, "cancel_input")).slice(n.fetch);
+    Object.assign(entry, {
+      clickEvents: await app.ev(`window.__m05clicks.events.slice(${n.clicks})`),
+      cancelInputFetch: fetched.map((c) => ({ atMs: c.atMs, ok: c.ok, args: c.args, result: c.ok ? undefined : String(c.result ?? "").slice(0, 300) })),
+      cancelInputInvoke: (await invokeCalls(app, "cancel_input", n.invoke)).map((c) => ({ atMs: c.atMs, args: c.args })),
+      answerInputCalls: (await ipc(app, "answer_input")).length - n.answers,
+      view: await app.ev(page("return view();")),
+      settled: (await tapEvents(app, sid, n.tap)).filter((e) => e.kind === "input_settled").map((e) => e.payload),
+    });
+    result.questions.push(entry);
+    previous = key;
+  }
+  result.end = await untilIdle(app, sid);
+  result.transcript = await turnLog(app, sid, prompt);
+  result.reply = reply(result.transcript);
+  result.finalView = await app.ev(page("return view();"));
+  const asked = result.questions.filter((x) => x.asked);
+  const skipClicks = (x) => x.clickEvents.filter((c) => c.type === "click" && c.button === "Skip").map((c) => c.detail);
+  const perQuestion = asked.flatMap((x, i) => Object.entries({
+    clickDetails: J(skipClicks(x)) === J(x.clicksSent === 1 ? [1] : [1, 2]),
+    oneCancelOnTheTransport: x.cancelInputFetch.length === 1 && x.cancelInputFetch[0].ok === true
+      && x.cancelInputFetch[0].args?.sessionId === sid && x.cancelInputFetch[0].args?.userInputId === x.inputId,
+    oneCancelThroughInvoke: result.invokeCounter.installed && result.invokeCounter.pollsSeenIn1500ms > 0 && x.cancelInputInvoke.length === 1,
+    noAnswerSent: x.answerInputCalls === 0,
+    noBanner: !x.view.banner,
+    cardGone: !x.view.inputs.some((c) => c.key === x.card.key),
+    settledOnceNotAnswered: x.settled.filter((p) => p.includes(`"inputId":"${x.inputId}"`)).length === 1
+      && !x.settled.some((p) => /"outcome":"answered"/.test(p)),
+  }).map(([k, v]) => [`q${i + 1}${x.clicksSent === 1 ? "OneClick" : "DoubleClick"}_${k}`, v]));
+  result.verdict = {
+    everyQuestionAsked: asked.length === counts.length,
+    ...Object.fromEntries(perQuestion),
+    turnContinuedAfterTheSkip: counts.length < 2 || asked.length === 2,
+    turnEnded: result.end.idle,
+    noBannerAtTheEnd: !result.finalView.banner,
+    replySaysSkipped: words(result.reply).filter((w) => w === "SKIPPED").length === asked.length
+      && !words(result.reply).some((w) => w === "APPLE" || w === "BANANA" || w === "CHERRY"),
+  };
+  return result;
+}
+
+/**
+ * (5) A two-stage approval in A. Two single clicks on Allow once, back to
+ * back and 12 px apart (clickCount 1 each: not a double-click): the first
+ * decides stage 0, the second lands before the card repaints and carries
+ * stage 0's token, refused -32053 and said calmly; the app re-reads the card.
+ * The card is left pending, the app force-killed (taskkill /F; its engines
+ * end on stdin EOF), relaunched on the same data folder, A reopened.
+ */
+async function staleKill(app) {
+  const sid = state().a;
+  await guard(app, sid, FOLDERS.a);
+  await app.ev(INSTALL_POLL_TAP);
+  const from = await tapCount(app);
+  const result = { liveTurns: 1, start: await followUp(app, TWO_STAGE) };
+  const asked = await waitCard(app, "approvals");
+  if (!asked) throw new Error(`no approval card within the bound; transcript: ${J(await turnLog(app, sid, TWO_STAGE))}`);
+  await sleep(1_500);
+  // The host's word for the card: the tool_request events the bridge delivered, not a pending read (it would re-pin the app's registry).
+  const delivered = (await tapEvents(app, sid, from)).filter((e) => e.kind === "tool_request").map((e) => parse(e.payload));
+  const panel0 = await app.ev(page("return panelApprovals();"));
+  const stage0 = panel0[0]?.requirementId ?? null;
+  result.card = { msToCard: asked.msToCard, view: await app.ev(page("return view();")), panel: panel0,
+    delivered: delivered.map((r) => ({ approvalId: r?.approvalId ?? null, requirement: r?.currentRequirementId ?? null, updated: r?.updated ?? null, choices: r?.choices ?? null })) };
+  result.invokeCounter = await countInvokes(app);
+  await app.ev(INSTALL_CLICK_LOG);
+  const n = { fetch: (await ipc(app, "approve")).length, reads: (await ipc(app, "list_pending_requests")).length, clicks: await app.ev("window.__m05clicks.events.length") };
+  const at = await centre(app, approvalButton("Allow once"));
+  if (!at) throw new Error("no Allow once button on the card");
+  for (const x of [at.x - 6, at.x + 6]) {
+    await app.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y: at.y });
+    await app.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y: at.y, button: "left", clickCount: 1 });
+    await app.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y: at.y, button: "left", clickCount: 1 });
+  }
+  const calls = await waitFor(async () => { const c = (await ipc(app, "approve")).slice(n.fetch); return c.length >= 2 && c.every((x) => x.ok !== undefined) ? c : null; }, 30_000, 200)
+    ?? (await ipc(app, "approve")).slice(n.fetch);
+  await sleep(2_500);
+  const requirementIn = (text) => parse(String(text ?? "").match(/"currentRequirementId":(\{[^}]*\})/)?.[1] ?? "null");
+  const reads = (await ipc(app, "list_pending_requests", 4000)).slice(n.reads).filter((c) => c.args?.sessionId === sid);
+  result.clicks = {
+    events: await app.ev(`window.__m05clicks.events.slice(${n.clicks})`),
+    approveFetch: calls.map((c) => ({ atMs: c.atMs, ok: c.ok, requirementSent: c.args?.requirementId ?? null, choiceId: c.args?.choiceId ?? null, result: String(c.result ?? "").slice(0, 300) })),
+    approveInvoke: (await invokeCalls(app, "approve")).map((c) => ({ atMs: c.atMs, requirementId: c.args?.requirementId ?? null })),
+  };
+  result.afterStale = {
+    view: await app.ev(page("return view();")),
+    panel: await app.ev(page("return panelApprovals();")),
+    appReReads: reads.map((c) => ({ atMs: c.atMs, ok: c.ok, requirement: requirementIn(c.result), labels: [...String(c.result ?? "").matchAll(/"label":"([^"]+)"/g)].map((m) => m[1]) })),
+  };
+
+  // (5) The card left pending; the marker it wrote reaches disk while a user would read it.
+  result.beforeKill = { markers: await markers(app), view: await app.ev(page("return view();")) };
+  await sleep(8_000);
+  const appPid = state().pid;
+  const list = engines(appPid);
+  app.close();
+  execFileSync("taskkill", ["/F", "/PID", String(appPid)], { stdio: "ignore" });
+  const appGone = await waitFor(() => !alive(appPid), 10_000, 500);
+  const enginesGone = await waitFor(() => list.every((e) => !alive(e.pid)), 20_000, 1_000);
+  const leftover = list.filter((e) => alive(e.pid));
+  for (const e of leftover) forceKill(e.pid);
+  saveState({ pid: null });
+  result.kill = { by: "taskkill /F of the app alone", appExited: Boolean(appGone), engines: enginesView(list), enginesEndedWithin20s: Boolean(enginesGone), enginesKilledByTheHarness: leftover.length };
+  const relaunched = await launchApp({ restart: true });
+  const next = await attach();
+  result.relaunch = { pidRecorded: Boolean(relaunched.pid) };
+  await guard(next, sid, FOLDERS.a);
+  const connected = await waitFor(() => next.ev(page("return connection() === 'Connected';")), 90_000, 500);
+  const samples = [];
+  for (let i = 0; i < 15; i++) {
+    const v = await next.ev(page("return view();"));
+    samples.push({ atS: i, inputs: v.inputs.length, approvals: v.approvals.length });
+    await sleep(1_000);
+  }
+  await sleep(30_000);
+  const log = await fullLog(next, sid);
+  const requested = log.findLastIndex((e) => e.role === "tool" && e.text.startsWith("Approval requested:"));
+  Object.assign(result.relaunch, {
+    connected: Boolean(connected),
+    view: await next.ev(page("return view();")),
+    cardSamples: samples,
+    linesAfterTheRequest: log.slice(requested + 1).filter((e) => e.role === "system").map((e) => e.text.slice(0, 200)),
+    transcriptTail: log.slice(-6).map((e) => ({ role: e.role, text: e.text.slice(0, 200) })),
+    markersAfterBoot: await markers(next),
+    approveCalls: (await ipc(next, "approve")).length,
+    livenessAfterAbout45s: await liveness(next, sid),
+  });
+
+  const after = result.afterStale;
+  const reread = after.appReReads.at(-1) ?? null;
+  const sameToken = (x, y) => J(x) === J(y);
+  const clickDetails = result.clicks.events.filter((c) => c.type === "click" && c.button === "Allow once").map((c) => c.detail);
+  result.verdict = {
+    // the stale click
+    cardOnStage0: stage0?.sourceIndex === 0,
+    twoSingleClicksReachedTheButton: J(clickDetails) === J([1, 1]),
+    twoDecisionsPinnedToStage0: calls.length === 2 && calls.every((c) => sameToken(c.args?.requirementId, stage0)) && result.clicks.approveInvoke.length === 2,
+    firstDecidedStage0: calls[0]?.ok === true && calls[0]?.result === "false",
+    secondRefusedStale: calls[1]?.ok === false && /-32053/.test(calls[1]?.result ?? ""),
+    calmNotice: after.view.banner === STALE_NOTICE,
+    cardReReadByTheApp: Boolean(reread?.ok),
+    cardShowsTheCurrentStep: Boolean(reread?.requirement) && sameToken(after.panel[0]?.requirementId, reread.requirement) && !sameToken(reread.requirement, stage0),
+    stillDecidable: after.view.approvals.length === 1 && J(after.view.approvals[0].buttons.map((b) => b.text)) === J(reread?.labels ?? null),
+    // the force-kill
+    approvalPendingAtTheKill: result.beforeKill.view.approvals.length === 1 && (result.beforeKill.markers.approvals ?? []).includes(sid),
+    appForceKilled: result.kill.appExited,
+    enginesEndedWithTheApp: result.kill.enginesEndedWithin20s && result.kill.enginesKilledByTheHarness === 0,
+    reopenedAndConnected: result.relaunch.connected,
+    noCardAfterTheRelaunch: samples.every((x) => x.inputs === 0 && x.approvals === 0),
+    cancelLineOnce: requested >= 0 && result.relaunch.linesAfterTheRequest.filter((t) => t === APPROVAL_RESTART_LINE).length === 1,
+    markerReadOnce: !(result.relaunch.markersAfterBoot.approvals ?? []).includes(sid),
+    noDecisionSent: result.relaunch.approveCalls === 0,
+    notLeftWorking: idleNow(result.relaunch.livenessAfterAbout45s),
+  };
+  return { app: next, result };
 }
 
 /** Whether the conversation still shows a running turn: row dot, health line, Stop and Guide offered. */
@@ -1094,6 +1552,46 @@ function summary() {
   return record.summary;
 }
 
+/** Per-item verdicts of the final record, derived from its stored phases: no app. */
+function finalSummary() {
+  const record = readJson(OUT, null);
+  if (!record) throw new Error("no record");
+  const p = record.phases;
+  const pick = (verdict, keys) => Object.fromEntries(keys.map((k) => [k, verdict?.[k] ?? null]));
+  const item = (phase, verdict, keys) => {
+    const facts = pick(verdict, keys);
+    return { phase, verdict: Object.values(facts).every((x) => x === true) ? "pass" : "fail", checks: facts };
+  };
+  const pair = p.pair?.verdict;
+  const stale = p["stale-kill"]?.verdict;
+  // Item 3 from skip alone when it got both questions, else its first question and skip-double's.
+  const skipBoth = p.skip?.verdict?.everyQuestionAsked === true;
+  const skip3 = skipBoth ? p.skip.verdict : {
+    ...Object.fromEntries(Object.entries(p.skip?.verdict ?? {}).filter(([k]) => k.startsWith("q1"))),
+    ...Object.fromEntries(Object.entries(p["skip-double"]?.verdict ?? { run: false }).map(([k, x]) => [`skipDouble_${k}`, x])),
+  };
+  const builds = [...new Set(Object.values(p).map((x) => x.exeSha256).filter(Boolean))];
+  record.summary = {
+    "1 same question id in two conversations": item("pair", pair, ["forgedCardInBHasAsId", "answerAReachedOnlyA", "answerCarriedOnlyAsSession",
+      "forgedCardInBUntouched", "forgedQuestionNeverReachedBsHost", "forgedCardGoneAfterAReloadWithNoCancelLine"]),
+    "2 two conversations waiting at once": item("pair", pair, ["bothWaitingTogether", "answerAReachedOnlyA", "aTurnEndedWithItsAnswer", "bUnchangedWhileAWasAnswered", "thenBAnswered"]),
+    "3 skip, one click and a double-click": item(skipBoth ? "skip" : "skip (first question), skip-double", skip3, Object.keys(skip3)),
+    "4 refused answer, then a corrected one on the same card": item("pair", pair, ["boundSetByTheModel", "refused32057", "refusalShown", "cardKeptWithTheTick",
+      "hostStillWaitingAfterTheRefusal", "correctedOnTheSameCardWithoutReload", "correctedAnswerAccepted", "oneCallPerAnswerInB", "noBannerAfterTheCorrection", "bTurnContinuedWithBothLabels"]),
+    "5a question card when its engine dies, app open": item("q-death", p["q-death"]?.verdict, Object.keys(p["q-death"]?.verdict ?? { missing: null })),
+    "5b restart with a question pending": item("b-restart", p["b-restart"]?.verdict, Object.keys(p["b-restart"]?.verdict ?? { missing: null })),
+    "5c approval pending at a force-kill, relaunched": item("stale-kill", stale, ["approvalPendingAtTheKill", "appForceKilled", "enginesEndedWithTheApp",
+      "reopenedAndConnected", "noCardAfterTheRelaunch", "cancelLineOnce", "markerReadOnce", "noDecisionSent", "notLeftWorking"]),
+    "5d stale approval click, said calmly": item("stale-kill", stale, ["cardOnStage0", "twoSingleClicksReachedTheButton", "twoDecisionsPinnedToStage0",
+      "firstDecidedStage0", "secondRefusedStale", "calmNotice", "cardReReadByTheApp", "cardShowsTheCurrentStep", "stillDecidable"]),
+    "one build": { verdict: builds.length === 1 ? "pass" : "fail", exeSha256: builds },
+  };
+  record.liveTurnsDetail = Object.entries(p).filter(([, x]) => (x.liveTurns ?? 0) > 0)
+    .map(([key, x]) => ({ phase: key, buildCommit: x.buildCommit, exeSha256: x.exeSha256, liveTurns: x.liveTurns }));
+  writeFileSync(OUT, `${JSON.stringify(record, null, 2)}\n`);
+  return Object.fromEntries(Object.entries(record.summary).map(([k, x]) => [k, x.verdict]));
+}
+
 // ---- main ---------------------------------------------------------------------------
 
 const PHASES = {
@@ -1106,6 +1604,17 @@ const PHASES = {
   "a-death-trace": aDeathTrace,
   "a-reconnect": aReconnect,
   stop: stopPhase,
+  pair,
+  skip: (app) => skip(app, SKIP2, [1, 2]),
+  "skip-double": (app) => skip(app, SKIP1, [2]),
+  "q-death": (app) => aDeath(app, { prompt: FRUIT, kind: "inputs" }),
+};
+// Phases that close the instance and hand back the relaunched one.
+const RESTARTS = {
+  "p-restart": (app) => restart(app, FOLDERS.p, "p"),
+  "q-restart": (app) => restart(app, FOLDERS.q, "q"),
+  "b-restart": (app) => restart(app, FOLDERS.b, "b"),
+  "stale-kill": staleKill,
 };
 if (PHASE === "rederive") {
   // a-reload's stage verdict recomputed from its stored stages: no app, no turn.
@@ -1121,13 +1630,13 @@ if (PHASE === "rederive") {
 `);
   process.exit(0);
 }
-if (PHASE === "summary") {
-  process.stdout.write(`${JSON.stringify(summary(), null, 2)}\n`);
+if (PHASE === "summary" || PHASE === "final-summary") {
+  process.stdout.write(`${JSON.stringify(PHASE === "summary" ? summary() : finalSummary(), null, 2)}\n`);
   process.exit(0);
 }
-if (!["launch", "relaunch", "p-restart", "q-restart"].includes(PHASE) && !PHASES[PHASE]) {
-  process.stderr.write("usage: cdp-m0-05-complement.mjs <launch|relaunch|probe|p-double|p-restart|q-restart|stale|q-double|a-reload|a-death|a-death-trace|a-reconnect|stop|summary|rederive>"
-    + " [--base dir] [--bin dir] [--exe file] [--build prefix|fixed] [--out file]\n");
+if (!["launch", "relaunch"].includes(PHASE) && !PHASES[PHASE] && !RESTARTS[PHASE]) {
+  process.stderr.write(`usage: cdp-m0-05-complement.mjs <launch|relaunch|${[...Object.keys(PHASES), ...Object.keys(RESTARTS)].join("|")}|summary|final-summary|rederive>`
+    + " [--base dir] [--bin dir] [--exe file] [--build prefix|fixed] [--engine file] [--out file]\n");
   process.exit(1);
 }
 let app = null;
@@ -1144,9 +1653,8 @@ try {
   else {
     if (!state().pid || !alive(state().pid)) throw new Error("the harness's app instance is not running: run launch first");
     app = await attach({ trace: PHASE !== "a-death-trace" });
-    if (PHASE === "p-restart" || PHASE === "q-restart") {
-      ({ app, result } = await restart(app, PHASE === "p-restart" ? FOLDERS.p : FOLDERS.q, PHASE === "p-restart" ? "p" : "q"));
-    } else result = await PHASES[PHASE](app);
+    if (RESTARTS[PHASE]) ({ app, result } = await RESTARTS[PHASE](app));
+    else result = await PHASES[PHASE](app);
   }
   if (PHASE !== "stop" && app) {
     result.consoleErrors = app.errors.slice(0, 20);

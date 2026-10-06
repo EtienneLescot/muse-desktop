@@ -333,7 +333,11 @@ const normPrompt = (r) => r && ({ inputId: r.inputId ?? r.request_id, toolName: 
   questions: (r.questions ?? []).map((x) => ({ id: x.id, header: x.header, question: x.question, mode: x.mode,
     minSelections: x.minSelections ?? null, maxSelections: x.maxSelections ?? null, options: (x.options ?? []).map((o) => o.label) })) });
 
-/** What the engine lists as pending for `sid`, through the app's own read-only command. */
+/**
+ * What the engine lists as pending for `sid`, through the app's own
+ * list_pending_requests. Not read-only: it also rebuilds the app's approval
+ * registry for that conversation (questions have no registry).
+ */
 async function hostInputs(app, sid) {
   const res = await app.ev(`window.__TAURI_INTERNALS__.invoke('list_pending_requests', { sessionId: ${J(sid)} })
     .then((r) => r, (e) => ({ error: String(e).slice(0, 300) }))`);
