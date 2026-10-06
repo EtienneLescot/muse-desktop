@@ -14,7 +14,8 @@
  * the sha256 of the one token it accepts. Every request is logged (memory and
  * --log) with the Authorization header reduced to `bearer:<sha256/12>`.
  *
- * MCP (2025-06-18, any path but /admin): initialize opens a session
+ * MCP (2025-06-18) on /mcp only; any other path is logged and answers 404
+ * (the proof's "another URL" under the same connector). initialize opens a session
  * (Mcp-Session-Id), notifications answer 202, tools/list, tools/call, ping;
  * GET answers 405 (no server stream), DELETE ends the session. A request with
  * an unknown session id answers 404, as the spec says for an ended session.
@@ -158,6 +159,12 @@ async function handleMcp(req, res, path) {
     }
   }
   const rpc = frame && !Array.isArray(frame) ? { rpc: frame.method ?? null, rpcId: frame.id ?? null } : { rpc: Array.isArray(frame) ? "<batch>" : null };
+  if (path !== "/mcp") {
+    // Another URL than the one the connector was registered with: whatever
+    // reaches it is logged (which bearer?), nothing is served.
+    record({ ...base, ...rpc, status: 404 });
+    return send(res, req, 404, { error: "no MCP endpoint here" });
+  }
   if (auth.state !== "current") {
     const description = auth.state === "expired" ? "the access token expired" : auth.auth === "none" ? null : "unknown access token";
     record({ ...base, ...rpc, status: 401 });
