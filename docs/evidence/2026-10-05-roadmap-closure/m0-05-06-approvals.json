@@ -950,6 +950,7 @@
         }
       },
       "staleReplay": {
+        "sentThrough": "the harness, through window.__TAURI_INTERNALS__.invoke('approve') with the stage-0 requirementId once the card showed stage 1: a replay, not a click on the card (scripts/cdp-m0-05-06-approvals.mjs --replay-stale)",
         "replayedRequirement": "{\"approvalId\":\"01a10c3c-d6ef-7893-8da0-07f664e204aa\",\"sourceIndex\":0}",
         "accepted": false,
         "error": "MSP error -32053: approval 01a10c3c-d6ef-7893-8da0-07f664e204aa requirement is stale [approvalRequirementStale] [retryable=false]",
@@ -3529,7 +3530,7 @@
       "M0-05 d card per stage, stale decision refused cleanly": {
         "verdict": "pass",
         "phase": "allow (pre-fix), allow-fixed",
-        "facts": "the card moves sourceIndex 0 -> 1 and stays mounted; replaying the stage-0 requirement returns -32053 approvalRequirementStale and the card stays on stage 1. The decision is now pinned to the token of the card clicked."
+        "facts": "the card moves sourceIndex 0 -> 1 and stays mounted; the stage-0 requirement, replayed by the harness through invoke('approve') and not clicked, returns -32053 approvalRequirementStale and the card stays on stage 1. The decision is now pinned to the token of the card clicked. A stale click on the card itself, with de8de14's calm notice, is in m0-05-final.json (stale-kill)."
       },
       "M0-05 e double-click on Allow sends exactly one decision": {
         "verdict": "pass after fix",
@@ -3585,5 +3586,6 @@
     "liveTurns": 15,
     "liveTurnsThisRound": 6
   },
-  "forgedNote": "forged: the second tool_request entered through a poll_events response, the path every bridge event takes to the renderer (push_event -> poll_events -> pollOnce -> handleEvent); it never reached the Rust registry, which approval_cards_are_isolated_when_ids_repeat_between_sessions covers. Its exact copy of A's payload (updated: false) also logged one 'Approval requested' line in test conversation B. bResumedOk is null because the harness did not see B's reopen read within its bound; B was loaded and connected afterwards (it took the next posture projection), and bAfter equals bBefore."
+  "forgedNote": "forged: the second tool_request entered through a poll_events response, the path every bridge event takes to the renderer (push_event -> poll_events -> pollOnce -> handleEvent); it never reached the Rust registry, which approval_cards_are_isolated_when_ids_repeat_between_sessions covers. Its exact copy of A's payload (updated: false) also logged one 'Approval requested' line in test conversation B. bResumedOk is null because the harness did not see B's reopen read within its bound; B was loaded and connected afterwards (it took the next posture projection), and bAfter equals bBefore.",
+  "pendingReadsNote": "The harness's pending() is the app's list_pending_requests. It is not read-only: it also rebuilds the app's approval registry for the conversation read (drops the approvals it does not list, re-pins the listed ones to the host's current requirement). The phases on the fixed builds sent the clicked card's requirementId with each decision (visible in allow-fixed and forged), which the bridge uses before the registry's; reject, reject-continued and allow ran on the pre-fix build, which sent none, so their decisions used the registry's token as the bridge or a harness read last set it. (Added on 06/10/2026.)"
 }
