@@ -9,7 +9,7 @@
   "git": "git version 2.48.1.windows.1",
   "liveTurns": 2,
   "handWritten": {
-    "note": "Written by hand after the runs, from the phases below; the harness writes everything else (merge() in scripts/cdp-m2-05-handoff.mjs). Each phase records its commit, whether the product tree was clean, and the exe's SHA-256.",
+    "note": "Written by hand after the runs, from the phases below; the harness writes everything else (merge() in scripts/cdp-m2-05-handoff.mjs). Each phase records its commit, whether the product tree was clean, and the exe's SHA-256. Corrected on 06/10/2026: forgedInputs gains the c-start folder dialog. Final pass: m2-05-handoff-final.json, where limits[0] is fixed (dba3b03) and the file in use of item 2 is named (b146d51).",
     "summary": "Complement to m2-05-handoff.json on Muse 1.4.2, in the app's isolated test mode, 2 live turns. All four open points hold on the fixed build (4e08e2a): the model's file tools follow the move; a move whose source cleanup fails after the target received the work leaves both sides byte-identical with an honest message; a move is refused while a turn runs and a send is refused while a move runs, with their reasons; a conflict is refused with no event on either side's files. Two defects found and fixed: a file Git cannot delete made the move report success (8dca438), and the Move action was disabled with no reason while Muse responds (4e08e2a).",
     "items": {
       "1 file tools after a move": "c-file-tools: after Move to worktree, read_file on docs/item1.txt returned the worktree version (line 2 ONLY-IN-WORKTREE-<token>, absent from Local's file: hashes differ, before and after) and the model answered with that line; write_file wrote item1-written.txt (17 bytes) in the worktree; Local byte-identical, the worktree gained only that file.",
@@ -34,6 +34,7 @@
     "forgedInputs": [
       "C was started by a direct start_session (no turn) and adopted on a reload: the host refused A's Fork conversation after a finished turn (MSP -32023 forkBoundaryInvalid WriteFailed, the known upstream Windows defect, docs/upstream). Same in the rehearsal that recorded c-held-untracked-before-fix, where A was started that way too.",
       "The TaskDialog's buttons are pressed with TDM_CLICK_BUTTON, as in the earlier record.",
+      "c-start: the welcome screen's folder dialog (plugin:dialog|open) never showed: the harness's IPC interceptor (dialogQueue in scripts/cdp-harness.mjs) answered it with the test repository, as CDP cannot drive the OS folder dialog. The picker, A's first message and Start went through the UI.",
       "Direct native calls only to show refusals: handoff_move while A responds (c-file-tools) and during the conflict (c-conflict).",
       "Held files: a separate PowerShell process opens them with FileShare.Read and no delete sharing, as an editor or viewer does."
     ],

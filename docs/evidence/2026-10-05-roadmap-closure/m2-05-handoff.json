@@ -8,10 +8,10 @@
   "git": "git version 2.48.1.windows.1",
   "liveTurns": 3,
   "handWritten": {
-    "fields": ["summary", "method", "forgedInputs", "fixes", "limits", "history", "phases.setup.confirmProbe"],
-    "note": "Written by hand after the runs: the harness never writes these fields. Every other field is the harness's output (merge() in scripts/cdp-m2-05-handoff.mjs); platform is a constant of that harness, not a measurement. Corrected on 06/10/2026: fixes[0].insufficient. Complement of 06/10/2026: m2-05-handoff-complement.json."
+    "fields": ["summary", "method", "forgedInputs", "fixes", "limits", "history", "phases.setup.commit", "phases.setup.confirmProbe", "phases[\"confirm-defect\"].codeCommit"],
+    "note": "Written by hand after the runs: the harness never writes these fields. phases.setup.commit was added by hand after that run; phases[\"confirm-defect\"].codeCommit is prose and that phase has no commit field. The harness wrote every other field: merge() in scripts/cdp-m2-05-handoff.mjs for each phase's run, and its rederive utility for the cwdRederived fields and the three verdicts that history names; platform is a constant of that harness, not a measurement. Corrected on 06/10/2026: fixes[0].insufficient; fields completed with phases.setup.commit and phases[\"confirm-defect\"].codeCommit; 'before any write' (summary, forgedInputs) narrowed to the user's files, Git writing inside .git. Complement of 06/10/2026: m2-05-handoff-complement.json. Final pass: m2-05-handoff-final.json."
   },
-  "summary": "M2-05 proved natively on Windows with Muse 1.4.2: a conversation moved Local -> worktree -> Local in the same session (3 live turns), restarted in the worktree, a deliberate conflict refused before any write, and a move failing after it had started writing (a Local file held open by another process) undone on both sides with an honest message. Two defects found and fixed on the way: the move never asked its question (fixed in 6dc62cf after an insufficient 7cc4c55), and the question counted the app's .muse entries as the user's ignored files (fixed in a3f0fca).",
+  "summary": "M2-05 proved natively on Windows with Muse 1.4.2: a conversation moved Local -> worktree -> Local in the same session (3 live turns), restarted in the worktree, a deliberate conflict refused before any of the user's files was written, and a move failing after it had started writing (a Local file held open by another process) undone on both sides with an honest message. Two defects found and fixed on the way: the move never asked its question (fixed in 6dc62cf after an insufficient 7cc4c55), and the question counted the app's .muse entries as the user's ignored files (fixed in a3f0fca).",
   "method": [
     "Real webview over CDP: the conversation's Actions menu (Move to worktree / Move back to local), the composer, the work panel (Changes, Files, Terminal), Delete.",
     "The move's question is the dialog plugin's native TaskDialog (title Muse-Desktop): read through UI Automation, answered with TDM_CLICK_BUTTON.",
@@ -23,7 +23,7 @@
   "forgedInputs": [
     "The test conversation was started by a direct start_session call, with the user's global posture and isolation read from storage and no connector servers, then adopted by the app on a page reload (restore_sessions). Why: the profile holds the 5-project maximum and every UI start path needs a project root or the global default folder, both the user's. A real user starts it from a project.",
     "The TaskDialog's buttons expose no UI Automation pattern: the harness presses OK or Cancel with TDM_CLICK_BUTTON, the TaskDialog's own button-press message, as a mouse click would.",
-    "Two direct native calls, only to show refusals: user_shell while the conversation is away (refused by the supervisor before the host is reached) and handoff_move during the conflict (refused before any write).",
+    "Two direct native calls, only to show refusals: user_shell while the conversation is away (refused by the supervisor before the host is reached) and handoff_move during the conflict (refused before any of the user's files was written).",
     "Nothing forged in the failure: a separate PowerShell process holds src/app.txt open with FileShare.Read and no delete sharing, as an editor or viewer does."
   ],
   "fixes": [

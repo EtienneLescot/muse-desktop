@@ -77,6 +77,23 @@
  * --rehearse refuses send_input in the page in c-send-during-move; --as <key>
  * records a phase under another key (a run on another build).
  *
+ * Final pass (06/10/2026), phases `f-*`, recorded in m2-05-handoff-final.json
+ * on the build with the last M2-05 fixes; A and C by a direct start_session
+ * each (declared in the record).
+ *   f-launch, f-setup, f-stop  as c-launch, c-setup, c-stop.
+ *   f-start     no turn. A and C in Local, adopted on a reload.
+ *   f-lock      1 turn. C's question is open when A's turn starts; once A
+ *               waits on its first card, C answers OK: refused, and the
+ *               worktree made for it goes with its branch. C's Move again:
+ *               refused before any question. Local's files watched.
+ *   f-held-tracked / f-held-untracked  no turn. As c-held-*: the message
+ *               names the file in use; the new worktree goes with its branch.
+ *   f-case-rename  no turn. A staged case-only rename (known limit): the
+ *               new worktree has nothing to conflict with until it exists, so
+ *               the question shows; OK, then refused at the move, nothing
+ *               written in Local, the worktree made for it removed.
+ *   f-round-trip  no turn. A: Local -> worktree -> Local, hashes both sides.
+ *
  * Every phase runs on the isolated test mode (ADR 0003): a fresh data folder
  * per launch under --base, no WEBVIEW2_* variable, the staged engine
  * (--engine) as the only local engine, CDP on MUSE_CDP_PORT (9333). The
@@ -88,8 +105,9 @@
  * Usage:
  *   node scripts/cdp-m2-05-handoff.mjs <phase> [--base G:\muse-proofs\m2-05]
  *     [--exe <muse-desktop.exe>] [--engine <muse exe>] [--out <record>] [--as <key>]
- * Each phase merges its path-free result into --out (m2-05-handoff.json, or
- * m2-05-handoff-complement.json for the c-* phases).
+ * Each phase merges its path-free result into --out (m2-05-handoff.json,
+ * m2-05-handoff-complement.json for the c-* phases, m2-05-handoff-final.json
+ * for the f-* phases), with the exe's and the engine's SHA-256.
  */
 import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
@@ -102,9 +120,10 @@ process.env.MUSE_CDP_PORT ??= "9333";
 const { INSTALL_IPC_TRACE, PORT, argValue, gitHead, openPage, redactor, sleep, under, waitFor, webviewProfile } = await import("./cdp-harness.mjs");
 
 const PHASE = process.argv[2];
-const COMPLEMENT = String(PHASE).startsWith("c-");
-const BASE = argValue("--base", COMPLEMENT ? "G:\\muse-proofs\\m2-05b\\run" : "G:\\muse-proofs\\m2-05");
-const OUT = argValue("--out", `docs/evidence/2026-10-05-roadmap-closure/${COMPLEMENT ? "m2-05-handoff-complement" : "m2-05-handoff"}.json`);
+const FINAL = String(PHASE).startsWith("f-");
+const COMPLEMENT = String(PHASE).startsWith("c-") || FINAL;
+const BASE = argValue("--base", FINAL ? "G:\\muse-proofs\\m2-05c\\run" : COMPLEMENT ? "G:\\muse-proofs\\m2-05b\\run" : "G:\\muse-proofs\\m2-05");
+const OUT = argValue("--out", `docs/evidence/2026-10-05-roadmap-closure/${FINAL ? "m2-05-handoff-final" : COMPLEMENT ? "m2-05-handoff-complement" : "m2-05-handoff"}.json`);
 const EXE = resolve(argValue("--exe", "G:\\muse-build\\cool-rubin-target\\debug\\muse-desktop.exe"));
 const ENGINE = resolve(argValue("--engine", join("src-tauri", "binaries", "muse-x86_64-pc-windows-msvc.exe")));
 const AS = argValue("--as", PHASE);
@@ -126,7 +145,7 @@ function redact(value) {
   // Worktree paths come back canonical (`\\?\G:\…`) and are shown without the
   // prefix: the plain form matches both (the redactor eats an optional prefix).
   const pairs = [[REPO, "<local>"], [BASE, "<proof>"]];
-  for (const [key, label] of [["w0", "<worktree 0>"], ["w1", "<worktree 1>"], ["w2", "<worktree 2>"], ["w3", "<worktree 3>"], ["wc", "<worktree c>"]]) {
+  for (const [key, label] of [["w0", "<worktree 0>"], ["w1", "<worktree 1>"], ["w2", "<worktree 2>"], ["w3", "<worktree 3>"], ["wc", "<worktree c>"], ["wl", "<worktree lock>"], ["wn", "<worktree n>"], ["wr", "<worktree r>"]]) {
     if (s[key]) pairs.unshift([s[key].replace(/^\\\\\?\\/, ""), label]);
   }
   return redactor(pairs)(value);
@@ -139,11 +158,17 @@ function engineVersion() {
 }
 
 const exeSha256 = () => createHash("sha256").update(readFileSync(EXE)).digest("hex");
+const engineSha256 = () => createHash("sha256").update(readFileSync(ENGINE)).digest("hex");
 /** No uncommitted change outside the harnesses and the docs: the exe can be rebuilt from `commit`. */
 const productTreeClean = () => execFileSync("git", ["status", "--porcelain", "--", ".", ":(exclude)scripts", ":(exclude)docs"], { encoding: "utf8" }).trim() === "";
 
 function merge(result) {
-  const record = readJson(OUT, COMPLEMENT ? {
+  const record = readJson(OUT, FINAL ? {
+    schema: "muse-desktop.m2-05-handoff-final.v1",
+    ticket: "M2-05",
+    complements: ["m2-05-handoff.json", "m2-05-handoff-complement.json"],
+    phases: {},
+  } : COMPLEMENT ? {
     schema: "muse-desktop.m2-05-handoff-complement.v1",
     ticket: "M2-05",
     complements: "m2-05-handoff.json",
@@ -159,7 +184,7 @@ function merge(result) {
   record.engine = engineVersion();
   record.git = execFileSync("git", ["--version"], { encoding: "utf8" }).trim();
   if (COMPLEMENT) record.platform = `win32 ${release()}, debug build in its isolated test mode (ADR 0003), WebView2 over CDP`;
-  record.phases[AS] = redact({ commit: record.commit, productTreeClean: productTreeClean(), exeSha256: exeSha256(), ...result });
+  record.phases[AS] = redact({ commit: record.commit, productTreeClean: productTreeClean(), exeSha256: exeSha256(), engineSha256: engineSha256(), ...result });
   record.liveTurns = Object.values(record.phases).reduce((n, p) => n + (p.liveTurns ?? 0), 0);
   writeFileSync(OUT, `${JSON.stringify(record, null, 2)}\n`);
   return record.phases[AS];
@@ -206,6 +231,9 @@ function side(dir) {
   };
 }
 const handoffRefs = () => lines(git(REPO, ["for-each-ref", "--format=%(refname)", "refs/muse/handoff"]));
+/** The repository's muse/ branches, and how many checkouts it has (Local counts). */
+const museBranches = () => lines(git(REPO, ["for-each-ref", "--format=%(refname:short)", "refs/heads/muse"]));
+const checkouts = () => lines(git(REPO, ["worktree", "list", "--porcelain"])).filter((l) => l.startsWith("worktree ")).length;
 /** Same content whatever the key order (also for nested side() snapshots). */
 const canonical = (v) => (v && typeof v === "object" && !Array.isArray(v)
   ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])])) : v);
@@ -727,9 +755,10 @@ async function setup(app) {
 
 /**
  * Pre-fix build only: the Move action's confirmation as shipped. The dialog
- * plugin replaces window.confirm with a call this app never allowed
- * (dialog:allow-confirm); read synchronously, its Promise counts as "yes".
- * The harness stands ready to answer Cancel: no question ever shows.
+ * plugin replaces window.confirm with a call to plugin:dialog|confirm, a
+ * command plugin 2.7 does not have (only open, save, message), so it always
+ * fails ("Command not found"); read without await, its Promise counts as
+ * "yes". The harness stands ready to answer Cancel: no question ever shows.
  */
 async function confirmDefect(app) {
   const s = state();
@@ -1253,7 +1282,7 @@ async function cSetup(app) {
   return { repo: { autocrlf, local }, profile, verdict: { repoClean: local.status.length === 0, emptyProfile: profile.projects === 0 && profile.sessions === 0 } };
 }
 
-/** Rehearsal only: A and C by a direct start_session each (no turn), adopted on a reload. */
+/** A rehearsal, and the final pass's f-start: A and C by a direct start_session each (no turn), adopted on a reload. */
 async function cRehearseStart(app) {
   if (state().a) throw new Error("conversations already exist under this --base");
   const user = await readUser(app);
@@ -1500,11 +1529,33 @@ async function cHeld(app, untracked) {
   const after = { local: side(REPO), target: target && existsSync(target) ? side(target) : null, refs: handoffRefs() };
   const view = await sessionView(app, s.c);
   const newRefs = after.refs.filter((r) => !before.refs.includes(r));
-  const result = { conversationC: s.forgedStart ? "started by a direct start_session, no turn (rehearsal)" : "A's Fork conversation, through the UI",
+  const result = { conversationC: s.forgedStart ? `started by a direct start_session, no turn${FINAL ? "" : " (rehearsal)"}` : "A's Fork conversation, through the UI",
     held: { path: held, share: "Read (no Delete)", released }, before: { local: before.local, refs: before.refs.length }, action, events: ev,
     after: { local: after.local, target: after.target, refs: after.refs.length }, newRefs, view };
   // What a move reported as done left behind in Local, if it was reported done.
   if (action.move?.ok === true) result.leftInSource = Object.keys(after.local.files).filter((p) => !(p in s.cleanMap) && p !== "build.log");
+  if (FINAL) {
+    // On the final build: the cause is named, and the worktree made for the move goes.
+    const branch = action.worktreeCreated[0]?.result?.branch ?? null;
+    result.after.museBranches = museBranches();
+    result.after.checkouts = checkouts();
+    result.verdict = {
+      confirmAsked: action.dialog?.found === true && action.dialog.answer === "OK" && Boolean(action.dialog.clicked),
+      targetReceivedTheWork: (ev.byPlace.target?.paths ?? []).some((p) => p.endsWith("notes/local.md")),
+      moveFailed: action.move?.ok === false,
+      namesTheFileInUse: action.banner?.startsWith(`The conversation was not moved: the source could not be cleaned; both sides were restored as they were: ${held} is in use by another program: close it, then move again (`) === true,
+      saysTheWorktreeWent: /; the new worktree \S+ was removed with its branch /.test(action.banner ?? "")
+        && (action.banner ?? "").endsWith(`with its branch ${branch}, as nothing was left in it`),
+      worktreeRemoved: target !== null && !existsSync(target) && result.after.checkouts === 1,
+      branchRemoved: branch !== null && !result.after.museBranches.includes(branch),
+      localByteIdentical: sameMap(after.local, before.local),
+      snapshotKept: newRefs.length === 2,
+      heldFileUnchanged: after.local.files[held] === before.local.files[held],
+      conversationStays: pathKey(view.stored?.workspace) === pathKey(REPO) && view.logEntries === viewBefore.logEntries,
+      noEventLost: eventsAt(ev, "overflow") === 0,
+    };
+    return result;
+  }
   result.verdict = {
     confirmAsked: action.dialog?.found === true && action.dialog.answer === "OK" && Boolean(action.dialog.clicked),
     targetReceivedTheWork: (ev.byPlace.target?.paths ?? []).some((p) => p.endsWith("notes/local.md")),
@@ -1570,11 +1621,171 @@ async function cStop(app) {
   return { close, verdict: { closedGracefully: close.graceful, exited: close.exited } };
 }
 
+// ---- final pass (06/10/2026): the last fixes, on the final build ---------------
+
+const settled = (app) => waitFor(() => app.ev(page("return !q('button').some((b) => /^(Checking what will move|Creating a worktree|Moving the work|Starting Muse there)/.test((b.innerText || '').trim()));")), 30_000, 400);
+
+/**
+ * Item 1, 1 live turn. C's question is open, unanswered, when A's turn
+ * starts. At A's first card: C's OK makes the worktree, the move is refused,
+ * and that worktree must go with its branch, the message saying so; then C's
+ * Move again is refused before any question. Local's own files are watched
+ * from C's click to the end of the card hook, not during the rest of the turn.
+ */
+async function fLock(app) {
+  const s = state();
+  if (!s.a || !s.c) throw new Error("run f-start first");
+  await guard(app, REPO, s.c);
+  await app.ev("(window.__baselineIpc.block = [], true)");
+  ensureLocalWork();
+  const before = { local: side(REPO), refs: handoffRefs().length, museBranches: museBranches(), checkouts: checkouts() };
+  const count = async (cmd) => (await ipc(app, cmd)).length;
+  const n = { move: await count("handoff_move"), create: await count("git_worktree_create_for_workspace") };
+  const watcher = watchWorkingTree(REPO);
+  let events = null;
+  const stopWatching = async () => { if (events === null) events = summarize(await watcher.stop(), (p) => placeOf(p)); };
+  let asked = null;
+  let turn = null;
+  let whileRunning = null;
+  try {
+    // 1. C's Move: the question shows and stays open.
+    const click = await clickAction(app, s.c, "Move to worktree");
+    if (!click.clicked) throw new Error(`C's Move to worktree: ${J(click)}`);
+    asked = { click, dialog: await nativeDialog(s.pid, null, 120_000), aRunning: await app.ev(page(`return running(${J(s.a)});`)) };
+    if (!asked.dialog.found) throw new Error("C's question did not show");
+    // 2. A's turn through its composer; at its first card, C's OK, then C again.
+    await select(app, s.a);
+    turn = await liveTurn(app, s.a, T1, { onCard: async () => {
+      const out = { aRunning: await app.ev(page(`return running(${J(s.a)});`)) };
+      out.answered = await nativeDialog(s.pid, "OK", 10_000);
+      const moved = await nextIpc(app, "handoff_move", n.move, 120_000);
+      out.move = moved ? { ok: moved.ok, newWorktree: moved.args?.newWorktree ?? null, result: parse(moved.result) } : null;
+      await settled(app);
+      await sleep(1_000);
+      out.banner = await app.ev(page("return banner();"));
+      out.created = (await ipc(app, "git_worktree_create_for_workspace")).slice(n.create).map((c) => ({ ok: c.ok, result: parse(c.result) }));
+      const wl = out.created[0]?.result?.path ?? null;
+      if (wl) saveState({ wl });
+      out.afterRefusal = { worktreeExists: wl ? existsSync(wl) : null, museBranches: museBranches(), checkouts: checkouts(), refs: handoffRefs().length };
+      await select(app, s.c);
+      out.again = await moveThroughUi(app, s.c, "Move to worktree", { answer: "Cancel", expectMove: false, dialogMs: 8_000 });
+      out.aStillRunning = await app.ev(page(`return running(${J(s.a)});`));
+      whileRunning = out;
+      await stopWatching();
+    } });
+  } finally {
+    await stopWatching();
+  }
+  const after = { local: side(REPO), refs: handoffRefs().length, museBranches: museBranches(), checkouts: checkouts() };
+  const view = await sessionView(app, s.a);
+  const cView = await sessionView(app, s.c);
+  const cwd = reportedCwd(turn);
+  const w = whileRunning;
+  const branch = w?.created[0]?.result?.branch ?? null;
+  const result = { liveTurns: 1, before, asked, turn, cwd, whileRunning, localEvents: events, after, view, cView };
+  result.verdict = {
+    questionOpenBeforeTheTurn: asked.dialog.found === true && asked.aRunning !== "true" && /to a new worktree/.test((asked.dialog.texts ?? []).join(" ")),
+    answeredWhileATurnRuns: w?.aRunning === "true" && w.answered?.answer === "OK" && Boolean(w.answered.clicked),
+    worktreeMadeThenRefused: w?.created.length === 1 && w.created[0].ok === true && w.move?.ok === false && w.move.newWorktree === true
+      && String(w.move.result).startsWith("a conversation is still responding in this folder: stop it before moving; "),
+    worktreeRemoved: w?.afterRefusal.worktreeExists === false && w.afterRefusal.checkouts === before.checkouts,
+    branchRemoved: branch !== null && sameMap(w.afterRefusal.museBranches, before.museBranches),
+    saysSo: (w?.banner ?? "").startsWith("The conversation was not moved: a conversation is still responding in this folder: stop it before moving; the new worktree ")
+      && (w?.banner ?? "").endsWith(`was removed with its branch ${branch}, as nothing was left in it`),
+    refusedBeforeTheQuestion: w?.aStillRunning === "true" && w.again.dialog?.found === false && w.again.moveCalls === 0 && w.again.worktreeCreated.length === 0
+      && w.again.preview?.ok === false && w.again.banner === "The move could not be prepared: a conversation is still responding in this folder: stop it before moving",
+    turnFinished: turn?.finished === true,
+    modelCwdLocal: shellIn(cwd, "local"),
+    noFileEventInLocal: eventsAt(events, "local") === 0 && eventsAt(events, "overflow") === 0,
+    localUnchanged: sameMap(after.local, before.local),
+    nothingLeft: after.refs === before.refs && after.checkouts === before.checkouts && sameMap(after.museBranches, before.museBranches),
+    conversationsStay: pathKey(view.stored?.workspace) === pathKey(REPO) && pathKey(cView.stored?.workspace) === pathKey(REPO),
+  };
+  return result;
+}
+
+/**
+ * Item 5, a known limit: a staged case-only rename. A new worktree does not
+ * exist at the preview, so the question shows; OK makes it, the move is
+ * refused as a conflict with nothing written in Local, and it goes again.
+ */
+async function fCaseRename(app) {
+  const s = state();
+  await guard(app, REPO, s.a);
+  await app.ev("(window.__baselineIpc.block = ['send_input'], true)");
+  git(REPO, ["mv", "README.md", "Readme.md"]);
+  const before = { local: side(REPO), refs: handoffRefs().length, museBranches: museBranches(), checkouts: checkouts() };
+  const watcher = watchWorkingTree(REPO);
+  let events = null;
+  let ui;
+  try {
+    ui = await moveThroughUi(app, s.a, "Move to worktree");
+  } finally {
+    events = summarize(await watcher.stop(), (p) => placeOf(p));
+  }
+  const wn = ui.move?.target ?? null;
+  if (wn) saveState({ wn });
+  const after = { local: side(REPO), refs: handoffRefs().length, museBranches: museBranches(), checkouts: checkouts(), worktreeExists: wn ? existsSync(wn) : null };
+  // The phase's own rename undone, for the next phase.
+  git(REPO, ["mv", "Readme.md", "README.md"]);
+  const undone = side(REPO);
+  const result = { before, ui, localEvents: events, after, undone: { status: undone.status, names: Object.keys(undone.files).filter((p) => /^readme\.md$/i.test(p)) } };
+  const branch = ui.worktreeCreated[0]?.result?.branch ?? null;
+  result.verdict = {
+    askedThenOk: ui.dialog?.found === true && ui.dialog.answer === "OK" && Boolean(ui.dialog.clicked) && ui.worktreeCreated.length === 1,
+    refusedAsAConflict: ui.move?.ok === false
+      && /^nothing was moved: 2 file\(s\) would conflict in the target: (Readme\.md, README\.md|README\.md, Readme\.md); /.test(String(ui.move.result)),
+    worktreeRemoved: after.worktreeExists === false && (ui.banner ?? "").endsWith(`was removed with its branch ${branch}, as nothing was left in it`),
+    noFileEvent: eventsAt(events, "local") === 0 && eventsAt(events, "overflow") === 0,
+    localUnchanged: sameMap(after.local, before.local),
+    nothingWritten: after.refs === before.refs && after.checkouts === before.checkouts && sameMap(after.museBranches, before.museBranches),
+    renameStillStaged: after.local.status.includes("R  README.md -> Readme.md"),
+  };
+  return result;
+}
+
+/** Item 3: A's work from Local to a new worktree and back, on the final build; both sides hashed at each step. */
+async function fRoundTrip(app) {
+  const s = state();
+  await guard(app, REPO, s.a);
+  await app.ev("(window.__baselineIpc.block = ['send_input'], true)");
+  ensureLocalWork();
+  writeFileSync(join(REPO, "added.txt"), "added and staged\n");
+  git(REPO, ["add", "--", "added.txt"]);
+  writeFileSync(join(REPO, "assets/new.bin"), NEW_BIN);
+  writeFileSync(join(REPO, "notes/crlf.md"), "untracked\r\nCRLF note\r\n");
+  writeFileSync(join(REPO, "build.log"), "ignored, stays in Local\n");
+  const before = { local: side(REPO), refs: handoffRefs().length };
+  const there = await moveThroughUi(app, s.a, "Move to worktree");
+  const wr = there.move?.ok === true ? there.move.result?.target ?? null : null;
+  if (!wr) return { before, there, failure: "the move to a new worktree did not happen" };
+  saveState({ wr });
+  const away = { local: side(REPO), wr: side(wr), refs: handoffRefs().length, view: await sessionView(app, s.a) };
+  const back = await moveThroughUi(app, s.a, "Move back to local");
+  const home = { local: side(REPO), wr: side(wr), refs: handoffRefs().length, view: await sessionView(app, s.a) };
+  const result = { before, there, away, back, home };
+  result.verdict = {
+    movedThere: there.dialog?.found === true && there.dialog.answer === "OK" && Boolean(there.dialog.clicked) && there.move.result?.sameSession === true,
+    worktreeHoldsTheWork: sameMap(away.wr.files, without(before.local.files, ["build.log"])),
+    localCleanMeanwhile: away.local.status.length === 0 && sameMap(away.local.files, { ...s.cleanMap, "build.log": before.local.files["build.log"] }),
+    followedThere: pathKey(away.view.stored?.workspace) === pathKey(wr),
+    movedBack: back.dialog?.found === true && back.dialog.answer === "OK" && Boolean(back.dialog.clicked) && back.move?.ok === true && pathKey(back.move.result?.target) === pathKey(REPO),
+    roundTripBytesIdentical: sameMap(home.local.files, before.local.files),
+    worktreeBackToItsCheckout: home.wr.status.length === 0 && sameMap(home.wr.files, s.cleanMap),
+    conversationHome: pathKey(home.view.stored?.workspace) === pathKey(REPO),
+    snapshotRefs: away.refs === before.refs + 2 && home.refs === away.refs + 2,
+    stagingArrivesUnstaged: { before: before.local.staged, after: home.local.staged },
+  };
+  return result;
+}
+
 // ---- main ---------------------------------------------------------------------------
 
 const PHASES = { setup, "confirm-defect": confirmDefect, "turn-local": turnLocal, move, "turn-worktree": turnWorktree, back, conflict, failure, final: finalMove, "ignored-count": ignoredCount, cleanup,
   "c-setup": cSetup, "c-rehearse-start": cRehearseStart, "c-start": cStart, "c-send-during-move": cSendDuringMove, "c-file-tools": cFileTools,
-  "c-held-tracked": (app) => cHeld(app, false), "c-held-untracked": (app) => cHeld(app, true), "c-conflict": cConflict, "c-stop": cStop };
+  "c-held-tracked": (app) => cHeld(app, false), "c-held-untracked": (app) => cHeld(app, true), "c-conflict": cConflict, "c-stop": cStop,
+  "f-setup": cSetup, "f-start": cRehearseStart, "f-lock": fLock, "f-held-tracked": (app) => cHeld(app, false), "f-held-untracked": (app) => cHeld(app, true),
+  "f-case-rename": fCaseRename, "f-round-trip": fRoundTrip, "f-stop": cStop };
 if (PHASE === "rederive") {
   // Recheck the stored turns with the current classifier: no app, no turn.
   // The live reading (with the `\\?\` flag the redaction removes) stays in `cwd`.
@@ -1610,16 +1821,18 @@ if (PHASE === "stop") {
   process.stdout.write(`${JSON.stringify(await closeApp(null))}\n`);
   process.exit(0);
 }
-if (PHASE !== "launch" && PHASE !== "c-launch" && PHASE !== "restart" && !PHASES[PHASE]) {
+const LAUNCH = ["launch", "c-launch", "f-launch"].includes(PHASE);
+if (!LAUNCH && PHASE !== "restart" && !PHASES[PHASE]) {
   process.stderr.write("usage: cdp-m2-05-handoff.mjs <launch|stop|setup|confirm-defect|turn-local|move|turn-worktree|restart|back|conflict|failure|final|ignored-count|cleanup|rederive"
-    + "|c-launch|c-setup|c-rehearse-start|c-start|c-send-during-move|c-file-tools|c-held-tracked|c-held-untracked|c-conflict|c-stop>"
+    + "|c-launch|c-setup|c-rehearse-start|c-start|c-send-during-move|c-file-tools|c-held-tracked|c-held-untracked|c-conflict|c-stop"
+    + "|f-launch|f-setup|f-start|f-lock|f-held-tracked|f-held-untracked|f-case-rename|f-round-trip|f-stop>"
     + " [--base dir] [--exe path] [--engine path] [--out file] [--as key] [--bulk n] [--rehearse]\n");
   process.exit(1);
 }
 let app = null;
 try {
   let result;
-  if (PHASE === "launch" || PHASE === "c-launch") {
+  if (LAUNCH) {
     ({ app, result } = await launch());
   } else {
     if (!state().pid || !alive(state().pid)) throw new Error("the harness's app instance is not running: run launch first");
@@ -1627,7 +1840,7 @@ try {
     if (PHASE === "restart") ({ app, result } = await restart(app));
     else result = await PHASES[PHASE](app);
   }
-  if (PHASE !== "cleanup" && PHASE !== "c-stop" && app) {
+  if (!["cleanup", "c-stop", "f-stop"].includes(PHASE) && app) {
     await app.ev("(window.__baselineIpc.block = [], true)");
     result.consoleErrors = app.errors.slice(0, 20);
   }
