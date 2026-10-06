@@ -5,8 +5,11 @@
 //! it would lift the single-instance guard without moving the webview store.
 //! `MUSE_DESKTOP_TEST_DATA_DIR` turns it on. That folder then holds the app
 //! data and the WebView2 profile, the single-instance guard and the OS wake-up
-//! task are skipped, and every engine is `MUSE_DESKTOP_TEST_SIDECAR`, a JSON
-//! argv such as `["node", "scripts/muse-fixture.mjs"]`.
+//! task are skipped, and every local engine is `MUSE_DESKTOP_TEST_SIDECAR`, a
+//! JSON argv such as `["node", "scripts/muse-fixture.mjs"]`. A remote target
+//! (`ssh://`) that the test profile itself configured is reached over the
+//! system ssh, as outside test mode: a test that configures none never leaves
+//! the fixture, as in CI.
 //! `MUSE_DESKTOP_TEST_CDP_PORT` opens the DevTools protocol of the webview on
 //! that port.
 

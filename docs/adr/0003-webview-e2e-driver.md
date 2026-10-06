@@ -16,7 +16,7 @@ The app starts in an isolated test mode, compiled into debug builds on Windows o
 
 - `MUSE_DESKTOP_TEST_DATA_DIR` turns it on. That folder holds the app data (outbox, scheduler, notifications, computer use, MCP packages) and the WebView2 profile: the app sets `WEBVIEW2_USER_DATA_FOLDER` itself, which overrides the folder Tauri passes to WebView2. The elevated runner honours it; the check verifies it on every run.
 - The mode never goes unnoticed: one line on stderr, `testMode: true` in the native diagnostics, and `test-mode.pid` written in the folder at startup.
-- `MUSE_DESKTOP_TEST_SIDECAR`, a JSON argv, replaces every engine, remote ones included. Missing or malformed, the start fails: a test instance never runs a real engine.
+- `MUSE_DESKTOP_TEST_SIDECAR`, a JSON argv, replaces every local engine. Missing or malformed, the start fails: a test instance never runs a real local engine. A remote target (`ssh://`, ADR 0002) that the test profile itself configured is reached over the system ssh, as outside test mode; a test that configures no remote target never leaves the fixture, as in CI.
 - `MUSE_DESKTOP_TEST_CDP_PORT` opens CDP through the window's `additionalBrowserArgs`, a WebView2 option, so an elevated host keeps it.
 - The single-instance guard and the OS wake-up task are skipped. The test instance runs beside the user's own and never edits the per-account `schtasks` entry.
 - In a release build, and on macOS and Linux, `test_mode::data_dir()` is `None` by construction: no variable is read, no branch can switch on. There the mode would lift the single-instance guard without moving the WKWebView or WebKitGTK store.
