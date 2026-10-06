@@ -1,0 +1,3167 @@
+{
+  "schema": "muse-desktop.m0-05-complement.v1",
+  "ticket": "M0-05",
+  "complements": [
+    "m0-05-questions.json",
+    "m0-05-06-approvals.json"
+  ],
+  "commit": "b2811dd",
+  "date": "2026-10-06",
+  "platform": "win32 10.0.26200, debug build in its isolated test mode (ADR 0003), WebView2 over CDP",
+  "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+  "engineSha256": "39a97806d315ece0fc5cdbb88c903ef5bc77655f32e66dc22d267a212c5030ba",
+  "liveTurns": 7,
+  "liveTurnsDetail": [
+    {
+      "phase": "p-double",
+      "build": "prefix",
+      "buildCommit": "68eb155",
+      "exeSha256": "3e5b381c03578691f8262805184759478f65640b5106d75b22576825a812c654",
+      "liveTurns": 1
+    },
+    {
+      "phase": "p-restart",
+      "build": "prefix",
+      "buildCommit": "68eb155",
+      "exeSha256": "3e5b381c03578691f8262805184759478f65640b5106d75b22576825a812c654",
+      "liveTurns": 1
+    },
+    {
+      "phase": "q-restart",
+      "build": "fixed",
+      "buildCommit": "87c6929",
+      "exeSha256": "3131c2825d400a68f65e18a5c1da16b0b561b9ff517fc8db2a167c658aea0c42",
+      "liveTurns": 1
+    },
+    {
+      "phase": "q-double",
+      "build": "fixed",
+      "buildCommit": "87c6929",
+      "exeSha256": "3131c2825d400a68f65e18a5c1da16b0b561b9ff517fc8db2a167c658aea0c42",
+      "liveTurns": 1
+    },
+    {
+      "phase": "q-double-2",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 1
+    },
+    {
+      "phase": "a-reload",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 1
+    },
+    {
+      "phase": "a-death",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 1
+    }
+  ],
+  "summary": {
+    "1 double answer": {
+      "prefix": {
+        "sendAnswerClickDetails": [
+          1,
+          2
+        ],
+        "answerInputCallsOnTheTransport": 2,
+        "answerInputCallsThroughInvoke": 2,
+        "refusedCalls": 1,
+        "bannerAfterTheDoubleClick": "Your response could not be submitted. — MSP error -32056: user input 01a110b7-3649-7e53-b0c4-06aa5ab3a950 is already settled [userInputAlreadySettled] [retryable=false]",
+        "bannerAtTheEnd": "Your response could not be submitted. — MSP error -32056: user input 01a110b7-3649-7e53-b0c4-06aa5ab3a950 is already settled [userInputAlreadySettled] [retryable=false]",
+        "inputSettledEvents": 1
+      },
+      "fixed": {
+        "sendAnswerClickDetails": [
+          1,
+          2
+        ],
+        "answerInputCallsOnTheTransport": 1,
+        "answerInputCallsThroughInvoke": 1,
+        "refusedCalls": 0,
+        "bannerAfterTheDoubleClick": null,
+        "bannerAtTheEnd": null,
+        "inputSettledEvents": 1
+      },
+      "fixedAgain": {
+        "sendAnswerClickDetails": [
+          1,
+          2
+        ],
+        "answerInputCallsOnTheTransport": 1,
+        "answerInputCallsThroughInvoke": 1,
+        "refusedCalls": 0,
+        "bannerAfterTheDoubleClick": null,
+        "bannerAtTheEnd": null,
+        "inputSettledEvents": 1
+      },
+      "verdict": "pass"
+    },
+    "2 restart with a question pending": {
+      "prefix": {
+        "cancelLine": false,
+        "cardsAfterRelaunch": 0,
+        "reissuedAfterResume": 1,
+        "appReadListsTheQuestion": false
+      },
+      "fixed": {
+        "cancelLine": true,
+        "cardsAfterRelaunch": 0,
+        "reissuedAfterResume": 1,
+        "appReadListsTheQuestion": false
+      },
+      "verdict": "pass"
+    },
+    "3 host death with an approval card": {
+      "measured": {
+        "approvalLines": 1,
+        "approvalRequestsReissuedAfterResume": 3
+      },
+      "reconnectedBy": "the app, right after host_exited (resume on open)",
+      "reconnectButtonAfterABootResume": {
+        "leftToTheUser": true,
+        "reconnectClicked": true,
+        "reconnectWorks": true,
+        "noPhantomCard": true
+      },
+      "verdict": "pass"
+    },
+    "4 approval regression after 9771bdb": {
+      "stagesPresentedByTheHost": 1,
+      "verdict": "pass"
+    },
+    "5 9771bdb discriminating": {
+      "deadQuestion": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+      "hostBefore": {
+        "resumeSession": {
+          "status": "idle",
+          "activeTurnId": null,
+          "turnCount": 1
+        },
+        "listsAfterResume": [
+          {
+            "userInputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "turnId": "01a110bd-d053-7c43-8a50-952b2ce6010a"
+          }
+        ],
+        "reissued": true
+      },
+      "appReadAfterRestart": {
+        "userInputs": [],
+        "approvals": []
+      },
+      "appBootReadDuringTheNextTurn": [
+        {
+          "ok": true,
+          "userInputIds": [
+            "01a110c1-5c21-7c42-be48-83910f654b3d"
+          ]
+        }
+      ],
+      "hostAfter": {
+        "resumeSession": {
+          "status": "idle",
+          "activeTurnId": null,
+          "turnCount": 2
+        },
+        "listsAfterResume": [
+          {
+            "userInputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "turnId": "01a110bd-d053-7c43-8a50-952b2ce6010a"
+          }
+        ],
+        "reissued": true
+      },
+      "verdict": "pass"
+    },
+    "found on the way: a conversation reopened after the restart stayed working": {
+      "prefix": {
+        "running": "true",
+        "health": "No recent host update No host event for 4m 17s. Muse may still be working. Last event: work item completed. Sync now Reconnect Stop",
+        "turnControls": [
+          "Stop",
+          "Stop",
+          "Guide"
+        ]
+      },
+      "fixed": {
+        "running": "false",
+        "health": null,
+        "turnControls": []
+      },
+      "verdict": "fixed"
+    },
+    "found on the way: a waiting question's line lost by a reload or a restart": {
+      "before": {
+        "storedWhileWaiting": false,
+        "linesAtTheEnd": 0
+      },
+      "after": {
+        "storedWhileWaiting": true,
+        "renderedAfterTheReload": true,
+        "linesAtTheEnd": 1
+      },
+      "verdict": "fixed"
+    }
+  },
+  "summaryText": "M0-05 complement proved natively on Windows with Muse 1.4.2, in the isolated test mode only. (1) A real double-click on Send answer sends one answer and no banner; before the fix, two answers 3 ms apart, the second refused -32056 userInputAlreadySettled, and a false banner to the end. (2) A question pending when the app closes: after the relaunch, no card, and the transcript says \"Input cancelled: Muse closed before you answered.\"; before the fix, no line. (3) Only the conversation's engine killed with an approval card open: card removed, \"Approval cancelled: Muse stopped before you answered, so the action did not run.\", the app reconnects by itself 6 ms after host_exited, three approval requests the engine re-issues for the dead turn are ignored, no decision sent; the Reconnect button also works after a boot resume. (4) Under Ask, the card shows the host's choices, a window reload rebuilds it from the turn-filtered read, and deciding every stage the host presents (one, for the prescribed command) reaches the turn's end. (5) Raw MSP reads before and after show the engine still lists the dead turn's question after session/resume, while the app's own read returns nothing and its boot read during the next turn carries the live question only. Two more defects found and fixed on the way: a conversation reopened after that restart stayed \"Muse may still be working\", and a waiting question's transcript line was lost by a reload or a restart.",
+  "fixes": [
+    {
+      "commit": "a00ea27",
+      "defect": "A double-click on Send answer answered twice; the host refused the second and the banner said the answer had failed.",
+      "fix": "Send answer and Skip ignore the second click of a double-click (e.detail > 1), as the approval cards do; answerInput and cancelInput send one decision per question, released when the host refuses it.",
+      "before": "p-double",
+      "after": "q-double, q-double-2",
+      "test": "test/visibleFailures.test.ts: sends one answer per question card, however often it is pressed"
+    },
+    {
+      "commit": "a00ea27",
+      "defect": "A question open when the app closed left no line after the restart, where an approval said it was cancelled.",
+      "fix": "The open questions' conversations are written for the next boot (muse-desktop.pending-inputs.v1), which says \"Input cancelled: Muse closed before you answered.\" once.",
+      "before": "p-restart",
+      "after": "q-restart",
+      "test": "test/visibleFailures.test.ts: says a question left open when the app closed was cancelled, as for an approval"
+    },
+    {
+      "commit": "87c6929",
+      "defect": "After that restart the conversation stayed \"Muse may still be working\", with Stop and Guide: the resume reports the turn cancelled, then 1.4.2 replays its in-flight items, and each item start marked the conversation running.",
+      "fix": "While no turn has started since the resume (noLiveTurnRef), an item start does not mark the conversation running.",
+      "before": "stale-p (263 s after the relaunch)",
+      "after": "q-restart (livenessAfterAMinute)",
+      "test": "test/visibleFailures.test.ts: keeps a conversation resumed with no turn idle while the engine replays the dead turn's items"
+    },
+    {
+      "commit": "b2811dd",
+      "defect": "A waiting question's \"Input requested\" line was on screen but not in the stored log: an item update queued before it in the same poll rewrote the whole log without it. A reload or a restart while the question waited lost it for good.",
+      "fix": "pushLog saves the log again once its own update is applied.",
+      "before": "p-restart and q-restart (stored transcript at close), q-double (stored false while waiting, no line after the reload)",
+      "after": "q-double-2 (stored while waiting, shown after the reload, one line at the end)",
+      "test": "test/visibleFailures.test.ts: stores a log line once its update is applied, after any whole-log save queued before it"
+    }
+  ],
+  "hostFacts": [
+    "Muse 1.4.2 refuses a second userInput/answer sent 3 ms after the first: -32056 userInputAlreadySettled (p-double).",
+    "Closing the app ends its engine (killed at exit). The next resume cancels the turn (resume_reconcile:orphaned_by_process_loss), then replays its in-flight items and re-issues the question (userInput/request); approval/listPending keeps listing it with the dead turnId while session/read says idle, activeTurnId null (q-restart, msp-raw-1, msp-raw-2).",
+    "Engine killed with an approval pending: after the resume, approval/resolved abort for it, then tool_request re-issued for it and twice for a second approval id of the dead turn (a-death).",
+    "The prescribed command `$m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m` came as one approval stage (approve terminal at sourceIndex 0). Under the default Isolation the write itself failed (Set-Content: path not found or filtered): probe.txt not written (a-reload).",
+    "request_user_input raised no approval card under Ask (promptUnmatched)."
+  ],
+  "forgedInputs": [
+    "The folder dialog of \"New project from a folder…\" was answered by the harness for folders P, Q and A: CDP cannot drive the OS dialog. Each conversation was then started from the welcome screen with its first message.",
+    "The engine's death is a taskkill /F of the one engine child of the app whose working directory, read from its PEB, is folder A; the engine of folder Q kept running. A crash cannot be scheduled.",
+    "The page refuses a wrapper on __TAURI_INTERNALS__.invoke (the property and the object's invoke are non-writable and non-configurable). Its calls were counted from the debugger instead: a conditional breakpoint on that very function (Debugger.setBreakpointOnFunctionCall) whose condition records the command and returns false, so it never pauses. answer_input was also counted on window.fetch, the IPC transport; both counts agree in every phase.",
+    "The harness's own reads beside the app: list_pending_requests (the app's read-only command) and poll_events since 0 (the backend's event ring, read-only).",
+    "The raw MSP reads (msp-raw-1, msp-raw-2, scripts/msp-orphan-prompt.mjs) ran their own engine on conversation Q with the app closed; each re-issued userInput/request was acknowledged with an empty result, as the bridge does; nothing answered or cancelled.",
+    "No answer, decision or message was forged: every pick, answer, decision and Reconnect was a real mouse click through CDP Input, every message went through the composer or the welcome screen."
+  ],
+  "limits": [
+    "7 live turns instead of about 6: q-double-2 proves the fourth fix (b2811dd) natively and proves item 1 again on that build.",
+    "Three builds, each phase with its own: pre-fix (68eb155), 87c6929, b2811dd. The item 2 proof (q-restart) ran on 87c6929, before the pushLog fix: after its relaunch the transcript has the cancel line but not the question's own line, the fourth defect.",
+    "Item 4: the host presented one stage, not the two the brief expected. The two-stage card path was proven in m0-05-06-approvals.json (allow-fixed, two).",
+    "Item 3: with the approval pending, the app reconnected by itself (the conversation had been started in this run: resume on open). The Reconnect button itself was clicked after a boot resume with no card pending (a-reconnect, no turn).",
+    "The test mode isolates the app's data and WebView2 profile, not the engine's session store: the test conversations live in the engine's own store, as in the earlier isolated proofs.",
+    "Windows only; macOS not run."
+  ],
+  "notes": [
+    "Harness corrections during the run: the pre-fix instance's final stop record was overwritten by a key collision (stop keys are numbered since; that close was graceful); a-reload's stage verdict was rederived from its stored stages (the first version required two stages); a-death's reconnect facts were read after the phase from the page's own trace (a-death-trace); the first q-double-2 attempt is kept as a failure record (the composer was still connecting after the relaunch, no message sent).",
+    "Isolation: every instance in the test mode, a fresh data folder per launch (launch-1 pre-fix, launch-2 fixed; relaunches reused it), no WEBVIEW2_* variable, CDP on 9333, the WebView2 --user-data-dir checked under the data folder at every attach, MUSE_NO_AUTO_UPDATE=1, every instance closed from its window. Each exe ran from a copy, so a rebuild of the shared target could not swap it between a close and a relaunch."
+  ],
+  "phases": {
+    "launch-1": {
+      "headAtPhase": "a00ea27",
+      "build": "prefix",
+      "buildCommit": "68eb155",
+      "exe": "muse-desktop-prefix.exe",
+      "exeSha256": "3e5b381c03578691f8262805184759478f65640b5106d75b22576825a812c654",
+      "liveTurns": 0,
+      "started": true,
+      "pidRecorded": true,
+      "isolation": {
+        "testModeMarker": true,
+        "webviewProfileUnderTestFolder": true,
+        "cdpPort": 9333
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-Cv6e3Clj.js"
+      ]
+    },
+    "probe": {
+      "headAtPhase": "a00ea27",
+      "build": "prefix",
+      "buildCommit": "68eb155",
+      "exe": "muse-desktop-prefix.exe",
+      "exeSha256": "3e5b381c03578691f8262805184759478f65640b5106d75b22576825a812c654",
+      "liveTurns": 0,
+      "invokeCounter": {
+        "wrapperRefused": {
+          "assignmentTaken": false,
+          "writable": false,
+          "configurable": false
+        },
+        "method": "Debugger.setBreakpointOnFunctionCall (condition records, returns false)",
+        "installed": true,
+        "pollsSeenIn1500ms": 1
+      },
+      "profile": {
+        "sessions": 0,
+        "posture": "ask",
+        "welcome": true,
+        "newConversation": 1
+      },
+      "view": {
+        "activeSid": null,
+        "inputs": [],
+        "approvals": [],
+        "banner": null,
+        "connection": null,
+        "health": null,
+        "reconnect": null
+      },
+      "verdict": {
+        "emptyProfile": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-Cv6e3Clj.js"
+      ]
+    },
+    "p-double": {
+      "headAtPhase": "a00ea27",
+      "build": "prefix",
+      "buildCommit": "68eb155",
+      "exe": "muse-desktop-prefix.exe",
+      "exeSha256": "3e5b381c03578691f8262805184759478f65640b5106d75b22576825a812c654",
+      "liveTurns": 1,
+      "start": {
+        "sid": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+        "startSession": {
+          "ok": true,
+          "authorizationMode": "ask",
+          "sandboxMode": "workspace",
+          "hostApprovalMode": "promptUnmatched"
+        },
+        "sendInput": {
+          "ok": true
+        }
+      },
+      "card": {
+        "msToCard": 5680,
+        "approvalsAllowedFirst": [],
+        "view": {
+          "activeSid": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+          "inputs": [
+            {
+              "key": "01a110b7-2064-7dd3-9b93-8e662dbde166:01a110b7-3649-7e53-b0c4-06aa5ab3a950",
+              "questions": [
+                {
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ]
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ],
+              "alert": null
+            }
+          ],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        },
+        "appPending": {
+          "userInputs": [
+            {
+              "inputId": "01a110b7-3649-7e53-b0c4-06aa5ab3a950",
+              "turnId": null
+            }
+          ],
+          "approvals": []
+        }
+      },
+      "invokeCounter": {
+        "wrapperRefused": {
+          "assignmentTaken": false,
+          "writable": false,
+          "configurable": false
+        },
+        "method": "Debugger.setBreakpointOnFunctionCall (condition records, returns false)",
+        "installed": true,
+        "pollsSeenIn1500ms": 10
+      },
+      "pick": {
+        "clicked": true,
+        "count": 1
+      },
+      "beforeSend": {
+        "activeSid": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+        "inputs": [
+          {
+            "key": "01a110b7-2064-7dd3-9b93-8e662dbde166:01a110b7-3649-7e53-b0c4-06aa5ab3a950",
+            "questions": [
+              {
+                "question": "Which fruit should I name?",
+                "choices": [
+                  {
+                    "label": "Apple",
+                    "pressed": false
+                  },
+                  {
+                    "label": "Banana",
+                    "pressed": true
+                  },
+                  {
+                    "label": "Cherry",
+                    "pressed": false
+                  }
+                ]
+              }
+            ],
+            "actions": [
+              "Send answer",
+              "Skip"
+            ],
+            "alert": null
+          }
+        ],
+        "approvals": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": "Waiting for your answer Muse needs your answer before it can continue.",
+        "reconnect": null
+      },
+      "doubleClick": {
+        "clicked": true,
+        "count": 2
+      },
+      "after": {
+        "clicks": [
+          {
+            "type": "click",
+            "detail": 1,
+            "button": "Send answer",
+            "atMs": 741
+          },
+          {
+            "type": "click",
+            "detail": 2,
+            "button": "Send answer",
+            "atMs": 743
+          },
+          {
+            "type": "dblclick",
+            "detail": 2,
+            "button": "Send answer",
+            "atMs": 744
+          }
+        ],
+        "answerInputFetch": [
+          {
+            "atMs": 136625,
+            "ok": true,
+            "args": {
+              "sessionId": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+              "userInputId": "01a110b7-3649-7e53-b0c4-06aa5ab3a950",
+              "answers": [
+                {
+                  "questionId": "fruit",
+                  "selectedLabel": "Banana"
+                }
+              ]
+            }
+          },
+          {
+            "atMs": 136628,
+            "ok": false,
+            "args": {
+              "sessionId": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+              "userInputId": "01a110b7-3649-7e53-b0c4-06aa5ab3a950",
+              "answers": [
+                {
+                  "questionId": "fruit",
+                  "selectedLabel": "Banana"
+                }
+              ]
+            },
+            "result": "\"MSP error -32056: user input 01a110b7-3649-7e53-b0c4-06aa5ab3a950 is already settled [userInputAlreadySettled] [retryable=false]\""
+          }
+        ],
+        "answerInputInvoke": [
+          {
+            "cmd": "answer_input",
+            "atMs": 2248,
+            "args": {
+              "sessionId": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+              "userInputId": "01a110b7-3649-7e53-b0c4-06aa5ab3a950",
+              "answers": [
+                {
+                  "questionId": "fruit",
+                  "selectedLabel": "Banana"
+                }
+              ]
+            }
+          },
+          {
+            "cmd": "answer_input",
+            "atMs": 2251,
+            "args": {
+              "sessionId": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+              "userInputId": "01a110b7-3649-7e53-b0c4-06aa5ab3a950",
+              "answers": [
+                {
+                  "questionId": "fruit",
+                  "selectedLabel": "Banana"
+                }
+              ]
+            }
+          }
+        ],
+        "view": {
+          "activeSid": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+          "inputs": [],
+          "approvals": [],
+          "banner": "Your response could not be submitted. — MSP error -32056: user input 01a110b7-3649-7e53-b0c4-06aa5ab3a950 is already settled [userInputAlreadySettled] [retryable=false]",
+          "connection": "Connected",
+          "health": "Muse is working Last update 2s ago. · work item completed.",
+          "reconnect": null
+        }
+      },
+      "end": {
+        "idle": true,
+        "msToIdle": 15377
+      },
+      "settled": [
+        "{\"inputId\":\"01a110b7-3649-7e53-b0c4-06aa5ab3a950\",\"outcome\":\"answered\"}"
+      ],
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Before anything else, call your request_user_input tool exactly once, with one single-select question: id \"fruit\", header \"Fruit\", question \"Which fruit should I name?\", options \"Apple\", \"Banana\", \"Cherry\". After my answer, reply with only the fruit I picked, in capital letters. Use no other tool."
+        },
+        {
+          "role": "assistant",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "tool",
+          "text": "request_user_input {\"status\":\"answered\",\"answers\":[{\"id\":\"fruit\",\"selected_label\":\"Banana\"}]}"
+        },
+        {
+          "role": "tool",
+          "text": "Input requested: request_user_input"
+        },
+        {
+          "role": "assistant",
+          "text": "BANANA"
+        },
+        {
+          "role": "system",
+          "text": "Input answered"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "reply": "BANANA",
+      "finalView": {
+        "activeSid": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+        "inputs": [],
+        "approvals": [],
+        "banner": "Your response could not be submitted. — MSP error -32056: user input 01a110b7-3649-7e53-b0c4-06aa5ab3a950 is already settled [userInputAlreadySettled] [retryable=false]",
+        "connection": "Connected",
+        "health": null,
+        "reconnect": null
+      },
+      "measured": {
+        "sendAnswerClickDetails": [
+          1,
+          2
+        ],
+        "answerInputCallsOnTheTransport": 2,
+        "answerInputCallsThroughInvoke": 2,
+        "refusedCalls": 1,
+        "bannerAfterTheDoubleClick": "Your response could not be submitted. — MSP error -32056: user input 01a110b7-3649-7e53-b0c4-06aa5ab3a950 is already settled [userInputAlreadySettled] [retryable=false]",
+        "bannerAtTheEnd": "Your response could not be submitted. — MSP error -32056: user input 01a110b7-3649-7e53-b0c4-06aa5ab3a950 is already settled [userInputAlreadySettled] [retryable=false]",
+        "inputSettledEvents": 1
+      },
+      "verdict": {
+        "realDoubleClickReachedTheButton": true,
+        "oneAnswerSent": false,
+        "answerAccepted": true,
+        "noFalseErrorBanner": false,
+        "settledAnsweredOnce": true,
+        "turnEnded": true,
+        "replyIsTheAnswer": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-Cv6e3Clj.js"
+      ]
+    },
+    "p-restart": {
+      "headAtPhase": "a00ea27",
+      "build": "prefix",
+      "buildCommit": "68eb155",
+      "exe": "muse-desktop-prefix.exe",
+      "exeSha256": "3e5b381c03578691f8262805184759478f65640b5106d75b22576825a812c654",
+      "liveTurns": 1,
+      "start": {
+        "sendInput": {
+          "ok": true
+        }
+      },
+      "before": {
+        "msToCard": 2429,
+        "approvalsAllowedFirst": [],
+        "view": {
+          "activeSid": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+          "inputs": [
+            {
+              "key": "01a110b7-2064-7dd3-9b93-8e662dbde166:01a110b7-c875-7352-b151-eee1067a990c",
+              "questions": [
+                {
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ]
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ],
+              "alert": null
+            }
+          ],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        },
+        "appPending": {
+          "userInputs": [
+            {
+              "inputId": "01a110b7-c875-7352-b151-eee1067a990c",
+              "turnId": null
+            }
+          ],
+          "approvals": []
+        },
+        "markers": {
+          "inputs": null,
+          "approvals": "[]"
+        },
+        "engines": [
+          {
+            "pid": 41944,
+            "created": "2026-10-06T12:16:36.9511150+02:00",
+            "folder": "P"
+          }
+        ],
+        "transcript": [
+          {
+            "role": "user",
+            "text": "Before anything else, call your request_user_input tool exactly once, with one single-select question: id \"fruit\", header \"Fruit\", question \"Which fruit should I name?\", options \"Apple\", \"Banana\", \"Cherry\". After my answer, reply with only the fruit I picked, in capital letters. Use no other tool."
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "request_user_input"
+          }
+        ]
+      },
+      "close": {
+        "graceful": true,
+        "exited": true,
+        "enginesBefore": 1,
+        "enginesAliveAfter": 0
+      },
+      "relaunch": {
+        "pidRecorded": true
+      },
+      "after": {
+        "connected": true,
+        "view": {
+          "activeSid": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+          "inputs": [],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Muse is working Last update 15s ago. · work item completed.",
+          "reconnect": null
+        },
+        "cardSamples": [
+          {
+            "atS": 0,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 1,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 2,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 3,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 4,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 5,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 6,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 7,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 8,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 9,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 10,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 11,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 12,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 13,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 14,
+            "inputs": 0,
+            "approvals": 0
+          }
+        ],
+        "transcriptTail": [
+          {
+            "role": "user",
+            "text": "Before anything else, call your request_user_input tool exactly once, with one single-select question: id \"fruit\", header \"Fruit\", question \"Which fruit should I name?\", options \"Apple\", \"Banana\", \"Ch"
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "The previous process terminated while this tool call was in flight, and no result was recorded. The outcome is unknown: the operation may have partially or fully applied. Verify the actual state befor"
+          },
+          {
+            "role": "system",
+            "text": "Stopped"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "tool",
+            "text": "request_user_input The previous process terminated while this tool call was in flight, and no result was recorded. The outcome is unknown: the operation may have partially or fully applied. Verify the"
+          }
+        ],
+        "linesAfterTheQuestion": [
+          "Input answered",
+          "Stopped"
+        ],
+        "appPending": {
+          "userInputs": [],
+          "approvals": []
+        },
+        "resumeEvents": {
+          "oldest": 1,
+          "truncated": false,
+          "events": [
+            {
+              "seq": 1,
+              "kind": "cancelled",
+              "payload": "{\"durationMs\":null,\"error\":null,\"reason\":\"resume_reconcile:orphaned_by_process_loss\",\"terminal\":\"cancelled\",\"turnId\":\"01a110b7-bfff-716e-8933-25ee1b7aeb2a\"}"
+            },
+            {
+              "seq": 2,
+              "kind": "item_started",
+              "payload": "{\"commandText\":null,\"itemId\":\"197503fd-c1e1-4b17-b616-c2a87ad2a57b\",\"itemKind\":\"reminderChild\",\"outputRef\":null,\"richContent\":null,\"toolSummary\":null,\"turnId\":\"01a110b7-bfff-716e-8933-25ee1b7aeb2a\"}"
+            },
+            {
+              "seq": 3,
+              "kind": "subagent_event",
+              "payload": "{\"agent_id\":\"197503fd-c1e1-4b17-b616-c2a87ad2a57b\",\"itemId\":\"197503fd-c1e1-4b17-b616-c2a87ad2a57b\",\"replace\":true,\"status\":\"completed\",\"text\":\"Reminder child session\"}"
+            },
+            {
+              "seq": 4,
+              "kind": "item_done",
+              "payload": "{\"itemId\":\"197503fd-c1e1-4b17-b616-c2a87ad2a57b\",\"turnId\":\"01a110b7-bfff-716e-8933-25ee1b7aeb2a\"}"
+            },
+            {
+              "seq": 5,
+              "kind": "item_started",
+              "payload": "{\"commandText\":null,\"itemId\":\"01a110b7-c875-7352-b151-eee1067a990c\",\"itemKind\":\"toolCall\",\"outputRef\":null,\"richContent\":null,\"toolSummary\":\"request_user_input\",\"turnId\":\"01a110b7-bfff-716e-8933-25ee1b7aeb2a\"}"
+            },
+            {
+              "seq": 6,
+              "kind": "shell_output",
+              "payload": "{\"itemId\":\"01a110b7-c875-7352-b151-eee1067a990c\",\"outputRef\":null,\"richContent\":null,\"text\":\"The previous process terminated while this tool call was in flight, and no result was recorded. The outcome is unknown: the operation may have partially or fully applied. Verify the actual state before retry"
+            },
+            {
+              "seq": 7,
+              "kind": "item_done",
+              "payload": "{\"itemId\":\"01a110b7-c875-7352-b151-eee1067a990c\",\"turnId\":\"01a110b7-bfff-716e-8933-25ee1b7aeb2a\"}"
+            },
+            {
+              "seq": 8,
+              "kind": "input_request",
+              "payload": "{\"inputId\":\"01a110b7-c875-7352-b151-eee1067a990c\",\"itemId\":\"01a110b7-c875-7352-b151-eee1067a990c\",\"questions\":[{\"header\":\"Fruit\",\"id\":\"fruit\",\"maxSelections\":null,\"minSelections\":null,\"mode\":\"single\",\"options\":[{\"description\":\"\",\"label\":\"Apple\"},{\"description\":\"\",\"label\":\"Banana\"},{\"description\":\"\","
+            }
+          ]
+        },
+        "engines": [
+          {
+            "pid": 35064,
+            "created": "2026-10-06T12:17:30.9561490+02:00",
+            "folder": "P"
+          }
+        ],
+        "markersAfterBoot": {
+          "inputs": null,
+          "approvals": "[]"
+        }
+      },
+      "question": "01a110b7-c875-7352-b151-eee1067a990c",
+      "measured": {
+        "cancelLine": false,
+        "cardsAfterRelaunch": 0,
+        "reissuedAfterResume": 1,
+        "appReadListsTheQuestion": false
+      },
+      "verdict": {
+        "questionPendingAtClose": true,
+        "closedFromItsWindow": true,
+        "engineEndedWithTheApp": true,
+        "reopenedAndConnected": true,
+        "noPhantomCard": true,
+        "transcriptSaysInputCancelled": false,
+        "lineOnlyOnce": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-Cv6e3Clj.js"
+      ]
+    },
+    "stale-p": {
+      "headAtPhase": "df9c2a2",
+      "build": "prefix",
+      "buildCommit": "68eb155",
+      "exe": "muse-desktop-prefix.exe",
+      "exeSha256": "3e5b381c03578691f8262805184759478f65640b5106d75b22576825a812c654",
+      "liveTurns": 0,
+      "conversation": "P",
+      "secondsSinceTheInstanceStarted": 263,
+      "liveness": {
+        "running": "true",
+        "health": "No recent host update No host event for 4m 17s. Muse may still be working. Last event: work item completed. Sync now Reconnect Stop",
+        "turnControls": [
+          "Stop",
+          "Stop",
+          "Guide"
+        ]
+      },
+      "view": {
+        "activeSid": "01a110b7-2064-7dd3-9b93-8e662dbde166",
+        "inputs": [],
+        "approvals": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": "No recent host update No host event for 4m 17s. Muse may still be working. Last event: work item completed. Sync now Reconnect Stop",
+        "reconnect": null
+      },
+      "verdict": {
+        "idle": false
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-Cv6e3Clj.js"
+      ]
+    },
+    "launch-2": {
+      "headAtPhase": "87c6929",
+      "build": "fixed",
+      "buildCommit": "87c6929",
+      "exe": "muse-desktop-87c6929.exe",
+      "exeSha256": "3131c2825d400a68f65e18a5c1da16b0b561b9ff517fc8db2a167c658aea0c42",
+      "liveTurns": 0,
+      "started": true,
+      "pidRecorded": true,
+      "isolation": {
+        "testModeMarker": true,
+        "webviewProfileUnderTestFolder": true,
+        "cdpPort": 9333
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-CZwfKgkV.js"
+      ]
+    },
+    "q-restart": {
+      "headAtPhase": "87c6929",
+      "build": "fixed",
+      "buildCommit": "87c6929",
+      "exe": "muse-desktop-87c6929.exe",
+      "exeSha256": "3131c2825d400a68f65e18a5c1da16b0b561b9ff517fc8db2a167c658aea0c42",
+      "liveTurns": 1,
+      "start": {
+        "sid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+        "startSession": {
+          "ok": true,
+          "authorizationMode": "ask",
+          "sandboxMode": "workspace",
+          "hostApprovalMode": "promptUnmatched"
+        },
+        "sendInput": {
+          "ok": true
+        }
+      },
+      "before": {
+        "msToCard": 5678,
+        "approvalsAllowedFirst": [],
+        "view": {
+          "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+          "inputs": [
+            {
+              "key": "01a110bd-ce35-75f2-8d43-dfd15742458c:01a110bd-e462-7bc2-b4e6-6307e2e78455",
+              "questions": [
+                {
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ]
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ],
+              "alert": null
+            }
+          ],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        },
+        "appPending": {
+          "userInputs": [
+            {
+              "inputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+              "turnId": null
+            }
+          ],
+          "approvals": []
+        },
+        "markers": {
+          "inputs": "[\"01a110bd-ce35-75f2-8d43-dfd15742458c\"]",
+          "approvals": "[]"
+        },
+        "engines": [
+          {
+            "pid": 42140,
+            "created": "2026-10-06T12:23:54.7445010+02:00",
+            "folder": "Q"
+          }
+        ],
+        "transcript": [
+          {
+            "role": "user",
+            "text": "Before anything else, call your request_user_input tool exactly once, with one single-select question: id \"fruit\", header \"Fruit\", question \"Which fruit should I name?\", options \"Apple\", \"Banana\", \"Cherry\". After my answer, reply with only the fruit I picked, in capital letters. Use no other tool."
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "request_user_input"
+          }
+        ]
+      },
+      "close": {
+        "graceful": true,
+        "exited": true,
+        "enginesBefore": 1,
+        "enginesAliveAfter": 0
+      },
+      "relaunch": {
+        "pidRecorded": true
+      },
+      "after": {
+        "connected": true,
+        "view": {
+          "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+          "inputs": [],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": null,
+          "reconnect": null
+        },
+        "cardSamples": [
+          {
+            "atS": 0,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 1,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 2,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 3,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 4,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 5,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 6,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 7,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 8,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 9,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 10,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 11,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 12,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 13,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 14,
+            "inputs": 0,
+            "approvals": 0
+          }
+        ],
+        "livenessAfterAMinute": {
+          "running": "false",
+          "health": null,
+          "turnControls": []
+        },
+        "transcriptTail": [
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "system",
+            "text": "Input cancelled: Muse closed before you answered."
+          },
+          {
+            "role": "tool",
+            "text": "The previous process terminated while this tool call was in flight, and no result was recorded. The outcome is unknown: the operation may have partially or fully applied. Verify the actual state befor"
+          },
+          {
+            "role": "system",
+            "text": "Stopped"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          },
+          {
+            "role": "tool",
+            "text": "request_user_input The previous process terminated while this tool call was in flight, and no result was recorded. The outcome is unknown: the operation may have partially or fully applied. Verify the"
+          }
+        ],
+        "linesAfterTheQuestion": [
+          "Input cancelled: Muse closed before you answered.",
+          "Stopped"
+        ],
+        "appPending": {
+          "userInputs": [],
+          "approvals": []
+        },
+        "resumeEvents": {
+          "oldest": 1,
+          "truncated": false,
+          "events": [
+            {
+              "seq": 1,
+              "kind": "cancelled",
+              "payload": "{\"durationMs\":null,\"error\":null,\"reason\":\"resume_reconcile:orphaned_by_process_loss\",\"terminal\":\"cancelled\",\"turnId\":\"01a110bd-d053-7c43-8a50-952b2ce6010a\"}"
+            },
+            {
+              "seq": 2,
+              "kind": "item_started",
+              "payload": "{\"commandText\":null,\"itemId\":\"0ffee816-7689-4aac-8a36-de0af7ced269\",\"itemKind\":\"reminderChild\",\"outputRef\":null,\"richContent\":null,\"toolSummary\":null,\"turnId\":\"01a110bd-d053-7c43-8a50-952b2ce6010a\"}"
+            },
+            {
+              "seq": 3,
+              "kind": "subagent_event",
+              "payload": "{\"agent_id\":\"0ffee816-7689-4aac-8a36-de0af7ced269\",\"itemId\":\"0ffee816-7689-4aac-8a36-de0af7ced269\",\"replace\":true,\"status\":\"completed\",\"text\":\"Reminder child session\"}"
+            },
+            {
+              "seq": 4,
+              "kind": "item_done",
+              "payload": "{\"itemId\":\"0ffee816-7689-4aac-8a36-de0af7ced269\",\"turnId\":\"01a110bd-d053-7c43-8a50-952b2ce6010a\"}"
+            },
+            {
+              "seq": 5,
+              "kind": "item_started",
+              "payload": "{\"commandText\":null,\"itemId\":\"01a110bd-e462-7bc2-b4e6-6307e2e78455\",\"itemKind\":\"toolCall\",\"outputRef\":null,\"richContent\":null,\"toolSummary\":\"request_user_input\",\"turnId\":\"01a110bd-d053-7c43-8a50-952b2ce6010a\"}"
+            },
+            {
+              "seq": 6,
+              "kind": "shell_output",
+              "payload": "{\"itemId\":\"01a110bd-e462-7bc2-b4e6-6307e2e78455\",\"outputRef\":null,\"richContent\":null,\"text\":\"The previous process terminated while this tool call was in flight, and no result was recorded. The outcome is unknown: the operation may have partially or fully applied. Verify the actual state before retry"
+            },
+            {
+              "seq": 7,
+              "kind": "item_done",
+              "payload": "{\"itemId\":\"01a110bd-e462-7bc2-b4e6-6307e2e78455\",\"turnId\":\"01a110bd-d053-7c43-8a50-952b2ce6010a\"}"
+            },
+            {
+              "seq": 8,
+              "kind": "input_request",
+              "payload": "{\"inputId\":\"01a110bd-e462-7bc2-b4e6-6307e2e78455\",\"itemId\":\"01a110bd-e462-7bc2-b4e6-6307e2e78455\",\"questions\":[{\"header\":\"Fruit\",\"id\":\"fruit\",\"maxSelections\":null,\"minSelections\":null,\"mode\":\"single\",\"options\":[{\"description\":\"\",\"label\":\"Apple\"},{\"description\":\"\",\"label\":\"Banana\"},{\"description\":\"\","
+            }
+          ]
+        },
+        "engines": [
+          {
+            "pid": 35464,
+            "created": "2026-10-06T12:24:11.0038300+02:00",
+            "folder": "Q"
+          }
+        ],
+        "markersAfterBoot": {
+          "inputs": "[]",
+          "approvals": "[]"
+        }
+      },
+      "question": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+      "measured": {
+        "cancelLine": true,
+        "cardsAfterRelaunch": 0,
+        "reissuedAfterResume": 1,
+        "appReadListsTheQuestion": false
+      },
+      "verdict": {
+        "questionPendingAtClose": true,
+        "closedFromItsWindow": true,
+        "engineEndedWithTheApp": true,
+        "reopenedAndConnected": true,
+        "noPhantomCard": true,
+        "transcriptSaysInputCancelled": true,
+        "lineOnlyOnce": true,
+        "notLeftWorking": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-CZwfKgkV.js"
+      ]
+    },
+    "stop-2.1": {
+      "headAtPhase": "87c6929",
+      "build": "fixed",
+      "buildCommit": "87c6929",
+      "exe": "muse-desktop-87c6929.exe",
+      "exeSha256": "3131c2825d400a68f65e18a5c1da16b0b561b9ff517fc8db2a167c658aea0c42",
+      "liveTurns": 0,
+      "close": {
+        "graceful": true,
+        "exited": true,
+        "enginesBefore": 1,
+        "enginesAliveAfter": 0
+      },
+      "verdict": {
+        "closedFromItsWindow": true,
+        "enginesEnded": true
+      }
+    },
+    "msp-raw-1": {
+      "commit": "87c6929",
+      "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+      "liveTurns": 0,
+      "engineArgs": [
+        "serve",
+        "--sandbox-network",
+        "restricted"
+      ],
+      "initialize": {
+        "ok": true
+      },
+      "readBeforeResume": {
+        "ok": true,
+        "session": {
+          "status": "notLoaded",
+          "activeTurnId": null,
+          "turnCount": 1
+        }
+      },
+      "listPendingBeforeResume": {
+        "ok": true,
+        "userInputs": [
+          {
+            "userInputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "turnId": "01a110bd-d053-7c43-8a50-952b2ce6010a",
+            "toolName": "request_user_input",
+            "questions": [
+              "fruit"
+            ]
+          }
+        ],
+        "approvals": 0
+      },
+      "resume": {
+        "ok": true,
+        "session": {
+          "status": "idle",
+          "activeTurnId": null,
+          "turnCount": 1
+        },
+        "pendingRequests": [
+          {
+            "sessionId": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+            "userInputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "turnId": "01a110bd-d053-7c43-8a50-952b2ce6010a",
+            "itemId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "toolCallId": "call_01a110bde8f076c18a817317b89f3131",
+            "toolName": "request_user_input",
+            "viewCursor": "v:01a110bd-ce35-75f2-8d43-dfd15742458c:8",
+            "sourceRange": {
+              "stream": {
+                "kind": "session",
+                "id": "01a110bd-ce35-75f2-8d43-dfd15742458c"
+              },
+              "first": {
+                "id": "2cae9156-4c23-404c-a6c5-92b0f6b833ea",
+                "sequence": 73
+              },
+              "last": {
+                "id": "2cae9156-4c23-404c-a6c5-92b0f6b833ea",
+                "sequence": 73
+              }
+            },
+            "questions": [
+              {
+                "id": "fruit",
+                "header": "Fruit",
+                "question": "Which fruit should I name?",
+                "selection": {
+                  "mode": "single"
+                },
+                "options": [
+                  {
+                    "label": "Apple"
+                  },
+                  {
+                    "label": "Banana"
+                  },
+                  {
+                    "label": "Cherry"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "framesAfterResume": [
+        {
+          "ms": 2748,
+          "request": "userInput/request",
+          "params": {
+            "userInputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "turnId": "01a110bd-d053-7c43-8a50-952b2ce6010a",
+            "toolName": "request_user_input"
+          }
+        }
+      ],
+      "listPendingAfterResume": {
+        "ok": true,
+        "userInputs": [
+          {
+            "userInputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "turnId": "01a110bd-d053-7c43-8a50-952b2ce6010a",
+            "toolName": "request_user_input",
+            "questions": [
+              "fruit"
+            ]
+          }
+        ],
+        "approvals": 0
+      },
+      "verdict": {
+        "sessionRunsNoTurn": true,
+        "foldStillListsTheQuestion": true,
+        "questionReissuedAfterResume": true
+      },
+      "stderrTail": ""
+    },
+    "relaunch-2.1": {
+      "headAtPhase": "87c6929",
+      "build": "fixed",
+      "buildCommit": "87c6929",
+      "exe": "muse-desktop-87c6929.exe",
+      "exeSha256": "3131c2825d400a68f65e18a5c1da16b0b561b9ff517fc8db2a167c658aea0c42",
+      "liveTurns": 0,
+      "started": true,
+      "sameDataFolder": true,
+      "pidRecorded": true,
+      "isolation": {
+        "testModeMarker": true,
+        "webviewProfileUnderTestFolder": true,
+        "cdpPort": 9333
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-CZwfKgkV.js"
+      ]
+    },
+    "q-double": {
+      "headAtPhase": "87c6929",
+      "build": "fixed",
+      "buildCommit": "87c6929",
+      "exe": "muse-desktop-87c6929.exe",
+      "exeSha256": "3131c2825d400a68f65e18a5c1da16b0b561b9ff517fc8db2a167c658aea0c42",
+      "liveTurns": 1,
+      "start": {
+        "sendInput": {
+          "ok": true
+        }
+      },
+      "card": {
+        "msToCard": 2441,
+        "approvalsAllowedFirst": [],
+        "view": {
+          "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+          "inputs": [
+            {
+              "key": "01a110bd-ce35-75f2-8d43-dfd15742458c:01a110c1-5c21-7c42-be48-83910f654b3d",
+              "questions": [
+                {
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ]
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ],
+              "alert": null
+            }
+          ],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        },
+        "appPending": {
+          "userInputs": [
+            {
+              "inputId": "01a110c1-5c21-7c42-be48-83910f654b3d",
+              "turnId": null
+            }
+          ],
+          "approvals": []
+        },
+        "inputLine": {
+          "rendered": true,
+          "stored": false
+        }
+      },
+      "reload": {
+        "msToCard": 3521,
+        "view": {
+          "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+          "inputs": [
+            {
+              "key": "01a110bd-ce35-75f2-8d43-dfd15742458c:01a110c1-5c21-7c42-be48-83910f654b3d",
+              "questions": [
+                {
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ]
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ],
+              "alert": null
+            }
+          ],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        },
+        "bootListPending": [
+          {
+            "ok": true,
+            "userInputIds": [
+              "01a110c1-5c21-7c42-be48-83910f654b3d"
+            ]
+          }
+        ],
+        "appPending": {
+          "userInputs": [
+            {
+              "inputId": "01a110c1-5c21-7c42-be48-83910f654b3d",
+              "turnId": null
+            }
+          ],
+          "approvals": []
+        },
+        "deadQuestionsLeftByQRestart": [
+          "01a110bd-e462-7bc2-b4e6-6307e2e78455"
+        ]
+      },
+      "invokeCounter": {
+        "wrapperRefused": {
+          "assignmentTaken": false,
+          "writable": false,
+          "configurable": false
+        },
+        "method": "Debugger.setBreakpointOnFunctionCall (condition records, returns false)",
+        "installed": true,
+        "pollsSeenIn1500ms": 10
+      },
+      "pick": {
+        "clicked": true,
+        "count": 1
+      },
+      "beforeSend": {
+        "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+        "inputs": [
+          {
+            "key": "01a110bd-ce35-75f2-8d43-dfd15742458c:01a110c1-5c21-7c42-be48-83910f654b3d",
+            "questions": [
+              {
+                "question": "Which fruit should I name?",
+                "choices": [
+                  {
+                    "label": "Apple",
+                    "pressed": false
+                  },
+                  {
+                    "label": "Banana",
+                    "pressed": true
+                  },
+                  {
+                    "label": "Cherry",
+                    "pressed": false
+                  }
+                ]
+              }
+            ],
+            "actions": [
+              "Send answer",
+              "Skip"
+            ],
+            "alert": null
+          }
+        ],
+        "approvals": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": "Waiting for your answer Muse needs your answer before it can continue.",
+        "reconnect": null
+      },
+      "doubleClick": {
+        "clicked": true,
+        "count": 2
+      },
+      "after": {
+        "clicks": [
+          {
+            "type": "click",
+            "detail": 1,
+            "button": "Send answer",
+            "atMs": 721
+          },
+          {
+            "type": "click",
+            "detail": 2,
+            "button": "Send answer",
+            "atMs": 724
+          },
+          {
+            "type": "dblclick",
+            "detail": 2,
+            "button": "Send answer",
+            "atMs": 724
+          }
+        ],
+        "answerInputFetch": [
+          {
+            "atMs": 5815,
+            "ok": true,
+            "args": {
+              "sessionId": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+              "userInputId": "01a110c1-5c21-7c42-be48-83910f654b3d",
+              "answers": [
+                {
+                  "questionId": "fruit",
+                  "selectedLabel": "Banana"
+                }
+              ]
+            }
+          }
+        ],
+        "answerInputInvoke": [
+          {
+            "cmd": "answer_input",
+            "atMs": 2234,
+            "args": {
+              "sessionId": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+              "userInputId": "01a110c1-5c21-7c42-be48-83910f654b3d",
+              "answers": [
+                {
+                  "questionId": "fruit",
+                  "selectedLabel": "Banana"
+                }
+              ]
+            }
+          }
+        ],
+        "view": {
+          "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+          "inputs": [],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Muse is working Last update 0s ago. · work item started.",
+          "reconnect": null
+        }
+      },
+      "end": {
+        "idle": true,
+        "msToIdle": 10571
+      },
+      "settled": [
+        "{\"inputId\":\"01a110c1-5c21-7c42-be48-83910f654b3d\",\"outcome\":\"answered\"}"
+      ],
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Before anything else, call your request_user_input tool exactly once, with one single-select question: id \"fruit\", header \"Fruit\", question \"Which fruit should I name?\", options \"Apple\", \"Banana\", \"Cherry\". After my answer, reply with only the fruit I picked, in capital letters. Use no other tool."
+        },
+        {
+          "role": "assistant",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "text": ""
+        },
+        {
+          "role": "tool",
+          "text": "request_user_input"
+        },
+        {
+          "role": "assistant",
+          "text": "BANANA"
+        },
+        {
+          "role": "system",
+          "text": "Input answered"
+        },
+        {
+          "role": "tool",
+          "text": "request_user_input {\"status\":\"answered\",\"answers\":[{\"id\":\"fruit\",\"selected_label\":\"Banana\"}]}"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "reply": "BANANA",
+      "finalView": {
+        "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+        "inputs": [],
+        "approvals": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": null,
+        "reconnect": null
+      },
+      "measured": {
+        "sendAnswerClickDetails": [
+          1,
+          2
+        ],
+        "answerInputCallsOnTheTransport": 1,
+        "answerInputCallsThroughInvoke": 1,
+        "refusedCalls": 0,
+        "bannerAfterTheDoubleClick": null,
+        "bannerAtTheEnd": null,
+        "inputSettledEvents": 1
+      },
+      "verdict": {
+        "realDoubleClickReachedTheButton": true,
+        "oneAnswerSent": true,
+        "answerAccepted": true,
+        "noFalseErrorBanner": true,
+        "settledAnsweredOnce": true,
+        "turnEnded": true,
+        "replyIsTheAnswer": true,
+        "reloadRebuiltOnlyTheLiveCard": true,
+        "bootReadCarriedOnlyTheLiveQuestion": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-CZwfKgkV.js"
+      ]
+    },
+    "stop-2.2": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "87c6929",
+      "exe": "muse-desktop-87c6929.exe",
+      "exeSha256": "3131c2825d400a68f65e18a5c1da16b0b561b9ff517fc8db2a167c658aea0c42",
+      "liveTurns": 0,
+      "close": {
+        "graceful": true,
+        "exited": true,
+        "enginesBefore": 1,
+        "enginesAliveAfter": 0
+      },
+      "verdict": {
+        "closedFromItsWindow": true,
+        "enginesEnded": true
+      }
+    },
+    "msp-raw-2": {
+      "commit": "b2811dd",
+      "engine": "Muse Code 1.4.2 (1.4.2-R4684.1)",
+      "liveTurns": 0,
+      "engineArgs": [
+        "serve",
+        "--sandbox-network",
+        "restricted"
+      ],
+      "initialize": {
+        "ok": true
+      },
+      "readBeforeResume": {
+        "ok": true,
+        "session": {
+          "status": "notLoaded",
+          "activeTurnId": null,
+          "turnCount": 2
+        }
+      },
+      "listPendingBeforeResume": {
+        "ok": true,
+        "userInputs": [
+          {
+            "userInputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "turnId": "01a110bd-d053-7c43-8a50-952b2ce6010a",
+            "toolName": "request_user_input",
+            "questions": [
+              "fruit"
+            ]
+          }
+        ],
+        "approvals": 0
+      },
+      "resume": {
+        "ok": true,
+        "session": {
+          "status": "idle",
+          "activeTurnId": null,
+          "turnCount": 2
+        },
+        "pendingRequests": [
+          {
+            "sessionId": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+            "userInputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "turnId": "01a110bd-d053-7c43-8a50-952b2ce6010a",
+            "itemId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "toolCallId": "call_01a110bde8f076c18a817317b89f3131",
+            "toolName": "request_user_input",
+            "viewCursor": "v:01a110bd-ce35-75f2-8d43-dfd15742458c:8",
+            "sourceRange": {
+              "stream": {
+                "kind": "session",
+                "id": "01a110bd-ce35-75f2-8d43-dfd15742458c"
+              },
+              "first": {
+                "id": "2cae9156-4c23-404c-a6c5-92b0f6b833ea",
+                "sequence": 73
+              },
+              "last": {
+                "id": "2cae9156-4c23-404c-a6c5-92b0f6b833ea",
+                "sequence": 73
+              }
+            },
+            "questions": [
+              {
+                "id": "fruit",
+                "header": "Fruit",
+                "question": "Which fruit should I name?",
+                "selection": {
+                  "mode": "single"
+                },
+                "options": [
+                  {
+                    "label": "Apple"
+                  },
+                  {
+                    "label": "Banana"
+                  },
+                  {
+                    "label": "Cherry"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "framesAfterResume": [
+        {
+          "ms": 3020,
+          "request": "userInput/request",
+          "params": {
+            "userInputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "turnId": "01a110bd-d053-7c43-8a50-952b2ce6010a",
+            "toolName": "request_user_input"
+          }
+        }
+      ],
+      "listPendingAfterResume": {
+        "ok": true,
+        "userInputs": [
+          {
+            "userInputId": "01a110bd-e462-7bc2-b4e6-6307e2e78455",
+            "turnId": "01a110bd-d053-7c43-8a50-952b2ce6010a",
+            "toolName": "request_user_input",
+            "questions": [
+              "fruit"
+            ]
+          }
+        ],
+        "approvals": 0
+      },
+      "verdict": {
+        "sessionRunsNoTurn": true,
+        "foldStillListsTheQuestion": true,
+        "questionReissuedAfterResume": true
+      },
+      "stderrTail": ""
+    },
+    "relaunch-2.2": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exe": "muse-desktop-b2811dd.exe",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 0,
+      "started": true,
+      "sameDataFolder": true,
+      "exeSwitched": true,
+      "pidRecorded": true,
+      "isolation": {
+        "testModeMarker": true,
+        "webviewProfileUnderTestFolder": true,
+        "cdpPort": 9333
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DxuK_ZSN.js"
+      ]
+    },
+    "q-double-2-failure-103120": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exe": "muse-desktop-b2811dd.exe",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "failure": "prompt not sent: send disabled",
+      "consoleErrors": []
+    },
+    "q-double-2": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exe": "muse-desktop-b2811dd.exe",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 1,
+      "start": {
+        "sendInput": {
+          "ok": true
+        }
+      },
+      "card": {
+        "msToCard": 3243,
+        "approvalsAllowedFirst": [],
+        "view": {
+          "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+          "inputs": [
+            {
+              "key": "01a110bd-ce35-75f2-8d43-dfd15742458c:01a110c4-e0d0-7c83-8124-c0c7356fa75b",
+              "questions": [
+                {
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ]
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ],
+              "alert": null
+            }
+          ],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        },
+        "appPending": {
+          "userInputs": [
+            {
+              "inputId": "01a110c4-e0d0-7c83-8124-c0c7356fa75b",
+              "turnId": null
+            }
+          ],
+          "approvals": []
+        },
+        "inputLine": {
+          "rendered": true,
+          "stored": true
+        }
+      },
+      "reload": {
+        "msToCard": 3509,
+        "inputLineRendered": true,
+        "view": {
+          "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+          "inputs": [
+            {
+              "key": "01a110bd-ce35-75f2-8d43-dfd15742458c:01a110c4-e0d0-7c83-8124-c0c7356fa75b",
+              "questions": [
+                {
+                  "question": "Which fruit should I name?",
+                  "choices": [
+                    {
+                      "label": "Apple",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Banana",
+                      "pressed": false
+                    },
+                    {
+                      "label": "Cherry",
+                      "pressed": false
+                    }
+                  ]
+                }
+              ],
+              "actions": [
+                "Send answer",
+                "Skip"
+              ],
+              "alert": null
+            }
+          ],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your answer Muse needs your answer before it can continue.",
+          "reconnect": null
+        },
+        "bootListPending": [
+          {
+            "ok": true,
+            "userInputIds": [
+              "01a110c4-e0d0-7c83-8124-c0c7356fa75b"
+            ]
+          }
+        ],
+        "appPending": {
+          "userInputs": [
+            {
+              "inputId": "01a110c4-e0d0-7c83-8124-c0c7356fa75b",
+              "turnId": null
+            }
+          ],
+          "approvals": []
+        },
+        "deadQuestionsLeftByQRestart": [
+          "01a110bd-e462-7bc2-b4e6-6307e2e78455"
+        ]
+      },
+      "invokeCounter": {
+        "wrapperRefused": {
+          "assignmentTaken": false,
+          "writable": false,
+          "configurable": false
+        },
+        "method": "Debugger.setBreakpointOnFunctionCall (condition records, returns false)",
+        "installed": true,
+        "pollsSeenIn1500ms": 9
+      },
+      "pick": {
+        "clicked": true,
+        "count": 1
+      },
+      "beforeSend": {
+        "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+        "inputs": [
+          {
+            "key": "01a110bd-ce35-75f2-8d43-dfd15742458c:01a110c4-e0d0-7c83-8124-c0c7356fa75b",
+            "questions": [
+              {
+                "question": "Which fruit should I name?",
+                "choices": [
+                  {
+                    "label": "Apple",
+                    "pressed": false
+                  },
+                  {
+                    "label": "Banana",
+                    "pressed": true
+                  },
+                  {
+                    "label": "Cherry",
+                    "pressed": false
+                  }
+                ]
+              }
+            ],
+            "actions": [
+              "Send answer",
+              "Skip"
+            ],
+            "alert": null
+          }
+        ],
+        "approvals": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": "Waiting for your answer Muse needs your answer before it can continue.",
+        "reconnect": null
+      },
+      "doubleClick": {
+        "clicked": true,
+        "count": 2
+      },
+      "after": {
+        "clicks": [
+          {
+            "type": "click",
+            "detail": 1,
+            "button": "Send answer",
+            "atMs": 753
+          },
+          {
+            "type": "click",
+            "detail": 2,
+            "button": "Send answer",
+            "atMs": 757
+          },
+          {
+            "type": "dblclick",
+            "detail": 2,
+            "button": "Send answer",
+            "atMs": 757
+          }
+        ],
+        "answerInputFetch": [
+          {
+            "atMs": 5846,
+            "ok": true,
+            "args": {
+              "sessionId": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+              "userInputId": "01a110c4-e0d0-7c83-8124-c0c7356fa75b",
+              "answers": [
+                {
+                  "questionId": "fruit",
+                  "selectedLabel": "Banana"
+                }
+              ]
+            }
+          }
+        ],
+        "answerInputInvoke": [
+          {
+            "cmd": "answer_input",
+            "atMs": 2269,
+            "args": {
+              "sessionId": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+              "userInputId": "01a110c4-e0d0-7c83-8124-c0c7356fa75b",
+              "answers": [
+                {
+                  "questionId": "fruit",
+                  "selectedLabel": "Banana"
+                }
+              ]
+            }
+          }
+        ],
+        "view": {
+          "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+          "inputs": [],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Muse is working Last update 2s ago. · work item started.",
+          "reconnect": null
+        }
+      },
+      "end": {
+        "idle": true,
+        "msToIdle": 32400
+      },
+      "settled": [
+        "{\"inputId\":\"01a110c4-e0d0-7c83-8124-c0c7356fa75b\",\"outcome\":\"answered\"}"
+      ],
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Before anything else, call your request_user_input tool exactly once, with one single-select question: id \"fruit\", header \"Fruit\", question \"Which fruit should I name?\", options \"Apple\", \"Banana\", \"Cherry\". After my answer, reply with only the fruit I picked, in capital letters. Use no other tool."
+        },
+        {
+          "role": "assistant",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "text": ""
+        },
+        {
+          "role": "tool",
+          "text": "request_user_input"
+        },
+        {
+          "role": "tool",
+          "text": "Input requested: request_user_input"
+        },
+        {
+          "role": "assistant",
+          "text": "BANANA"
+        },
+        {
+          "role": "system",
+          "text": "Input answered"
+        },
+        {
+          "role": "tool",
+          "text": "request_user_input {\"status\":\"answered\",\"answers\":[{\"id\":\"fruit\",\"selected_label\":\"Banana\"}]}"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "reply": "BANANA",
+      "finalView": {
+        "activeSid": "01a110bd-ce35-75f2-8d43-dfd15742458c",
+        "inputs": [],
+        "approvals": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": null,
+        "reconnect": null
+      },
+      "inputLinesAtTheEnd": 1,
+      "measured": {
+        "sendAnswerClickDetails": [
+          1,
+          2
+        ],
+        "answerInputCallsOnTheTransport": 1,
+        "answerInputCallsThroughInvoke": 1,
+        "refusedCalls": 0,
+        "bannerAfterTheDoubleClick": null,
+        "bannerAtTheEnd": null,
+        "inputSettledEvents": 1
+      },
+      "verdict": {
+        "realDoubleClickReachedTheButton": true,
+        "oneAnswerSent": true,
+        "answerAccepted": true,
+        "noFalseErrorBanner": true,
+        "settledAnsweredOnce": true,
+        "turnEnded": true,
+        "replyIsTheAnswer": true,
+        "reloadRebuiltOnlyTheLiveCard": true,
+        "bootReadCarriedOnlyTheLiveQuestion": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DxuK_ZSN.js"
+      ]
+    },
+    "a-reload": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exe": "muse-desktop-b2811dd.exe",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 1,
+      "postureStored": "ask",
+      "start": {
+        "sid": "01a110c5-c67d-70e2-9157-71f7021d4592",
+        "startSession": {
+          "ok": true,
+          "authorizationMode": "ask",
+          "sandboxMode": "workspace",
+          "hostApprovalMode": "promptUnmatched"
+        },
+        "sendInput": {
+          "ok": true
+        }
+      },
+      "card": {
+        "msToCard": 4869,
+        "view": {
+          "activeSid": "01a110c5-c67d-70e2-9157-71f7021d4592",
+          "inputs": [],
+          "approvals": [
+            {
+              "key": "01a110c5-c67d-70e2-9157-71f7021d4592:01a110c5-db2e-7a10-b721-fd44664518c0",
+              "title": "powershell",
+              "command": "$m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m",
+              "scope": "scope: once",
+              "buttons": [
+                {
+                  "text": "Allow once",
+                  "cls": "approve"
+                },
+                {
+                  "text": "Reject",
+                  "cls": "deny"
+                }
+              ]
+            }
+          ],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+          "reconnect": null
+        },
+        "appPending": {
+          "userInputs": [],
+          "approvals": [
+            {
+              "approvalId": "01a110c5-db2e-7a10-b721-fd44664518c0",
+              "turnId": null,
+              "requirement": {
+                "approvalId": "01a110c5-db2e-7a10-b721-fd44664518c0",
+                "sourceIndex": 0
+              },
+              "choices": [
+                {
+                  "choiceId": "allow_once",
+                  "label": "Allow once",
+                  "decision": "approved"
+                },
+                {
+                  "choiceId": "abort",
+                  "label": "Reject",
+                  "decision": "abort"
+                }
+              ]
+            }
+          ]
+        },
+        "panel": [
+          {
+            "requestId": "01a110c5-db2e-7a10-b721-fd44664518c0",
+            "requirementId": {
+              "approvalId": "01a110c5-db2e-7a10-b721-fd44664518c0",
+              "sourceIndex": 0
+            }
+          }
+        ]
+      },
+      "reload": {
+        "msToCard": 3527,
+        "view": {
+          "activeSid": "01a110c5-c67d-70e2-9157-71f7021d4592",
+          "inputs": [],
+          "approvals": [
+            {
+              "key": "01a110c5-c67d-70e2-9157-71f7021d4592:01a110c5-db2e-7a10-b721-fd44664518c0",
+              "title": "powershell",
+              "command": "$m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m",
+              "scope": "scope: once",
+              "buttons": [
+                {
+                  "text": "Allow once",
+                  "cls": "approve"
+                },
+                {
+                  "text": "Reject",
+                  "cls": "deny"
+                }
+              ]
+            }
+          ],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+          "reconnect": null
+        },
+        "panel": [
+          {
+            "requestId": "01a110c5-db2e-7a10-b721-fd44664518c0",
+            "requirementId": {
+              "approvalId": "01a110c5-db2e-7a10-b721-fd44664518c0",
+              "sourceIndex": 0
+            }
+          }
+        ],
+        "bootListPending": [
+          {
+            "ok": true,
+            "approvalIds": [
+              "01a110c5-db2e-7a10-b721-fd44664518c0"
+            ]
+          }
+        ],
+        "approveCallsBeforeAnyClick": 0
+      },
+      "stages": [
+        {
+          "requirement": {
+            "approvalId": "01a110c5-db2e-7a10-b721-fd44664518c0",
+            "sourceIndex": 0
+          },
+          "choices": [
+            {
+              "choiceId": "allow_once",
+              "label": "Allow once",
+              "decision": "approved"
+            },
+            {
+              "choiceId": "abort",
+              "label": "Reject",
+              "decision": "abort"
+            }
+          ],
+          "cardPinnedToIt": true,
+          "click": {
+            "clicked": true,
+            "count": 1
+          },
+          "approve": {
+            "ok": true,
+            "requirementSent": {
+              "approvalId": "01a110c5-db2e-7a10-b721-fd44664518c0",
+              "sourceIndex": 0
+            },
+            "result": "true"
+          }
+        }
+      ],
+      "end": {
+        "idle": true,
+        "msToIdle": 11350
+      },
+      "finalView": {
+        "activeSid": "01a110c5-c67d-70e2-9157-71f7021d4592",
+        "inputs": [],
+        "approvals": [],
+        "banner": null,
+        "connection": "Connected",
+        "health": null,
+        "reconnect": null
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Use your PowerShell tool to run EXACTLY this command, unchanged, once: $m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m"
+        },
+        {
+          "role": "assistant",
+          "text": ""
+        },
+        {
+          "role": "subagent",
+          "text": ""
+        },
+        {
+          "role": "tool",
+          "text": "Approval requested: powershell: $m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m"
+        },
+        {
+          "role": "assistant",
+          "text": "Set-Content : Un objet � l'emplacement sp�cifi� Microsoft.PowerShell.Core\\FileSystem::<folder A>\\probe.txt est inexistant ou a �t� filtr� � l'aide du param�tre -Include ou -Exclude. Au caract�re Ligne:1 : 13 + $m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') "
+        },
+        {
+          "role": "tool",
+          "text": "powershell · Write probe marker file"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "assistant",
+          "text": "Command failed with exit code 1. `Set-Content` reported the `probe.txt` path as not found/filtered."
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        },
+        {
+          "role": "subagent",
+          "text": "Reminder child session"
+        }
+      ],
+      "probeFile": null,
+      "verdict": {
+        "askPosture": true,
+        "cardShowsTheHostChoices": true,
+        "reloadRebuiltTheCard": true,
+        "bootReadKeptTheLiveApproval": true,
+        "turnEnded": true,
+        "noErrorBanner": true,
+        "everyPresentedStageAccepted": true,
+        "lastDecisionTerminal": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DxuK_ZSN.js"
+      ],
+      "measured": {
+        "stagesPresentedByTheHost": 1
+      }
+    },
+    "a-death": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exe": "muse-desktop-b2811dd.exe",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 1,
+      "start": {
+        "sendInput": {
+          "ok": true
+        }
+      },
+      "before": {
+        "msToCard": 3249,
+        "view": {
+          "activeSid": "01a110c5-c67d-70e2-9157-71f7021d4592",
+          "inputs": [],
+          "approvals": [
+            {
+              "key": "01a110c5-c67d-70e2-9157-71f7021d4592:01a110c6-e59c-74f1-87f3-f73b7451fc7c",
+              "title": "powershell",
+              "command": "$m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m",
+              "scope": "scope: once",
+              "buttons": [
+                {
+                  "text": "Allow once",
+                  "cls": "approve"
+                },
+                {
+                  "text": "Reject",
+                  "cls": "deny"
+                }
+              ]
+            }
+          ],
+          "banner": null,
+          "connection": "Connected",
+          "health": "Waiting for your approval Choose an authorization option above to continue this conversation.",
+          "reconnect": null
+        },
+        "appPending": {
+          "userInputs": [],
+          "approvals": [
+            {
+              "approvalId": "01a110c6-e59c-74f1-87f3-f73b7451fc7c",
+              "turnId": null,
+              "requirement": {
+                "approvalId": "01a110c6-e59c-74f1-87f3-f73b7451fc7c",
+                "sourceIndex": 0
+              },
+              "choices": [
+                {
+                  "choiceId": "allow_once",
+                  "label": "Allow once",
+                  "decision": "approved"
+                },
+                {
+                  "choiceId": "abort",
+                  "label": "Reject",
+                  "decision": "abort"
+                }
+              ]
+            }
+          ]
+        },
+        "engines": [
+          {
+            "pid": 33428,
+            "created": "2026-10-06T12:31:18.1825670+02:00",
+            "folder": "Q"
+          },
+          {
+            "pid": 36244,
+            "created": "2026-10-06T12:32:37.2435060+02:00",
+            "folder": "A"
+          }
+        ],
+        "victim": {
+          "pid": 36244,
+          "parentIsTheApp": true,
+          "folder": "A"
+        }
+      },
+      "after": {
+        "msToHostExited": 316,
+        "view": {
+          "activeSid": "01a110c5-c67d-70e2-9157-71f7021d4592",
+          "inputs": [],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connecting",
+          "health": null,
+          "reconnect": {
+            "text": "Reconnect",
+            "disabled": false
+          }
+        },
+        "appAlive": true,
+        "victimAlive": false,
+        "otherEnginesAlive": 1,
+        "otherEnginesBefore": 1,
+        "transcript": [
+          {
+            "role": "user",
+            "text": "Use your PowerShell tool to run EXACTLY this command, unchanged, once: $m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m"
+          },
+          {
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "role": "subagent",
+            "text": ""
+          },
+          {
+            "role": "tool",
+            "text": "Approval requested: powershell: $m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m"
+          },
+          {
+            "role": "system",
+            "text": "Approval cancelled: Muse stopped before you answered, so the action did not run."
+          },
+          {
+            "role": "system",
+            "text": "Muse stopped because the host process ended. Reconnect to continue."
+          }
+        ]
+      },
+      "reconnect": {
+        "click": {
+          "clicked": false
+        },
+        "resumeSession": {
+          "ok": null,
+          "running": null,
+          "error": ""
+        },
+        "connection": "Connected",
+        "engines": [
+          {
+            "pid": 33428,
+            "created": "2026-10-06T12:31:18.1825670+02:00",
+            "folder": "Q"
+          },
+          {
+            "pid": 23972,
+            "created": "2026-10-06T12:33:55.2768150+02:00",
+            "folder": "A"
+          }
+        ],
+        "newEngineInA": true,
+        "cardSamples": [
+          {
+            "atS": 0,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 1,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 2,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 3,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 4,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 5,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 6,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 7,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 8,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 9,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 10,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 11,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 12,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 13,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 14,
+            "inputs": 0,
+            "approvals": 0
+          }
+        ],
+        "view": {
+          "activeSid": "01a110c5-c67d-70e2-9157-71f7021d4592",
+          "inputs": [],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": null,
+          "reconnect": null
+        },
+        "appPending": {
+          "userInputs": [],
+          "approvals": []
+        },
+        "eventsAfterResume": [],
+        "approveCallsSinceTheKill": 0,
+        "transcriptTail": [
+          {
+            "role": "tool",
+            "text": "Approval requested: powershell: $m = 'm05'; Set-Content -Path (Join-Path (Get-Location) 'probe.txt') -Value $m"
+          },
+          {
+            "role": "system",
+            "text": "Approval cancelled: Muse stopped before you answered, so the action did not run."
+          },
+          {
+            "role": "system",
+            "text": "Muse stopped because the host process ended. Reconnect to continue."
+          },
+          {
+            "role": "system",
+            "text": "Stopped"
+          },
+          {
+            "role": "subagent",
+            "text": "Reminder child session"
+          }
+        ],
+        "by": "the app, right after host_exited (resume on open)",
+        "autoResume": {
+          "msAfterHostExited": 6,
+          "ok": true,
+          "running": false,
+          "loaded": true,
+          "eventsAfterHostExited": [
+            {
+              "atMs": 72404,
+              "kind": "approval/resolved",
+              "payload": "{\"approvalId\":\"01a110c6-e59c-74f1-87f3-f73b7451fc7c\",\"decision\":\"abort\",\"terminal\":true,\"turnId\":\"01a110c6-d89e-7791-8da3-71e9d22d71ab\"}"
+            },
+            {
+              "atMs": 72404,
+              "kind": "tool_request",
+              "payload": "{\"approvalId\":\"01a110c6-e59c-74f1-87f3-f73b7451fc7c\",\"choices\":[{\"choiceId\":\"allow_once\",\"decision\":\"approved\",\"label\":\"Allow once\",\"scope\":\"once\"},{\"choiceId\":\"abort\",\"decision\":\"abort\",\"label\":\"Reje"
+            },
+            {
+              "atMs": 72404,
+              "kind": "cancelled",
+              "payload": "{\"durationMs\":null,\"error\":null,\"reason\":\"resume_reconcile:orphaned_by_process_loss\",\"terminal\":\"cancelled\",\"turnId\":\"01a110c6-d89e-7791-8da3-71e9d22d71ab\"}"
+            },
+            {
+              "atMs": 72404,
+              "kind": "item_started",
+              "payload": "{\"commandText\":null,\"itemId\":\"0b5f652e-572a-4467-9590-92c51c1086e4\",\"itemKind\":\"reminderChild\",\"outputRef\":null,\"richContent\":null,\"toolSummary\":null,\"turnId\":\"01a110c6-d89e-7791-8da3-71e9d22d71ab\"}"
+            },
+            {
+              "atMs": 72404,
+              "kind": "subagent_event",
+              "payload": "{\"agent_id\":\"0b5f652e-572a-4467-9590-92c51c1086e4\",\"childSessionId\":\"55bd561d-6c35-4b5a-9cf3-bd5ded6371e6\",\"itemId\":\"0b5f652e-572a-4467-9590-92c51c1086e4\",\"replace\":true,\"status\":\"completed\",\"text\":\"R"
+            },
+            {
+              "atMs": 72404,
+              "kind": "item_done",
+              "payload": "{\"itemId\":\"0b5f652e-572a-4467-9590-92c51c1086e4\",\"turnId\":\"01a110c6-d89e-7791-8da3-71e9d22d71ab\"}"
+            },
+            {
+              "atMs": 72404,
+              "kind": "tool_request",
+              "payload": "{\"approvalId\":\"01a110c6-e59c-75d1-9da0-a9f6928d70fd\",\"choices\":[{\"choiceId\":\"allow_once\",\"decision\":\"approved\",\"label\":\"Allow once\",\"scope\":\"once\"},{\"choiceId\":\"abort\",\"decision\":\"abort\",\"label\":\"Reje"
+            },
+            {
+              "atMs": 72404,
+              "kind": "tool_request",
+              "payload": "{\"approvalId\":\"01a110c6-e59c-75d1-9da0-a9f6928d70fd\",\"choices\":[{\"choiceId\":\"allow_once\",\"decision\":\"approved\",\"label\":\"Allow once\",\"scope\":\"once\"},{\"choiceId\":\"abort\",\"decision\":\"abort\",\"label\":\"Reje"
+            }
+          ],
+          "approveCallsSinceHostExited": 0
+        }
+      },
+      "measured": {
+        "approvalLines": 1,
+        "approvalRequestsReissuedAfterResume": 3
+      },
+      "verdict": {
+        "approvalPendingAtTheKill": true,
+        "onlyAsEngineKilled": true,
+        "hostExitedReported": true,
+        "cardRemoved": true,
+        "transcriptSaysApprovalCancelled": true,
+        "reconnectWorks": true,
+        "noPhantomCard": true,
+        "noDecisionSent": true,
+        "reissuedRequestsIgnored": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DxuK_ZSN.js"
+      ],
+      "note": "The Reconnect click found no button: A was started in this run, so the app resumed it by itself right after host_exited. reconnect.autoResume, the reissue count and verdict.reconnectWorks were read after the phase (a-death-trace) from the page's own IPC trace and poll tap, no action taken."
+    },
+    "a-death-trace": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exe": "muse-desktop-b2811dd.exe",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 0,
+      "readFrom": "the page's own IPC trace and poll tap, not reset",
+      "facts": {
+        "hostExitedAtMs": 69235,
+        "resume": {
+          "msAfterHostExited": 6,
+          "ok": true,
+          "running": false,
+          "loaded": true,
+          "eventsAfterHostExited": [
+            {
+              "atMs": 72404,
+              "kind": "approval/resolved",
+              "payload": "{\"approvalId\":\"01a110c6-e59c-74f1-87f3-f73b7451fc7c\",\"decision\":\"abort\",\"terminal\":true,\"turnId\":\"01a110c6-d89e-7791-8da3-71e9d22d71ab\"}"
+            },
+            {
+              "atMs": 72404,
+              "kind": "tool_request",
+              "payload": "{\"approvalId\":\"01a110c6-e59c-74f1-87f3-f73b7451fc7c\",\"choices\":[{\"choiceId\":\"allow_once\",\"decision\":\"approved\",\"label\":\"Allow once\",\"scope\":\"once\"},{\"choiceId\":\"abort\",\"decision\":\"abort\",\"label\":\"Reje"
+            },
+            {
+              "atMs": 72404,
+              "kind": "cancelled",
+              "payload": "{\"durationMs\":null,\"error\":null,\"reason\":\"resume_reconcile:orphaned_by_process_loss\",\"terminal\":\"cancelled\",\"turnId\":\"01a110c6-d89e-7791-8da3-71e9d22d71ab\"}"
+            },
+            {
+              "atMs": 72404,
+              "kind": "item_started",
+              "payload": "{\"commandText\":null,\"itemId\":\"0b5f652e-572a-4467-9590-92c51c1086e4\",\"itemKind\":\"reminderChild\",\"outputRef\":null,\"richContent\":null,\"toolSummary\":null,\"turnId\":\"01a110c6-d89e-7791-8da3-71e9d22d71ab\"}"
+            },
+            {
+              "atMs": 72404,
+              "kind": "subagent_event",
+              "payload": "{\"agent_id\":\"0b5f652e-572a-4467-9590-92c51c1086e4\",\"childSessionId\":\"55bd561d-6c35-4b5a-9cf3-bd5ded6371e6\",\"itemId\":\"0b5f652e-572a-4467-9590-92c51c1086e4\",\"replace\":true,\"status\":\"completed\",\"text\":\"R"
+            },
+            {
+              "atMs": 72404,
+              "kind": "item_done",
+              "payload": "{\"itemId\":\"0b5f652e-572a-4467-9590-92c51c1086e4\",\"turnId\":\"01a110c6-d89e-7791-8da3-71e9d22d71ab\"}"
+            },
+            {
+              "atMs": 72404,
+              "kind": "tool_request",
+              "payload": "{\"approvalId\":\"01a110c6-e59c-75d1-9da0-a9f6928d70fd\",\"choices\":[{\"choiceId\":\"allow_once\",\"decision\":\"approved\",\"label\":\"Allow once\",\"scope\":\"once\"},{\"choiceId\":\"abort\",\"decision\":\"abort\",\"label\":\"Reje"
+            },
+            {
+              "atMs": 72404,
+              "kind": "tool_request",
+              "payload": "{\"approvalId\":\"01a110c6-e59c-75d1-9da0-a9f6928d70fd\",\"choices\":[{\"choiceId\":\"allow_once\",\"decision\":\"approved\",\"label\":\"Allow once\",\"scope\":\"once\"},{\"choiceId\":\"abort\",\"decision\":\"abort\",\"label\":\"Reje"
+            }
+          ],
+          "approveCallsSinceHostExited": 0
+        }
+      },
+      "verdict": {
+        "reconnectWorks": true,
+        "reissuedRequestsIgnored": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DxuK_ZSN.js"
+      ]
+    },
+    "stop-2.3": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exe": "muse-desktop-b2811dd.exe",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 0,
+      "close": {
+        "graceful": true,
+        "exited": true,
+        "enginesBefore": 2,
+        "enginesAliveAfter": 0
+      },
+      "verdict": {
+        "closedFromItsWindow": true,
+        "enginesEnded": true
+      }
+    },
+    "relaunch-2.3": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exe": "muse-desktop-b2811dd.exe",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 0,
+      "started": true,
+      "sameDataFolder": true,
+      "exeSwitched": false,
+      "pidRecorded": true,
+      "isolation": {
+        "testModeMarker": true,
+        "webviewProfileUnderTestFolder": true,
+        "cdpPort": 9333
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DxuK_ZSN.js"
+      ]
+    },
+    "a-reconnect": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exe": "muse-desktop-b2811dd.exe",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 0,
+      "killed": {
+        "folder": "A",
+        "parentIsTheApp": true
+      },
+      "hostExited": true,
+      "beforeClick": {
+        "view": {
+          "activeSid": "01a110c5-c67d-70e2-9157-71f7021d4592",
+          "inputs": [],
+          "approvals": [],
+          "banner": null,
+          "connection": "Disconnected",
+          "health": null,
+          "reconnect": {
+            "text": "Reconnect",
+            "disabled": false
+          }
+        },
+        "resumesSinceKill": 0
+      },
+      "click": {
+        "clicked": true,
+        "count": 1
+      },
+      "after": {
+        "resumeSession": {
+          "ok": true,
+          "running": false
+        },
+        "connected": true,
+        "engines": [
+          {
+            "pid": 39476,
+            "created": "2026-10-06T12:39:59.9920630+02:00",
+            "folder": "A"
+          }
+        ],
+        "cardSamples": [
+          {
+            "atS": 0,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 1,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 2,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 3,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 4,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 5,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 6,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 7,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 8,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 9,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 10,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 11,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 12,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 13,
+            "inputs": 0,
+            "approvals": 0
+          },
+          {
+            "atS": 14,
+            "inputs": 0,
+            "approvals": 0
+          }
+        ],
+        "view": {
+          "activeSid": "01a110c5-c67d-70e2-9157-71f7021d4592",
+          "inputs": [],
+          "approvals": [],
+          "banner": null,
+          "connection": "Connected",
+          "health": null,
+          "reconnect": null
+        },
+        "eventsSinceKill": [
+          {
+            "kind": "host_exited",
+            "payload": "sidecar host exited (code Some(1), signal None). "
+          },
+          {
+            "kind": "approval/resolved",
+            "payload": "{\"approvalId\":\"01a110c6-e59c-7fbb-8a91-a7e6017f17c1\",\"decision\":\"abort\",\"terminal\":true,\"turnId\":\"01a110c6-d89e-7791-8da3-71e9d22d71ab\"}"
+          },
+          {
+            "kind": "tool_request",
+            "payload": "{\"approvalId\":\"01a110c6-e59c-7fbb-8a91-a7e6017f17c1\",\"choices\":[{\"choiceId\":\"allow_once\",\"decision\":\"approved\",\"label\":\"Allow once\",\"scope\":\"once\"},{\"choiceId\":"
+          },
+          {
+            "kind": "tool_request",
+            "payload": "{\"approvalId\":\"01a110c6-e59c-7fc2-b1bb-f7fddfe6d5a8\",\"choices\":[{\"choiceId\":\"allow_once\",\"decision\":\"approved\",\"label\":\"Allow once\",\"scope\":\"once\"},{\"choiceId\":"
+          },
+          {
+            "kind": "tool_request",
+            "payload": "{\"approvalId\":\"01a110c6-e59c-7fc2-b1bb-f7fddfe6d5a8\",\"choices\":[{\"choiceId\":\"allow_once\",\"decision\":\"approved\",\"label\":\"Allow once\",\"scope\":\"once\"},{\"choiceId\":"
+          }
+        ]
+      },
+      "verdict": {
+        "leftToTheUser": true,
+        "reconnectClicked": true,
+        "reconnectWorks": true,
+        "noPhantomCard": true
+      },
+      "consoleErrors": [],
+      "bundle": [
+        "index-DxuK_ZSN.js"
+      ]
+    },
+    "stop-2.4": {
+      "headAtPhase": "b2811dd",
+      "build": "fixed",
+      "buildCommit": "b2811dd",
+      "exe": "muse-desktop-b2811dd.exe",
+      "exeSha256": "bba4d8decf89c493ab80efbeb8cfe8902ba2c5bbe12607e8a342e5eedaf8629d",
+      "liveTurns": 0,
+      "close": {
+        "graceful": true,
+        "exited": true,
+        "enginesBefore": 1,
+        "enginesAliveAfter": 0
+      },
+      "verdict": {
+        "closedFromItsWindow": true,
+        "enginesEnded": true
+      }
+    }
+  }
+}
