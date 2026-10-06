@@ -858,7 +858,9 @@ fn level_counts(available: &[String]) -> Value {
 /// * `attach=false` — the manifest carries the level: `bounded` + capability
 ///   manifest for "observe", `--dangerously-bypass-approvals` for "act"
 ///   (LEVELS explains why act cannot be bounded). The manifest's time bounds
-///   hold.
+///   hold. The record of "act" is never handed over: served as a bounded
+///   capability manifest, the driver refused it and act never started
+///   (measured 06/10/2026, "the computer-use service did not start").
 /// * `attach=true` — `standard --grant existing-profile` and **no manifest**.
 ///   The driver refuses `--grant` outside standard ("--grant is valid only in
 ///   standard permission mode"), and every capability manifest makes windows
@@ -868,7 +870,7 @@ fn level_counts(available: &[String]) -> Value {
 ///   mode keeps its own driver-side ceiling (measured: `kill_app` refused,
 ///   `foreign_process_termination_denied`); the observe/act tool ceiling moves
 ///   to the relay, which reads the recorded level.
-pub fn serve_argv(endpoint: &str, manifest_path: Option<&str>, attach: bool) -> Vec<String> {
+pub fn serve_argv(endpoint: &str, manifest: &Value, manifest_path: &str, attach: bool) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "serve".to_string(),
         "--socket".to_string(),
@@ -883,17 +885,18 @@ pub fn serve_argv(endpoint: &str, manifest_path: Option<&str>, attach: bool) -> 
         ]);
         return args;
     }
-    match manifest_path {
-        Some(path) => args.extend([
+    if manifest["mode"] == "bounded" {
+        args.extend([
             "--permission-mode".to_string(),
             "bounded".to_string(),
             "--capability-manifest".to_string(),
-            path.to_string(),
+            manifest_path.to_string(),
             "--approve-capability-manifest".to_string(),
-        ]),
+        ]);
+    } else {
         // The user consented to "act" in Settings; LEVELS says why it cannot
         // be bounded.
-        None => args.extend(["--dangerously-bypass-approvals".to_string()]),
+        args.push("--dangerously-bypass-approvals".to_string());
     }
     args
 }
@@ -921,11 +924,10 @@ pub fn enable(level: &str, dir: &Path) -> Result<Value, String> {
 
     let endpoint = endpoint();
     let attach = read_attach(dir).unwrap_or(false);
-    let manifest_path = (!attach).then(|| path.display().to_string());
-    // With the browser attached the manifest is still written — it is the
-    // level record the relay and `resume` read — but it is not handed to the
-    // driver (`serve_argv` explains why it cannot be).
-    let args = serve_argv(&endpoint, manifest_path.as_deref(), attach);
+    // The manifest is always written — it is the level record the relay and
+    // `resume` read — but only a bounded one is handed to the driver
+    // (`serve_argv` explains why).
+    let args = serve_argv(&endpoint, &manifest, &path.display().to_string(), attach);
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let mut command = service_command(&driver, &args);
     command
@@ -1422,28 +1424,30 @@ mod tests {
     #[test]
     fn the_serve_argv_matrix_matches_the_measured_driver_rules() {
         let endpoint = "\\\\.\\pipe\\muse-test";
-        let manifest = Some("C:\\data\\computer-manifest.json");
+        let path = "C:\\data\\computer-manifest.json";
+        let record = |level| manifest(level, &fixture()).unwrap();
 
         // observe, browser detached: the bounded manifest carries the level.
-        let observe = serve_argv(endpoint, manifest, false);
+        let observe = serve_argv(endpoint, &record("observe"), path, false);
         assert_eq!(
             observe,
             [
                 "serve", "--socket", endpoint, "--permission-mode", "bounded",
-                "--capability-manifest", manifest.unwrap(), "--approve-capability-manifest",
+                "--capability-manifest", path, "--approve-capability-manifest",
             ]
         );
 
-        // act, browser detached: unrestricted, no manifest handed over.
-        let act = serve_argv(endpoint, None, false);
+        // act, browser detached: unrestricted, its record never handed over
+        // (served as a bounded manifest, act never started: 06/10/2026).
+        let act = serve_argv(endpoint, &record("act"), path, false);
         assert!(act.contains(&"--dangerously-bypass-approvals".to_string()));
-        assert!(!act.iter().any(|arg| arg == "--permission-mode"));
+        assert!(!act.iter().any(|arg| arg == "--permission-mode" || arg == path));
 
         // Browser attached, either level: standard + grant, and no manifest —
         // the driver refuses `--grant` outside standard, and every manifest
         // makes the user's live windows invisible unless each pid is named.
         for level in LEVELS {
-            let attached = serve_argv(endpoint, manifest, true);
+            let attached = serve_argv(endpoint, &record(level), path, true);
             assert_eq!(
                 attached,
                 [
