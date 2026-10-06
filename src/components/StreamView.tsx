@@ -561,10 +561,14 @@ export function StreamView({
   }, [safeWindowEnd, safeWindowStart, streamWindowed, windowPadding.bottom, windowPadding.top]);
 
   useLayoutEffect(() => {
-    if (!streamWindowed) return;
     const stream = streamRef.current;
     if (stream === null || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver((observations) => {
+      // An entry mounted away from the viewport keeps its placeholder height
+      // until it is shown: a long last answer grew by ~5,000 px after End had
+      // landed. A reader at the end stays at the end while entries settle.
+      if (stickRef.current) stream.scrollTop = stream.scrollHeight;
+      if (!streamWindowed) return;
       const updates = new Map<number, number>();
       for (const observation of observations) {
         const node = observation.target as HTMLElement;
@@ -677,6 +681,8 @@ export function StreamView({
   }
 
   function revealHit(hit: TranscriptHit): void {
+    // Leaving the end on purpose: the resize pin must not pull the reader back.
+    stickRef.current = false;
     const visible = hit.index >= safeWindowStart && hit.index < safeWindowStart + visibleEntries.length;
     if (!visible && streamWindowed) {
       const next = Math.min(Math.max(0, hit.index - 12), maxWindowStart);
