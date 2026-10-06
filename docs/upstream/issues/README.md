@@ -133,7 +133,10 @@ on 05/10, with Étienne's approval. The measurements are in
   turn of the 05/10 matrix reached `turn/completed`. The issue can be updated or closed when
   convenient. This has not been posted yet.
 - **Not posted yet:**
-  - On native Windows 1.4.2, the "Workspace and network" isolation still gives the sandboxed shell
-    no network. `Invoke-WebRequest` fails and `curl.exe` returns `000`. Measured in the app by the
-    M0-05/M0-06 proof on 05/10.
+  - On native Windows 1.4.2, under `--sandbox-network enabled`, HTTPS fails in the sandboxed shell
+    before any handshake: Schannel has no credentials for the sandbox account (`muse-sbx-u1`,
+    `SEC_E_NO_CREDENTIALS 0x8009030E`), for `Invoke-WebRequest` and `curl.exe` alike. DNS, raw TCP
+    and plain HTTP work. Measured stage by stage on 06/10
+    ([m0-06-junction-network-1.4.2.json](../../evidence/2026-10-05-roadmap-closure/m0-06-junction-network-1.4.2.json));
+    the 05/10 reading, "no network at all", is superseded.
   - French-locale PowerShell output is mis-decoded. This one is mentioned as a side note in #88.

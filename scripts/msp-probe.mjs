@@ -59,11 +59,11 @@ function reason(error) {
 }
 
 /** Minimal MSP client over newline JSON-RPC on a real child process. */
-export function createHost(binary, workspace, extraArgs = []) {
-  // The app's own argv (main.rs HostSandboxPolicy for the workspace mode), so
-  // the probe measures the host the desktop actually runs. The launcher
-  // self-updates unless told not to.
-  const child = spawn(binary, ["serve", "--sandbox-network", "restricted", "--trust-workspace", ...extraArgs], {
+export function createHost(binary, workspace, extraArgs = [], baseArgs = ["serve", "--sandbox-network", "restricted", "--trust-workspace"]) {
+  // The app's own argv (main.rs HostSandboxPolicy, workspace mode unless
+  // `baseArgs` names another), so the probe measures the host the desktop
+  // actually runs. The launcher self-updates unless told not to.
+  const child = spawn(binary, [...baseArgs, ...extraArgs], {
     cwd: workspace,
     env: { ...process.env, MUSE_NO_AUTO_UPDATE: "1" },
     stdio: ["pipe", "pipe", "pipe"],

@@ -24,14 +24,14 @@
  * watchdog stops a run that hangs.
  */
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // A port of its own: never attach to a developer's CDP-enabled app on 9222.
 process.env.MUSE_CDP_PORT ??= "9339";
-const { INSTALL_IPC_TRACE, argValue, openPage, redactor, sleep, waitFor } = await import("./cdp-harness.mjs");
+const { INSTALL_IPC_TRACE, argValue, browserCommandLines, openPage, redactor, sleep, under, waitFor, webviewProfile } = await import("./cdp-harness.mjs");
 
 const PORT = Number(process.env.MUSE_CDP_PORT);
 const EXE = resolve(argValue("--exe", join(process.env.CARGO_TARGET_DIR ?? join("src-tauri", "target"), "debug", "muse-desktop.exe")));
@@ -46,27 +46,6 @@ const WATCHDOG_MS = 6 * 60_000;
 /** A diagnostic command's bounded output; never throws. */
 function run(cmd, args, max = 600) {
   try { return execFileSync(cmd, args, { encoding: "utf8", timeout: 20_000 }).trim().slice(0, max); } catch (error) { return `failed: ${String(error?.message ?? error).slice(0, 200)}`; }
-}
-
-/** Command lines of the WebView2 browser processes (child processes carry --type=). */
-const browserCommandLines = () => run("powershell", ["-NoProfile", "-Command",
-  "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Where-Object { $_.CommandLine -notmatch '--type=' } | ForEach-Object { $_.CommandLine }"], 200_000);
-
-/** The --user-data-dir of the WebView2 browser that serves CDP on PORT. */
-function webviewProfile() {
-  const line = browserCommandLines().split(/\r?\n/).find((entry) => entry.includes(`--remote-debugging-port=${PORT}`));
-  const flag = line?.match(/--user-data-dir=(?:"([^"]+)"|(\S+))/);
-  return flag ? flag[1] ?? flag[2] : null;
-}
-
-/** Whether `path` is inside `dir`, both resolved on disk (short names, case). */
-function under(path, dir) {
-  try {
-    const rel = relative(realpathSync.native(dir), realpathSync.native(path));
-    return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-  } catch {
-    return false;
-  }
 }
 
 /** A CDP call that has not settled in `ms` fails instead of hanging the run. */

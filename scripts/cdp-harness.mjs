@@ -9,6 +9,8 @@
  * MUSE_CDP_PORT overrides the port (default 9222).
  */
 import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { isAbsolute, relative } from "node:path";
 
 export const PORT = Number(process.env.MUSE_CDP_PORT ?? 9222);
 export const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -161,4 +163,32 @@ export function redactor(pairs) {
 
 export function gitHead() {
   return execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+}
+
+/** Command lines of the WebView2 browser processes (child processes carry --type=); never throws. */
+export function browserCommandLines() {
+  try {
+    return execFileSync("powershell", ["-NoProfile", "-Command",
+      "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Where-Object { $_.CommandLine -notmatch '--type=' } | ForEach-Object { $_.CommandLine }"],
+    { encoding: "utf8", timeout: 20_000 }).trim().slice(0, 200_000);
+  } catch (error) {
+    return `failed: ${String(error?.message ?? error).slice(0, 200)}`;
+  }
+}
+
+/** The --user-data-dir of the WebView2 browser that serves CDP on PORT. */
+export function webviewProfile() {
+  const line = browserCommandLines().split(/\r?\n/).find((entry) => entry.includes(`--remote-debugging-port=${PORT}`));
+  const flag = line?.match(/--user-data-dir=(?:"([^"]+)"|(\S+))/);
+  return flag ? flag[1] ?? flag[2] : null;
+}
+
+/** Whether `path` is inside `dir`, both resolved on disk (short names, case). */
+export function under(path, dir) {
+  try {
+    const rel = relative(realpathSync.native(dir), realpathSync.native(path));
+    return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+  } catch {
+    return false;
+  }
 }
