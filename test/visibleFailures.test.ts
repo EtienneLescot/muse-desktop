@@ -30,6 +30,8 @@
  *   restart, where an approval said it was cancelled.
  * - M0-05: after that restart, the conversation stayed "Muse may still be
  *   working": 1.4.2 replays the cancelled turn's items after the resume.
+ * - M0-05: a window reload or a restart while a question waited lost its
+ *   "Input requested" line: on screen, never in the stored log.
  * - M2-05: every window.confirm question was skipped in the app: the dialog
  *   plugin's replacement calls a command the plugin no longer has, and its
  *   Promise read as a yes.
@@ -203,6 +205,16 @@ describe("visible failures", () => {
     const start = hook.indexOf("if (isItemStartKind(kind)) {");
     const block = hook.slice(start, hook.indexOf("ensurePlaceholder(sid, itemId, agentId, itemRole", start));
     assert.match(block, /if \(\(itemRole !== "tool" \|\| modelToolCall\) && !noLiveTurnRef\.current\.has\(sid\)\) \{\s*setSessions\(/);
+  });
+
+  it("stores a log line once its update is applied, after any whole-log save queued before it", () => {
+    // M0-05: the question's line was appended to the stored log, then
+    // overwritten by an item update queued earlier in the same poll; a
+    // reload or a restart while the question waited lost it.
+    const hook = read("../src/hooks/useMuseSessions.ts");
+    const start = hook.indexOf("function pushLog(sessionId: string, entries: LogEntry[]): void {");
+    const body = hook.slice(start, hook.indexOf("appendLog(sessionId, entries);", start));
+    assert.match(body, /setLogs\(\(cur\) => \{\s*const next = \[\.\.\.\(cur\[sessionId\] \?\? \[\]\), \.\.\.entries\];\s*saveLog\(sessionId, next\);/);
   });
 
   it("says a question left open when the app closed was cancelled, as for an approval", () => {

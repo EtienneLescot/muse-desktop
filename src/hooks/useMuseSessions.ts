@@ -2865,7 +2865,14 @@ export function useMuseSessions(): UseMuseSessions {
   /** Append entries to a session log (state + disk), creating the session row if needed. */
   function pushLog(sessionId: string, entries: LogEntry[]): void {
     if (entries.length === 0) return;
-    setLogs((cur) => ({ ...cur, [sessionId]: [...(cur[sessionId] ?? []), ...entries] }));
+    // Saved again once applied: an update queued before this one writes the
+    // whole log without these entries. M0-05: a question's "Input requested"
+    // line was lost when the window reloaded or the app closed while it waited.
+    setLogs((cur) => {
+      const next = [...(cur[sessionId] ?? []), ...entries];
+      saveLog(sessionId, next);
+      return { ...cur, [sessionId]: next };
+    });
     appendLog(sessionId, entries);
   }
 
