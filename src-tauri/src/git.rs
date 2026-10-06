@@ -3126,6 +3126,21 @@ mod tests {
         assert!(!git_command(&root, &["branch", "--list", "muse/kept"]).unwrap().is_empty());
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn handoff_refuses_a_case_only_rename_before_any_write() {
+        // Known limit: on a disk that ignores case, `Package.json` is found
+        // through `package.json`. Letting it move would not help: arriving
+        // unstaged, as all staging does, the rename is invisible to Git there.
+        let (root, wt) = worktree_fixture();
+        run_git(&root, &["mv", "package.json", "Package.json"]);
+        // Both ways: into the worktree, and HEAD's name back into Local.
+        assert_eq!(handoff_preview(&root, Some(&wt)).unwrap().conflicts, vec!["Package.json", "package.json"]);
+        assert!(handoff_move(&root, &wt).unwrap_err().starts_with("nothing was moved"));
+        assert!(!status(&root).unwrap().files.is_empty());
+        assert!(git_command(&root, &["for-each-ref", "refs/muse"]).unwrap().is_empty());
+    }
+
     #[test]
     fn handoff_undo_keeps_files_edited_during_the_move() {
         let (root, wt) = worktree_fixture();
