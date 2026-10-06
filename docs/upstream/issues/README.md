@@ -149,6 +149,13 @@ on 05/10, with Étienne's approval. The measurements are in
     `session/read.activeTurnId` meanwhile (9771bdb).
   - Recorded in [m0-05-questions.json](../../evidence/2026-10-05-roadmap-closure/m0-05-questions.json),
     phase `msp-orphan-head`.
+- **#93, new issue: `userShell` granted under `--disable-shell`** ([#93](https://github.com/meta-models/muse-code-sdk/issues/93)).
+  - Started with `--disable-write --disable-shell`, the host still grants `userShell` and
+    `sessionMcp` at `initialize`.
+  - `session/userShell` is accepted, then its item fails with "tool policy denied shell
+    execution". The client now disables "Run in Muse" for a read-only project itself.
+  - The issue also asks whether `sessionMcp` should be granted under `--disable-write`.
+  - Recorded in `m0-13-click-effect-isolated.json` (branch of the M0-13 proof, 06/10).
 - **Not posted:**
   - A conversation resumed within about 1 s of its engine being killed stopped publishing events.
     It was seen once and never reproduced, so it needs a raw MSP re-run before filing.
