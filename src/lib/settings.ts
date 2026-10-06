@@ -128,10 +128,11 @@ export interface HostRequest {
  * conflict is solved by the refused request's own host and posture: a remote
  * `ssh://` key or a project folder is not the default folder, and a project
  * override is not the global posture. Null when the error asks for no restart
- * or its request is unknown, so no other host is restarted in its place.
+ * or its request is unknown, so no other host is restarted in its place. The
+ * refusal is `sandbox_policy_conflict` in main.rs ("…; restart it to apply …").
  */
 export function conflictRestart(error: string | null, request: HostRequest | null): HostRequest | null {
-  return request !== null && error !== null && error.toLowerCase().includes("restart the workspace host")
+  return request !== null && error !== null && error.toLowerCase().includes("restart it to apply")
     ? request
     : null;
 }

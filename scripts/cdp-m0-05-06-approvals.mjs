@@ -1298,7 +1298,7 @@ async function scope(app) {
     projectFollowsSettings: mode("Workspace and network", "F") === "network" && result.change.requested.sandboxMode === "elevated",
     noNetworkProjectStaysWorkspace: mode("Workspace and network", "N") === "workspace" && mode("Elevated access", "N") === "workspace",
     engineArgvMatches: result.cases.every((c) => c.engine === "reused a running engine" || c.engine.includes(flag[c.requested.sandboxMode])),
-    runningEngineKeepsItsPosture: !result.change.ok && /restart the workspace host/.test(result.change.error ?? ""),
+    runningEngineKeepsItsPosture: !result.change.ok && /restart it to apply/.test(result.change.error ?? ""),
   };
   return result;
 }
@@ -1469,7 +1469,7 @@ const SENTENCES = [
     check: (e) => {
       const change = e.rec.scope?.change;
       return { measured: [`app scope: Elevated access asked for folder F while its engine runs Workspace and network -> ${change?.ok ? "started" : change?.error}`],
-        contradiction: !change ? null : change.ok || !/restart the workspace host/.test(change.error ?? "") };
+        contradiction: !change ? null : change.ok || !/restart it to apply/.test(change.error ?? "") };
     } },
   { text: "On Windows with Muse 1.4.2, sandboxed PowerShell commands fail on relative paths (Set-Content -Path notes.txt), while absolute paths and Muse's own file tools work.",
     claim: "relative PowerShell writes fail in the sandbox; absolute paths and write_file work in the folder",

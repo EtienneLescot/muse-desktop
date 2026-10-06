@@ -176,8 +176,9 @@ describe("sandbox settings", () => {
   });
 
   it("restarts the host a posture conflict refused, with the posture it asked for", () => {
-    // ensure_host's refusal (main.rs sandbox_policy_conflict), as start and reconnect show it.
-    const refusal = "workspace host already uses sandbox posture workspace; restart the workspace host before starting this conversation with network";
+    // ensure_host's refusal (main.rs sandbox_policy_conflict), as start and
+    // reconnect show it: in the words of Settings, no raw posture key.
+    const refusal = "This folder's engine is running with Workspace only; restart it to apply Workspace and network.";
     const remote: HostRequest = {
       workspace: "ssh://ops@box:22/srv/app",
       sandbox: { mode: "network", disableWrite: false, disableShell: false },
