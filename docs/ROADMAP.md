@@ -24,7 +24,7 @@ This document is the source of truth for product progress. It is split **by plat
 - **05/10:** native Muse 1.4.2 is the reference engine. M2-08 is withdrawn. M4-07 closes on a remote engine session over the system ssh, and the cloud runner is split out as M4-10. M2-05 is a same-session handoff through `turn/start.workspaceRoots` plus a client Git transfer with rollback. Postures map Ask → `promptUnmatched`, the middle posture → `onRequest`, YOLO → `allowAll`.
   - **D1:** keep the default workspace isolation on Windows and document the sandboxed PowerShell relative-path limit (upstream [#88](https://github.com/meta-models/muse-code-sdk/issues/88)).
   - **D2:** post upstream.
-  - **D3:** release: nothing is published for now.
+  - **D3:** release: nothing is published for now. **Superseded on 12/10:** release 0.3.0, Windows installer bundling engine 1.4.2 ([note](releases/0.3.0.md)).
   - **D4:** the middle posture is renamed "Ask only for more access".
 - **06/10:**
   - A project follows the global Isolation level of Settings unless its own preferences restrict it (`48ad2ea` and the review fixes).
